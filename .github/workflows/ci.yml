@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Checkout wham (sibling)
-        run: git clone --depth 1 https://github.com/WarHub/wham.git ../wham
+        run: git clone --filter=blob:none https://github.com/WarHub/wham.git ../wham
 
       - name: Checkout wh40k-9e (sibling)
         run: git clone --depth 1 --branch v9.8.0 https://github.com/BSData/wh40k-9e.git ../wh40k-9e
