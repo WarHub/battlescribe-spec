@@ -181,6 +181,40 @@ public static class JavaModelFactory
     }
 
     /// <summary>
+    /// Create a SelectionEntryGroup (a group of mutually exclusive entries).
+    /// </summary>
+    public static SelectionEntryGroup CreateSelectionEntryGroup(
+        string id,
+        string name,
+        bool hidden = false,
+        string? defaultSelectionEntryId = null,
+        IEnumerable<SelectionEntry>? selectionEntries = null,
+        IEnumerable<Constraint>? constraints = null,
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var seg = new SelectionEntryGroup();
+        seg.setId(id);
+        seg.setName(name);
+        seg.setHidden(hidden);
+        if (!string.IsNullOrEmpty(defaultSelectionEntryId))
+            seg.setDefaultSelectionEntryId(defaultSelectionEntryId);
+
+        if (selectionEntries != null)
+            foreach (var se in selectionEntries)
+                seg.getSelectionEntries().add(se);
+
+        if (constraints != null)
+            foreach (var c in constraints)
+                seg.getConstraints().add(c);
+
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                seg.getModifiers().add(m);
+
+        return seg;
+    }
+
+    /// <summary>
     /// Create a Cost entry.
     /// </summary>
     public static Cost CreateCost(string name, string typeId, double value)

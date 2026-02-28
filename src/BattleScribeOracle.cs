@@ -582,7 +582,28 @@ public sealed class BattleScribeOracle : IDisposable
             foreach (var mg in spec.ModifierGroups)
                 entry.getModifierGroups().add(BuildModifierGroup(mg));
 
+        if (spec.SelectionEntryGroups != null)
+            foreach (var seg in spec.SelectionEntryGroups)
+                entry.getSelectionEntryGroups().add(BuildSelectionEntryGroup(seg));
+
         return entry;
+    }
+
+    private static SelectionEntryGroup BuildSelectionEntryGroup(SelectionEntryGroupSpec spec)
+    {
+        var constraints = spec.Constraints?.Select(c =>
+            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var childEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+
+        return JavaModelFactory.CreateSelectionEntryGroup(
+            spec.Id, spec.Name,
+            hidden: spec.Hidden,
+            defaultSelectionEntryId: spec.DefaultSelectionEntryId,
+            selectionEntries: childEntries,
+            constraints: constraints,
+            modifiers: modifiers);
     }
 
     private static Modifier BuildModifier(ModifierSpec spec)
@@ -641,6 +662,13 @@ public sealed class BattleScribeOracle : IDisposable
         var children = JavaListToList<SelectionEntry>(entry.getSelectionEntries());
         foreach (var child in children)
             IndexEntries(child);
+        var groups = JavaListToList<SelectionEntryGroup>(entry.getSelectionEntryGroups());
+        foreach (var group in groups)
+        {
+            var groupEntries = JavaListToList<SelectionEntry>(group.getSelectionEntries());
+            foreach (var ge in groupEntries)
+                IndexEntries(ge);
+        }
     }
 
     /// <summary>

@@ -55,6 +55,7 @@ public record SelectionEntrySpec(
     ModifierSpec[]? Modifiers = null,
     ModifierGroupSpec[]? ModifierGroups = null,
     SelectionEntrySpec[]? ChildEntries = null,
+    SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
     CategoryLinkSpec[]? CategoryLinks = null);
 
 public record ForceEntrySpec(
@@ -73,11 +74,21 @@ public record CategoryEntrySpec(
     string Id,
     string Name);
 
+public record SelectionEntryGroupSpec(
+    string Id,
+    string Name,
+    bool Hidden = false,
+    string DefaultSelectionEntryId = "",
+    ConstraintSpec[]? Constraints = null,
+    ModifierSpec[]? Modifiers = null,
+    SelectionEntrySpec[]? SelectionEntries = null);
+
 public record CatalogueSpec(
     string Id = "cat-1",
     string Name = "Cat",
     string GameSystemId = "test-gs",
-    SelectionEntrySpec[]? SelectionEntries = null);
+    SelectionEntrySpec[]? SelectionEntries = null,
+    SelectionEntryGroupSpec[]? SelectionEntryGroups = null);
 
 public record ConditionGroupSpec(
     string Type,

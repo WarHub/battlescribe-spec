@@ -1,0 +1,51 @@
+id: selection-entry-group-constraint
+category: selection
+description: SelectionEntryGroup can have constraints limiting how many entries can be selected from it
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-parent
+        name: Parent Unit
+        type: unit
+        selectionEntryGroups:
+          - id: seg-weapons
+            name: Weapon Options
+            constraints:
+              - id: con-max-1
+                type: max
+                value: 1
+                field: selections
+                scope: parent
+            selectionEntries:
+              - id: se-sword
+                name: Sword
+                type: upgrade
+              - id: se-axe
+                name: Axe
+                type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Group constraint max=1 means only 1 weapon can be picked.
+  # With synthetic data, constraints don't fire.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Parent Unit
