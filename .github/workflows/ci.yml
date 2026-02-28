@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout battlescribe-spec
+        uses: actions/checkout@v4
+
+      - name: Checkout wham (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: WarHub/wham
+          path: ../wham
+
+      - name: Checkout wh40k-9e (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: BSData/wh40k-9e
+          ref: v9.8.0
+          path: ../wh40k-9e
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore
+
+      - name: Test
+        run: dotnet test --no-build --logger GitHubActions
+        env:
+          WH40K_DATA_DIR: ${{ github.workspace }}/../wh40k-9e

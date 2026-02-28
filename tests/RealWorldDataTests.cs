@@ -10,10 +10,9 @@ namespace BattleScribeSpec.Tests;
 /// </summary>
 public class RealWorldDataTests
 {
-    private const string Wh40kDataDir = @"C:\Users\amis\wh40k-9e";
+    private static string Wh40kDataDir => TestPaths.Wh40kDataDir!;
 
-    private static bool DataAvailable => Directory.Exists(Wh40kDataDir)
-        && Directory.GetFiles(Wh40kDataDir, "*.gst").Length > 0;
+    private static bool DataAvailable => TestPaths.Wh40kDataAvailable;
 
     [SkippableFact]
     public void LoadGamesystem_Succeeds()
