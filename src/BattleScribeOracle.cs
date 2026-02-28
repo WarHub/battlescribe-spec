@@ -381,6 +381,88 @@ public sealed class BattleScribeOracle : IDisposable
             .ToList();
     }
 
+    // ===== Spec-based API (accepts pure .NET spec records) =====
+
+    /// <summary>
+    /// Set up the oracle from a complete scenario spec. Returns initialization errors.
+    /// </summary>
+    public List<string> SetupFromSpec(ScenarioSpec scenario)
+    {
+        var costTypes = scenario.GameSystem.CostTypes?.Select(ct =>
+            JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray();
+
+        var forceEntries = scenario.GameSystem.ForceEntries?.Select(fe =>
+            JavaModelFactory.CreateForceEntry(fe.Id, fe.Name)).ToArray();
+
+        var gs = JavaModelFactory.CreateGameSystem(
+            id: scenario.GameSystem.Id,
+            name: scenario.GameSystem.Name,
+            costTypes: costTypes,
+            forceEntries: forceEntries);
+
+        var selectionEntries = scenario.Catalogue.SelectionEntries?
+            .Select(BuildSelectionEntry).ToArray();
+
+        var cat = JavaModelFactory.CreateCatalogue(
+            scenario.Catalogue.Id, scenario.Catalogue.Name,
+            scenario.Catalogue.GameSystemId,
+            selectionEntries: selectionEntries);
+
+        _setupCatalogue = cat;
+        _setupForceEntries.Clear();
+        if (forceEntries != null)
+            _setupForceEntries.AddRange(forceEntries);
+        _setupSelectionEntries.Clear();
+        if (selectionEntries != null)
+            _setupSelectionEntries.AddRange(selectionEntries);
+
+        return Initialize(gs, new Dictionary<string, Catalogue> { [scenario.Catalogue.Id] = cat });
+    }
+
+    private static SelectionEntry BuildSelectionEntry(SelectionEntrySpec spec)
+    {
+        var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
+        var constraints = spec.Constraints?.Select(c =>
+            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope)).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var childEntries = spec.ChildEntries?.Select(BuildSelectionEntry).ToArray();
+
+        return JavaModelFactory.CreateSelectionEntry(
+            spec.Id, spec.Name, spec.Type,
+            costs: costs,
+            constraints: constraints,
+            modifiers: modifiers,
+            selectionEntries: childEntries);
+    }
+
+    private static Modifier BuildModifier(ModifierSpec spec)
+    {
+        var conditions = spec.Conditions?.Select(c =>
+            JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
+                percentValue: c.PercentValue)).ToArray();
+
+        return JavaModelFactory.CreateModifier(spec.Type, spec.Field, spec.Value, conditions: conditions);
+    }
+
+    /// <summary>
+    /// Get name of first selection in first force (for modifier testing).
+    /// </summary>
+    public string? GetFirstSelectionName()
+    {
+        EnsureInitialized();
+        var selections = GetAllSelections();
+        return selections.Count > 0 ? selections[0].getName() : null;
+    }
+
+    /// <summary>
+    /// Get all selection names in the roster.
+    /// </summary>
+    public List<string?> GetAllSelectionNames()
+    {
+        EnsureInitialized();
+        return GetAllSelections().Select(s => s.getName()).ToList();
+    }
+
     /// <summary>
     /// Diagnostic: list types in the BattleScribeEngine assembly for debugging IKVM type resolution.
     /// </summary>
