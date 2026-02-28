@@ -1,0 +1,39 @@
+id: cost-base-calculation
+category: cost
+description: Base cost from entry is reflected in selection and roster total
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1.0
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 200
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: totalCost
+    costTypeId: pts
+    expected: 200

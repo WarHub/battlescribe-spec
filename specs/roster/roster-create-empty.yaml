@@ -1,0 +1,22 @@
+id: roster-create-empty
+category: roster
+description: Creating a new roster results in an empty roster with no forces
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+
+steps:
+  - assert: forceCount
+    expected: 0
+
+  - assert: hasValidationErrors
+    expected: false

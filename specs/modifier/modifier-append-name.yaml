@@ -1,0 +1,36 @@
+id: modifier-append-name
+category: modifier
+description: String APPEND modifier adds text to the name (with space prefix)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit
+        type: unit
+        modifiers:
+          - type: append
+            field: name
+            value: Alpha
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: "Unit Alpha"

@@ -1,0 +1,57 @@
+id: condition-at-least
+category: condition
+description: Condition type atLeast evaluates true when count >= value
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger
+        name: Trigger Unit
+        type: unit
+      - id: se-target
+        name: Target Unit
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Activated
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                childId: se-trigger
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Before trigger: target keeps original name
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target Unit
+
+  # Add trigger
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # After trigger: condition met, modifier applied
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Activated

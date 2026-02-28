@@ -1,0 +1,43 @@
+id: condition-at-most
+category: condition
+description: Condition type atMost evaluates true when count <= value
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Few Units
+            conditions:
+              - type: atMost
+                value: 1
+                field: selections
+                scope: force
+                childId: se-unit-a
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # With 1 selection, atMost(1) is true → modifier applied
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Few Units

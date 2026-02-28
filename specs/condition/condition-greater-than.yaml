@@ -1,0 +1,66 @@
+id: condition-greater-than
+category: condition
+description: Condition type greaterThan evaluates true when count > value
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger
+        name: Trigger
+        type: unit
+      - id: se-target
+        name: Target
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: More Than One Trigger
+            conditions:
+              - type: greaterThan
+                value: 1
+                field: selections
+                scope: force
+                childId: se-trigger
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  # With 0 triggers, greaterThan(1) is false
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Target
+
+  # Add first trigger (count=1, greaterThan(1) still false)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Target
+
+  # Add second trigger (count=2, greaterThan(1) now true)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: More Than One Trigger

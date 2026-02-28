@@ -1,0 +1,53 @@
+id: modifier-conditional-false-keeps-base-cost
+category: modifier
+description: When condition is false, cost modifier is not applied and base cost remains
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1.0
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger
+        name: Trigger
+        type: unit
+      - id: se-target
+        name: Target
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 100
+        modifiers:
+          - type: set
+            field: pts
+            value: "0"
+            conditions:
+              - type: atLeast
+                value: 99
+                field: selections
+                scope: force
+                childId: se-trigger
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  # Condition requires 99 triggers — false, base cost preserved
+  - assert: totalCost
+    costTypeId: pts
+    expected: 100

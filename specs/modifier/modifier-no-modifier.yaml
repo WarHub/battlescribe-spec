@@ -1,0 +1,43 @@
+id: modifier-no-modifier
+category: modifier
+description: Entry without modifiers keeps its original values
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1.0
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unchanged Unit
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 100
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unchanged Unit
+              costs:
+                - typeId: pts
+                  value: 100

@@ -1,0 +1,48 @@
+id: cost-multi-type
+category: cost
+description: Multiple cost types tracked independently
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1.0
+      - id: pl
+        name: Power Level
+        defaultCostLimit: -1.0
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 100
+          - name: Power Level
+            typeId: pl
+            value: 5
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
+        - typeId: pl
+          value: 5

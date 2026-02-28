@@ -1,0 +1,43 @@
+id: condition-not-equal-to
+category: condition
+description: Condition type notEqualTo evaluates true when count != value
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Not Five
+            conditions:
+              - type: notEqualTo
+                value: 5
+                field: selections
+                scope: force
+                childId: se-unit-a
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # With 1 selection, notEqualTo(5) is true
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Not Five

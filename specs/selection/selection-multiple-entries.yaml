@@ -1,0 +1,41 @@
+id: selection-multiple-entries
+category: selection
+description: Selecting multiple different entries creates separate selections
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+      - id: se-unit-b
+        name: Unit B
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Unit A
+            - name: Unit B

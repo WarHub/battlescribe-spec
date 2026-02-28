@@ -1,0 +1,50 @@
+id: scope-force-trigger-in-same-force
+category: scope
+description: Force scope trigger must be in the same force as the target
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger
+        name: Trigger
+        type: unit
+      - id: se-target
+        name: Target
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Same Force Trigger
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                childId: se-trigger
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Both in force 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Same Force Trigger

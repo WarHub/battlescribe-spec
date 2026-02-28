@@ -1,0 +1,24 @@
+id: force-add-single
+category: force
+description: Adding a force creates one force in the roster
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Patrol

@@ -1,0 +1,33 @@
+id: cost-empty-roster
+category: cost
+description: Empty roster before any selections has no cost entries
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1.0
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Before any selections, force has zero selections
+  - expectedState:
+      forceCount: 1
+      forces:
+        - selectionCount: 0

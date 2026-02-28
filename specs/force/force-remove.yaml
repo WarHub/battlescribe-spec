@@ -1,0 +1,28 @@
+id: force-remove
+category: force
+description: Removing a force reduces force count to zero
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - assert: forceCount
+    expected: 1
+
+  - action: removeForce
+    forceIndex: 0
+
+  - assert: forceCount
+    expected: 0

@@ -1,0 +1,59 @@
+id: constraint-multiple-entries-independent
+category: constraint
+description: Constraints on different entries are evaluated independently
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        constraints:
+          - id: con-max-a
+            type: max
+            value: 2
+            field: selections
+            scope: parent
+      - id: se-unit-b
+        name: Unit B
+        type: unit
+        constraints:
+          - id: con-max-b
+            type: max
+            value: 1
+            field: selections
+            scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select entries up to their limits
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 3
+          selections:
+            - name: Unit A
+            - name: Unit A
+            - name: Unit B

@@ -1,0 +1,33 @@
+id: selection-upgrade-type
+category: selection
+description: Selection type is preserved as defined in the entry (upgrade)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-upgrade-a
+        name: Upgrade A
+        type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Upgrade A
+              type: upgrade

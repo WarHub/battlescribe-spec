@@ -1,0 +1,43 @@
+id: condition-false-prevents-modifier
+category: condition
+description: When condition evaluates to false, modifier is not applied
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Original Name
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Should Not Appear
+            conditions:
+              - type: atLeast
+                value: 99
+                field: selections
+                scope: force
+                childId: se-unit-a
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Condition requires 99 selections — false, so modifier not applied
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Original Name

@@ -1,0 +1,54 @@
+id: scope-force-vs-roster
+category: scope
+description: Force scope only counts within the same force, not across forces
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger
+        name: Trigger
+        type: unit
+      - id: se-target
+        name: Target
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Force Triggered
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                childId: se-trigger
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select target in force 1
+  - action: selectEntry
+    forceIndex: 1
+    entryIndex: 1
+
+  # Select trigger in force 0 — different force, so force scope doesn't see it
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionName
+    forceIndex: 1
+    selectionIndex: 0
+    expected: Target

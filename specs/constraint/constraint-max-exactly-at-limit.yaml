@@ -1,0 +1,43 @@
+id: constraint-max-exactly-at-limit
+category: constraint
+description: Exactly at max constraint does not trigger validation error
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        constraints:
+          - id: con-max-2
+            type: max
+            value: 2
+            field: selections
+            scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionCount
+    forceIndex: 0
+    expected: 2
+
+  - assert: noValidationErrors

@@ -329,6 +329,21 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
+    /// Select a specific entry by index on a specific force by index.
+    /// Entry index refers to _setupSelectionEntries order.
+    /// </summary>
+    public List<Selection> SelectEntryByIndex(int forceIndex, int entryIndex)
+    {
+        EnsureInitialized();
+        var forces = GetForces();
+        if (forceIndex < 0 || forceIndex >= forces.Count)
+            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        if (entryIndex < 0 || entryIndex >= _setupSelectionEntries.Count)
+            throw new ArgumentOutOfRangeException(nameof(entryIndex));
+        return SelectEntry(forces[forceIndex], _setupSelectionEntries[entryIndex]);
+    }
+
+    /// <summary>
     /// Get the number of forces in the roster.
     /// </summary>
     public int GetForceCount()

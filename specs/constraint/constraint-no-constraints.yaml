@@ -1,0 +1,31 @@
+id: constraint-no-constraints
+category: constraint
+description: Entry with no constraints has no validation errors
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - assert: noValidationErrors
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: noValidationErrors

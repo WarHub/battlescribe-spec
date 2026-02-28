@@ -1,0 +1,44 @@
+id: modifier-set-constraint
+category: modifier
+description: Modifier can change constraint value (e.g. set max constraint)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        constraints:
+          - id: con-max-1
+            type: max
+            value: 1
+            field: selections
+            scope: parent
+        modifiers:
+          - type: set
+            field: con-max-1
+            value: "3"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select 2 - would violate max=1, but modifier changed it to max=3
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: noValidationErrors

@@ -1,0 +1,74 @@
+id: condition-multiple-and
+category: condition
+description: Multiple conditions use AND logic (all must be true for modifier to apply)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger-a
+        name: Trigger A
+        type: unit
+      - id: se-trigger-b
+        name: Trigger B
+        type: unit
+      - id: se-target
+        name: Target
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Both Present
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                childId: se-trigger-a
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                childId: se-trigger-b
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 2
+
+  # Only target, neither trigger → no change
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Target
+
+  # Add trigger A only → still not both
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Target
+
+  # Add trigger B → both present → modifier applied
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Both Present

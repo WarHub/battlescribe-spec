@@ -1,0 +1,43 @@
+id: cost-zero
+category: cost
+description: Selection with zero cost contributes nothing to roster total
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1.0
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Free Unit
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 0
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Free Unit
+              costs:
+                - typeId: pts
+                  value: 0

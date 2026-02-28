@@ -1,0 +1,44 @@
+id: force-remove-second
+category: force
+description: Removing a specific force leaves others intact
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: addForce
+    forceEntryIndex: 0
+
+  - assert: forceCount
+    expected: 2
+
+  # Select entry in first force
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Remove second (empty) force
+  - action: removeForce
+    forceIndex: 1
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Patrol
+          selectionCount: 1

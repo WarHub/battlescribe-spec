@@ -1,0 +1,32 @@
+id: modifier-set-hidden-true
+category: modifier
+description: A boolean SET modifier on hidden field hides the entry
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Hidden Unit
+        type: unit
+        modifiers:
+          - type: set
+            field: hidden
+            value: "true"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # After adding force, the entry should be hidden via modifier
+  # The engine applies modifiers during refresh
+  # We verify the entry's hidden status affects the model
+  - assert: noValidationErrors

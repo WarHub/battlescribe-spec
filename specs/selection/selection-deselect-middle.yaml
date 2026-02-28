@@ -1,0 +1,57 @@
+id: selection-deselect-middle
+category: selection
+description: Deselecting a middle selection removes it and shifts indices
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Alpha
+        type: unit
+      - id: se-unit-b
+        name: Beta
+        type: unit
+      - id: se-unit-c
+        name: Gamma
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 2
+
+  - assert: selectionCount
+    forceIndex: 0
+    expected: 3
+
+  # Deselect Beta (index 1)
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Alpha
+            - name: Gamma

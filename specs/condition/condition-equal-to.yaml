@@ -1,0 +1,43 @@
+id: condition-equal-to
+category: condition
+description: Condition type equalTo evaluates true when count == value
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Exactly One
+            conditions:
+              - type: equalTo
+                value: 1
+                field: selections
+                scope: force
+                childId: se-unit-a
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # With exactly 1 selection, equalTo(1) is true
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Exactly One

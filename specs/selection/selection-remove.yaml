@@ -1,0 +1,39 @@
+id: selection-remove
+category: selection
+description: Deselecting a selection removes it from the force
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionCount
+    forceIndex: 0
+    expected: 1
+
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
+  - assert: selectionCount
+    forceIndex: 0
+    expected: 0

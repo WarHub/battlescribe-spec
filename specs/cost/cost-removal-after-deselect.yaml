@@ -1,0 +1,58 @@
+id: cost-removal-after-deselect
+category: cost
+description: Deselecting a selection removes its cost from roster total
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1.0
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 200
+      - id: se-unit-b
+        name: Unit B
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 50
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - assert: totalCost
+    costTypeId: pts
+    expected: 250
+
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
+  - assert: totalCost
+    costTypeId: pts
+    expected: 50

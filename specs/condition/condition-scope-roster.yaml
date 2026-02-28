@@ -1,0 +1,59 @@
+id: condition-scope-roster
+category: condition
+description: Condition with scope=roster counts across all forces
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger
+        name: Trigger
+        type: unit
+      - id: se-target
+        name: Target
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Roster Triggered
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: roster
+                childId: se-trigger
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select target in force 1
+  - action: selectEntry
+    forceIndex: 1
+    entryIndex: 1
+
+  - assert: selectionName
+    forceIndex: 1
+    selectionIndex: 0
+    expected: Target
+
+  # Select trigger in force 0 — roster scope sees it
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionName
+    forceIndex: 1
+    selectionIndex: 0
+    expected: Roster Triggered

@@ -1,0 +1,50 @@
+id: roster-add-force-and-select
+category: roster
+description: After adding a force and selecting an entry, roster has one force with one selection
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1.0
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 100
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - assert: forceCount
+    expected: 1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Patrol
+          selectionCount: 1
+          selections:
+            - name: Unit A
+              type: unit
+      costs:
+        - typeId: pts
+          value: 100

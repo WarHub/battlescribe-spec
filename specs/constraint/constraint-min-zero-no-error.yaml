@@ -1,0 +1,31 @@
+id: constraint-min-zero-no-error
+category: constraint
+description: A minimum constraint of 0 never causes an error (entry is optional)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        constraints:
+          - id: con-min-0
+            type: min
+            value: 0
+            field: selections
+            scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - assert: noValidationErrors

@@ -1,0 +1,56 @@
+id: scope-force
+category: scope
+description: Condition with scope=force counts selections in the current force
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger
+        name: Trigger
+        type: unit
+      - id: se-target
+        name: Target
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Force Has Trigger
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                childId: se-trigger
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  # No trigger yet
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Target
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Trigger added to force → condition met
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Force Has Trigger
