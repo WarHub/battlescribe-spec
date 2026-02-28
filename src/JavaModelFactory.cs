@@ -1,0 +1,272 @@
+using net.battlescribe.model.data;
+using net.battlescribe.model.roster;
+
+namespace BattleScribeSpec;
+
+/// <summary>
+/// Factory for creating Java BattleScribe model objects (via IKVM) for use in oracle tests.
+/// Java model uses mutable lists accessed via getXxx() methods.
+/// </summary>
+public static class JavaModelFactory
+{
+    /// <summary>
+    /// Create a GameSystem with cost types and optional force entries.
+    /// </summary>
+    public static GameSystem CreateGameSystem(
+        string id = "test-gs",
+        string name = "Test Game System",
+        int revision = 1,
+        string bsVersion = "2.03",
+        IEnumerable<CostType>? costTypes = null,
+        IEnumerable<ForceEntry>? forceEntries = null,
+        IEnumerable<CategoryEntry>? categoryEntries = null)
+    {
+        var gs = new GameSystem();
+        gs.setId(id);
+        gs.setName(name);
+        gs.setRevision(revision);
+        gs.setBattleScribeVersion(bsVersion);
+        gs.setAuthorName("Test");
+
+        if (costTypes != null)
+            foreach (var ct in costTypes)
+                gs.getCostTypes().add(ct);
+
+        if (forceEntries != null)
+            foreach (var fe in forceEntries)
+                gs.getForceEntries().add(fe);
+
+        if (categoryEntries != null)
+            foreach (var ce in categoryEntries)
+                gs.getCategoryEntries().add(ce);
+
+        return gs;
+    }
+
+    /// <summary>
+    /// Create a CostType.
+    /// </summary>
+    public static CostType CreateCostType(string id, string name, double defaultCostLimit = -1.0)
+    {
+        var ct = new CostType();
+        ct.setId(id);
+        ct.setName(name);
+        ct.setDefaultCostLimit(defaultCostLimit);
+        return ct;
+    }
+
+    /// <summary>
+    /// Create a CategoryEntry.
+    /// </summary>
+    public static CategoryEntry CreateCategoryEntry(string id, string name, bool hidden = false)
+    {
+        var ce = new CategoryEntry();
+        ce.setId(id);
+        ce.setName(name);
+        ce.setHidden(hidden);
+        return ce;
+    }
+
+    /// <summary>
+    /// Create a ForceEntry with category links.
+    /// </summary>
+    public static ForceEntry CreateForceEntry(
+        string id,
+        string name,
+        bool hidden = false,
+        IEnumerable<CategoryLink>? categoryLinks = null)
+    {
+        var fe = new ForceEntry();
+        fe.setId(id);
+        fe.setName(name);
+        fe.setHidden(hidden);
+
+        if (categoryLinks != null)
+            foreach (var cl in categoryLinks)
+                fe.getCategoryLinks().add(cl);
+
+        return fe;
+    }
+
+    /// <summary>
+    /// Create a CategoryLink linking a ForceEntry to a CategoryEntry.
+    /// </summary>
+    public static CategoryLink CreateCategoryLink(string id, string targetId, string name, bool primary = false)
+    {
+        var cl = new CategoryLink();
+        cl.setId(id);
+        cl.setTargetId(targetId);
+        cl.setName(name);
+        cl.setPrimary(primary);
+        return cl;
+    }
+
+    /// <summary>
+    /// Create a Catalogue with optional entries.
+    /// </summary>
+    public static Catalogue CreateCatalogue(
+        string id,
+        string name,
+        string gameSystemId,
+        int revision = 1,
+        string bsVersion = "2.03",
+        IEnumerable<SelectionEntry>? selectionEntries = null,
+        IEnumerable<EntryLink>? entryLinks = null)
+    {
+        var cat = new Catalogue();
+        cat.setId(id);
+        cat.setName(name);
+        cat.setGameSystemId(gameSystemId);
+        cat.setRevision(revision);
+        cat.setBattleScribeVersion(bsVersion);
+        cat.setAuthorName("Test");
+
+        if (selectionEntries != null)
+            foreach (var se in selectionEntries)
+                cat.getSelectionEntries().add(se);
+
+        if (entryLinks != null)
+            foreach (var el in entryLinks)
+                cat.getEntryLinks().add(el);
+
+        return cat;
+    }
+
+    /// <summary>
+    /// Create a SelectionEntry (a unit, model, upgrade, etc.)
+    /// </summary>
+    public static SelectionEntry CreateSelectionEntry(
+        string id,
+        string name,
+        string type = "unit",
+        bool hidden = false,
+        IEnumerable<Cost>? costs = null,
+        IEnumerable<SelectionEntry>? selectionEntries = null,
+        IEnumerable<EntryLink>? entryLinks = null,
+        IEnumerable<CategoryLink>? categoryLinks = null,
+        IEnumerable<Constraint>? constraints = null,
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var se = new SelectionEntry();
+        se.setId(id);
+        se.setName(name);
+        se.setType(type);
+        se.setHidden(hidden);
+
+        if (costs != null)
+            foreach (var c in costs)
+                se.getCosts().add(c);
+
+        if (selectionEntries != null)
+            foreach (var child in selectionEntries)
+                se.getSelectionEntries().add(child);
+
+        if (entryLinks != null)
+            foreach (var el in entryLinks)
+                se.getEntryLinks().add(el);
+
+        if (categoryLinks != null)
+            foreach (var cl in categoryLinks)
+                se.getCategoryLinks().add(cl);
+
+        if (constraints != null)
+            foreach (var c in constraints)
+                se.getConstraints().add(c);
+
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                se.getModifiers().add(m);
+
+        return se;
+    }
+
+    /// <summary>
+    /// Create a Cost entry.
+    /// </summary>
+    public static Cost CreateCost(string name, string typeId, double value)
+    {
+        var c = new Cost();
+        c.setName(name);
+        c.setTypeId(typeId);
+        c.setValue(value);
+        return c;
+    }
+
+    /// <summary>
+    /// Create a Constraint (min/max selection count or cost).
+    /// </summary>
+    public static Constraint CreateConstraint(
+        string id,
+        string type,
+        double value,
+        string field,
+        string scope,
+        bool shared = false,
+        bool includeChildSelections = false,
+        bool includeChildForces = false)
+    {
+        var c = new Constraint();
+        c.setId(id);
+        c.setType(type);
+        c.setValue(value);
+        c.setField(field);
+        c.setScope(scope);
+        c.setShared(shared);
+        c.setIncludeChildSelections(includeChildSelections);
+        c.setIncludeChildForces(includeChildForces);
+        return c;
+    }
+
+    /// <summary>
+    /// Create a Modifier that changes an element's property.
+    /// </summary>
+    public static Modifier CreateModifier(
+        string type,
+        string field,
+        string value,
+        IEnumerable<Condition>? conditions = null,
+        IEnumerable<Repeat>? repeats = null)
+    {
+        var m = new Modifier();
+        m.setType(type);
+        m.setField(field);
+        m.setValue(value);
+
+        if (conditions != null)
+            foreach (var cond in conditions)
+                m.getConditions().add(cond);
+
+        if (repeats != null)
+            foreach (var r in repeats)
+                m.getRepeats().add(r);
+
+        return m;
+    }
+
+    /// <summary>
+    /// Create a Condition for a modifier.
+    /// </summary>
+    public static Condition CreateCondition(
+        string type,
+        double value,
+        string field,
+        string scope,
+        string childId = "",
+        bool shared = false,
+        bool includeChildSelections = false,
+        bool includeChildForces = false,
+        bool percentValue = false)
+    {
+        var c = new Condition();
+        c.setType(type);
+        c.setValue(value);
+        c.setField(field);
+        c.setScope(scope);
+        c.setChildId(childId);
+        c.setShared(shared);
+        c.setIncludeChildSelections(includeChildSelections);
+        c.setIncludeChildForces(includeChildForces);
+        c.setPercentValue(percentValue);
+        return c;
+    }
+}

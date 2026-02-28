@@ -12,4 +12,52 @@
     <ProjectReference Include="..\..\wham\src\WarHub.ArmouryModel.Workspaces.BattleScribe\WarHub.ArmouryModel.Workspaces.BattleScribe.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="IKVM" Version="8.15.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <IkvmReference Include="..\lib\BattleScribeEngine.jar">
+      <AssemblyName>BattleScribeEngine</AssemblyName>
+      <AssemblyVersion>2.3.21.0</AssemblyVersion>
+      <References>..\lib\simple-xml-2.7.1.jar;..\lib\kotlin-stdlib-1.3.71.jar;..\lib\kotlin-stdlib-common-1.3.71.jar;..\lib\annotations-13.0.jar</References>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\DataUtils.jar">
+      <AssemblyName>DataUtils</AssemblyName>
+      <AssemblyVersion>2.3.21.0</AssemblyVersion>
+      <References>..\lib\simple-xml-2.7.1.jar;..\lib\kotlin-stdlib-1.3.71.jar;..\lib\kotlin-stdlib-common-1.3.71.jar;..\lib\annotations-13.0.jar</References>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\simple-xml-2.7.1.jar">
+      <AssemblyName>SimpleXml</AssemblyName>
+      <AssemblyVersion>2.7.1.0</AssemblyVersion>
+      <References>..\lib\stax-1.2.0.jar;..\lib\stax-api-1.0.1.jar;..\lib\xpp3-1.1.3.3.jar</References>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\kotlin-stdlib-1.3.71.jar">
+      <AssemblyName>KotlinStdlib</AssemblyName>
+      <AssemblyVersion>1.3.71.0</AssemblyVersion>
+      <References>..\lib\kotlin-stdlib-common-1.3.71.jar;..\lib\annotations-13.0.jar</References>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\kotlin-stdlib-common-1.3.71.jar">
+      <AssemblyName>KotlinStdlibCommon</AssemblyName>
+      <AssemblyVersion>1.3.71.0</AssemblyVersion>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\annotations-13.0.jar">
+      <AssemblyName>JetBrainsAnnotations</AssemblyName>
+      <AssemblyVersion>13.0.0.0</AssemblyVersion>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\stax-1.2.0.jar">
+      <AssemblyName>Stax</AssemblyName>
+      <AssemblyVersion>1.2.0.0</AssemblyVersion>
+      <References>..\lib\stax-api-1.0.1.jar</References>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\stax-api-1.0.1.jar">
+      <AssemblyName>StaxApi</AssemblyName>
+      <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\xpp3-1.1.3.3.jar">
+      <AssemblyName>Xpp3</AssemblyName>
+      <AssemblyVersion>1.1.3.3</AssemblyVersion>
+    </IkvmReference>
+  </ItemGroup>
+
 </Project>
