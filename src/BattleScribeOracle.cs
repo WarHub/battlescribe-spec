@@ -258,6 +258,8 @@ public sealed class BattleScribeOracle : IDisposable
     private Catalogue? _setupCatalogue;
     private readonly List<ForceEntry> _setupForceEntries = [];
     private readonly List<SelectionEntry> _setupSelectionEntries = [];
+    private readonly List<CostType> _setupCostTypes = [];
+    private readonly Dictionary<string, SelectionEntry> _entryLookup = new();
 
     /// <summary>
     /// Set up the oracle with a Patrol force entry (no units).
@@ -539,6 +541,13 @@ public sealed class BattleScribeOracle : IDisposable
         _setupSelectionEntries.Clear();
         if (selectionEntries != null)
             _setupSelectionEntries.AddRange(selectionEntries);
+        _setupCostTypes.Clear();
+        if (costTypes != null)
+            _setupCostTypes.AddRange(costTypes);
+        _entryLookup.Clear();
+        if (selectionEntries != null)
+            foreach (var se in selectionEntries)
+                IndexEntries(se);
 
         return Initialize(gs, new Dictionary<string, Catalogue> { [scenario.Catalogue.Id] = cat });
     }
@@ -550,13 +559,23 @@ public sealed class BattleScribeOracle : IDisposable
             JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope)).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         var childEntries = spec.ChildEntries?.Select(BuildSelectionEntry).ToArray();
+        var categoryLinks = spec.CategoryLinks?.Select(cl =>
+            JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray();
 
-        return JavaModelFactory.CreateSelectionEntry(
+        var entry = JavaModelFactory.CreateSelectionEntry(
             spec.Id, spec.Name, spec.Type,
+            hidden: spec.Hidden,
             costs: costs,
             constraints: constraints,
             modifiers: modifiers,
-            selectionEntries: childEntries);
+            selectionEntries: childEntries,
+            categoryLinks: categoryLinks);
+
+        if (spec.ModifierGroups != null)
+            foreach (var mg in spec.ModifierGroups)
+                entry.getModifierGroups().add(BuildModifierGroup(mg));
+
+        return entry;
     }
 
     private static Modifier BuildModifier(ModifierSpec spec)
@@ -565,8 +584,74 @@ public sealed class BattleScribeOracle : IDisposable
             JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
                 percentValue: c.PercentValue)).ToArray();
 
-        return JavaModelFactory.CreateModifier(spec.Type, spec.Field, spec.Value, conditions: conditions);
+        var conditionGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
+
+        var repeats = spec.Repeats?.Select(r =>
+            JavaModelFactory.CreateRepeat(r.Value, r.Repeats, r.Field, r.Scope, r.ChildId,
+                r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray();
+
+        var m = JavaModelFactory.CreateModifier(spec.Type, spec.Field, spec.Value,
+            conditions: conditions, repeats: repeats);
+
+        if (conditionGroups != null)
+            foreach (var cg in conditionGroups)
+                m.getConditionGroups().add(cg);
+
+        return m;
     }
+
+    private static net.battlescribe.model.data.ConditionGroup BuildConditionGroup(ConditionGroupSpec spec)
+    {
+        var conditions = spec.Conditions?.Select(c =>
+            JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
+                percentValue: c.PercentValue)).ToArray();
+
+        var childGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
+
+        return JavaModelFactory.CreateConditionGroup(spec.Type, conditions, childGroups);
+    }
+
+    private static net.battlescribe.model.data.ModifierGroup BuildModifierGroup(ModifierGroupSpec spec)
+    {
+        var conditions = spec.Conditions?.Select(c =>
+            JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
+                percentValue: c.PercentValue)).ToArray();
+
+        var conditionGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
+
+        var repeats = spec.Repeats?.Select(r =>
+            JavaModelFactory.CreateRepeat(r.Value, r.Repeats, r.Field, r.Scope, r.ChildId,
+                r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray();
+
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+
+        return JavaModelFactory.CreateModifierGroup(conditions, conditionGroups, repeats, modifiers);
+    }
+
+    private void IndexEntries(SelectionEntry entry)
+    {
+        _entryLookup[entry.getId()] = entry;
+        var children = JavaListToList<SelectionEntry>(entry.getSelectionEntries());
+        foreach (var child in children)
+            IndexEntries(child);
+    }
+
+    /// <summary>
+    /// Get a setup selection entry by index (for OracleRosterEngine).
+    /// </summary>
+    internal SelectionEntry GetSetupSelectionEntry(int index) => _setupSelectionEntries[index];
+
+    /// <summary>
+    /// Get a cost type by ID (for SetCostLimit).
+    /// </summary>
+    internal CostType? GetCostTypeById(string id) =>
+        _setupCostTypes.FirstOrDefault(ct => ct.getId() == id);
+
+    /// <summary>
+    /// Find a selection entry by its ID (searches all entries including children).
+    /// </summary>
+    internal SelectionEntry? GetEntryById(string id) =>
+        _entryLookup.TryGetValue(id, out var entry) ? entry : null;
 
     /// <summary>
     /// Get name of first selection in first force (for modifier testing).

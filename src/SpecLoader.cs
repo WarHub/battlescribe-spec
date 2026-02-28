@@ -89,11 +89,15 @@ public static class SpecLoader
             Id: def.Id,
             Name: def.Name,
             Type: def.Type,
+            Hidden: def.Hidden,
             Costs: def.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
             Constraints: def.Constraints?.Select(c =>
                 new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope)).ToArray(),
             Modifiers: def.Modifiers?.Select(ConvertModifier).ToArray(),
-            ChildEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray());
+            ModifierGroups: def.ModifierGroups?.Select(ConvertModifierGroup).ToArray(),
+            ChildEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray(),
+            CategoryLinks: def.CategoryLinks?.Select(cl =>
+                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray());
     }
 
     private static ModifierSpec ConvertModifier(ModifierDef def)
@@ -102,7 +106,26 @@ public static class SpecLoader
             Type: def.Type,
             Field: def.Field,
             Value: def.Value,
-            Conditions: def.Conditions?.Select(c =>
-                new ConditionSpec(c.Type, c.Value, c.Field, c.Scope, c.ChildId, c.PercentValue)).ToArray());
+            Conditions: def.Conditions?.Select(ConvertCondition).ToArray(),
+            ConditionGroups: def.ConditionGroups?.Select(ConvertConditionGroup).ToArray(),
+            Repeats: def.Repeats?.Select(r =>
+                new RepeatSpec(r.Value, r.Repeats, r.Field, r.Scope, r.ChildId,
+                    r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray());
     }
+
+    private static ConditionSpec ConvertCondition(ConditionDef def) =>
+        new(def.Type, def.Value, def.Field, def.Scope, def.ChildId, def.PercentValue);
+
+    private static ConditionGroupSpec ConvertConditionGroup(ConditionGroupDef def) =>
+        new(def.Type,
+            def.Conditions?.Select(ConvertCondition).ToArray(),
+            def.ConditionGroups?.Select(ConvertConditionGroup).ToArray());
+
+    private static ModifierGroupSpec ConvertModifierGroup(ModifierGroupDef def) =>
+        new(def.Conditions?.Select(ConvertCondition).ToArray(),
+            def.ConditionGroups?.Select(ConvertConditionGroup).ToArray(),
+            def.Repeats?.Select(r =>
+                new RepeatSpec(r.Value, r.Repeats, r.Field, r.Scope, r.ChildId,
+                    r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray(),
+            def.Modifiers?.Select(ConvertModifier).ToArray());
 }

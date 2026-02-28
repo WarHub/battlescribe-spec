@@ -38,9 +38,20 @@ public sealed class OracleRosterEngine : IRosterEngine
 
     public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex)
     {
-        // Child entry selection requires the parent selection and child entry reference
-        // This will be expanded as spec tests require it
-        throw new NotImplementedException("SelectChildEntry not yet implemented");
+        var forces = _oracle.GetForces();
+        if (forceIndex < 0 || forceIndex >= forces.Count)
+            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        var selections = JavaListToList<net.battlescribe.model.roster.Selection>(forces[forceIndex].getSelections());
+        if (selectionIndex < 0 || selectionIndex >= selections.Count)
+            throw new ArgumentOutOfRangeException(nameof(selectionIndex));
+        var parentSelection = selections[selectionIndex];
+        var parentEntryId = parentSelection.getEntryId();
+        var parentEntry = _oracle.GetEntryById(parentEntryId)
+            ?? throw new InvalidOperationException($"Parent entry '{parentEntryId}' not found in entry lookup.");
+        var childEntries = JavaListToList<net.battlescribe.model.data.SelectionEntry>(parentEntry.getSelectionEntries());
+        if (childEntryIndex < 0 || childEntryIndex >= childEntries.Count)
+            throw new ArgumentOutOfRangeException(nameof(childEntryIndex));
+        _oracle.SelectEntry(parentSelection, childEntries[childEntryIndex]);
     }
 
     public void DeselectSelection(int forceIndex, int selectionIndex)
@@ -59,8 +70,8 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forces = _oracle.GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
-        // Need to get the selection entry and parent
-        throw new NotImplementedException("SetSelectionCount requires entry reference mapping");
+        var entry = _oracle.GetSetupSelectionEntry(entryIndex);
+        _oracle.SetNumSelections(forces[forceIndex], entry, count);
     }
 
     public void DuplicateSelection(int forceIndex, int selectionIndex)
@@ -76,12 +87,9 @@ public sealed class OracleRosterEngine : IRosterEngine
 
     public void SetCostLimit(string costTypeId, double value)
     {
-        // Find cost type from game system
-        var roster = _oracle.GetRoster();
-        var costTypes = JavaListToList<net.battlescribe.model.data.CostType>(
-            _oracle.GetRoster().getCosts());
-        // SetCostLimit needs a CostType object — simplified for now
-        throw new NotImplementedException("SetCostLimit requires CostType lookup");
+        var costType = _oracle.GetCostTypeById(costTypeId)
+            ?? throw new InvalidOperationException($"Cost type '{costTypeId}' not found.");
+        _oracle.SetCostLimit(costType, value);
     }
 
     public RosterState GetRosterState()

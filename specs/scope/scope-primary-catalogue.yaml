@@ -1,0 +1,31 @@
+id: scope-primary-catalogue
+category: scope
+description: Primary catalogue scope tests condition at the catalogue level
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Basic Unit
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Basic Unit

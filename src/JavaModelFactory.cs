@@ -269,4 +269,85 @@ public static class JavaModelFactory
         c.setPercentValue(percentValue);
         return c;
     }
+
+    /// <summary>
+    /// Create a ConditionGroup (AND/OR logic for conditions).
+    /// </summary>
+    public static ConditionGroup CreateConditionGroup(
+        string type = "and",
+        IEnumerable<Condition>? conditions = null,
+        IEnumerable<ConditionGroup>? conditionGroups = null)
+    {
+        var cg = new ConditionGroup();
+        cg.setType(type);
+
+        if (conditions != null)
+            foreach (var c in conditions)
+                cg.getConditions().add(c);
+
+        if (conditionGroups != null)
+            foreach (var child in conditionGroups)
+                cg.getConditionGroups().add(child);
+
+        return cg;
+    }
+
+    /// <summary>
+    /// Create a Repeat for a modifier.
+    /// </summary>
+    public static Repeat CreateRepeat(
+        double value = 1,
+        int repeats = 1,
+        string field = "selections",
+        string scope = "self",
+        string childId = "",
+        bool roundUp = false,
+        bool shared = false,
+        bool includeChildSelections = false,
+        bool includeChildForces = false,
+        bool percentValue = false)
+    {
+        var r = new Repeat();
+        r.setValue(value);
+        r.setRepeats(repeats);
+        r.setField(field);
+        r.setScope(scope);
+        r.setChildId(childId);
+        r.setRoundUp(roundUp);
+        r.setShared(shared);
+        r.setIncludeChildSelections(includeChildSelections);
+        r.setIncludeChildForces(includeChildForces);
+        r.setPercentValue(percentValue);
+        return r;
+    }
+
+    /// <summary>
+    /// Create a ModifierGroup containing conditions and modifiers.
+    /// </summary>
+    public static ModifierGroup CreateModifierGroup(
+        IEnumerable<Condition>? conditions = null,
+        IEnumerable<ConditionGroup>? conditionGroups = null,
+        IEnumerable<Repeat>? repeats = null,
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var mg = new ModifierGroup();
+
+        if (conditions != null)
+            foreach (var c in conditions)
+                mg.getConditions().add(c);
+
+        if (conditionGroups != null)
+            foreach (var cg in conditionGroups)
+                mg.getConditionGroups().add(cg);
+
+        if (repeats != null)
+            foreach (var r in repeats)
+                mg.getRepeats().add(r);
+
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                mg.getModifiers().add(m);
+
+        return mg;
+    }
 }

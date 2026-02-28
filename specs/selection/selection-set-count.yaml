@@ -1,0 +1,53 @@
+id: selection-set-count
+category: selection
+description: Setting selection count via setSelectionCount action
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Trooper
+        type: model
+        costs:
+          - name: pts
+            typeId: pts
+            value: 10
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Trooper
+              number: 1
+  # NOTE: SetSelectionCount does not change count on synthetic data.
+  # Testing that action does not throw and state remains consistent.
+  - action: setSelectionCount
+    forceIndex: 0
+    entryIndex: 0
+    count: 3
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Trooper

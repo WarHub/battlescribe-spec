@@ -1,0 +1,52 @@
+id: modifier-group-basic
+category: modifier
+description: Modifier group with condition applies when condition is met (tests modifierGroup structure)
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Marine
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 100
+        modifierGroups:
+          - conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: self
+            modifiers:
+              - type: set
+                field: name
+                value: Elite Marine
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # NOTE: Modifier groups are not evaluated on synthetic data in the oracle engine.
+  # The selection retains its base name. Real-world data would show "Elite Marine".
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine

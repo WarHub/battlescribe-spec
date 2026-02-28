@@ -1,0 +1,48 @@
+id: scope-child-id-filter
+category: scope
+description: Condition with childId filters which entries are counted
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-target
+        name: Target Unit
+        type: unit
+      - id: se-watcher
+        name: Watcher
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Active Watcher
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: roster
+                childId: se-target
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Target Unit
+            - name: Active Watcher

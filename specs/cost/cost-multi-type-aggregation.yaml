@@ -1,0 +1,59 @@
+id: cost-multi-type-aggregation
+category: cost
+description: Multiple cost types aggregate independently across selections
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1
+      - id: pl
+        name: Power Level
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Tactical Squad
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 100
+          - name: Power Level
+            typeId: pl
+            value: 5
+      - id: se-2
+        name: Heavy Support
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 200
+          - name: Power Level
+            typeId: pl
+            value: 10
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+  - assert: totalCost
+    costTypeId: pts
+    expected: 300
+  - assert: totalCost
+    costTypeId: pl
+    expected: 15

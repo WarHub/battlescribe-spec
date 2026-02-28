@@ -1,0 +1,25 @@
+id: roster-name-and-metadata
+category: roster
+description: Roster metadata matches game system configuration
+
+setup:
+  gameSystem:
+    id: custom-gs-123
+    name: My Custom Game
+    forceEntries:
+      - id: fe-1
+        name: Formation
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: custom-gs-123
+
+steps:
+  - expectedState:
+      forceCount: 0
+  - action: addForce
+    forceEntryIndex: 0
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Formation

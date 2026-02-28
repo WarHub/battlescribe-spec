@@ -1,0 +1,49 @@
+id: condition-group-and
+category: condition
+description: Condition group with AND logic on modifier (tests structure)
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Soldier
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Renamed Soldier
+            conditionGroups:
+              - type: and
+                conditions:
+                  - type: atLeast
+                    value: 1
+                    field: selections
+                    scope: self
+                  - type: atMost
+                    value: 10
+                    field: selections
+                    scope: self
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # NOTE: ConditionGroups on modifiers are not evaluated by the oracle
+  # with synthetic data. The modifier does not apply.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Soldier

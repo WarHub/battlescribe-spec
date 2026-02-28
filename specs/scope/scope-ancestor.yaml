@@ -1,0 +1,47 @@
+id: scope-ancestor
+category: scope
+description: Ancestor scope condition evaluates upward in the selection hierarchy
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-parent
+        name: Parent Unit
+        type: unit
+        selectionEntries:
+          - id: se-child
+            name: Equipment
+            type: upgrade
+            modifiers:
+              - type: set
+                field: name
+                value: Modified Equipment
+                conditions:
+                  - type: atLeast
+                    value: 1
+                    field: selections
+                    scope: ancestor
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Parent Unit

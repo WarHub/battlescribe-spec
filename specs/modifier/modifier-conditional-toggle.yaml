@@ -1,0 +1,49 @@
+id: modifier-conditional-toggle
+category: modifier
+description: Modifier condition on same entry evaluates correctly, toggling via select/deselect
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Alpha
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Active Alpha
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: parent
+                childId: se-1
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  # Select Alpha - modifier condition met (atLeast 1 selection of self)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Active Alpha
+  # Deselect Alpha
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 0

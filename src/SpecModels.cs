@@ -9,7 +9,9 @@ public record ModifierSpec(
     string Type,
     string Field,
     string Value,
-    ConditionSpec[]? Conditions = null);
+    ConditionSpec[]? Conditions = null,
+    ConditionGroupSpec[]? ConditionGroups = null,
+    RepeatSpec[]? Repeats = null);
 
 public record ConditionSpec(
     string Type,
@@ -40,10 +42,13 @@ public record SelectionEntrySpec(
     string Id,
     string Name,
     string Type = "unit",
+    bool Hidden = false,
     CostSpec[]? Costs = null,
     ConstraintSpec[]? Constraints = null,
     ModifierSpec[]? Modifiers = null,
-    SelectionEntrySpec[]? ChildEntries = null);
+    ModifierGroupSpec[]? ModifierGroups = null,
+    SelectionEntrySpec[]? ChildEntries = null,
+    CategoryLinkSpec[]? CategoryLinks = null);
 
 public record ForceEntrySpec(
     string Id,
@@ -60,6 +65,35 @@ public record CatalogueSpec(
     string Name = "Cat",
     string GameSystemId = "test-gs",
     SelectionEntrySpec[]? SelectionEntries = null);
+
+public record ConditionGroupSpec(
+    string Type,
+    ConditionSpec[]? Conditions = null,
+    ConditionGroupSpec[]? ConditionGroups = null);
+
+public record RepeatSpec(
+    double Value = 1,
+    int Repeats = 1,
+    string Field = "selections",
+    string Scope = "self",
+    string ChildId = "",
+    bool RoundUp = false,
+    bool Shared = false,
+    bool IncludeChildSelections = false,
+    bool IncludeChildForces = false,
+    bool PercentValue = false);
+
+public record ModifierGroupSpec(
+    ConditionSpec[]? Conditions = null,
+    ConditionGroupSpec[]? ConditionGroups = null,
+    RepeatSpec[]? Repeats = null,
+    ModifierSpec[]? Modifiers = null);
+
+public record CategoryLinkSpec(
+    string Id,
+    string TargetId,
+    string Name,
+    bool Primary = false);
 
 /// <summary>
 /// Complete test scenario specification.

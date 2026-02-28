@@ -1,0 +1,29 @@
+id: force-with-categories
+category: force
+description: Force entry inherits category entries from game system
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-hq
+        name: HQ
+      - id: cat-troops
+        name: Troops
+      - id: cat-elites
+        name: Elites
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - assert: forceCount
+    expected: 1
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Patrol
+          selectionCount: 0

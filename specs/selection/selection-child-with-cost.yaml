@@ -1,0 +1,52 @@
+id: selection-child-with-cost
+category: selection
+description: Child entry costs contribute to roster total
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-parent
+        name: Squad
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 100
+        selectionEntries:
+          - id: se-child
+            name: Weapon Upgrade
+            type: upgrade
+            costs:
+              - name: pts
+                typeId: pts
+                value: 25
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - assert: totalCost
+    costTypeId: pts
+    expected: 100
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+  - assert: totalCost
+    costTypeId: pts
+    expected: 125

@@ -1,0 +1,64 @@
+id: modifier-multiple-groups
+category: modifier
+description: Multiple modifier groups are structured independently on an entry
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Agent
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 100
+        modifierGroups:
+          - conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: self
+            modifiers:
+              - type: set
+                field: name
+                value: Active Agent
+          - conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: self
+            modifiers:
+              - type: increment
+                field: pts
+                value: "25"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # NOTE: Modifier groups are not evaluated on synthetic data.
+  # The selection retains base values.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Agent
+              costs:
+                - typeId: pts
+                  value: 100

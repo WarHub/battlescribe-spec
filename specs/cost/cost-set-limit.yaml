@@ -1,0 +1,43 @@
+id: cost-set-limit
+category: cost
+description: Setting a cost limit updates the roster cost configuration
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: 2000
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Unit
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 100
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - assert: totalCost
+    costTypeId: pts
+    expected: 100
+  - action: setCostLimit
+    costTypeId: pts
+    value: 500
+  - assert: totalCost
+    costTypeId: pts
+    expected: 100

@@ -1,0 +1,29 @@
+id: force-add-and-remove-all
+category: force
+description: Adding and removing all forces returns roster to empty state
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+      - id: fe-2
+        name: Battalion
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: addForce
+    forceEntryIndex: 1
+  - assert: forceCount
+    expected: 2
+  - action: removeForce
+    forceIndex: 1
+  - assert: forceCount
+    expected: 1
+  - action: removeForce
+    forceIndex: 0
+  - assert: forceCount
+    expected: 0

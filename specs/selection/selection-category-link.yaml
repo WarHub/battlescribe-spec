@@ -1,0 +1,40 @@
+id: selection-category-link
+category: selection
+description: Selection entry with category link assigns the selection to a category
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-entry-hq
+        name: HQ
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Commander
+        type: unit
+        categoryLinks:
+          - id: cl-1
+            targetId: cat-entry-hq
+            name: HQ
+            primary: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Commander
+              type: unit

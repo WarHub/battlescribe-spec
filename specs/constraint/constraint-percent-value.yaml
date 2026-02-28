@@ -1,0 +1,44 @@
+id: constraint-percent-value
+category: constraint
+description: Constraint with percentValue calculates threshold as percentage
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: 2000
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Elite
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 300
+        constraints:
+          - id: c1
+            type: max
+            value: 50
+            field: selections
+            scope: parent
+            percentValue: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
