@@ -1,0 +1,48 @@
+id: condition-equal-to-zero
+category: condition
+description: equalTo 0 is true when no matching elements exist (edge case for empty state)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit
+        name: Unit A
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: None Present
+            conditions:
+              - type: equalTo
+                value: 0
+                field: selections
+                scope: force
+                childId: se-other
+      - id: se-other
+        name: Unit B
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select Unit A - equalTo 0 checks for se-other in force scope
+  # Since se-other hasn't been added, count is 0 → condition true
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: None Present

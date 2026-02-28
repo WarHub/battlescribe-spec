@@ -1,0 +1,50 @@
+id: cost-negative-value
+category: cost
+description: Selection with negative cost reduces the roster cost total
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-expensive
+        name: Expensive Unit
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 100
+      - id: se-discount
+        name: Discount
+        type: upgrade
+        costs:
+          - name: pts
+            typeId: pts
+            value: -25
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+  - expectedState:
+      forces:
+        - selectionCount: 2
+      costs:
+        - typeId: pts
+          value: 75.0
