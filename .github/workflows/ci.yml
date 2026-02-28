@@ -15,17 +15,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Checkout wham (sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: WarHub/wham
-          path: ../wham
+        run: git clone --depth 1 https://github.com/WarHub/wham.git ../wham
 
       - name: Checkout wh40k-9e (sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: BSData/wh40k-9e
-          ref: v9.8.0
-          path: ../wh40k-9e
+        run: git clone --depth 1 --branch v9.8.0 https://github.com/BSData/wh40k-9e.git ../wh40k-9e
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
