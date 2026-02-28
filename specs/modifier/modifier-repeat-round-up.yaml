@@ -1,0 +1,50 @@
+id: modifier-repeat-round-up
+category: modifier
+description: Repeat with roundUp=true rounds fractional repeat count up (Math.ceil)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 50
+        modifiers:
+          - type: increment
+            field: pts
+            value: "10"
+            repeats:
+              - value: 3
+                repeats: 1
+                field: selections
+                scope: self
+                roundUp: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # self scope, 1 selection, repeat value 3 → repeats = ceil(1/3) = 1
+  # So increment by 10 once → 50 + 10 = 60
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad

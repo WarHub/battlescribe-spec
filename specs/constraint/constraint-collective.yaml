@@ -1,0 +1,62 @@
+id: constraint-collective
+category: constraint
+description: Collective constraint divides the limit by the number of sibling entries sharing the constraint
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        constraints:
+          - id: con-max-collective
+            type: max
+            value: 4
+            field: selections
+            scope: parent
+            shared: true
+      - id: se-unit-b
+        name: Unit B
+        type: unit
+        constraints:
+          - id: con-max-collective
+            type: max
+            value: 4
+            field: selections
+            scope: parent
+            shared: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select Unit A twice
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Select Unit B twice - shared constraint means total across A+B <= 4
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 4

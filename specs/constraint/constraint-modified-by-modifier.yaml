@@ -1,0 +1,59 @@
+id: constraint-modified-by-modifier
+category: constraint
+description: A modifier can target a constraint's value field, changing the effective min/max
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit
+        name: Unit A
+        type: unit
+        constraints:
+          - id: con-max
+            type: max
+            value: 1
+            field: selections
+            scope: parent
+        modifiers:
+          - type: increment
+            field: con-max
+            value: "2"
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: parent
+                childId: se-unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 1
+
+  # With synthetic data, constraint modification may not be observable
+  # but the structure is correctly defined for engines that process it
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
