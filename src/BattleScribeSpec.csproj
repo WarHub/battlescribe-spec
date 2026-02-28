@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\wham\src\WarHub.ArmouryModel.Source\WarHub.ArmouryModel.Source.csproj" />
+    <ProjectReference Include="..\..\wham\src\WarHub.ArmouryModel.Source.BattleScribe\WarHub.ArmouryModel.Source.BattleScribe.csproj" />
+    <ProjectReference Include="..\..\wham\src\WarHub.ArmouryModel.Workspaces.BattleScribe\WarHub.ArmouryModel.Workspaces.BattleScribe.csproj" />
+  </ItemGroup>
+
+</Project>
