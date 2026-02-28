@@ -6,57 +6,63 @@ namespace BattleScribeSpec;
 /// Creates minimal synthetic BattleScribe data for targeted testing.
 /// Each factory method produces a self-contained game system + catalogue
 /// pair designed to test a specific specification area.
+/// Uses Core records with .ToNode() for immutable construction.
 /// </summary>
 public static class TestDataFactory
 {
     private static string NewId() => Guid.NewGuid().ToString();
+
+    private static CostCore Pts(decimal value) => new() { TypeId = "pts", Name = "pts", Value = value };
 
     /// <summary>
     /// Creates a minimal game system with one cost type (pts) and one profile type (Stats).
     /// </summary>
     public static GamesystemNode CreateMinimalGamesystem()
     {
-        return NodeFactory.Gamesystem("Test Game") with
+        return new GamesystemCore
         {
             Id = "test-gs-1",
+            Name = "Test Game",
             BattleScribeVersion = "2.03",
             Revision = 1,
-            CostTypes = [NodeFactory.CostType("pts") with { Id = "pts" }],
+            CostTypes = [new CostTypeCore { Id = "pts", Name = "pts" }],
             ProfileTypes =
             [
-                NodeFactory.ProfileType("Unit") with
+                new ProfileTypeCore
                 {
                     Id = "unit-stats",
+                    Name = "Unit",
                     CharacteristicTypes =
                     [
-                        NodeFactory.CharacteristicType("M") with { Id = "char-m" },
-                        NodeFactory.CharacteristicType("WS") with { Id = "char-ws" },
-                        NodeFactory.CharacteristicType("BS") with { Id = "char-bs" },
-                        NodeFactory.CharacteristicType("S") with { Id = "char-s" },
-                        NodeFactory.CharacteristicType("T") with { Id = "char-t" },
-                        NodeFactory.CharacteristicType("W") with { Id = "char-w" },
+                        new CharacteristicTypeCore { Id = "char-m", Name = "M" },
+                        new CharacteristicTypeCore { Id = "char-ws", Name = "WS" },
+                        new CharacteristicTypeCore { Id = "char-bs", Name = "BS" },
+                        new CharacteristicTypeCore { Id = "char-s", Name = "S" },
+                        new CharacteristicTypeCore { Id = "char-t", Name = "T" },
+                        new CharacteristicTypeCore { Id = "char-w", Name = "W" },
                     ]
                 }
             ],
             CategoryEntries =
             [
-                NodeFactory.CategoryEntry("HQ") with { Id = "cat-hq" },
-                NodeFactory.CategoryEntry("Troops") with { Id = "cat-troops" },
-                NodeFactory.CategoryEntry("Faction") with { Id = "cat-faction" },
+                new CategoryEntryCore { Id = "cat-hq", Name = "HQ" },
+                new CategoryEntryCore { Id = "cat-troops", Name = "Troops" },
+                new CategoryEntryCore { Id = "cat-faction", Name = "Faction" },
             ],
             ForceEntries =
             [
-                NodeFactory.ForceEntry("Detachment") with
+                new ForceEntryCore
                 {
                     Id = "force-det",
+                    Name = "Detachment",
                     CategoryLinks =
                     [
-                        NodeFactory.CategoryLink() with { Id = NewId(), TargetId = "cat-hq", Name = "HQ" },
-                        NodeFactory.CategoryLink() with { Id = NewId(), TargetId = "cat-troops", Name = "Troops" },
+                        new CategoryLinkCore { Id = NewId(), TargetId = "cat-hq", Name = "HQ" },
+                        new CategoryLinkCore { Id = NewId(), TargetId = "cat-troops", Name = "Troops" },
                     ]
                 }
             ],
-        };
+        }.ToNode();
     }
 
     /// <summary>
@@ -65,31 +71,33 @@ public static class TestDataFactory
     /// </summary>
     public static CatalogueNode CreateBasicCatalogue()
     {
-        return NodeFactory.Catalogue("test-gs-1", "Test Catalogue") with
+        return new CatalogueCore
         {
             Id = "test-cat-1",
+            Name = "Test Catalogue",
+            GamesystemId = "test-gs-1",
             BattleScribeVersion = "2.03",
             Revision = 1,
             SelectionEntries =
             [
-                // A simple HQ unit with a cost
-                NodeFactory.SelectionEntry("Commander") with
+                new SelectionEntryCore
                 {
                     Id = "entry-commander",
+                    Name = "Commander",
                     Type = SelectionEntryKind.Unit,
-                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 100m }],
+                    Costs = [Pts(100)],
                     CategoryLinks =
                     [
-                        NodeFactory.CategoryLink() with { Id = NewId(), TargetId = "cat-hq", Name = "HQ" },
+                        new CategoryLinkCore { Id = NewId(), TargetId = "cat-hq", Name = "HQ" },
                     ],
                     Constraints =
                     [
-                        NodeFactory.Constraint() with
+                        new ConstraintCore
                         {
                             Id = "con-cmd-min", Type = ConstraintKind.Minimum, Value = 0,
                             Scope = "force", Field = "selections",
                         },
-                        NodeFactory.Constraint() with
+                        new ConstraintCore
                         {
                             Id = "con-cmd-max", Type = ConstraintKind.Maximum, Value = 3,
                             Scope = "force", Field = "selections",
@@ -97,15 +105,15 @@ public static class TestDataFactory
                     ],
                     SelectionEntries =
                     [
-                        // Nested upgrade entry
-                        NodeFactory.SelectionEntry("Power Sword") with
+                        new SelectionEntryCore
                         {
                             Id = "entry-power-sword",
+                            Name = "Power Sword",
                             Type = SelectionEntryKind.Upgrade,
-                            Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 5m }],
+                            Costs = [Pts(5)],
                             Constraints =
                             [
-                                NodeFactory.Constraint() with
+                                new ConstraintCore
                                 {
                                     Id = "con-sword-max", Type = ConstraintKind.Maximum, Value = 1,
                                     Scope = "parent", Field = "selections",
@@ -114,32 +122,32 @@ public static class TestDataFactory
                         },
                     ],
                 },
-
-                // A troops unit with model count
-                NodeFactory.SelectionEntry("Soldier Squad") with
+                new SelectionEntryCore
                 {
                     Id = "entry-soldiers",
+                    Name = "Soldier Squad",
                     Type = SelectionEntryKind.Unit,
-                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 10m }],
+                    Costs = [Pts(10)],
                     CategoryLinks =
                     [
-                        NodeFactory.CategoryLink() with { Id = NewId(), TargetId = "cat-troops", Name = "Troops" },
+                        new CategoryLinkCore { Id = NewId(), TargetId = "cat-troops", Name = "Troops" },
                     ],
                     SelectionEntries =
                     [
-                        NodeFactory.SelectionEntry("Soldier") with
+                        new SelectionEntryCore
                         {
                             Id = "entry-soldier-model",
+                            Name = "Soldier",
                             Type = SelectionEntryKind.Model,
-                            Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 10m }],
+                            Costs = [Pts(10)],
                             Constraints =
                             [
-                                NodeFactory.Constraint() with
+                                new ConstraintCore
                                 {
                                     Id = "con-soldier-min", Type = ConstraintKind.Minimum, Value = 5,
                                     Scope = "parent", Field = "selections",
                                 },
-                                NodeFactory.Constraint() with
+                                new ConstraintCore
                                 {
                                     Id = "con-soldier-max", Type = ConstraintKind.Maximum, Value = 10,
                                     Scope = "parent", Field = "selections",
@@ -149,7 +157,7 @@ public static class TestDataFactory
                     ],
                 },
             ],
-        };
+        }.ToNode();
     }
 
     /// <summary>
@@ -157,43 +165,42 @@ public static class TestDataFactory
     /// </summary>
     public static CatalogueNode CreateModifierTestCatalogue()
     {
-        return NodeFactory.Catalogue("test-gs-1", "Modifier Test Catalogue") with
+        return new CatalogueCore
         {
             Id = "test-cat-modifiers",
+            Name = "Modifier Test Catalogue",
+            GamesystemId = "test-gs-1",
             BattleScribeVersion = "2.03",
             Revision = 1,
             SelectionEntries =
             [
-                // Entry with unconditional name modifier
-                NodeFactory.SelectionEntry("Base Name") with
+                new SelectionEntryCore
                 {
                     Id = "entry-name-mod",
+                    Name = "Base Name",
                     Type = SelectionEntryKind.Upgrade,
                     Modifiers =
                     [
-                        // Append " (Modified)" to name unconditionally
-                        NodeFactory.Modifier() with
+                        new ModifierCore
                         {
                             Type = ModifierKind.Append, Field = "name", Value = "(Modified)",
                         },
                     ],
                 },
-
-                // Entry with conditional cost modifier
-                NodeFactory.SelectionEntry("Variable Cost Unit") with
+                new SelectionEntryCore
                 {
                     Id = "entry-var-cost",
+                    Name = "Variable Cost Unit",
                     Type = SelectionEntryKind.Unit,
-                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 50m }],
+                    Costs = [Pts(50)],
                     Modifiers =
                     [
-                        // Increment cost by 10 when at least 3 selections in force
-                        NodeFactory.Modifier() with
+                        new ModifierCore
                         {
                             Type = ModifierKind.Increment, Field = "pts", Value = "10",
                             Conditions =
                             [
-                                NodeFactory.Condition() with
+                                new ConditionCore
                                 {
                                     Type = ConditionKind.AtLeast, Value = 3,
                                     Field = "selections", Scope = "force", ChildId = "entry-var-cost",
@@ -202,22 +209,20 @@ public static class TestDataFactory
                         },
                     ],
                 },
-
-                // Entry with hidden modifier (conditional visibility)
-                NodeFactory.SelectionEntry("Conditional Entry") with
+                new SelectionEntryCore
                 {
                     Id = "entry-conditional",
+                    Name = "Conditional Entry",
                     Type = SelectionEntryKind.Upgrade,
                     Hidden = true,
                     Modifiers =
                     [
-                        // Un-hide when a specific other entry is selected
-                        NodeFactory.Modifier() with
+                        new ModifierCore
                         {
                             Type = ModifierKind.Set, Field = "hidden", Value = "false",
                             Conditions =
                             [
-                                NodeFactory.Condition() with
+                                new ConditionCore
                                 {
                                     Type = ConditionKind.AtLeast, Value = 1,
                                     Field = "selections", Scope = "force", ChildId = "entry-commander",
@@ -226,24 +231,22 @@ public static class TestDataFactory
                         },
                     ],
                 },
-
-                // Entry with set-primary category modifier
-                NodeFactory.SelectionEntry("Faction Swap Unit") with
+                new SelectionEntryCore
                 {
                     Id = "entry-faction-swap",
+                    Name = "Faction Swap Unit",
                     Type = SelectionEntryKind.Unit,
-                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 75m }],
+                    Costs = [Pts(75)],
                     CategoryLinks =
                     [
-                        NodeFactory.CategoryLink() with
+                        new CategoryLinkCore
                         {
                             Id = "catlink-hq", TargetId = "cat-hq", Name = "HQ", Primary = true,
                         },
                     ],
                     Modifiers =
                     [
-                        // Change primary category to Troops
-                        NodeFactory.Modifier() with
+                        new ModifierCore
                         {
                             Type = ModifierKind.SetPrimary, Field = "category",
                             Value = "cat-troops",
@@ -251,7 +254,7 @@ public static class TestDataFactory
                     ],
                 },
             ],
-        };
+        }.ToNode();
     }
 
     /// <summary>
@@ -259,30 +262,34 @@ public static class TestDataFactory
     /// </summary>
     public static CatalogueNode CreateLinkTestCatalogue()
     {
-        return NodeFactory.Catalogue("test-gs-1", "Link Test Catalogue") with
+        return new CatalogueCore
         {
             Id = "test-cat-links",
+            Name = "Link Test Catalogue",
+            GamesystemId = "test-gs-1",
             BattleScribeVersion = "2.03",
             Revision = 1,
             SharedSelectionEntries =
             [
-                NodeFactory.SelectionEntry("Shared Weapon") with
+                new SelectionEntryCore
                 {
                     Id = "shared-weapon-1",
+                    Name = "Shared Weapon",
                     Type = SelectionEntryKind.Upgrade,
-                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 15m }],
+                    Costs = [Pts(15)],
                 },
             ],
             SelectionEntries =
             [
-                NodeFactory.SelectionEntry("Linked Unit") with
+                new SelectionEntryCore
                 {
                     Id = "entry-linked-unit",
+                    Name = "Linked Unit",
                     Type = SelectionEntryKind.Unit,
-                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 80m }],
+                    Costs = [Pts(80)],
                     EntryLinks =
                     [
-                        NodeFactory.EntryLink() with
+                        new EntryLinkCore
                         {
                             Id = "link-to-shared",
                             TargetId = "shared-weapon-1",
@@ -291,7 +298,7 @@ public static class TestDataFactory
                     ],
                 },
             ],
-        };
+        }.ToNode();
     }
 
     /// <summary>
@@ -299,32 +306,36 @@ public static class TestDataFactory
     /// </summary>
     public static CatalogueNode CreateSelectionGroupTestCatalogue()
     {
-        return NodeFactory.Catalogue("test-gs-1", "SelectionGroup Test Catalogue") with
+        return new CatalogueCore
         {
             Id = "test-cat-groups",
+            Name = "SelectionGroup Test Catalogue",
+            GamesystemId = "test-gs-1",
             BattleScribeVersion = "2.03",
             Revision = 1,
             SelectionEntries =
             [
-                NodeFactory.SelectionEntry("Equipped Unit") with
+                new SelectionEntryCore
                 {
                     Id = "entry-equipped",
+                    Name = "Equipped Unit",
                     Type = SelectionEntryKind.Unit,
-                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 50m }],
+                    Costs = [Pts(50)],
                     SelectionEntryGroups =
                     [
-                        NodeFactory.SelectionEntryGroup("Weapon Choice") with
+                        new SelectionEntryGroupCore
                         {
                             Id = "group-weapon-choice",
+                            Name = "Weapon Choice",
                             DefaultSelectionEntryId = "weapon-a",
                             Constraints =
                             [
-                                NodeFactory.Constraint() with
+                                new ConstraintCore
                                 {
                                     Id = "con-weapon-min", Type = ConstraintKind.Minimum, Value = 1,
                                     Scope = "parent", Field = "selections",
                                 },
-                                NodeFactory.Constraint() with
+                                new ConstraintCore
                                 {
                                     Id = "con-weapon-max", Type = ConstraintKind.Maximum, Value = 1,
                                     Scope = "parent", Field = "selections",
@@ -332,29 +343,26 @@ public static class TestDataFactory
                             ],
                             SelectionEntries =
                             [
-                                NodeFactory.SelectionEntry("Weapon A") with
+                                new SelectionEntryCore
                                 {
-                                    Id = "weapon-a",
-                                    Type = SelectionEntryKind.Upgrade,
-                                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 0m }],
+                                    Id = "weapon-a", Name = "Weapon A",
+                                    Type = SelectionEntryKind.Upgrade, Costs = [Pts(0)],
                                 },
-                                NodeFactory.SelectionEntry("Weapon B") with
+                                new SelectionEntryCore
                                 {
-                                    Id = "weapon-b",
-                                    Type = SelectionEntryKind.Upgrade,
-                                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 10m }],
+                                    Id = "weapon-b", Name = "Weapon B",
+                                    Type = SelectionEntryKind.Upgrade, Costs = [Pts(10)],
                                 },
-                                NodeFactory.SelectionEntry("Weapon C") with
+                                new SelectionEntryCore
                                 {
-                                    Id = "weapon-c",
-                                    Type = SelectionEntryKind.Upgrade,
-                                    Costs = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 25m }],
+                                    Id = "weapon-c", Name = "Weapon C",
+                                    Type = SelectionEntryKind.Upgrade, Costs = [Pts(25)],
                                 },
                             ],
                         },
                     ],
                 },
             ],
-        };
+        }.ToNode();
     }
 }

@@ -34,14 +34,14 @@ public class FormatValidationTests
         var gs = TestDataFactory.CreateMinimalGamesystem();
         Assert.Single(gs.ProfileTypes);
         Assert.Equal("Unit", gs.ProfileTypes[0].Name);
-        Assert.Equal(6, gs.ProfileTypes[0].CharacteristicTypes.Length);
+        Assert.Equal(6, gs.ProfileTypes[0].CharacteristicTypes.Count);
     }
 
     [Fact]
     public void MinimalGamesystem_HasCategoryEntries()
     {
         var gs = TestDataFactory.CreateMinimalGamesystem();
-        Assert.Equal(3, gs.CategoryEntries.Length);
+        Assert.Equal(3, gs.CategoryEntries.Count);
         Assert.Contains(gs.CategoryEntries, c => c.Name == "HQ");
         Assert.Contains(gs.CategoryEntries, c => c.Name == "Troops");
         Assert.Contains(gs.CategoryEntries, c => c.Name == "Faction");
@@ -53,7 +53,7 @@ public class FormatValidationTests
         var gs = TestDataFactory.CreateMinimalGamesystem();
         Assert.Single(gs.ForceEntries);
         Assert.Equal("Detachment", gs.ForceEntries[0].Name);
-        Assert.Equal(2, gs.ForceEntries[0].CategoryLinks.Length);
+        Assert.Equal(2, gs.ForceEntries[0].CategoryLinks.Count);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class FormatValidationTests
     public void BasicCatalogue_HasSelectionEntries()
     {
         var cat = TestDataFactory.CreateBasicCatalogue();
-        Assert.Equal(2, cat.SelectionEntries.Length);
+        Assert.Equal(2, cat.SelectionEntries.Count);
         Assert.Contains(cat.SelectionEntries, e => e.Name == "Commander");
         Assert.Contains(cat.SelectionEntries, e => e.Name == "Soldier Squad");
     }

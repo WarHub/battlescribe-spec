@@ -36,7 +36,6 @@ public class ConditionEvaluationTests
     [Fact]
     public void AllConditionKinds_AreValid()
     {
-        // Verify all ConditionKind enum values are defined
         var kinds = Enum.GetValues<ConditionKind>();
         Assert.Contains(ConditionKind.LessThan, kinds);
         Assert.Contains(ConditionKind.GreaterThan, kinds);
@@ -51,7 +50,6 @@ public class ConditionEvaluationTests
     [Fact]
     public void Condition_Scope_Values()
     {
-        // Verify commonly used scope values work in the data model
         var cat = TestDataFactory.CreateModifierTestCatalogue();
 
         // Force scope
@@ -61,81 +59,89 @@ public class ConditionEvaluationTests
             .FirstOrDefault(c => c.Scope == "force");
         Assert.NotNull(forceScopeCondition);
 
-        // Test that conditions can reference different scope values
-        var testCondition = NodeFactory.Condition() with
+        // Test conditions with different scope values using Core records
+        var rosterScope = new ConditionCore
         {
             Type = ConditionKind.EqualTo, Value = 1,
             Field = "selections", Scope = "roster"
-        };
-        Assert.Equal("roster", testCondition.Scope);
+        }.ToNode();
+        Assert.Equal("roster", rosterScope.Scope);
 
-        testCondition = testCondition with { Scope = "self" };
-        Assert.Equal("self", testCondition.Scope);
+        var selfScope = new ConditionCore
+        {
+            Type = ConditionKind.EqualTo, Value = 1,
+            Field = "selections", Scope = "self"
+        }.ToNode();
+        Assert.Equal("self", selfScope.Scope);
 
-        testCondition = testCondition with { Scope = "parent" };
-        Assert.Equal("parent", testCondition.Scope);
+        var parentScope = new ConditionCore
+        {
+            Type = ConditionKind.EqualTo, Value = 1,
+            Field = "selections", Scope = "parent"
+        }.ToNode();
+        Assert.Equal("parent", parentScope.Scope);
     }
 
     [Fact]
     public void ConditionGroup_And_CanBeCreated()
     {
-        var group = NodeFactory.ConditionGroup() with
+        var group = new ConditionGroupCore
         {
             Type = ConditionGroupKind.And,
             Conditions =
             [
-                NodeFactory.Condition() with
+                new ConditionCore
                 {
                     Type = ConditionKind.AtLeast, Value = 1, Field = "selections", Scope = "force",
                 },
-                NodeFactory.Condition() with
+                new ConditionCore
                 {
                     Type = ConditionKind.AtMost, Value = 5, Field = "selections", Scope = "force",
                 },
             ],
-        };
+        }.ToNode();
 
         Assert.Equal(ConditionGroupKind.And, group.Type);
-        Assert.Equal(2, group.Conditions.Length);
+        Assert.Equal(2, group.Conditions.Count);
     }
 
     [Fact]
     public void ConditionGroup_Or_CanBeCreated()
     {
-        var group = NodeFactory.ConditionGroup() with
+        var group = new ConditionGroupCore
         {
             Type = ConditionGroupKind.Or,
             Conditions =
             [
-                NodeFactory.Condition() with
+                new ConditionCore
                 {
                     Type = ConditionKind.EqualTo, Value = 0, Field = "selections", Scope = "force",
                 },
-                NodeFactory.Condition() with
+                new ConditionCore
                 {
                     Type = ConditionKind.AtLeast, Value = 3, Field = "selections", Scope = "force",
                 },
             ],
-        };
+        }.ToNode();
 
         Assert.Equal(ConditionGroupKind.Or, group.Type);
-        Assert.Equal(2, group.Conditions.Length);
+        Assert.Equal(2, group.Conditions.Count);
     }
 
     [Fact]
     public void ConditionGroup_Nested_CanBeCreated()
     {
-        var nested = NodeFactory.ConditionGroup() with
+        var nested = new ConditionGroupCore
         {
             Type = ConditionGroupKind.And,
             ConditionGroups =
             [
-                NodeFactory.ConditionGroup() with
+                new ConditionGroupCore
                 {
                     Type = ConditionGroupKind.Or,
                     Conditions =
                     [
-                        NodeFactory.Condition() with
+                        new ConditionCore
                         {
                             Type = ConditionKind.EqualTo, Value = 1, Field = "selections", Scope = "force",
                         },
@@ -144,12 +150,12 @@ public class ConditionEvaluationTests
             ],
             Conditions =
             [
-                NodeFactory.Condition() with
+                new ConditionCore
                 {
                     Type = ConditionKind.AtLeast, Value = 1, Field = "selections", Scope = "roster",
                 },
             ],
-        };
+        }.ToNode();
 
         Assert.Equal(ConditionGroupKind.And, nested.Type);
         Assert.Single(nested.ConditionGroups);

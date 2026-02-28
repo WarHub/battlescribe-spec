@@ -16,7 +16,7 @@ public class ConstraintValidationTests
         var commander = cat.SelectionEntries.First(e => e.Name == "Commander");
         var minConstraint = commander.Constraints.First(c => c.Type == ConstraintKind.Minimum);
 
-        Assert.Equal(0m, minConstraint.Value); // 0 = not required
+        Assert.Equal(0m, minConstraint.Value);
         Assert.Equal("force", minConstraint.Scope);
         Assert.Equal("selections", minConstraint.Field);
     }
@@ -33,33 +33,34 @@ public class ConstraintValidationTests
     }
 
     [Theory]
-    [InlineData(0, true)]   // 0 = not required, valid
-    [InlineData(-1, true)]  // -1 = unlimited max, valid
-    [InlineData(1, true)]   // explicit limit, valid
-    [InlineData(10, true)]  // explicit limit, valid
+    [InlineData(0, true)]
+    [InlineData(-1, true)]
+    [InlineData(1, true)]
+    [InlineData(10, true)]
     public void Constraint_SpecialValues_AreRecognized(decimal value, bool isValid)
     {
-        var constraint = NodeFactory.Constraint() with
+        var constraint = new ConstraintCore
         {
+            Id = "test",
             Type = ConstraintKind.Maximum,
             Value = value,
             Scope = "force",
             Field = "selections",
-        };
+        }.ToNode();
 
         Assert.Equal(value, constraint.Value);
-        Assert.True(isValid); // all values are structurally valid
+        Assert.True(isValid);
     }
 
     [Fact]
     public void Constraint_MinZero_MeansNotRequired()
     {
-        // Spec: min constraint with value 0 means "not required"
-        var constraint = NodeFactory.Constraint() with
+        var constraint = new ConstraintCore
         {
+            Id = "test",
             Type = ConstraintKind.Minimum, Value = 0,
             Scope = "force", Field = "selections",
-        };
+        }.ToNode();
         Assert.Equal(0m, constraint.Value);
         Assert.Equal(ConstraintKind.Minimum, constraint.Type);
     }
@@ -67,12 +68,12 @@ public class ConstraintValidationTests
     [Fact]
     public void Constraint_MaxNegativeOne_MeansUnlimited()
     {
-        // Spec: max constraint with value -1 means "unlimited"
-        var constraint = NodeFactory.Constraint() with
+        var constraint = new ConstraintCore
         {
+            Id = "test",
             Type = ConstraintKind.Maximum, Value = -1,
             Scope = "force", Field = "selections",
-        };
+        }.ToNode();
         Assert.Equal(-1m, constraint.Value);
         Assert.Equal(ConstraintKind.Maximum, constraint.Type);
     }
@@ -102,7 +103,6 @@ public class ConstraintValidationTests
         var min = group.Constraints.First(c => c.Type == ConstraintKind.Minimum);
         var max = group.Constraints.First(c => c.Type == ConstraintKind.Maximum);
 
-        // min=1, max=1 means exactly one must be selected
         Assert.Equal(1m, min.Value);
         Assert.Equal(1m, max.Value);
     }
@@ -110,15 +110,15 @@ public class ConstraintValidationTests
     [Fact]
     public void Constraint_ScopeVariants()
     {
-        // Test that constraints work with different scope values
         var scopes = new[] { "self", "parent", "force", "roster", "primary-category" };
         foreach (var scope in scopes)
         {
-            var constraint = NodeFactory.Constraint() with
+            var constraint = new ConstraintCore
             {
+                Id = "test",
                 Type = ConstraintKind.Maximum, Value = 5,
                 Scope = scope, Field = "selections",
-            };
+            }.ToNode();
             Assert.Equal(scope, constraint.Scope);
         }
     }

@@ -10,30 +10,33 @@ namespace BattleScribeSpec.Tests;
 /// </summary>
 public class SerializationRoundTripTests
 {
+    private static MemoryStream SerializeToStream(SourceNode node)
+    {
+        var memStream = new MemoryStream();
+        using (var writer = new StreamWriter(memStream, leaveOpen: true))
+        {
+            BattleScribeXmlSerializer.Instance.Serialize(node, writer);
+        }
+        memStream.Position = 0;
+        return memStream;
+    }
+
     [Fact]
     public void Gamesystem_CanSerializeAndDeserialize()
     {
         var gs = TestDataFactory.CreateMinimalGamesystem();
 
-        using var memStream = new MemoryStream();
-        using (var writer = new StreamWriter(memStream, leaveOpen: true))
-        {
-            BattleScribeXmlSerializer.Instance.Serialize(gs, writer);
-        }
-
-        memStream.Position = 0;
-        var deserialized = BattleScribeXmlSerializer.Instance.Deserialize(
-            ser => ser.DeserializeGamesystem(),
-            memStream) as GamesystemNode;
+        using var memStream = SerializeToStream(gs);
+        var deserialized = memStream.DeserializeGamesystem();
 
         Assert.NotNull(deserialized);
         Assert.Equal(gs.Id, deserialized.Id);
         Assert.Equal(gs.Name, deserialized.Name);
         Assert.Equal(gs.BattleScribeVersion, deserialized.BattleScribeVersion);
-        Assert.Equal(gs.CostTypes.Length, deserialized.CostTypes.Length);
-        Assert.Equal(gs.ProfileTypes.Length, deserialized.ProfileTypes.Length);
-        Assert.Equal(gs.CategoryEntries.Length, deserialized.CategoryEntries.Length);
-        Assert.Equal(gs.ForceEntries.Length, deserialized.ForceEntries.Length);
+        Assert.Equal(gs.CostTypes.Count, deserialized.CostTypes.Count);
+        Assert.Equal(gs.ProfileTypes.Count, deserialized.ProfileTypes.Count);
+        Assert.Equal(gs.CategoryEntries.Count, deserialized.CategoryEntries.Count);
+        Assert.Equal(gs.ForceEntries.Count, deserialized.ForceEntries.Count);
     }
 
     [Fact]
@@ -41,22 +44,14 @@ public class SerializationRoundTripTests
     {
         var cat = TestDataFactory.CreateBasicCatalogue();
 
-        using var memStream = new MemoryStream();
-        using (var writer = new StreamWriter(memStream, leaveOpen: true))
-        {
-            BattleScribeXmlSerializer.Instance.Serialize(cat, writer);
-        }
-
-        memStream.Position = 0;
-        var deserialized = BattleScribeXmlSerializer.Instance.Deserialize(
-            ser => ser.DeserializeCatalogue(),
-            memStream) as CatalogueNode;
+        using var memStream = SerializeToStream(cat);
+        var deserialized = memStream.DeserializeCatalogue();
 
         Assert.NotNull(deserialized);
         Assert.Equal(cat.Id, deserialized.Id);
         Assert.Equal(cat.Name, deserialized.Name);
         Assert.Equal(cat.GamesystemId, deserialized.GamesystemId);
-        Assert.Equal(cat.SelectionEntries.Length, deserialized.SelectionEntries.Length);
+        Assert.Equal(cat.SelectionEntries.Count, deserialized.SelectionEntries.Count);
     }
 
     [Fact]
@@ -64,16 +59,8 @@ public class SerializationRoundTripTests
     {
         var cat = TestDataFactory.CreateBasicCatalogue();
 
-        using var memStream = new MemoryStream();
-        using (var writer = new StreamWriter(memStream, leaveOpen: true))
-        {
-            BattleScribeXmlSerializer.Instance.Serialize(cat, writer);
-        }
-
-        memStream.Position = 0;
-        var deserialized = BattleScribeXmlSerializer.Instance.Deserialize(
-            ser => ser.DeserializeCatalogue(),
-            memStream) as CatalogueNode;
+        using var memStream = SerializeToStream(cat);
+        var deserialized = memStream.DeserializeCatalogue();
 
         Assert.NotNull(deserialized);
         var commander = deserialized.SelectionEntries.FirstOrDefault(e => e.Name == "Commander");
@@ -81,7 +68,7 @@ public class SerializationRoundTripTests
         Assert.Equal(SelectionEntryKind.Unit, commander.Type);
         Assert.Single(commander.Costs);
         Assert.Equal(100m, commander.Costs[0].Value);
-        Assert.Equal(2, commander.Constraints.Length);
+        Assert.Equal(2, commander.Constraints.Count);
     }
 
     [Fact]
@@ -89,16 +76,8 @@ public class SerializationRoundTripTests
     {
         var cat = TestDataFactory.CreateModifierTestCatalogue();
 
-        using var memStream = new MemoryStream();
-        using (var writer = new StreamWriter(memStream, leaveOpen: true))
-        {
-            BattleScribeXmlSerializer.Instance.Serialize(cat, writer);
-        }
-
-        memStream.Position = 0;
-        var deserialized = BattleScribeXmlSerializer.Instance.Deserialize(
-            ser => ser.DeserializeCatalogue(),
-            memStream) as CatalogueNode;
+        using var memStream = SerializeToStream(cat);
+        var deserialized = memStream.DeserializeCatalogue();
 
         Assert.NotNull(deserialized);
         var entry = deserialized.SelectionEntries.FirstOrDefault(e => e.Id == "entry-name-mod");
@@ -114,16 +93,8 @@ public class SerializationRoundTripTests
     {
         var cat = TestDataFactory.CreateLinkTestCatalogue();
 
-        using var memStream = new MemoryStream();
-        using (var writer = new StreamWriter(memStream, leaveOpen: true))
-        {
-            BattleScribeXmlSerializer.Instance.Serialize(cat, writer);
-        }
-
-        memStream.Position = 0;
-        var deserialized = BattleScribeXmlSerializer.Instance.Deserialize(
-            ser => ser.DeserializeCatalogue(),
-            memStream) as CatalogueNode;
+        using var memStream = SerializeToStream(cat);
+        var deserialized = memStream.DeserializeCatalogue();
 
         Assert.NotNull(deserialized);
         Assert.Single(deserialized.SharedSelectionEntries);
@@ -139,16 +110,8 @@ public class SerializationRoundTripTests
     {
         var cat = TestDataFactory.CreateSelectionGroupTestCatalogue();
 
-        using var memStream = new MemoryStream();
-        using (var writer = new StreamWriter(memStream, leaveOpen: true))
-        {
-            BattleScribeXmlSerializer.Instance.Serialize(cat, writer);
-        }
-
-        memStream.Position = 0;
-        var deserialized = BattleScribeXmlSerializer.Instance.Deserialize(
-            ser => ser.DeserializeCatalogue(),
-            memStream) as CatalogueNode;
+        using var memStream = SerializeToStream(cat);
+        var deserialized = memStream.DeserializeCatalogue();
 
         Assert.NotNull(deserialized);
         var unit = deserialized.SelectionEntries.First(e => e.Name == "Equipped Unit");
@@ -156,32 +119,25 @@ public class SerializationRoundTripTests
         var group = unit.SelectionEntryGroups[0];
         Assert.Equal("Weapon Choice", group.Name);
         Assert.Equal("weapon-a", group.DefaultSelectionEntryId);
-        Assert.Equal(3, group.SelectionEntries.Length);
+        Assert.Equal(3, group.SelectionEntries.Count);
     }
 
     [Fact]
     public void Roster_CanSerializeAndDeserialize()
     {
         var gs = TestDataFactory.CreateMinimalGamesystem();
-        var roster = NodeFactory.Roster(gs) with
+        var rosterNode = NodeFactory.Roster(gs).Core with
         {
-            CostLimits = [NodeFactory.Cost("pts") with { TypeId = "pts", Value = 2000m }],
+            CostLimits = [new CostLimitCore { TypeId = "pts", Name = "pts", Value = 2000m }],
         };
+        var roster = rosterNode.ToNode();
 
-        using var memStream = new MemoryStream();
-        using (var writer = new StreamWriter(memStream, leaveOpen: true))
-        {
-            BattleScribeXmlSerializer.Instance.Serialize(roster, writer);
-        }
-
-        memStream.Position = 0;
-        var deserialized = BattleScribeXmlSerializer.Instance.Deserialize(
-            ser => ser.DeserializeRoster(),
-            memStream) as RosterNode;
+        using var memStream = SerializeToStream(roster);
+        var deserialized = memStream.DeserializeRoster();
 
         Assert.NotNull(deserialized);
-        Assert.Equal(roster.GamesystemId, deserialized.GamesystemId);
-        Assert.Equal(roster.GamesystemName, deserialized.GamesystemName);
+        Assert.Equal(roster.GameSystemId, deserialized.GameSystemId);
+        Assert.Equal(roster.GameSystemName, deserialized.GameSystemName);
         Assert.Single(deserialized.CostLimits);
         Assert.Equal(2000m, deserialized.CostLimits[0].Value);
     }

@@ -24,7 +24,7 @@ public class DataModelIntegrityTests
     {
         var cat = TestDataFactory.CreateBasicCatalogue();
         var commander = cat.SelectionEntries.First(e => e.Name == "Commander");
-        Assert.Equal(2, commander.Constraints.Length);
+        Assert.Equal(2, commander.Constraints.Count);
 
         var minConstraint = commander.Constraints.First(c => c.Type == ConstraintKind.Minimum);
         Assert.Equal(0m, minConstraint.Value);
@@ -99,7 +99,7 @@ public class DataModelIntegrityTests
         var group = unit.SelectionEntryGroups[0];
         Assert.Equal("Weapon Choice", group.Name);
         Assert.Equal("weapon-a", group.DefaultSelectionEntryId);
-        Assert.Equal(3, group.SelectionEntries.Length);
-        Assert.Equal(2, group.Constraints.Length);
+        Assert.Equal(3, group.SelectionEntries.Count);
+        Assert.Equal(2, group.Constraints.Count);
     }
 }

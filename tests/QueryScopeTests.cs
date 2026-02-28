@@ -19,102 +19,102 @@ public class QueryScopeTests
     [InlineData("primary-catalogue")]
     public void Condition_AcceptsScopeValue(string scope)
     {
-        var condition = NodeFactory.Condition() with
+        var condition = new ConditionCore
         {
             Type = ConditionKind.AtLeast, Value = 1,
             Field = "selections", Scope = scope,
-        };
+        }.ToNode();
         Assert.Equal(scope, condition.Scope);
     }
 
     [Theory]
     [InlineData("selections")]
     [InlineData("forces")]
-    [InlineData("pts")]          // cost type ID
-    [InlineData("custom-cost")]  // custom cost type ID
+    [InlineData("pts")]
+    [InlineData("custom-cost")]
     public void Condition_AcceptsFieldValue(string field)
     {
-        var condition = NodeFactory.Condition() with
+        var condition = new ConditionCore
         {
             Type = ConditionKind.EqualTo, Value = 1,
             Field = field, Scope = "force",
-        };
+        }.ToNode();
         Assert.Equal(field, condition.Field);
     }
 
     [Theory]
     [InlineData("any")]
-    [InlineData("entry-commander")]  // specific entry ID
-    [InlineData("cat-hq")]           // category entry ID
+    [InlineData("entry-commander")]
+    [InlineData("cat-hq")]
     public void Condition_AcceptsChildIdFilter(string childId)
     {
-        var condition = NodeFactory.Condition() with
+        var condition = new ConditionCore
         {
             Type = ConditionKind.AtLeast, Value = 1,
             Field = "selections", Scope = "force", ChildId = childId,
-        };
+        }.ToNode();
         Assert.Equal(childId, condition.ChildId);
     }
 
     [Fact]
     public void Condition_IncludeChildSelections_Flag()
     {
-        var condition = NodeFactory.Condition() with
+        var condition = new ConditionCore
         {
             Type = ConditionKind.AtLeast, Value = 1,
             Field = "selections", Scope = "force",
             IncludeChildSelections = true,
-        };
+        }.ToNode();
         Assert.True(condition.IncludeChildSelections);
     }
 
     [Fact]
     public void Condition_IncludeChildForces_Flag()
     {
-        var condition = NodeFactory.Condition() with
+        var condition = new ConditionCore
         {
             Type = ConditionKind.AtLeast, Value = 1,
             Field = "selections", Scope = "roster",
             IncludeChildForces = true,
-        };
+        }.ToNode();
         Assert.True(condition.IncludeChildForces);
     }
 
     [Fact]
-    public void Condition_PercentValue_Flag()
+    public void Condition_IsValuePercentage_Flag()
     {
-        var condition = NodeFactory.Condition() with
+        var condition = new ConditionCore
         {
             Type = ConditionKind.AtMost, Value = 50,
             Field = "pts", Scope = "roster",
-            PercentValue = true,
-        };
-        Assert.True(condition.PercentValue);
+            IsValuePercentage = true,
+        }.ToNode();
+        Assert.True(condition.IsValuePercentage);
         Assert.Equal(50m, condition.Value);
     }
 
     [Fact]
     public void Condition_Shared_Flag()
     {
-        var condition = NodeFactory.Condition() with
+        var condition = new ConditionCore
         {
             Type = ConditionKind.AtLeast, Value = 1,
             Field = "selections", Scope = "force",
             Shared = true,
-        };
+        }.ToNode();
         Assert.True(condition.Shared);
     }
 
     [Fact]
     public void Constraint_ScopeAndField_MatchConditionPattern()
     {
-        // Constraints use the same scope/field system as conditions (minus childId)
-        var constraint = NodeFactory.Constraint() with
+        var constraint = new ConstraintCore
         {
+            Id = "test",
             Type = ConstraintKind.Maximum, Value = 3,
             Scope = "force", Field = "selections",
             IncludeChildSelections = false,
-        };
+        }.ToNode();
 
         Assert.Equal("force", constraint.Scope);
         Assert.Equal("selections", constraint.Field);
@@ -123,19 +123,19 @@ public class QueryScopeTests
     [Fact]
     public void Repeat_HasQueryFields()
     {
-        var repeat = NodeFactory.Repeat() with
+        var repeat = new RepeatCore
         {
             Value = 5m,
-            Repeats = 1,
+            RepeatCount = 1,
             RoundUp = false,
             Field = "selections",
             Scope = "force",
             ChildId = "entry-soldier-model",
             IncludeChildSelections = true,
-        };
+        }.ToNode();
 
         Assert.Equal(5m, repeat.Value);
-        Assert.Equal(1, repeat.Repeats);
+        Assert.Equal(1, repeat.RepeatCount);
         Assert.False(repeat.RoundUp);
         Assert.Equal("force", repeat.Scope);
         Assert.Equal("entry-soldier-model", repeat.ChildId);

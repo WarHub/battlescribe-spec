@@ -58,16 +58,16 @@ public class RealWorldDataTests
         var gs = (GamesystemNode)DataLoader.LoadFile(gstFile);
 
         // wh40k-9e should have pts, PL, and CP cost types
-        Assert.True(gs.CostTypes.Length >= 2, $"Expected ≥2 cost types, got {gs.CostTypes.Length}");
+        Assert.True(gs.CostTypes.Count >= 2, $"Expected ≥2 cost types, got {gs.CostTypes.Count}");
 
         // Should have profile types (at least Unit, Weapon)
-        Assert.True(gs.ProfileTypes.Length >= 1, $"Expected ≥1 profile types, got {gs.ProfileTypes.Length}");
+        Assert.True(gs.ProfileTypes.Count >= 1, $"Expected ≥1 profile types, got {gs.ProfileTypes.Count}");
 
         // Should have category entries (HQ, Troops, Elites, etc.)
-        Assert.True(gs.CategoryEntries.Length >= 5, $"Expected ≥5 categories, got {gs.CategoryEntries.Length}");
+        Assert.True(gs.CategoryEntries.Count >= 5, $"Expected ≥5 categories, got {gs.CategoryEntries.Count}");
 
         // Should have force entries (detachments)
-        Assert.True(gs.ForceEntries.Length >= 1, $"Expected ≥1 force entries, got {gs.ForceEntries.Length}");
+        Assert.True(gs.ForceEntries.Count >= 1, $"Expected ≥1 force entries, got {gs.ForceEntries.Count}");
     }
 
     [SkippableFact]
@@ -94,7 +94,7 @@ public class RealWorldDataTests
 
         // At least some catalogues should have selection entries
         var withEntries = catalogues.Cast<CatalogueNode>()
-            .Count(c => c.SelectionEntries.Length > 0 || c.EntryLinks.Length > 0);
+            .Count(c => c.SelectionEntries.Count > 0 || c.EntryLinks.Count > 0);
         Assert.True(withEntries > 0, "Expected some catalogues with entries");
     }
 
