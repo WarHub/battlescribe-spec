@@ -23,4 +23,12 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Copy IKVM-generated assemblies that aren't transitively referenced -->
+  <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
+    <ItemGroup>
+      <IkvmDlls Include="..\src\bin\$(Configuration)\$(TargetFramework)\DataUtils.dll;..\src\bin\$(Configuration)\$(TargetFramework)\KotlinStdlib.dll;..\src\bin\$(Configuration)\$(TargetFramework)\KotlinStdlibCommon.dll;..\src\bin\$(Configuration)\$(TargetFramework)\Stax.dll;..\src\bin\$(Configuration)\$(TargetFramework)\StaxApi.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

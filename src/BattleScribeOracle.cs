@@ -381,6 +381,115 @@ public sealed class BattleScribeOracle : IDisposable
             .ToList();
     }
 
+    // ===== File-loading API (loads real XML data via SimpleXML Persister) =====
+
+    /// <summary>
+    /// Load a game system from a .gst XML file using SimpleXML deserialization.
+    /// Bypasses DataUtils wrapper to avoid IKVM cross-assembly class loading issues.
+    /// </summary>
+    public void LoadGameSystemFile(string gstFilePath)
+    {
+        var gs = DeserializeXml<GameSystem>(gstFilePath);
+        _gameSystem = gs;
+    }
+
+    /// <summary>
+    /// Load a catalogue from a .cat XML file using SimpleXML deserialization.
+    /// </summary>
+    public void LoadCatalogueFile(string catFilePath)
+    {
+        var cat = DeserializeXml<Catalogue>(catFilePath);
+        _catalogues[cat.getId()] = cat;
+    }
+
+    /// <summary>
+    /// Deserialize an XML file to a Java model type using SimpleXML Persister.
+    /// This replicates what DataUtils does internally without cross-assembly issues.
+    /// </summary>
+    private static T DeserializeXml<T>(string filePath) where T : class
+    {
+        // Use the default Persister with strict=false (matching @Root(strict=false) annotations)
+        var persister = new org.simpleframework.xml.core.Persister();
+        var file = new java.io.File(filePath);
+        // Get java.lang.Class from .NET Type using IKVM intrinsics
+        var javaClass = java.lang.Class.forName(typeof(T).FullName!.Replace('+', '$'));
+        var result = persister.read(javaClass, file, false);
+        return (T)(result ?? throw new InvalidOperationException(
+            $"SimpleXML deserialization returned null for {filePath}"));
+    }
+
+    /// <summary>
+    /// Initialize the engine after loading game system and catalogues from files.
+    /// </summary>
+    public List<string> InitializeFromLoadedData()
+    {
+        if (_gameSystem is null)
+            throw new InvalidOperationException("Load a game system file first.");
+
+        // Populate force entries from loaded data
+        _setupForceEntries.Clear();
+        var feIter = _gameSystem.getForceEntries().iterator();
+        while (feIter.hasNext())
+            _setupForceEntries.Add((ForceEntry)feIter.next());
+
+        // Set up catalogue reference for AddForceByIndex
+        if (_catalogues.Count > 0)
+            _setupCatalogue = _catalogues.Values.First();
+
+        return Initialize(_gameSystem, _catalogues);
+    }
+
+    /// <summary>
+    /// Get list of force entry names (for test inspection).
+    /// </summary>
+    public List<string> GetAvailableForceEntryNames()
+    {
+        return _setupForceEntries.Select(fe => fe.getName() ?? "?").ToList();
+    }
+
+    /// <summary>
+    /// Get available selection entry names from a catalogue.
+    /// </summary>
+    public List<string> GetCatalogueSelectionEntryNames(string catalogueId)
+    {
+        if (!_catalogues.TryGetValue(catalogueId, out var cat))
+            return [];
+        var result = new List<string>();
+        var iter = cat.getSelectionEntries().iterator();
+        while (iter.hasNext())
+        {
+            var se = (SelectionEntry)iter.next();
+            result.Add(se.getName() ?? "?");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Select a catalogue selection entry by name (first match) on the first force.
+    /// Returns count of selections created, or -1 if not found.
+    /// </summary>
+    public int SelectCatalogueEntryByName(string entryName, string catalogueId)
+    {
+        EnsureInitialized();
+        if (!_catalogues.TryGetValue(catalogueId, out var cat))
+            return -1;
+
+        var forces = GetForces();
+        if (forces.Count == 0) return -1;
+
+        var iter = cat.getSelectionEntries().iterator();
+        while (iter.hasNext())
+        {
+            var se = (SelectionEntry)iter.next();
+            if (se.getName() == entryName)
+            {
+                var sels = SelectEntry(forces[0], se);
+                return sels.Count;
+            }
+        }
+        return -1;
+    }
+
     // ===== Spec-based API (accepts pure .NET spec records) =====
 
     /// <summary>
