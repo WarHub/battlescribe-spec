@@ -69,9 +69,13 @@ public static class SpecLoader
             Id: setup.GameSystem.Id,
             Name: setup.GameSystem.Name,
             ForceEntries: setup.GameSystem.ForceEntries?
-                .Select(fe => new ForceEntrySpec(fe.Id, fe.Name)).ToArray(),
+                .Select(fe => new ForceEntrySpec(fe.Id, fe.Name,
+                    fe.CategoryLinks?.Select(cl =>
+                        new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray())).ToArray(),
             CostTypes: setup.GameSystem.CostTypes?
-                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray());
+                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray(),
+            CategoryEntries: setup.GameSystem.CategoryEntries?
+                .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray());
 
         var cat = new CatalogueSpec(
             Id: setup.Catalogue.Id,
@@ -92,7 +96,8 @@ public static class SpecLoader
             Hidden: def.Hidden,
             Costs: def.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
             Constraints: def.Constraints?.Select(c =>
-                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope)).ToArray(),
+                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                    c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
             Modifiers: def.Modifiers?.Select(ConvertModifier).ToArray(),
             ModifierGroups: def.ModifierGroups?.Select(ConvertModifierGroup).ToArray(),
             ChildEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray(),
@@ -114,7 +119,8 @@ public static class SpecLoader
     }
 
     private static ConditionSpec ConvertCondition(ConditionDef def) =>
-        new(def.Type, def.Value, def.Field, def.Scope, def.ChildId, def.PercentValue);
+        new(def.Type, def.Value, def.Field, def.Scope, def.ChildId, def.PercentValue,
+            def.Shared, def.IncludeChildSelections, def.IncludeChildForces);
 
     private static ConditionGroupSpec ConvertConditionGroup(ConditionGroupDef def) =>
         new(def.Type,

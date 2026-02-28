@@ -19,14 +19,21 @@ public record ConditionSpec(
     string Field,
     string Scope,
     string ChildId = "",
-    bool PercentValue = false);
+    bool PercentValue = false,
+    bool Shared = false,
+    bool IncludeChildSelections = false,
+    bool IncludeChildForces = false);
 
 public record ConstraintSpec(
     string Id,
     string Type,
     double Value,
     string Field,
-    string Scope);
+    string Scope,
+    bool Shared = false,
+    bool IncludeChildSelections = false,
+    bool IncludeChildForces = false,
+    bool PercentValue = false);
 
 public record CostSpec(
     string Name,
@@ -52,13 +59,19 @@ public record SelectionEntrySpec(
 
 public record ForceEntrySpec(
     string Id,
-    string Name);
+    string Name,
+    CategoryLinkSpec[]? CategoryLinks = null);
 
 public record GameSystemSpec(
     string Id = "test-gs",
     string Name = "Test Game System",
     ForceEntrySpec[]? ForceEntries = null,
-    CostTypeSpec[]? CostTypes = null);
+    CostTypeSpec[]? CostTypes = null,
+    CategoryEntrySpec[]? CategoryEntries = null);
+
+public record CategoryEntrySpec(
+    string Id,
+    string Name);
 
 public record CatalogueSpec(
     string Id = "cat-1",

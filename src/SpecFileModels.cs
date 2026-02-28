@@ -98,6 +98,9 @@ public sealed class ForceEntryDef
 
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "categoryLinks")]
+    public List<CategoryLinkDef>? CategoryLinks { get; set; }
 }
 
 public sealed class CategoryEntryDef

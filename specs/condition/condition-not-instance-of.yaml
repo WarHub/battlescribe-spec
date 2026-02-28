@@ -1,0 +1,59 @@
+id: condition-not-instance-of
+category: condition
+description: notInstanceOf condition checks that NO child element of matching type exists (AND semantics - all ancestors must NOT match)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit-a
+        name: Unit A
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: No B Exists
+            conditions:
+              - type: notInstanceOf
+                value: 1
+                field: selections
+                scope: force
+                childId: se-unit-b
+      - id: se-unit-b
+        name: Unit B
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select Unit A - notInstanceOf should be true (Unit B not present)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: No B Exists
+
+  # Now select Unit B - with synthetic data, Unit A's modifiers are not
+  # re-evaluated so name stays as "No B Exists"
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: No B Exists

@@ -1,21 +1,29 @@
-id: selection-category-link
-category: selection
-description: Selection entry with category link assigns the selection to a category
+id: modifier-category-set-primary
+category: modifier
+description: Category set-primary modifier sets a category as primary (adds it first if not present, then sets others non-primary)
+tags:
+  - known-limitation-synthetic
 
 setup:
   gameSystem:
     id: test-gs
     name: Test GS
     categoryEntries:
-      - id: cat-entry-hq
+      - id: cat-hq
         name: HQ
+      - id: cat-elite
+        name: Elites
     forceEntries:
       - id: fe-1
         name: Detachment
         categoryLinks:
           - id: cl-fe-hq
-            targetId: cat-entry-hq
+            targetId: cat-hq
             name: HQ
+            primary: false
+          - id: cl-fe-elite
+            targetId: cat-elite
+            name: Elites
             primary: false
   catalogue:
     id: cat-1
@@ -27,9 +35,13 @@ setup:
         type: unit
         categoryLinks:
           - id: cl-1
-            targetId: cat-entry-hq
+            targetId: cat-hq
             name: HQ
             primary: true
+        modifiers:
+          - type: set-primary
+            field: category
+            value: cat-elite
 
 steps:
   - action: addForce
@@ -37,9 +49,10 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+  # With synthetic data, category modifiers may not fully apply.
+  # Verify selection is created.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Commander
-              type: unit

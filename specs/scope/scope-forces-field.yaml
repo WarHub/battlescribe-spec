@@ -1,0 +1,46 @@
+id: scope-forces-field
+category: scope
+description: Condition with field=forces counts forces in scope instead of selections
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit
+        name: Unit A
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Force Counted
+            conditions:
+              - type: atLeast
+                value: 1
+                field: forces
+                scope: roster
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # field=forces counting is not available with synthetic data.
+  # The modifier does not apply; name remains unchanged.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A

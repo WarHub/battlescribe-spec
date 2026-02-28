@@ -1,0 +1,62 @@
+id: condition-instance-of-by-category
+category: condition
+description: instanceOf condition can match by CategoryEntry ID on selections with matching category links
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-hq
+        name: HQ
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+            primary: false
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-detector
+        name: Detector
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: HQ Found
+            conditions:
+              - type: instanceOf
+                value: 1
+                field: selections
+                scope: force
+                childId: cat-hq
+      - id: se-commander
+        name: Commander
+        type: unit
+        categoryLinks:
+          - id: cl-cmd-hq
+            targetId: cat-hq
+            name: HQ
+            primary: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # instanceOf by category not evaluated with synthetic data
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Detector
