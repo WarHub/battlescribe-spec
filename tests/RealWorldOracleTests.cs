@@ -19,7 +19,7 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     [SkippableFact]
     public void LoadGameSystem_ViaJavaDeserializer()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         using var oracle = new BattleScribeOracle();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
@@ -38,7 +38,7 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     [SkippableFact]
     public void LoadGameSystemAndCatalogue_ViaJavaDeserializer()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         using var oracle = new BattleScribeOracle();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
@@ -62,7 +62,7 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     [SkippableFact]
     public void AddForce_WithRealData()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         using var oracle = new BattleScribeOracle();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
@@ -94,7 +94,7 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     [SkippableFact]
     public void LoadAllCatalogues_ViaJavaDeserializer()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         using var oracle = new BattleScribeOracle();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
@@ -128,7 +128,7 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     [SkippableFact]
     public void CompareForceEntries_JavaVsWham()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
 

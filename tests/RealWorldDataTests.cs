@@ -17,7 +17,7 @@ public class RealWorldDataTests
     [SkippableFact]
     public void LoadGamesystem_Succeeds()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
         var node = DataLoader.LoadFile(gstFile);
@@ -33,7 +33,7 @@ public class RealWorldDataTests
     [SkippableFact]
     public void LoadAllCatalogues_Succeed()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var (gamesystem, catalogues) = DataLoader.LoadDirectory(Wh40kDataDir);
         Assert.NotNull(gamesystem);
@@ -51,7 +51,7 @@ public class RealWorldDataTests
     [SkippableFact]
     public void Gamesystem_HasExpectedStructure()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
         var gs = (GamesystemNode)DataLoader.LoadFile(gstFile);
@@ -72,7 +72,7 @@ public class RealWorldDataTests
     [SkippableFact]
     public void AllCatalogues_ReferenceCorrectGamesystem()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var (gamesystem, catalogues) = DataLoader.LoadDirectory(Wh40kDataDir);
         var gs = (GamesystemNode)gamesystem!;
@@ -87,7 +87,7 @@ public class RealWorldDataTests
     [SkippableFact]
     public void Catalogues_HaveSelectionEntries()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var (_, catalogues) = DataLoader.LoadDirectory(Wh40kDataDir);
 
@@ -100,7 +100,7 @@ public class RealWorldDataTests
     [SkippableFact]
     public void Gamesystem_RoundTrip_Succeeds()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
         var (success, error) = DataLoader.RoundTripTest(gstFile);
@@ -110,7 +110,7 @@ public class RealWorldDataTests
     [SkippableFact]
     public void Catalogues_RoundTrip_Succeed()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found");
+        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var catFiles = Directory.GetFiles(Wh40kDataDir, "*.cat");
         var failures = new List<string>();
