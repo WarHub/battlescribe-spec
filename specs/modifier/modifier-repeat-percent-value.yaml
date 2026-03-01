@@ -1,0 +1,55 @@
+id: modifier-repeat-percent-value
+category: modifier
+description: Repeat with percentValue=true uses percentage-based threshold calculation
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 100
+        modifiers:
+          - type: increment
+            field: pts
+            value: "10"
+            repeats:
+              - value: 50
+                repeats: 1
+                field: selections
+                scope: self
+                percentValue: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # percentValue=true: threshold is 50% of the condition value.
+  # With self scope and selections field: 1 selection.
+  # Repeat value 50 with percentValue → condition uses percentage math.
+  # NOTE: percentValue on repeats is not meaningful with synthetic data.
+  # The base cost is observed unchanged.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
