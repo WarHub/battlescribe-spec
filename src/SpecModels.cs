@@ -43,7 +43,9 @@ public record CostSpec(
 public record CostTypeSpec(
     string Id,
     string Name,
-    double DefaultCostLimit = -1.0);
+    double DefaultCostLimit = -1.0,
+    bool Hidden = false,
+    bool Limit = false);
 
 public record SelectionEntrySpec(
     string Id,
@@ -56,7 +58,8 @@ public record SelectionEntrySpec(
     ModifierGroupSpec[]? ModifierGroups = null,
     SelectionEntrySpec[]? ChildEntries = null,
     SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
-    CategoryLinkSpec[]? CategoryLinks = null);
+    CategoryLinkSpec[]? CategoryLinks = null,
+    bool Collective = false);
 
 public record ForceEntrySpec(
     string Id,
@@ -111,7 +114,8 @@ public record ModifierGroupSpec(
     ConditionSpec[]? Conditions = null,
     ConditionGroupSpec[]? ConditionGroups = null,
     RepeatSpec[]? Repeats = null,
-    ModifierSpec[]? Modifiers = null);
+    ModifierSpec[]? Modifiers = null,
+    ModifierGroupSpec[]? ModifierGroups = null);
 
 public record CategoryLinkSpec(
     string Id,

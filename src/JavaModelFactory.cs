@@ -46,12 +46,19 @@ public static class JavaModelFactory
     /// <summary>
     /// Create a CostType.
     /// </summary>
-    public static CostType CreateCostType(string id, string name, double defaultCostLimit = -1.0)
+    public static CostType CreateCostType(
+        string id,
+        string name,
+        double defaultCostLimit = -1.0,
+        bool hidden = false,
+        bool limit = false)
     {
         var ct = new CostType();
         ct.setId(id);
         ct.setName(name);
         ct.setDefaultCostLimit(defaultCostLimit);
+        ct.setHidden(hidden);
+        ct.GetType().GetMethod("setLimit")?.Invoke(ct, [limit]);
         return ct;
     }
 
@@ -145,13 +152,15 @@ public static class JavaModelFactory
         IEnumerable<EntryLink>? entryLinks = null,
         IEnumerable<CategoryLink>? categoryLinks = null,
         IEnumerable<Constraint>? constraints = null,
-        IEnumerable<Modifier>? modifiers = null)
+        IEnumerable<Modifier>? modifiers = null,
+        bool collective = false)
     {
         var se = new SelectionEntry();
         se.setId(id);
         se.setName(name);
         se.setType(type);
         se.setHidden(hidden);
+        se.setCollective(collective);
 
         if (costs != null)
             foreach (var c in costs)

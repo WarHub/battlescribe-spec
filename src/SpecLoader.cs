@@ -73,7 +73,7 @@ public static class SpecLoader
                     fe.CategoryLinks?.Select(cl =>
                         new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray())).ToArray(),
             CostTypes: setup.GameSystem.CostTypes?
-                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray(),
+                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray(),
             CategoryEntries: setup.GameSystem.CategoryEntries?
                 .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray());
 
@@ -105,7 +105,8 @@ public static class SpecLoader
             ChildEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray(),
             SelectionEntryGroups: def.SelectionEntryGroups?.Select(ConvertSelectionEntryGroup).ToArray(),
             CategoryLinks: def.CategoryLinks?.Select(cl =>
-                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray());
+                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
+            Collective: def.Collective);
     }
 
     private static SelectionEntryGroupSpec ConvertSelectionEntryGroup(SelectionEntryGroupDef def)
@@ -150,5 +151,6 @@ public static class SpecLoader
             def.Repeats?.Select(r =>
                 new RepeatSpec(r.Value, r.Repeats, r.Field, r.Scope, r.ChildId,
                     r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray(),
-            def.Modifiers?.Select(ConvertModifier).ToArray());
+            def.Modifiers?.Select(ConvertModifier).ToArray(),
+            def.ModifierGroups?.Select(ConvertModifierGroup).ToArray());
 }

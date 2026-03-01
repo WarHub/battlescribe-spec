@@ -515,7 +515,7 @@ public sealed class BattleScribeOracle : IDisposable
     public List<string> SetupFromSpec(ScenarioSpec scenario)
     {
         var costTypes = scenario.GameSystem.CostTypes?.Select(ct =>
-            JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray();
+            JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray();
 
         var forceEntries = scenario.GameSystem.ForceEntries?.Select(fe =>
             JavaModelFactory.CreateForceEntry(fe.Id, fe.Name,
@@ -576,7 +576,8 @@ public sealed class BattleScribeOracle : IDisposable
             constraints: constraints,
             modifiers: modifiers,
             selectionEntries: childEntries,
-            categoryLinks: categoryLinks);
+            categoryLinks: categoryLinks,
+            collective: spec.Collective);
 
         if (spec.ModifierGroups != null)
             foreach (var mg in spec.ModifierGroups)
@@ -652,8 +653,11 @@ public sealed class BattleScribeOracle : IDisposable
                 r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray();
 
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
-
-        return JavaModelFactory.CreateModifierGroup(conditions, conditionGroups, repeats, modifiers);
+        var group = JavaModelFactory.CreateModifierGroup(conditions, conditionGroups, repeats, modifiers);
+        if (spec.ModifierGroups != null)
+            foreach (var nested in spec.ModifierGroups)
+                group.getModifierGroups().add(BuildModifierGroup(nested));
+        return group;
     }
 
     private void IndexEntries(SelectionEntry entry)

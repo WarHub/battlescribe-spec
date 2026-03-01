@@ -89,6 +89,12 @@ public sealed class CostTypeDef
 
     [YamlMember(Alias = "defaultCostLimit")]
     public double DefaultCostLimit { get; set; } = -1.0;
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "limit")]
+    public bool Limit { get; set; }
 }
 
 public sealed class ForceEntryDef
@@ -131,6 +137,9 @@ public sealed class SelectionEntryDef
 
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "collective")]
+    public bool Collective { get; set; }
 
     [YamlMember(Alias = "costs")]
     public List<CostDef>? Costs { get; set; }
@@ -254,6 +263,9 @@ public sealed class ModifierGroupDef
 
     [YamlMember(Alias = "modifiers")]
     public List<ModifierDef>? Modifiers { get; set; }
+
+    [YamlMember(Alias = "modifierGroups")]
+    public List<ModifierGroupDef>? ModifierGroups { get; set; }
 }
 
 public sealed class ConditionDef

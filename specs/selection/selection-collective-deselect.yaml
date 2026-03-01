@@ -1,0 +1,43 @@
+id: selection-collective-deselect
+category: selection
+description: Deselecting a collective entry removes it from all sibling instances
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        selectionEntries:
+          - id: se-child
+            name: Shared Weapon
+            type: upgrade
+            collective: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
+  # Deselecting the parent removes all collective children too.
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 0

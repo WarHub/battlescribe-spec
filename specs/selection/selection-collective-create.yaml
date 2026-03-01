@@ -1,0 +1,40 @@
+id: selection-collective-create
+category: selection
+description: Collective entry is replicated across sibling selections when selected
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        selectionEntries:
+          - id: se-child
+            name: Weapon
+            type: upgrade
+            collective: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Collective child entries are automatically created for all instances.
+  # With synthetic data, the selection just appears with its children.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Squad
