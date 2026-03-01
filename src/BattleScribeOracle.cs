@@ -76,6 +76,27 @@ public sealed class BattleScribeOracle : IDisposable
         var errors = _engine.a(roster, gameSystem, forceMap, linkedCatMap, favouritesMap, true);
         _initialized = true;
 
+        // Set up cost types and cost limits from game system (after engine init)
+        var ctIter = gameSystem.getCostTypes().iterator();
+        var hasAnyCostTypes = false;
+        while (ctIter.hasNext())
+        {
+            hasAnyCostTypes = true;
+            var ct = (CostType)ctIter.next();
+            // Cost limit
+            var limit = new net.battlescribe.model.data.Cost();
+            limit.setName(ct.getName());
+            limit.setTypeId(ct.getId());
+            limit.setValue(ct.getDefaultCostLimit());
+            roster.getCostLimits().add(limit);
+            // Roster cost (starts at zero, engine calculates)
+            var cost = new net.battlescribe.model.data.Cost();
+            cost.setName(ct.getName());
+            cost.setTypeId(ct.getId());
+            cost.setValue(0.0);
+            roster.getCosts().add(cost);
+        }
+
         return JavaListToStringErrors(errors);
     }
 
@@ -304,14 +325,34 @@ public sealed class BattleScribeOracle : IDisposable
 
     /// <summary>
     /// Add a force by index (from setup force entries).
+    /// Automatically resolves linked catalogues from the active catalogue.
     /// </summary>
     public List<string> AddForceByIndex(int index)
     {
         EnsureInitialized();
         if (_setupCatalogue is null)
             throw new InvalidOperationException("Call SetupWith* before AddForceByIndex.");
-        var (_, errors) = AddForce(_setupCatalogue, _setupForceEntries[index]);
+        var linked = ResolveLinkedCatalogues(_setupCatalogue);
+        var (_, errors) = AddForce(_setupCatalogue, _setupForceEntries[index], linked);
         return errors;
+    }
+
+    /// <summary>
+    /// Resolve linked catalogues for a catalogue by reading its CatalogueLink elements
+    /// and looking up target catalogue IDs in the loaded catalogue dictionary.
+    /// </summary>
+    private Dictionary<string, Catalogue> ResolveLinkedCatalogues(Catalogue catalogue)
+    {
+        var linked = new Dictionary<string, Catalogue>();
+        var linkIter = catalogue.getCatalogueLinks().iterator();
+        while (linkIter.hasNext())
+        {
+            var link = (CatalogueLink)linkIter.next();
+            var targetId = link.getTargetId();
+            if (targetId != null && _catalogues.TryGetValue(targetId, out var targetCat))
+                linked[targetId] = targetCat;
+        }
+        return linked;
     }
 
     /// <summary>
@@ -420,6 +461,62 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
+    /// Load a catalogue and all its linked catalogue dependencies from a data directory.
+    /// Recursively discovers and loads linked catalogues by parsing CatalogueLink elements.
+    /// </summary>
+    public void LoadCatalogueWithDependencies(string catFilePath, string dataDir)
+    {
+        // Load the catalogue itself
+        LoadCatalogueFile(catFilePath);
+        var cat = _catalogues.Values.Last();
+
+        // Build ID→file index for the data directory
+        var catFiles = Directory.GetFiles(dataDir, "*.cat");
+        var idToFile = new Dictionary<string, string>();
+        foreach (var file in catFiles)
+        {
+            // Quick parse just the root element to get the catalogue ID
+            try
+            {
+                using var reader = new System.IO.StreamReader(file);
+                // Read enough to find the id attribute
+                var buffer = new char[2000];
+                reader.Read(buffer, 0, buffer.Length);
+                var header = new string(buffer);
+                var idMatch = System.Text.RegularExpressions.Regex.Match(header, @"\bid=""([^""]+)""");
+                if (idMatch.Success)
+                    idToFile[idMatch.Groups[1].Value] = file;
+            }
+            catch { /* skip unreadable files */ }
+        }
+
+        // Recursively load linked catalogues
+        var loaded = new HashSet<string>(_catalogues.Keys);
+        var toLoad = new Queue<Catalogue>();
+        toLoad.Enqueue(cat);
+
+        while (toLoad.Count > 0)
+        {
+            var current = toLoad.Dequeue();
+            var linkIter = current.getCatalogueLinks().iterator();
+            while (linkIter.hasNext())
+            {
+                var link = (CatalogueLink)linkIter.next();
+                var targetId = link.getTargetId();
+                if (targetId == null || loaded.Contains(targetId))
+                    continue;
+                if (idToFile.TryGetValue(targetId, out var linkedFile))
+                {
+                    LoadCatalogueFile(linkedFile);
+                    loaded.Add(targetId);
+                    var linkedCat = _catalogues[targetId];
+                    toLoad.Enqueue(linkedCat);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Deserialize an XML file to a Java model type using SimpleXML Persister.
     /// This replicates what DataUtils does internally without cross-assembly issues.
     /// </summary>
@@ -453,7 +550,7 @@ public sealed class BattleScribeOracle : IDisposable
         if (_catalogues.Count > 0)
             _setupCatalogue = _catalogues.Values.First();
 
-        return Initialize(_gameSystem, _catalogues);
+        return Initialize(_gameSystem, new Dictionary<string, Catalogue>(_catalogues));
     }
 
     /// <summary>
@@ -462,6 +559,22 @@ public sealed class BattleScribeOracle : IDisposable
     public List<string> GetAvailableForceEntryNames()
     {
         return _setupForceEntries.Select(fe => fe.getName() ?? "?").ToList();
+    }
+
+    /// <summary>
+    /// Get game system cost type names (for diagnostics).
+    /// </summary>
+    public List<string> GetGameSystemCostTypeNames()
+    {
+        if (_gameSystem is null) return [];
+        var result = new List<string>();
+        var iter = _gameSystem.getCostTypes().iterator();
+        while (iter.hasNext())
+        {
+            var ct = (CostType)iter.next();
+            result.Add($"{ct.getName()} ({ct.getId()})");
+        }
+        return result;
     }
 
     /// <summary>
@@ -505,6 +618,220 @@ public sealed class BattleScribeOracle : IDisposable
             }
         }
         return -1;
+    }
+
+    /// <summary>
+    /// Select a catalogue entry by name on a specific force.
+    /// Uses the engine's resolved entry index (via categories) to find entries
+    /// with proper composite IDs, ensuring costs and modifiers propagate correctly.
+    /// Returns count of selections created, or -1 if not found.
+    /// </summary>
+    public int SelectEntryByNameOnForce(string entryName, int forceIndex)
+    {
+        EnsureInitialized();
+        var forces = GetForces();
+        if (forceIndex < 0 || forceIndex >= forces.Count) return -1;
+
+        var force = forces[forceIndex];
+
+        // Use engine's category API to get properly resolved entries.
+        // The engine resolves entry links during init, creating entries with
+        // composite IDs (linkId::sharedId) that match its internal index.
+        // Raw catalogue entries have unresolved IDs that the engine can't find
+        // during refresh, causing cost calculation to silently fail.
+        var categories = JavaListToList<Category>(force.getCategories());
+        foreach (var category in categories)
+        {
+            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
+            foreach (var entry in entries)
+            {
+                if (entry.getName() == entryName)
+                {
+                    var sels = SelectEntry(force, entry);
+                    return sels.Count;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Get all available entry names from all forces using the engine's resolved entries.
+    /// </summary>
+    public List<string> GetAllAvailableEntryNames()
+    {
+        EnsureInitialized();
+        var names = new HashSet<string>();
+        var forces = GetForces();
+        foreach (var force in forces)
+        {
+            var categories = JavaListToList<Category>(force.getCategories());
+            foreach (var category in categories)
+            {
+                var entries = JavaListToList<SelectionEntry>(_engine.a(category));
+                foreach (var entry in entries)
+                    names.Add(entry.getName() ?? "?");
+            }
+        }
+        return names.OrderBy(x => x).ToList();
+    }
+
+    /// <summary>
+    /// Diagnostic: get entries per category for a force.
+    /// </summary>
+    public List<(string Category, List<string> Entries)> GetEntriesByCategory(int forceIndex)
+    {
+        EnsureInitialized();
+        var forces = GetForces();
+        if (forceIndex < 0 || forceIndex >= forces.Count) return [];
+        var force = forces[forceIndex];
+        var result = new List<(string, List<string>)>();
+        var categories = JavaListToList<Category>(force.getCategories());
+        foreach (var category in categories)
+        {
+            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
+            result.Add((category.getName() ?? "?",
+                entries.Select(e => e.getName() ?? "?").ToList()));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Find force entry index by name (for AddForceByIndex).
+    /// Returns -1 if not found.
+    /// </summary>
+    public int GetForceEntryIndexByName(string name)
+    {
+        for (int i = 0; i < _setupForceEntries.Count; i++)
+        {
+            var feName = _setupForceEntries[i].getName();
+            if (feName != null && feName.Contains(name, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Set the active catalogue for AddForceByIndex (when multiple catalogues are loaded).
+    /// </summary>
+    public void SetActiveCatalogue(string catalogueId)
+    {
+        if (_catalogues.TryGetValue(catalogueId, out var cat))
+            _setupCatalogue = cat;
+        else
+            throw new InvalidOperationException($"Catalogue '{catalogueId}' not loaded.");
+    }
+
+    /// <summary>
+    /// Get all loaded catalogue IDs and names.
+    /// </summary>
+    public List<(string Id, string Name)> GetLoadedCatalogues()
+    {
+        return _catalogues.Select(kvp => (kvp.Key, kvp.Value.getName() ?? "?")).ToList();
+    }
+
+    /// <summary>
+    /// Find a selection entry by ID across all catalogues (for entry link resolution).
+    /// </summary>
+    private SelectionEntry? FindSelectionEntryById(string id)
+    {
+        foreach (var cat in _catalogues.Values)
+        {
+            // Check shared selection entries first (common target for entry links)
+            var sharedIter = cat.getSharedSelectionEntries().iterator();
+            while (sharedIter.hasNext())
+            {
+                var se = (SelectionEntry)sharedIter.next();
+                if (se.getId() == id) return se;
+            }
+
+            // Direct entries
+            var seIter = cat.getSelectionEntries().iterator();
+            while (seIter.hasNext())
+            {
+                var se = (SelectionEntry)seIter.next();
+                if (se.getId() == id) return se;
+            }
+        }
+
+        // Also check game system shared entries
+        if (_gameSystem != null)
+        {
+            var gsSharedIter = _gameSystem.getSharedSelectionEntries().iterator();
+            while (gsSharedIter.hasNext())
+            {
+                var se = (SelectionEntry)gsSharedIter.next();
+                if (se.getId() == id) return se;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Diagnostic: dump cost state of roster, forces, and selections.
+    /// </summary>
+    public string DiagnoseCosts()
+    {
+        EnsureInitialized();
+        var sb = new System.Text.StringBuilder();
+        var roster = GetRoster();
+
+        sb.AppendLine($"Roster costs ({roster.getCosts().size()}):");
+        var cIter = roster.getCosts().iterator();
+        while (cIter.hasNext())
+        {
+            var c = (Cost)cIter.next();
+            sb.AppendLine($"  {c.getName()} ({c.getTypeId()}) = {c.getValue()} hidden={c.isHidden()}");
+        }
+
+        sb.AppendLine($"Roster costLimits ({roster.getCostLimits().size()}):");
+        var clIter = roster.getCostLimits().iterator();
+        while (clIter.hasNext())
+        {
+            var c = (Cost)clIter.next();
+            sb.AppendLine($"  {c.getName()} ({c.getTypeId()}) = {c.getValue()}");
+        }
+
+        var forces = GetForces();
+        sb.AppendLine($"Forces ({forces.Count}):");
+        foreach (var force in forces)
+        {
+            sb.AppendLine($"  Force: {force.getName()} (catId={force.getCatalogueId()})");
+
+            var selIter = force.getSelections().iterator();
+            while (selIter.hasNext())
+            {
+                var sel = (Selection)selIter.next();
+                sb.Append($"    Sel: {sel.getName()} (type={sel.getType()}, num={sel.getNumber()}, entryId={sel.getEntryId()})");
+                var scIter = sel.getCosts().iterator();
+                var hasCosts = false;
+                while (scIter.hasNext())
+                {
+                    var c = (Cost)scIter.next();
+                    sb.Append($" [{c.getName()}={c.getValue()}]");
+                    hasCosts = true;
+                }
+                if (!hasCosts) sb.Append(" [NO COSTS]");
+                sb.AppendLine();
+
+                // Child selections (one level)
+                var childIter = sel.getSelections().iterator();
+                while (childIter.hasNext())
+                {
+                    var child = (Selection)childIter.next();
+                    sb.Append($"      Child: {child.getName()} (num={child.getNumber()})");
+                    var ccIter = child.getCosts().iterator();
+                    while (ccIter.hasNext())
+                    {
+                        var c = (Cost)ccIter.next();
+                        sb.Append($" [{c.getName()}={c.getValue()}]");
+                    }
+                    sb.AppendLine();
+                }
+            }
+        }
+        return sb.ToString();
     }
 
     // ===== Spec-based API (accepts pure .NET spec records) =====
