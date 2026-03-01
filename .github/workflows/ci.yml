@@ -35,3 +35,10 @@ jobs:
         run: dotnet test --no-build --logger GitHubActions
         env:
           WH40K_DATA_DIR: ${{ github.workspace }}/../wh40k-9e
+
+      - name: End-to-end spec runner test
+        run: |
+          dotnet src/BattleScribeSpec.Runner/bin/Debug/net10.0/bs-spec-runner.dll \
+            --adapter "dotnet:src/BattleScribeSpec.ReferenceAdapter/bin/Debug/net10.0/bs-reference-adapter.dll" \
+            --specs specs \
+            --output github-actions
