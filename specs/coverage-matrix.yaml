@@ -1,14 +1,14 @@
 # BattleScribe Engine Conformance Test Coverage Matrix
-# Current branch state: 179 specs, 314 tests, all passing
+# Current branch state: 179 specs, 325 tests, all passing
 
 summary:
   total_specs: 179
-  total_tests: 314
-  passed: 314
+  total_tests: 326
+  passed: 326
   skipped: 0
   failed: 0
   categories_covered: 9
-  known_limitations_synthetic: 47
+  known_limitations_synthetic: 0
 
 spec_inventory:
   condition:
