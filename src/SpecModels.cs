@@ -43,7 +43,9 @@ public record CostSpec(
 public record CostTypeSpec(
     string Id,
     string Name,
-    double DefaultCostLimit = -1.0);
+    double DefaultCostLimit = -1.0,
+    bool Hidden = false,
+    bool Limit = false);
 
 public record SelectionEntrySpec(
     string Id,
@@ -56,12 +58,19 @@ public record SelectionEntrySpec(
     ModifierGroupSpec[]? ModifierGroups = null,
     SelectionEntrySpec[]? ChildEntries = null,
     SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
-    CategoryLinkSpec[]? CategoryLinks = null);
+    CategoryLinkSpec[]? CategoryLinks = null,
+    bool Collective = false,
+    RuleSpec[]? Rules = null,
+    ProfileSpec[]? Profiles = null,
+    InfoGroupSpec[]? InfoGroups = null,
+    string Page = "",
+    EntryLinkSpec[]? EntryLinks = null);
 
 public record ForceEntrySpec(
     string Id,
     string Name,
-    CategoryLinkSpec[]? CategoryLinks = null);
+    CategoryLinkSpec[]? CategoryLinks = null,
+    ForceEntrySpec[]? ForceEntries = null);
 
 public record GameSystemSpec(
     string Id = "test-gs",
@@ -88,7 +97,8 @@ public record CatalogueSpec(
     string Name = "Cat",
     string GameSystemId = "test-gs",
     SelectionEntrySpec[]? SelectionEntries = null,
-    SelectionEntryGroupSpec[]? SelectionEntryGroups = null);
+    SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
+    EntryLinkSpec[]? EntryLinks = null);
 
 public record ConditionGroupSpec(
     string Type,
@@ -111,13 +121,55 @@ public record ModifierGroupSpec(
     ConditionSpec[]? Conditions = null,
     ConditionGroupSpec[]? ConditionGroups = null,
     RepeatSpec[]? Repeats = null,
-    ModifierSpec[]? Modifiers = null);
+    ModifierSpec[]? Modifiers = null,
+    ModifierGroupSpec[]? ModifierGroups = null);
 
 public record CategoryLinkSpec(
     string Id,
     string TargetId,
     string Name,
     bool Primary = false);
+
+public record RuleSpec(
+    string Id,
+    string Name,
+    string Description = "",
+    bool Hidden = false,
+    string Page = "",
+    ModifierSpec[]? Modifiers = null);
+
+public record ProfileSpec(
+    string Id,
+    string Name,
+    string TypeId = "",
+    string TypeName = "",
+    bool Hidden = false,
+    CharacteristicSpec[]? Characteristics = null,
+    ModifierSpec[]? Modifiers = null);
+
+public record CharacteristicSpec(
+    string Name,
+    string TypeId,
+    string Value = "");
+
+public record InfoGroupSpec(
+    string Id,
+    string Name,
+    bool Hidden = false,
+    ProfileSpec[]? Profiles = null,
+    RuleSpec[]? Rules = null,
+    ModifierSpec[]? Modifiers = null);
+
+public record EntryLinkSpec(
+    string Id,
+    string Name,
+    string TargetId,
+    string Type = "selectionEntry",
+    bool Hidden = false,
+    CostSpec[]? Costs = null,
+    ConstraintSpec[]? Constraints = null,
+    ModifierSpec[]? Modifiers = null,
+    CategoryLinkSpec[]? CategoryLinks = null);
 
 /// <summary>
 /// Complete test scenario specification.

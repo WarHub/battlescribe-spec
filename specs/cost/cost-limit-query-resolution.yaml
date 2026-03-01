@@ -1,0 +1,64 @@
+id: cost-limit-query-resolution
+category: cost
+description: CostType.isLimit affects query value resolution — limit cost types resolve to the limit value rather than the actual cost
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: ct-pts
+        name: pts
+      - id: ct-pl
+        name: PL
+        limit: true
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit
+        name: Unit
+        type: unit
+        costs:
+          - typeId: ct-pts
+            value: 50
+          - typeId: ct-pl
+            value: 3
+      - id: se-watcher
+        name: Watcher
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Limit Resolved
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: roster
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # When CostType has isLimit=true, query resolution for that cost type
+  # returns the limit value instead of the actual accumulated cost.
+  # This affects conditions that reference cost-type values.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit
+              costs:
+                - typeId: ct-pts
+                  value: 50
+                - typeId: ct-pl
+                  value: 3

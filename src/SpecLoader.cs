@@ -69,11 +69,9 @@ public static class SpecLoader
             Id: setup.GameSystem.Id,
             Name: setup.GameSystem.Name,
             ForceEntries: setup.GameSystem.ForceEntries?
-                .Select(fe => new ForceEntrySpec(fe.Id, fe.Name,
-                    fe.CategoryLinks?.Select(cl =>
-                        new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray())).ToArray(),
+                .Select(fe => ConvertForceEntry(fe)).ToArray(),
             CostTypes: setup.GameSystem.CostTypes?
-                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray(),
+                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray(),
             CategoryEntries: setup.GameSystem.CategoryEntries?
                 .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray());
 
@@ -84,7 +82,8 @@ public static class SpecLoader
             SelectionEntries: setup.Catalogue.SelectionEntries?
                 .Select(ConvertSelectionEntry).ToArray(),
             SelectionEntryGroups: setup.Catalogue.SelectionEntryGroups?
-                .Select(ConvertSelectionEntryGroup).ToArray());
+                .Select(ConvertSelectionEntryGroup).ToArray(),
+            EntryLinks: setup.Catalogue.EntryLinks?.Select(ConvertEntryLink).ToArray());
 
         return (gs, cat);
     }
@@ -105,8 +104,20 @@ public static class SpecLoader
             ChildEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray(),
             SelectionEntryGroups: def.SelectionEntryGroups?.Select(ConvertSelectionEntryGroup).ToArray(),
             CategoryLinks: def.CategoryLinks?.Select(cl =>
-                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray());
+                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
+            Collective: def.Collective,
+            Rules: def.Rules?.Select(ConvertRule).ToArray(),
+            Profiles: def.Profiles?.Select(ConvertProfile).ToArray(),
+            InfoGroups: def.InfoGroups?.Select(ConvertInfoGroup).ToArray(),
+            Page: def.Page,
+            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray());
     }
+
+    private static ForceEntrySpec ConvertForceEntry(ForceEntryDef fe) =>
+        new(fe.Id, fe.Name,
+            fe.CategoryLinks?.Select(cl =>
+                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
+            fe.ForceEntries?.Select(ConvertForceEntry).ToArray());
 
     private static SelectionEntryGroupSpec ConvertSelectionEntryGroup(SelectionEntryGroupDef def)
     {
@@ -150,5 +161,31 @@ public static class SpecLoader
             def.Repeats?.Select(r =>
                 new RepeatSpec(r.Value, r.Repeats, r.Field, r.Scope, r.ChildId,
                     r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray(),
+            def.Modifiers?.Select(ConvertModifier).ToArray(),
+            def.ModifierGroups?.Select(ConvertModifierGroup).ToArray());
+
+    private static RuleSpec ConvertRule(RuleDef def) =>
+        new(def.Id, def.Name, def.Description, def.Hidden, def.Page,
             def.Modifiers?.Select(ConvertModifier).ToArray());
+
+    private static ProfileSpec ConvertProfile(ProfileDef def) =>
+        new(def.Id, def.Name, def.TypeId, def.TypeName, def.Hidden,
+            def.Characteristics?.Select(c => new CharacteristicSpec(c.Name, c.TypeId, c.Value)).ToArray(),
+            def.Modifiers?.Select(ConvertModifier).ToArray());
+
+    private static InfoGroupSpec ConvertInfoGroup(InfoGroupDef def) =>
+        new(def.Id, def.Name, def.Hidden,
+            def.Profiles?.Select(ConvertProfile).ToArray(),
+            def.Rules?.Select(ConvertRule).ToArray(),
+            def.Modifiers?.Select(ConvertModifier).ToArray());
+
+    private static EntryLinkSpec ConvertEntryLink(EntryLinkDef def) =>
+        new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
+            def.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
+            def.Constraints?.Select(c =>
+                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                    c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
+            def.Modifiers?.Select(ConvertModifier).ToArray(),
+            def.CategoryLinks?.Select(cl =>
+                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray());
 }

@@ -1,0 +1,46 @@
+id: condition-childid-catalogue
+category: condition
+description: childId filter can reference a Catalogue ID for scoping queries to a specific catalogue
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-watcher
+        name: Watcher
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Cat Matched
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: roster
+                childId: cat-1
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # childId references a Catalogue ID. The engine can use catalogue
+  # IDs to scope counting to entries from a specific catalogue.
+  # With synthetic data, this filtering is not fully operational.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Watcher

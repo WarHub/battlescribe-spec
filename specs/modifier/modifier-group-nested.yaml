@@ -1,0 +1,54 @@
+id: modifier-group-nested
+category: modifier
+description: Nested modifier groups (ModifierGroup containing ModifierGroups) form hierarchical modifier structures
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Marine
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 100
+        modifierGroups:
+          - conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: self
+            modifierGroups:
+              - modifiers:
+                  - type: increment
+                    field: pts
+                    value: "10"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Nested ModifierGroup: outer group has condition (atLeast 1),
+  # inner group contains increment modifier.
+  # With synthetic data, ModifierGroups are not fully evaluated.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine

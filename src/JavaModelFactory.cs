@@ -46,12 +46,19 @@ public static class JavaModelFactory
     /// <summary>
     /// Create a CostType.
     /// </summary>
-    public static CostType CreateCostType(string id, string name, double defaultCostLimit = -1.0)
+    public static CostType CreateCostType(
+        string id,
+        string name,
+        double defaultCostLimit = -1.0,
+        bool hidden = false,
+        bool limit = false)
     {
         var ct = new CostType();
         ct.setId(id);
         ct.setName(name);
         ct.setDefaultCostLimit(defaultCostLimit);
+        ct.setHidden(hidden);
+        ct.GetType().GetMethod("setLimit")?.Invoke(ct, [limit]);
         return ct;
     }
 
@@ -74,7 +81,8 @@ public static class JavaModelFactory
         string id,
         string name,
         bool hidden = false,
-        IEnumerable<CategoryLink>? categoryLinks = null)
+        IEnumerable<CategoryLink>? categoryLinks = null,
+        IEnumerable<ForceEntry>? forceEntries = null)
     {
         var fe = new ForceEntry();
         fe.setId(id);
@@ -84,6 +92,10 @@ public static class JavaModelFactory
         if (categoryLinks != null)
             foreach (var cl in categoryLinks)
                 fe.getCategoryLinks().add(cl);
+
+        if (forceEntries != null)
+            foreach (var child in forceEntries)
+                fe.getForceEntries().add(child);
 
         return fe;
     }
@@ -99,6 +111,46 @@ public static class JavaModelFactory
         cl.setName(name);
         cl.setPrimary(primary);
         return cl;
+    }
+
+    /// <summary>
+    /// Create an EntryLink that references a shared entry.
+    /// </summary>
+    public static EntryLink CreateEntryLink(
+        string id,
+        string name,
+        string targetId,
+        string type = "selectionEntry",
+        bool hidden = false,
+        IEnumerable<Cost>? costs = null,
+        IEnumerable<Constraint>? constraints = null,
+        IEnumerable<Modifier>? modifiers = null,
+        IEnumerable<CategoryLink>? categoryLinks = null)
+    {
+        var el = new EntryLink();
+        el.setId(id);
+        el.setName(name);
+        el.setTargetId(targetId);
+        el.setType(type);
+        el.setHidden(hidden);
+
+        if (costs != null)
+            foreach (var c in costs)
+                el.getCosts().add(c);
+
+        if (constraints != null)
+            foreach (var c in constraints)
+                el.getConstraints().add(c);
+
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                el.getModifiers().add(m);
+
+        if (categoryLinks != null)
+            foreach (var cl in categoryLinks)
+                el.getCategoryLinks().add(cl);
+
+        return el;
     }
 
     /// <summary>
@@ -145,13 +197,15 @@ public static class JavaModelFactory
         IEnumerable<EntryLink>? entryLinks = null,
         IEnumerable<CategoryLink>? categoryLinks = null,
         IEnumerable<Constraint>? constraints = null,
-        IEnumerable<Modifier>? modifiers = null)
+        IEnumerable<Modifier>? modifiers = null,
+        bool collective = false)
     {
         var se = new SelectionEntry();
         se.setId(id);
         se.setName(name);
         se.setType(type);
         se.setHidden(hidden);
+        se.setCollective(collective);
 
         if (costs != null)
             foreach (var c in costs)
@@ -383,5 +437,74 @@ public static class JavaModelFactory
                 mg.getModifiers().add(m);
 
         return mg;
+    }
+
+    public static net.battlescribe.model.data.Rule CreateRule(
+        string id, string name, string description = "", bool hidden = false, string page = "",
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var r = new net.battlescribe.model.data.Rule();
+        r.setId(id);
+        r.setName(name);
+        r.setDescription(description);
+        r.setHidden(hidden);
+        if (!string.IsNullOrEmpty(page))
+            r.setPage(page);
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                r.getModifiers().add(m);
+        return r;
+    }
+
+    public static Profile CreateProfile(
+        string id, string name, string typeId = "", string typeName = "",
+        bool hidden = false,
+        IEnumerable<Characteristic>? characteristics = null,
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var p = new Profile();
+        p.setId(id);
+        p.setName(name);
+        p.setTypeId(typeId);
+        p.setTypeName(typeName);
+        p.setHidden(hidden);
+        if (characteristics != null)
+            foreach (var c in characteristics)
+                p.getCharacteristics().add(c);
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                p.getModifiers().add(m);
+        return p;
+    }
+
+    public static Characteristic CreateCharacteristic(string name, string typeId, string value = "")
+    {
+        var c = new Characteristic();
+        c.setName(name);
+        c.setTypeId(typeId);
+        c.setValue(value);
+        return c;
+    }
+
+    public static InfoGroup CreateInfoGroup(
+        string id, string name, bool hidden = false,
+        IEnumerable<Profile>? profiles = null,
+        IEnumerable<net.battlescribe.model.data.Rule>? rules = null,
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var ig = new InfoGroup();
+        ig.setId(id);
+        ig.setName(name);
+        ig.setHidden(hidden);
+        if (profiles != null)
+            foreach (var p in profiles)
+                ig.getProfiles().add(p);
+        if (rules != null)
+            foreach (var r in rules)
+                ig.getRules().add(r);
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                ig.getModifiers().add(m);
+        return ig;
     }
 }

@@ -77,6 +77,9 @@ public sealed class CatalogueDef
 
     [YamlMember(Alias = "selectionEntryGroups")]
     public List<SelectionEntryGroupDef>? SelectionEntryGroups { get; set; }
+
+    [YamlMember(Alias = "entryLinks")]
+    public List<EntryLinkDef>? EntryLinks { get; set; }
 }
 
 public sealed class CostTypeDef
@@ -89,6 +92,12 @@ public sealed class CostTypeDef
 
     [YamlMember(Alias = "defaultCostLimit")]
     public double DefaultCostLimit { get; set; } = -1.0;
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "limit")]
+    public bool Limit { get; set; }
 }
 
 public sealed class ForceEntryDef
@@ -104,6 +113,9 @@ public sealed class ForceEntryDef
 
     [YamlMember(Alias = "categoryLinks")]
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
+
+    [YamlMember(Alias = "forceEntries")]
+    public List<ForceEntryDef>? ForceEntries { get; set; }
 }
 
 public sealed class CategoryEntryDef
@@ -132,6 +144,9 @@ public sealed class SelectionEntryDef
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
 
+    [YamlMember(Alias = "collective")]
+    public bool Collective { get; set; }
+
     [YamlMember(Alias = "costs")]
     public List<CostDef>? Costs { get; set; }
 
@@ -150,8 +165,23 @@ public sealed class SelectionEntryDef
     [YamlMember(Alias = "selectionEntryGroups")]
     public List<SelectionEntryGroupDef>? SelectionEntryGroups { get; set; }
 
+    [YamlMember(Alias = "entryLinks")]
+    public List<EntryLinkDef>? EntryLinks { get; set; }
+
     [YamlMember(Alias = "categoryLinks")]
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<RuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "infoGroups")]
+    public List<InfoGroupDef>? InfoGroups { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
 }
 
 public sealed class SelectionEntryGroupDef
@@ -254,6 +284,9 @@ public sealed class ModifierGroupDef
 
     [YamlMember(Alias = "modifiers")]
     public List<ModifierDef>? Modifiers { get; set; }
+
+    [YamlMember(Alias = "modifierGroups")]
+    public List<ModifierGroupDef>? ModifierGroups { get; set; }
 }
 
 public sealed class ConditionDef
@@ -344,6 +377,114 @@ public sealed class CategoryLinkDef
 
     [YamlMember(Alias = "primary")]
     public bool Primary { get; set; }
+}
+
+public sealed class RuleDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "description")]
+    public string Description { get; set; } = "";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+}
+
+public sealed class ProfileDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "typeId")]
+    public string TypeId { get; set; } = "";
+
+    [YamlMember(Alias = "typeName")]
+    public string TypeName { get; set; } = "";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "characteristics")]
+    public List<CharacteristicDef>? Characteristics { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+}
+
+public sealed class CharacteristicDef
+{
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "typeId")]
+    public string TypeId { get; set; } = "";
+
+    [YamlMember(Alias = "value")]
+    public string Value { get; set; } = "";
+}
+
+public sealed class InfoGroupDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<RuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+}
+
+public sealed class EntryLinkDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "targetId")]
+    public string TargetId { get; set; } = "";
+
+    [YamlMember(Alias = "type")]
+    public string Type { get; set; } = "selectionEntry";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "costs")]
+    public List<CostDef>? Costs { get; set; }
+
+    [YamlMember(Alias = "constraints")]
+    public List<ConstraintDef>? Constraints { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+
+    [YamlMember(Alias = "categoryLinks")]
+    public List<CategoryLinkDef>? CategoryLinks { get; set; }
 }
 
 // ===== Step definitions =====

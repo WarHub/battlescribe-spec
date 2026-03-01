@@ -1,0 +1,49 @@
+id: condition-instance-of-catalogue
+category: condition
+description: instanceOf condition can match against Catalogue IDs for catalogue-scoped checks
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-detector
+        name: Detector
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Catalogue Matched
+            conditions:
+              - type: instanceOf
+                value: 1
+                field: selections
+                scope: roster
+                childId: cat-1
+      - id: se-unit
+        name: Unit
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # instanceOf can check if the matched element is an instance of a
+  # specific Catalogue. With synthetic data, catalogue-level instanceOf
+  # matching is not fully operational.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Detector

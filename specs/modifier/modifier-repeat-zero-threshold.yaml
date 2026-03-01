@@ -1,0 +1,53 @@
+id: modifier-repeat-zero-threshold
+category: modifier
+description: Repeat with value=0 is skipped by the engine (division by zero guard)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 50
+        modifiers:
+          - type: increment
+            field: pts
+            value: "100"
+            repeats:
+              - value: 0
+                repeats: 1
+                field: selections
+                scope: self
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Repeat with value=0 → engine skips repeat calculation (division by zero guard).
+  # The modifier's repeat count is 0, so the increment is NOT applied.
+  # Cost remains at base value 50.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+      costs:
+        - typeId: pts
+          value: 50.0
