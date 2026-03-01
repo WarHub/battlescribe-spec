@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="BattleScribeSpec.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="*.cs" />
   </ItemGroup>
 

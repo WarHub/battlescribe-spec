@@ -1,8 +1,7 @@
 id: modifier-category-set-primary
 category: modifier
 description: Category set-primary modifier sets a category as primary (adds it first if not present, then sets others non-primary)
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -49,10 +48,11 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # With synthetic data, category modifiers may not fully apply.
-  # Verify selection is created.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Commander
+              categories:
+                - name: Elites
+                  primary: true

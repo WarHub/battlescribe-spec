@@ -1,8 +1,7 @@
 id: modifier-characteristic-value
 category: modifier
 description: Modifier can set a Profile Characteristic value (STRING modifier on CharacteristicType ID field)
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -11,6 +10,12 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
+    profileTypes:
+      - id: stat-type
+        name: Unit Stats
+        characteristicTypes:
+          - id: char-wounds
+            name: Wounds
   catalogue:
     id: cat-1
     name: Cat
@@ -39,10 +44,12 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # The modifier targets a CharacteristicType by its ID (char-wounds).
-  # With synthetic data, profile modifiers are not evaluated.
-  # The selection appears with its base name.
   - expectedState:
       forces:
         - selections:
             - name: Marine
+              profiles:
+                - name: Marine Stats
+                  characteristics:
+                    - name: Wounds
+                      value: "3"

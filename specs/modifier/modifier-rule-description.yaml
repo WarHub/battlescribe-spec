@@ -1,8 +1,7 @@
 id: modifier-rule-description
 category: modifier
 description: Modifier can set a Rule's description field (STRING modifier on rule description)
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -34,10 +33,10 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # The modifier targets the rule's description field.
-  # With synthetic data, rule modifiers may not be evaluated.
-  # The selection appears with its base name.
   - expectedState:
       forces:
         - selections:
             - name: Marine
+              rules:
+                - name: Combat Doctrine
+                  description: Modified description

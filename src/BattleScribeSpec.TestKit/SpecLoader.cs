@@ -122,7 +122,10 @@ public static class SpecLoader
             CostTypes: setup.GameSystem.CostTypes?
                 .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray(),
             CategoryEntries: setup.GameSystem.CategoryEntries?
-                .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray());
+                .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray(),
+            ProfileTypes: setup.GameSystem.ProfileTypes?
+                .Select(pt => new ProfileTypeSpec(pt.Id, pt.Name,
+                    pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray());
 
         var cat = new CatalogueSpec(
             Id: setup.Catalogue.Id,

@@ -59,6 +59,9 @@ public sealed class GameSystemDef
 
     [YamlMember(Alias = "categoryEntries")]
     public List<CategoryEntryDef>? CategoryEntries { get; set; }
+
+    [YamlMember(Alias = "profileTypes")]
+    public List<ProfileTypeDef>? ProfileTypes { get; set; }
 }
 
 public sealed class CatalogueDef
@@ -673,4 +676,25 @@ public sealed class ExpectedCategoryDef
 
     [YamlMember(Alias = "primary")]
     public bool? Primary { get; set; }
+}
+
+public sealed class ProfileTypeDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "characteristicTypes")]
+    public List<CharacteristicTypeDef>? CharacteristicTypes { get; set; }
+}
+
+public sealed class CharacteristicTypeDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
 }

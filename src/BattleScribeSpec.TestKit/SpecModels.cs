@@ -77,7 +77,8 @@ public record GameSystemSpec(
     string Name = "Test Game System",
     ForceEntrySpec[]? ForceEntries = null,
     CostTypeSpec[]? CostTypes = null,
-    CategoryEntrySpec[]? CategoryEntries = null);
+    CategoryEntrySpec[]? CategoryEntries = null,
+    ProfileTypeSpec[]? ProfileTypes = null);
 
 public record CategoryEntrySpec(
     string Id,
@@ -177,3 +178,12 @@ public record EntryLinkSpec(
 public record ScenarioSpec(
     GameSystemSpec GameSystem,
     CatalogueSpec Catalogue);
+
+public record ProfileTypeSpec(
+    string Id,
+    string Name,
+    CharacteristicTypeSpec[]? CharacteristicTypes = null);
+
+public record CharacteristicTypeSpec(
+    string Id,
+    string Name);

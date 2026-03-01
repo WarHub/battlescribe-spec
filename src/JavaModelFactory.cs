@@ -19,7 +19,8 @@ public static class JavaModelFactory
         string bsVersion = "2.03",
         IEnumerable<CostType>? costTypes = null,
         IEnumerable<ForceEntry>? forceEntries = null,
-        IEnumerable<CategoryEntry>? categoryEntries = null)
+        IEnumerable<CategoryEntry>? categoryEntries = null,
+        IEnumerable<ProfileType>? profileTypes = null)
     {
         var gs = new GameSystem();
         gs.setId(id);
@@ -39,6 +40,10 @@ public static class JavaModelFactory
         if (categoryEntries != null)
             foreach (var ce in categoryEntries)
                 gs.getCategoryEntries().add(ce);
+
+        if (profileTypes != null)
+            foreach (var pt in profileTypes)
+                gs.getProfileTypes().add(pt);
 
         return gs;
     }
@@ -506,5 +511,26 @@ public static class JavaModelFactory
             foreach (var m in modifiers)
                 ig.getModifiers().add(m);
         return ig;
+    }
+
+    public static ProfileType CreateProfileType(
+        string id, string name,
+        IEnumerable<CharacteristicType>? characteristicTypes = null)
+    {
+        var pt = new ProfileType();
+        pt.setId(id);
+        pt.setName(name);
+        if (characteristicTypes != null)
+            foreach (var ct in characteristicTypes)
+                pt.getCharacteristicTypes().add(ct);
+        return pt;
+    }
+
+    public static CharacteristicType CreateCharacteristicType(string id, string name)
+    {
+        var ct = new CharacteristicType();
+        ct.setId(id);
+        ct.setName(name);
+        return ct;
     }
 }

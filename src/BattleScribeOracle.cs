@@ -849,12 +849,18 @@ public sealed class BattleScribeOracle : IDisposable
         var categoryEntries = scenario.GameSystem.CategoryEntries?.Select(ce =>
             JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name)).ToArray();
 
+        var profileTypes = scenario.GameSystem.ProfileTypes?.Select(pt =>
+            JavaModelFactory.CreateProfileType(pt.Id, pt.Name,
+                pt.CharacteristicTypes?.Select(ct =>
+                    JavaModelFactory.CreateCharacteristicType(ct.Id, ct.Name)))).ToArray();
+
         var gs = JavaModelFactory.CreateGameSystem(
             id: scenario.GameSystem.Id,
             name: scenario.GameSystem.Name,
             costTypes: costTypes,
             forceEntries: forceEntries,
-            categoryEntries: categoryEntries);
+            categoryEntries: categoryEntries,
+            profileTypes: profileTypes);
 
         var selectionEntries = scenario.Catalogue.SelectionEntries?
             .Select(BuildSelectionEntry).ToArray();
@@ -1088,6 +1094,8 @@ public sealed class BattleScribeOracle : IDisposable
     /// </summary>
     internal SelectionEntry? GetEntryById(string id) =>
         _entryLookup.TryGetValue(id, out var entry) ? entry : null;
+
+    internal GameSystem? GetGameSystem() => _gameSystem;
 
     /// <summary>
     /// Get name of first selection in first force (for modifier testing).
