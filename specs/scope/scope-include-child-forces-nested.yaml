@@ -1,8 +1,7 @@
 id: scope-include-child-forces-nested
 category: scope
 description: includeChildForces flag traverses into nested forces for query resolution
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

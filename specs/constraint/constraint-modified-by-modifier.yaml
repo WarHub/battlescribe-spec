@@ -1,8 +1,7 @@
 id: constraint-modified-by-modifier
 category: constraint
 description: A modifier can target a constraint's value field, changing the effective min/max
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

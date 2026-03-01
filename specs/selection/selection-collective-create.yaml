@@ -1,8 +1,7 @@
 id: selection-collective-create
 category: selection
 description: Collective entry is replicated across sibling selections when selected
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

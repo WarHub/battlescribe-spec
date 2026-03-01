@@ -1,8 +1,7 @@
 id: entry-link-with-modifier
 category: selection
 description: EntryLink can have its own modifiers that override the target entry
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

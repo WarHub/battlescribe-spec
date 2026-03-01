@@ -1,8 +1,7 @@
 id: entry-link-basic
 category: selection
 description: EntryLink references a shared SelectionEntry, resolved at runtime by targetId
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

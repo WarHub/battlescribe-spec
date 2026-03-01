@@ -1,8 +1,7 @@
 id: selection-entry-group-basic
 category: selection
 description: SelectionEntryGroup contains multiple child entries that can be selected independently
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

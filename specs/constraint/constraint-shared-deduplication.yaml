@@ -1,8 +1,7 @@
 id: constraint-shared-deduplication
 category: constraint
 description: Shared entry validation errors are deduplicated (same error not reported twice)
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

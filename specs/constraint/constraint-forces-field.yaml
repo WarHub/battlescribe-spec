@@ -1,8 +1,7 @@
 id: constraint-forces-field
 category: constraint
 description: Constraint with field=forces applies to force count instead of selection count
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

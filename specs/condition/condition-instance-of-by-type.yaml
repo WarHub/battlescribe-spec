@@ -1,8 +1,7 @@
 id: condition-instance-of-by-type
 category: condition
 description: instanceOf condition can match by SelectionEntry.Type (e.g. unit, model, upgrade)
-tags:
-  - known-limitation-synthetic
+tags: []
 setup:
   gameSystem:
     id: test-gs
