@@ -1,9 +1,6 @@
 id: condition-childid-group
 category: condition
 description: childId filter can reference a SelectionEntryGroup ID to count selections from that group
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -39,9 +36,8 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # childId references a SelectionEntryGroup ID. With synthetic data,
-  # the engine's indexing doesn't resolve group IDs, so the modifier
-  # is not applied.
+  # childId references SelectionEntryGroup seg-weapons which does not
+  # exist in the catalogue. Condition is false → name stays "Watcher".
   - expectedState:
       forces:
         - selectionCount: 1

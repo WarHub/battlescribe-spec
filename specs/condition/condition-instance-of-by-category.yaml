@@ -1,9 +1,6 @@
 id: condition-instance-of-by-category
 category: condition
 description: instanceOf condition can match by CategoryEntry ID on selections with matching category links
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -54,7 +51,7 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # instanceOf by category not evaluated with synthetic data
+  # Only detector selected, no HQ-category selection yet → false
   - expectedState:
       forces:
         - selectionCount: 1
