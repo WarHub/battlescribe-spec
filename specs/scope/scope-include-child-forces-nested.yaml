@@ -1,0 +1,47 @@
+id: scope-include-child-forces-nested
+category: scope
+description: includeChildForces flag traverses into nested forces for query resolution
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-detach
+            name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Veteran Squad
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                includeChildForces: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # includeChildForces=true should traverse nested forces when counting.
+  # With synthetic data, this produces the same result as without the flag.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad

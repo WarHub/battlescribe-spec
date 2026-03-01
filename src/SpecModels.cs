@@ -69,7 +69,8 @@ public record SelectionEntrySpec(
 public record ForceEntrySpec(
     string Id,
     string Name,
-    CategoryLinkSpec[]? CategoryLinks = null);
+    CategoryLinkSpec[]? CategoryLinks = null,
+    ForceEntrySpec[]? ForceEntries = null);
 
 public record GameSystemSpec(
     string Id = "test-gs",

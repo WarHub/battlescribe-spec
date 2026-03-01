@@ -1,0 +1,35 @@
+id: force-nested-basic
+category: force
+description: Force entries can contain nested sub-force entries for hierarchical army structures
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-detach
+            name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  # Adding the top-level "Army" force. It has a nested "Detachment" force entry.
+  # The engine creates the parent force; nested force entries are available for
+  # subsequent selectForce operations.
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Army

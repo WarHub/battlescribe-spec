@@ -81,7 +81,8 @@ public static class JavaModelFactory
         string id,
         string name,
         bool hidden = false,
-        IEnumerable<CategoryLink>? categoryLinks = null)
+        IEnumerable<CategoryLink>? categoryLinks = null,
+        IEnumerable<ForceEntry>? forceEntries = null)
     {
         var fe = new ForceEntry();
         fe.setId(id);
@@ -91,6 +92,10 @@ public static class JavaModelFactory
         if (categoryLinks != null)
             foreach (var cl in categoryLinks)
                 fe.getCategoryLinks().add(cl);
+
+        if (forceEntries != null)
+            foreach (var child in forceEntries)
+                fe.getForceEntries().add(child);
 
         return fe;
     }

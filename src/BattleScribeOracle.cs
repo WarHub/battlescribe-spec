@@ -517,10 +517,7 @@ public sealed class BattleScribeOracle : IDisposable
         var costTypes = scenario.GameSystem.CostTypes?.Select(ct =>
             JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray();
 
-        var forceEntries = scenario.GameSystem.ForceEntries?.Select(fe =>
-            JavaModelFactory.CreateForceEntry(fe.Id, fe.Name,
-                categoryLinks: fe.CategoryLinks?.Select(cl =>
-                    JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray())).ToArray();
+        var forceEntries = scenario.GameSystem.ForceEntries?.Select(BuildForceEntry).ToArray();
 
         var categoryEntries = scenario.GameSystem.CategoryEntries?.Select(ce =>
             JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name)).ToArray();
@@ -558,6 +555,15 @@ public sealed class BattleScribeOracle : IDisposable
                 IndexEntries(se);
 
         return Initialize(gs, new Dictionary<string, Catalogue> { [scenario.Catalogue.Id] = cat });
+    }
+
+    private static ForceEntry BuildForceEntry(ForceEntrySpec feSpec)
+    {
+        var categoryLinks = feSpec.CategoryLinks?.Select(cl =>
+            JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray();
+        var childForceEntries = feSpec.ForceEntries?.Select(BuildForceEntry).ToArray();
+        return JavaModelFactory.CreateForceEntry(feSpec.Id, feSpec.Name,
+            categoryLinks: categoryLinks, forceEntries: childForceEntries);
     }
 
     private static SelectionEntry BuildSelectionEntry(SelectionEntrySpec spec)

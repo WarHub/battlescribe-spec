@@ -69,9 +69,7 @@ public static class SpecLoader
             Id: setup.GameSystem.Id,
             Name: setup.GameSystem.Name,
             ForceEntries: setup.GameSystem.ForceEntries?
-                .Select(fe => new ForceEntrySpec(fe.Id, fe.Name,
-                    fe.CategoryLinks?.Select(cl =>
-                        new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray())).ToArray(),
+                .Select(fe => ConvertForceEntry(fe)).ToArray(),
             CostTypes: setup.GameSystem.CostTypes?
                 .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray(),
             CategoryEntries: setup.GameSystem.CategoryEntries?
@@ -114,6 +112,12 @@ public static class SpecLoader
             Page: def.Page,
             EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray());
     }
+
+    private static ForceEntrySpec ConvertForceEntry(ForceEntryDef fe) =>
+        new(fe.Id, fe.Name,
+            fe.CategoryLinks?.Select(cl =>
+                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
+            fe.ForceEntries?.Select(ConvertForceEntry).ToArray());
 
     private static SelectionEntryGroupSpec ConvertSelectionEntryGroup(SelectionEntryGroupDef def)
     {
