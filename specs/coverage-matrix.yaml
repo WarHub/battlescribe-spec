@@ -1,10 +1,10 @@
 # BattleScribe Engine Conformance Test Coverage Matrix
-# Current branch state: 179 specs, 325 tests, all passing
+# Current state: 179 specs, 325 tests, all passing
 
 summary:
   total_specs: 179
-  total_tests: 326
-  passed: 326
+  total_tests: 325
+  passed: 325
   skipped: 0
   failed: 0
   categories_covered: 9
@@ -234,8 +234,8 @@ engine_api:
 
 enum_coverage:
   condition_type:
-    covered: 11
-    total: 11
+    covered: 8
+    total: 8
     values:
       EQ: { status: covered, specs: [condition-equal-to, condition-equal-to-zero] }
       NE: { status: covered, specs: [condition-not-equal-to] }
@@ -246,8 +246,8 @@ enum_coverage:
       INSTANCE_OF: { status: covered, specs: [condition-instance-of, condition-instance-of-by-type, condition-instance-of-by-category, condition-instance-of-ancestor, condition-instance-of-roster-scope, condition-instance-of-group, condition-instance-of-force-entry, condition-instance-of-catalogue] }
       NOT_INSTANCE_OF: { status: covered, specs: [condition-not-instance-of] }
   modifier_type:
-    covered: 8
-    total: 8
+    covered: 12
+    total: 12
     values:
       string_set: { status: covered, specs: [modifier-set-name] }
       string_increment: { status: covered, specs: [modifier-increment-name, modifier-string-increment-numeric] }
