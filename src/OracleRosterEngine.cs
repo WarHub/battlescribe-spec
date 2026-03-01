@@ -132,6 +132,9 @@ public sealed class OracleRosterEngine : IRosterEngine
     {
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
+        var profiles = JavaListToList<net.battlescribe.model.data.Profile>(sel.getProfiles());
+        var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());
+        var categories = JavaListToList<net.battlescribe.model.roster.Category>(sel.getCategories());
         return new SelectionState(
             sel.getName() ?? "",
             sel.getEntryId(),
@@ -139,7 +142,22 @@ public sealed class OracleRosterEngine : IRosterEngine
             sel.getNumber(),
             false, // hidden status requires checking the entry, not the selection
             costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList(),
-            children.Select(CaptureSelection).ToList());
+            children.Select(CaptureSelection).ToList(),
+            Profiles: profiles.Select(CaptureProfile).ToList(),
+            Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden())).ToList(),
+            Categories: categories.Select(c => new CategoryState(c.getName() ?? "", c.getEntryId(), c.isPrimary())).ToList(),
+            Page: sel.getPage());
+    }
+
+    private static ProfileState CaptureProfile(net.battlescribe.model.data.Profile prof)
+    {
+        var chars = JavaListToList<net.battlescribe.model.data.Characteristic>(prof.getCharacteristics());
+        return new ProfileState(
+            prof.getName() ?? "",
+            prof.getTypeId(),
+            prof.getTypeName(),
+            prof.isHidden(),
+            chars.Select(c => new CharacteristicState(c.getName() ?? "", c.getTypeId(), c.getValue() ?? "")).ToList());
     }
 
     private static List<T> JavaListToList<T>(java.util.List? javaList)

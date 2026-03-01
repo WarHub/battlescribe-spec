@@ -595,6 +595,18 @@ public sealed class ExpectedSelectionDef
 
     [YamlMember(Alias = "children")]
     public List<ExpectedSelectionDef>? Children { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ExpectedProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<ExpectedRuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "categories")]
+    public List<ExpectedCategoryDef>? Categories { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string? Page { get; set; }
 }
 
 public sealed class ExpectedCostDef
@@ -607,4 +619,58 @@ public sealed class ExpectedCostDef
 
     [YamlMember(Alias = "value")]
     public double? Value { get; set; }
+}
+
+public sealed class ExpectedProfileDef
+{
+    [YamlMember(Alias = "name")]
+    public string? Name { get; set; }
+
+    [YamlMember(Alias = "typeId")]
+    public string? TypeId { get; set; }
+
+    [YamlMember(Alias = "typeName")]
+    public string? TypeName { get; set; }
+
+    [YamlMember(Alias = "hidden")]
+    public bool? Hidden { get; set; }
+
+    [YamlMember(Alias = "characteristics")]
+    public List<ExpectedCharacteristicDef>? Characteristics { get; set; }
+}
+
+public sealed class ExpectedCharacteristicDef
+{
+    [YamlMember(Alias = "name")]
+    public string? Name { get; set; }
+
+    [YamlMember(Alias = "typeId")]
+    public string? TypeId { get; set; }
+
+    [YamlMember(Alias = "value")]
+    public string? Value { get; set; }
+}
+
+public sealed class ExpectedRuleDef
+{
+    [YamlMember(Alias = "name")]
+    public string? Name { get; set; }
+
+    [YamlMember(Alias = "description")]
+    public string? Description { get; set; }
+
+    [YamlMember(Alias = "hidden")]
+    public bool? Hidden { get; set; }
+}
+
+public sealed class ExpectedCategoryDef
+{
+    [YamlMember(Alias = "name")]
+    public string? Name { get; set; }
+
+    [YamlMember(Alias = "entryId")]
+    public string? EntryId { get; set; }
+
+    [YamlMember(Alias = "primary")]
+    public bool? Primary { get; set; }
 }
