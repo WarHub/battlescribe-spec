@@ -1,9 +1,6 @@
 id: modifier-group-basic
 category: modifier
 description: Modifier group with condition applies when condition is met (tests modifierGroup structure)
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -32,7 +29,8 @@ setup:
               - type: atLeast
                 value: 1
                 field: selections
-                scope: self
+                scope: parent
+                childId: se-1
             modifiers:
               - type: set
                 field: name
@@ -44,9 +42,8 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # NOTE: Modifier groups are not evaluated on synthetic data in the oracle engine.
-  # The selection retains its base name. Real-world data would show "Elite Marine".
+  # ModifierGroup condition: atLeast 1 selection in parent matching se-1 → true
   - expectedState:
       forces:
         - selections:
-            - name: Marine
+            - name: Elite Marine

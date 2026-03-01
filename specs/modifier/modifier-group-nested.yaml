@@ -1,9 +1,6 @@
 id: modifier-group-nested
 category: modifier
 description: Nested modifier groups (ModifierGroup containing ModifierGroups) form hierarchical modifier structures
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -32,7 +29,8 @@ setup:
               - type: atLeast
                 value: 1
                 field: selections
-                scope: self
+                scope: parent
+                childId: se-1
             modifierGroups:
               - modifiers:
                   - type: increment
@@ -45,10 +43,12 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # Nested ModifierGroup: outer group has condition (atLeast 1),
-  # inner group contains increment modifier.
-  # With synthetic data, ModifierGroups are not fully evaluated.
+  # Nested ModifierGroup: outer group condition met (1 selection ≥ 1),
+  # inner group unconditional → increment pts by 10 → 100 + 10 = 110
   - expectedState:
       forces:
         - selections:
             - name: Marine
+              costs:
+                - typeId: pts
+                  value: 110

@@ -1,9 +1,6 @@
 id: condition-group-or
 category: condition
 description: Condition group with OR logic on modifier (tests structure)
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -29,11 +26,13 @@ setup:
                   - type: atLeast
                     value: 1
                     field: selections
-                    scope: self
+                    scope: parent
+                    childId: se-1
                   - type: atLeast
                     value: 10
                     field: selections
-                    scope: self
+                    scope: parent
+                    childId: se-1
 
 steps:
   - action: addForce
@@ -41,9 +40,8 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # NOTE: ConditionGroups on modifiers are not evaluated by the oracle
-  # with synthetic data. The modifier does not apply.
+  # OR(atLeast 1, atLeast 10): with 1 selection, first true → modifier applies
   - expectedState:
       forces:
         - selections:
-            - name: Fighter
+            - name: Active Fighter

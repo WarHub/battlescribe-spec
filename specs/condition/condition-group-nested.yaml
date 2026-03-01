@@ -1,9 +1,6 @@
 id: condition-group-nested
 category: condition
 description: Nested condition groups form complex boolean logic trees (AND containing OR)
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -29,18 +26,21 @@ setup:
                   - type: atLeast
                     value: 1
                     field: selections
-                    scope: self
+                    scope: parent
+                    childId: se-1
                 conditionGroups:
                   - type: or
                     conditions:
                       - type: greaterThan
                         value: 5
                         field: selections
-                        scope: self
+                        scope: parent
+                        childId: se-1
                       - type: lessThan
                         value: 2
                         field: selections
-                        scope: self
+                        scope: parent
+                        childId: se-1
 
 steps:
   - action: addForce
@@ -50,8 +50,7 @@ steps:
     entryIndex: 0
   # Nested logic: AND(atLeast 1, OR(greaterThan 5, lessThan 2))
   # With 1 selection: atLeast 1 = true, OR(1>5=false, 1<2=true) = true → AND = true
-  # Modifier should apply, but ConditionGroups are not evaluated on synthetic data.
   - expectedState:
       forces:
         - selections:
-            - name: Soldier
+            - name: Elite Soldier

@@ -1,9 +1,6 @@
 id: modifier-group-with-repeat
 category: modifier
 description: ModifierGroup with its own repeat multiplier applies contained modifiers multiple times
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -32,7 +29,8 @@ setup:
               - value: 1
                 repeats: 1
                 field: selections
-                scope: self
+                scope: parent
+                childId: se-1
             modifiers:
               - type: increment
                 field: pts
@@ -44,11 +42,12 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # ModifierGroup repeat: self scope, 1 selection / value 1 = 1 repeat.
+  # ModifierGroup repeat: parent scope, childId se-1, 1 selection / value 1 = 1 repeat.
   # Contained modifier increments pts by 5 once → 50 + 5 = 55.
-  # NOTE: ModifierGroups with repeats are not evaluated on synthetic data
-  # in the oracle engine. The cost stays at base value.
   - expectedState:
       forces:
         - selections:
             - name: Squad
+              costs:
+                - typeId: pts
+                  value: 55
