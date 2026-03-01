@@ -1,8 +1,7 @@
 id: selection-force-level-entry
 category: selection
 description: Force-level entries create new selections each time they are selected
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

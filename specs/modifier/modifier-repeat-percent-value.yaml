@@ -1,9 +1,6 @@
 id: modifier-repeat-percent-value
 category: modifier
 description: Repeat with percentValue=true uses percentage-based threshold calculation
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -35,7 +32,8 @@ setup:
               - value: 50
                 repeats: 1
                 field: selections
-                scope: self
+                scope: parent
+                childId: se-1
                 percentValue: true
 
 steps:
@@ -44,11 +42,10 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # percentValue=true: threshold is 50% of the condition value.
-  # With self scope and selections field: 1 selection.
-  # Repeat value 50 with percentValue → condition uses percentage math.
-  # NOTE: percentValue on repeats is not meaningful with synthetic data.
-  # The base cost is observed unchanged.
+  # percentValue=true: raw count = 1 selection. Percentage = 1/50*100 = 2%.
+  # Round: floor(0.02) = 0 repeats. Modifier not applied → pts stays 100.
+  # (percentValue divides the count by the value and multiplies by 100,
+  # then applies repeats multiplier — with 1 selection and value 50, this is 0)
   - expectedState:
       forces:
         - selections:

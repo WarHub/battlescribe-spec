@@ -1,9 +1,7 @@
 id: condition-childid-catalogue
 category: condition
 description: childId filter can reference a Catalogue ID for scoping queries to a specific catalogue
-tags:
-  - known-limitation-synthetic
-
+tags: []
 setup:
   gameSystem:
     id: test-gs
@@ -36,9 +34,10 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # childId references a Catalogue ID. The engine can use catalogue
-  # IDs to scope counting to entries from a specific catalogue.
-  # With synthetic data, this filtering is not fully operational.
+  # childId references Catalogue ID cat-1. With scope=roster, the engine
+  # should count selections from that catalogue. This requires catalogue-level
+  # childId resolution in the engine's condition evaluator which isn't
+  # operational with synthetic data.
   - expectedState:
       forces:
         - selectionCount: 1

@@ -1,8 +1,7 @@
 id: cost-type-hidden
 category: cost
 description: Hidden cost types are tracked internally but filtered from display aggregation
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

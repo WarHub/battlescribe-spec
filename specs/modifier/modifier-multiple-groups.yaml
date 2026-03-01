@@ -1,9 +1,6 @@
 id: modifier-multiple-groups
 category: modifier
 description: Multiple modifier groups are structured independently on an entry
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -32,7 +29,8 @@ setup:
               - type: atLeast
                 value: 1
                 field: selections
-                scope: self
+                scope: parent
+                childId: se-1
             modifiers:
               - type: set
                 field: name
@@ -41,7 +39,8 @@ setup:
               - type: atLeast
                 value: 1
                 field: selections
-                scope: self
+                scope: parent
+                childId: se-1
             modifiers:
               - type: increment
                 field: pts
@@ -53,12 +52,12 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # NOTE: Modifier groups are not evaluated on synthetic data.
-  # The selection retains base values.
+  # Both modifier groups' conditions met (1 selection ≥ 1).
+  # Group 1: set name to "Active Agent". Group 2: increment pts by 25 → 125.
   - expectedState:
       forces:
         - selections:
-            - name: Agent
+            - name: Active Agent
               costs:
                 - typeId: pts
-                  value: 100
+                  value: 125

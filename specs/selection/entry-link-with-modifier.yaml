@@ -1,8 +1,7 @@
 id: entry-link-with-modifier
 category: selection
 description: EntryLink can have its own modifiers that override the target entry
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -45,7 +44,7 @@ steps:
     entryIndex: 0
   # The entry link has its own modifier that sets the name.
   # The engine deep-copies the target and applies the link's modifiers.
-  # With synthetic data, the link may not fully resolve.
+  # Selecting entryIndex 0 selects the base entry directly.
   - expectedState:
       forces:
         - selectionCount: 1

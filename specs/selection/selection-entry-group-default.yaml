@@ -1,8 +1,7 @@
 id: selection-entry-group-default
 category: selection
 description: SelectionEntryGroup with defaultSelectionEntryId auto-selects the default entry
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -37,8 +36,8 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # With defaultSelectionEntryId, the engine auto-selects se-sword.
-  # With synthetic data, this may not trigger.
+  # With defaultSelectionEntryId, the engine auto-selects se-sword
+  # when the parent unit is selected. Parent unit appears with child.
   - expectedState:
       forces:
         - selectionCount: 1

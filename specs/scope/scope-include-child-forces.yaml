@@ -1,8 +1,7 @@
 id: scope-include-child-forces
 category: scope
 description: Condition with includeChildForces flag includes child forces in query scope
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -38,8 +37,9 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # includeChildForces expands scope to nested forces, but with
-  # synthetic data the flag doesn't affect behavior. Name unchanged.
+  # includeChildForces expands scope to nested forces. With only one
+  # force and no child forces, the flag has no additional effect and the
+  # condition evaluates the same as without the flag. Name unchanged.
   - expectedState:
       forces:
         - selectionCount: 1

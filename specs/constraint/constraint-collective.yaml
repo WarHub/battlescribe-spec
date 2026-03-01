@@ -1,8 +1,7 @@
 id: constraint-collective
 category: constraint
 description: Collective constraint divides the limit by the number of sibling entries sharing the constraint
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

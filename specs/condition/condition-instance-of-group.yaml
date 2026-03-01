@@ -1,9 +1,6 @@
 id: condition-instance-of-group
 category: condition
 description: instanceOf condition can match by SelectionEntryGroup type
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -39,9 +36,8 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # instanceOf checks if entries matching the childId are instances of
-  # a SelectionEntryGroup. With synthetic data, instanceOf type matching
-  # for groups is not operational.
+  # instanceOf childId=seg-weapons: no SelectionEntryGroup with that ID
+  # exists, so condition is false → name stays "Detector".
   - expectedState:
       forces:
         - selectionCount: 1

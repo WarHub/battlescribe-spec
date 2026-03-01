@@ -280,15 +280,19 @@ public sealed class SpecRunner
                 continue;
             }
             var a = actual[si];
+            var selPrefix = $"{prefix}.selection[{si}]";
 
             if (es.Name is not null)
-                AssertEqual(stepIndex, $"{prefix}.selection[{si}].name", es.Name, a.Name);
+                AssertEqual(stepIndex, $"{selPrefix}.name", es.Name, a.Name);
 
             if (es.Type is not null)
-                AssertEqual(stepIndex, $"{prefix}.selection[{si}].type", es.Type, a.Type);
+                AssertEqual(stepIndex, $"{selPrefix}.type", es.Type, a.Type);
 
             if (es.Number is { } num)
-                AssertEqual(stepIndex, $"{prefix}.selection[{si}].number", num, a.Number);
+                AssertEqual(stepIndex, $"{selPrefix}.number", num, a.Number);
+
+            if (es.Page is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.page", es.Page, a.Page);
 
             if (es.Costs is { } eCosts)
             {
@@ -296,14 +300,110 @@ public sealed class SpecRunner
                 {
                     var ac = a.Costs.FirstOrDefault(c => c.TypeId == ec.TypeId);
                     if (ac is null)
-                        _errors.Add($"Step {stepIndex}: {prefix}.selection[{si}] cost type '{ec.TypeId}' not found");
+                        _errors.Add($"Step {stepIndex}: {selPrefix} cost type '{ec.TypeId}' not found");
                     else if (ec.Value is { } v)
-                        AssertEqual(stepIndex, $"{prefix}.selection[{si}].cost[{ec.TypeId}]", v, ac.Value);
+                        AssertEqual(stepIndex, $"{selPrefix}.cost[{ec.TypeId}]", v, ac.Value);
                 }
             }
 
+            if (es.Profiles is { } eProfiles)
+                AssertProfiles(stepIndex, selPrefix, eProfiles, a.Profiles);
+
+            if (es.Rules is { } eRules)
+                AssertRules(stepIndex, selPrefix, eRules, a.Rules);
+
+            if (es.Categories is { } eCategories)
+                AssertCategories(stepIndex, selPrefix, eCategories, a.Categories);
+
             if (es.Children is { } expectedChildren)
-                AssertSelections(stepIndex, $"{prefix}.selection[{si}]", expectedChildren, a.Children);
+                AssertSelections(stepIndex, selPrefix, expectedChildren, a.Children);
+        }
+    }
+
+    private void AssertProfiles(int stepIndex, string prefix,
+        List<ExpectedProfileDef> expected, IReadOnlyList<ProfileState> actual)
+    {
+        for (var pi = 0; pi < expected.Count; pi++)
+        {
+            var ep = expected[pi];
+            // Match by name if specified, otherwise by index
+            var ap = ep.Name is not null
+                ? actual.FirstOrDefault(p => p.Name == ep.Name)
+                : pi < actual.Count ? actual[pi] : null;
+            if (ap is null)
+            {
+                _errors.Add($"Step {stepIndex}: {prefix}.profile[{ep.Name ?? pi.ToString()}] not found (have {actual.Count} profiles)");
+                continue;
+            }
+            var profPrefix = $"{prefix}.profile[{ep.Name ?? pi.ToString()}]";
+
+            if (ep.TypeName is not null)
+                AssertEqual(stepIndex, $"{profPrefix}.typeName", ep.TypeName, ap.TypeName);
+
+            if (ep.Hidden is { } h)
+                AssertEqual(stepIndex, $"{profPrefix}.hidden", h, ap.Hidden);
+
+            if (ep.Characteristics is { } eChars)
+            {
+                foreach (var ec in eChars)
+                {
+                    var ac = ec.Name is not null
+                        ? ap.Characteristics.FirstOrDefault(c => c.Name == ec.Name)
+                        : null;
+                    if (ac is null)
+                    {
+                        _errors.Add($"Step {stepIndex}: {profPrefix}.characteristic[{ec.Name}] not found");
+                        continue;
+                    }
+                    if (ec.Value is not null)
+                        AssertEqual(stepIndex, $"{profPrefix}.characteristic[{ec.Name}].value", ec.Value, ac.Value);
+                }
+            }
+        }
+    }
+
+    private void AssertRules(int stepIndex, string prefix,
+        List<ExpectedRuleDef> expected, IReadOnlyList<RuleState> actual)
+    {
+        for (var ri = 0; ri < expected.Count; ri++)
+        {
+            var er = expected[ri];
+            var ar = er.Name is not null
+                ? actual.FirstOrDefault(r => r.Name == er.Name)
+                : ri < actual.Count ? actual[ri] : null;
+            if (ar is null)
+            {
+                _errors.Add($"Step {stepIndex}: {prefix}.rule[{er.Name ?? ri.ToString()}] not found (have {actual.Count} rules)");
+                continue;
+            }
+            var rulePrefix = $"{prefix}.rule[{er.Name ?? ri.ToString()}]";
+
+            if (er.Description is not null)
+                AssertEqual(stepIndex, $"{rulePrefix}.description", er.Description, ar.Description);
+
+            if (er.Hidden is { } h)
+                AssertEqual(stepIndex, $"{rulePrefix}.hidden", h, ar.Hidden);
+        }
+    }
+
+    private void AssertCategories(int stepIndex, string prefix,
+        List<ExpectedCategoryDef> expected, IReadOnlyList<CategoryState> actual)
+    {
+        for (var ci = 0; ci < expected.Count; ci++)
+        {
+            var ec = expected[ci];
+            var ac = ec.Name is not null
+                ? actual.FirstOrDefault(c => c.Name == ec.Name)
+                : ci < actual.Count ? actual[ci] : null;
+            if (ac is null)
+            {
+                _errors.Add($"Step {stepIndex}: {prefix}.category[{ec.Name ?? ci.ToString()}] not found (have {actual.Count} categories)");
+                continue;
+            }
+            var catPrefix = $"{prefix}.category[{ec.Name ?? ci.ToString()}]";
+
+            if (ec.Primary is { } p)
+                AssertEqual(stepIndex, $"{catPrefix}.primary", p, ac.Primary);
         }
     }
 

@@ -35,7 +35,11 @@ public static class SpecLoader
 
         foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
         {
-            var category = Path.GetFileName(Path.GetDirectoryName(file)) ?? "unknown";
+            var dir = Path.GetDirectoryName(file);
+            // Skip files in the root specs directory (e.g. coverage-matrix.yaml)
+            if (string.Equals(Path.GetFullPath(dir!), Path.GetFullPath(specsDir), StringComparison.OrdinalIgnoreCase))
+                continue;
+            var category = Path.GetFileName(dir) ?? "unknown";
             var id = Path.GetFileNameWithoutExtension(file);
             yield return (file, id, category);
         }
@@ -122,7 +126,10 @@ public static class SpecLoader
             CostTypes: setup.GameSystem.CostTypes?
                 .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray(),
             CategoryEntries: setup.GameSystem.CategoryEntries?
-                .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray());
+                .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray(),
+            ProfileTypes: setup.GameSystem.ProfileTypes?
+                .Select(pt => new ProfileTypeSpec(pt.Id, pt.Name,
+                    pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray());
 
         var cat = new CatalogueSpec(
             Id: setup.Catalogue.Id,

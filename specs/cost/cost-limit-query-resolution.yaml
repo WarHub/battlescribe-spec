@@ -1,8 +1,7 @@
 id: cost-limit-query-resolution
 category: cost
 description: CostType.isLimit affects query value resolution — limit cost types resolve to the limit value rather than the actual cost
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:

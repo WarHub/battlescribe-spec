@@ -1,9 +1,6 @@
 id: condition-childid-force-entry
 category: condition
 description: childId filter can reference a ForceEntry ID to count forces of that type
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -38,9 +35,8 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # childId references a ForceEntry ID to count forces of that type.
-  # With synthetic data, forces-field queries with childId filtering
-  # do not resolve correctly.
+  # childId references ForceEntry fe-detach but we only added fe-army.
+  # Condition is false → name stays "Watcher".
   - expectedState:
       forces:
         - selectionCount: 1

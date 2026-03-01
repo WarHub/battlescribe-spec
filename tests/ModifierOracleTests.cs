@@ -130,6 +130,53 @@ public class ModifierOracleTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Modifier_SetCharacteristicValue_ChangesProfileCharacteristic()
+    {
+        using var engine = new OracleRosterEngine();
+        var gs = new GameSystemSpec(
+            ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
+            ProfileTypes: [new ProfileTypeSpec("stat-type", "Unit Stats",
+                CharacteristicTypes: [new CharacteristicTypeSpec("char-wounds", "Wounds")])]);
+        var cat = new CatalogueSpec(SelectionEntries: [
+            new SelectionEntrySpec("se-1", "Marine",
+                Profiles: [new ProfileSpec("prof-1", "Marine Stats", "stat-type", "Unit Stats",
+                    Characteristics: [new CharacteristicSpec("Wounds", "char-wounds", "2")],
+                    Modifiers: [new ModifierSpec("set", "char-wounds", "3")])])
+        ]);
+        engine.Setup(gs, cat);
+        engine.AddForce(0);
+        engine.SelectEntry(0, 0);
+        var state = engine.GetRosterState();
+
+        var sel = state.Forces[0].Selections[0];
+        Assert.NotNull(sel.Profiles);
+        Assert.Single(sel.Profiles);
+        Assert.Equal("Marine Stats", sel.Profiles[0].Name);
+        Assert.Equal("3", sel.Profiles[0].Characteristics[0].Value);
+    }
+
+    [Fact]
+    public void Modifier_RuleDescription_ChangesRuleOnSelection()
+    {
+        using var engine = new OracleRosterEngine();
+        var gs = new GameSystemSpec(ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")]);
+        var cat = new CatalogueSpec(SelectionEntries: [
+            new SelectionEntrySpec("se-1", "Marine",
+                Rules: [new RuleSpec("rule-1", "Combat Doctrine", "Original description",
+                    Modifiers: [new ModifierSpec("set", "description", "Modified description")])])
+        ]);
+        engine.Setup(gs, cat);
+        engine.AddForce(0);
+        engine.SelectEntry(0, 0);
+        var state = engine.GetRosterState();
+
+        var sel = state.Forces[0].Selections[0];
+        Assert.NotNull(sel.Rules);
+        Assert.Single(sel.Rules);
+        Assert.Equal("Modified description", sel.Rules[0].Description);
+    }
+
+    [Fact]
     public void Modifier_WithCondition_OnlyAppliesWhenConditionMet()
     {
         using var oracle = new BattleScribeOracle();

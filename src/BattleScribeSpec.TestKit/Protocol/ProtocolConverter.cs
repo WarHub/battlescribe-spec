@@ -20,6 +20,11 @@ public static class ProtocolConverter
         CostTypes = gs.CostTypes?.Select(ToProtocol).ToList(),
         ForceEntries = gs.ForceEntries?.Select(ToProtocol).ToList(),
         CategoryEntries = gs.CategoryEntries?.Select(ct => new ProtocolCategoryEntry { Id = ct.Id, Name = ct.Name }).ToList(),
+        ProfileTypes = gs.ProfileTypes?.Select(pt => new ProtocolProfileType
+        {
+            Id = pt.Id, Name = pt.Name,
+            CharacteristicTypes = pt.CharacteristicTypes?.Select(ct => new ProtocolCharacteristicType { Id = ct.Id, Name = ct.Name }).ToList(),
+        }).ToList(),
     };
 
     public static ProtocolCatalogue ToProtocol(CatalogueSpec cat) => new()
@@ -163,7 +168,9 @@ public static class ProtocolConverter
         Id: gs.Id, Name: gs.Name,
         ForceEntries: gs.ForceEntries?.Select(FromProtocol).ToArray(),
         CostTypes: gs.CostTypes?.Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray(),
-        CategoryEntries: gs.CategoryEntries?.Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray());
+        CategoryEntries: gs.CategoryEntries?.Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray(),
+        ProfileTypes: gs.ProfileTypes?.Select(pt => new ProfileTypeSpec(pt.Id, pt.Name,
+            pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray());
 
     public static CatalogueSpec FromProtocol(ProtocolCatalogue cat) => new(
         Id: cat.Id, Name: cat.Name, GameSystemId: cat.GameSystemId,
@@ -267,7 +274,13 @@ public static class ProtocolConverter
     static SelectionState ToSelectionState(ProtocolSelection s) => new(
         s.Name, s.EntryId, s.Type, s.Number, s.Hidden,
         s.Costs.Select(ToCostState).ToList(),
-        s.Children.Select(ToSelectionState).ToList());
+        s.Children.Select(ToSelectionState).ToList(),
+        Profiles: s.Profiles?.Select(p => new ProfileState(
+            p.Name, p.TypeId, p.TypeName, p.Hidden,
+            p.Characteristics.Select(c => new CharacteristicState(c.Name, c.TypeId, c.Value)).ToList())).ToList()!,
+        Rules: s.Rules?.Select(r => new RuleState(r.Name, r.Description, r.Hidden)).ToList()!,
+        Categories: s.Categories?.Select(c => new CategoryState(c.Name, c.EntryId, c.Primary)).ToList()!,
+        Page: s.Page);
 
     static CostState ToCostState(ProtocolCost c) => new(c.Name, c.TypeId, c.Value);
 
@@ -294,6 +307,17 @@ public static class ProtocolConverter
         Number = s.Number, Hidden = s.Hidden,
         Costs = s.Costs.Select(ToProtocolCost).ToList(),
         Children = s.Children.Select(ToProtocolSelection).ToList(),
+        Profiles = s.Profiles?.Select(p => new ProtocolSelectionProfile
+        {
+            Name = p.Name, TypeId = p.TypeId, TypeName = p.TypeName, Hidden = p.Hidden,
+            Characteristics = p.Characteristics.Select(c => new ProtocolCharacteristic
+            { Name = c.Name, TypeId = c.TypeId ?? "", Value = c.Value }).ToList(),
+        }).ToList(),
+        Rules = s.Rules?.Select(r => new ProtocolSelectionRule
+        { Name = r.Name, Description = r.Description, Hidden = r.Hidden }).ToList(),
+        Categories = s.Categories?.Select(c => new ProtocolSelectionCategory
+        { Name = c.Name, EntryId = c.EntryId, Primary = c.Primary }).ToList(),
+        Page = s.Page,
     };
 
     static ProtocolCost ToProtocolCost(CostState c) => new()

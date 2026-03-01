@@ -1,8 +1,7 @@
 id: scope-forces-field
 category: scope
 description: Condition with field=forces counts forces in scope instead of selections
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -37,8 +36,9 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # field=forces counting is not available with synthetic data.
-  # The modifier does not apply; name remains unchanged.
+  # field=forces counts forces in scope rather than selections.
+  # The condition checks for forces, and the engine evaluates
+  # this independently of selection state. Name unchanged.
   - expectedState:
       forces:
         - selectionCount: 1

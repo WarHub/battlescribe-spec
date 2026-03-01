@@ -1,8 +1,7 @@
 id: entry-link-basic
 category: selection
 description: EntryLink references a shared SelectionEntry, resolved at runtime by targetId
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -32,8 +31,8 @@ steps:
     forceIndex: 0
     entryIndex: 0
   # EntryLink el-1 references se-shared. The engine resolves the link
-  # and creates a selection based on the target entry.
-  # With synthetic data, link resolution may not fully work.
+  # during expansion and makes the target entry selectable.
+  # Selecting entryIndex 0 selects the first catalogue entry (se-shared).
   - expectedState:
       forces:
         - selectionCount: 1

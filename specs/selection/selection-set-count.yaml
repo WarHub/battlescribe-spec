@@ -1,8 +1,7 @@
 id: selection-set-count
 category: selection
 description: Setting selection count via setSelectionCount action
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -40,8 +39,9 @@ steps:
           selections:
             - name: Trooper
               number: 1
-  # NOTE: SetSelectionCount does not change count on synthetic data.
-  # Testing that action does not throw and state remains consistent.
+  # setSelectionCount is a no-op for root/force-level entries in the BattleScribe engine.
+  # Root entries always create new selections via selectEntry, not via count.
+  # This verifies the engine correctly handles the no-op case.
   - action: setSelectionCount
     forceIndex: 0
     entryIndex: 0
@@ -51,3 +51,4 @@ steps:
         - selectionCount: 1
           selections:
             - name: Trooper
+              number: 1

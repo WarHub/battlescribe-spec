@@ -1,8 +1,7 @@
 id: modifier-on-profile
 category: modifier
 description: Modifiers can be applied to profiles and rules (BaseInfo elements), not just entries
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -11,6 +10,12 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
+    profileTypes:
+      - id: stat-type
+        name: Unit Stats
+        characteristicTypes:
+          - id: char-attacks
+            name: Attacks
   catalogue:
     id: cat-1
     name: Cat
@@ -47,11 +52,15 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # Both profile and rule have their own modifiers.
-  # Profile modifier: increment char-attacks from 1 to 2
-  # Rule modifier: append "(enhanced)" to description
-  # With synthetic data, these modifiers on BaseInfo may not be evaluated.
   - expectedState:
       forces:
         - selections:
             - name: Marine
+              profiles:
+                - name: Marine Stats
+                  characteristics:
+                    - name: Attacks
+                      value: "2"
+              rules:
+                - name: Rapid Fire
+                  description: "Base description (enhanced)"

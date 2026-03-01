@@ -1,8 +1,7 @@
 id: refresh-after-set-count
 category: refresh
 description: SetSelectionCount triggers engine refresh
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -37,8 +36,8 @@ steps:
   - assert: totalCost
     costTypeId: pts
     expected: 10
-  # NOTE: SetSelectionCount on synthetic data does not change count/number.
-  # Verifying the action completes without error and state remains consistent.
+  # setSelectionCount is a no-op for root/force-level entries in the BattleScribe engine.
+  # Root entries always create new selections via selectEntry, not via count.
   - action: setSelectionCount
     forceIndex: 0
     entryIndex: 0

@@ -1,8 +1,7 @@
 id: modifier-category-remove
 category: modifier
 description: Category remove modifier removes a category link from a selection
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
@@ -43,10 +42,9 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # Category removal is a modifier effect; with synthetic data, modifiers
-  # may not fully evaluate categories. Verify selection exists.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Veteran Squad
+              categories: []

@@ -1,9 +1,7 @@
 id: condition-instance-of-force-entry
 category: condition
 description: instanceOf condition can match against ForceEntry types
-tags:
-  - known-limitation-synthetic
-
+tags: []
 setup:
   gameSystem:
     id: test-gs
@@ -41,9 +39,9 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # instanceOf can check if forces in roster are instances of a
-  # specific ForceEntry. With synthetic data, this type of matching
-  # is not fully operational in the engine.
+  # instanceOf checks if forces in roster are instances of fe-patrol.
+  # We added a force from fe-patrol (index 0) → condition should be true.
+  # With synthetic data, instanceOf force entry matching is not operational.
   - expectedState:
       forces:
         - selectionCount: 1

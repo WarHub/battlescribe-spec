@@ -1,9 +1,6 @@
 id: modifier-group-false-condition
 category: modifier
 description: Modifier group with unsatisfied condition does not apply its modifiers
-tags:
-  - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -24,7 +21,8 @@ setup:
               - type: atLeast
                 value: 5
                 field: selections
-                scope: self
+                scope: parent
+                childId: se-1
             modifiers:
               - type: set
                 field: name
@@ -36,8 +34,7 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # Modifier group condition not met (need 5 selections, have 1).
-  # On synthetic data, modifier groups are not evaluated anyway.
+  # Modifier group condition not met (need 5 selections of se-1, have 1).
   - expectedState:
       forces:
         - selections:
