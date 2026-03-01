@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/BattleScribeSpec.TestKit/BattleScribeSpec.TestKit.csproj" />
     <Project Path="src/BattleScribeSpec.csproj" />
   </Folder>
   <Folder Name="/tests/">
