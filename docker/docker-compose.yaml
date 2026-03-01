@@ -1,0 +1,37 @@
+# Docker Compose for running BattleScribe spec conformance tests.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yaml up --build
+#
+# The runner starts the reference adapter as a subprocess via stdin/stdout,
+# so both images are built but only the runner is launched directly.
+# For external adapters, override --adapter to point to a network address or binary.
+
+services:
+  # Builds the runner image (contains spec runner + embedded specs)
+  runner:
+    build:
+      context: ..
+      dockerfile: docker/runner.Dockerfile
+    image: bs-spec-runner:local
+    # Default: run all specs against the reference adapter
+    command: ["--adapter", "dotnet:/adapter/bs-reference-adapter.dll", "--specs", "/specs", "--output", "summary"]
+    volumes:
+      - adapter-bin:/adapter:ro
+    depends_on:
+      reference-adapter-build:
+        condition: service_completed_successfully
+
+  # Build-only service that publishes the reference adapter binary
+  reference-adapter-build:
+    build:
+      context: ..
+      dockerfile: docker/reference-adapter.Dockerfile
+    image: bs-reference-adapter:local
+    # Copy the published adapter to the shared volume, then exit
+    entrypoint: ["sh", "-c", "cp -r /app/* /output/"]
+    volumes:
+      - adapter-bin:/output
+
+volumes:
+  adapter-bin:
