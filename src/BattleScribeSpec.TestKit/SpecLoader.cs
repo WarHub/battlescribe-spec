@@ -42,6 +42,17 @@ public static class SpecLoader
     }
 
     /// <summary>
+    /// Load a spec from a YAML string.
+    /// </summary>
+    public static SpecFile LoadFromYaml(string yaml, string? defaultId = null)
+    {
+        var spec = Deserializer.Deserialize<SpecFile>(yaml);
+        if (string.IsNullOrEmpty(spec.Id) && defaultId is not null)
+            spec.Id = defaultId;
+        return spec;
+    }
+
+    /// <summary>
     /// Find the specs directory by walking up from the test assembly location.
     /// </summary>
     public static string? FindSpecsDirectory()
@@ -57,6 +68,44 @@ public static class SpecLoader
             dir = Path.GetDirectoryName(dir);
         }
         return null;
+    }
+
+    /// <summary>
+    /// Discover all spec YAML files embedded in the TestKit assembly.
+    /// </summary>
+    public static IEnumerable<(string ResourceName, string Id, string Category)> DiscoverEmbeddedSpecs()
+    {
+        var assembly = typeof(SpecLoader).Assembly;
+        foreach (var name in assembly.GetManifestResourceNames())
+        {
+            if (!name.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Resource names look like: BattleScribeSpec.specs.category.file.yaml
+            var parts = name.Split('.');
+            // Find "specs" segment, category is next, then filename
+            var specsIdx = Array.IndexOf(parts, "specs");
+            if (specsIdx < 0 || specsIdx + 2 >= parts.Length)
+                continue;
+
+            var category = parts[specsIdx + 1];
+            // filename is everything between category and .yaml extension
+            var id = string.Join(".", parts[(specsIdx + 2)..^1]);
+            yield return (name, id, category);
+        }
+    }
+
+    /// <summary>
+    /// Load a spec from an embedded resource.
+    /// </summary>
+    public static SpecFile LoadEmbedded(string resourceName)
+    {
+        var assembly = typeof(SpecLoader).Assembly;
+        using var stream = assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
+        using var reader = new StreamReader(stream);
+        var yaml = reader.ReadToEnd();
+        return LoadFromYaml(yaml);
     }
 
     /// <summary>

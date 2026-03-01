@@ -1,6 +1,9 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/BattleScribeSpec.TestKit/BattleScribeSpec.TestKit.csproj" />
     <Project Path="src/BattleScribeSpec.csproj" />
+    <Project Path="src/BattleScribeSpec.Runner/BattleScribeSpec.Runner.csproj" />
+    <Project Path="src/BattleScribeSpec.ReferenceAdapter/BattleScribeSpec.ReferenceAdapter.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BattleScribeSpec.Tests.csproj" />

@@ -4,9 +4,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="BattleScribeSpec.TestKit\BattleScribeSpec.TestKit.csproj" />
     <ProjectReference Include="..\..\wham\src\WarHub.ArmouryModel.Source\WarHub.ArmouryModel.Source.csproj" />
     <ProjectReference Include="..\..\wham\src\WarHub.ArmouryModel.Source.BattleScribe\WarHub.ArmouryModel.Source.BattleScribe.csproj" />
     <ProjectReference Include="..\..\wham\src\WarHub.ArmouryModel.Workspaces.BattleScribe\WarHub.ArmouryModel.Workspaces.BattleScribe.csproj" />
@@ -14,7 +20,6 @@
 
   <ItemGroup>
     <PackageReference Include="IKVM" Version="8.15.0" />
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
   <ItemGroup>
