@@ -1,0 +1,45 @@
+id: selection-entry-group-basic
+category: selection
+description: SelectionEntryGroup contains multiple child entries that can be selected independently
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-parent
+        name: Parent Unit
+        type: unit
+        selectionEntryGroups:
+          - id: seg-weapons
+            name: Weapon Options
+            selectionEntries:
+              - id: se-sword
+                name: Sword
+                type: upgrade
+              - id: se-axe
+                name: Axe
+                type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Parent unit should be created. With synthetic data, group children
+  # behavior (auto-select, defaults) may not trigger fully.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Parent Unit

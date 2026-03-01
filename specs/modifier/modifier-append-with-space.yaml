@@ -1,0 +1,35 @@
+id: modifier-append-with-space
+category: modifier
+description: Append modifier adds a space prefix before appending the value to the string
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        modifiers:
+          - type: append
+            field: name
+            value: Alpha
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Append adds " " + value → "Squad Alpha"
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad Alpha

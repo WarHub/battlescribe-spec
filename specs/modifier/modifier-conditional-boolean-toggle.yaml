@@ -1,0 +1,46 @@
+id: modifier-conditional-boolean-toggle
+category: modifier
+description: Boolean modifier with condition toggles hidden based on selection state
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trigger
+        name: Trigger Unit
+        type: unit
+      - id: se-target
+        name: Target Unit
+        type: unit
+        hidden: true
+        modifiers:
+          - type: set
+            field: hidden
+            value: "false"
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                childId: se-trigger
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  # Select trigger unit - should cause target to become visible
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Trigger Unit

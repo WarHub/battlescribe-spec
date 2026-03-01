@@ -1,0 +1,47 @@
+id: scope-include-child-forces
+category: scope
+description: Condition with includeChildForces flag includes child forces in query scope
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit
+        name: Unit A
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Child Forces Included
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: force
+                includeChildForces: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # includeChildForces expands scope to nested forces, but with
+  # synthetic data the flag doesn't affect behavior. Name unchanged.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A

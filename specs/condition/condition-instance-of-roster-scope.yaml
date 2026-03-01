@@ -1,0 +1,46 @@
+id: condition-instance-of-roster-scope
+category: condition
+description: instanceOf condition with roster scope always returns false (engine implementation returns false for roster scope)
+tags:
+  - edge-case
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit
+        name: Unit A
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Should Not Apply
+            conditions:
+              - type: instanceOf
+                value: 1
+                field: selections
+                scope: roster
+                childId: se-unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # instanceOf with roster scope returns false, so modifier should NOT apply
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A

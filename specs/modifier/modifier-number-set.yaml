@@ -1,0 +1,46 @@
+id: modifier-number-set
+category: modifier
+description: Number set modifier replaces a numeric (cost) field value entirely
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Unit A
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 100
+        modifiers:
+          - type: set
+            field: pts
+            value: "50"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Number set: cost becomes 50 regardless of original value
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+      costs:
+        - typeId: pts
+          value: 50.0

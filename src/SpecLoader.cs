@@ -69,16 +69,22 @@ public static class SpecLoader
             Id: setup.GameSystem.Id,
             Name: setup.GameSystem.Name,
             ForceEntries: setup.GameSystem.ForceEntries?
-                .Select(fe => new ForceEntrySpec(fe.Id, fe.Name)).ToArray(),
+                .Select(fe => new ForceEntrySpec(fe.Id, fe.Name,
+                    fe.CategoryLinks?.Select(cl =>
+                        new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray())).ToArray(),
             CostTypes: setup.GameSystem.CostTypes?
-                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray());
+                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray(),
+            CategoryEntries: setup.GameSystem.CategoryEntries?
+                .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray());
 
         var cat = new CatalogueSpec(
             Id: setup.Catalogue.Id,
             Name: setup.Catalogue.Name,
             GameSystemId: setup.Catalogue.GameSystemId,
             SelectionEntries: setup.Catalogue.SelectionEntries?
-                .Select(ConvertSelectionEntry).ToArray());
+                .Select(ConvertSelectionEntry).ToArray(),
+            SelectionEntryGroups: setup.Catalogue.SelectionEntryGroups?
+                .Select(ConvertSelectionEntryGroup).ToArray());
 
         return (gs, cat);
     }
@@ -92,12 +98,28 @@ public static class SpecLoader
             Hidden: def.Hidden,
             Costs: def.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
             Constraints: def.Constraints?.Select(c =>
-                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope)).ToArray(),
+                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                    c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
             Modifiers: def.Modifiers?.Select(ConvertModifier).ToArray(),
             ModifierGroups: def.ModifierGroups?.Select(ConvertModifierGroup).ToArray(),
             ChildEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray(),
+            SelectionEntryGroups: def.SelectionEntryGroups?.Select(ConvertSelectionEntryGroup).ToArray(),
             CategoryLinks: def.CategoryLinks?.Select(cl =>
                 new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray());
+    }
+
+    private static SelectionEntryGroupSpec ConvertSelectionEntryGroup(SelectionEntryGroupDef def)
+    {
+        return new SelectionEntryGroupSpec(
+            Id: def.Id,
+            Name: def.Name,
+            Hidden: def.Hidden,
+            DefaultSelectionEntryId: def.DefaultSelectionEntryId,
+            Constraints: def.Constraints?.Select(c =>
+                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                    c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
+            Modifiers: def.Modifiers?.Select(ConvertModifier).ToArray(),
+            SelectionEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray());
     }
 
     private static ModifierSpec ConvertModifier(ModifierDef def)
@@ -114,7 +136,8 @@ public static class SpecLoader
     }
 
     private static ConditionSpec ConvertCondition(ConditionDef def) =>
-        new(def.Type, def.Value, def.Field, def.Scope, def.ChildId, def.PercentValue);
+        new(def.Type, def.Value, def.Field, def.Scope, def.ChildId, def.PercentValue,
+            def.Shared, def.IncludeChildSelections, def.IncludeChildForces);
 
     private static ConditionGroupSpec ConvertConditionGroup(ConditionGroupDef def) =>
         new(def.Type,

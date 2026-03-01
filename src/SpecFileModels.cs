@@ -74,6 +74,9 @@ public sealed class CatalogueDef
 
     [YamlMember(Alias = "selectionEntries")]
     public List<SelectionEntryDef>? SelectionEntries { get; set; }
+
+    [YamlMember(Alias = "selectionEntryGroups")]
+    public List<SelectionEntryGroupDef>? SelectionEntryGroups { get; set; }
 }
 
 public sealed class CostTypeDef
@@ -98,6 +101,9 @@ public sealed class ForceEntryDef
 
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "categoryLinks")]
+    public List<CategoryLinkDef>? CategoryLinks { get; set; }
 }
 
 public sealed class CategoryEntryDef
@@ -141,8 +147,35 @@ public sealed class SelectionEntryDef
     [YamlMember(Alias = "selectionEntries")]
     public List<SelectionEntryDef>? SelectionEntries { get; set; }
 
+    [YamlMember(Alias = "selectionEntryGroups")]
+    public List<SelectionEntryGroupDef>? SelectionEntryGroups { get; set; }
+
     [YamlMember(Alias = "categoryLinks")]
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
+}
+
+public sealed class SelectionEntryGroupDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "defaultSelectionEntryId")]
+    public string DefaultSelectionEntryId { get; set; } = "";
+
+    [YamlMember(Alias = "constraints")]
+    public List<ConstraintDef>? Constraints { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+
+    [YamlMember(Alias = "selectionEntries")]
+    public List<SelectionEntryDef>? SelectionEntries { get; set; }
 }
 
 public sealed class CostDef

@@ -1,0 +1,35 @@
+id: modifier-string-decrement-non-numeric
+category: modifier
+description: String decrement on non-numeric string is a no-op (cannot parse as double)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Alpha Squad
+        type: unit
+        modifiers:
+          - type: decrement
+            field: name
+            value: "10"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # String decrement on non-numeric name: parse fails, no-op
+  - expectedState:
+      forces:
+        - selections:
+            - name: Alpha Squad

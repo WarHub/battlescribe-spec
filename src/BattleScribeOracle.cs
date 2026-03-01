@@ -518,13 +518,19 @@ public sealed class BattleScribeOracle : IDisposable
             JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit)).ToArray();
 
         var forceEntries = scenario.GameSystem.ForceEntries?.Select(fe =>
-            JavaModelFactory.CreateForceEntry(fe.Id, fe.Name)).ToArray();
+            JavaModelFactory.CreateForceEntry(fe.Id, fe.Name,
+                categoryLinks: fe.CategoryLinks?.Select(cl =>
+                    JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray())).ToArray();
+
+        var categoryEntries = scenario.GameSystem.CategoryEntries?.Select(ce =>
+            JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name)).ToArray();
 
         var gs = JavaModelFactory.CreateGameSystem(
             id: scenario.GameSystem.Id,
             name: scenario.GameSystem.Name,
             costTypes: costTypes,
-            forceEntries: forceEntries);
+            forceEntries: forceEntries,
+            categoryEntries: categoryEntries);
 
         var selectionEntries = scenario.Catalogue.SelectionEntries?
             .Select(BuildSelectionEntry).ToArray();
@@ -556,7 +562,8 @@ public sealed class BattleScribeOracle : IDisposable
     {
         var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
         var constraints = spec.Constraints?.Select(c =>
-            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope)).ToArray();
+            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         var childEntries = spec.ChildEntries?.Select(BuildSelectionEntry).ToArray();
         var categoryLinks = spec.CategoryLinks?.Select(cl =>
@@ -575,14 +582,35 @@ public sealed class BattleScribeOracle : IDisposable
             foreach (var mg in spec.ModifierGroups)
                 entry.getModifierGroups().add(BuildModifierGroup(mg));
 
+        if (spec.SelectionEntryGroups != null)
+            foreach (var seg in spec.SelectionEntryGroups)
+                entry.getSelectionEntryGroups().add(BuildSelectionEntryGroup(seg));
+
         return entry;
+    }
+
+    private static SelectionEntryGroup BuildSelectionEntryGroup(SelectionEntryGroupSpec spec)
+    {
+        var constraints = spec.Constraints?.Select(c =>
+            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var childEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+
+        return JavaModelFactory.CreateSelectionEntryGroup(
+            spec.Id, spec.Name,
+            hidden: spec.Hidden,
+            defaultSelectionEntryId: spec.DefaultSelectionEntryId,
+            selectionEntries: childEntries,
+            constraints: constraints,
+            modifiers: modifiers);
     }
 
     private static Modifier BuildModifier(ModifierSpec spec)
     {
         var conditions = spec.Conditions?.Select(c =>
             JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
-                percentValue: c.PercentValue)).ToArray();
+                c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray();
 
         var conditionGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
 
@@ -604,7 +632,7 @@ public sealed class BattleScribeOracle : IDisposable
     {
         var conditions = spec.Conditions?.Select(c =>
             JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
-                percentValue: c.PercentValue)).ToArray();
+                c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray();
 
         var childGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
 
@@ -615,7 +643,7 @@ public sealed class BattleScribeOracle : IDisposable
     {
         var conditions = spec.Conditions?.Select(c =>
             JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
-                percentValue: c.PercentValue)).ToArray();
+                c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray();
 
         var conditionGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
 
@@ -634,6 +662,13 @@ public sealed class BattleScribeOracle : IDisposable
         var children = JavaListToList<SelectionEntry>(entry.getSelectionEntries());
         foreach (var child in children)
             IndexEntries(child);
+        var groups = JavaListToList<SelectionEntryGroup>(entry.getSelectionEntryGroups());
+        foreach (var group in groups)
+        {
+            var groupEntries = JavaListToList<SelectionEntry>(group.getSelectionEntries());
+            foreach (var ge in groupEntries)
+                IndexEntries(ge);
+        }
     }
 
     /// <summary>

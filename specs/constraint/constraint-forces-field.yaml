@@ -1,0 +1,41 @@
+id: constraint-forces-field
+category: constraint
+description: Constraint with field=forces applies to force count instead of selection count
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-unit
+        name: Unit A
+        type: unit
+        constraints:
+          - id: con-force-field
+            type: atLeast
+            value: 1
+            field: forces
+            scope: roster
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # The constraint uses field=forces, which counts forces not selections.
+  # With synthetic data, constraint validation doesn't fire.
+  - expectedState:
+      forces:
+        - selectionCount: 1

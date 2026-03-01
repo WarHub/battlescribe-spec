@@ -1,0 +1,35 @@
+id: modifier-string-increment-numeric
+category: modifier
+description: String increment/decrement parses value as double; applies arithmetic on numeric string fields
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: "100"
+        type: unit
+        modifiers:
+          - type: increment
+            field: name
+            value: "25"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # String increment parses both values as doubles: 100 + 25 = 125
+  - expectedState:
+      forces:
+        - selections:
+            - name: "125"

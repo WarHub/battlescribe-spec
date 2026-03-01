@@ -1,0 +1,44 @@
+id: modifier-field-constraint-value
+category: modifier
+description: Modifier can target a constraint ID as field, changing the constraint's value
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Unit A
+        type: unit
+        constraints:
+          - id: con-max
+            type: max
+            value: 2
+            field: selections
+            scope: parent
+        modifiers:
+          # This modifier targets the constraint ID, not a built-in field
+          - type: set
+            field: con-max
+            value: "5"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # The modifier targets the constraint value (max), changing it from 2 to 5.
+  # With synthetic data, this doesn't produce observable state changes.
+  - expectedState:
+      forces:
+        - selectionCount: 1
