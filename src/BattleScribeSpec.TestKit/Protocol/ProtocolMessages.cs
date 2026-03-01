@@ -219,6 +219,67 @@ public sealed class ProtocolSelection
 
     [JsonPropertyName("children")]
     public List<ProtocolSelection> Children { get; set; } = [];
+
+    [JsonPropertyName("profiles")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolSelectionProfile>? Profiles { get; set; }
+
+    [JsonPropertyName("rules")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolSelectionRule>? Rules { get; set; }
+
+    [JsonPropertyName("categories")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolSelectionCategory>? Categories { get; set; }
+
+    [JsonPropertyName("page")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Page { get; set; }
+}
+
+public sealed class ProtocolSelectionProfile
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("typeId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TypeId { get; set; }
+
+    [JsonPropertyName("typeName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TypeName { get; set; }
+
+    [JsonPropertyName("hidden")]
+    public bool Hidden { get; set; }
+
+    [JsonPropertyName("characteristics")]
+    public List<ProtocolCharacteristic> Characteristics { get; set; } = [];
+}
+
+public sealed class ProtocolSelectionRule
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = "";
+
+    [JsonPropertyName("hidden")]
+    public bool Hidden { get; set; }
+}
+
+public sealed class ProtocolSelectionCategory
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("entryId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonPropertyName("primary")]
+    public bool Primary { get; set; }
 }
 
 public sealed class ProtocolCost
@@ -254,6 +315,10 @@ public sealed class ProtocolGameSystem
     [JsonPropertyName("categoryEntries")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolCategoryEntry>? CategoryEntries { get; set; }
+
+    [JsonPropertyName("profileTypes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolProfileType>? ProfileTypes { get; set; }
 }
 
 public sealed class ProtocolCatalogue
@@ -296,6 +361,28 @@ public sealed class ProtocolCostType
 
     [JsonPropertyName("limit")]
     public bool Limit { get; set; }
+}
+
+public sealed class ProtocolProfileType
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("characteristicTypes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolCharacteristicType>? CharacteristicTypes { get; set; }
+}
+
+public sealed class ProtocolCharacteristicType
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
 }
 
 public sealed class ProtocolForceEntry
