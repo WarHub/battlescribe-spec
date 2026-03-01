@@ -109,6 +109,46 @@ public static class JavaModelFactory
     }
 
     /// <summary>
+    /// Create an EntryLink that references a shared entry.
+    /// </summary>
+    public static EntryLink CreateEntryLink(
+        string id,
+        string name,
+        string targetId,
+        string type = "selectionEntry",
+        bool hidden = false,
+        IEnumerable<Cost>? costs = null,
+        IEnumerable<Constraint>? constraints = null,
+        IEnumerable<Modifier>? modifiers = null,
+        IEnumerable<CategoryLink>? categoryLinks = null)
+    {
+        var el = new EntryLink();
+        el.setId(id);
+        el.setName(name);
+        el.setTargetId(targetId);
+        el.setType(type);
+        el.setHidden(hidden);
+
+        if (costs != null)
+            foreach (var c in costs)
+                el.getCosts().add(c);
+
+        if (constraints != null)
+            foreach (var c in constraints)
+                el.getConstraints().add(c);
+
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                el.getModifiers().add(m);
+
+        if (categoryLinks != null)
+            foreach (var cl in categoryLinks)
+                el.getCategoryLinks().add(cl);
+
+        return el;
+    }
+
+    /// <summary>
     /// Create a Catalogue with optional entries.
     /// </summary>
     public static Catalogue CreateCatalogue(

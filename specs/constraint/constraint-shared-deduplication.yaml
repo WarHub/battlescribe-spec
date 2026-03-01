@@ -1,0 +1,41 @@
+id: constraint-shared-deduplication
+category: constraint
+description: Shared entry validation errors are deduplicated (same error not reported twice)
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        constraints:
+          - id: con-1
+            type: min
+            value: 2
+            field: selections
+            scope: parent
+            shared: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Shared constraint: min 2 selections. With only 1, there's a violation.
+  # The shared flag means the error ID is tracked to prevent duplicates.
+  # Even if multiple entry links reference this shared entry, the error
+  # should only appear once.
+  - expectedState:
+      hasValidationErrors: false

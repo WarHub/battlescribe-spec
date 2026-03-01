@@ -1,0 +1,39 @@
+id: entry-link-basic
+category: selection
+description: EntryLink references a shared SelectionEntry, resolved at runtime by targetId
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-shared
+        name: Shared Weapon
+        type: upgrade
+    entryLinks:
+      - id: el-1
+        name: Weapon Link
+        targetId: se-shared
+        type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # EntryLink el-1 references se-shared. The engine resolves the link
+  # and creates a selection based on the target entry.
+  # With synthetic data, link resolution may not fully work.
+  - expectedState:
+      forces:
+        - selectionCount: 1

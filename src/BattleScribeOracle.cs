@@ -534,11 +534,13 @@ public sealed class BattleScribeOracle : IDisposable
 
         var selectionEntries = scenario.Catalogue.SelectionEntries?
             .Select(BuildSelectionEntry).ToArray();
+        var entryLinks = scenario.Catalogue.EntryLinks?.Select(BuildEntryLink).ToArray();
 
         var cat = JavaModelFactory.CreateCatalogue(
             scenario.Catalogue.Id, scenario.Catalogue.Name,
             scenario.Catalogue.GameSystemId,
-            selectionEntries: selectionEntries);
+            selectionEntries: selectionEntries,
+            entryLinks: entryLinks);
 
         _setupCatalogue = cat;
         _setupForceEntries.Clear();
@@ -627,6 +629,10 @@ public sealed class BattleScribeOracle : IDisposable
                     JavaModelFactory.CreateInfoGroup(igSpec.Id, igSpec.Name, igSpec.Hidden, igProfiles, igRules, igModifiers));
             }
 
+        if (spec.EntryLinks != null)
+            foreach (var el in spec.EntryLinks)
+                entry.getEntryLinks().add(BuildEntryLink(el));
+
         if (!string.IsNullOrEmpty(spec.Page))
             entry.setPage(spec.Page);
 
@@ -648,6 +654,21 @@ public sealed class BattleScribeOracle : IDisposable
             selectionEntries: childEntries,
             constraints: constraints,
             modifiers: modifiers);
+    }
+
+    private static EntryLink BuildEntryLink(EntryLinkSpec spec)
+    {
+        var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
+        var constraints = spec.Constraints?.Select(c =>
+            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var categoryLinks = spec.CategoryLinks?.Select(cl =>
+            JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray();
+
+        return JavaModelFactory.CreateEntryLink(
+            spec.Id, spec.Name, spec.TargetId, spec.Type, spec.Hidden,
+            costs, constraints, modifiers, categoryLinks);
     }
 
     private static Modifier BuildModifier(ModifierSpec spec)

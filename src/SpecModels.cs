@@ -63,7 +63,8 @@ public record SelectionEntrySpec(
     RuleSpec[]? Rules = null,
     ProfileSpec[]? Profiles = null,
     InfoGroupSpec[]? InfoGroups = null,
-    string Page = "");
+    string Page = "",
+    EntryLinkSpec[]? EntryLinks = null);
 
 public record ForceEntrySpec(
     string Id,
@@ -95,7 +96,8 @@ public record CatalogueSpec(
     string Name = "Cat",
     string GameSystemId = "test-gs",
     SelectionEntrySpec[]? SelectionEntries = null,
-    SelectionEntryGroupSpec[]? SelectionEntryGroups = null);
+    SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
+    EntryLinkSpec[]? EntryLinks = null);
 
 public record ConditionGroupSpec(
     string Type,
@@ -156,6 +158,17 @@ public record InfoGroupSpec(
     ProfileSpec[]? Profiles = null,
     RuleSpec[]? Rules = null,
     ModifierSpec[]? Modifiers = null);
+
+public record EntryLinkSpec(
+    string Id,
+    string Name,
+    string TargetId,
+    string Type = "selectionEntry",
+    bool Hidden = false,
+    CostSpec[]? Costs = null,
+    ConstraintSpec[]? Constraints = null,
+    ModifierSpec[]? Modifiers = null,
+    CategoryLinkSpec[]? CategoryLinks = null);
 
 /// <summary>
 /// Complete test scenario specification.
