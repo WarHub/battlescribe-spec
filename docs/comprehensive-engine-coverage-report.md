@@ -1,748 +1,728 @@
-# Research Report: Comprehensive BattleScribe Engine Coverage Strategy
+# BattleScribe Engine Conformance Spec — Coverage Report
 
-> **Status: Coverage Expansion Complete** — 153 specs, 287 tests (275 passed, 12 skipped), 94% enum coverage.
-> See `specs/coverage-matrix.yaml` for the machine-readable coverage matrix.
-
-## Problem Statement
-
-We started with 117 YAML conformance specs covering 9 categories of BattleScribe roster engine behavior.
-The question: **How can we be certain our test suite covers the ENTIRE engine logic—every code path, every edge case, every enum value?**
-
-This report systematically analyzes the decompiled BattleScribe Java engine to:
-1. Enumerate every testable dimension exhaustively
-2. Identify exact coverage gaps in our specs
-3. Propose a methodology for achieving provable completeness
+153 YAML conformance specs across 9 categories. 287 test cases: 275 passed, 12 skipped.
+Machine-readable coverage matrix: [`specs/coverage-matrix.yaml`](../specs/coverage-matrix.yaml).
 
 ---
 
-## 1. Exhaustive Enum Coverage Matrix
+## 1. Test Suite Summary
 
-The engine's behavior is fundamentally controlled by enumerated types. Each enum value represents a distinct code path. Here is the complete inventory from decompiled source.
+| Category | Specs | Description |
+|----------|------:|-------------|
+| condition | 20 | Condition type evaluation (numerical comparisons, instanceOf) |
+| constraint | 18 | Min/max constraint validation, edge cases, flags |
+| cost | 14 | Cost calculation, aggregation, limits, edge cases |
+| force | 9 | Force add/remove, independence, categories |
+| modifier | 36 | All modifier data types, field targets, repeats, groups |
+| refresh | 10 | Re-evaluation triggers after every operation type |
+| roster | 9 | Roster state, metadata, cost types |
+| scope | 13 | Scope resolution (self, parent, force, roster, ancestor) |
+| selection | 24 | Entry selection, groups, deselection, duplication, lifecycle |
+| **Total** | **153** | |
 
-### 1.1 Condition.Type (8 values) — `model/data/Condition.java:56-64`
+22 specs are tagged `known-limitation-synthetic` — they define correct behavior but produce trivially-passing results with synthetic data because the engine's indexing/resolution requires real catalogue data. These serve as documentation and will become meaningful when tested against real-world data.
 
-| Value | Code Path | Current Coverage | Gap? |
-|-------|-----------|-----------------|------|
-| `equalTo` | `actual == target` | ✅ `condition-equal-to.yaml` | |
-| `notEqualTo` | `actual != target` | ✅ `condition-not-equal-to.yaml` | |
-| `greaterThan` | `actual > target` | ✅ `condition-greater-than.yaml` | |
-| `lessThan` | `actual < target` | ✅ `condition-less-than.yaml` | |
-| `atLeast` | `actual >= target` | ✅ `condition-at-least.yaml` | |
-| `atMost` | `actual <= target` | ✅ `condition-at-most.yaml` | |
-| `instanceOf` | ancestry type check | ✅ `condition-instance-of.yaml` + 4 variants | |
-| `notInstanceOf` | ancestry NOT type check | ✅ `condition-not-instance-of.yaml` | |
+---
 
-**instanceOf/notInstanceOf** are completely different code paths from numerical conditions (c.java lines 1194-1227):
-- They check if a parent element IS a specific entry type
+## 2. Engine API Coverage
+
+The `IRosterEngine` interface exposes 11 methods plus `Setup`. Every method is exercised:
+
+| Method | Example Specs |
+|--------|---------------|
+| `Setup` | Every spec (implicit) |
+| `AddForce` | force-add-single, force-add-multiple |
+| `RemoveForce` | force-remove, force-remove-second, force-add-and-remove-all |
+| `SelectEntry` | selection-add-unit, selection-with-cost, selection-multiple-entries |
+| `SelectChildEntry` | selection-child-entry, selection-child-multiple, selection-child-with-cost |
+| `DeselectSelection` | selection-remove, selection-deselect-last, selection-deselect-middle |
+| `SetSelectionCount` | selection-set-count, selection-number-default |
+| `DuplicateSelection` | selection-duplicate, cost-duplicate-increases |
+| `SetCostLimit` | cost-set-limit |
+| `GetRosterState` | Every spec (implicit in assertions) |
+| `GetValidationErrors` | constraint-min-violation, constraint-max-violation, refresh-validation-update |
+| `HasValidationErrors` | constraint-min-violation |
+
+---
+
+## 3. Enum Coverage Matrix
+
+The engine's behavior is controlled by enumerated types. Each value represents a distinct code path. Source references are from the decompiled BattleScribe Java engine.
+
+### 3.1 Condition.Type — 8/8 covered
+
+| Value | Code Path | Specs |
+|-------|-----------|-------|
+| `equalTo` | `actual == target` | condition-equal-to, condition-equal-to-zero |
+| `notEqualTo` | `actual != target` | condition-not-equal-to |
+| `greaterThan` | `actual > target` | condition-greater-than |
+| `lessThan` | `actual < target` | condition-less-than |
+| `atLeast` | `actual >= target` | condition-at-least |
+| `atMost` | `actual <= target` | condition-at-most |
+| `instanceOf` | Ancestry type check | condition-instance-of, + 4 variants (by-type, by-category, ancestor, roster-scope) |
+| `notInstanceOf` | Ancestry NOT check | condition-not-instance-of |
+
+**instanceOf/notInstanceOf details:**
+- Completely separate code path from numerical conditions (c.java:1194-1227)
+- Checks if a parent element IS a specific entry type
 - Can match against: SelectionEntry, SelectionEntryGroup, SelectionEntry.Type, CategoryEntry, ForceEntry, Catalogue
-- Use ancestor scope to walk up the parent chain
 - `notInstanceOf` uses AND semantics: ALL ancestors must NOT match
+- Scope=roster always returns false (edge case covered by condition-instance-of-roster-scope)
 
-**Specs needed:** All covered ✅
-- `condition-not-instance-of.yaml` — basic notInstanceOf
-- `condition-instance-of-by-type.yaml` — instanceOf matching SelectionEntry.Type (known-limitation-synthetic)
-- `condition-instance-of-by-category.yaml` — instanceOf matching CategoryEntry
-- `condition-instance-of-ancestor.yaml` — instanceOf with ancestor scope (known-limitation-synthetic)
-- `condition-instance-of-roster-scope.yaml` — edge case: returns false
+### 3.2 Constraint.Type — 2/2 covered
 
-### 1.2 Constraint.Type (2 values) — `model/data/Constraint.java:82-84`
+| Value | Code Path | Specs |
+|-------|-----------|-------|
+| `min` | `actual < limit` → error | constraint-min-satisfied, constraint-min-violation, constraint-min-zero-no-error, constraint-min-and-max |
+| `max` | `actual > limit` → error | constraint-max-satisfied, constraint-max-violation, constraint-max-exactly-at-limit, constraint-max-unlimited, constraint-min-and-max |
 
-| Value | Code Path | Current Coverage | Gap? |
-|-------|-----------|-----------------|------|
-| `min` | `actual < limit` → error | ✅ Multiple specs | |
-| `max` | `actual > limit` → error | ✅ Multiple specs | |
+Edge cases covered: min=0 skips validation, max=-1 is unlimited, cost field constraints, percentValue, roster-scope constraints.
 
-Both covered, but edge cases exist:
-- **min=0**: skip validation (line 410) ✅ `constraint-min-zero-no-error.yaml`
-- **max=-1**: unlimited, skip (line 410) ✅ `constraint-max-unlimited.yaml`
-- **Constraint with cost field** ✅ `constraint-cost-field.yaml`
-- **Constraint with percentValue** ✅ `constraint-percent-value.yaml`
-- **Constraint on roster scope** — partially tested
+### 3.3 Modifier Types — 11/11 covered
 
-**Missing constraint edge cases:** All covered ✅
-- `constraint-modified-by-modifier.yaml` — modifier targeting constraint ID as field ✅
-- `constraint-forces-field.yaml` — constraint on forces count ✅ (known-limitation-synthetic)
-- `constraint-collective.yaml` — collective entries ✅ (known-limitation-synthetic)
-- `constraint-hidden-enforcement.yaml` — hidden entry enforcement ✅ (known-limitation-synthetic)
+#### STRING modifiers (4/4)
+| Type | Behavior | Specs |
+|------|----------|-------|
+| `set` | Replace string value | modifier-set-name |
+| `append` | Concatenate with space prefix | modifier-append-name, modifier-append-with-space |
+| `increment` | Parse as double and add | modifier-increment-name, modifier-string-increment-numeric |
+| `decrement` | Parse as double and subtract | modifier-decrement-name, modifier-string-decrement-non-numeric |
 
-### 1.3 Modifier.DataType + ModifierType (4 × 11 = 11 distinct types)
+Edge cases: increment/decrement on non-numeric strings is a no-op. Append always prepends a space.
 
-#### STRING modifiers — `Modifier.java:186-191`
-| Type | Behavior | Coverage | Gap? |
-|------|----------|----------|------|
-| `set` | Replace string | ✅ `modifier-set-name.yaml` | |
-| `append` | Concatenate with space prefix | ✅ `modifier-append-name.yaml` | |
-| `increment` | Parse as double, add | ✅ `modifier-increment-name.yaml` | |
-| `decrement` | Parse as double, subtract | ✅ `modifier-decrement-name.yaml` | |
+#### NUMBER modifiers (3/3)
+| Type | Behavior | Specs |
+|------|----------|-------|
+| `set` | Replace numeric value | modifier-set-cost, modifier-number-set |
+| `increment` | Add to value | modifier-increment-cost, modifier-conditional-increment-cost |
+| `decrement` | Subtract from value | modifier-decrement-cost, modifier-decrement-below-zero, modifier-number-decrement |
 
-Edge cases:
-- Increment/decrement on non-numeric strings → no-op (d.java lines 897-906)
-- Append adds " " prefix, not just concatenation
+#### BOOLEAN modifiers (1/1)
+| Type | Behavior | Specs |
+|------|----------|-------|
+| `set` | Set boolean value | modifier-set-boolean, modifier-set-hidden-true, modifier-conditional-boolean-toggle |
 
-#### NUMBER modifiers — `Modifier.java:150-154`
-| Type | Behavior | Coverage | Gap? |
-|------|----------|----------|------|
-| `set` | Replace value | ✅ `modifier-set-cost.yaml` | |
-| `increment` | Add value | ✅ `modifier-increment-cost.yaml` | |
-| `decrement` | Subtract value | ✅ `modifier-decrement-cost.yaml` | |
+The only boolean field is `hidden`.
 
-Edge cases:
-- Non-numeric value string → no-op (d.java line 914)
-- Modifier targeting constraint ID (NUMBER field) — see constraint modification
+#### CATEGORY modifiers (4/4)
+| Type | Behavior | Specs |
+|------|----------|-------|
+| `add` | Add CategoryLink | modifier-category-add |
+| `remove` | Remove CategoryLink | modifier-category-remove ᵃ |
+| `set-primary` | Set category as primary (adds if absent) | modifier-category-set-primary ᵃ |
+| `unset-primary` | Unset category primary flag | modifier-category-unset-primary ᵃ |
 
-#### BOOLEAN modifiers — `Modifier.java:116-118`
-| Type | Behavior | Coverage | Gap? |
-|------|----------|----------|------|
-| `set` | Set boolean value | ✅ `modifier-set-boolean.yaml`, `modifier-set-hidden-true.yaml` | |
+ᵃ known-limitation-synthetic. `set-primary` has subtle behavior: if category doesn't exist, it adds it first, then sets all others to non-primary.
 
-Only one boolean field exists: `hidden` (BaseModifyableData.ModifierField.HIDDEN)
+### 3.4 Modifier Field Targets — 5/8 covered
 
-#### CATEGORY modifiers — `Modifier.java:79-84`
-| Type | Behavior | Coverage | Gap? |
-|------|----------|----------|------|
-| `add` | Add CategoryLink | ✅ `modifier-category-add.yaml` | |
-| `remove` | Remove CategoryLink | ✅ `modifier-category-remove.yaml` | known-limitation-synthetic |
-| `set-primary` | Set category as primary (adds if missing) | ✅ `modifier-category-set-primary.yaml` | known-limitation-synthetic |
-| `unset-primary` | Unset category primary flag | ✅ `modifier-category-unset-primary.yaml` | known-limitation-synthetic |
+| Field Target | Data Type | Specs | Status |
+|-------------|-----------|-------|--------|
+| Entry `name` | STRING | modifier-set-name, modifier-append-name, modifier-increment-name, modifier-decrement-name | ✅ |
+| Entry `hidden` | BOOLEAN | modifier-set-hidden-true, modifier-set-boolean, modifier-field-hidden | ✅ |
+| CostType ID | NUMBER | modifier-set-cost, modifier-increment-cost, modifier-decrement-cost | ✅ |
+| Constraint ID | NUMBER | modifier-set-constraint, modifier-field-constraint-value | ✅ |
+| `categories` | CATEGORY | modifier-category-add, modifier-category-remove, etc. | ✅ |
+| Rule `description` | STRING | — | ❌ Not covered |
+| Entry `page` | STRING | — | ❌ Not covered |
+| CharacteristicType ID | STRING | — | ❌ Not covered |
 
-**Specs needed:** All covered ✅
+The 3 uncovered field targets are informational data (Rule descriptions, page numbers, Profile characteristics). They don't affect roster editing logic. Covering them would require extending the spec infrastructure with Rule, Profile, and BookData model types.
 
-Note: SET_PRIMARY has a subtle behavior — if category doesn't exist, it ADDS it first, then sets all others to non-primary (d.java lines 969-978).
+### 3.5 Scope Values — 8/8 covered
 
-### 1.4 Modifier Field Targets — `d.java resolveModifierField()`
+| Scope | Resolution | Specs |
+|-------|-----------|-------|
+| `self` | The entry itself | scope-self |
+| `parent` | Parent entry | scope-parent |
+| `ancestor` | Walk up entire parent chain | scope-ancestor |
+| `force` | Containing force | scope-force, scope-force-trigger-in-same-force, scope-force-vs-roster |
+| `roster` | Roster root | scope-roster, scope-roster-cross-force, condition-scope-roster |
+| `primary-category` | Primary category of selection | scope-primary-category ᵃ |
+| `primary-catalogue` | Primary catalogue (≈force) | scope-primary-catalogue |
+| Specific entry ID | Direct entry reference | scope-child-id-filter |
 
-| Field Target | DataType | Source | Coverage | Gap? |
-|-------------|----------|--------|----------|------|
-| Entry `name` | STRING | `BaseData.ModifierField.NAME` | ✅ | |
-| Entry `hidden` | BOOLEAN | `BaseModifyableData.ModifierField.HIDDEN` | ✅ | |
-| CostType ID | NUMBER | `CostType` instance | ✅ | |
-| Constraint ID | NUMBER | `Constraint` instance | ⚠️ `modifier-set-constraint.yaml` | Partial |
-| Rule `description` | STRING | `Rule.ModifierField.DESCRIPTION` | ❌ **MISSING** | **YES** |
-| Entry `page` | STRING | `BaseBookData.ModifierField.PAGE` | ❌ **MISSING** | **YES** |
-| CharacteristicType ID | STRING | Profile characteristic | ❌ **MISSING** | **YES** |
-| `categories` | CATEGORY | category operations | ✅ (add only) | Partial |
+ᵃ known-limitation-synthetic.
 
-**Specs needed:**
-- `modifier-rule-description.yaml` — modify Rule.description (STRING)
-- `modifier-page.yaml` — modify page field (STRING)
-- `modifier-profile-characteristic.yaml` — modify Profile characteristic value
+### 3.6 Query Fields — 3/3 covered
 
-### 1.5 BaseQuery.Scope (7 + entry ID) — `BaseQuery.java:149-157`
+| Field | What It Counts | Specs |
+|-------|---------------|-------|
+| `selections` | Count matching Selection instances | Extensively used across all categories |
+| `forces` | Count matching Force instances | scope-forces-field ᵃ |
+| CostType ID | Sum cost values for matching selections | constraint-cost-field |
 
-| Scope | Resolution | Coverage | Gap? |
-|-------|-----------|----------|------|
-| `self` | The entry itself | ✅ `scope-self.yaml` | |
-| `parent` | Parent entry | ✅ `scope-parent.yaml` | |
-| `ancestor` | Walk up entire path | ✅ `scope-ancestor.yaml` | |
-| `force` | Containing Force | ✅ `scope-force.yaml` | |
-| `roster` | Roster root | ✅ `scope-roster.yaml` | |
-| `primary-category` | Primary category of selection | ✅ `scope-primary-category.yaml` | known-limitation-synthetic |
-| `primary-catalogue` | Primary catalogue (≈force) | ✅ `scope-primary-catalogue.yaml` | |
-| specific entry ID | Direct entry reference | ✅ `scope-child-id-filter.yaml` | |
+ᵃ known-limitation-synthetic.
 
-**Spec needed:** Covered ✅ `scope-primary-category.yaml`
+### 3.7 ChildId Filter Types — 4/7 covered
 
-### 1.6 BaseQuery.Field (2 + CostType IDs) — `BaseQuery.java:114-117`
+| ChildId Type | Specs | Status |
+|-------------|-------|--------|
+| `any` (wildcard) | Used implicitly in most specs | ✅ |
+| SelectionEntry ID | scope-child-id-filter | ✅ |
+| SelectionEntry.Type | Implicit (unit/model/upgrade filtering) | ✅ |
+| CategoryEntry ID | condition-instance-of-by-category | ✅ |
+| SelectionEntryGroup ID | — | ❌ Not covered |
+| ForceEntry ID | — | ❌ Not covered |
+| Catalogue ID | — | ❌ Not covered |
 
-| Field | What it counts | Coverage | Gap? |
-|-------|---------------|----------|------|
-| `selections` | Count matching Selection instances | ✅ extensively used | |
-| `forces` | Count matching Force instances | ✅ `scope-forces-field.yaml` | known-limitation-synthetic |
-| CostType ID | Sum cost values for matching selections | ✅ `constraint-cost-field.yaml` | |
+The 3 uncovered childId filter types require real-world data to exercise properly — synthetic data doesn't populate the engine's internal indexing structures used for these lookups.
 
-**Spec needed:** Covered ✅ `scope-forces-field.yaml`
+### 3.8 Query Flags — 4/4 covered
 
-### 1.7 BaseFilteredQuery.Child — `BaseFilteredQuery.java:91-93`
+| Flag | Specs |
+|------|-------|
+| `includeChildSelections` | constraint-include-child-selections |
+| `includeChildForces` | scope-include-child-forces ᵃ |
+| `shared` | constraint-shared |
+| `percentValue` | constraint-percent-value, condition-percent-value |
 
-| ChildId Type | Matches | Coverage | Gap? |
-|-------------|---------|----------|------|
-| `any` | Everything (wildcard) | ✅ used implicitly | |
-| SelectionEntry ID | Specific entry | ✅ `scope-child-id-filter.yaml` | |
-| SelectionEntryGroup ID | Entry group | ⚠️ Tested via entry-group specs | Lower priority |
-| SelectionEntry.Type | Entry type (unit/model/upgrade) | ✅ implicit | |
-| CategoryEntry ID | Category membership | ✅ `condition-instance-of-by-category.yaml` | |
-| ForceEntry ID | Force entry | ⚠️ Not directly testable with synthetic data | Lower priority |
-| Catalogue ID | Catalogue origin | ⚠️ Not directly testable with synthetic data | Lower priority |
+ᵃ known-limitation-synthetic.
 
-**Specs needed:** Mostly covered. Remaining items are lower priority and require real-world data.
-- `scope-child-id-force-entry.yaml`
+### 3.9 ConditionGroup Types — 2/2 covered
 
-### 1.8 SelectionEntry.Type (3 values) — `SelectionEntry.java:59-63`
+| Type | Behavior | Specs |
+|------|----------|-------|
+| `and` | All conditions must pass | condition-group-and, condition-group-and-fails, condition-multiple-and |
+| `or` | Any condition must pass | condition-group-or |
 
-| Type | Coverage | Gap? |
-|------|----------|------|
-| `unit` | ✅ `selection-add-unit.yaml` | |
-| `model` | ✅ `selection-model-type.yaml` | |
-| `upgrade` | ✅ `selection-upgrade-type.yaml` | |
+### 3.10 SelectionEntry Types — 3/3 covered
 
-All covered.
-
-### 1.9 ConditionGroup.Type (2 values) — `ConditionGroup.java:75-78`
-
-| Type | Behavior | Coverage | Gap? |
-|------|----------|----------|------|
-| `and` | All conditions must pass | ✅ `condition-group-and.yaml` | |
-| `or` | Any condition must pass | ✅ `condition-group-or.yaml` | |
-
-Both covered. Missing:
-- Nested ConditionGroup (group within group) ❌
-- `condition-group-and-fails.yaml` covers AND failure
-
-### 1.10 Query Flags
-
-| Flag | Coverage | Gap? |
-|------|----------|------|
-| `includeChildSelections` | ✅ `constraint-include-child-selections.yaml` | |
-| `includeChildForces` | ✅ `scope-include-child-forces.yaml` | known-limitation-synthetic |
-| `shared` | ✅ `constraint-shared.yaml` (partially) | |
-| `percentValue` | ✅ `constraint-percent-value.yaml` | |
+| Type | Specs |
+|------|-------|
+| `unit` | selection-add-unit, selection-with-cost, selection-multiple-entries |
+| `model` | selection-model-type |
+| `upgrade` | selection-upgrade-type |
 
 ---
 
-## 2. Code Path Analysis — Major Logic Blocks
+## 4. Code Path Coverage — Engine Logic Blocks
 
-### 2.1 Modifier Evaluation (c.java lines 1109-1165)
+Analysis of the three main engine classes from decompiled source.
+
+### 4.1 Modifier Evaluation — c.java (AbstractRosterEngine)
 
 ```
 for each modifier/modifierGroup:
   1. evaluateConditions(modifier) → AND of all conditions
-  2. evaluateConditionGroups(modifier) → AND of all conditionGroups  
+  2. evaluateConditionGroups(modifier) → AND of all conditionGroups
   3. calculateRepeatCount(modifier) → multiply application count
   4. applyModifier(copy, modifier, count)
 ```
 
-**Covered paths:**
-- ✅ Unconditional modifier (empty conditions)
-- ✅ Conditional modifier that passes
-- ✅ Conditional modifier that fails
-- ✅ Repeat-multiplied modifier
-- ✅ Multiple modifiers on same entry
-- ✅ ModifierGroup (basic)
-- ✅ ModifierGroup with false condition
+| Path | Status | Specs |
+|------|--------|-------|
+| Unconditional modifier | ✅ | modifier-set-name, modifier-increment-cost, etc. |
+| Conditional modifier (passes) | ✅ | modifier-conditional-set-name, modifier-conditional-increment-cost |
+| Conditional modifier (fails) | ✅ | modifier-conditional-false-keeps-base-cost, condition-false-prevents-modifier |
+| Repeat-multiplied modifier | ✅ | modifier-repeat-basic |
+| Multiple modifiers on same entry | ✅ | modifier-multiple-on-same-entry |
+| ModifierGroup (basic) | ✅ | modifier-group-basic ᵃ |
+| ModifierGroup (false condition) | ✅ | modifier-group-false-condition ᵃ |
+| Multiple repeats (additive) | ✅ | modifier-repeat-multiple-additive |
+| roundUp=true vs false | ✅ | modifier-repeat-round-up, modifier-repeat-round-down |
+| ModifierGroup with repeat | ❌ | — |
+| Nested ModifierGroups | ❌ | — |
+| Modifier on BaseInfo (profile/rule) | ❌ | — |
 
-**Missing paths:**
-- ❌ ModifierGroup with repeat multiplier
-- ❌ Nested ModifierGroups (group within group)
-- ✅ Multiple repeats (additive: `modifier-repeat-multiple-additive.yaml`)
-- ✅ Repeat with roundUp=true vs roundUp=false distinction (`modifier-repeat-round-up/down.yaml`)
-- ❌ Modifier on BaseInfo (profile/rule) — appends condition text to name (line 1131-1133)
+ᵃ known-limitation-synthetic.
 
-### 2.2 Condition Evaluation (c.java lines 1185-1307)
+### 4.2 Condition Evaluation — c.java
 
-Two completely separate paths:
-
-**Path A: Numerical comparison (6 types)**
-```
-1. resolveScope → rosterElement
-2. getQueryValue(condition, rosterElement) → actual
-3. getConditionValue(condition) → target (possibly percentValue)
-4. compare(actual, target)
-```
-
-Covered: ✅ All 6 numerical comparison types
+**Path A: Numerical comparison (6 types)** — all covered.
 
 **Path B: instanceOf/notInstanceOf (2 types)**
-```
-1. resolveScope → if ROSTER, return false
-2. resolveChildFilter → IFilteredQueryChild
-3. if ANCESTOR scope: collect all ancestors
-4. else: resolve single rosterElement
-5. for each element: check if matches childFilter
-```
 
-instanceOf matching logic (c.java lines 1263-1307):
-- `BaseFilteredQuery.Child.ANY` → always true
-- `Selection` vs `SelectionEntry` → match by entry ID (or sharedEntryId if shared)
-- `Selection` vs `SelectionEntryGroup` → check if entry's parent groups match
-- `Selection` vs `SelectionEntry.Type` → check selection.type == type.id
-- Any vs `CategoryEntry` → check category membership
-- `Force` vs `ForceEntry` → check entryId match
-- `Force` vs `Catalogue` → check catalogueId match
+| Matching Target | Status | Spec |
+|----------------|--------|------|
+| SelectionEntry | ✅ | condition-instance-of |
+| SelectionEntry.Type | ✅ | condition-instance-of-by-type ᵃ |
+| CategoryEntry | ✅ | condition-instance-of-by-category |
+| Ancestor scope (walks chain) | ✅ | condition-instance-of-ancestor ᵃ |
+| Roster scope (returns false) | ✅ | condition-instance-of-roster-scope |
+| notInstanceOf | ✅ | condition-not-instance-of |
+| SelectionEntryGroup | ❌ | — |
+| ForceEntry | ❌ | — |
+| Catalogue | ❌ | — |
+| Shared entries | ❌ | — |
 
-**Missing paths:** Mostly covered ✅
-- ✅ instanceOf with scope=roster (returns false — `condition-instance-of-roster-scope.yaml`)
-- ✅ instanceOf with ancestor scope (`condition-instance-of-ancestor.yaml`, known-limitation-synthetic)
-- ❌ instanceOf matching SelectionEntryGroup (lower priority)
-- ✅ instanceOf matching SelectionEntry.Type (`condition-instance-of-by-type.yaml`, known-limitation-synthetic)
-- ✅ instanceOf matching CategoryEntry (`condition-instance-of-by-category.yaml`)
-- ❌ instanceOf matching ForceEntry (lower priority)
-- ❌ instanceOf matching Catalogue (lower priority)
-- ✅ notInstanceOf (`condition-not-instance-of.yaml`)
-- ❌ instanceOf with shared entries (lower priority)
+ᵃ known-limitation-synthetic.
 
-### 2.3 Repeat Calculation (c.java lines 1349-1370)
+### 4.3 Repeat Calculation — c.java
 
 ```
 for each repeat:
-  1. resolveScope → rosterElement
-  2. getConditionValue(repeat) → threshold
-  3. getQueryValue(repeat, rosterElement) → actual
-  4. ratio = actual / threshold
-  5. ratio = roundUp ? ceil(ratio) : floor(ratio)
-  6. n2 = ratio × repeat.repeats
-  7. n += n2  (ADDITIVE across multiple repeats)
+  ratio = actual / threshold
+  ratio = roundUp ? ceil(ratio) : floor(ratio)
+  n += ratio × repeat.repeats  // ADDITIVE across multiple repeats
 ```
 
-**Covered:** ✅
-- ✅ Basic repeat (single repeat)
-- ✅ Multiple repeats (additive: `modifier-repeat-multiple-additive.yaml`)
-- ✅ roundUp=true vs roundUp=false (`modifier-repeat-round-up/down.yaml`)
+| Path | Status | Spec |
+|------|--------|------|
+| Basic repeat | ✅ | modifier-repeat-basic |
+| roundUp=true | ✅ | modifier-repeat-round-up |
+| roundUp=false | ✅ | modifier-repeat-round-down |
+| Multiple repeats (additive) | ✅ | modifier-repeat-multiple-additive |
+| Repeat with percentValue | ❌ | — |
+| Zero threshold (skip) | ❌ | — |
+| NaN query value (skip) | ❌ | — |
 
-**Missing:**
-- ❌ Repeat with percentValue
-- ❌ Repeat with zero threshold (skip — line 1359)
-- ❌ Repeat with NaN query value (skip)
+### 4.4 Query Value Resolution — c.java
 
-### 2.4 Query Value Resolution (c.java lines 1386-1444)
+| Branch | Status | Notes |
+|--------|--------|-------|
+| CostType field → sum costs | ✅ | constraint-cost-field |
+| Field.SELECTIONS → count | ✅ | Extensively used |
+| Field.FORCES → count | ✅ | scope-forces-field ᵃ |
+| CostType.isLimit() → roster limits | ❌ | Requires CostType model extension |
+| Constraint query implicit childId | ❌ | Covered implicitly via constraint specs |
 
-Three branches based on field type:
-1. **CostType field** → sum costs for matching selections
-   - Special: `CostType.isLimit()` → use roster cost limits instead
-2. **Field.SELECTIONS** → count matching selections
-3. **Field.FORCES** → count matching forces
+ᵃ known-limitation-synthetic.
 
-For Constraint queries specifically, the childId is the BaseEntry itself (line 1397).
+### 4.5 Constraint Validation — f.java
 
-**Missing:**
-- ❌ CostType with isLimit() flag
-- ❌ Field.FORCES query resolution
-- ❌ Constraint query childId resolution (implicit self)
+| Validation Type | Status | Specs |
+|----------------|--------|-------|
+| Roster cost limits | ✅ | cost-set-limit |
+| Roster-scope constraints | ✅ | constraint-shared, condition-scope-roster |
+| Force/category/selection-scope constraints | ✅ | constraint-min-violation, constraint-max-violation, many others |
+| Hidden entry enforcement | ✅ | constraint-hidden-enforcement ᵃ |
+| Collective entry enforcement | ✅ | constraint-collective ᵃ |
+| Validation error deduplication (shared) | ❌ | — |
 
-### 2.5 Constraint Validation (f.java lines 356-662)
+ᵃ known-limitation-synthetic.
 
-Five validation types:
-1. **Roster cost limits** (lines 361-366): `actualCost > costLimit` → error
-2. **Roster-scope constraints** (lines 402-413): constraints with scope=roster
-3. **Force/Category/Selection-scope constraints** (lines 416-504): per-element validation
-4. **Hidden entry enforcement** (lines 617-625): hidden entry with selections → error
-5. **Collective entry enforcement** (lines 641-661): sibling selections must have equal counts
+### 4.6 Selection Operations — f.java
 
-**Covered:**
-- ✅ Basic min/max validation
-- ✅ Cost limit validation (cost-set-limit.yaml)
-- ✅ Unlimited (max=-1) and not-required (min=0)
-- ✅ Hidden entry enforcement (`constraint-hidden-enforcement.yaml`, known-limitation-synthetic)
-- ✅ Collective entry (`constraint-collective.yaml`, known-limitation-synthetic)
+| Operation | Status | Specs |
+|-----------|--------|-------|
+| New selection creation | ✅ | selection-add-unit, selection-with-cost |
+| Selection number increment | ✅ | selection-same-entry-twice, selection-set-count |
+| Child entry auto-addition (min constraints) | ✅ | selection-child-entry, selection-with-children |
+| SelectionEntryGroup default selection | ✅ | selection-entry-group-default ᵃ |
+| Deselect (remove) | ✅ | selection-remove, selection-deselect-last |
+| Duplicate | ✅ | selection-duplicate |
+| Collective entry creation (sibling replication) | ❌ | — |
+| Collective entry deselection | ❌ | — |
+| Force-level entry ("always new" flag) | ❌ | — |
+| Favourites (selectFavourite) | ❌ | — |
+| Nested force selection | ❌ | — |
 
-**Missing:**
-- ❌ Validation error deduplication (shared entries, line 541-548)
+ᵃ known-limitation-synthetic.
 
-### 2.6 Selection Operations (f.java lines 929-1143)
+### 4.7 Cost Calculation — f.java
 
-**Select Entry (f.java lines 989-1053):**
-```
-1. If force-level or "always new" (d2.f(selectionEntry)): create new Selection
-2. Else if existing selection exists: increment number
-3. If new: auto-add child entries based on min constraints
-4. If new: auto-add default selections from SelectionEntryGroups
-5. If collective: replicate across sibling models
-```
-
-**Covered:**
-- ✅ New selection creation
-- ✅ Number increment
-- ✅ Child entry auto-addition
-- ✅ Deselect (remove)
-- ✅ Duplicate
-
-**Missing:**
-- ✅ SelectionEntryGroup default selection (`selection-entry-group-default.yaml`, known-limitation-synthetic)
-- ❌ Collective entry creation (replicates across siblings)
-- ❌ Collective entry deselection
-- ❌ Force-level entry ("always create new") flag
-- ❌ Favourites (selectFavourite — f.java line 1167)
-- ❌ Nested force selection (force within force)
-
-### 2.7 Cost Calculation (f.java lines 717-780)
-
-```
-1. Get SelectionEntry for selection
-2. Apply modifiers to get effective costs
-3. Multiply by selection.number (implicit in cost values)
-4. Aggregate into roster.costs
-```
-
-**Covered:**
-- ✅ Base cost calculation
-- ✅ Cost aggregation
-- ✅ Multi-type costs
-- ✅ Cost after modifier
-- ✅ Cost after deselect
-
-**Missing:**
-- ❌ Cost with hidden flag (CostType.isHidden → filtered from display)
-- ❌ Cost limit CostType (CostType.isLimit) vs regular CostType
+| Path | Status | Specs |
+|------|--------|-------|
+| Base cost calculation | ✅ | cost-base-calculation |
+| Cost aggregation (multi-entry) | ✅ | cost-aggregation, cost-multi-force-aggregation |
+| Multi-type costs | ✅ | cost-multi-type, cost-multi-type-aggregation |
+| Cost after modifier | ✅ | modifier-set-cost, modifier-increment-cost |
+| Cost after deselect | ✅ | cost-removal-after-deselect |
+| Zero cost | ✅ | cost-zero, cost-zero-value |
+| Negative cost | ✅ | cost-negative-value |
+| Cost after duplicate | ✅ | cost-duplicate-increases |
+| CostType.isHidden (filtered from display) | ❌ | — |
+| CostType.isLimit vs regular | ❌ | — |
 
 ---
 
-## 3. Untested Engine Features (Major Gaps)
+## 5. Untested Engine Features
 
-### 3.1 SelectionEntryGroup (COVERED ✅)
+### 5.1 EntryLink
 
-SelectionEntryGroups are now modeled in the spec infrastructure:
-- `SelectionEntryGroupDef` in YAML, `SelectionEntryGroupSpec` in spec models
-- `CreateSelectionEntryGroup` in `JavaModelFactory`
-- `BuildSelectionEntryGroup` in `BattleScribeOracle`
-- 3 specs: `selection-entry-group-basic`, `selection-entry-group-default`, `selection-entry-group-constraint`
-- All tagged `known-limitation-synthetic` (groups don't fully evaluate with synthetic data)
-
-### 3.2 EntryLink (MAJOR)
-
-EntryLinks are references to shared entries:
+EntryLinks are references to shared entries. They add a layer of indirection that real catalogues use extensively:
 - Type: `selectionEntry` or `selectionEntryGroup`
-- Resolved at runtime by targetId
+- Resolved at runtime by `targetId`
 - Can have their own modifiers/constraints that override the target
-- ID prefixing: `h.a(entryLink.getId(), targetEntry.getId())`
+- ID prefixing: the engine combines the link ID with the target entry ID
 
-Not modeled in our YAML specs.
+**Impact:** High. Real catalogues are built almost entirely with EntryLinks. Not modeled in the spec infrastructure.
 
-### 3.3 Profiles, Rules, InfoGroups
+**Required infrastructure:** `EntryLinkDef` in YAML models, `CreateEntryLink` in JavaModelFactory, resolution logic in BattleScribeOracle.
 
-These are informational data attached to entries:
+### 5.2 Profiles, Rules, InfoGroups
+
+Informational data attached to entries:
 - Modifiers can modify profile characteristics (STRING field = CharacteristicType ID)
-- Rules can have description modified
+- Rules can have their description modified
 - InfoGroups can be hidden
-- During refresh, profiles/rules are collected and modifier-applied
+- During the refresh cycle, profiles/rules are collected and modifier-applied
 
-Not directly relevant to roster editing logic but ARE part of the refresh cycle.
+**Impact:** Low for roster editing logic. These are display-only concerns. However, modifier field targets `page`, `description`, and CharacteristicType ID require this infrastructure.
 
-### 3.4 Nested Forces
+### 5.3 Nested Forces
 
 Forces can contain sub-forces:
 - `Force.getForces()` returns nested forces
-- `includeChildForces` flag on queries traverses nested forces
+- `includeChildForces` flag on queries traverses into nested forces
 - Sub-forces have independent catalogues
 - Constraint validation recurses into nested forces
 
----
+**Impact:** Medium. Some game systems use nested forces (e.g., detachments within armies).
 
-## 4. Coverage Gaps Summary — Status After Expansion
+**Required infrastructure:** Recursive force setup in YAML, nested force operations in IRosterEngine.
 
-### 4.1 ~~Priority 1 — New Condition Types (5 specs)~~ ✅ DONE
-- ✅ `condition-not-instance-of` — basic notInstanceOf
-- ✅ `condition-instance-of-by-type` — instanceOf matching SelectionEntry.Type
-- ✅ `condition-instance-of-by-category` — instanceOf matching CategoryEntry
-- ✅ `condition-instance-of-ancestor` — instanceOf with ancestor scope
-- ✅ `condition-instance-of-roster-scope` — edge case: returns false
+### 5.4 Nested Condition Groups
 
-### 4.2 ~~Priority 1 — Missing Modifier Types (3 specs)~~ ✅ DONE
-- ✅ `modifier-category-remove` — remove CategoryLink
-- ✅ `modifier-category-set-primary` — set primary category
-- ✅ `modifier-category-unset-primary` — unset primary category
+Condition groups can contain other condition groups, creating arbitrary boolean logic trees.
 
-### 4.3 ~~Priority 1 — Missing Scope/Field (3 specs)~~ ✅ DONE
-- ✅ `scope-primary-category` — primary-category scope
-- ✅ `scope-forces-field` — counting forces instead of selections
-- ✅ `scope-include-child-forces` — includeChildForces flag
+**Impact:** Low. Real catalogues rarely nest beyond one level.
 
-### 4.4 ~~Priority 2 — Missing Constraint Edge Cases (4 specs)~~ ✅ DONE
-- ✅ `constraint-modified-by-modifier` — modifier targets constraint.value
-- ✅ `constraint-collective` — collective entry
-- ✅ `constraint-hidden-enforcement` — hidden entry enforcement
-- ✅ `constraint-forces-field` — constraint on forces count
+### 5.5 Favourites
 
-### 4.5 ~~Priority 2 — Missing Repeat Edge Cases (3 specs)~~ ✅ DONE
-- ✅ `modifier-repeat-round-up` — roundUp=true
-- ✅ `modifier-repeat-round-down` — roundUp=false
-- ✅ `modifier-repeat-multiple-additive` — multiple repeats (additive)
+`selectFavourite` is a BattleScribe app feature that bookmarks selections for quick access. It's an app-level feature, not a roster logic concern.
 
-### 4.6 Priority 3 — Modifier Field Targets (3 specs) — NOT COVERED
-- ❌ `modifier-rule-description` — modify rule description (requires Rule model infrastructure)
-- ❌ `modifier-page` — modify page field (requires Page field infrastructure)
-- ❌ `modifier-profile-characteristic` — modify profile characteristic (requires Profile model infrastructure)
-
-> **Note:** These 3 modifier field targets are informational data fields that don't affect core roster editing logic.
-> They would require extending the spec model with Rule, Profile, and BookData types — significant infrastructure
-> for low-impact coverage. Deferred to a future iteration with real-world data testing.
-
-### 4.7 ~~Priority 3 — SelectionEntryGroup Support (~5 specs)~~ ✅ DONE
-- ✅ Infrastructure: YAML model, JavaModelFactory, BattleScribeOracle
-- ✅ `selection-entry-group-basic` — group with multiple entries
-- ✅ `selection-entry-group-default` — defaultSelectionEntryId
-- ✅ `selection-entry-group-constraint` — min/max on group
-
-### 4.8 Priority 4 — Structural Features — PARTIALLY COVERED
-- ❌ EntryLink resolution (requires EntryLink model infrastructure)
-- ❌ Nested forces (requires nested force support)
-- ❌ Nested condition groups (group within group)
-- ❌ Favourites (low priority, rarely used)
-- ❌ Force-level entry flag (edge case)
-
-### Additional Specs Added Beyond Original Plan
-- ✅ `condition-equal-to-zero` — equalTo 0 edge case with childId
-- ✅ `condition-percent-value` — percentValue flag on condition
-- ✅ `modifier-field-hidden` — hidden field modifier
-- ✅ `modifier-field-constraint-value` — constraint value as field target
-- ✅ `modifier-conditional-boolean-toggle` — conditional hidden toggle
-- ✅ `modifier-append-with-space` — append adds space prefix
-- ✅ `modifier-number-decrement` — numeric cost decrement
-- ✅ `modifier-number-set` — numeric cost set
-- ✅ `modifier-string-increment-numeric` — string numeric increment
-- ✅ `modifier-string-decrement-non-numeric` — no-op on non-numeric
-- ✅ `cost-zero-value` — zero cost entry
-- ✅ `cost-negative-value` — negative cost entry
-- ✅ `selection-multiple-types` — mixed types coexist
-- ✅ `selection-deselect-then-reselect` — deselect/reselect lifecycle
-- ✅ `force-multiple-types` — different force entry types
-
-### Total: 153 specs (117 original + 36 new)
+**Impact:** Very low. Not relevant to roster conformance.
 
 ---
 
-## 5. Strategies for Achieving Coverage Certainty
+## 6. Known Limitations of Synthetic Data Testing
 
-### 5.1 Systematic Enum Coverage Matrix
+22 specs are tagged `known-limitation-synthetic`. These specs define correct behavior declaratively but produce trivially-passing results because the BattleScribe engine's internal indexing doesn't fully populate with synthetic (programmatically-constructed) data.
 
-Create a machine-readable coverage matrix mapping every enum value to spec files:
+Affected areas:
+- **instanceOf matching by Type or CategoryEntry** — engine needs real data indexing to resolve these
+- **Category modifiers (remove, set-primary, unset-primary)** — state changes aren't observable via selection names/costs
+- **Field=forces counting** — forces aren't indexed for counting with synthetic data
+- **includeChildForces flag** — no effect without real nested force data
+- **Collective/hidden enforcement** — constraint validation doesn't fully evaluate
+- **ModifierGroups** — group condition evaluation has synthetic data limitations
+- **SelectionEntryGroups** — group default selection and constraints don't trigger
 
-```yaml
-# coverage-matrix.yaml
-condition_types:
-  equalTo: [condition-equal-to]
-  notEqualTo: [condition-not-equal-to]
-  instanceOf: [condition-instance-of, condition-instance-of-by-type]
-  notInstanceOf: [condition-not-instance-of]
-  # ...
+**Mitigation:** These specs will become fully meaningful when tested with real-world catalogue data (e.g., wh40k-9e). The real-world data oracle tests in the test harness (`WH40K_DATA_DIR` environment variable) already exercise some of these paths.
 
-modifier_types:
-  string_set: [modifier-set-name]
-  category_remove: [modifier-category-remove]
-  # ...
-```
+---
 
-Each enum value must have at least one spec. This is mechanically verifiable.
+## 7. Remaining Coverage Gaps
 
-### 5.2 Code Path Tracing
+### 7.1 Modifier field targets (3 items — low priority)
 
-For each method in the engine (c.java, d.java, f.java), identify:
-1. Branch conditions (if/else, switch cases)
-2. Loop iterations (for each modifier, for each condition)
-3. Early returns (null checks, empty checks)
-4. Error paths (throws)
+| Target | Required Infrastructure |
+|--------|----------------------|
+| Rule `description` | Rule model types in spec YAML |
+| Entry `page` | Page field in BookData models |
+| CharacteristicType ID | Profile + CharacteristicType models |
 
-Map each branch to a spec that exercises it. This is the most thorough approach but requires decompiled source analysis.
+These are informational fields that don't affect roster selection, cost, or validation logic.
 
-### 5.3 Boundary Value Analysis
+### 7.2 ChildId filter types (3 items — requires real data)
 
-For each numeric comparison, test:
-- Exactly at boundary (equalTo)
-- Just above boundary (greaterThan by 1)
-- Just below boundary (lessThan by 1)
-- Zero
-- Negative values
-- Very large values
+| Filter | Notes |
+|--------|-------|
+| SelectionEntryGroup ID | Engine resolves via parent group chain |
+| ForceEntry ID | Engine resolves via force.entryId |
+| Catalogue ID | Engine resolves via catalogueId |
 
-For each collection, test:
-- Empty (no entries)
-- Single entry
-- Multiple entries
+These are lower priority and require real catalogue data with proper indexing.
 
-### 5.4 Combinatorial Testing
+### 7.3 Code paths (assorted — diminishing returns)
 
-Key dimensions to combine:
-1. **Condition type** × **Scope** × **Field** × **ChildId type**
-2. **Modifier type** × **Modifier field** × **Repeat** × **Condition**
-3. **Constraint type** × **Scope** × **Field** × **Flags**
+| Path | Category | Notes |
+|------|----------|-------|
+| ModifierGroup with repeat multiplier | Modifier evaluation | Rare in real data |
+| Nested ModifierGroups | Modifier evaluation | Very rare |
+| Modifier on BaseInfo (profile/rule) | Modifier evaluation | Needs Profile/Rule infra |
+| Repeat with percentValue | Repeat calculation | Edge case |
+| Repeat with zero threshold | Repeat calculation | Guard clause (skip) |
+| CostType.isLimit() | Query resolution | Needs CostType extension |
+| Validation error deduplication | Constraint validation | Shared entry edge case |
+| Collective entry creation/deselection | Selection operations | Needs collective flag support |
+| Force-level entry ("always new") | Selection operations | Niche flag |
+| Nested force selection | Selection operations | Needs nested force infra |
+| CostType.isHidden | Cost calculation | Display filtering |
+| instanceOf matching SelectionEntryGroup | instanceOf | Needs proper group nesting |
+| instanceOf matching ForceEntry/Catalogue | instanceOf | Needs real data |
+| instanceOf with shared entries | instanceOf | Needs EntryLink infra |
 
-Full combinatorial is impractical (thousands of combinations), but pairwise testing (every pair of dimensions appears at least once) is feasible.
+### 7.4 Summary
 
-### 5.5 Real-World Data Oracle Testing
+| Category | Covered | Total | % |
+|----------|---------|-------|---|
+| Condition types | 8 | 8 | 100% |
+| Constraint types | 2 | 2 | 100% |
+| Modifier types | 11 | 11 | 100% |
+| Modifier field targets | 5 | 8 | 63% |
+| Scope values | 8 | 8 | 100% |
+| Query fields | 3 | 3 | 100% |
+| Query flags | 4 | 4 | 100% |
+| ConditionGroup types | 2 | 2 | 100% |
+| SelectionEntry types | 3 | 3 | 100% |
+| ChildId filter types | 4 | 7 | 57% |
+| **Enum values total** | **50** | **56** | **89%** |
+| Engine API methods | 12 | 12 | 100% |
+| Major code paths | ~38 | ~52 | ~73% |
 
-Use wh40k-9e data to:
+The uncovered items fall into three categories:
+1. **Informational field targets** (3) — no impact on roster logic
+2. **Real-data-dependent paths** (6+) — synthetic data can't exercise them
+3. **Structural features** (5+) — require significant infrastructure investment (EntryLink, nested forces, collective entries)
+
+---
+
+## 8. Strategies for Further Coverage
+
+### 8.1 Real-World Data Oracle Testing
+
+The highest-impact next step. Use wh40k-9e data to:
 1. Load a complex catalogue (e.g., Space Marines)
-2. Create a realistic roster
-3. Snapshot state at each step
-4. Verify our synthetic specs match real-world behavior
+2. Create a realistic roster step by step
+3. Snapshot state after each operation
+4. Compare against expected values
 
-This catches edge cases that synthetic data misses due to indexing/resolution differences.
+This would exercise EntryLink resolution, proper indexing, and all the `known-limitation-synthetic` specs in meaningful ways.
 
-### 5.6 Mutation Testing (Conceptual)
+### 8.2 Pairwise Combinatorial Testing
 
-If we had a second engine implementation:
-1. Introduce deliberate bugs (mutations)
-2. Verify the spec suite catches each mutation
-3. Mutations that survive indicate coverage gaps
+Key dimensions that could be combined:
+- **Condition type** × **Scope** × **Field** × **ChildId type** (8 × 8 × 3 × 7 = 1,344 combos)
+- **Modifier type** × **Field target** × **Repeat** × **Condition** (11 × 8 × 4 × 2 = 704 combos)
 
-This is the gold standard for test suite quality measurement.
+Full combinatorial is impractical. Pairwise testing (every pair of dimensions appears at least once) would require ~50-80 additional specs.
+
+### 8.3 Mutation Testing
+
+When a second engine implementation exists:
+1. Introduce deliberate bugs (mutations) in the second engine
+2. Run the spec suite against the mutated engine
+3. Mutations that survive indicate spec gaps
+
+This is the gold standard for measuring test suite quality.
+
+### 8.4 Infrastructure Investment Priorities
+
+| Feature | Effort | Coverage Impact | Priority |
+|---------|--------|----------------|----------|
+| Real-world data oracle tests | Medium | High (exercises 22 synthetic specs) | **1** |
+| EntryLink support | High | High (real catalogues use extensively) | **2** |
+| Profile/Rule models | Medium | Low (informational only) | 3 |
+| Nested force support | Medium | Medium (some game systems use) | 3 |
+| Collective entry support | Low | Low (rare feature) | 4 |
 
 ---
 
-## 6. Infrastructure Changes Needed
+## Appendix A: Engine Method Coverage Map
 
-### 6.1 YAML Spec Model Extensions
+### c.java — AbstractRosterEngine (Core Logic)
 
-To test SelectionEntryGroups, the spec format needs:
+| Method | Purpose | Status |
+|--------|---------|--------|
+| Apply modifiers to data element | Modifier orchestration | ✅ |
+| Apply single modifier | Individual modifier application | ✅ |
+| Apply modifier group | ModifierGroup evaluation | ✅ ᵃ |
+| Evaluate conditions | Condition AND logic | ✅ |
+| Evaluate single condition | Per-condition check | ✅ |
+| instanceOf matching | Type ancestry check | ✅ (6 of 9 match targets) |
+| Entry ID matching (shared) | SharedEntry resolution | ❌ |
+| Evaluate condition group | ConditionGroup AND/OR | ✅ |
+| Calculate repeat count | Repeat multiplier | ✅ (basic, roundUp, additive) |
+| Get condition value (percentValue) | Target value resolution | ✅ |
+| Get query value | Actual value resolution | ✅ |
+| Resolve childId filter | ChildId → filter object | ✅ (4 of 7 types) |
 
-```yaml
-setup:
-  entries:
-    - id: se-1
-      name: "Parent"
-      type: unit
-      selectionEntryGroups:
-        - id: seg-1
-          name: "Weapons"
-          defaultSelectionEntryId: se-w1
-          entries:
-            - id: se-w1
-              name: "Weapon A"
-              type: upgrade
-            - id: se-w2
-              name: "Weapon B"
-              type: upgrade
+ᵃ known-limitation-synthetic.
+
+### f.java — ConcurrentRosterEngine (API Surface)
+
+| Method | Purpose | Status |
+|--------|---------|--------|
+| setRoster | Initialize roster | ✅ |
+| selectRootForce | Add top-level force | ✅ |
+| selectForce (nested) | Add nested force | ❌ |
+| setNumSelections | Set selection count | ✅ |
+| selectEntry | Add selection | ✅ |
+| duplicateSelection | Clone selection | ✅ |
+| selectFavourite | Bookmark selection | ❌ |
+| deselectForce | Remove force | ✅ |
+| deselectEntry | Remove selection | ✅ |
+| setCostLimit | Set cost cap | ✅ |
+| getValidationErrors | Get error list | ✅ |
+| hasValidationErrors | Boolean error check | ✅ |
+| validate (private) | Run validation | ✅ (implicit) |
+| refresh (private) | Refresh elements | ✅ (implicit) |
+
+### d.java — CatalogueDataEngine (Modifier Application)
+
+| Method | Purpose | Status |
+|--------|---------|--------|
+| Apply modifier (dispatch) | Route to typed handler | ✅ |
+| Apply STRING modifier | String field operations | ✅ (all 4 types) |
+| Apply NUMBER modifier | Numeric field operations | ✅ (all 3 types) |
+| Apply BOOLEAN modifier | Boolean field operations | ✅ |
+| Apply CATEGORY modifier | Category operations | ✅ (all 4 types) |
+| String field setter (name) | Set entry name | ✅ |
+| String field setter (page) | Set page number | ❌ |
+| String field setter (description) | Set rule description | ❌ |
+| Number field setter (CostType) | Set cost value | ✅ |
+| Number field setter (Constraint) | Set constraint value | ✅ |
+| Boolean field setter (hidden) | Set hidden flag | ✅ |
+
+---
+
+## Appendix B: Spec File Inventory
+
 ```
-
-### 6.2 IRosterEngine Extensions
-
-May need new methods:
-- `SelectEntryFromGroup(forceIndex, selectionIndex, groupIndex, entryIndex)`
-- `GetSelectionCategories(forceIndex, selectionIndex)` — to verify category modifiers
-- `GetValidationErrorDetails()` — structured error info (source element, constraint)
-
-### 6.3 Category State in Assertions
-
-To verify category modifiers (add/remove/set-primary), need to expose categories on selections:
-
-```yaml
-expectedState:
-  selections:
-    - entryId: se-1
-      categories:
-        - entryId: cat-1
-          primary: true
+specs/
+├── condition/     (20 specs)
+│   ├── condition-at-least.yaml
+│   ├── condition-at-most.yaml
+│   ├── condition-equal-to.yaml
+│   ├── condition-equal-to-zero.yaml
+│   ├── condition-false-prevents-modifier.yaml
+│   ├── condition-greater-than.yaml
+│   ├── condition-group-and.yaml
+│   ├── condition-group-and-fails.yaml
+│   ├── condition-group-or.yaml
+│   ├── condition-instance-of.yaml
+│   ├── condition-instance-of-ancestor.yaml
+│   ├── condition-instance-of-by-category.yaml
+│   ├── condition-instance-of-by-type.yaml
+│   ├── condition-instance-of-roster-scope.yaml
+│   ├── condition-less-than.yaml
+│   ├── condition-multiple-and.yaml
+│   ├── condition-not-equal-to.yaml
+│   ├── condition-not-instance-of.yaml
+│   ├── condition-percent-value.yaml
+│   └── condition-scope-roster.yaml
+├── constraint/    (18 specs)
+│   ├── constraint-collective.yaml
+│   ├── constraint-cost-field.yaml
+│   ├── constraint-forces-field.yaml
+│   ├── constraint-hidden-enforcement.yaml
+│   ├── constraint-include-child-selections.yaml
+│   ├── constraint-max-exactly-at-limit.yaml
+│   ├── constraint-max-satisfied.yaml
+│   ├── constraint-max-unlimited.yaml
+│   ├── constraint-max-violation.yaml
+│   ├── constraint-min-and-max.yaml
+│   ├── constraint-min-satisfied.yaml
+│   ├── constraint-min-violation.yaml
+│   ├── constraint-min-zero-no-error.yaml
+│   ├── constraint-modified-by-modifier.yaml
+│   ├── constraint-multiple-entries-independent.yaml
+│   ├── constraint-no-constraints.yaml
+│   ├── constraint-percent-value.yaml
+│   └── constraint-shared.yaml
+├── cost/          (14 specs)
+│   ├── cost-aggregation.yaml
+│   ├── cost-base-calculation.yaml
+│   ├── cost-child-aggregation.yaml
+│   ├── cost-duplicate-increases.yaml
+│   ├── cost-empty-roster.yaml
+│   ├── cost-multi-force-aggregation.yaml
+│   ├── cost-multi-type.yaml
+│   ├── cost-multi-type-aggregation.yaml
+│   ├── cost-negative-value.yaml
+│   ├── cost-removal-after-deselect.yaml
+│   ├── cost-same-entry-twice-doubles.yaml
+│   ├── cost-set-limit.yaml
+│   ├── cost-zero.yaml
+│   └── cost-zero-value.yaml
+├── force/         (9 specs)
+│   ├── force-add-and-remove-all.yaml
+│   ├── force-add-multiple.yaml
+│   ├── force-add-single.yaml
+│   ├── force-empty-has-no-selections.yaml
+│   ├── force-multiple-types.yaml
+│   ├── force-remove.yaml
+│   ├── force-remove-second.yaml
+│   ├── force-selections-independent.yaml
+│   └── force-with-categories.yaml
+├── modifier/      (36 specs)
+│   ├── modifier-append-name.yaml
+│   ├── modifier-append-with-space.yaml
+│   ├── modifier-category-add.yaml
+│   ├── modifier-category-remove.yaml
+│   ├── modifier-category-set-primary.yaml
+│   ├── modifier-category-unset-primary.yaml
+│   ├── modifier-conditional-boolean-toggle.yaml
+│   ├── modifier-conditional-false-keeps-base-cost.yaml
+│   ├── modifier-conditional-increment-cost.yaml
+│   ├── modifier-conditional-set-name.yaml
+│   ├── modifier-conditional-toggle.yaml
+│   ├── modifier-decrement-below-zero.yaml
+│   ├── modifier-decrement-cost.yaml
+│   ├── modifier-decrement-name.yaml
+│   ├── modifier-field-constraint-value.yaml
+│   ├── modifier-field-hidden.yaml
+│   ├── modifier-group-basic.yaml
+│   ├── modifier-group-false-condition.yaml
+│   ├── modifier-increment-cost.yaml
+│   ├── modifier-increment-name.yaml
+│   ├── modifier-multiple-groups.yaml
+│   ├── modifier-multiple-on-same-entry.yaml
+│   ├── modifier-no-modifier.yaml
+│   ├── modifier-number-decrement.yaml
+│   ├── modifier-number-set.yaml
+│   ├── modifier-repeat-basic.yaml
+│   ├── modifier-repeat-multiple-additive.yaml
+│   ├── modifier-repeat-round-down.yaml
+│   ├── modifier-repeat-round-up.yaml
+│   ├── modifier-set-boolean.yaml
+│   ├── modifier-set-constraint.yaml
+│   ├── modifier-set-cost.yaml
+│   ├── modifier-set-hidden-true.yaml
+│   ├── modifier-set-name.yaml
+│   ├── modifier-string-decrement-non-numeric.yaml
+│   └── modifier-string-increment-numeric.yaml
+├── refresh/       (10 specs)
+│   ├── refresh-after-child-select.yaml
+│   ├── refresh-after-deselect.yaml
+│   ├── refresh-after-duplicate.yaml
+│   ├── refresh-after-select.yaml
+│   ├── refresh-after-set-count.yaml
+│   ├── refresh-cost-recalculation.yaml
+│   ├── refresh-full-lifecycle.yaml
+│   ├── refresh-modifier-reevaluation.yaml
+│   ├── refresh-modifier-toggle-cost.yaml
+│   └── refresh-validation-update.yaml
+├── roster/        (9 specs)
+│   ├── roster-add-force-and-select.yaml
+│   ├── roster-create-empty.yaml
+│   ├── roster-deselect-reduces-cost.yaml
+│   ├── roster-game-system-id.yaml
+│   ├── roster-multi-cost-types.yaml
+│   ├── roster-multiple-selections.yaml
+│   ├── roster-name-and-metadata.yaml
+│   ├── roster-no-cost-types.yaml
+│   └── roster-with-cost-types.yaml
+├── scope/         (13 specs)
+│   ├── scope-ancestor.yaml
+│   ├── scope-child-id-filter.yaml
+│   ├── scope-force.yaml
+│   ├── scope-force-trigger-in-same-force.yaml
+│   ├── scope-force-vs-roster.yaml
+│   ├── scope-forces-field.yaml
+│   ├── scope-include-child-forces.yaml
+│   ├── scope-parent.yaml
+│   ├── scope-primary-catalogue.yaml
+│   ├── scope-primary-category.yaml
+│   ├── scope-roster.yaml
+│   ├── scope-roster-cross-force.yaml
+│   └── scope-self.yaml
+└── selection/     (24 specs)
+    ├── selection-add-unit.yaml
+    ├── selection-category-link.yaml
+    ├── selection-child-entry.yaml
+    ├── selection-child-multiple.yaml
+    ├── selection-child-with-cost.yaml
+    ├── selection-deselect-last.yaml
+    ├── selection-deselect-middle.yaml
+    ├── selection-deselect-then-reselect.yaml
+    ├── selection-duplicate.yaml
+    ├── selection-entry-group-basic.yaml
+    ├── selection-entry-group-constraint.yaml
+    ├── selection-entry-group-default.yaml
+    ├── selection-hidden-entry.yaml
+    ├── selection-model-type.yaml
+    ├── selection-multiple-deselects.yaml
+    ├── selection-multiple-entries.yaml
+    ├── selection-multiple-types.yaml
+    ├── selection-number-default.yaml
+    ├── selection-remove.yaml
+    ├── selection-same-entry-twice.yaml
+    ├── selection-set-count.yaml
+    ├── selection-upgrade-type.yaml
+    ├── selection-with-children.yaml
+    └── selection-with-cost.yaml
 ```
-
-### 6.4 Profile/Rule State in Assertions
-
-To verify profile/rule modifiers:
-
-```yaml
-expectedState:
-  selections:
-    - entryId: se-1
-      profiles:
-        - name: "Unit Stats"
-          characteristics:
-            - name: "Attacks"
-              value: "4"
-```
-
----
-
-## 7. Implementation Plan — Execution Status
-
-### Phase 1: Close Critical Enum Gaps (~11 specs) ✅ COMPLETE
-- ✅ All missing condition types (notInstanceOf, instanceOf variants)
-- ✅ All missing category modifier types (remove, set-primary, unset-primary)
-- ✅ Missing scope (primary-category)
-- ✅ Missing field (forces)
-- ✅ Missing flag (includeChildForces)
-- Extended: ConditionSpec/ConstraintSpec with Shared, IncludeChildSelections, IncludeChildForces, PercentValue flags
-- Added CategoryEntrySpec and CategoryEntries to GameSystemSpec
-- Added CategoryLinks to ForceEntrySpec
-- Commit: 30c148d (250 tests passing)
-
-### Phase 2: Close Constraint & Repeat Gaps (~10 specs) ✅ COMPLETE
-- ✅ Constraint modification by modifier
-- ✅ Hidden entry enforcement
-- ✅ Collective entry constraints
-- ✅ Forces field constraint
-- ✅ Repeat edge cases (roundUp, roundDown, multiple additive)
-- ✅ Percent value condition, string increment/decrement edge cases
-- Commit: d50c60c (260 tests passing)
-
-### Phase 3: SelectionEntryGroup Support (~3 specs) ✅ COMPLETE
-- ✅ Extended YAML model with `selectionEntryGroups` on entries and catalogue
-- ✅ Extended `JavaModelFactory` to create `SelectionEntryGroup` objects
-- ✅ Extended `BattleScribeOracle` to register groups
-- ✅ 3 group-specific specs (basic, default, constraint)
-- Commit: 5173300 (263 tests passing)
-
-### Phase 4: Additional Coverage (~12 specs) ✅ COMPLETE
-- ✅ Modifier field targets: hidden, constraint value, boolean toggle
-- ✅ Cost edge cases: zero value, negative value
-- ✅ Number modifiers: decrement, set
-- ✅ String modifier: append with space prefix
-- ✅ Selection lifecycle: deselect then reselect, mixed types
-- ✅ Force types, condition equalTo 0 edge case
-- Commit: 1f04be6 (275 tests passing, 12 skipped)
-
-### Phase 5: Coverage Matrix & Verification ✅ COMPLETE
-- ✅ Created `specs/coverage-matrix.yaml` mapping every enum value to specs
-- ✅ Updated this report with completion status
-- 94% enum coverage (47/50 values covered)
-- 3 uncovered items are informational field targets requiring infrastructure investment
-
-### Grand Total: 153 specs (117 original + 36 new), 287 tests (275 passed, 12 skipped)
-
----
-
-## 8. What "100% Coverage" Means — Final Assessment
-
-Given the engine's architecture, true 100% coverage means:
-
-1. **Every enum value** exercised in at least one spec ✅ **94% achieved** (47/50 values, 3 are info-only fields)
-2. **Every code branch** in modifier evaluation, condition evaluation, constraint validation, and selection operations ✅ **Achieved** (Phases 1-4)
-3. **Every query resolution path** (scope × field × childId × flags) at least pairwise ✅ **Largely covered**
-4. **Every error message format** validated ⚠️ **Partial** (structured error assertions via validationErrors)
-5. **Every infrastructure pattern** (EntryLink, nested forces, shared entries) ⚠️ **Partial** (SelectionEntryGroup done, EntryLink/nested forces deferred)
-
-**Achieved: ~94% enum coverage with 153 specs.** The remaining 6% covers:
-- 3 informational modifier field targets (rule description, page, profile characteristic) that don't affect roster logic
-- EntryLink resolution, nested forces, and favourites which require significant infrastructure investment
-
-The `specs/coverage-matrix.yaml` file provides a machine-readable mapping of every engine feature to its covering specs, enabling automated verification of coverage completeness.
-
----
-
-## Appendix: Engine Method Coverage Map
-
-### c.java (AbstractRosterEngine) — Core Logic
-
-| Method Signature | Purpose | Tested? |
-|-----------------|---------|---------|
-| `a(d, BaseSelectable, T, boolean)` | Apply modifiers to data element | ✅ |
-| `a(d, BaseSelectable, T, T, Modifier, ...)` | Apply single modifier | ✅ |
-| `a(d, BaseSelectable, T, T, ModifierGroup, ...)` | Apply modifier group | ⚠️ synthetic limitation |
-| `a(d, BaseSelectable, BaseModifyableData, BaseModifier, ...)` | Evaluate conditions | ✅ |
-| `a(d, BaseSelectable, BaseModifyableData, Condition, ...)` | Evaluate single condition | ✅ |
-| `a(d, BaseSelectable, IFilteredQueryChild, boolean)` | instanceOf matching | ✅ multiple variants |
-| `a(BaseSelectionEntry, BaseSelectionEntry)` | Entry ID matching (shared) | ❌ |
-| `a(d, BaseSelectable, BaseModifyableData, ConditionGroup, ...)` | Evaluate condition group | ✅ |
-| `a(d, BaseRosterElement, BaseModifyableData, BaseModifier, ...)` | Calculate repeat count | ✅ roundUp/down/additive |
-| `a(d, BaseModifyableData, BaseQuery, BaseRosterElement, boolean)` | Get condition value (percentValue) | ✅ |
-| `a(d, BaseModifyableData, BaseQuery, BaseRosterElement, boolean, boolean)` | Get query value | ✅ |
-| `a(d, boolean, BaseFilteredQuery)` | Resolve childId filter | ⚠️ partial |
-
-### f.java (ConcurrentRosterEngine) — API Surface
-
-| Method | Purpose | Tested? |
-|--------|---------|---------|
-| `a(Roster, GameSystem, Map, Map, Map, boolean)` | setRoster | ✅ |
-| `b(GameSystem, Catalogue, Map, ForceEntry, List, List)` | selectRootForce | ✅ |
-| `b(Force, GameSystem, Catalogue, Map, ForceEntry, List, List)` | selectForce (nested) | ❌ |
-| `a(BaseSelectionParent, SelectionEntry, int)` | setNumSelections | ✅ |
-| `b(BaseSelectionParent, SelectionEntry)` | selectEntry | ✅ |
-| `k(Selection)` | duplicateSelection | ✅ |
-| `l(Selection)` | selectFavourite | ❌ |
-| `g(Force)` | deselectForce | ✅ |
-| `m(Selection)` | deselectEntry | ✅ |
-| `a(CostType, double)` | setCostLimit | ✅ |
-| `q()` | getValidationErrors | ✅ |
-| `r()` | hasValidationErrors | ✅ |
-| `v()` | validate (private) | ✅ implicitly |
-| `a(boolean, boolean)` | refresh elements (private) | ✅ implicitly |
-| `w()` | clear changed (private) | ✅ implicitly |
-
-### d.java (CatalogueDataEngine) — Modifier Application
-
-| Method | Purpose | Tested? |
-|--------|---------|---------|
-| `a(BaseModifyableData, Modifier, int)` | Apply modifier | ✅ |
-| `a(String, Modifier)` | Apply STRING modifier | ✅ |
-| `a(double, Modifier)` | Apply NUMBER modifier | ✅ |
-| `a(Boolean, Modifier)` | Apply BOOLEAN modifier | ✅ |
-| `a(ICategorised, Modifier)` | Apply CATEGORY modifier | ✅ add, remove, set/unset-primary |
-| String field setter | `name`, `page`, `description` | ⚠️ name only (page/description need infra) |
-| Number field setter | CostType, Constraint | ✅ both |
-| Boolean field setter | `hidden` | ✅ |
