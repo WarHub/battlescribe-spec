@@ -587,6 +587,49 @@ public sealed class BattleScribeOracle : IDisposable
             foreach (var seg in spec.SelectionEntryGroups)
                 entry.getSelectionEntryGroups().add(BuildSelectionEntryGroup(seg));
 
+        if (spec.Rules != null)
+            foreach (var ruleSpec in spec.Rules)
+            {
+                var ruleModifiers = ruleSpec.Modifiers?.Select(BuildModifier).ToArray();
+                var rule = JavaModelFactory.CreateRule(ruleSpec.Id, ruleSpec.Name, ruleSpec.Description,
+                    ruleSpec.Hidden, ruleSpec.Page, ruleModifiers);
+                entry.getRules().add(rule);
+            }
+
+        if (spec.Profiles != null)
+            foreach (var profileSpec in spec.Profiles)
+            {
+                var chars = profileSpec.Characteristics?.Select(c =>
+                    JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
+                var profileModifiers = profileSpec.Modifiers?.Select(BuildModifier).ToArray();
+                var profile = JavaModelFactory.CreateProfile(profileSpec.Id, profileSpec.Name,
+                    profileSpec.TypeId, profileSpec.TypeName, profileSpec.Hidden, chars, profileModifiers);
+                entry.getProfiles().add(profile);
+            }
+
+        if (spec.InfoGroups != null)
+            foreach (var igSpec in spec.InfoGroups)
+            {
+                var igProfiles = igSpec.Profiles?.Select(ps =>
+                {
+                    var cs = ps.Characteristics?.Select(c =>
+                        JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
+                    var ms = ps.Modifiers?.Select(BuildModifier).ToArray();
+                    return JavaModelFactory.CreateProfile(ps.Id, ps.Name, ps.TypeId, ps.TypeName, ps.Hidden, cs, ms);
+                }).ToArray();
+                var igRules = igSpec.Rules?.Select(rs =>
+                {
+                    var ms = rs.Modifiers?.Select(BuildModifier).ToArray();
+                    return JavaModelFactory.CreateRule(rs.Id, rs.Name, rs.Description, rs.Hidden, rs.Page, ms);
+                }).ToArray();
+                var igModifiers = igSpec.Modifiers?.Select(BuildModifier).ToArray();
+                entry.getInfoGroups().add(
+                    JavaModelFactory.CreateInfoGroup(igSpec.Id, igSpec.Name, igSpec.Hidden, igProfiles, igRules, igModifiers));
+            }
+
+        if (!string.IsNullOrEmpty(spec.Page))
+            entry.setPage(spec.Page);
+
         return entry;
     }
 

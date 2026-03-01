@@ -161,6 +161,18 @@ public sealed class SelectionEntryDef
 
     [YamlMember(Alias = "categoryLinks")]
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<RuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "infoGroups")]
+    public List<InfoGroupDef>? InfoGroups { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
 }
 
 public sealed class SelectionEntryGroupDef
@@ -356,6 +368,84 @@ public sealed class CategoryLinkDef
 
     [YamlMember(Alias = "primary")]
     public bool Primary { get; set; }
+}
+
+public sealed class RuleDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "description")]
+    public string Description { get; set; } = "";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+}
+
+public sealed class ProfileDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "typeId")]
+    public string TypeId { get; set; } = "";
+
+    [YamlMember(Alias = "typeName")]
+    public string TypeName { get; set; } = "";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "characteristics")]
+    public List<CharacteristicDef>? Characteristics { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+}
+
+public sealed class CharacteristicDef
+{
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "typeId")]
+    public string TypeId { get; set; } = "";
+
+    [YamlMember(Alias = "value")]
+    public string Value { get; set; } = "";
+}
+
+public sealed class InfoGroupDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<RuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
 }
 
 // ===== Step definitions =====

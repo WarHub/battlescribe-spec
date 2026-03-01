@@ -106,7 +106,11 @@ public static class SpecLoader
             SelectionEntryGroups: def.SelectionEntryGroups?.Select(ConvertSelectionEntryGroup).ToArray(),
             CategoryLinks: def.CategoryLinks?.Select(cl =>
                 new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
-            Collective: def.Collective);
+            Collective: def.Collective,
+            Rules: def.Rules?.Select(ConvertRule).ToArray(),
+            Profiles: def.Profiles?.Select(ConvertProfile).ToArray(),
+            InfoGroups: def.InfoGroups?.Select(ConvertInfoGroup).ToArray(),
+            Page: def.Page);
     }
 
     private static SelectionEntryGroupSpec ConvertSelectionEntryGroup(SelectionEntryGroupDef def)
@@ -153,4 +157,19 @@ public static class SpecLoader
                     r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray(),
             def.Modifiers?.Select(ConvertModifier).ToArray(),
             def.ModifierGroups?.Select(ConvertModifierGroup).ToArray());
+
+    private static RuleSpec ConvertRule(RuleDef def) =>
+        new(def.Id, def.Name, def.Description, def.Hidden, def.Page,
+            def.Modifiers?.Select(ConvertModifier).ToArray());
+
+    private static ProfileSpec ConvertProfile(ProfileDef def) =>
+        new(def.Id, def.Name, def.TypeId, def.TypeName, def.Hidden,
+            def.Characteristics?.Select(c => new CharacteristicSpec(c.Name, c.TypeId, c.Value)).ToArray(),
+            def.Modifiers?.Select(ConvertModifier).ToArray());
+
+    private static InfoGroupSpec ConvertInfoGroup(InfoGroupDef def) =>
+        new(def.Id, def.Name, def.Hidden,
+            def.Profiles?.Select(ConvertProfile).ToArray(),
+            def.Rules?.Select(ConvertRule).ToArray(),
+            def.Modifiers?.Select(ConvertModifier).ToArray());
 }

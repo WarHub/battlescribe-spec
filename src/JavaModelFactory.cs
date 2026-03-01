@@ -393,4 +393,73 @@ public static class JavaModelFactory
 
         return mg;
     }
+
+    public static net.battlescribe.model.data.Rule CreateRule(
+        string id, string name, string description = "", bool hidden = false, string page = "",
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var r = new net.battlescribe.model.data.Rule();
+        r.setId(id);
+        r.setName(name);
+        r.setDescription(description);
+        r.setHidden(hidden);
+        if (!string.IsNullOrEmpty(page))
+            r.setPage(page);
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                r.getModifiers().add(m);
+        return r;
+    }
+
+    public static Profile CreateProfile(
+        string id, string name, string typeId = "", string typeName = "",
+        bool hidden = false,
+        IEnumerable<Characteristic>? characteristics = null,
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var p = new Profile();
+        p.setId(id);
+        p.setName(name);
+        p.setTypeId(typeId);
+        p.setTypeName(typeName);
+        p.setHidden(hidden);
+        if (characteristics != null)
+            foreach (var c in characteristics)
+                p.getCharacteristics().add(c);
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                p.getModifiers().add(m);
+        return p;
+    }
+
+    public static Characteristic CreateCharacteristic(string name, string typeId, string value = "")
+    {
+        var c = new Characteristic();
+        c.setName(name);
+        c.setTypeId(typeId);
+        c.setValue(value);
+        return c;
+    }
+
+    public static InfoGroup CreateInfoGroup(
+        string id, string name, bool hidden = false,
+        IEnumerable<Profile>? profiles = null,
+        IEnumerable<net.battlescribe.model.data.Rule>? rules = null,
+        IEnumerable<Modifier>? modifiers = null)
+    {
+        var ig = new InfoGroup();
+        ig.setId(id);
+        ig.setName(name);
+        ig.setHidden(hidden);
+        if (profiles != null)
+            foreach (var p in profiles)
+                ig.getProfiles().add(p);
+        if (rules != null)
+            foreach (var r in rules)
+                ig.getRules().add(r);
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                ig.getModifiers().add(m);
+        return ig;
+    }
 }

@@ -1,0 +1,48 @@
+id: modifier-characteristic-value
+category: modifier
+description: Modifier can set a Profile Characteristic value (STRING modifier on CharacteristicType ID field)
+tags:
+  - known-limitation-synthetic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Marine
+        type: unit
+        profiles:
+          - id: prof-1
+            name: Marine Stats
+            typeId: stat-type
+            typeName: Unit Stats
+            characteristics:
+              - name: Wounds
+                typeId: char-wounds
+                value: "2"
+            modifiers:
+              - type: set
+                field: char-wounds
+                value: "3"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # The modifier targets a CharacteristicType by its ID (char-wounds).
+  # With synthetic data, profile modifiers are not evaluated.
+  # The selection appears with its base name.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine

@@ -59,7 +59,11 @@ public record SelectionEntrySpec(
     SelectionEntrySpec[]? ChildEntries = null,
     SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
     CategoryLinkSpec[]? CategoryLinks = null,
-    bool Collective = false);
+    bool Collective = false,
+    RuleSpec[]? Rules = null,
+    ProfileSpec[]? Profiles = null,
+    InfoGroupSpec[]? InfoGroups = null,
+    string Page = "");
 
 public record ForceEntrySpec(
     string Id,
@@ -122,6 +126,36 @@ public record CategoryLinkSpec(
     string TargetId,
     string Name,
     bool Primary = false);
+
+public record RuleSpec(
+    string Id,
+    string Name,
+    string Description = "",
+    bool Hidden = false,
+    string Page = "",
+    ModifierSpec[]? Modifiers = null);
+
+public record ProfileSpec(
+    string Id,
+    string Name,
+    string TypeId = "",
+    string TypeName = "",
+    bool Hidden = false,
+    CharacteristicSpec[]? Characteristics = null,
+    ModifierSpec[]? Modifiers = null);
+
+public record CharacteristicSpec(
+    string Name,
+    string TypeId,
+    string Value = "");
+
+public record InfoGroupSpec(
+    string Id,
+    string Name,
+    bool Hidden = false,
+    ProfileSpec[]? Profiles = null,
+    RuleSpec[]? Rules = null,
+    ModifierSpec[]? Modifiers = null);
 
 /// <summary>
 /// Complete test scenario specification.
