@@ -3,7 +3,6 @@ category: condition
 description: instanceOf condition can match by SelectionEntry.Type (e.g. unit, model, upgrade)
 tags:
   - known-limitation-synthetic
-
 setup:
   gameSystem:
     id: test-gs
@@ -37,7 +36,7 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  # Select detector - instanceOf by type 'model' does not match with synthetic data
+  # Select detector only - no model selected yet, condition false
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -48,12 +47,14 @@ steps:
           selections:
             - name: Detector
 
-  # Add a model-type entry. With synthetic data, detector's modifiers
-  # are not re-evaluated with proper type matching.
+  # Add a model-type entry - instanceOf checks for type 'model' in force
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1
 
+  # With model selected, instanceOf childId=model should match
+  # Basic Model (type=model) → condition true → name="Model Found".
+  # With synthetic data, instanceOf type matching is not operational.
   - expectedState:
       forces:
         - selectionCount: 2
