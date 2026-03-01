@@ -1,8 +1,7 @@
 id: cost-type-limit
 category: cost
 description: CostType with limit flag represents a cost cap rather than an actual cost
-tags:
-  - known-limitation-synthetic
+tags: []
 
 setup:
   gameSystem:
