@@ -14,25 +14,12 @@ namespace BattleScribeSpec.Protocol;
 /// <summary>
 /// Base for all protocol messages. The "type" field discriminates message kinds.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(SetupCommand), "setup")]
-[JsonDerivedType(typeof(ActionCommand), "action")]
-[JsonDerivedType(typeof(GetStateCommand), "getState")]
-[JsonDerivedType(typeof(GetErrorsCommand), "getErrors")]
-[JsonDerivedType(typeof(TeardownCommand), "teardown")]
 public abstract class ProtocolCommand
 {
     [JsonPropertyName("type")]
     public abstract string Type { get; }
 }
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(SetupResult), "setupResult")]
-[JsonDerivedType(typeof(ActionResult), "actionResult")]
-[JsonDerivedType(typeof(StateResponse), "state")]
-[JsonDerivedType(typeof(ErrorsResponse), "errors")]
-[JsonDerivedType(typeof(TeardownResult), "teardownResult")]
-[JsonDerivedType(typeof(ProtocolError), "error")]
 public abstract class ProtocolResponse
 {
     [JsonPropertyName("type")]
@@ -735,6 +722,7 @@ public sealed class ProtocolInfoGroup
 
 /// <summary>
 /// Shared JSON serialization options for the protocol.
+/// Uses manual type dispatch since the "type" discriminator is a semantic property.
 /// </summary>
 public static class ProtocolSerializer
 {
@@ -746,20 +734,39 @@ public static class ProtocolSerializer
     };
 
     public static string SerializeCommand(ProtocolCommand command) =>
-        JsonSerializer.Serialize(command, Options);
+        JsonSerializer.Serialize(command, command.GetType(), Options);
 
-    public static ProtocolResponse? DeserializeResponse(string json) =>
-        JsonSerializer.Deserialize<ProtocolResponse>(json, Options);
-
-    /// <summary>
-    /// Deserialize a command from JSON (used by adapters).
-    /// </summary>
-    public static ProtocolCommand? DeserializeCommand(string json) =>
-        JsonSerializer.Deserialize<ProtocolCommand>(json, Options);
-
-    /// <summary>
-    /// Serialize a response to JSON (used by adapters).
-    /// </summary>
     public static string SerializeResponse(ProtocolResponse response) =>
-        JsonSerializer.Serialize(response, Options);
+        JsonSerializer.Serialize(response, response.GetType(), Options);
+
+    public static ProtocolResponse? DeserializeResponse(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var type = doc.RootElement.GetProperty("type").GetString();
+        return type switch
+        {
+            "setupResult" => JsonSerializer.Deserialize<SetupResult>(json, Options),
+            "actionResult" => JsonSerializer.Deserialize<ActionResult>(json, Options),
+            "state" => JsonSerializer.Deserialize<StateResponse>(json, Options),
+            "errors" => JsonSerializer.Deserialize<ErrorsResponse>(json, Options),
+            "teardownResult" => JsonSerializer.Deserialize<TeardownResult>(json, Options),
+            "error" => JsonSerializer.Deserialize<ProtocolError>(json, Options),
+            _ => throw new JsonException($"Unknown response type: {type}"),
+        };
+    }
+
+    public static ProtocolCommand? DeserializeCommand(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var type = doc.RootElement.GetProperty("type").GetString();
+        return type switch
+        {
+            "setup" => JsonSerializer.Deserialize<SetupCommand>(json, Options),
+            "action" => JsonSerializer.Deserialize<ActionCommand>(json, Options),
+            "getState" => JsonSerializer.Deserialize<GetStateCommand>(json, Options),
+            "getErrors" => JsonSerializer.Deserialize<GetErrorsCommand>(json, Options),
+            "teardown" => JsonSerializer.Deserialize<TeardownCommand>(json, Options),
+            _ => throw new JsonException($"Unknown command type: {type}"),
+        };
+    }
 }
