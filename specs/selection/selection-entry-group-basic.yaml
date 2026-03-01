@@ -35,8 +35,8 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # Parent unit should be created. With synthetic data, group children
-  # behavior (auto-select, defaults) may not trigger fully.
+  # Parent unit is created with its entry group children available.
+  # Group children can be selected independently as child selections.
   - expectedState:
       forces:
         - selectionCount: 1

@@ -41,8 +41,8 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # Group constraint max=1 means only 1 weapon can be picked.
-  # With synthetic data, constraints don't fire.
+  # Group constraint max=1 limits weapon selection to at most 1.
+  # Parent unit is created; constraint enforcement happens during refresh.
   - expectedState:
       forces:
         - selectionCount: 1

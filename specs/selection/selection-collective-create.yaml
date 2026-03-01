@@ -31,7 +31,7 @@ steps:
     forceIndex: 0
     entryIndex: 0
   # Collective child entries are automatically created for all instances.
-  # With synthetic data, the selection just appears with its children.
+  # The selection appears with its children.
   - expectedState:
       forces:
         - selectionCount: 1

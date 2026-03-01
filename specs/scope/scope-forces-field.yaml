@@ -36,8 +36,9 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # field=forces counting is not available with synthetic data.
-  # The modifier does not apply; name remains unchanged.
+  # field=forces counts forces in scope rather than selections.
+  # The condition checks for forces, and the engine evaluates
+  # this independently of selection state. Name unchanged.
   - expectedState:
       forces:
         - selectionCount: 1
