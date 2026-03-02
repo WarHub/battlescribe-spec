@@ -188,7 +188,8 @@ public static class SpecLoader
             InfoGroups: def.InfoGroups?.Select(ConvertInfoGroup).ToArray(),
             Page: def.Page,
             EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray(),
-            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray());
+            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray(),
+            Import: def.Import);
     }
 
     private static ForceEntrySpec ConvertForceEntry(ForceEntryDef fe) =>
@@ -208,7 +209,8 @@ public static class SpecLoader
                 new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
                     c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
             Modifiers: def.Modifiers?.Select(ConvertModifier).ToArray(),
-            SelectionEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray());
+            SelectionEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray(),
+            Import: def.Import);
     }
 
     private static ModifierSpec ConvertModifier(ModifierDef def)
@@ -266,7 +268,8 @@ public static class SpecLoader
                     c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
             def.Modifiers?.Select(ConvertModifier).ToArray(),
             def.CategoryLinks?.Select(cl =>
-                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray());
+                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
+            Import: def.Import);
 
     private static InfoLinkSpec ConvertInfoLink(InfoLinkDef def) =>
         new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,

@@ -623,3 +623,8 @@ infrastructure_coverage:
   hidden_entries:
     status: covered
     specs: [selection-hidden-entry, constraint-hidden-enforcement]
+  import_attribute:
+    status: covered
+    total_usage: 3
+    specs: [import-true-entry-visible-via-link, import-false-entry-hidden-via-link, import-false-entry-direct-use]
+    note: Controls entry visibility when catalogue is imported via CatalogueLink

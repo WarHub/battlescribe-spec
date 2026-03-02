@@ -1,0 +1,49 @@
+id: import-true-entry-visible-via-link
+category: selection
+description: Entry with explicit import=true is selectable when its catalogue is imported via CatalogueLink
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-base
+      name: Base Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-base-1
+          name: Shared Unit
+          type: unit
+          import: true
+    - id: cat-faction
+      name: Faction Catalogue
+      gameSystemId: test-gs
+      catalogueLinks:
+        - id: cl-1
+          name: Base Catalogue
+          targetId: cat-base
+          importRootEntries: true
+      selectionEntries:
+        - id: se-faction-1
+          name: Faction Unit
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+    catalogueIndex: 1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Patrol
+          selectionCount: 1
+          selections:
+            - name: Faction Unit
+              type: unit

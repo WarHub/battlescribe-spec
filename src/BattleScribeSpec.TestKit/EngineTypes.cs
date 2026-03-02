@@ -15,7 +15,8 @@ public record RosterState(
 public record ForceState(
     string Name,
     string? CatalogueId,
-    IReadOnlyList<SelectionState> Selections);
+    IReadOnlyList<SelectionState> Selections,
+    int? AvailableEntryCount = null);
 
 public record SelectionState(
     string Name,

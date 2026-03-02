@@ -65,7 +65,8 @@ public record SelectionEntrySpec(
     InfoGroupSpec[]? InfoGroups = null,
     string Page = "",
     EntryLinkSpec[]? EntryLinks = null,
-    InfoLinkSpec[]? InfoLinks = null);
+    InfoLinkSpec[]? InfoLinks = null,
+    bool Import = true);
 
 public record ForceEntrySpec(
     string Id,
@@ -92,7 +93,8 @@ public record SelectionEntryGroupSpec(
     string DefaultSelectionEntryId = "",
     ConstraintSpec[]? Constraints = null,
     ModifierSpec[]? Modifiers = null,
-    SelectionEntrySpec[]? SelectionEntries = null);
+    SelectionEntrySpec[]? SelectionEntries = null,
+    bool Import = true);
 
 public record CatalogueSpec(
     string Id = "cat-1",
@@ -194,7 +196,8 @@ public record EntryLinkSpec(
     CostSpec[]? Costs = null,
     ConstraintSpec[]? Constraints = null,
     ModifierSpec[]? Modifiers = null,
-    CategoryLinkSpec[]? CategoryLinks = null);
+    CategoryLinkSpec[]? CategoryLinks = null,
+    bool Import = true);
 
 public record InfoLinkSpec(
     string Id,

@@ -61,7 +61,7 @@ public static class ProtocolConverter
 
     static ProtocolSelectionEntry ToProtocol(SelectionEntrySpec se) => new()
     {
-        Id = se.Id, Name = se.Name, Type = se.Type, Hidden = se.Hidden,
+        Id = se.Id, Name = se.Name, Type = se.Type, Hidden = se.Hidden, Import = se.Import,
         Collective = se.Collective, Page = string.IsNullOrEmpty(se.Page) ? null : se.Page,
         Costs = se.Costs?.Select(ToProtocolCostValue).ToList(),
         Constraints = se.Constraints?.Select(ToProtocol).ToList(),
@@ -79,7 +79,7 @@ public static class ProtocolConverter
 
     static ProtocolSelectionEntryGroup ToProtocol(SelectionEntryGroupSpec seg) => new()
     {
-        Id = seg.Id, Name = seg.Name, Hidden = seg.Hidden,
+        Id = seg.Id, Name = seg.Name, Hidden = seg.Hidden, Import = seg.Import,
         DefaultSelectionEntryId = string.IsNullOrEmpty(seg.DefaultSelectionEntryId) ? null : seg.DefaultSelectionEntryId,
         Constraints = seg.Constraints?.Select(ToProtocol).ToList(),
         Modifiers = seg.Modifiers?.Select(ToProtocol).ToList(),
@@ -88,7 +88,7 @@ public static class ProtocolConverter
 
     static ProtocolEntryLink ToProtocol(EntryLinkSpec el) => new()
     {
-        Id = el.Id, Name = el.Name, TargetId = el.TargetId, Type = el.Type, Hidden = el.Hidden,
+        Id = el.Id, Name = el.Name, TargetId = el.TargetId, Type = el.Type, Hidden = el.Hidden, Import = el.Import,
         Costs = el.Costs?.Select(ToProtocolCostValue).ToList(),
         Constraints = el.Constraints?.Select(ToProtocol).ToList(),
         Modifiers = el.Modifiers?.Select(ToProtocol).ToList(),
@@ -226,7 +226,7 @@ public static class ProtocolConverter
         fe.ForceEntries?.Select(FromProtocol).ToArray());
 
     static SelectionEntrySpec FromProtocol(ProtocolSelectionEntry se) => new(
-        Id: se.Id, Name: se.Name, Type: se.Type, Hidden: se.Hidden, Collective: se.Collective,
+        Id: se.Id, Name: se.Name, Type: se.Type, Hidden: se.Hidden, Import: se.Import, Collective: se.Collective,
         Page: se.Page ?? "",
         Costs: se.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
         Constraints: se.Constraints?.Select(FromProtocol).ToArray(),
@@ -242,14 +242,14 @@ public static class ProtocolConverter
         InfoLinks: se.InfoLinks?.Select(FromProtocol).ToArray());
 
     static SelectionEntryGroupSpec FromProtocol(ProtocolSelectionEntryGroup seg) => new(
-        Id: seg.Id, Name: seg.Name, Hidden: seg.Hidden,
+        Id: seg.Id, Name: seg.Name, Hidden: seg.Hidden, Import: seg.Import,
         DefaultSelectionEntryId: seg.DefaultSelectionEntryId ?? "",
         Constraints: seg.Constraints?.Select(FromProtocol).ToArray(),
         Modifiers: seg.Modifiers?.Select(FromProtocol).ToArray(),
         SelectionEntries: seg.SelectionEntries?.Select(FromProtocol).ToArray());
 
     static EntryLinkSpec FromProtocol(ProtocolEntryLink el) => new(
-        Id: el.Id, Name: el.Name, TargetId: el.TargetId, Type: el.Type, Hidden: el.Hidden,
+        Id: el.Id, Name: el.Name, TargetId: el.TargetId, Type: el.Type, Hidden: el.Hidden, Import: el.Import,
         Costs: el.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
         Constraints: el.Constraints?.Select(FromProtocol).ToArray(),
         Modifiers: el.Modifiers?.Select(FromProtocol).ToArray(),
@@ -324,7 +324,8 @@ public static class ProtocolConverter
 
     static ForceState ToForceState(ProtocolForce f) => new(
         f.Name, f.CatalogueId,
-        f.Selections.Select(ToSelectionState).ToList());
+        f.Selections.Select(ToSelectionState).ToList(),
+        f.AvailableEntryCount);
 
     static SelectionState ToSelectionState(ProtocolSelection s) => new(
         s.Name, s.EntryId, s.Type, s.Number, s.Hidden,
@@ -354,6 +355,7 @@ public static class ProtocolConverter
     {
         Name = f.Name, CatalogueId = f.CatalogueId,
         Selections = f.Selections.Select(ToProtocolSelection).ToList(),
+        AvailableEntryCount = f.AvailableEntryCount,
     };
 
     static ProtocolSelection ToProtocolSelection(SelectionState s) => new()

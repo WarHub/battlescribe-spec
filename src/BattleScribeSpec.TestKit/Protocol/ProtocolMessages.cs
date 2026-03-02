@@ -199,6 +199,10 @@ public sealed class ProtocolForce
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CatalogueId { get; set; }
 
+    [JsonPropertyName("availableEntryCount")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? AvailableEntryCount { get; set; }
+
     [JsonPropertyName("selections")]
     public List<ProtocolSelection> Selections { get; set; } = [];
 }
@@ -465,6 +469,9 @@ public sealed class ProtocolSelectionEntry
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
 
+    [JsonPropertyName("import")]
+    public bool Import { get; set; } = true;
+
     [JsonPropertyName("collective")]
     public bool Collective { get; set; }
 
@@ -532,6 +539,9 @@ public sealed class ProtocolSelectionEntryGroup
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
 
+    [JsonPropertyName("import")]
+    public bool Import { get; set; } = true;
+
     [JsonPropertyName("defaultSelectionEntryId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DefaultSelectionEntryId { get; set; }
@@ -565,6 +575,9 @@ public sealed class ProtocolEntryLink
 
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
+
+    [JsonPropertyName("import")]
+    public bool Import { get; set; } = true;
 
     [JsonPropertyName("costs")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
