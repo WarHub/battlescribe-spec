@@ -64,4 +64,5 @@ steps:
       hasValidationErrors: true
       validationErrors:
         - message: must have
+          entryId: se-unit-a
           constraintId: con-min-shared
