@@ -46,3 +46,4 @@ steps:
   - expectedState:
       errors:
         - on: category cat-troops
+          from: se-unit-a/hidden

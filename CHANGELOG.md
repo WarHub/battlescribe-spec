@@ -17,9 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
       from: se-unit-a/con-min-1     # entryId/constraintId
     - on: roster
       from: costLimits/ct-pts       # cost limit pseudo-entry
+    - on: category cat-troops
+      from: se-unit-a/hidden        # hidden entry pseudo-constraint
   ```
 - `errors: []` asserts no validation errors; omitting `errors` skips the check.
-- Cost limit errors use `costLimits/{costTypeId}` as the `from` source.
+- `from` format is `{entryId}/{constraintId}` with reserved pseudo-values:
+  - `costLimits/{costTypeId}` — cost limit errors (pseudo-entry)
+  - `{entryId}/hidden` — hidden entry errors (pseudo-constraint)
 - 9 new spec YAML files for structured validation error assertions:
   `constraint-min-violation-linked`, `constraint-max-violation-linked`,
   `constraint-cost-max-linked`, `constraint-cost-min-linked`,

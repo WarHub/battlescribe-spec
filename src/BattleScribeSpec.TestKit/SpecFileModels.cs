@@ -701,7 +701,9 @@ public sealed class ExpectedValidationErrorDef
 /// <summary>
 /// Structured error assertion using compact "on"/"from" format.
 /// <para>"on" identifies the roster element: "roster", "force", "category cat-troops", "selection se-unit-a"</para>
-/// <para>"from" identifies the source: "entryId/constraintId" or "costLimits/costTypeId"</para>
+/// <para>"from" identifies the source as "{entryId}/{constraintId}" with reserved pseudo-values:</para>
+/// <para>  - "costLimits/{costTypeId}" for cost limit errors (pseudo-entry)</para>
+/// <para>  - "{entryId}/hidden" for hidden entry errors (pseudo-constraint)</para>
 /// <para>"message" is an optional substring check on the error message.</para>
 /// </summary>
 public sealed class ErrorAssertionDef
@@ -716,8 +718,10 @@ public sealed class ErrorAssertionDef
 
     /// <summary>
     /// The source entry and constraint that caused the error.
-    /// Format: "{entryId}/{constraintId}" or "costLimits/{costTypeId}".
-    /// Examples: "se-unit-a/con-min-1", "costLimits/ct-pts".
+    /// Format: "{entryId}/{constraintId}" with reserved pseudo-values:
+    ///   "costLimits/{costTypeId}" for cost limit errors,
+    ///   "{entryId}/hidden" for hidden entry errors.
+    /// Examples: "se-unit-a/con-min-1", "costLimits/ct-pts", "se-unit-a/hidden".
     /// </summary>
     [YamlMember(Alias = "from")]
     public string? From { get; set; }

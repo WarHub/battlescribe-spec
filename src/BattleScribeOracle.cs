@@ -374,6 +374,21 @@ public sealed class BattleScribeOracle : IDisposable
                 (entryId, constraintId) = ResolveEntryFromMessage(message);
             }
 
+            // Detect hidden entry errors: "cannot have any selections of {name} (hidden)"
+            if (entryId is null && message.Contains("(hidden)"))
+            {
+                foreach (var (id, entry) in _entryLookup)
+                {
+                    var entryName = entry.getName();
+                    if (entryName is not null && message.Contains(entryName))
+                    {
+                        entryId = id;
+                        constraintId = "hidden";
+                        break;
+                    }
+                }
+            }
+
             result.Add(new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId));
         }
     }

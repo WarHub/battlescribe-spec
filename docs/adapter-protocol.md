@@ -187,7 +187,7 @@ Each validation error is a structured object with the following fields:
 | `ownerId` | string? | Runtime ID of the owning roster element |
 | `ownerEntryId` | string? | Catalogue entry ID of the owner (for force/category/selection) |
 | `entryId` | string? | ID of the entry whose constraint was violated, or `"costLimits"` for cost limit errors |
-| `constraintId` | string? | ID of the constraint that failed, or the cost type ID for cost limit errors |
+| `constraintId` | string? | ID of the constraint that failed, the cost type ID for cost limit errors, or `"hidden"` for hidden entry errors |
 
 Null fields are omitted from the JSON.
 
@@ -204,6 +204,22 @@ When a roster exceeds a cost limit, the error uses a special convention:
   "ownerType": "roster",
   "entryId": "costLimits",
   "constraintId": "ct-pts"
+}
+```
+
+#### Hidden entry errors
+
+When a hidden entry is selected, the error uses:
+- `entryId` is the hidden entry's ID
+- `constraintId` is `"hidden"` (pseudo-constraint)
+
+```json
+{
+  "message": "Patrol cannot have any selections of Unit A (hidden)",
+  "ownerType": "category",
+  "ownerEntryId": "cat-troops",
+  "entryId": "se-unit-a",
+  "constraintId": "hidden"
 }
 ```
 
