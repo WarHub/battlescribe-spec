@@ -1,0 +1,17 @@
+id: wh40k-10e-create-army
+category: real-world
+description: Create a basic Warhammer 40k 10th Edition roster with a Strike Force
+tags: [wh40k-10e, real-world]
+engines: [newrecruit]
+
+setup:
+  dataSource: "github:BSData/wh40k-10e@v10.14.0"
+
+steps:
+  - action: addForce
+    forceEntryName: "Strike Force"
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: "Strike Force"
