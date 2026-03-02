@@ -1,0 +1,37 @@
+id: publication-on-catalogue
+category: selection
+description: Publications are metadata on catalogue, entries can reference them via page
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    publications:
+      - id: pub-1
+        name: Core Rulebook
+        shortName: CRB
+        publisher: Games Workshop
+    selectionEntries:
+      - id: se-1
+        name: Marine
+        type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine

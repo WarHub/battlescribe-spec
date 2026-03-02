@@ -114,6 +114,9 @@ public sealed class CatalogueDef
 
     [YamlMember(Alias = "catalogueLinks")]
     public List<CatalogueLinkDef>? CatalogueLinks { get; set; }
+
+    [YamlMember(Alias = "publications")]
+    public List<PublicationDef>? Publications { get; set; }
 }
 
 public sealed class CatalogueLinkDef
@@ -129,6 +132,27 @@ public sealed class CatalogueLinkDef
 
     [YamlMember(Alias = "importRootEntries")]
     public bool ImportRootEntries { get; set; } = true;
+}
+
+public sealed class PublicationDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "shortName")]
+    public string ShortName { get; set; } = "";
+
+    [YamlMember(Alias = "publisher")]
+    public string Publisher { get; set; } = "";
+
+    [YamlMember(Alias = "publicationDate")]
+    public string PublicationDate { get; set; } = "";
+
+    [YamlMember(Alias = "publisherUrl")]
+    public string PublisherUrl { get; set; } = "";
 }
 
 public sealed class CostTypeDef

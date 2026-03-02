@@ -585,4 +585,18 @@ public static class JavaModelFactory
         cl.setImportRootEntries(importRootEntries);
         return cl;
     }
+
+    public static Publication CreatePublication(
+        string id, string name, string shortName = "", string publisher = "",
+        string publicationDate = "", string publisherUrl = "")
+    {
+        var pub = new Publication();
+        pub.setId(id);
+        pub.setName(name);
+        if (!string.IsNullOrEmpty(shortName)) pub.setShortName(shortName);
+        if (!string.IsNullOrEmpty(publisher)) pub.setPublisher(publisher);
+        if (!string.IsNullOrEmpty(publicationDate)) pub.setPublicationDate(publicationDate);
+        if (!string.IsNullOrEmpty(publisherUrl)) pub.setPublisherUrl(publisherUrl);
+        return pub;
+    }
 }

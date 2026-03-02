@@ -160,7 +160,9 @@ public static class SpecLoader
             SharedInfoGroups: def.SharedInfoGroups?.Select(ConvertInfoGroup).ToArray(),
             InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray(),
             CatalogueLinks: def.CatalogueLinks?.Select(cl =>
-                new CatalogueLinkSpec(cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries)).ToArray());
+                new CatalogueLinkSpec(cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries)).ToArray(),
+            Publications: def.Publications?.Select(p =>
+                new PublicationSpec(p.Id, p.Name, p.ShortName, p.Publisher, p.PublicationDate, p.PublisherUrl)).ToArray());
     }
 
     private static SelectionEntrySpec ConvertSelectionEntry(SelectionEntryDef def)

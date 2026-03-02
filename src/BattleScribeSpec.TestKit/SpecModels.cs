@@ -107,13 +107,22 @@ public record CatalogueSpec(
     ProfileSpec[]? SharedProfiles = null,
     InfoGroupSpec[]? SharedInfoGroups = null,
     InfoLinkSpec[]? InfoLinks = null,
-    CatalogueLinkSpec[]? CatalogueLinks = null);
+    CatalogueLinkSpec[]? CatalogueLinks = null,
+    PublicationSpec[]? Publications = null);
 
 public record CatalogueLinkSpec(
     string Id,
     string Name,
     string TargetId,
     bool ImportRootEntries = true);
+
+public record PublicationSpec(
+    string Id,
+    string Name,
+    string ShortName = "",
+    string Publisher = "",
+    string PublicationDate = "",
+    string PublisherUrl = "");
 
 public record ConditionGroupSpec(
     string Type,
