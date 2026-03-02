@@ -351,6 +351,38 @@ public sealed class ProtocolCatalogue
     [JsonPropertyName("entryLinks")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolEntryLink>? EntryLinks { get; set; }
+
+    [JsonPropertyName("sharedSelectionEntries")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolSelectionEntry>? SharedSelectionEntries { get; set; }
+
+    [JsonPropertyName("sharedSelectionEntryGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolSelectionEntryGroup>? SharedSelectionEntryGroups { get; set; }
+
+    [JsonPropertyName("sharedRules")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolRule>? SharedRules { get; set; }
+
+    [JsonPropertyName("sharedProfiles")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolProfile>? SharedProfiles { get; set; }
+
+    [JsonPropertyName("sharedInfoGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoGroup>? SharedInfoGroups { get; set; }
+
+    [JsonPropertyName("infoLinks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoLink>? InfoLinks { get; set; }
+
+    [JsonPropertyName("catalogueLinks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolCatalogueLink>? CatalogueLinks { get; set; }
+
+    [JsonPropertyName("publications")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolPublication>? Publications { get; set; }
 }
 
 public sealed class ProtocolCostType
@@ -483,6 +515,10 @@ public sealed class ProtocolSelectionEntry
     [JsonPropertyName("infoGroups")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolInfoGroup>? InfoGroups { get; set; }
+
+    [JsonPropertyName("infoLinks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoLink>? InfoLinks { get; set; }
 }
 
 public sealed class ProtocolSelectionEntryGroup
@@ -811,6 +847,72 @@ public sealed class ProtocolInfoGroup
     [JsonPropertyName("modifiers")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolModifier>? Modifiers { get; set; }
+
+    [JsonPropertyName("infoLinks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoLink>? InfoLinks { get; set; }
+}
+
+public sealed class ProtocolInfoLink
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("targetId")]
+    public string TargetId { get; set; } = "";
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "";
+
+    [JsonPropertyName("hidden")]
+    public bool Hidden { get; set; }
+
+    [JsonPropertyName("modifiers")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolModifier>? Modifiers { get; set; }
+}
+
+public sealed class ProtocolCatalogueLink
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("targetId")]
+    public string TargetId { get; set; } = "";
+
+    [JsonPropertyName("importRootEntries")]
+    public bool ImportRootEntries { get; set; } = true;
+}
+
+public sealed class ProtocolPublication
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("shortName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ShortName { get; set; }
+
+    [JsonPropertyName("publisher")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Publisher { get; set; }
+
+    [JsonPropertyName("publicationDate")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PublicationDate { get; set; }
+
+    [JsonPropertyName("publisherUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PublisherUrl { get; set; }
 }
 
 // ===== Serialization helpers =====

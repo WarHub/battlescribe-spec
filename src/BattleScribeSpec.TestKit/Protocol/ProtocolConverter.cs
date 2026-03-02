@@ -36,6 +36,14 @@ public static class ProtocolConverter
         SelectionEntries = cat.SelectionEntries?.Select(ToProtocol).ToList(),
         SelectionEntryGroups = cat.SelectionEntryGroups?.Select(ToProtocol).ToList(),
         EntryLinks = cat.EntryLinks?.Select(ToProtocol).ToList(),
+        SharedSelectionEntries = cat.SharedSelectionEntries?.Select(ToProtocol).ToList(),
+        SharedSelectionEntryGroups = cat.SharedSelectionEntryGroups?.Select(ToProtocol).ToList(),
+        SharedRules = cat.SharedRules?.Select(ToProtocol).ToList(),
+        SharedProfiles = cat.SharedProfiles?.Select(ToProtocol).ToList(),
+        SharedInfoGroups = cat.SharedInfoGroups?.Select(ToProtocol).ToList(),
+        InfoLinks = cat.InfoLinks?.Select(ToProtocol).ToList(),
+        CatalogueLinks = cat.CatalogueLinks?.Select(ToProtocol).ToList(),
+        Publications = cat.Publications?.Select(ToProtocol).ToList(),
     };
 
     static ProtocolCostType ToProtocol(CostTypeSpec ct) => new()
@@ -66,6 +74,7 @@ public static class ProtocolConverter
         Rules = se.Rules?.Select(ToProtocol).ToList(),
         Profiles = se.Profiles?.Select(ToProtocol).ToList(),
         InfoGroups = se.InfoGroups?.Select(ToProtocol).ToList(),
+        InfoLinks = se.InfoLinks?.Select(ToProtocol).ToList(),
     };
 
     static ProtocolSelectionEntryGroup ToProtocol(SelectionEntryGroupSpec seg) => new()
@@ -158,6 +167,25 @@ public static class ProtocolConverter
         Profiles = ig.Profiles?.Select(ToProtocol).ToList(),
         Rules = ig.Rules?.Select(ToProtocol).ToList(),
         Modifiers = ig.Modifiers?.Select(ToProtocol).ToList(),
+        InfoLinks = ig.InfoLinks?.Select(ToProtocol).ToList(),
+    };
+
+    static ProtocolInfoLink ToProtocol(InfoLinkSpec il) => new()
+    {
+        Id = il.Id, Name = il.Name, TargetId = il.TargetId, Type = il.Type, Hidden = il.Hidden,
+        Modifiers = il.Modifiers?.Select(ToProtocol).ToList(),
+    };
+
+    static ProtocolCatalogueLink ToProtocol(CatalogueLinkSpec cl) => new()
+    {
+        Id = cl.Id, Name = cl.Name, TargetId = cl.TargetId, ImportRootEntries = cl.ImportRootEntries,
+    };
+
+    static ProtocolPublication ToProtocol(PublicationSpec pub) => new()
+    {
+        Id = pub.Id, Name = pub.Name, ShortName = pub.ShortName,
+        Publisher = pub.Publisher, PublicationDate = pub.PublicationDate,
+        PublisherUrl = pub.PublisherUrl,
     };
 
     // ===== Protocol → Spec (adapter side: receiving setup data) =====
@@ -182,7 +210,15 @@ public static class ProtocolConverter
         Id: cat.Id, Name: cat.Name, GameSystemId: cat.GameSystemId,
         SelectionEntries: cat.SelectionEntries?.Select(FromProtocol).ToArray(),
         SelectionEntryGroups: cat.SelectionEntryGroups?.Select(FromProtocol).ToArray(),
-        EntryLinks: cat.EntryLinks?.Select(FromProtocol).ToArray());
+        EntryLinks: cat.EntryLinks?.Select(FromProtocol).ToArray(),
+        SharedSelectionEntries: cat.SharedSelectionEntries?.Select(FromProtocol).ToArray(),
+        SharedSelectionEntryGroups: cat.SharedSelectionEntryGroups?.Select(FromProtocol).ToArray(),
+        SharedRules: cat.SharedRules?.Select(FromProtocol).ToArray(),
+        SharedProfiles: cat.SharedProfiles?.Select(FromProtocol).ToArray(),
+        SharedInfoGroups: cat.SharedInfoGroups?.Select(FromProtocol).ToArray(),
+        InfoLinks: cat.InfoLinks?.Select(FromProtocol).ToArray(),
+        CatalogueLinks: cat.CatalogueLinks?.Select(FromProtocol).ToArray(),
+        Publications: cat.Publications?.Select(FromProtocol).ToArray());
 
     static ForceEntrySpec FromProtocol(ProtocolForceEntry fe) => new(
         fe.Id, fe.Name,
@@ -202,7 +238,8 @@ public static class ProtocolConverter
         Rules: se.Rules?.Select(FromProtocol).ToArray(),
         Profiles: se.Profiles?.Select(FromProtocol).ToArray(),
         InfoGroups: se.InfoGroups?.Select(FromProtocol).ToArray(),
-        EntryLinks: se.EntryLinks?.Select(FromProtocol).ToArray());
+        EntryLinks: se.EntryLinks?.Select(FromProtocol).ToArray(),
+        InfoLinks: se.InfoLinks?.Select(FromProtocol).ToArray());
 
     static SelectionEntryGroupSpec FromProtocol(ProtocolSelectionEntryGroup seg) => new(
         Id: seg.Id, Name: seg.Name, Hidden: seg.Hidden,
@@ -263,7 +300,19 @@ public static class ProtocolConverter
         ig.Id, ig.Name, ig.Hidden,
         ig.Profiles?.Select(FromProtocol).ToArray(),
         ig.Rules?.Select(FromProtocol).ToArray(),
-        ig.Modifiers?.Select(FromProtocol).ToArray());
+        ig.Modifiers?.Select(FromProtocol).ToArray(),
+        ig.InfoLinks?.Select(FromProtocol).ToArray());
+
+    static InfoLinkSpec FromProtocol(ProtocolInfoLink il) => new(
+        il.Id, il.Name, il.TargetId, il.Type, il.Hidden,
+        il.Modifiers?.Select(FromProtocol).ToArray());
+
+    static CatalogueLinkSpec FromProtocol(ProtocolCatalogueLink cl) => new(
+        cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries);
+
+    static PublicationSpec FromProtocol(ProtocolPublication pub) => new(
+        pub.Id, pub.Name, pub.ShortName, pub.Publisher,
+        pub.PublicationDate, pub.PublisherUrl);
 
     // ===== Protocol → Engine state records =====
 
