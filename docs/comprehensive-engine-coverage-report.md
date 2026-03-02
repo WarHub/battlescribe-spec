@@ -2,7 +2,7 @@
 
 Machine-readable coverage matrix: [`specs/coverage-matrix.yaml`](../specs/coverage-matrix.yaml).
 
-Current suite status: **205 YAML specs** across 9 categories, with **351 test cases** (**351 passed, 0 skipped, 0 failed**).
+Current suite status: **215 YAML specs** across 9 categories, with **361 test cases** (**361 passed, 0 skipped, 0 failed**).
 Known limitation tags: **0** (all previously synthetic specs now fully execute).
 
 ---
@@ -14,19 +14,19 @@ Known limitation tags: **0** (all previously synthetic specs now fully execute).
 | condition | 28 |
 | constraint | 20 |
 | cost | 19 |
-| force | 10 |
+| force | 11 |
 | modifier | 48 |
 | refresh | 10 |
 | roster | 9 |
 | scope | 14 |
-| selection | 47 |
-| **Total** | **205** |
+| selection | 55 |
+| **Total** | **215** |
 
 | Test Cases | Passed | Skipped | Failed |
 |------------|-------:|--------:|-------:|
-| 351 | 351 | 0 | 0 |
+| 361 | 361 | 0 | 0 |
 
-Tests break down as: 205 spec conformance tests (1:1 with YAML specs) + 146 infrastructure/unit tests.
+Tests break down as: 215 spec conformance tests (1:1 with YAML specs) + 146 infrastructure/unit tests.
 
 ---
 
@@ -37,7 +37,7 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 | Method | Specs Using | Key Evidence |
 |--------|----------:|--------------|
 | `Setup` | 205 | Every spec (implicit setup path) |
-| `AddForce` | 202 | force-add-single, force-add-multiple, force-nested-basic |
+| `AddForce` | 212 | force-add-single, force-add-multiple, force-nested-basic, force-multi-catalogue-two-forces |
 | `RemoveForce` | 4 | force-remove, force-remove-second, force-add-and-remove-all, refresh-full-lifecycle |
 | `SelectEntry` | 190 | selection-add-unit, selection-with-cost, selection-multiple-entries |
 | `SelectChildEntry` | 8 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
@@ -187,10 +187,10 @@ The following are intentionally outside this conformance suite scope:
 
 | Gap | Status | Description |
 |-----|--------|-------------|
-| **InfoLinks** | ⚠️ Model N/A | InfoLinkSpec does not exist in the data model. EntryLinks serve as proxy for shared entry resolution. Real catalogues use InfoLinks extensively; adding InfoLinkSpec to the model would enable testing. |
+| **InfoLinks** | ✅ 4 specs | `info-link-to-profile`, `info-link-to-rule`, `info-link-to-infogroup`, `info-link-with-modifiers`. Tests shared profile/rule/infoGroup link resolution with modifier support. |
 | **InfoGroups** | ✅ 4 specs | `infogroup-basic`, `infogroup-hidden`, `infogroup-multiple-profiles`, `infogroup-with-modifiers`. Covers basic resolution, hidden filtering, multiple profiles, and modifier application on infoGroup contents. |
-| **Catalogue Links** | ⚠️ Model N/A | CatalogueLinkSpec does not exist in the data model. Only single-catalogue setups are testable. Real catalogues use complex cross-catalogue link chains. |
-| **Publications** | ⚠️ Model N/A | PublicationSpec does not exist in the data model. No behavioral effect on roster editing; informational metadata only. |
+| **Catalogue Links** | ✅ 2 specs | `catalogue-link-import`, `catalogue-link-shared-entry`. Tests cross-catalogue entry import and shared entry resolution through catalogue links. |
+| **Publications** | ✅ 1 spec | `publication-on-catalogue`. Tests publication metadata on catalogue (informational only, no behavioral effect). |
 
 ### HIGH — Features with minimal coverage that are heavily used in real data
 
@@ -198,7 +198,7 @@ The following are intentionally outside this conformance suite scope:
 |-----|--------|----------|
 | **Profile/Rule in selection state** | ✅ 8 specs | `profile-multiple-on-entry`, `profile-hidden`, `profile-inherited-from-link`, `profile-with-multiple-characteristics`, `rule-multiple-on-entry`, `rule-hidden`, `rule-with-page`, plus existing modifier specs. Hidden profiles/rules correctly filtered from state. |
 | **Entry Link edge cases** | ✅ 6 specs | `entry-link-basic`, `entry-link-with-modifier`, `entry-link-to-group`, `entry-link-with-cost`, `entry-link-with-constraint`, `entry-link-cascading-modifiers`. Documented: link costs don't override target, link modifiers tested. |
-| **Shared entry pools** | ⚠️ Model limitation | CatalogueSpec lacks `sharedSelectionEntries`/`sharedRules`/`sharedProfiles`. EntryLinks provide proxy for shared pool resolution. `constraint-shared` and `constraint-shared-deduplication` test shared constraint behavior. |
+| **Shared entry pools** | ✅ 1 spec + model | `shared-entry-via-entry-link` tests shared selection entry resolution through EntryLink. CatalogueSpec now supports `sharedSelectionEntries`, `sharedRules`, `sharedProfiles`, `sharedInfoGroups`. `constraint-shared` and `constraint-shared-deduplication` test shared constraint behavior. |
 | **Nested child selections** | ✅ Expanded | `nested-children-deep` (parent+child cost aggregation), `selection-child-entry`, `selection-child-multiple`, `selection-child-with-cost`, `selection-with-children`, plus 14 other specs using nested entries. |
 | **Forces query field** | ✅ Expanded | `constraint-include-child-forces` (cross-force constraints), `constraint-forces-field`, `scope-forces-field`, `scope-include-child-forces`, `scope-include-child-forces-nested`. |
 
@@ -219,7 +219,7 @@ The following are intentionally outside this conformance suite scope:
 | Gap | Status | Notes |
 |-----|--------|-------|
 | Modifier application order | ✅ `modifier-order-set-then-append` | Verifies set+append ordering produces expected result |
-| `import` attribute | ⚠️ Model N/A | Not in current data model |
+| `import` attribute | ⚠️ Model N/A | Not in current data model. Only remaining model gap. |
 | Default cost limits | ✅ `cost-default-limit-positive` | Verifies positive limit triggers validation error |
 | Entry link to group | ✅ `entry-link-to-group` | Tests EntryLink with type=selectionEntryGroup |
 | Category modifier `add` | ✅ `modifier-category-add` | Tests category addition modifier |
@@ -231,19 +231,20 @@ The following are intentionally outside this conformance suite scope:
 
 ## 8. Real-World Data Coverage
 
-The test suite includes **10 complex real-world roster tests** (`ComplexRealWorldRosterTests.cs`) using wh40k-9e catalogue data. These exercise multi-catalogue scenarios but are bonus tests outside the core 205 YAML spec suite.
-
-> **Note**: 1 real-world test (`Roster10_AeldariAlliedWarhost`) has known intermittent failures due to catalogue switching timing. This is a pre-existing flaky test, not a spec conformance issue.
+The test suite includes **10 complex real-world roster tests** (`ComplexRealWorldRosterTests.cs`) using wh40k-9e catalogue data. These exercise multi-catalogue scenarios and are bonus tests outside the core 215 YAML spec suite. All 10 tests pass consistently.
 
 ### Remaining Model Gaps (Require Code Changes)
 
-These features cannot be tested without extending the spec data model:
+Most gaps from the original report have been addressed:
 
-1. **InfoLinkSpec** — Add to support shared rule/profile/infoGroup link resolution
-2. **CatalogueLinkSpec** — Add to support multi-catalogue import/export testing
-3. **SharedSelectionEntries/SharedRules/SharedProfiles** on CatalogueSpec — Enable shared pool scenarios
-4. **PublicationSpec** — Low priority; informational metadata only
-5. **`import` attribute** on SelectionEntrySpec — Controls editor visibility
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **InfoLinkSpec** | ✅ Implemented | 4 specs covering profile/rule/infoGroup links with modifiers |
+| **CatalogueLinkSpec** | ✅ Implemented | 2 specs covering cross-catalogue import and shared entry resolution |
+| **Shared pools** | ✅ Implemented | CatalogueSpec now has sharedSelectionEntries/Rules/Profiles/InfoGroups |
+| **PublicationSpec** | ✅ Implemented | 1 spec covering catalogue publications |
+| **Multi-catalogue** | ✅ Implemented | `force-multi-catalogue-two-forces` tests multi-catalogue force creation |
+| **`import` attribute** | ⚠️ Not yet | Controls editor visibility of entries. Low priority. |
 
 ### Key Behavioral Findings (Documented in Specs)
 

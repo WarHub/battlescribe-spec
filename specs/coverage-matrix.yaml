@@ -1,11 +1,11 @@
 # BattleScribe Engine Conformance Test Coverage Matrix
-# Current state: 205 specs, 351 tests, all passing
-# Last updated: 2025-07-18
+# Current state: 215 specs, 361 tests, all passing
+# Last updated: 2026-03-02
 
 summary:
-  total_specs: 205
-  total_tests: 351  # 205 spec conformance + 146 infrastructure/unit
-  passed: 351
+  total_specs: 215
+  total_tests: 361  # 215 spec conformance + 146 infrastructure/unit
+  passed: 361
   skipped: 0
   failed: 0
   categories_covered: 9
@@ -89,12 +89,13 @@ spec_inventory:
       - cost-zero-value
       - cost-zero
   force:
-    count: 10
+    count: 11
     specs:
       - force-add-and-remove-all
       - force-add-multiple
       - force-add-single
       - force-empty-has-no-selections
+      - force-multi-catalogue-two-forces
       - force-multiple-types
       - force-nested-basic
       - force-remove-second
@@ -195,8 +196,10 @@ spec_inventory:
       - scope-roster
       - scope-self
   selection:
-    count: 47
+    count: 55
     specs:
+      - catalogue-link-import
+      - catalogue-link-shared-entry
       - collective-with-constraint
       - entry-group-with-modifiers
       - entry-link-basic
@@ -205,6 +208,10 @@ spec_inventory:
       - entry-link-with-cost
       - entry-link-with-modifier
       - hidden-cascade-to-children
+      - info-link-to-infogroup
+      - info-link-to-profile
+      - info-link-to-rule
+      - info-link-with-modifiers
       - infogroup-basic
       - infogroup-hidden
       - infogroup-multiple-profiles
@@ -213,6 +220,7 @@ spec_inventory:
       - profile-inherited-from-link
       - profile-multiple-on-entry
       - profile-with-multiple-characteristics
+      - publication-on-catalogue
       - rule-hidden
       - rule-multiple-on-entry
       - rule-with-page
@@ -244,18 +252,19 @@ spec_inventory:
       - selection-upgrade-type
       - selection-with-children
       - selection-with-cost
+      - shared-entry-via-entry-link
 
 # Engine API coverage: how many specs exercise each API operation
 # "total_usage" = number of specs calling this action; "representative_specs" = key examples
 engine_api:
   Setup:
     status: covered
-    total_usage: 205  # implicitly called by every spec
+    total_usage: 215  # implicitly called by every spec
     representative_specs: [roster-create-empty, roster-with-cost-types, roster-no-cost-types, roster-game-system-id]
   AddForce:
     status: covered
-    total_usage: 202
-    representative_specs: [force-add-single, force-add-multiple, force-multiple-types, force-nested-basic]
+    total_usage: 212
+    representative_specs: [force-add-single, force-add-multiple, force-multiple-types, force-nested-basic, force-multi-catalogue-two-forces]
   RemoveForce:
     status: covered
     total_usage: 4
@@ -586,6 +595,31 @@ infrastructure_coverage:
   force_level_entries:
     status: covered
     specs: [selection-force-level-entry]
+  info_links:
+    status: covered
+    total_usage: 4
+    specs: [info-link-to-profile, info-link-to-rule, info-link-to-infogroup, info-link-with-modifiers]
+    note: InfoLinks resolve shared profiles, rules, and infoGroups by targetId
+  catalogue_links:
+    status: covered
+    total_usage: 2
+    specs: [catalogue-link-import, catalogue-link-shared-entry]
+    note: Cross-catalogue import and shared entry resolution
+  publications:
+    status: covered
+    total_usage: 1
+    specs: [publication-on-catalogue]
+    note: Informational metadata, no behavioral effect
+  multi_catalogue:
+    status: covered
+    total_usage: 1
+    specs: [force-multi-catalogue-two-forces]
+    note: Multiple catalogues with per-force catalogue association
+  shared_pools:
+    status: covered
+    total_usage: 1
+    specs: [shared-entry-via-entry-link]
+    note: Shared selection entries on catalogue resolved via EntryLinks
   hidden_entries:
     status: covered
     specs: [selection-hidden-entry, constraint-hidden-enforcement]
