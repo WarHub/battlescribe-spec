@@ -620,6 +620,15 @@ public sealed class StepDef
     [YamlMember(Alias = "forceEntryIndex")]
     public int? ForceEntryIndex { get; set; }
 
+    [YamlMember(Alias = "entryName")]
+    public string? EntryName { get; set; }
+
+    [YamlMember(Alias = "forceEntryName")]
+    public string? ForceEntryName { get; set; }
+
+    [YamlMember(Alias = "childEntryName")]
+    public string? ChildEntryName { get; set; }
+
     [YamlMember(Alias = "forceIndex")]
     public int? ForceIndex { get; set; }
 

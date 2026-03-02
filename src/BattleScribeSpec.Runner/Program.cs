@@ -11,6 +11,7 @@ string? filter = null;
 string? tag = null;
 string? engineFilter = null;
 string? reportPath = null;
+string? matrixDir = null;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -37,6 +38,9 @@ for (var i = 0; i < args.Length; i++)
         case "--report" when i + 1 < args.Length:
             reportPath = args[++i];
             break;
+        case "--matrix" when i + 1 < args.Length:
+            matrixDir = args[++i];
+            break;
         case "--help" or "-h":
             PrintUsage();
             return 0;
@@ -45,6 +49,26 @@ for (var i = 0; i < args.Length; i++)
             PrintUsage();
             return 1;
     }
+}
+
+if (!string.IsNullOrEmpty(matrixDir))
+{
+    if (!Directory.Exists(matrixDir))
+    {
+        Console.Error.WriteLine($"Error: matrix directory not found: {matrixDir}");
+        return 1;
+    }
+
+    var files = Directory.GetFiles(matrixDir, "*-conformance.json");
+    if (files.Length == 0)
+    {
+        Console.Error.WriteLine($"Error: no *-conformance.json files found in {matrixDir}");
+        return 1;
+    }
+
+    var reports = files.Select(CompatibilityMatrix.LoadReport).ToArray();
+    Console.WriteLine(CompatibilityMatrix.GenerateMarkdown(reports));
+    return 0;
 }
 
 if (string.IsNullOrEmpty(adapter))
@@ -266,10 +290,12 @@ void PrintUsage()
         bs-spec-runner — BattleScribe conformance spec test runner
 
         Usage: bs-spec-runner --adapter <path> [options]
+               bs-spec-runner --matrix <dir>
 
         Options:
           --adapter <path>    Path to adapter executable (required)
                               Use "dotnet:path.dll" for .NET adapters
+          --matrix <dir>      Read *-conformance.json files and output markdown matrix
           --specs <dir>       Path to specs directory (default: embedded specs)
           --output <format>   Output format: summary (default), json, github-actions
           --filter <pattern>  Only run specs matching pattern

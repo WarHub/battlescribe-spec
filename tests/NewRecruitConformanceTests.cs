@@ -58,7 +58,7 @@ public sealed class NewRecruitConformanceTests : IAsyncLifetime
         }
     }
 
-    [Theory]
+    [SkippableTheory]
     [MemberData(nameof(AllSpecs))]
     public void NewRecruitEngine(string specPath, string specName)
     {

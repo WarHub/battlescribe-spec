@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
@@ -42,3 +43,51 @@ jobs:
             --adapter "dotnet:src/BattleScribeSpec.ReferenceAdapter/bin/Debug/net10.0/bs-reference-adapter.dll" \
             --specs specs \
             --output github-actions
+
+  nr-conformance:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[nr-test]')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone wham
+        run: git clone https://github.com/WarHub/wham.git ../wham
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Playwright browsers
+        run: dotnet build src/BattleScribeSpec.NewRecruit && pwsh src/BattleScribeSpec.NewRecruit/bin/Debug/net10.0/playwright.ps1 install chromium
+
+      - name: Build
+        run: dotnet build
+
+      - name: Run NR smoke tests
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "NewRecruitSmokeTests" --logger GitHubActions
+        env:
+          NR_ENGINE_URL: https://newrecruit.eu
+          NR_HEADLESS: true
+
+      - name: Run NR conformance tests
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "NewRecruitConformanceTests" --logger GitHubActions
+        env:
+          NR_ENGINE_URL: https://newrecruit.eu
+          NR_HEADLESS: true
+
+      - name: Generate conformance report
+        run: |
+          dotnet src/BattleScribeSpec.Runner/bin/Debug/net10.0/bs-spec-runner.dll \
+            --adapter "dotnet:src/BattleScribeSpec.ReferenceAdapter/bin/Debug/net10.0/bs-reference-adapter.dll" \
+            --specs specs \
+            --engine newrecruit \
+            --output github-actions \
+            --report artifacts/nr-conformance-report.json
+
+      - name: Upload conformance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: nr-conformance-report
+          path: artifacts/nr-conformance-report.json

@@ -1,0 +1,112 @@
+using System.Diagnostics;
+using System.Text.RegularExpressions;
+
+namespace BattleScribeSpec;
+
+public sealed class DataSourceResolver
+{
+    private static readonly Regex ShaRegex = new("^[0-9a-fA-F]{40}$", RegexOptions.Compiled);
+    private readonly string _cacheDir;
+
+    public DataSourceResolver(string? cacheDir = null)
+    {
+        _cacheDir = cacheDir
+            ?? Environment.GetEnvironmentVariable("BSSPEC_DATASOURCE_CACHE_DIR")
+            ?? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".battlescribe-spec",
+                "datasource-cache");
+    }
+
+    public string Resolve(string dataSourceUri) => Resolve(DataSourceUri.Parse(dataSourceUri));
+
+    public string Resolve(DataSourceUri uri) => uri.Provider switch
+    {
+        "github" => ResolveGithub(uri),
+        "local" => ResolveLocal(uri),
+        _ => throw new NotSupportedException($"Unsupported data source provider: {uri.Provider}")
+    };
+
+    public string? FindGameSystem(string resolvedDir, string gameSystemName) =>
+        FindByName(resolvedDir, "*.gst", gameSystemName);
+
+    public string? FindCatalogue(string resolvedDir, string catalogueName) =>
+        FindByName(resolvedDir, "*.cat", catalogueName);
+
+    private string ResolveLocal(DataSourceUri uri)
+    {
+        if (string.IsNullOrWhiteSpace(uri.Repo))
+            throw new DirectoryNotFoundException("Local data source path is empty.");
+
+        if (!Directory.Exists(uri.Repo))
+            throw new DirectoryNotFoundException($"Local data source directory not found: {uri.Repo}");
+
+        return uri.Repo;
+    }
+
+    private string ResolveGithub(DataSourceUri uri)
+    {
+        var cachePath = Path.Combine(
+            [_cacheDir, .. uri.CacheKey.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)]);
+
+        if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
+            return cachePath;
+
+        if (Directory.Exists(cachePath))
+            Directory.Delete(cachePath, recursive: true);
+
+        var parent = Path.GetDirectoryName(cachePath);
+        if (!string.IsNullOrWhiteSpace(parent))
+            Directory.CreateDirectory(parent);
+
+        var repoUrl = $"https://github.com/{uri.Org}/{uri.Repo}.git";
+        if (uri.Ref is not null && ShaRegex.IsMatch(uri.Ref))
+        {
+            RunGit(["clone", repoUrl, cachePath]);
+            RunGit(["-C", cachePath, "checkout", uri.Ref]);
+        }
+        else if (!string.IsNullOrWhiteSpace(uri.Ref))
+        {
+            RunGit(["clone", "--depth", "1", "--branch", uri.Ref, repoUrl, cachePath]);
+        }
+        else
+        {
+            RunGit(["clone", "--depth", "1", repoUrl, cachePath]);
+        }
+
+        return cachePath;
+    }
+
+    private static string? FindByName(string resolvedDir, string pattern, string name)
+    {
+        if (!Directory.Exists(resolvedDir))
+            throw new DirectoryNotFoundException($"Resolved directory not found: {resolvedDir}");
+
+        return Directory
+            .EnumerateFiles(resolvedDir, pattern, SearchOption.AllDirectories)
+            .FirstOrDefault(file => Path.GetFileName(file).Contains(name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void RunGit(IEnumerable<string> arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start git process.");
+        var stdOut = process.StandardOutput.ReadToEnd();
+        var stdErr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git command failed ({process.ExitCode}): {stdErr}{stdOut}");
+    }
+}
