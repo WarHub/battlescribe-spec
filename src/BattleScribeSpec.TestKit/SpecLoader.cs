@@ -158,7 +158,9 @@ public static class SpecLoader
             SharedRules: def.SharedRules?.Select(ConvertRule).ToArray(),
             SharedProfiles: def.SharedProfiles?.Select(ConvertProfile).ToArray(),
             SharedInfoGroups: def.SharedInfoGroups?.Select(ConvertInfoGroup).ToArray(),
-            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray());
+            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray(),
+            CatalogueLinks: def.CatalogueLinks?.Select(cl =>
+                new CatalogueLinkSpec(cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries)).ToArray());
     }
 
     private static SelectionEntrySpec ConvertSelectionEntry(SelectionEntryDef def)

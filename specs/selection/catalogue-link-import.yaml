@@ -1,0 +1,46 @@
+id: catalogue-link-import
+category: selection
+description: CatalogueLink imports entries from a linked catalogue
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-base
+      name: Base Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-base-1
+          name: Common Unit
+          type: unit
+    - id: cat-faction
+      name: Faction Catalogue
+      gameSystemId: test-gs
+      catalogueLinks:
+        - id: cl-1
+          name: Base Catalogue
+          targetId: cat-base
+          importRootEntries: true
+      selectionEntries:
+        - id: se-faction-1
+          name: Faction Unit
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+    catalogueIndex: 1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Patrol
+          selections:
+            - name: Faction Unit

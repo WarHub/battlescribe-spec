@@ -106,7 +106,14 @@ public record CatalogueSpec(
     RuleSpec[]? SharedRules = null,
     ProfileSpec[]? SharedProfiles = null,
     InfoGroupSpec[]? SharedInfoGroups = null,
-    InfoLinkSpec[]? InfoLinks = null);
+    InfoLinkSpec[]? InfoLinks = null,
+    CatalogueLinkSpec[]? CatalogueLinks = null);
+
+public record CatalogueLinkSpec(
+    string Id,
+    string Name,
+    string TargetId,
+    bool ImportRootEntries = true);
 
 public record ConditionGroupSpec(
     string Type,

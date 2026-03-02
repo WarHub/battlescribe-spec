@@ -951,6 +951,11 @@ public sealed class BattleScribeOracle : IDisposable
                 foreach (var il in catSpec.InfoLinks)
                     cat.getInfoLinks().add(BuildInfoLink(il));
 
+            if (catSpec.CatalogueLinks != null)
+                foreach (var clSpec in catSpec.CatalogueLinks)
+                    cat.getCatalogueLinks().add(
+                        JavaModelFactory.CreateCatalogueLink(clSpec.Id, clSpec.Name, clSpec.TargetId, clSpec.ImportRootEntries));
+
             catalogueDict[catSpec.Id] = cat;
             _setupCatalogues.Add(cat);
 

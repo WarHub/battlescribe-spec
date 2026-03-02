@@ -1,0 +1,44 @@
+id: catalogue-link-shared-entry
+category: selection
+description: CatalogueLink allows entry links to target shared entries from linked catalogue
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-base
+      name: Base Catalogue
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-se-1
+          name: Generic Weapon
+          type: upgrade
+    - id: cat-faction
+      name: Faction Catalogue
+      gameSystemId: test-gs
+      catalogueLinks:
+        - id: cl-1
+          name: Base Catalogue
+          targetId: cat-base
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+    catalogueIndex: 1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine

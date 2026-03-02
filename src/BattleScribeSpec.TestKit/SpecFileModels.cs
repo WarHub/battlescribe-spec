@@ -111,6 +111,24 @@ public sealed class CatalogueDef
 
     [YamlMember(Alias = "infoLinks")]
     public List<InfoLinkDef>? InfoLinks { get; set; }
+
+    [YamlMember(Alias = "catalogueLinks")]
+    public List<CatalogueLinkDef>? CatalogueLinks { get; set; }
+}
+
+public sealed class CatalogueLinkDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "targetId")]
+    public string TargetId { get; set; } = "";
+
+    [YamlMember(Alias = "importRootEntries")]
+    public bool ImportRootEntries { get; set; } = true;
 }
 
 public sealed class CostTypeDef

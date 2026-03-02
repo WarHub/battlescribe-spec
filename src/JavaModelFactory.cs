@@ -574,4 +574,15 @@ public static class JavaModelFactory
                 il.getModifiers().add(m);
         return il;
     }
+
+    public static CatalogueLink CreateCatalogueLink(
+        string id, string name, string targetId, bool importRootEntries = true)
+    {
+        var cl = new CatalogueLink();
+        cl.setId(id);
+        cl.setName(name);
+        cl.setTargetId(targetId);
+        cl.setImportRootEntries(importRootEntries);
+        return cl;
+    }
 }
