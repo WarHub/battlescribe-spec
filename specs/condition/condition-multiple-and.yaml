@@ -9,35 +9,35 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-trigger-a
-        name: Trigger A
-        type: unit
-      - id: se-trigger-b
-        name: Trigger B
-        type: unit
-      - id: se-target
-        name: Target
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Both Present
-            conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: force
-                childId: se-trigger-a
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: force
-                childId: se-trigger-b
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-trigger-a
+          name: Trigger A
+          type: unit
+        - id: se-trigger-b
+          name: Trigger B
+          type: unit
+        - id: se-target
+          name: Target
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Both Present
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: force
+                  childId: se-trigger-a
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: force
+                  childId: se-trigger-b
 
 steps:
   - action: addForce

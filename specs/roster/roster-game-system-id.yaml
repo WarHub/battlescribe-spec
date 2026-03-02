@@ -9,10 +9,10 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: my-custom-gs-id
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: my-custom-gs-id
 
 steps:
   - expectedState:

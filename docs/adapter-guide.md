@@ -55,13 +55,13 @@ for scanner.Scan() {
 
 ### 2. Handle the `setup` Command
 
-The setup command provides the full game system, catalogue, and roster definition.
+The setup command provides the full game system, catalogues, and roster definition.
 Your adapter must initialize the engine with this data and respond with a
 `setupResult`.
 
 ```json
 // Input
-{"type":"setup","version":"1.0","gameSystem":{...},"catalogue":{...},"catalogues":[...]}
+{"type":"setup","version":"1.0","gameSystem":{...},"catalogues":[...]}
 
 // Output
 {"type":"setupResult","errors":[]}

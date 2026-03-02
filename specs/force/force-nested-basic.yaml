@@ -13,14 +13,14 @@ setup:
         forceEntries:
           - id: fe-detach
             name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Squad
-        type: unit
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
 
 steps:
   - action: addForce

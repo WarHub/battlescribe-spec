@@ -14,27 +14,27 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-shared
-        name: Base Weapon
-        type: upgrade
-        costs:
-          - name: pts
-            typeId: pts
-            value: 10
-    entryLinks:
-      - id: el-1
-        name: Enhanced Weapon
-        targetId: se-shared
-        type: selectionEntry
-        modifiers:
-          - type: set
-            field: name
-            value: Enhanced Weapon
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-shared
+          name: Base Weapon
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+      entryLinks:
+        - id: el-1
+          name: Enhanced Weapon
+          targetId: se-shared
+          type: selectionEntry
+          modifiers:
+            - type: set
+              field: name
+              value: Enhanced Weapon
 
 steps:
   - action: addForce

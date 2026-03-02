@@ -10,29 +10,29 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-parent
-        name: Host Unit
-        type: unit
-    selectionEntryGroups:
-      - id: seg-shared
-        name: Shared Weapon Options
-        selectionEntries:
-          - id: se-blade
-            name: Power Blade
-            type: upgrade
-          - id: se-maul
-            name: Thunder Maul
-            type: upgrade
-    entryLinks:
-      - id: el-group-1
-        name: Weapon Options Link
-        targetId: seg-shared
-        type: selectionEntryGroup
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Host Unit
+          type: unit
+      selectionEntryGroups:
+        - id: seg-shared
+          name: Shared Weapon Options
+          selectionEntries:
+            - id: se-blade
+              name: Power Blade
+              type: upgrade
+            - id: se-maul
+              name: Thunder Maul
+              type: upgrade
+      entryLinks:
+        - id: el-group-1
+          name: Weapon Options Link
+          targetId: seg-shared
+          type: selectionEntryGroup
 
 steps:
   - action: addForce

@@ -29,7 +29,7 @@ public abstract class ProtocolResponse
 // ===== Runner → Adapter Commands =====
 
 /// <summary>
-/// Initialize the engine with game system and catalogue data.
+/// Initialize the engine with game system and catalogues data.
 /// </summary>
 public sealed class SetupCommand : ProtocolCommand
 {
@@ -42,12 +42,8 @@ public sealed class SetupCommand : ProtocolCommand
     [JsonPropertyName("gameSystem")]
     public ProtocolGameSystem GameSystem { get; set; } = new();
 
-    [JsonPropertyName("catalogue")]
-    public ProtocolCatalogue Catalogue { get; set; } = new();
-
     [JsonPropertyName("catalogues")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<ProtocolCatalogue>? Catalogues { get; set; }
+    public List<ProtocolCatalogue> Catalogues { get; set; } = [];
 }
 
 /// <summary>

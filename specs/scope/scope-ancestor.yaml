@@ -9,27 +9,27 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-parent
-        name: Parent Unit
-        type: unit
-        selectionEntries:
-          - id: se-child
-            name: Equipment
-            type: upgrade
-            modifiers:
-              - type: set
-                field: name
-                value: Modified Equipment
-                conditions:
-                  - type: atLeast
-                    value: 1
-                    field: selections
-                    scope: ancestor
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Parent Unit
+          type: unit
+          selectionEntries:
+            - id: se-child
+              name: Equipment
+              type: upgrade
+              modifiers:
+                - type: set
+                  field: name
+                  value: Modified Equipment
+                  conditions:
+                    - type: atLeast
+                      value: 1
+                      field: selections
+                      scope: ancestor
 
 steps:
   - action: addForce

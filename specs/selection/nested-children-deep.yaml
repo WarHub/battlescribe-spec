@@ -14,26 +14,26 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-squad
-        name: Squad
-        type: unit
-        costs:
-          - name: pts
-            typeId: pts
-            value: 50
-        selectionEntries:
-          - id: se-weapon
-            name: Heavy Weapon
-            type: upgrade
-            costs:
-              - name: pts
-                typeId: pts
-                value: 15
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+          selectionEntries:
+            - id: se-weapon
+              name: Heavy Weapon
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 15
 
 steps:
   - action: addForce

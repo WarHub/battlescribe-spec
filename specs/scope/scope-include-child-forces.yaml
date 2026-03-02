@@ -10,24 +10,24 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit
-        name: Unit A
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Child Forces Included
-            conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: force
-                includeChildForces: true
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Child Forces Included
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: force
+                  includeChildForces: true
 
 steps:
   - action: addForce

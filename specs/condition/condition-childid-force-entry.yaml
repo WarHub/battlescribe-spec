@@ -10,24 +10,24 @@ setup:
         name: Army
       - id: fe-detach
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-watcher
-        name: Watcher
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Detach Found
-            conditions:
-              - type: atLeast
-                value: 1
-                field: forces
-                scope: roster
-                childId: fe-detach
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-watcher
+          name: Watcher
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Detach Found
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: forces
+                  scope: roster
+                  childId: fe-detach
 
 steps:
   - action: addForce

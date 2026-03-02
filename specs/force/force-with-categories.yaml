@@ -16,6 +16,10 @@ setup:
     forceEntries:
       - id: fe-1
         name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
 
 steps:
   - action: addForce

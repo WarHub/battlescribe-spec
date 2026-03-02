@@ -9,27 +9,27 @@ setup:
     forceEntries:
       - id: fe-1
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    sharedRules:
-      - id: shared-rule-1
-        name: Duty Eternal
-        description: Original
-    selectionEntries:
-      - id: se-1
-        name: Marine
-        type: unit
-        infoLinks:
-          - id: il-1
-            name: Duty Eternal
-            targetId: shared-rule-1
-            type: rule
-            modifiers:
-              - type: set
-                field: description
-                value: Modified by InfoLink
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      sharedRules:
+        - id: shared-rule-1
+          name: Duty Eternal
+          description: Original
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          infoLinks:
+            - id: il-1
+              name: Duty Eternal
+              targetId: shared-rule-1
+              type: rule
+              modifiers:
+                - type: set
+                  field: description
+                  value: Modified by InfoLink
 
 steps:
   - action: addForce

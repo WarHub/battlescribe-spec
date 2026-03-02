@@ -9,27 +9,27 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit
-        name: Unit A
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: None Present
-            conditions:
-              - type: equalTo
-                value: 0
-                field: selections
-                scope: force
-                childId: se-other
-      - id: se-other
-        name: Unit B
-        type: unit
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: None Present
+              conditions:
+                - type: equalTo
+                  value: 0
+                  field: selections
+                  scope: force
+                  childId: se-other
+        - id: se-other
+          name: Unit B
+          type: unit
 
 steps:
   - action: addForce

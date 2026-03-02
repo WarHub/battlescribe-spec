@@ -16,27 +16,27 @@ setup:
         characteristicTypes:
           - id: char-wounds
             name: Wounds
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Marine
-        type: unit
-        profiles:
-          - id: prof-1
-            name: Marine Stats
-            typeId: stat-type
-            typeName: Unit Stats
-            characteristics:
-              - name: Wounds
-                typeId: char-wounds
-                value: "2"
-            modifiers:
-              - type: set
-                field: char-wounds
-                value: "3"
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          profiles:
+            - id: prof-1
+              name: Marine Stats
+              typeId: stat-type
+              typeName: Unit Stats
+              characteristics:
+                - name: Wounds
+                  typeId: char-wounds
+                  value: "2"
+              modifiers:
+                - type: set
+                  field: char-wounds
+                  value: "3"
 
 steps:
   - action: addForce

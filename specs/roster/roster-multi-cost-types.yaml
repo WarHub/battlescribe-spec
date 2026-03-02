@@ -19,24 +19,24 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: HQ Choice
-        type: unit
-        costs:
-          - name: Points
-            typeId: pts
-            value: 100
-          - name: Power Level
-            typeId: pl
-            value: 5
-          - name: Command Points
-            typeId: cp
-            value: -1
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: HQ Choice
+          type: unit
+          costs:
+            - name: Points
+              typeId: pts
+              value: 100
+            - name: Power Level
+              typeId: pl
+              value: 5
+            - name: Command Points
+              typeId: cp
+              value: -1
 
 steps:
   - action: addForce

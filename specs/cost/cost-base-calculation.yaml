@@ -13,18 +13,18 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit-a
-        name: Unit A
-        type: unit
-        costs:
-          - name: Points
-            typeId: pts
-            value: 200
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          costs:
+            - name: Points
+              typeId: pts
+              value: 200
 
 steps:
   - action: addForce

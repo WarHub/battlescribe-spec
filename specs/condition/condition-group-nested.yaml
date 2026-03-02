@@ -8,39 +8,39 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Soldier
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Elite Soldier
-            conditionGroups:
-              - type: and
-                conditions:
-                  - type: atLeast
-                    value: 1
-                    field: selections
-                    scope: parent
-                    childId: se-1
-                conditionGroups:
-                  - type: or
-                    conditions:
-                      - type: greaterThan
-                        value: 5
-                        field: selections
-                        scope: parent
-                        childId: se-1
-                      - type: lessThan
-                        value: 2
-                        field: selections
-                        scope: parent
-                        childId: se-1
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Soldier
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Elite Soldier
+              conditionGroups:
+                - type: and
+                  conditions:
+                    - type: atLeast
+                      value: 1
+                      field: selections
+                      scope: parent
+                      childId: se-1
+                  conditionGroups:
+                    - type: or
+                      conditions:
+                        - type: greaterThan
+                          value: 5
+                          field: selections
+                          scope: parent
+                          childId: se-1
+                        - type: lessThan
+                          value: 2
+                          field: selections
+                          scope: parent
+                          childId: se-1
 
 steps:
   - action: addForce

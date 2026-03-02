@@ -9,34 +9,34 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-parent
-        name: Warrior
-        type: unit
-        selectionEntryGroups:
-          - id: seg-gear
-            name: Gear Options
-            modifiers:
-              - type: set
-                field: name
-                value: Special Gear
-            constraints:
-              - id: con-max-1
-                type: max
-                value: 1
-                field: selections
-                scope: parent
-            selectionEntries:
-              - id: se-shield
-                name: Shield
-                type: upgrade
-              - id: se-helm
-                name: Helm
-                type: upgrade
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Warrior
+          type: unit
+          selectionEntryGroups:
+            - id: seg-gear
+              name: Gear Options
+              modifiers:
+                - type: set
+                  field: name
+                  value: Special Gear
+              constraints:
+                - id: con-max-1
+                  type: max
+                  value: 1
+                  field: selections
+                  scope: parent
+              selectionEntries:
+                - id: se-shield
+                  name: Shield
+                  type: upgrade
+                - id: se-helm
+                  name: Helm
+                  type: upgrade
 
 steps:
   - action: addForce

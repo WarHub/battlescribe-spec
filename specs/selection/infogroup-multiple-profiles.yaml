@@ -25,54 +25,54 @@ setup:
         characteristicTypes:
           - id: char-desc
             name: Description
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Commander
-        type: unit
-        infoGroups:
-          - id: ig-gear
-            name: Commander Gear
-            profiles:
-              - id: prof-sword
-                name: Power Sword
-                typeId: pt-weapon
-                typeName: Weapon Stats
-                characteristics:
-                  - name: Range
-                    typeId: char-range
-                    value: Melee
-                  - name: Strength
-                    typeId: char-str
-                    value: "5"
-                  - name: AP
-                    typeId: char-ap
-                    value: "-3"
-              - id: prof-pistol
-                name: Plasma Pistol
-                typeId: pt-weapon
-                typeName: Weapon Stats
-                characteristics:
-                  - name: Range
-                    typeId: char-range
-                    value: "12"
-                  - name: Strength
-                    typeId: char-str
-                    value: "7"
-                  - name: AP
-                    typeId: char-ap
-                    value: "-3"
-              - id: prof-aura
-                name: Command Aura
-                typeId: pt-ability
-                typeName: Ability
-                characteristics:
-                  - name: Description
-                    typeId: char-desc
-                    value: Re-roll hit rolls of 1 for friendly units within 6 inches
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Commander
+          type: unit
+          infoGroups:
+            - id: ig-gear
+              name: Commander Gear
+              profiles:
+                - id: prof-sword
+                  name: Power Sword
+                  typeId: pt-weapon
+                  typeName: Weapon Stats
+                  characteristics:
+                    - name: Range
+                      typeId: char-range
+                      value: Melee
+                    - name: Strength
+                      typeId: char-str
+                      value: "5"
+                    - name: AP
+                      typeId: char-ap
+                      value: "-3"
+                - id: prof-pistol
+                  name: Plasma Pistol
+                  typeId: pt-weapon
+                  typeName: Weapon Stats
+                  characteristics:
+                    - name: Range
+                      typeId: char-range
+                      value: "12"
+                    - name: Strength
+                      typeId: char-str
+                      value: "7"
+                    - name: AP
+                      typeId: char-ap
+                      value: "-3"
+                - id: prof-aura
+                  name: Command Aura
+                  typeId: pt-ability
+                  typeName: Ability
+                  characteristics:
+                    - name: Description
+                      typeId: char-desc
+                      value: Re-roll hit rolls of 1 for friendly units within 6 inches
 
 steps:
   - action: addForce

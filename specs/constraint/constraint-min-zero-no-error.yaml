@@ -9,20 +9,20 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit-a
-        name: Unit A
-        type: unit
-        constraints:
-          - id: con-min-0
-            type: min
-            value: 0
-            field: selections
-            scope: parent
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          constraints:
+            - id: con-min-0
+              type: min
+              value: 0
+              field: selections
+              scope: parent
 
 steps:
   - action: addForce

@@ -8,27 +8,27 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-watcher
-        name: Watcher
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Group Found
-            conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: force
-                childId: seg-weapons
-      - id: se-unit
-        name: Unit
-        type: unit
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-watcher
+          name: Watcher
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Group Found
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: force
+                  childId: seg-weapons
+        - id: se-unit
+          name: Unit
+          type: unit
 
 steps:
   - action: addForce

@@ -427,9 +427,10 @@ public sealed class BattleScribeOracle : IDisposable
         var forces = GetForces();
         if (forces.Count == 0)
             throw new InvalidOperationException("No forces available. Call AddForceByIndex first.");
-        if (_setupSelectionEntries.Count == 0)
-            throw new InvalidOperationException("No selection entries configured. Use SetupWithPatrolAndUnit.");
-        var selections = SelectEntry(forces[0], _setupSelectionEntries[0]);
+        var entries = GetEntriesForForce(0);
+        if (entries.Count == 0)
+            throw new InvalidOperationException("No selection entries available for the force.");
+        var selections = SelectEntry(forces[0], entries[0]);
         return selections.Count;
     }
 
@@ -460,7 +461,6 @@ public sealed class BattleScribeOracle : IDisposable
 
     /// <summary>
     /// Get the selection entries available for a given force, based on its catalogue.
-    /// Falls back to the flat list for backward compatibility.
     /// </summary>
     private List<SelectionEntry> GetEntriesForForce(int forceIndex)
     {
@@ -470,7 +470,8 @@ public sealed class BattleScribeOracle : IDisposable
             if (catIdx < _perCatalogueEntries.Count)
                 return _perCatalogueEntries[catIdx];
         }
-        return _setupSelectionEntries;
+        throw new InvalidOperationException(
+            $"No catalogue mapping found for force {forceIndex}. Force must be added via AddForceByIndex.");
     }
 
     /// <summary>
@@ -1089,10 +1090,9 @@ public sealed class BattleScribeOracle : IDisposable
                 }
             _perCatalogueEntries.Add(catEntries);
 
-            // Add to flat lists for backward compat
+            // Index direct entries and shared entries for lookup by ID.
             if (selectionEntries != null)
             {
-                _setupSelectionEntries.AddRange(selectionEntries);
                 foreach (var se in selectionEntries)
                     IndexEntries(se);
             }
@@ -1101,7 +1101,7 @@ public sealed class BattleScribeOracle : IDisposable
                     IndexEntries(se);
         }
 
-        // Primary catalogue is the first one (backward compat)
+        // Default active catalogue is the first loaded catalogue.
         _setupCatalogue = _setupCatalogues.Count > 0 ? _setupCatalogues[0] : null;
 
         _setupForceEntries.Clear();

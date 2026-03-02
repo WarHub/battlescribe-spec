@@ -18,23 +18,23 @@ setup:
             targetId: cat-elite
             name: Elites
             primary: false
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Veteran Squad
-        type: unit
-        categoryLinks:
-          - id: cl-1
-            targetId: cat-elite
-            name: Elites
-            primary: false
-        modifiers:
-          - type: remove
-            field: category
-            value: cat-elite
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Veteran Squad
+          type: unit
+          categoryLinks:
+            - id: cl-1
+              targetId: cat-elite
+              name: Elites
+              primary: false
+          modifiers:
+            - type: remove
+              field: category
+              value: cat-elite
 
 steps:
   - action: addForce

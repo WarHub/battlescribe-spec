@@ -18,33 +18,33 @@ setup:
             name: Range
           - id: char-strength
             name: Strength
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Warrior
-        type: unit
-        infoGroups:
-          - id: ig-1
-            name: Warrior Info
-            profiles:
-              - id: prof-1
-                name: Bolter
-                typeId: pt-weapon
-                typeName: Weapon Stats
-                characteristics:
-                  - name: Range
-                    typeId: char-range
-                    value: "24"
-                  - name: Strength
-                    typeId: char-strength
-                    value: "4"
-            rules:
-              - id: rule-1
-                name: Rapid Fire
-                description: May fire twice at half range
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Warrior
+          type: unit
+          infoGroups:
+            - id: ig-1
+              name: Warrior Info
+              profiles:
+                - id: prof-1
+                  name: Bolter
+                  typeId: pt-weapon
+                  typeName: Weapon Stats
+                  characteristics:
+                    - name: Range
+                      typeId: char-range
+                      value: "24"
+                    - name: Strength
+                      typeId: char-strength
+                      value: "4"
+              rules:
+                - id: rule-1
+                  name: Rapid Fire
+                  description: May fire twice at half range
 
 steps:
   - action: addForce

@@ -9,18 +9,18 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit-a
-        name: Original Name
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Modified Name
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Original Name
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Modified Name
 
 steps:
   - action: addForce

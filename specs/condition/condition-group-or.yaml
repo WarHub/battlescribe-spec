@@ -8,31 +8,31 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Fighter
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Active Fighter
-            conditionGroups:
-              - type: or
-                conditions:
-                  - type: atLeast
-                    value: 1
-                    field: selections
-                    scope: parent
-                    childId: se-1
-                  - type: atLeast
-                    value: 10
-                    field: selections
-                    scope: parent
-                    childId: se-1
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Fighter
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Active Fighter
+              conditionGroups:
+                - type: or
+                  conditions:
+                    - type: atLeast
+                      value: 1
+                      field: selections
+                      scope: parent
+                      childId: se-1
+                    - type: atLeast
+                      value: 10
+                      field: selections
+                      scope: parent
+                      childId: se-1
 
 steps:
   - action: addForce

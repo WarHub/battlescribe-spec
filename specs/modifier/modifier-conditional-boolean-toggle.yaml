@@ -9,28 +9,28 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-trigger
-        name: Trigger Unit
-        type: unit
-      - id: se-target
-        name: Target Unit
-        type: unit
-        hidden: true
-        modifiers:
-          - type: set
-            field: hidden
-            value: "false"
-            conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: force
-                childId: se-trigger
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-trigger
+          name: Trigger Unit
+          type: unit
+        - id: se-target
+          name: Target Unit
+          type: unit
+          hidden: true
+          modifiers:
+            - type: set
+              field: hidden
+              value: "false"
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: force
+                  childId: se-trigger
 
 steps:
   - action: addForce

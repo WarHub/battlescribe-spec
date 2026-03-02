@@ -12,21 +12,21 @@ setup:
         forceEntries:
           - id: fe-detach
             name: Sub-Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Squad
-        type: unit
-        constraints:
-          - id: con-1
-            type: max
-            value: 2
-            field: selections
-            scope: force
-            includeChildForces: true
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          constraints:
+            - id: con-1
+              type: max
+              value: 2
+              field: selections
+              scope: force
+              includeChildForces: true
 
 steps:
   - action: addForce

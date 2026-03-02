@@ -9,21 +9,21 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-parent
-        name: Command Squad
-        type: unit
-        selectionEntries:
-          - id: se-child-1
-            name: Sergeant
-            type: model
-          - id: se-child-2
-            name: Medic
-            type: model
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Command Squad
+          type: unit
+          selectionEntries:
+            - id: se-child-1
+              name: Sergeant
+              type: model
+            - id: se-child-2
+              name: Medic
+              type: model
 
 steps:
   - action: addForce
