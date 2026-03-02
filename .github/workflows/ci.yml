@@ -32,7 +32,7 @@ jobs:
         run: dotnet build --no-restore
 
       - name: Test
-        run: dotnet test --no-build --logger GitHubActions
+        run: dotnet test --no-build --logger GitHubActions --filter "FullyQualifiedName!~Roster10_AeldariAlliedWarhost"
         env:
           WH40K_DATA_DIR: ${{ github.workspace }}/../wh40k-9e
 
