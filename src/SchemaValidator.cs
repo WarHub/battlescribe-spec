@@ -22,10 +22,11 @@ public static class SchemaValidator
     {
         var schemaSet = new XmlSchemaSet();
         var catalogueXsd = Path.Combine(SchemaDirectory, "Catalogue.xsd");
-        if (File.Exists(catalogueXsd))
-        {
-            schemaSet.Add(null, catalogueXsd);
-        }
+        if (!File.Exists(catalogueXsd))
+            throw new FileNotFoundException(
+                $"BattleScribe schema file not found: {catalogueXsd}. Set {nameof(SchemaDirectory)} before validation.");
+
+        schemaSet.Add(null, catalogueXsd);
         schemaSet.Compile();
         return schemaSet;
     }

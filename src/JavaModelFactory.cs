@@ -63,7 +63,9 @@ public static class JavaModelFactory
         ct.setName(name);
         ct.setDefaultCostLimit(defaultCostLimit);
         ct.setHidden(hidden);
-        ct.GetType().GetMethod("setLimit")?.Invoke(ct, [limit]);
+        var setLimit = ct.GetType().GetMethod("setLimit")
+            ?? throw new MissingMethodException(ct.GetType().FullName, "setLimit");
+        setLimit.Invoke(ct, [limit]);
         return ct;
     }
 

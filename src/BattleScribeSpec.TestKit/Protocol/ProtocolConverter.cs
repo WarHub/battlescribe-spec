@@ -7,12 +7,18 @@ public static class ProtocolConverter
 {
     // ===== Spec → Protocol (runner side: sending setup data) =====
 
-    public static SetupCommand ToSetupCommand(GameSystemSpec gs, CatalogueSpec[] catalogues) => new()
+    public static SetupCommand ToSetupCommand(GameSystemSpec gs, CatalogueSpec[] catalogues)
     {
-        GameSystem = ToProtocol(gs),
-        Catalogue = ToProtocol(catalogues[0]),
-        Catalogues = catalogues.Length > 1 ? catalogues.Select(ToProtocol).ToList() : null,
-    };
+        if (catalogues.Length == 0)
+            throw new ArgumentException("At least one catalogue is required for setup.", nameof(catalogues));
+
+        return new SetupCommand
+        {
+            GameSystem = ToProtocol(gs),
+            Catalogue = ToProtocol(catalogues[0]),
+            Catalogues = catalogues.Length > 1 ? catalogues.Select(ToProtocol).ToList() : null,
+        };
+    }
 
     public static ProtocolGameSystem ToProtocol(GameSystemSpec gs) => new()
     {

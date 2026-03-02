@@ -8,7 +8,7 @@ COPY src/BattleScribeSpec.csproj src/
 COPY src/BattleScribeSpec.ReferenceAdapter/BattleScribeSpec.ReferenceAdapter.csproj src/BattleScribeSpec.ReferenceAdapter/
 
 # Copy IKVM JARs needed at restore/build time
-COPY src/*.jar src/
+COPY lib/*.jar lib/
 RUN dotnet restore src/BattleScribeSpec.ReferenceAdapter/BattleScribeSpec.ReferenceAdapter.csproj
 
 # Copy all source
