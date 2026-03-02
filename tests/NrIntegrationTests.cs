@@ -11,34 +11,25 @@ namespace BattleScribeSpec.Tests;
 /// Skipped unless NR_ENGINE_URL is set.
 /// </summary>
 [Collection("NewRecruit")]
-public sealed class NrIntegrationTests : IAsyncLifetime
+public sealed class NrIntegrationTests
 {
     private readonly ITestOutputHelper _output;
-    private NewRecruitRosterEngine? _engine;
+    private readonly NewRecruitFixture _fixture;
 
-    public NrIntegrationTests(ITestOutputHelper output) => _output = output;
-
-    public async Task InitializeAsync()
+    public NrIntegrationTests(ITestOutputHelper output, NewRecruitFixture fixture)
     {
-        var baseUrl = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
-        if (string.IsNullOrEmpty(baseUrl)) return;
-        var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
-        _engine = await NewRecruitRosterEngine.CreateAsync(baseUrl, headless);
-    }
-
-    public async Task DisposeAsync()
-    {
-        _engine?.Dispose();
+        _output = output;
+        _fixture = fixture;
     }
 
     [SkippableFact]
     public void Setup_CreatesRosterWithForce()
     {
-        Skip.If(_engine is null, "NR_ENGINE_URL not set");
+        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = new GameSystemSpec(Name: "Age of Sigmar 4.0");
         var cat = new CatalogueSpec(Name: "Beasts of Chaos [LEGENDS]");
-        var errors = _engine!.Setup(gs, [cat]);
+        var errors = _fixture.Engine!.Setup(gs, [cat]);
 
         _output.WriteLine($"Setup errors: [{string.Join(", ", errors)}]");
         Assert.Empty(errors);
@@ -46,7 +37,7 @@ public sealed class NrIntegrationTests : IAsyncLifetime
         // Small delay to let Pinia store settle
         Thread.Sleep(1000);
 
-        var state = _engine.GetRosterState();
+        var state = _fixture.Engine.GetRosterState();
         _output.WriteLine($"Roster: '{state.Name}', Forces: {state.Forces.Count}");
         foreach (var err in state.ValidationErrors)
             _output.WriteLine($"  Validation: {err}");
@@ -57,14 +48,14 @@ public sealed class NrIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public void SelectEntry_AddsSelection()
     {
-        Skip.If(_engine is null, "NR_ENGINE_URL not set");
+        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = new GameSystemSpec(Name: "Age of Sigmar 4.0");
         var cat = new CatalogueSpec(Name: "Beasts of Chaos [LEGENDS]");
-        var errors = _engine!.Setup(gs, [cat]);
+        var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
-        var stateBefore = _engine.GetRosterState();
+        var stateBefore = _fixture.Engine.GetRosterState();
         var selsBefore = stateBefore.Forces[0].Selections.Count;
         _output.WriteLine($"Before SelectEntry: {selsBefore} selections");
         foreach (var sel in stateBefore.Forces[0].Selections)
@@ -75,7 +66,7 @@ public sealed class NrIntegrationTests : IAsyncLifetime
         // This test verifies the call doesn't throw
         try
         {
-            _engine.SelectEntry(0, 0);
+            _fixture.Engine.SelectEntry(0, 0);
             _output.WriteLine("SelectEntry(0, 0) succeeded");
         }
         catch (Exception ex)
@@ -83,7 +74,7 @@ public sealed class NrIntegrationTests : IAsyncLifetime
             _output.WriteLine($"SelectEntry(0, 0) threw: {ex.Message}");
         }
 
-        var stateAfter = _engine.GetRosterState();
+        var stateAfter = _fixture.Engine.GetRosterState();
         var selsAfter = stateAfter.Forces[0].Selections.Count;
         _output.WriteLine($"After SelectEntry: {selsAfter} selections");
 
@@ -94,17 +85,17 @@ public sealed class NrIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public void GetRosterState_ReturnsSelectionDetails()
     {
-        Skip.If(_engine is null, "NR_ENGINE_URL not set");
+        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = new GameSystemSpec(Name: "Age of Sigmar 4.0");
         var cat = new CatalogueSpec(Name: "Beasts of Chaos [LEGENDS]");
-        var errors = _engine!.Setup(gs, [cat]);
+        var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
         // Select an entry to have a non-default selection
-        _engine.SelectEntry(0, 0);
+        _fixture.Engine.SelectEntry(0, 0);
 
-        var state = _engine.GetRosterState();
+        var state = _fixture.Engine.GetRosterState();
         Assert.NotEmpty(state.Forces);
 
         var force = state.Forces[0];
@@ -124,14 +115,14 @@ public sealed class NrIntegrationTests : IAsyncLifetime
     [SkippableFact]
     public void GetValidationErrors_ReturnsErrors()
     {
-        Skip.If(_engine is null, "NR_ENGINE_URL not set");
+        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = new GameSystemSpec(Name: "Age of Sigmar 4.0");
         var cat = new CatalogueSpec(Name: "Beasts of Chaos [LEGENDS]");
-        var errors = _engine!.Setup(gs, [cat]);
+        var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
-        var validationErrors = _engine.GetValidationErrors();
+        var validationErrors = _fixture.Engine.GetValidationErrors();
         _output.WriteLine($"Validation errors: {validationErrors.Count}");
         foreach (var err in validationErrors)
             _output.WriteLine($"  - {err}");

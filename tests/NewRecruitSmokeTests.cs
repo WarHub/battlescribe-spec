@@ -11,39 +11,21 @@ namespace BattleScribeSpec.Tests;
 /// Skipped when NR_ENGINE_URL is not set.
 /// </summary>
 [Collection("NewRecruit")]
-public sealed class NewRecruitSmokeTests : IAsyncLifetime
+public sealed class NewRecruitSmokeTests
 {
     private readonly ITestOutputHelper _output;
-    private NewRecruitRosterEngine? _engine;
-    private string? _baseUrl;
+    private readonly NewRecruitFixture _fixture;
 
-    public NewRecruitSmokeTests(ITestOutputHelper output)
+    public NewRecruitSmokeTests(ITestOutputHelper output, NewRecruitFixture fixture)
     {
         _output = output;
-    }
-
-    public async Task InitializeAsync()
-    {
-        _baseUrl = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
-        if (string.IsNullOrEmpty(_baseUrl))
-            return;
-
-        var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
-        _output.WriteLine($"Creating NR engine: {_baseUrl} (headless={headless})");
-        _engine = await NewRecruitRosterEngine.CreateAsync(_baseUrl, headless);
-    }
-
-    public Task DisposeAsync()
-    {
-        _engine?.Dispose();
-        _engine = null;
-        return Task.CompletedTask;
+        _fixture = fixture;
     }
 
     [SkippableFact]
     public void Smoke_Setup_CreatesRosterWithNoErrors()
     {
-        Skip.If(string.IsNullOrEmpty(_baseUrl), "NR_ENGINE_URL not set");
+        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = new GameSystemSpec(
             Id: "smoke-gs",
@@ -79,7 +61,7 @@ public sealed class NewRecruitSmokeTests : IAsyncLifetime
             ]);
 
         _output.WriteLine("Calling Setup...");
-        var errors = _engine!.Setup(gs, [cat]);
+        var errors = _fixture.Engine!.Setup(gs, [cat]);
 
         foreach (var err in errors)
             _output.WriteLine($"  Setup error: {err}");
@@ -91,7 +73,7 @@ public sealed class NewRecruitSmokeTests : IAsyncLifetime
     [SkippableFact]
     public void Smoke_AddForceAndReadState()
     {
-        Skip.If(string.IsNullOrEmpty(_baseUrl), "NR_ENGINE_URL not set");
+        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = new GameSystemSpec(
             Id: "smoke-gs2",
@@ -122,14 +104,14 @@ public sealed class NewRecruitSmokeTests : IAsyncLifetime
                     Costs: [new CostSpec(Name: "pts", TypeId: "pts", Value: 100)])
             ]);
 
-        var errors = _engine!.Setup(gs, [cat]);
+        var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
         _output.WriteLine("Adding force...");
-        _engine.AddForce(0);
+        _fixture.Engine.AddForce(0);
 
         _output.WriteLine("Reading roster state...");
-        var state = _engine.GetRosterState();
+        var state = _fixture.Engine.GetRosterState();
 
         _output.WriteLine($"Roster: name='{state.Name}', forces={state.Forces.Count}, costs={state.Costs.Count}");
         foreach (var force in state.Forces)
@@ -145,7 +127,7 @@ public sealed class NewRecruitSmokeTests : IAsyncLifetime
     [SkippableFact]
     public void Smoke_RunSimpleSpec()
     {
-        Skip.If(string.IsNullOrEmpty(_baseUrl), "NR_ENGINE_URL not set");
+        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
         // Run the simplest existing spec against NR to validate the full pipeline
         var specsDir = SpecLoader.FindSpecsDirectory();
@@ -170,7 +152,7 @@ public sealed class NewRecruitSmokeTests : IAsyncLifetime
                 continue;
             }
 
-            var runner = new SpecRunner(_engine!);
+            var runner = new SpecRunner(_fixture.Engine!);
             var result = runner.Run(spec);
 
             _output.WriteLine($"  Result: {(result.Passed ? "PASS" : "FAIL")}");

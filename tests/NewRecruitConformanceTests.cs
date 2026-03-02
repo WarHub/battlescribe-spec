@@ -18,33 +18,17 @@ namespace BattleScribeSpec.Tests;
 /// are still run but don't fail the suite. This allows tracking conformance progress.
 /// </summary>
 [Collection("NewRecruit")]
-public sealed class NewRecruitConformanceTests : IAsyncLifetime
+public sealed class NewRecruitConformanceTests
 {
     private readonly ITestOutputHelper _output;
-    private NewRecruitRosterEngine? _engine;
-    private ExpectedFailures? _expectedFailures;
+    private readonly NewRecruitFixture _fixture;
+    private readonly ExpectedFailures? _expectedFailures;
 
-    public NewRecruitConformanceTests(ITestOutputHelper output)
+    public NewRecruitConformanceTests(ITestOutputHelper output, NewRecruitFixture fixture)
     {
         _output = output;
-    }
-
-    public async Task InitializeAsync()
-    {
-        var baseUrl = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
-        if (string.IsNullOrEmpty(baseUrl))
-            return;
-
-        var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
-        _engine = await NewRecruitRosterEngine.CreateAsync(baseUrl, headless);
-        _expectedFailures = ExpectedFailures.Load("newrecruit");
-    }
-
-    public Task DisposeAsync()
-    {
-        _engine?.Dispose();
-        _engine = null;
-        return Task.CompletedTask;
+        _fixture = fixture;
+        _expectedFailures = fixture.Available ? ExpectedFailures.Load("newrecruit") : null;
     }
 
     public static IEnumerable<object[]> AllSpecs()
@@ -62,8 +46,7 @@ public sealed class NewRecruitConformanceTests : IAsyncLifetime
     [MemberData(nameof(AllSpecs))]
     public void NewRecruitEngine(string specPath, string specName)
     {
-        var baseUrl = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
-        Skip.If(string.IsNullOrEmpty(baseUrl),
+        Skip.If(!_fixture.Available,
             "NR_ENGINE_URL not set — skipping New Recruit conformance tests");
 
         var spec = SpecLoader.Load(specPath);
@@ -75,10 +58,18 @@ public sealed class NewRecruitConformanceTests : IAsyncLifetime
             return;
         }
 
+        // Skip specs that use inline data (no dataSource) — NR adapter can only load
+        // real-world data from NR's library, not synthetic inline game system definitions.
+        if (string.IsNullOrEmpty(spec.Setup.DataSource))
+        {
+            _output.WriteLine($"Skipping spec: {specName} — no dataSource (NR requires real-world data)");
+            return;
+        }
+
         _output.WriteLine($"Running spec: {specName} — {spec.Description}");
 
-        Assert.NotNull(_engine);
-        var runner = new SpecRunner(_engine);
+        var engine = _fixture.Engine!;
+        var runner = new SpecRunner(engine);
         var result = runner.Run(spec);
 
         if (!result.Passed)
