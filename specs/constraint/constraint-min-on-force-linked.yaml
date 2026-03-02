@@ -52,5 +52,6 @@ steps:
       hasValidationErrors: true
       validationErrors:
         - message: must have
+          ownerType: force
           entryId: se-unit-a
           constraintId: con-min-force

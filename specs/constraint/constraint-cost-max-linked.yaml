@@ -60,5 +60,7 @@ steps:
       hasValidationErrors: true
       validationErrors:
         - message: too much
+          ownerType: category
+          ownerEntryId: cat-troops
           entryId: se-unit-a
           constraintId: con-cost-max

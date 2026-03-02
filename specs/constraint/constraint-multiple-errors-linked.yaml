@@ -67,7 +67,13 @@ steps:
   - expectedState:
       hasValidationErrors: true
       validationErrors:
-        - entryId: se-unit-a
+        - message: must have
+          ownerType: category
+          ownerEntryId: cat-troops
+          entryId: se-unit-a
           constraintId: con-min-troops
-        - entryId: se-hq
+        - message: must have
+          ownerType: category
+          ownerEntryId: cat-hq
+          entryId: se-hq
           constraintId: con-min-hq

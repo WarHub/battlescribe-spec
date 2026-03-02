@@ -47,3 +47,5 @@ steps:
       hasValidationErrors: true
       validationErrors:
         - message: hidden
+          ownerType: category
+          ownerEntryId: cat-troops
