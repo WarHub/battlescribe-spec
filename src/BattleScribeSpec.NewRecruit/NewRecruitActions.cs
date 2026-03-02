@@ -16,11 +16,8 @@ namespace BattleScribeSpec.NewRecruit;
 /// </summary>
 public static class NewRecruitActions
 {
-    private const string GetArmy =
-        "document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army";
-
-    private const string GetBook =
-        "document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.book";
+    private const string GetArmy = "window.__bsspec?.army";
+    private const string GetBook = "window.__bsspec?.book";
 
     /// <summary>
     /// Add a force to the roster by force entry index.
@@ -31,11 +28,11 @@ public static class NewRecruitActions
         var error = await page.EvaluateAsync<string?>("""
             ({forceEntryIndex}) => {
                 try {
-                    const list = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList();
-                    if (!list) return 'No current list';
-                    const army = list.army;
-                    const book = list.book;
-                    if (!army || !book) return 'No army or book on list';
+                    const spec = window.__bsspec;
+                    if (!spec) return 'No spec state — was Setup called?';
+                    const army = spec.army;
+                    const book = spec.book;
+                    if (!army || !book) return 'No army or book';
 
                     const forces = book.getForces();
                     if (forceEntryIndex >= forces.length) return `Force entry index ${forceEntryIndex} out of range (${forces.length} available)`;
@@ -60,7 +57,7 @@ public static class NewRecruitActions
         var error = await page.EvaluateAsync<string?>("""
             (forceIndex) => {
                 try {
-                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
                     const forces = army.getForces();
@@ -85,7 +82,7 @@ public static class NewRecruitActions
         var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, entryIndex}) => {
                 try {
-                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
                     const forces = army.getForces();
@@ -118,7 +115,7 @@ public static class NewRecruitActions
         var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, selectionIndex, childEntryIndex}) => {
                 try {
-                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
                     const forces = army.getForces();
@@ -153,7 +150,7 @@ public static class NewRecruitActions
         var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, selectionIndex}) => {
                 try {
-                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
                     const forces = army.getForces();
@@ -185,7 +182,7 @@ public static class NewRecruitActions
         var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, entryIndex, count}) => {
                 try {
-                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
                     const forces = army.getForces();
@@ -212,7 +209,7 @@ public static class NewRecruitActions
         var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, selectionIndex}) => {
                 try {
-                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
                     const forces = army.getForces();
@@ -244,7 +241,7 @@ public static class NewRecruitActions
         var error = await page.EvaluateAsync<string?>("""
             ({costTypeId, value}) => {
                 try {
-                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
                     // Try setMaxCosts method first

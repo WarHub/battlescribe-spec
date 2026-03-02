@@ -45,11 +45,55 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         {
             // Navigate to /app and wait for systems to load
             await _browser.NavigateToAppAsync();
-            await _browser.Page.WaitForTimeoutAsync(2000);
+            await _browser.Page.WaitForTimeoutAsync(3000);
 
-            // Select system by name, load book by catalogue name, create roster + list
-            var setupResult = await _browser.Page.EvaluateAsync<string?>($$"""
-                async ({systemName, catalogueName}) => {
+            // Step 1: Click the matching system label via Playwright UI
+            // Programmatic selectSystem() doesn't fully initialize the reactive state.
+            var systemName = gameSystem.Name;
+            var systemLabels = _browser.Page.Locator("label.system-label");
+            var count = await systemLabels.CountAsync();
+            bool systemFound = false;
+
+            for (int i = 0; i < count; i++)
+            {
+                var text = await systemLabels.Nth(i).InnerTextAsync();
+                if (text.Contains(systemName, StringComparison.OrdinalIgnoreCase) ||
+                    systemName.Contains(text, StringComparison.OrdinalIgnoreCase))
+                {
+                    await systemLabels.Nth(i).ClickAsync();
+                    systemFound = true;
+                    break;
+                }
+            }
+
+            if (!systemFound)
+            {
+                // Try exact match first, then click first available
+                var exactLabel = _browser.Page.Locator($"label.system-label:has-text('{systemName}')");
+                if (await exactLabel.CountAsync() > 0)
+                {
+                    await exactLabel.First.ClickAsync();
+                    systemFound = true;
+                }
+                else if (count > 0)
+                {
+                    errors.Add($"System '{systemName}' not found in NR UI. Clicking first available.");
+                    await systemLabels.First.ClickAsync();
+                    systemFound = true;
+                }
+                else
+                {
+                    errors.Add($"No systems found in NR UI");
+                    return errors;
+                }
+            }
+
+            await _browser.Page.WaitForTimeoutAsync(3000);
+
+            // Step 2: Create list via Pinia API (system is now fully loaded via UI click)
+            var catalogueName = catalogues.FirstOrDefault()?.Name ?? "";
+            var setupResult = await _browser.Page.EvaluateAsync<string?>("""
+                async (catalogueName) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
@@ -58,19 +102,10 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return 'Required stores not found';
 
-                        // Step 1: Select matching system from NR library
-                        const systems = sysStore.systems || [];
-                        let sys = systems.find(s => s.name === systemName);
-                        if (!sys) {
-                            // Try partial match
-                            sys = systems.find(s => s.name.includes(systemName) || systemName.includes(s.name));
-                        }
-                        if (!sys) return 'System not found in NR library: ' + systemName + '. Available: ' + systems.map(s => s.name).slice(0, 10).join(', ');
+                        const sys = sysStore._selectedSystem;
+                        if (!sys) return 'No selected system after click';
 
-                        // Select the system (triggers book loading)
-                        await sysStore.selectSystem(sys);
-
-                        // Step 2: Find matching playable book
+                        // Find matching playable book
                         const playableBooks = sys.books?.array?.filter(b => b.playable) || [];
                         if (!playableBooks.length) return 'No playable books for system: ' + sys.name;
 
@@ -80,17 +115,25 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         }
                         if (!selectedBook) selectedBook = playableBooks[0];
 
-                        // Step 3: Load book data
+                        // Load book data
                         const bookData = await sys.getBook(selectedBook.id);
                         if (!bookData) return 'Failed to load book data for: ' + selectedBook.name;
 
-                        // Step 4: Create roster
+                        // Create roster
                         const costs = bookData.getCosts();
                         const roster = bookData.createRoster(costs);
                         if (!roster) return 'Failed to create roster';
                         roster.setCustomName('Spec Test');
 
-                        // Step 5: Build row metadata and add list
+                        // Insert a force
+                        const bookForces = bookData.getForces();
+                        const visibleForces = bookForces.filter(f => f.hidden !== true);
+                        const force = visibleForces[0] || bookForces[0];
+                        if (!force) return 'No forces available. bookForces.length=' + bookForces.length;
+
+                        roster.insertForce(bookData, force.id);
+
+                        // Build row metadata and add list
                         const row = {
                             list_key: 'spec_' + Date.now(),
                             name: 'Spec Test',
@@ -106,12 +149,16 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         };
 
                         await listsStore.addList({row, army: roster, book: bookData});
+
+                        // Save references globally — Pinia store doesn't preserve army/book between evaluations
+                        window.__bsspec = { army: roster, book: bookData, row };
+
                         return null; // success
                     } catch(e) {
                         return 'Setup error: ' + e.message;
                     }
                 }
-                """, new { systemName = gameSystem.Name, catalogueName = catalogues.FirstOrDefault()?.Name ?? "" });
+                """, catalogueName);
 
             if (setupResult != null)
                 errors.Add(setupResult);

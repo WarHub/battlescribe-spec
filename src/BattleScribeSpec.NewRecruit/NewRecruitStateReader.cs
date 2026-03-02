@@ -16,44 +16,43 @@ namespace BattleScribeSpec.NewRecruit;
 /// </summary>
 public static class NewRecruitStateReader
 {
+    private static readonly System.Text.Json.JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
     /// <summary>
     /// Read the current roster state from NR's reactive store.
     /// </summary>
     public static async Task<RosterState> ReadRosterStateAsync(IPage page)
     {
-        var state = await page.EvaluateAsync<NrRosterSnapshot>("""
+        // Return JSON string to avoid Playwright's type coercion issues with nested records
+        var json = await page.EvaluateAsync<string>("""
             (() => {
                 const empty = { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
 
-                const app = document.querySelector('#__nuxt')?.__vue_app__;
-                if (!app) return empty;
+                // Read from global reference saved during Setup
+                const spec = window.__bsspec;
+                if (!spec) return JSON.stringify({...empty, validationErrors: ['window.__bsspec not set — was Setup called?']});
 
-                const pinia = app.config.globalProperties.$pinia;
-                if (!pinia) return empty;
-
-                const lists = pinia._s.get('lists');
-                if (!lists) return empty;
-
-                const list = lists.getCurrentList();
-                if (!list) return empty;
-
-                const army = list.army;
-                if (!army) return empty;
+                const army = spec.army;
+                if (army === null || army === undefined) return JSON.stringify({...empty, validationErrors: ['army is null']});
 
                 try {
-                    return {
-                        name: army.getCustomName?.() || army.getName?.() || list.row?.name || '',
-                        gameSystemId: list.row?.bsid_system || '',
+                    const result = {
+                        name: army.getCustomName?.() || army.getName?.() || spec.row?.name || '',
+                        gameSystemId: spec.row?.bsid_system || '',
                         forces: extractForces(army),
                         costs: extractTotalCosts(army),
                         validationErrors: extractErrors(army)
                     };
+                    return JSON.stringify(result);
                 } catch(e) {
-                    return { ...empty, validationErrors: ['State read error: ' + e.message] };
+                    return JSON.stringify({ ...empty, validationErrors: ['State read error: ' + e.message] });
                 }
 
                 function extractForces(army) {
                     const forces = army.getForces?.() || [];
+                    if (!Array.isArray(forces)) return [];
                     return forces.map(f => ({
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
@@ -139,7 +138,9 @@ public static class NewRecruitStateReader
             })()
             """);
 
-        return MapToRosterState(state);
+        var snapshot = System.Text.Json.JsonSerializer.Deserialize<NrRosterSnapshot>(json, _jsonOptions)
+            ?? new NrRosterSnapshot();
+        return MapToRosterState(snapshot);
     }
 
     /// <summary>
