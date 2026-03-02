@@ -241,12 +241,127 @@ public sealed class BattleScribeOracle : IDisposable
 
     /// <summary>
     /// Get all validation errors for the current roster with structured entry links.
+    /// Walks the roster tree per-element (like BattleScribe's rosterManager.d()),
+    /// using validationErrorIds for shared entries and engine entry data for non-shared.
     /// </summary>
     public List<ValidationErrorState> GetValidationErrors()
     {
         EnsureInitialized();
-        var javaErrors = _engine.q();
-        return JavaListToValidationErrors(javaErrors);
+        var result = new List<ValidationErrorState>();
+        var roster = _engine.a();
+        // Roster-level errors (e.g., cost limit)
+        CollectElementErrors(roster, "roster", roster.getId(), null, result);
+        // Walk forces → categories → selections
+        foreach (var force in JavaListToList<Force>(roster.getForces()))
+        {
+            CollectElementErrors(force, "force", force.getId(), force.getEntryId(), result);
+            foreach (var category in JavaListToList<Category>(force.getCategories()))
+            {
+                CollectElementErrors(category, "category", category.getId(), category.getEntryId(), result);
+            }
+            foreach (var selection in JavaListToList<Selection>(force.getSelections()))
+            {
+                CollectSelectionErrors(selection, result);
+            }
+        }
+        return result;
+    }
+
+    private void CollectSelectionErrors(Selection selection, List<ValidationErrorState> result)
+    {
+        CollectElementErrors(selection, "selection", selection.getId(), selection.getEntryId(), result);
+        foreach (var child in JavaListToList<Selection>(selection.getSelections()))
+        {
+            CollectSelectionErrors(child, result);
+        }
+    }
+
+    private void CollectElementErrors(
+        BaseRosterElement element, string ownerType, string? ownerId, string? ownerEntryId,
+        List<ValidationErrorState> result)
+    {
+        var errors = element.getValidationErrors();
+        if (errors is null || errors.size() == 0) return;
+
+        // Build a lookup of error IDs on this element (shared entries only)
+        // Format: ownerId::entryId::constraintId
+        var errorIdMap = new Dictionary<string, (string entryId, string constraintId)>();
+        var errorIds = element.getValidationErrorIds();
+        if (errorIds is not null)
+        {
+            var idIter = errorIds.iterator();
+            while (idIter.hasNext())
+            {
+                var errorId = idIter.next()?.ToString();
+                if (errorId is null) continue;
+                var parts = errorId.Split("::");
+                if (parts.Length >= 3)
+                {
+                    errorIdMap[parts[1]] = (parts[1], parts[2]);
+                }
+            }
+        }
+
+        var iter = errors.iterator();
+        while (iter.hasNext())
+        {
+            var item = iter.next();
+            if (item?.GetType().FullName != "net.battlescribe.engine.b.a")
+            {
+                result.Add(new ValidationErrorState(item?.ToString() ?? "(null error)"));
+                continue;
+            }
+
+            dynamic error = item;
+            var message = (string?)error.b() ?? "(null error)";
+
+            string? entryId = null;
+            string? constraintId = null;
+
+            // Try shared entry error IDs first
+            foreach (var kvp in errorIdMap)
+            {
+                var entry = GetEntryById(kvp.Value.entryId);
+                if (entry is not null && message.Contains(entry.getName()))
+                {
+                    entryId = kvp.Value.entryId;
+                    constraintId = kvp.Value.constraintId;
+                    break;
+                }
+            }
+
+            // Fall back to engine entry data for non-shared entries
+            if (entryId is null)
+            {
+                (entryId, constraintId) = ResolveEntryFromMessage(message);
+            }
+
+            result.Add(new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId));
+        }
+    }
+
+    /// <summary>
+    /// Resolve entryId and constraintId by matching the error message against
+    /// the engine's own entry data (names and constraint types).
+    /// </summary>
+    private (string? entryId, string? constraintId) ResolveEntryFromMessage(string message)
+    {
+        foreach (var (id, entry) in _entryLookup)
+        {
+            var entryName = entry.getName();
+            if (entryName is null || !message.Contains(entryName)) continue;
+            var constraints = JavaListToList<Constraint>(entry.getConstraints());
+            foreach (var c in constraints)
+            {
+                var type = c.getType();
+                if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
+                    (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                {
+                    return (id, c.getId());
+                }
+            }
+        }
+        return (null, null);
     }
 
     /// <summary>
@@ -1440,82 +1555,6 @@ public sealed class BattleScribeOracle : IDisposable
         return result;
     }
 
-    private static List<ValidationErrorState> JavaListToValidationErrors(JavaList? javaList)
-    {
-        if (javaList is null) return [];
-        var result = new List<ValidationErrorState>(javaList.size());
-        var iter = javaList.iterator();
-        while (iter.hasNext())
-        {
-            var item = iter.next();
-            // Use dynamic dispatch to avoid C# type/namespace collision with
-            // net.battlescribe.engine.b.a (both a type and a namespace in IKVM)
-            if (item?.GetType().FullName == "net.battlescribe.engine.b.a")
-            {
-                dynamic error = item;
-                var message = (string?)error.b() ?? "(null error)";
-                string? ownerType = null;
-                string? ownerId = null;
-                string? ownerEntryId = null;
-
-                object? owner = error.a();
-                switch (owner)
-                {
-                    case net.battlescribe.model.roster.Selection sel:
-                        ownerType = "selection";
-                        ownerId = sel.getId();
-                        ownerEntryId = sel.getEntryId();
-                        break;
-                    case net.battlescribe.model.roster.Category cat:
-                        ownerType = "category";
-                        ownerId = cat.getId();
-                        ownerEntryId = cat.getEntryId();
-                        break;
-                    case net.battlescribe.model.roster.Force force:
-                        ownerType = "force";
-                        ownerId = force.getId();
-                        ownerEntryId = force.getEntryId();
-                        break;
-                    case net.battlescribe.model.roster.Roster roster:
-                        ownerType = "roster";
-                        ownerId = roster.getId();
-                        break;
-                }
-
-                // Extract entryId and constraintId from the owner's validationErrorIds
-                // Error IDs follow the pattern: rosterElementId::entryId::constraintId
-                string? entryId = null;
-                string? constraintId = null;
-                if (owner is net.battlescribe.model.roster.BaseRosterElement ownerElement)
-                {
-                    var errorIds = ownerElement.getValidationErrorIds();
-                    if (errorIds is not null)
-                    {
-                        var idIter = errorIds.iterator();
-                        while (idIter.hasNext())
-                        {
-                            var errorId = idIter.next()?.ToString();
-                            if (errorId is null) continue;
-                            var parts = errorId.Split("::");
-                            if (parts.Length >= 3 && parts[0] == ownerId)
-                            {
-                                entryId = parts[1];
-                                constraintId = parts[2];
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                result.Add(new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId));
-            }
-            else
-            {
-                result.Add(new ValidationErrorState(item?.ToString() ?? "(null error)"));
-            }
-        }
-        return result;
-    }
 
     private static List<string> JavaListToStringErrors(JavaList? javaList)
     {
