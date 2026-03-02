@@ -157,7 +157,8 @@ public static class SpecLoader
                 .Select(ConvertSelectionEntryGroup).ToArray(),
             SharedRules: def.SharedRules?.Select(ConvertRule).ToArray(),
             SharedProfiles: def.SharedProfiles?.Select(ConvertProfile).ToArray(),
-            SharedInfoGroups: def.SharedInfoGroups?.Select(ConvertInfoGroup).ToArray());
+            SharedInfoGroups: def.SharedInfoGroups?.Select(ConvertInfoGroup).ToArray(),
+            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray());
     }
 
     private static SelectionEntrySpec ConvertSelectionEntry(SelectionEntryDef def)
@@ -182,7 +183,8 @@ public static class SpecLoader
             Profiles: def.Profiles?.Select(ConvertProfile).ToArray(),
             InfoGroups: def.InfoGroups?.Select(ConvertInfoGroup).ToArray(),
             Page: def.Page,
-            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray());
+            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray(),
+            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray());
     }
 
     private static ForceEntrySpec ConvertForceEntry(ForceEntryDef fe) =>
@@ -249,7 +251,8 @@ public static class SpecLoader
         new(def.Id, def.Name, def.Hidden,
             def.Profiles?.Select(ConvertProfile).ToArray(),
             def.Rules?.Select(ConvertRule).ToArray(),
-            def.Modifiers?.Select(ConvertModifier).ToArray());
+            def.Modifiers?.Select(ConvertModifier).ToArray(),
+            def.InfoLinks?.Select(ConvertInfoLink).ToArray());
 
     private static EntryLinkSpec ConvertEntryLink(EntryLinkDef def) =>
         new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
@@ -260,4 +263,8 @@ public static class SpecLoader
             def.Modifiers?.Select(ConvertModifier).ToArray(),
             def.CategoryLinks?.Select(cl =>
                 new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray());
+
+    private static InfoLinkSpec ConvertInfoLink(InfoLinkDef def) =>
+        new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
+            def.Modifiers?.Select(ConvertModifier).ToArray());
 }

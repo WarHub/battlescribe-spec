@@ -558,4 +558,20 @@ public static class JavaModelFactory
         ct.setName(name);
         return ct;
     }
+
+    public static InfoLink CreateInfoLink(
+        string id, string name, string targetId, string type = "profile",
+        bool hidden = false, IEnumerable<Modifier>? modifiers = null)
+    {
+        var il = new InfoLink();
+        il.setId(id);
+        il.setName(name);
+        il.setTargetId(targetId);
+        il.setType(type);
+        il.setHidden(hidden);
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                il.getModifiers().add(m);
+        return il;
+    }
 }

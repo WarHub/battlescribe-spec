@@ -64,7 +64,8 @@ public record SelectionEntrySpec(
     ProfileSpec[]? Profiles = null,
     InfoGroupSpec[]? InfoGroups = null,
     string Page = "",
-    EntryLinkSpec[]? EntryLinks = null);
+    EntryLinkSpec[]? EntryLinks = null,
+    InfoLinkSpec[]? InfoLinks = null);
 
 public record ForceEntrySpec(
     string Id,
@@ -104,7 +105,8 @@ public record CatalogueSpec(
     SelectionEntryGroupSpec[]? SharedSelectionEntryGroups = null,
     RuleSpec[]? SharedRules = null,
     ProfileSpec[]? SharedProfiles = null,
-    InfoGroupSpec[]? SharedInfoGroups = null);
+    InfoGroupSpec[]? SharedInfoGroups = null,
+    InfoLinkSpec[]? InfoLinks = null);
 
 public record ConditionGroupSpec(
     string Type,
@@ -164,7 +166,8 @@ public record InfoGroupSpec(
     bool Hidden = false,
     ProfileSpec[]? Profiles = null,
     RuleSpec[]? Rules = null,
-    ModifierSpec[]? Modifiers = null);
+    ModifierSpec[]? Modifiers = null,
+    InfoLinkSpec[]? InfoLinks = null);
 
 public record EntryLinkSpec(
     string Id,
@@ -176,6 +179,14 @@ public record EntryLinkSpec(
     ConstraintSpec[]? Constraints = null,
     ModifierSpec[]? Modifiers = null,
     CategoryLinkSpec[]? CategoryLinks = null);
+
+public record InfoLinkSpec(
+    string Id,
+    string Name,
+    string TargetId,
+    string Type = "profile",
+    bool Hidden = false,
+    ModifierSpec[]? Modifiers = null);
 
 /// <summary>
 /// Complete test scenario specification.

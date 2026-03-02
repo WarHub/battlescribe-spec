@@ -947,6 +947,10 @@ public sealed class BattleScribeOracle : IDisposable
                 sharedProfiles: sharedProfiles,
                 sharedInfoGroups: sharedInfoGroups);
 
+            if (catSpec.InfoLinks != null)
+                foreach (var il in catSpec.InfoLinks)
+                    cat.getInfoLinks().add(BuildInfoLink(il));
+
             catalogueDict[catSpec.Id] = cat;
             _setupCatalogues.Add(cat);
 
@@ -1077,6 +1081,10 @@ public sealed class BattleScribeOracle : IDisposable
             foreach (var el in spec.EntryLinks)
                 entry.getEntryLinks().add(BuildEntryLink(el));
 
+        if (spec.InfoLinks != null)
+            foreach (var il in spec.InfoLinks)
+                entry.getInfoLinks().add(BuildInfoLink(il));
+
         if (!string.IsNullOrEmpty(spec.Page))
             entry.setPage(spec.Page);
 
@@ -1121,7 +1129,18 @@ public sealed class BattleScribeOracle : IDisposable
         var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
         var rules = spec.Rules?.Select(BuildRule).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
-        return JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers);
+        var ig = JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers);
+        if (spec.InfoLinks != null)
+            foreach (var il in spec.InfoLinks)
+                ig.getInfoLinks().add(BuildInfoLink(il));
+        return ig;
+    }
+
+    private static InfoLink BuildInfoLink(InfoLinkSpec spec)
+    {
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        return JavaModelFactory.CreateInfoLink(spec.Id, spec.Name, spec.TargetId, spec.Type,
+            spec.Hidden, modifiers);
     }
 
     private static EntryLink BuildEntryLink(EntryLinkSpec spec)

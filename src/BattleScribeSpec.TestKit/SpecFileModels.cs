@@ -108,6 +108,9 @@ public sealed class CatalogueDef
 
     [YamlMember(Alias = "sharedInfoGroups")]
     public List<InfoGroupDef>? SharedInfoGroups { get; set; }
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
 }
 
 public sealed class CostTypeDef
@@ -210,6 +213,9 @@ public sealed class SelectionEntryDef
 
     [YamlMember(Alias = "page")]
     public string Page { get; set; } = "";
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
 }
 
 public sealed class SelectionEntryGroupDef
@@ -483,6 +489,9 @@ public sealed class InfoGroupDef
 
     [YamlMember(Alias = "modifiers")]
     public List<ModifierDef>? Modifiers { get; set; }
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
 }
 
 public sealed class EntryLinkDef
@@ -513,6 +522,27 @@ public sealed class EntryLinkDef
 
     [YamlMember(Alias = "categoryLinks")]
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
+}
+
+public sealed class InfoLinkDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "targetId")]
+    public string TargetId { get; set; } = "";
+
+    [YamlMember(Alias = "type")]
+    public string Type { get; set; } = "profile";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
 }
 
 // ===== Step definitions =====
