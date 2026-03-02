@@ -23,5 +23,140 @@
     "specId": "wh40k-10e-space-marines-intercessors",
     "reason": "DataSource resolver not implemented — cannot resolve github:BSData/wh40k-10e@v10.14.0",
     "category": "infrastructure"
+  },
+  {
+    "specId": "refresh/refresh-after-select",
+    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
+    "category": "nr-auto-select"
+  },
+  {
+    "specId": "refresh/refresh-validation-update",
+    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
+    "category": "nr-auto-select"
+  },
+  {
+    "specId": "refresh/refresh-full-lifecycle",
+    "reason": "NR auto-selects entries with min>=1 constraints — costs doubled",
+    "category": "nr-auto-select"
+  },
+  {
+    "specId": "constraint/constraint-min-and-max",
+    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
+    "category": "nr-auto-select"
+  },
+  {
+    "specId": "constraint/constraint-forces-field",
+    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
+    "category": "nr-auto-select"
+  },
+  {
+    "specId": "scope/scope-include-child-forces",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "scope/scope-include-child-forces-nested",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "condition/condition-percent-value",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "condition/condition-instance-of-by-type",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "selection/catalogue-link-import",
+    "reason": "NR orders imported entries differently from BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "selection/catalogue-link-shared-entry",
+    "reason": "NR multi-catalogue entry resolution differs from BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "selection/import-true-entry-visible-via-link",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "selection/import-false-entry-hidden-via-link",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "selection/import-false-entry-direct-use",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "selection/selection-multiple-types",
+    "reason": "NR returns child selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "selection/selection-child-multiple",
+    "reason": "NR returns child selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "selection/selection-child-entry",
+    "reason": "NR returns child selections in different order than BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "force/force-multi-catalogue-two-forces",
+    "reason": "NR multi-catalogue force entry association differs from BattleScribe",
+    "category": "nr-entry-order"
+  },
+  {
+    "specId": "cost/cost-child-aggregation",
+    "reason": "NR does not aggregate child selection costs into roster total the same way",
+    "category": "nr-child-cost"
+  },
+  {
+    "specId": "selection/selection-child-with-cost",
+    "reason": "NR does not aggregate child selection costs into roster total the same way",
+    "category": "nr-child-cost"
+  },
+  {
+    "specId": "selection/nested-children-deep",
+    "reason": "NR does not aggregate child selection costs into roster total the same way",
+    "category": "nr-child-cost"
+  },
+  {
+    "specId": "refresh/refresh-after-child-select",
+    "reason": "NR does not aggregate child selection costs into roster total the same way",
+    "category": "nr-child-cost"
+  },
+  {
+    "specId": "selection/selection-model-with-cost",
+    "reason": "NR does not aggregate child model costs into roster total",
+    "category": "nr-child-cost"
+  },
+  {
+    "specId": "modifier/modifier-entry-page",
+    "reason": "NR does not expose page numbers on selections",
+    "category": "nr-missing-feature"
+  },
+  {
+    "specId": "selection/rule-with-page",
+    "reason": "NR does not expose page numbers on selections",
+    "category": "nr-missing-feature"
+  },
+  {
+    "specId": "modifier/modifier-category-unset-primary",
+    "reason": "NR does not unset primary category via modifier",
+    "category": "nr-behavior"
+  },
+  {
+    "specId": "cost/cost-default-limit-positive",
+    "reason": "NR does not enforce cost limit validation the same way",
+    "category": "nr-behavior"
   }
 ]

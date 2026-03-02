@@ -5,62 +5,115 @@ namespace BattleScribeSpec.NewRecruit;
 /// <summary>
 /// Translates IRosterEngine action calls to NR roster tree operations.
 ///
-/// NR uses a unified node model where roster, force, category, entry, and selection
-/// objects share the same prototype chain with methods like:
-/// - getForces(), getEntries(), getSelections(), getChildren()
-/// - setAmount(n), incrementAmount(), decrementAmount()
-/// - getName(), getId(), getCosts(), delete(), dupe()
+/// NR's roster tree for locally-loaded systems:
+///   army → selectors[catIdx].first() → selectors[forceIdx] → instances[n] (= forces)
+///   force → selectors[catIdx].first() → selectors[entryIdx] (entry selectors)
 ///
-/// Access pattern: lists.getCurrentList() → {row, army, book}
-/// The 'army' property IS the roster object.
+/// Key API patterns (verified via Playwright exploration):
+///   - army.getForces() returns force instances (NOT getChildren which returns [])
+///   - force.getSelections() returns selected entries
+///   - army.insertForce(book, forceId) adds a force by ID
+///   - entrySelector.addInstance() selects an entry (increments from 0→1)
+///   - selection.delete() removes a selection
+///   - army.calcTotalCosts() returns [{name, value}]
 /// </summary>
 public static class NewRecruitActions
 {
-    private const string GetArmy = "window.__bsspec?.army";
-    private const string GetBook = "window.__bsspec?.book";
+    /// <summary>
+    /// JS helper: get forces array from army, preferring getForces() over getChildren().
+    /// </summary>
+    private const string JsGetForces = """
+        function getForces(army) {
+            const f = army.getForces?.();
+            if (f?.length) return f;
+            const c = army.getChildren?.();
+            if (c?.length) return c;
+            return [];
+        }
+        """;
 
     /// <summary>
-    /// Add a force to the roster by force entry index.
-    /// Uses book.getForces()[index] to get the force definition, then army.insertForce(book, forceId).
+    /// JS helper: get selections from a force.
     /// </summary>
-    public static async Task AddForceAsync(IPage page, int forceEntryIndex, int catalogueIndex = 0)
+    private const string JsGetSelections = """
+        function getSelections(force) {
+            const s = force.getSelections?.();
+            if (s?.length) return s;
+            const c = force.getChildren?.();
+            if (c?.length) return c;
+            return [];
+        }
+        """;
+
+    /// <summary>
+    /// JS helper: recursively find a selector by ID in the selector tree.
+    /// NR's tree: node.selectors[].first().selectors[] — entries are leaf selectors.
+    /// </summary>
+    private const string JsFindSelectorById = """
+        function findSelectorById(node, targetId) {
+            if (!node) return null;
+            // Check if this node's ids include the target
+            if (node.ids?.includes(targetId)) return node;
+            // Check selectors array
+            const sels = node.selectors || [];
+            for (const s of sels) {
+                if (s.ids?.includes(targetId)) return s;
+                // Go deeper via first() (gets the instance node with sub-selectors)
+                if (typeof s.first === 'function') {
+                    const inst = s.first();
+                    if (inst?.selectors) {
+                        const found = findSelectorById(inst, targetId);
+                        if (found) return found;
+                    }
+                }
+                // Also check nested selectors directly
+                if (s.selectors) {
+                    const found = findSelectorById(s, targetId);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+        """;
+
+    /// <summary>
+    /// Add a force to the roster by force entry ID, using the specified catalogue book.
+    /// </summary>
+    public static async Task AddForceByIdAsync(IPage page, string forceId, int catalogueIndex = 0)
     {
         var error = await page.EvaluateAsync<string?>("""
-            ({forceEntryIndex}) => {
+            ({forceId, catalogueIndex}) => {
                 try {
                     const spec = window.__bsspec;
                     if (!spec) return 'No spec state — was Setup called?';
                     const army = spec.army;
-                    const book = spec.book;
+                    const books = spec.books || [spec.book];
+                    const book = books[catalogueIndex] || books[0];
                     if (!army || !book) return 'No army or book';
 
-                    const forces = book.getForces();
-                    if (forceEntryIndex >= forces.length) return `Force entry index ${forceEntryIndex} out of range (${forces.length} available)`;
-
-                    const force = forces[forceEntryIndex];
-                    army.insertForce(book, force.id);
+                    army.insertForce(book, forceId);
                     return null;
                 } catch(e) {
                     return 'AddForce error: ' + e.message;
                 }
             }
-            """, new { forceEntryIndex });
+            """, new { forceId, catalogueIndex });
         if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
     /// Remove a force from the roster by index.
-    /// Uses army.getForces()[index].delete().
     /// </summary>
     public static async Task RemoveForceAsync(IPage page, int forceIndex)
     {
-        var error = await page.EvaluateAsync<string?>("""
+        var error = await page.EvaluateAsync<string?>($$"""
             (forceIndex) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const forces = army.getForces();
+                    {{JsGetForces}}
+                    const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
 
                     forces[forceIndex].delete();
@@ -74,28 +127,84 @@ public static class NewRecruitActions
     }
 
     /// <summary>
-    /// Select an entry in the specified force, adding it to the roster.
-    /// Uses force.getEntries()[entryIndex].incrementAmount().
+    /// Select an entry in the specified force by entry ID.
+    /// Traverses the force's selector tree to find the entry selector, then calls addInstance().
     /// </summary>
-    public static async Task SelectEntryAsync(IPage page, int forceIndex, int entryIndex)
+    public static async Task SelectEntryByIdAsync(IPage page, int forceIndex, string entryId)
     {
-        var error = await page.EvaluateAsync<string?>("""
+        var error = await page.EvaluateAsync<string?>($$"""
+            ({forceIndex, entryId}) => {
+                try {
+                    const army = window.__bsspec?.army;
+                    if (!army) return 'No current roster';
+
+                    {{JsGetForces}}
+                    const forces = getForces(army);
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
+
+                    const force = forces[forceIndex];
+
+                    {{JsFindSelectorById}}
+                    const selector = findSelectorById(force, entryId);
+                    if (!selector) return `Entry '${entryId}' not found in force selector tree`;
+
+                    // addInstance() on the selector creates a new selection instance
+                    if (typeof selector.addInstance === 'function') {
+                        selector.addInstance();
+                    } else if (selector.getAmount?.() === 0 && typeof selector.incrementAmount === 'function') {
+                        selector.incrementAmount();
+                    } else {
+                        selector.setAmount?.((selector.getAmount?.() || 0) + 1);
+                    }
+                    return null;
+                } catch(e) {
+                    return 'SelectEntry error: ' + e.message;
+                }
+            }
+            """, new { forceIndex, entryId });
+        if (error != null) throw new InvalidOperationException(error);
+    }
+
+    /// <summary>
+    /// Select an entry in the specified force by flat index across all categories.
+    /// Iterates the force's selector tree to find the Nth non-force entry selector.
+    /// </summary>
+    public static async Task SelectEntryByIndexAsync(IPage page, int forceIndex, int entryIndex)
+    {
+        var error = await page.EvaluateAsync<string?>($$"""
             ({forceIndex, entryIndex}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const forces = army.getForces();
-                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
+                    {{JsGetForces}}
+                    const forces = getForces(army);
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
 
-                    const entries = forces[forceIndex].getEntries();
-                    if (entryIndex >= entries.length) return `Entry index ${entryIndex} out of range (${entries.length} entries)`;
+                    const force = forces[forceIndex];
 
-                    const entry = entries[entryIndex];
-                    if (entry.getAmount() === 0) {
-                        entry.incrementAmount();
+                    // Collect all entry selectors from all categories in the force
+                    const allEntrySelectors = [];
+                    for (const catSel of force.selectors || []) {
+                        const catInst = typeof catSel.first === 'function' ? catSel.first() : null;
+                        if (!catInst) continue;
+                        for (const entrySel of catInst.selectors || []) {
+                            // Skip force-type selectors (they're for sub-forces, not entries)
+                            if (entrySel.isForce) continue;
+                            allEntrySelectors.push(entrySel);
+                        }
+                    }
+
+                    if (entryIndex >= allEntrySelectors.length)
+                        return `Entry index ${entryIndex} out of range (${allEntrySelectors.length} entry selectors in force)`;
+
+                    const sel = allEntrySelectors[entryIndex];
+                    if (typeof sel.addInstance === 'function') {
+                        sel.addInstance();
+                    } else if (sel.getAmount?.() === 0 && typeof sel.incrementAmount === 'function') {
+                        sel.incrementAmount();
                     } else {
-                        entry.setAmount(entry.getAmount() + 1);
+                        sel.setAmount?.((sel.getAmount?.() || 0) + 1);
                     }
                     return null;
                 } catch(e) {
@@ -108,55 +217,66 @@ public static class NewRecruitActions
 
     /// <summary>
     /// Select a child entry under an existing selection.
-    /// Uses force.getSelections()[selectionIndex].getEntries()[childEntryIndex].incrementAmount().
+    /// Child entries are in the selection's selector tree.
     /// </summary>
-    public static async Task SelectChildEntryAsync(IPage page, int forceIndex, int selectionIndex, int childEntryIndex)
+    public static async Task SelectChildEntryByIdAsync(IPage page, int forceIndex, int selectionIndex, string childEntryId)
     {
-        var error = await page.EvaluateAsync<string?>("""
-            ({forceIndex, selectionIndex, childEntryIndex}) => {
+        var error = await page.EvaluateAsync<string?>($$"""
+            ({forceIndex, selectionIndex, childEntryId}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const forces = army.getForces();
+                    {{JsGetForces}}
+                    {{JsGetSelections}}
+                    const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                    const selections = forces[forceIndex].getSelections();
+                    const selections = getSelections(forces[forceIndex]);
                     if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
-                    const childEntries = selections[selectionIndex].getEntries();
-                    if (childEntryIndex >= childEntries.length) return `Child entry index ${childEntryIndex} out of range (${childEntries.length} entries)`;
+                    const sel = selections[selectionIndex];
 
-                    const entry = childEntries[childEntryIndex];
-                    if (entry.getAmount() === 0) {
-                        entry.incrementAmount();
+                    {{JsFindSelectorById}}
+                    // Search in the selection's selector tree
+                    const selector = sel.selector ? findSelectorById(sel.selector, childEntryId) : null;
+                    // Also try the selection node itself
+                    const found = selector || findSelectorById(sel, childEntryId);
+                    if (!found) return `Child entry '${childEntryId}' not found under selection`;
+
+                    if (typeof found.addInstance === 'function') {
+                        found.addInstance();
+                    } else if (found.getAmount?.() === 0 && typeof found.incrementAmount === 'function') {
+                        found.incrementAmount();
                     } else {
-                        entry.setAmount(entry.getAmount() + 1);
+                        found.setAmount?.((found.getAmount?.() || 0) + 1);
                     }
                     return null;
                 } catch(e) {
                     return 'SelectChildEntry error: ' + e.message;
                 }
             }
-            """, new { forceIndex, selectionIndex, childEntryIndex });
+            """, new { forceIndex, selectionIndex, childEntryId });
         if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
-    /// Deselect (remove) a selection by setting its amount to 0 or calling delete().
+    /// Deselect (remove) a selection by calling delete() or setting amount to 0.
     /// </summary>
     public static async Task DeselectSelectionAsync(IPage page, int forceIndex, int selectionIndex)
     {
-        var error = await page.EvaluateAsync<string?>("""
+        var error = await page.EvaluateAsync<string?>($$"""
             ({forceIndex, selectionIndex}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const forces = army.getForces();
+                    {{JsGetForces}}
+                    {{JsGetSelections}}
+                    const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                    const selections = forces[forceIndex].getSelections();
+                    const selections = getSelections(forces[forceIndex]);
                     if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
                     const sel = selections[selectionIndex];
@@ -179,16 +299,18 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task SetSelectionCountAsync(IPage page, int forceIndex, int entryIndex, int count)
     {
-        var error = await page.EvaluateAsync<string?>("""
+        var error = await page.EvaluateAsync<string?>($$"""
             ({forceIndex, entryIndex, count}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const forces = army.getForces();
+                    {{JsGetForces}}
+                    {{JsGetSelections}}
+                    const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                    const selections = forces[forceIndex].getSelections();
+                    const selections = getSelections(forces[forceIndex]);
                     if (entryIndex >= selections.length) return `Selection index ${entryIndex} out of range`;
 
                     selections[entryIndex].setAmount(count);
@@ -206,16 +328,18 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task DuplicateSelectionAsync(IPage page, int forceIndex, int selectionIndex)
     {
-        var error = await page.EvaluateAsync<string?>("""
+        var error = await page.EvaluateAsync<string?>($$"""
             ({forceIndex, selectionIndex}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const forces = army.getForces();
+                    {{JsGetForces}}
+                    {{JsGetSelections}}
+                    const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                    const selections = forces[forceIndex].getSelections();
+                    const selections = getSelections(forces[forceIndex]);
                     if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
                     const sel = selections[selectionIndex];
@@ -234,7 +358,7 @@ public static class NewRecruitActions
     }
 
     /// <summary>
-    /// Set cost limit for a cost type using army.setMaxCosts() or updating maxCosts array.
+    /// Set cost limit for a cost type using army.setMaxCosts().
     /// </summary>
     public static async Task SetCostLimitAsync(IPage page, string costTypeId, double value)
     {
@@ -244,7 +368,6 @@ public static class NewRecruitActions
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    // Try setMaxCosts method first
                     const maxCosts = army.getMaxCosts?.();
                     if (maxCosts && Array.isArray(maxCosts)) {
                         const cost = maxCosts.find(c => c.typeId === costTypeId || c.name === costTypeId);

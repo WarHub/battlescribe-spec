@@ -26,6 +26,24 @@ public static class CatXmlGenerator
         return GenerateCatalogueXml(gameSystem, catalogues[0]);
     }
 
+    /// <summary>
+    /// Generate XML for all catalogues. Returns (filename, xml) pairs.
+    /// </summary>
+    public static IReadOnlyList<(string FileName, string Xml)> GenerateAllCatalogueXml(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    {
+        if (catalogues.Length == 0)
+            throw new ArgumentException("At least one catalogue is required.", nameof(catalogues));
+
+        var gamesystem = MapGameSystem(gameSystem);
+        var result = new List<(string, string)>();
+        for (var i = 0; i < catalogues.Length; i++)
+        {
+            var xml = SerializeNode(MapCatalogue(gamesystem, catalogues[i]));
+            result.Add(($"catalogue{i}.cat", xml));
+        }
+        return result;
+    }
+
     private static GamesystemNode MapGameSystem(GameSystemSpec gameSystem)
     {
         var node = Gamesystem(name: gameSystem.Name, id: gameSystem.Id);
@@ -571,8 +589,8 @@ public static class CatXmlGenerator
     private static ConstraintKind MapConstraintKind(string value) =>
         value switch
         {
-            "min" => ConstraintKind.Minimum,
-            "max" => ConstraintKind.Maximum,
+            "min" or "atLeast" => ConstraintKind.Minimum,
+            "max" or "atMost" => ConstraintKind.Maximum,
             _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unsupported constraint kind."),
         };
 

@@ -3,18 +3,22 @@ namespace BattleScribeSpec.NewRecruit;
 /// <summary>
 /// IRosterEngine implementation that wraps the New Recruit web app via Playwright.
 ///
-/// Uses NR's Pinia store API discovered via bundle decompilation:
-/// 1. Setup: Select system from NR library → load book → createRoster → addList
-/// 2. Actions: Interact with roster nodes via prototype methods (getEntries, setAmount, etc.)
-/// 3. State: Read from roster tree via getCurrentList().army
+/// Supports two data loading modes:
+/// 1. Synthetic (inline) data: Generate BattleScribe XML via CatXmlGenerator,
+///    load into NR via loadSystemFromFs Pinia store API.
+/// 2. Real-world data: Select from NR's remote library via UI click.
 ///
-/// Currently only supports real-world data (systems from NR's library).
-/// Synthetic spec data cannot be loaded into NR's web mode.
+/// State is read from the roster tree via getCurrentList().army using
+/// NR's internal reactive object API (getChildren, getName, getCosts, etc.)
 /// </summary>
 public sealed class NewRecruitRosterEngine : IRosterEngine
 {
     private readonly NewRecruitBrowser _browser;
     private bool _disposed;
+    private GameSystemSpec? _gameSystem;
+    private CatalogueSpec[]? _catalogues;
+    // Maps force index → catalogue index (tracked as forces are added)
+    private readonly List<int> _forceCatalogueMap = [];
 
     private NewRecruitRosterEngine(NewRecruitBrowser browser)
     {
@@ -34,6 +38,8 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
+        _gameSystem = gameSystem;
+        _catalogues = catalogues;
         return SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
     }
 
@@ -43,57 +49,19 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
         try
         {
-            // Navigate to /app and wait for systems to load
+            // Navigate to /app and wait for NR to initialize
             await _browser.NavigateToAppAsync();
-            await _browser.Page.WaitForTimeoutAsync(3000);
+            await _browser.Page.WaitForTimeoutAsync(2000);
 
-            // Step 1: Click the matching system label via Playwright UI
-            // Programmatic selectSystem() doesn't fully initialize the reactive state.
-            var systemName = gameSystem.Name;
-            var systemLabels = _browser.Page.Locator("label.system-label");
-            var count = await systemLabels.CountAsync();
-            bool systemFound = false;
+            // Generate BattleScribe XML from spec data
+            var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
+            var allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
 
-            for (int i = 0; i < count; i++)
-            {
-                var text = await systemLabels.Nth(i).InnerTextAsync();
-                if (text.Contains(systemName, StringComparison.OrdinalIgnoreCase) ||
-                    systemName.Contains(text, StringComparison.OrdinalIgnoreCase))
-                {
-                    await systemLabels.Nth(i).ClickAsync();
-                    systemFound = true;
-                    break;
-                }
-            }
-
-            if (!systemFound)
-            {
-                // Try exact match first, then click first available
-                var exactLabel = _browser.Page.Locator($"label.system-label:has-text('{systemName}')");
-                if (await exactLabel.CountAsync() > 0)
-                {
-                    await exactLabel.First.ClickAsync();
-                    systemFound = true;
-                }
-                else if (count > 0)
-                {
-                    errors.Add($"System '{systemName}' not found in NR UI. Clicking first available.");
-                    await systemLabels.First.ClickAsync();
-                    systemFound = true;
-                }
-                else
-                {
-                    errors.Add($"No systems found in NR UI");
-                    return errors;
-                }
-            }
-
-            await _browser.Page.WaitForTimeoutAsync(3000);
-
-            // Step 2: Create list via Pinia API (system is now fully loaded via UI click)
-            var catalogueName = catalogues.FirstOrDefault()?.Name ?? "";
+            // Build files array and catalogue name list for multi-catalogue support
+            var catFiles = allCatXml.Select(c => new { name = c.FileName, path = $"/spec/{c.FileName}", data = c.Xml }).ToArray();
+            var catNames = catalogues.Select(c => c.Name).ToArray();
             var setupResult = await _browser.Page.EvaluateAsync<string?>("""
-                async (catalogueName) => {
+                async ([gstXml, catFiles, systemId, catNames]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
@@ -102,38 +70,61 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return 'Required stores not found';
 
-                        const sys = sysStore._selectedSystem;
-                        if (!sys) return 'No selected system after click';
+                        // Load synthetic data into NR's local library
+                        const files = [
+                            { name: 'system.gst', path: '/spec/system.gst', data: gstXml },
+                            ...catFiles.map(c => ({ name: c.name, path: c.path, data: c.data })),
+                        ];
+                        await sysStore.loadSystemFromFs(files);
 
-                        // Find matching playable book
+                        // Select the locally loaded system
+                        const localSys = sysStore.localLibrary[systemId];
+                        if (!localSys) return 'System not found in localLibrary after load: ' + systemId;
+                        sysStore.selectSystem(localSys);
+
+                        const sys = sysStore._selectedSystem;
+                        if (!sys) return 'No selected system after selectSystem()';
+
+                        // Find playable books (catalogues)
                         const playableBooks = sys.books?.array?.filter(b => b.playable) || [];
                         if (!playableBooks.length) return 'No playable books for system: ' + sys.name;
 
-                        let selectedBook = playableBooks.find(b => b.name === catalogueName);
-                        if (!selectedBook) {
-                            selectedBook = playableBooks.find(b => b.name.includes(catalogueName) || catalogueName.includes(b.name));
+                        // Load ALL book data for multi-catalogue support
+                        const allBooks = [];
+                        for (const catName of catNames) {
+                            let pb = playableBooks.find(b => b.name === catName);
+                            if (!pb) pb = playableBooks.find(b => b.name.includes(catName) || catName.includes(b.name));
+                            if (!pb && allBooks.length === 0) pb = playableBooks[0];
+                            if (pb) {
+                                const bd = await sys.getBook(pb.id);
+                                if (bd) {
+                                    const gs = bd.catalogue.gameSystem;
+                                    bd.catalogue.costIndex = {};
+                                    if (gs?.costTypes) {
+                                        for (const ct of gs.costTypes) {
+                                            bd.catalogue.costIndex[ct.id] = ct;
+                                        }
+                                    }
+                                    allBooks.push({ name: catName, bookRef: pb, bookData: bd });
+                                }
+                            }
                         }
-                        if (!selectedBook) selectedBook = playableBooks[0];
+                        if (!allBooks.length) return 'No book data loaded for any catalogue';
 
-                        // Load book data
-                        const bookData = await sys.getBook(selectedBook.id);
-                        if (!bookData) return 'Failed to load book data for: ' + selectedBook.name;
-
-                        // Create roster
-                        const costs = bookData.getCosts();
-                        const roster = bookData.createRoster(costs);
+                        // Create roster from first book, then remove auto-created forces
+                        const primaryBook = allBooks[0].bookData;
+                        const costs = primaryBook.getCosts();
+                        const roster = primaryBook.createRoster(costs);
                         if (!roster) return 'Failed to create roster';
                         roster.setCustomName('Spec Test');
 
-                        // Insert a force
-                        const bookForces = bookData.getForces();
-                        const visibleForces = bookForces.filter(f => f.hidden !== true);
-                        const force = visibleForces[0] || bookForces[0];
-                        if (!force) return 'No forces available. bookForces.length=' + bookForces.length;
-
-                        roster.insertForce(bookData, force.id);
+                        const autoForces = roster.getForces?.() || [];
+                        for (const f of [...autoForces]) {
+                            if (typeof f.delete === 'function') f.delete();
+                        }
 
                         // Build row metadata and add list
+                        const selectedBook = allBooks[0].bookRef;
                         const row = {
                             list_key: 'spec_' + Date.now(),
                             name: 'Spec Test',
@@ -148,17 +139,22 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             bsid_system: sys.bsid
                         };
 
-                        await listsStore.addList({row, army: roster, book: bookData});
+                        await listsStore.addList({row, army: roster, book: primaryBook});
 
-                        // Save references globally — Pinia store doesn't preserve army/book between evaluations
-                        window.__bsspec = { army: roster, book: bookData, row };
+                        // Save references globally — books array for multi-catalogue AddForce
+                        window.__bsspec = {
+                            army: roster,
+                            book: primaryBook,
+                            books: allBooks.map(b => b.bookData),
+                            row
+                        };
 
                         return null; // success
                     } catch(e) {
-                        return 'Setup error: ' + e.message;
+                        return 'Setup error: ' + e.message + '\n' + e.stack;
                     }
                 }
-                """, catalogueName);
+                """, new object[] { gstXml, catFiles, gameSystem.Id, catNames });
 
             if (setupResult != null)
                 errors.Add(setupResult);
@@ -173,26 +169,84 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
     {
-        NewRecruitActions.AddForceAsync(_browser.Page, forceEntryIndex, catalogueIndex)
+        var forceEntry = _gameSystem?.ForceEntries?.ElementAtOrDefault(forceEntryIndex);
+        var forceId = forceEntry?.Id;
+        if (forceId is null)
+            throw new ArgumentOutOfRangeException(nameof(forceEntryIndex),
+                $"Force entry index {forceEntryIndex} out of range ({_gameSystem?.ForceEntries?.Length ?? 0} available)");
+        NewRecruitActions.AddForceByIdAsync(_browser.Page, forceId, catalogueIndex)
             .GetAwaiter().GetResult();
+        _forceCatalogueMap.Add(catalogueIndex);
     }
 
     public void RemoveForce(int forceIndex)
     {
         NewRecruitActions.RemoveForceAsync(_browser.Page, forceIndex)
             .GetAwaiter().GetResult();
+        if (forceIndex < _forceCatalogueMap.Count)
+            _forceCatalogueMap.RemoveAt(forceIndex);
     }
 
     public void SelectEntry(int forceIndex, int entryIndex)
     {
-        NewRecruitActions.SelectEntryAsync(_browser.Page, forceIndex, entryIndex)
+        // Determine which catalogue this force belongs to
+        var catIdx = forceIndex < _forceCatalogueMap.Count ? _forceCatalogueMap[forceIndex] : 0;
+        var cat = _catalogues?.ElementAtOrDefault(catIdx) ?? _catalogues?.FirstOrDefault();
+        // Build ordered list: direct SelectionEntries followed by resolved EntryLinks
+        var entryIds = (cat?.SelectionEntries ?? []).Select(e => e.Id)
+            .Concat((cat?.EntryLinks ?? []).Select(el => el.TargetId))
+            .ToList();
+        if (entryIndex >= entryIds.Count)
+            throw new ArgumentOutOfRangeException(nameof(entryIndex),
+                $"Entry index {entryIndex} out of range (catalogue has {entryIds.Count} entries)");
+        NewRecruitActions.SelectEntryByIdAsync(_browser.Page, forceIndex, entryIds[entryIndex])
             .GetAwaiter().GetResult();
     }
 
     public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex)
     {
-        NewRecruitActions.SelectChildEntryAsync(_browser.Page, forceIndex, selectionIndex, childEntryIndex)
+        // Resolve child entry ID: find the parent selection's entry in the catalogue,
+        // then get the child entry by index
+        var state = GetRosterState();
+        if (forceIndex >= state.Forces.Count)
+            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        if (selectionIndex >= state.Forces[forceIndex].Selections.Count)
+            throw new ArgumentOutOfRangeException(nameof(selectionIndex));
+
+        var parentEntryId = state.Forces[forceIndex].Selections[selectionIndex].EntryId;
+        var parentEntry = FindEntryById(parentEntryId);
+        var childEntries = parentEntry?.ChildEntries;
+        if (childEntries is null || childEntryIndex >= childEntries.Length)
+            throw new ArgumentOutOfRangeException(nameof(childEntryIndex),
+                $"Child entry index {childEntryIndex} out of range for parent '{parentEntryId}'");
+
+        var childEntryId = childEntries[childEntryIndex].Id;
+        NewRecruitActions.SelectChildEntryByIdAsync(_browser.Page, forceIndex, selectionIndex, childEntryId)
             .GetAwaiter().GetResult();
+    }
+
+    private SelectionEntrySpec? FindEntryById(string? id)
+    {
+        if (id is null || _catalogues is null) return null;
+        foreach (var cat in _catalogues)
+        {
+            var found = FindEntryRecursive(cat.SelectionEntries, id)
+                ?? FindEntryRecursive(cat.SharedSelectionEntries, id);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    private static SelectionEntrySpec? FindEntryRecursive(SelectionEntrySpec[]? entries, string id)
+    {
+        if (entries is null) return null;
+        foreach (var entry in entries)
+        {
+            if (entry.Id == id) return entry;
+            var found = FindEntryRecursive(entry.ChildEntries, id);
+            if (found is not null) return found;
+        }
+        return null;
     }
 
     public void DeselectSelection(int forceIndex, int selectionIndex)

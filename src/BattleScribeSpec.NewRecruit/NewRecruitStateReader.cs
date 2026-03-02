@@ -51,7 +51,10 @@ public static class NewRecruitStateReader
                 }
 
                 function extractForces(army) {
-                    const forces = army.getForces?.() || [];
+                    // getForces() works for locally-loaded systems; getChildren() may return []
+                    let forces = army.getForces?.();
+                    if (!forces?.length) forces = army.getChildren?.();
+                    if (!forces?.length) forces = [];
                     if (!Array.isArray(forces)) return [];
                     return forces.map(f => ({
                         name: f.getName?.() || '',
@@ -61,7 +64,10 @@ public static class NewRecruitStateReader
                 }
 
                 function extractSelections(parent) {
-                    const selections = parent.getSelections?.() || [];
+                    // getSelections() returns selected entries; getChildren() is fallback
+                    let selections = parent.getSelections?.();
+                    if (!selections?.length) selections = parent.getChildren?.();
+                    if (!selections?.length) selections = [];
                     return selections.map(s => extractSelection(s));
                 }
 
@@ -109,15 +115,26 @@ public static class NewRecruitStateReader
                 }
 
                 function extractTotalCosts(army) {
-                    const costs = army.getTotalCosts?.() || army.getCosts?.() || [];
-                    if (Array.isArray(costs)) {
+                    // calcTotalCosts() works for locally-loaded systems
+                    const costs = army.calcTotalCosts?.() || army.getTotalCosts?.() || army.getCosts?.() || [];
+                    if (Array.isArray(costs) && costs.length > 0) {
                         return costs.map(c => ({
                             name: c.name || '',
                             typeId: c.typeId || '',
                             value: c.value || 0
                         }));
                     }
-                    if (typeof costs === 'object') {
+                    // Fallback: return cost types from game system with value 0
+                    const spec = window.__bsspec;
+                    const gs = spec?.book?.catalogue?.gameSystem;
+                    if (gs?.costTypes) {
+                        return gs.costTypes.map(ct => ({
+                            name: ct.name || '',
+                            typeId: ct.id || '',
+                            value: 0
+                        }));
+                    }
+                    if (typeof costs === 'object' && !Array.isArray(costs)) {
                         return Object.entries(costs).map(([key, val]) => ({
                             name: key,
                             typeId: key,

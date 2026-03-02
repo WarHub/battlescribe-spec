@@ -58,14 +58,6 @@ public sealed class NewRecruitConformanceTests
             return;
         }
 
-        // Skip specs that use inline data (no dataSource) — NR adapter can only load
-        // real-world data from NR's library, not synthetic inline game system definitions.
-        if (string.IsNullOrEmpty(spec.Setup.DataSource))
-        {
-            _output.WriteLine($"Skipping spec: {specName} — no dataSource (NR requires real-world data)");
-            return;
-        }
-
         _output.WriteLine($"Running spec: {specName} — {spec.Description}");
 
         var engine = _fixture.Engine!;
