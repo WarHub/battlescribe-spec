@@ -161,14 +161,9 @@ Full `INSTANCE_OF` target coverage: `SelectionEntry`, `SelectionEntry.Type`, `Ca
 
 ---
 
-## 5. Known Limitations
+## 5. Known Limitations — None
 
-**0 specs** are tagged `known-limitation-synthetic` — all 179 specs fully execute against the BattleScribe reference engine via IKVM.
-
-Previously, 47 specs had this tag due to synthetic fixture limitations. These were systematically resolved by:
-- Fixing the spec YAML to use proper `childId` references that the engine can resolve
-- Adding protocol support for profiles, rules, categories, and page in selection state
-- Fixing ModifierGroup/ConditionGroup condition evaluation paths
+All 179 specs fully execute against the BattleScribe reference engine via IKVM with no skips, workarounds, or synthetic tags. Previously 47 specs carried a `known-limitation-synthetic` tag; all were resolved.
 
 ---
 
