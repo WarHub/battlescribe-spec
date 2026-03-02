@@ -1,0 +1,53 @@
+id: condition-group-triple-nested
+category: condition
+description: 3 levels of condition group nesting (AND → OR → conditions) form deep boolean logic
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Trooper
+        type: unit
+        modifiers:
+          - type: set
+            field: name
+            value: Elite Trooper
+            conditionGroups:
+              - type: and
+                conditionGroups:
+                  - type: or
+                    conditionGroups:
+                      - type: and
+                        conditions:
+                          - type: atLeast
+                            value: 1
+                            field: selections
+                            scope: parent
+                            childId: se-1
+                          - type: lessThan
+                            value: 5
+                            field: selections
+                            scope: parent
+                            childId: se-1
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Triple nesting: AND( OR( AND(atLeast 1, lessThan 5) ) )
+  # With 1 selection: atLeast 1=true, lessThan 5=true → inner AND=true → OR=true → outer AND=true
+  - expectedState:
+      forces:
+        - selections:
+            - name: Elite Trooper

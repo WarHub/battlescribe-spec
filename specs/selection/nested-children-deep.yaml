@@ -1,0 +1,60 @@
+id: nested-children-deep
+category: selection
+description: Nested child entry with cost aggregates to roster total
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-squad
+        name: Squad
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 50
+        selectionEntries:
+          - id: se-weapon
+            name: Heavy Weapon
+            type: upgrade
+            costs:
+              - name: pts
+                typeId: pts
+                value: 15
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+  # Parent unit costs 50pts, child upgrade costs 15pts, total 65pts
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Squad
+              type: unit
+              children:
+                - name: Heavy Weapon
+                  type: upgrade
+      costs:
+        - typeId: pts
+          value: 65

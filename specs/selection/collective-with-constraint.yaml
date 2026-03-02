@@ -1,0 +1,45 @@
+id: collective-with-constraint
+category: selection
+description: Collective child entry with constraint on parent enforces selection limits
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-squad
+        name: Squad
+        type: unit
+        constraints:
+          - id: con-max-2
+            type: max
+            value: 2
+            field: selections
+            scope: parent
+        selectionEntries:
+          - id: se-weapon
+            name: Weapon
+            type: model
+            collective: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Two Squad selections, each with collective Weapon child.
+  # Constraint max=2 is satisfied with exactly 2.
+  - expectedState:
+      forces:
+        - selectionCount: 2

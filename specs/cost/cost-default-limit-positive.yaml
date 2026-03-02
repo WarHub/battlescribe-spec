@@ -1,0 +1,41 @@
+id: cost-default-limit-positive
+category: cost
+description: DefaultCostLimit enforced — entry exceeding limit triggers validation error
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: 100
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Expensive Unit
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 120
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Cost 120 exceeds defaultCostLimit of 100 → validation error
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 120
+  - assert: hasValidationErrors
+    expected: true

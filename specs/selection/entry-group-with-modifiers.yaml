@@ -1,0 +1,53 @@
+id: entry-group-with-modifiers
+category: selection
+description: SelectionEntryGroup with modifiers alters child entry properties
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-parent
+        name: Warrior
+        type: unit
+        selectionEntryGroups:
+          - id: seg-gear
+            name: Gear Options
+            modifiers:
+              - type: set
+                field: name
+                value: Special Gear
+            constraints:
+              - id: con-max-1
+                type: max
+                value: 1
+                field: selections
+                scope: parent
+            selectionEntries:
+              - id: se-shield
+                name: Shield
+                type: upgrade
+              - id: se-helm
+                name: Helm
+                type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Group modifier sets the group name to "Special Gear".
+  # Group constraint limits selection from the group to max 1.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Warrior

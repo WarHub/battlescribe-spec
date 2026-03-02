@@ -1,0 +1,43 @@
+id: rule-hidden
+category: selection
+description: A rule with hidden true is filtered from selection state (not exposed)
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-covert
+        name: Covert Operative
+        type: unit
+        rules:
+          - id: rule-visible
+            name: Rapid Fire
+            description: Can fire twice at half range
+          - id: rule-hidden-ability
+            name: Hidden Deployment
+            description: This unit may be placed in reserves during deployment
+            hidden: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Hidden rules are filtered from state; only non-hidden rule appears
+  - expectedState:
+      forces:
+        - selections:
+            - name: Covert Operative
+              rules:
+                - name: Rapid Fire
+                  description: Can fire twice at half range

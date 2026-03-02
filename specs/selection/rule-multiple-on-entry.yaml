@@ -1,0 +1,43 @@
+id: rule-multiple-on-entry
+category: selection
+description: An entry with two rules produces both rules in selection state
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-veteran
+        name: Veteran Squad
+        type: unit
+        rules:
+          - id: rule-fearless
+            name: Fearless
+            description: This unit automatically passes morale tests
+          - id: rule-scout
+            name: Scout Move
+            description: This unit may make a normal move before the first turn
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Veteran Squad
+              rules:
+                - name: Fearless
+                  description: This unit automatically passes morale tests
+                - name: Scout Move
+                  description: This unit may make a normal move before the first turn

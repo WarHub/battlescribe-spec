@@ -1,0 +1,64 @@
+id: cost-three-types
+category: cost
+description: Three cost types tracked simultaneously on a single selection
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: Points
+        defaultCostLimit: -1
+      - id: pl
+        name: Power Level
+        defaultCostLimit: -1
+      - id: cp
+        name: Command Points
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Command Unit
+        type: unit
+        costs:
+          - name: Points
+            typeId: pts
+            value: 100
+          - name: Power Level
+            typeId: pl
+            value: 5
+          - name: Command Points
+            typeId: cp
+            value: 1
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Command Unit
+              costs:
+                - typeId: pts
+                  value: 100
+                - typeId: pl
+                  value: 5
+                - typeId: cp
+                  value: 1
+      costs:
+        - typeId: pts
+          value: 100
+        - typeId: pl
+          value: 5
+        - typeId: cp
+          value: 1

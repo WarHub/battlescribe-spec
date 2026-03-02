@@ -1,0 +1,57 @@
+id: selection-model-with-cost
+category: selection
+description: Model type child with cost contributes to roster total
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-squad
+        name: Squad
+        type: unit
+        selectionEntries:
+          - id: se-trooper
+            name: Trooper
+            type: model
+            costs:
+              - name: pts
+                typeId: pts
+                value: 10
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Squad
+              type: unit
+              children:
+                - name: Trooper
+                  type: model
+                  costs:
+                    - typeId: pts
+                      value: 10
+      costs:
+        - typeId: pts
+          value: 10

@@ -1,0 +1,46 @@
+id: constraint-include-child-forces
+category: constraint
+description: Constraint with includeChildForces applies across nested force hierarchy
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-detach
+            name: Sub-Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Squad
+        type: unit
+        constraints:
+          - id: con-1
+            type: max
+            value: 2
+            field: selections
+            scope: force
+            includeChildForces: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  # Army force created; Sub-Detachment is available as a nested force entry.
+  # The constraint with includeChildForces=true means the max limit
+  # counts selections across the parent force and any child forces.
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Army
+          selectionCount: 1
+          selections:
+            - name: Squad

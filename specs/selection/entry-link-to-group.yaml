@@ -1,0 +1,49 @@
+id: entry-link-to-group
+category: selection
+description: EntryLink with type selectionEntryGroup targets a shared group and exposes its children
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-parent
+        name: Host Unit
+        type: unit
+    selectionEntryGroups:
+      - id: seg-shared
+        name: Shared Weapon Options
+        selectionEntries:
+          - id: se-blade
+            name: Power Blade
+            type: upgrade
+          - id: se-maul
+            name: Thunder Maul
+            type: upgrade
+    entryLinks:
+      - id: el-group-1
+        name: Weapon Options Link
+        targetId: seg-shared
+        type: selectionEntryGroup
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Host Unit is selected. The entryLink resolves the shared group,
+  # making Power Blade and Thunder Maul available as selectable children.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Host Unit

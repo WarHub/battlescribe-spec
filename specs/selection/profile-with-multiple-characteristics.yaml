@@ -1,0 +1,72 @@
+id: profile-with-multiple-characteristics
+category: selection
+description: A profile with multiple characteristics produces all values in selection state
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-unit
+        name: Unit Stats
+        characteristicTypes:
+          - id: char-mv
+            name: Move
+          - id: char-ws
+            name: WS
+          - id: char-bs
+            name: BS
+          - id: char-wounds
+            name: Wounds
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-trooper
+        name: Heavy Trooper
+        type: unit
+        profiles:
+          - id: prof-trooper
+            name: Heavy Trooper Stats
+            typeId: pt-unit
+            typeName: Unit Stats
+            characteristics:
+              - name: Move
+                typeId: char-mv
+                value: "5"
+              - name: WS
+                typeId: char-ws
+                value: "3"
+              - name: BS
+                typeId: char-bs
+                value: "4"
+              - name: Wounds
+                typeId: char-wounds
+                value: "2"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Heavy Trooper
+              profiles:
+                - name: Heavy Trooper Stats
+                  characteristics:
+                    - name: Move
+                      value: "5"
+                    - name: WS
+                      value: "3"
+                    - name: BS
+                      value: "4"
+                    - name: Wounds
+                      value: "2"
