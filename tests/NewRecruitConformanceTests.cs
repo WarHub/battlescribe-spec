@@ -13,12 +13,16 @@ namespace BattleScribeSpec.Tests;
 ///
 /// Tests are skipped if the NR_ENGINE_URL environment variable is not set.
 /// Set NR_ENGINE_URL=https://newrecruit.eu (or a local instance) to enable.
+///
+/// Expected failures: Specs listed in specs/expected-failures/newrecruit.json
+/// are still run but don't fail the suite. This allows tracking conformance progress.
 /// </summary>
 [Collection("NewRecruit")]
 public sealed class NewRecruitConformanceTests : IAsyncLifetime
 {
     private readonly ITestOutputHelper _output;
     private NewRecruitRosterEngine? _engine;
+    private ExpectedFailures? _expectedFailures;
 
     public NewRecruitConformanceTests(ITestOutputHelper output)
     {
@@ -33,6 +37,7 @@ public sealed class NewRecruitConformanceTests : IAsyncLifetime
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         _engine = await NewRecruitRosterEngine.CreateAsync(baseUrl, headless);
+        _expectedFailures = ExpectedFailures.Load("newrecruit");
     }
 
     public Task DisposeAsync()
@@ -78,10 +83,27 @@ public sealed class NewRecruitConformanceTests : IAsyncLifetime
 
         if (!result.Passed)
         {
+            var classification = _expectedFailures?.Classify(result)
+                ?? SpecResultClassification.Failed;
+
             var message = $"Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
                 string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
+
+            if (classification == SpecResultClassification.ExpectedFailure)
+            {
+                var entry = _expectedFailures!.GetEntry(result.SpecId);
+                _output.WriteLine($"[EXPECTED FAILURE] {message}");
+                _output.WriteLine($"  Reason: {entry?.Reason}");
+                return; // Don't fail the test
+            }
+
             _output.WriteLine(message);
             Assert.Fail(message);
+        }
+        else if (_expectedFailures?.IsExpectedFailure(result.SpecId) == true)
+        {
+            _output.WriteLine($"[UNEXPECTED PASS] Spec '{specName}' is in expected failures but now passes! " +
+                "Consider removing it from specs/expected-failures/newrecruit.json");
         }
     }
 }

@@ -10,6 +10,7 @@ var output = "summary";
 string? filter = null;
 string? tag = null;
 string? engineFilter = null;
+string? reportPath = null;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -32,6 +33,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--engine" when i + 1 < args.Length:
             engineFilter = args[++i];
+            break;
+        case "--report" when i + 1 < args.Length:
+            reportPath = args[++i];
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -98,6 +102,8 @@ using var adapterProcess = AdapterProcess.Start(adapterExe, adapterArgs);
 
 // ===== Run specs =====
 var results = new List<SpecResult>();
+var reportResults = new List<SpecResultSummary>();
+var skipped = 0;
 var sw = Stopwatch.StartNew();
 
 IEnumerable<(string IdForLoad, string Id, string Category, Func<SpecFile> Loader)> specSources;
@@ -116,7 +122,11 @@ foreach (var (_, id, category, loader) in specSources)
 
     // Apply filter
     if (filter is not null && !specName.Contains(filter, StringComparison.OrdinalIgnoreCase))
+    {
+        skipped++;
+        reportResults.Add(new SpecResultSummary(id, category, "", "skipped", [$"Skipped by filter '{filter}'"]));
         continue;
+    }
 
     SpecFile spec;
     try
@@ -125,23 +135,39 @@ foreach (var (_, id, category, loader) in specSources)
     }
     catch (Exception ex)
     {
-        results.Add(new SpecResult(id, category, "Failed to load", [$"Load error: {ex.Message}"]));
+        var failures = new List<string> { $"Load error: {ex.Message}" };
+        results.Add(new SpecResult(id, category, "Failed to load", failures));
+        reportResults.Add(new SpecResultSummary(id, category, "Failed to load", "failed", failures));
         continue;
     }
 
     // Apply tag filter
     if (tag is not null && !(spec.Tags?.Contains(tag, StringComparer.OrdinalIgnoreCase) ?? false))
+    {
+        skipped++;
+        reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped", [$"Skipped by tag '{tag}'"]));
         continue;
+    }
 
     // Apply engine filter — null engines means "all engines"
     if (engineFilter is not null && !spec.IsApplicableTo(engineFilter))
+    {
+        skipped++;
+        reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped", [$"Skipped by engine filter '{engineFilter}'"]));
         continue;
+    }
 
     // Run spec via protocol engine
     using var engine = new JsonProtocolEngine(adapterProcess);
     var runner = new SpecRunner(engine);
     var result = runner.Run(spec);
     results.Add(result);
+    reportResults.Add(new SpecResultSummary(
+        result.SpecId,
+        result.Category,
+        result.Description,
+        result.Passed ? "passed" : "failed",
+        [.. result.Failures]));
 }
 
 sw.Stop();
@@ -163,6 +189,9 @@ switch (output)
         OutputSummary(results, sw.Elapsed);
         break;
 }
+
+if (reportPath is not null)
+    OutputConformanceReport(reportPath, reportResults);
 
 return exitCode;
 
@@ -247,6 +276,51 @@ void PrintUsage()
           --tag <tag>         Only run specs with this tag
           --engine <name>     Only run specs applicable to this engine
                               (battlescribe, newrecruit, phalanx)
+          --report <path>     Write conformance report JSON to file
           -h, --help          Show this help
         """);
+}
+
+void OutputConformanceReport(string path, List<SpecResultSummary> results)
+{
+    var reportPassed = results.Count(r => r.Status == "passed");
+    var reportFailed = results.Count(r => r.Status == "failed");
+    var reportSkipped = results.Count(r => r.Status == "skipped");
+    var runTotal = reportPassed + reportFailed;
+    var passRate = runTotal == 0 ? 0 : (double)reportPassed / runTotal * 100.0;
+
+    var report = new ConformanceReport(
+        engineFilter ?? "all",
+        DateTime.UtcNow,
+        totalSpecs,
+        reportPassed,
+        reportFailed,
+        reportSkipped,
+        passRate,
+        results);
+
+    var directory = Path.GetDirectoryName(path);
+    if (!string.IsNullOrEmpty(directory))
+        Directory.CreateDirectory(directory);
+
+    File.WriteAllText(path, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+
+    Console.WriteLine();
+    Console.WriteLine($"Conformance report: {path}");
+    Console.WriteLine($"Summary: total={report.TotalSpecs}, passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}, passRate={report.PassRate:F1}%");
+
+    if (engineFilter is not null)
+        Console.WriteLine($"Engine breakdown: {engineFilter} => passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}");
+
+    var failedSpecs = results.Where(r => r.Status == "failed").ToList();
+    if (failedSpecs.Count > 0)
+    {
+        Console.WriteLine("Failed specs:");
+        foreach (var failedSpec in failedSpecs)
+        {
+            Console.WriteLine($"  - {failedSpec.Category}/{failedSpec.SpecId}");
+            foreach (var failure in failedSpec.Failures)
+                Console.WriteLine($"    {failure}");
+        }
+    }
 }

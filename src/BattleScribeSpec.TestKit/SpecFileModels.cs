@@ -54,6 +54,9 @@ public sealed class SetupDef
     [YamlMember(Alias = "gameSystem")]
     public GameSystemDef GameSystem { get; set; } = new();
 
+    [YamlMember(Alias = "dataSource")]
+    public string? DataSource { get; init; }
+
     /// <summary>
     /// Multiple catalogues for multi-catalogue scenarios.
     /// </summary>
