@@ -134,8 +134,7 @@ foreach (var (_, id, category, loader) in specSources)
         continue;
 
     // Apply engine filter — null engines means "all engines"
-    if (engineFilter is not null && spec.Engines is not null
-        && !spec.Engines.Contains(engineFilter, StringComparer.OrdinalIgnoreCase))
+    if (engineFilter is not null && !spec.IsApplicableTo(engineFilter))
         continue;
 
     // Run spec via protocol engine
@@ -171,6 +170,9 @@ return exitCode;
 
 void OutputSummary(List<SpecResult> results, TimeSpan elapsed)
 {
+    if (engineFilter is not null)
+        Console.WriteLine($"Engine: {engineFilter}");
+
     foreach (var result in results)
     {
         var status = result.Passed ? "PASS" : "FAIL";
@@ -189,6 +191,7 @@ void OutputJson(List<SpecResult> results, TimeSpan elapsed)
 {
     var report = new
     {
+        engine = engineFilter,
         passed,
         failed,
         total = results.Count,
@@ -207,8 +210,9 @@ void OutputJson(List<SpecResult> results, TimeSpan elapsed)
 
 void OutputGitHubActions(List<SpecResult> results, TimeSpan elapsed)
 {
+    var engineLabel = engineFilter is not null ? $" ({engineFilter})" : "";
     // Step summary as markdown table
-    Console.WriteLine("## BattleScribe Spec Conformance Results");
+    Console.WriteLine($"## BattleScribe Spec Conformance Results{engineLabel}");
     Console.WriteLine();
     Console.WriteLine($"**{passed}** passed, **{failed}** failed, **{results.Count}** total ({elapsed.TotalSeconds:F1}s)");
     Console.WriteLine();

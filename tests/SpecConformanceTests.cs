@@ -32,6 +32,14 @@ public sealed class SpecConformanceTests
     public void OracleEngine(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
+
+        // Skip specs not applicable to the BattleScribe oracle engine
+        if (!spec.IsApplicableTo("battlescribe"))
+        {
+            _output.WriteLine($"Skipping spec: {specName} — not applicable to battlescribe engine");
+            return;
+        }
+
         _output.WriteLine($"Running spec: {specName} — {spec.Description}");
 
         using var engine = new OracleRosterEngine();

@@ -36,6 +36,14 @@ public sealed class SpecFile
 
     [YamlMember(Alias = "steps")]
     public List<StepDef> Steps { get; set; } = [];
+
+    /// <summary>
+    /// Check if this spec applies to the given engine.
+    /// Null/empty engines means applicable to all engines.
+    /// </summary>
+    public bool IsApplicableTo(string engineName)
+        => Engines is null || Engines.Count == 0
+        || Engines.Contains(engineName, StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
