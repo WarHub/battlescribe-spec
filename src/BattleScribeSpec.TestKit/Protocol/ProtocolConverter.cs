@@ -7,10 +7,11 @@ public static class ProtocolConverter
 {
     // ===== Spec → Protocol (runner side: sending setup data) =====
 
-    public static SetupCommand ToSetupCommand(GameSystemSpec gs, CatalogueSpec cat) => new()
+    public static SetupCommand ToSetupCommand(GameSystemSpec gs, CatalogueSpec[] catalogues) => new()
     {
         GameSystem = ToProtocol(gs),
-        Catalogue = ToProtocol(cat),
+        Catalogue = ToProtocol(catalogues[0]),
+        Catalogues = catalogues.Length > 1 ? catalogues.Select(ToProtocol).ToList() : null,
     };
 
     public static ProtocolGameSystem ToProtocol(GameSystemSpec gs) => new()
@@ -161,8 +162,13 @@ public static class ProtocolConverter
 
     // ===== Protocol → Spec (adapter side: receiving setup data) =====
 
-    public static (GameSystemSpec, CatalogueSpec) FromSetupCommand(SetupCommand cmd) =>
-        (FromProtocol(cmd.GameSystem), FromProtocol(cmd.Catalogue));
+    public static (GameSystemSpec, CatalogueSpec[]) FromSetupCommand(SetupCommand cmd)
+    {
+        var gs = FromProtocol(cmd.GameSystem);
+        var catalogues = cmd.Catalogues?.Select(FromProtocol).ToArray()
+            ?? [FromProtocol(cmd.Catalogue)];
+        return (gs, catalogues);
+    }
 
     public static GameSystemSpec FromProtocol(ProtocolGameSystem gs) => new(
         Id: gs.Id, Name: gs.Name,

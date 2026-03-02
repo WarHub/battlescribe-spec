@@ -174,10 +174,11 @@ public record EntryLinkSpec(
 
 /// <summary>
 /// Complete test scenario specification.
+/// Supports multiple catalogues — each force can be from a different catalogue.
 /// </summary>
 public record ScenarioSpec(
     GameSystemSpec GameSystem,
-    CatalogueSpec Catalogue);
+    CatalogueSpec[] Catalogues);
 
 public record ProfileTypeSpec(
     string Id,

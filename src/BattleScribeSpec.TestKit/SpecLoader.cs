@@ -113,10 +113,10 @@ public static class SpecLoader
     }
 
     /// <summary>
-    /// Convert YAML setup definitions to existing SpecModels records
-    /// for use with IRosterEngine.Setup().
+    /// Convert YAML setup definitions to ScenarioSpec.
+    /// Supports both singular 'catalogue' and plural 'catalogues'.
     /// </summary>
-    public static (GameSystemSpec, CatalogueSpec) ToSpecModels(SetupDef setup)
+    public static ScenarioSpec ToSpecModels(SetupDef setup)
     {
         var gs = new GameSystemSpec(
             Id: setup.GameSystem.Id,
@@ -131,17 +131,26 @@ public static class SpecLoader
                 .Select(pt => new ProfileTypeSpec(pt.Id, pt.Name,
                     pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray());
 
-        var cat = new CatalogueSpec(
-            Id: setup.Catalogue.Id,
-            Name: setup.Catalogue.Name,
-            GameSystemId: setup.Catalogue.GameSystemId,
-            SelectionEntries: setup.Catalogue.SelectionEntries?
-                .Select(ConvertSelectionEntry).ToArray(),
-            SelectionEntryGroups: setup.Catalogue.SelectionEntryGroups?
-                .Select(ConvertSelectionEntryGroup).ToArray(),
-            EntryLinks: setup.Catalogue.EntryLinks?.Select(ConvertEntryLink).ToArray());
+        // Support both singular 'catalogue' and plural 'catalogues'
+        var catalogueDefs = setup.Catalogues
+            ?? (setup.Catalogue is { } singleCat ? [singleCat] : [new CatalogueDef()]);
 
-        return (gs, cat);
+        var catalogues = catalogueDefs.Select(ConvertCatalogue).ToArray();
+
+        return new ScenarioSpec(gs, catalogues);
+    }
+
+    private static CatalogueSpec ConvertCatalogue(CatalogueDef def)
+    {
+        return new CatalogueSpec(
+            Id: def.Id,
+            Name: def.Name,
+            GameSystemId: def.GameSystemId,
+            SelectionEntries: def.SelectionEntries?
+                .Select(ConvertSelectionEntry).ToArray(),
+            SelectionEntryGroups: def.SelectionEntryGroups?
+                .Select(ConvertSelectionEntryGroup).ToArray(),
+            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray());
     }
 
     private static SelectionEntrySpec ConvertSelectionEntry(SelectionEntryDef def)

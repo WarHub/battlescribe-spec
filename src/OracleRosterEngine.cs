@@ -9,18 +9,18 @@ namespace BattleScribeSpec;
 public sealed class OracleRosterEngine : IRosterEngine
 {
     private readonly BattleScribeOracle _oracle = new();
-    private CatalogueSpec? _catalogueSpec;
+    private CatalogueSpec[]? _catalogueSpecs;
 
-    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec catalogue)
+    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
-        _catalogueSpec = catalogue;
-        var scenario = new ScenarioSpec(gameSystem, catalogue);
+        _catalogueSpecs = catalogues;
+        var scenario = new ScenarioSpec(gameSystem, catalogues);
         return _oracle.SetupFromSpec(scenario);
     }
 
-    public void AddForce(int forceEntryIndex)
+    public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
     {
-        _oracle.AddForceByIndex(forceEntryIndex);
+        _oracle.AddForceByIndex(forceEntryIndex, catalogueIndex);
     }
 
     public void RemoveForce(int forceIndex)

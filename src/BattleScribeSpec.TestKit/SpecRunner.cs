@@ -22,8 +22,8 @@ public sealed class SpecRunner
         try
         {
             // Setup
-            var (gs, cat) = SpecLoader.ToSpecModels(spec.Setup);
-            _engine.Setup(gs, cat);
+            var scenario = SpecLoader.ToSpecModels(spec.Setup);
+            _engine.Setup(scenario.GameSystem, scenario.Catalogues);
 
             // Execute steps
             for (var i = 0; i < spec.Steps.Count; i++)
@@ -57,7 +57,7 @@ public sealed class SpecRunner
         switch (step.Action)
         {
             case "addForce":
-                _engine.AddForce(step.ForceEntryIndex ?? 0);
+                _engine.AddForce(step.ForceEntryIndex ?? 0, step.CatalogueIndex ?? 0);
                 break;
 
             case "removeForce":

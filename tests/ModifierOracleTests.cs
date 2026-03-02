@@ -20,7 +20,7 @@ public class ModifierOracleTests(ITestOutputHelper output)
             new GameSystemSpec(
                 ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
                 CostTypes: costTypes),
-            new CatalogueSpec(SelectionEntries: entries));
+            [new CatalogueSpec(SelectionEntries: entries)]);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class ModifierOracleTests(ITestOutputHelper output)
                     Characteristics: [new CharacteristicSpec("Wounds", "char-wounds", "2")],
                     Modifiers: [new ModifierSpec("set", "char-wounds", "3")])])
         ]);
-        engine.Setup(gs, cat);
+        engine.Setup(gs, [cat]);
         engine.AddForce(0);
         engine.SelectEntry(0, 0);
         var state = engine.GetRosterState();
@@ -165,7 +165,7 @@ public class ModifierOracleTests(ITestOutputHelper output)
                 Rules: [new RuleSpec("rule-1", "Combat Doctrine", "Original description",
                     Modifiers: [new ModifierSpec("set", "description", "Modified description")])])
         ]);
-        engine.Setup(gs, cat);
+        engine.Setup(gs, [cat]);
         engine.AddForce(0);
         engine.SelectEntry(0, 0);
         var state = engine.GetRosterState();

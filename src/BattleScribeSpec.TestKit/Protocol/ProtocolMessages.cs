@@ -44,6 +44,10 @@ public sealed class SetupCommand : ProtocolCommand
 
     [JsonPropertyName("catalogue")]
     public ProtocolCatalogue Catalogue { get; set; } = new();
+
+    [JsonPropertyName("catalogues")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolCatalogue>? Catalogues { get; set; }
 }
 
 /// <summary>
@@ -76,6 +80,10 @@ public sealed class ActionCommand : ProtocolCommand
     [JsonPropertyName("childEntryIndex")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ChildEntryIndex { get; set; }
+
+    [JsonPropertyName("catalogueIndex")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? CatalogueIndex { get; set; }
 
     [JsonPropertyName("costTypeId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
