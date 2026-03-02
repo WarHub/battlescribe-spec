@@ -666,7 +666,29 @@ public sealed class ExpectedStateDef
     public List<ExpectedCostDef>? Costs { get; set; }
 
     [YamlMember(Alias = "validationErrors")]
-    public List<string>? ValidationErrors { get; set; }
+    public List<ExpectedValidationErrorDef>? ValidationErrors { get; set; }
+}
+
+/// <summary>
+/// Expected structured validation error for assertion.
+/// All fields are optional — only specified fields are checked.
+/// </summary>
+public sealed class ExpectedValidationErrorDef
+{
+    [YamlMember(Alias = "message")]
+    public string? Message { get; set; }
+
+    [YamlMember(Alias = "ownerType")]
+    public string? OwnerType { get; set; }
+
+    [YamlMember(Alias = "ownerEntryId")]
+    public string? OwnerEntryId { get; set; }
+
+    [YamlMember(Alias = "entryId")]
+    public string? EntryId { get; set; }
+
+    [YamlMember(Alias = "constraintId")]
+    public string? ConstraintId { get; set; }
 }
 
 public sealed class ExpectedForceDef

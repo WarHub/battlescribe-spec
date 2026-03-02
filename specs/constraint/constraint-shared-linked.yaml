@@ -1,0 +1,67 @@
+id: constraint-shared-linked
+category: constraint
+description: Shared constraint violation produces structured error with entry link
+tags:
+  - validation-errors
+  - structured-errors
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: con-min-shared
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+              shared: true
+        - id: se-unit-b
+          name: Unit B
+          type: unit
+          categoryLinks:
+            - id: cl-seb-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: con-min-shared
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+              shared: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - expectedState:
+      hasValidationErrors: true
+      validationErrors:
+        - message: must have
+          constraintId: con-min-shared

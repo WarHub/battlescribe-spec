@@ -69,7 +69,7 @@ public static class ModelConverter
             roster.getGameSystemId(),
             forceSnapshots,
             costSnapshots,
-            [.. errors]);
+            [.. errors.Select(e => e.Message)]);
     }
 
     private static SelectionSnapshot CaptureSelection(net.battlescribe.model.roster.Selection sel)

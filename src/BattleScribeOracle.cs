@@ -240,13 +240,13 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Get all validation errors for the current roster.
+    /// Get all validation errors for the current roster with structured entry links.
     /// </summary>
-    public List<string> GetValidationErrors()
+    public List<ValidationErrorState> GetValidationErrors()
     {
         EnsureInitialized();
         var javaErrors = _engine.q();
-        return JavaListToStringErrors(javaErrors);
+        return JavaListToValidationErrors(javaErrors);
     }
 
     /// <summary>
@@ -1436,6 +1436,83 @@ public sealed class BattleScribeOracle : IDisposable
         while (iter.hasNext())
         {
             result.Add((T)iter.next());
+        }
+        return result;
+    }
+
+    private static List<ValidationErrorState> JavaListToValidationErrors(JavaList? javaList)
+    {
+        if (javaList is null) return [];
+        var result = new List<ValidationErrorState>(javaList.size());
+        var iter = javaList.iterator();
+        while (iter.hasNext())
+        {
+            var item = iter.next();
+            // Use dynamic dispatch to avoid C# type/namespace collision with
+            // net.battlescribe.engine.b.a (both a type and a namespace in IKVM)
+            if (item?.GetType().FullName == "net.battlescribe.engine.b.a")
+            {
+                dynamic error = item;
+                var message = (string?)error.b() ?? "(null error)";
+                string? ownerType = null;
+                string? ownerId = null;
+                string? ownerEntryId = null;
+
+                object? owner = error.a();
+                switch (owner)
+                {
+                    case net.battlescribe.model.roster.Selection sel:
+                        ownerType = "selection";
+                        ownerId = sel.getId();
+                        ownerEntryId = sel.getEntryId();
+                        break;
+                    case net.battlescribe.model.roster.Category cat:
+                        ownerType = "category";
+                        ownerId = cat.getId();
+                        ownerEntryId = cat.getEntryId();
+                        break;
+                    case net.battlescribe.model.roster.Force force:
+                        ownerType = "force";
+                        ownerId = force.getId();
+                        ownerEntryId = force.getEntryId();
+                        break;
+                    case net.battlescribe.model.roster.Roster roster:
+                        ownerType = "roster";
+                        ownerId = roster.getId();
+                        break;
+                }
+
+                // Extract entryId and constraintId from the owner's validationErrorIds
+                // Error IDs follow the pattern: rosterElementId::entryId::constraintId
+                string? entryId = null;
+                string? constraintId = null;
+                if (owner is net.battlescribe.model.roster.BaseRosterElement ownerElement)
+                {
+                    var errorIds = ownerElement.getValidationErrorIds();
+                    if (errorIds is not null)
+                    {
+                        var idIter = errorIds.iterator();
+                        while (idIter.hasNext())
+                        {
+                            var errorId = idIter.next()?.ToString();
+                            if (errorId is null) continue;
+                            var parts = errorId.Split("::");
+                            if (parts.Length >= 3 && parts[0] == ownerId)
+                            {
+                                entryId = parts[1];
+                                constraintId = parts[2];
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                result.Add(new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId));
+            }
+            else
+            {
+                result.Add(new ValidationErrorState(item?.ToString() ?? "(null error)"));
+            }
         }
         return result;
     }

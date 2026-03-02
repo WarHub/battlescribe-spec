@@ -63,12 +63,7 @@ public interface IRosterEngine : IDisposable
     RosterState GetRosterState();
 
     /// <summary>
-    /// Get all current validation errors.
+    /// Get all current validation errors with structured entry links.
     /// </summary>
-    IReadOnlyList<string> GetValidationErrors();
-
-    /// <summary>
-    /// Check whether the roster has any validation errors.
-    /// </summary>
-    bool HasValidationErrors();
+    IReadOnlyList<ValidationErrorState> GetValidationErrors();
 }

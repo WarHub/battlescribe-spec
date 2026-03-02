@@ -5,12 +5,20 @@ namespace BattleScribeSpec;
 /// These types are used by both the spec runner and engine implementations.
 /// </summary>
 
+public record ValidationErrorState(
+    string Message,
+    string? OwnerType = null,
+    string? OwnerId = null,
+    string? OwnerEntryId = null,
+    string? EntryId = null,
+    string? ConstraintId = null);
+
 public record RosterState(
     string Name,
     string GameSystemId,
     IReadOnlyList<ForceState> Forces,
     IReadOnlyList<CostState> Costs,
-    IReadOnlyList<string> ValidationErrors);
+    IReadOnlyList<ValidationErrorState> ValidationErrors);
 
 public record ForceState(
     string Name,

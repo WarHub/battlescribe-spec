@@ -137,4 +137,5 @@ public class ConstraintOracleTests
         Assert.False(oracle.HasValidationErrors());
         Assert.Empty(errors);
     }
+
 }

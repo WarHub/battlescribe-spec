@@ -154,7 +154,7 @@ public sealed class StateResponse : ProtocolResponse
     public List<ProtocolCost> Costs { get; set; } = [];
 
     [JsonPropertyName("validationErrors")]
-    public List<string> ValidationErrors { get; set; } = [];
+    public List<ProtocolValidationError> ValidationErrors { get; set; } = [];
 }
 
 public sealed class ErrorsResponse : ProtocolResponse
@@ -163,13 +163,42 @@ public sealed class ErrorsResponse : ProtocolResponse
     public override string Type => "errors";
 
     [JsonPropertyName("errors")]
-    public List<string> Errors { get; set; } = [];
+    public List<ProtocolValidationError> Errors { get; set; } = [];
 }
 
 public sealed class TeardownResult : ProtocolResponse
 {
     [JsonPropertyName("type")]
     public override string Type => "teardownResult";
+}
+
+/// <summary>
+/// Structured validation error with entry-link data.
+/// </summary>
+public sealed class ProtocolValidationError
+{
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("ownerType")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OwnerType { get; set; }
+
+    [JsonPropertyName("ownerId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OwnerId { get; set; }
+
+    [JsonPropertyName("ownerEntryId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OwnerEntryId { get; set; }
+
+    [JsonPropertyName("entryId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryId { get; set; }
+
+    [JsonPropertyName("constraintId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConstraintId { get; set; }
 }
 
 /// <summary>

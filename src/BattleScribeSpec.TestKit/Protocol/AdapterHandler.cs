@@ -124,7 +124,18 @@ public static class AdapterHandler
         if (engine is null)
             return new ProtocolError { Message = "Engine not initialized" };
 
-        return new ErrorsResponse { Errors = engine.GetValidationErrors().ToList() };
+        return new ErrorsResponse
+        {
+            Errors = engine.GetValidationErrors().Select(e => new ProtocolValidationError
+            {
+                Message = e.Message,
+                OwnerType = e.OwnerType,
+                OwnerId = e.OwnerId,
+                OwnerEntryId = e.OwnerEntryId,
+                EntryId = e.EntryId,
+                ConstraintId = e.ConstraintId,
+            }).ToList()
+        };
     }
 
     private static ProtocolResponse HandleTeardown(ref IRosterEngine? engine)

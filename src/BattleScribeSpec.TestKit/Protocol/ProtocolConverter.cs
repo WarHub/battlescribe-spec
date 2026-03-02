@@ -326,7 +326,7 @@ public static class ProtocolConverter
         state.Name, state.GameSystemId,
         state.Forces.Select(ToForceState).ToList(),
         state.Costs.Select(ToCostState).ToList(),
-        state.ValidationErrors);
+        state.ValidationErrors.Select(ToValidationErrorState).ToList());
 
     static ForceState ToForceState(ProtocolForce f) => new(
         f.Name, f.CatalogueId,
@@ -346,6 +346,19 @@ public static class ProtocolConverter
 
     static CostState ToCostState(ProtocolCost c) => new(c.Name, c.TypeId, c.Value);
 
+    static ValidationErrorState ToValidationErrorState(ProtocolValidationError e) => new(
+        e.Message, e.OwnerType, e.OwnerId, e.OwnerEntryId, e.EntryId, e.ConstraintId);
+
+    static ProtocolValidationError ToProtocolValidationError(ValidationErrorState e) => new()
+    {
+        Message = e.Message,
+        OwnerType = e.OwnerType,
+        OwnerId = e.OwnerId,
+        OwnerEntryId = e.OwnerEntryId,
+        EntryId = e.EntryId,
+        ConstraintId = e.ConstraintId,
+    };
+
     // ===== Engine state → Protocol (adapter side: sending state) =====
 
     public static StateResponse ToStateResponse(RosterState state) => new()
@@ -354,7 +367,7 @@ public static class ProtocolConverter
         GameSystemId = state.GameSystemId,
         Forces = state.Forces.Select(ToProtocolForce).ToList(),
         Costs = state.Costs.Select(ToProtocolCost).ToList(),
-        ValidationErrors = state.ValidationErrors.ToList(),
+        ValidationErrors = state.ValidationErrors.Select(ToProtocolValidationError).ToList(),
     };
 
     static ProtocolForce ToProtocolForce(ForceState f) => new()

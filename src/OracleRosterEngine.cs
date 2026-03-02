@@ -9,10 +9,12 @@ namespace BattleScribeSpec;
 public sealed class OracleRosterEngine : IRosterEngine
 {
     private readonly BattleScribeOracle _oracle = new();
+    private GameSystemSpec? _gameSystemSpec;
     private CatalogueSpec[]? _catalogueSpecs;
 
     public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
+        _gameSystemSpec = gameSystem;
         _catalogueSpecs = catalogues;
         var scenario = new ScenarioSpec(gameSystem, catalogues);
         return _oracle.SetupFromSpec(scenario);
@@ -120,9 +122,59 @@ public sealed class OracleRosterEngine : IRosterEngine
             errors);
     }
 
-    public IReadOnlyList<string> GetValidationErrors() => _oracle.GetValidationErrors();
+    public IReadOnlyList<ValidationErrorState> GetValidationErrors()
+    {
+        var errors = _oracle.GetValidationErrors();
+        if (_catalogueSpecs is null) return errors;
+        // Enrich errors with entryId/constraintId by correlating entry names in messages
+        return errors.Select(e => EnrichError(e)).ToList();
+    }
 
-    public bool HasValidationErrors() => _oracle.HasValidationErrors();
+    private ValidationErrorState EnrichError(ValidationErrorState error)
+    {
+        if (error.EntryId is not null && error.ConstraintId is not null)
+            return error; // already populated (shared entries)
+        if (_catalogueSpecs is null)
+            return error;
+
+        // Collect all entries from all catalogues (including nested children)
+        var allEntries = new List<SelectionEntrySpec>();
+        foreach (var cat in _catalogueSpecs)
+        {
+            if (cat.SelectionEntries is { } entries)
+                CollectEntries(entries, allEntries);
+            if (cat.SharedSelectionEntries is { } shared)
+                CollectEntries(shared, allEntries);
+        }
+
+        // Match by entry name in error message
+        foreach (var entry in allEntries)
+        {
+            if (!error.Message.Contains(entry.Name)) continue;
+            if (entry.Constraints is null) continue;
+            foreach (var c in entry.Constraints)
+            {
+                var constraintType = c.Type; // "min" or "max"
+                if ((constraintType == "min" && (error.Message.Contains("must have") || error.Message.Contains("must spend"))) ||
+                    (constraintType == "max" && (error.Message.Contains("too many") || error.Message.Contains("too much"))))
+                {
+                    return error with { EntryId = entry.Id, ConstraintId = c.Id };
+                }
+            }
+        }
+
+        return error;
+    }
+
+    private static void CollectEntries(IEnumerable<SelectionEntrySpec> entries, List<SelectionEntrySpec> result)
+    {
+        foreach (var entry in entries)
+        {
+            result.Add(entry);
+            if (entry.ChildEntries is { } children)
+                CollectEntries(children, result);
+        }
+    }
 
     public void Dispose() => _oracle.Dispose();
 

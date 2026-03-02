@@ -127,7 +127,7 @@ public sealed class SpecRunner
                 case "hasValidationErrors":
                     AssertEqual(stepIndex, "hasValidationErrors",
                         Convert.ToBoolean(step.Expected),
-                        _engine.HasValidationErrors());
+                        _engine.GetValidationErrors().Count > 0);
                     break;
 
                 case "validationErrorCount":
@@ -141,7 +141,7 @@ public sealed class SpecRunner
                     if (errors.Count > 0)
                     {
                         _errors.Add($"Step {stepIndex}: expected no validation errors but got {errors.Count}: " +
-                            string.Join("; ", errors));
+                            string.Join("; ", errors.Select(e => e.Message)));
                     }
                     break;
 
@@ -219,7 +219,7 @@ public sealed class SpecRunner
             AssertEqual(stepIndex, "forceCount", fc, state.Forces.Count);
 
         if (expected.HasValidationErrors is { } hve)
-            AssertEqual(stepIndex, "hasValidationErrors", hve, _engine.HasValidationErrors());
+            AssertEqual(stepIndex, "hasValidationErrors", hve, _engine.GetValidationErrors().Count > 0);
 
         if (expected.ValidationErrorCount is { } vec)
             AssertEqual(stepIndex, "validationErrorCount", vec, _engine.GetValidationErrors().Count);
@@ -273,8 +273,24 @@ public sealed class SpecRunner
             var actualErrors = _engine.GetValidationErrors();
             foreach (var ee in expectedErrors)
             {
-                if (!actualErrors.Any(ae => ae.Contains(ee)))
-                    _errors.Add($"Step {stepIndex}: expected validation error containing '{ee}' not found in: [{string.Join("; ", actualErrors)}]");
+                var match = actualErrors.FirstOrDefault(ae =>
+                    (ee.Message is null || ae.Message.Contains(ee.Message)) &&
+                    (ee.OwnerType is null || ae.OwnerType == ee.OwnerType) &&
+                    (ee.OwnerEntryId is null || ae.OwnerEntryId == ee.OwnerEntryId) &&
+                    (ee.EntryId is null || ae.EntryId == ee.EntryId) &&
+                    (ee.ConstraintId is null || ae.ConstraintId == ee.ConstraintId));
+                if (match is null)
+                {
+                    var desc = string.Join(", ",
+                        new[] {
+                            ee.Message is not null ? $"message~'{ee.Message}'" : null,
+                            ee.OwnerType is not null ? $"ownerType='{ee.OwnerType}'" : null,
+                            ee.OwnerEntryId is not null ? $"ownerEntryId='{ee.OwnerEntryId}'" : null,
+                            ee.EntryId is not null ? $"entryId='{ee.EntryId}'" : null,
+                            ee.ConstraintId is not null ? $"constraintId='{ee.ConstraintId}'" : null,
+                        }.Where(s => s is not null));
+                    _errors.Add($"Step {stepIndex}: expected validation error matching [{desc}] not found in: [{string.Join("; ", actualErrors.Select(e => e.Message))}]");
+                }
             }
         }
     }
