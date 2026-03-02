@@ -1,11 +1,11 @@
 # BattleScribe Engine Conformance Test Coverage Matrix
-# Current state: 179 specs, 325 tests, all passing
+# Current state: 205 specs, 351 tests, all passing
 # Last updated: 2025-07-18
 
 summary:
-  total_specs: 179
-  total_tests: 325  # 179 spec conformance + 146 infrastructure/unit
-  passed: 325
+  total_specs: 205
+  total_tests: 351  # 205 spec conformance + 146 infrastructure/unit
+  passed: 351
   skipped: 0
   failed: 0
   categories_covered: 9
@@ -13,7 +13,7 @@ summary:
 
 spec_inventory:
   condition:
-    count: 27
+    count: 28
     specs:
       - condition-at-least
       - condition-at-most
@@ -28,6 +28,7 @@ spec_inventory:
       - condition-group-and
       - condition-group-nested
       - condition-group-or
+      - condition-group-triple-nested
       - condition-instance-of-ancestor
       - condition-instance-of-by-category
       - condition-instance-of-by-type
@@ -43,12 +44,13 @@ spec_inventory:
       - condition-percent-value
       - condition-scope-roster
   constraint:
-    count: 19
+    count: 20
     specs:
       - constraint-collective
       - constraint-cost-field
       - constraint-forces-field
       - constraint-hidden-enforcement
+      - constraint-include-child-forces
       - constraint-include-child-selections
       - constraint-max-exactly-at-limit
       - constraint-max-satisfied
@@ -65,11 +67,12 @@ spec_inventory:
       - constraint-shared-deduplication
       - constraint-shared
   cost:
-    count: 17
+    count: 19
     specs:
       - cost-aggregation
       - cost-base-calculation
       - cost-child-aggregation
+      - cost-default-limit-positive
       - cost-duplicate-increases
       - cost-empty-roster
       - cost-limit-query-resolution
@@ -80,6 +83,7 @@ spec_inventory:
       - cost-removal-after-deselect
       - cost-same-entry-twice-doubles
       - cost-set-limit
+      - cost-three-types
       - cost-type-hidden
       - cost-type-limit
       - cost-zero-value
@@ -98,8 +102,10 @@ spec_inventory:
       - force-selections-independent
       - force-with-categories
   modifier:
-    count: 44
+    count: 48
     specs:
+      - entry-link-cascading-modifiers
+      - infogroup-with-modifiers
       - modifier-append-name
       - modifier-append-with-space
       - modifier-category-add
@@ -130,7 +136,9 @@ spec_inventory:
       - modifier-number-decrement
       - modifier-number-set
       - modifier-on-profile
+      - modifier-order-set-then-append
       - modifier-repeat-basic
+      - modifier-repeat-include-child-selections
       - modifier-repeat-multiple-additive
       - modifier-repeat-percent-value
       - modifier-repeat-round-down
@@ -187,10 +195,27 @@ spec_inventory:
       - scope-roster
       - scope-self
   selection:
-    count: 29
+    count: 47
     specs:
+      - collective-with-constraint
+      - entry-group-with-modifiers
       - entry-link-basic
+      - entry-link-to-group
+      - entry-link-with-constraint
+      - entry-link-with-cost
       - entry-link-with-modifier
+      - hidden-cascade-to-children
+      - infogroup-basic
+      - infogroup-hidden
+      - infogroup-multiple-profiles
+      - nested-children-deep
+      - profile-hidden
+      - profile-inherited-from-link
+      - profile-multiple-on-entry
+      - profile-with-multiple-characteristics
+      - rule-hidden
+      - rule-multiple-on-entry
+      - rule-with-page
       - selection-add-unit
       - selection-category-link
       - selection-child-entry
@@ -208,6 +233,7 @@ spec_inventory:
       - selection-force-level-entry
       - selection-hidden-entry
       - selection-model-type
+      - selection-model-with-cost
       - selection-multiple-deselects
       - selection-multiple-entries
       - selection-multiple-types
@@ -224,11 +250,11 @@ spec_inventory:
 engine_api:
   Setup:
     status: covered
-    total_usage: 179  # implicitly called by every spec
+    total_usage: 205  # implicitly called by every spec
     representative_specs: [roster-create-empty, roster-with-cost-types, roster-no-cost-types, roster-game-system-id]
   AddForce:
     status: covered
-    total_usage: 176
+    total_usage: 202
     representative_specs: [force-add-single, force-add-multiple, force-multiple-types, force-nested-basic]
   RemoveForce:
     status: covered
@@ -236,11 +262,11 @@ engine_api:
     specs: [force-remove, force-remove-second, force-add-and-remove-all, refresh-full-lifecycle]
   SelectEntry:
     status: covered
-    total_usage: 164
+    total_usage: 190
     representative_specs: [selection-add-unit, selection-with-cost, selection-multiple-entries, selection-same-entry-twice]
   SelectChildEntry:
     status: covered
-    total_usage: 6
+    total_usage: 8
     specs: [selection-child-entry, selection-child-multiple, selection-child-with-cost, cost-child-aggregation, refresh-after-child-select, scope-ancestor]
   DeselectSelection:
     status: covered
@@ -260,11 +286,11 @@ engine_api:
     specs: [cost-set-limit]
   GetRosterState:
     status: covered
-    total_usage: 126  # specs using expectedState assertions
+    total_usage: 138  # specs using expectedState assertions
     representative_specs: [roster-create-empty, roster-with-cost-types, cost-aggregation, modifier-set-name]
   GetValidationErrors:
     status: covered
-    total_usage: 9  # specs using hasValidationErrors or noValidationErrors asserts
+    total_usage: 11  # specs using hasValidationErrors or noValidationErrors asserts
     specs: [constraint-min-violation, constraint-min-satisfied, constraint-min-zero-no-error, constraint-max-violation, constraint-max-satisfied, constraint-max-exactly-at-limit, constraint-max-unlimited, constraint-no-constraints]
     note: Also tested via noValidationErrors in modifier-set-constraint and modifier-set-hidden-true
   HasValidationErrors:

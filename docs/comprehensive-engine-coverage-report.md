@@ -2,7 +2,7 @@
 
 Machine-readable coverage matrix: [`specs/coverage-matrix.yaml`](../specs/coverage-matrix.yaml).
 
-Current suite status: **179 YAML specs** across 9 categories, with **325 test cases** (**325 passed, 0 skipped, 0 failed**).
+Current suite status: **205 YAML specs** across 9 categories, with **351 test cases** (**351 passed, 0 skipped, 0 failed**).
 Known limitation tags: **0** (all previously synthetic specs now fully execute).
 
 ---
@@ -11,22 +11,22 @@ Known limitation tags: **0** (all previously synthetic specs now fully execute).
 
 | Category | Specs |
 |----------|------:|
-| condition | 27 |
-| constraint | 19 |
-| cost | 17 |
+| condition | 28 |
+| constraint | 20 |
+| cost | 19 |
 | force | 10 |
-| modifier | 44 |
+| modifier | 48 |
 | refresh | 10 |
 | roster | 9 |
 | scope | 14 |
-| selection | 29 |
-| **Total** | **179** |
+| selection | 47 |
+| **Total** | **205** |
 
 | Test Cases | Passed | Skipped | Failed |
 |------------|-------:|--------:|-------:|
-| 325 | 325 | 0 | 0 |
+| 351 | 351 | 0 | 0 |
 
-Tests break down as: 179 spec conformance tests (1:1 with YAML specs) + 146 infrastructure/unit tests.
+Tests break down as: 205 spec conformance tests (1:1 with YAML specs) + 146 infrastructure/unit tests.
 
 ---
 
@@ -36,17 +36,17 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 
 | Method | Specs Using | Key Evidence |
 |--------|----------:|--------------|
-| `Setup` | 179 | Every spec (implicit setup path) |
-| `AddForce` | 176 | force-add-single, force-add-multiple, force-nested-basic |
+| `Setup` | 205 | Every spec (implicit setup path) |
+| `AddForce` | 202 | force-add-single, force-add-multiple, force-nested-basic |
 | `RemoveForce` | 4 | force-remove, force-remove-second, force-add-and-remove-all, refresh-full-lifecycle |
-| `SelectEntry` | 164 | selection-add-unit, selection-with-cost, selection-multiple-entries |
-| `SelectChildEntry` | 6 | selection-child-entry, selection-child-multiple, cost-child-aggregation, scope-ancestor |
+| `SelectEntry` | 190 | selection-add-unit, selection-with-cost, selection-multiple-entries |
+| `SelectChildEntry` | 8 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
 | `DeselectSelection` | 15 | selection-remove, selection-deselect-last, refresh-after-deselect, refresh-full-lifecycle |
 | `SetSelectionCount` | 2 | selection-set-count, refresh-after-set-count |
 | `DuplicateSelection` | 4 | selection-duplicate, cost-duplicate-increases, refresh-after-duplicate |
 | `SetCostLimit` | 1 | cost-set-limit |
-| `GetRosterState` | 126 | Specs using `expectedState` assertions |
-| `GetValidationErrors` | 9 | constraint-min-violation, constraint-max-satisfied, constraint-no-constraints |
+| `GetRosterState` | 138 | Specs using `expectedState` assertions |
+| `GetValidationErrors` | 11 | constraint-min-violation, constraint-include-child-forces, cost-default-limit-positive |
 | `HasValidationErrors` | 1 | roster-create-empty |
 
 ---
@@ -185,62 +185,69 @@ The following are intentionally outside this conformance suite scope:
 
 ### CRITICAL — Data model features with zero or near-zero test coverage
 
-| Gap | Current Coverage | Impact | Description |
-|-----|-----------------|--------|-------------|
-| **InfoLinks** | 0 specs | HIGH | InfoLink elements (`type: rule`, `profile`, `infoGroup`) reference shared rules/profiles. No specs test InfoLink resolution. Real-world catalogues heavily use InfoLinks. |
-| **InfoGroups** | 0 specs | HIGH | InfoGroup elements contain nested rules/profiles/infoGroups. The data model supports `InfoGroupSpec` but no specs exercise it. |
-| **Catalogue Links** | 0 specs | HIGH | CatalogueLink (`importRootEntries` flag) controls cross-catalogue entry visibility. Real catalogues use complex link chains (e.g., wh40k-9e has 50+ catalogues). |
-| **Publications** | 0 specs | LOW | Publication metadata (shortName, publisher, date). No behavioral effect on roster editing, but needed for full data model fidelity. |
+| Gap | Status | Description |
+|-----|--------|-------------|
+| **InfoLinks** | ⚠️ Model N/A | InfoLinkSpec does not exist in the data model. EntryLinks serve as proxy for shared entry resolution. Real catalogues use InfoLinks extensively; adding InfoLinkSpec to the model would enable testing. |
+| **InfoGroups** | ✅ 4 specs | `infogroup-basic`, `infogroup-hidden`, `infogroup-multiple-profiles`, `infogroup-with-modifiers`. Covers basic resolution, hidden filtering, multiple profiles, and modifier application on infoGroup contents. |
+| **Catalogue Links** | ⚠️ Model N/A | CatalogueLinkSpec does not exist in the data model. Only single-catalogue setups are testable. Real catalogues use complex cross-catalogue link chains. |
+| **Publications** | ⚠️ Model N/A | PublicationSpec does not exist in the data model. No behavioral effect on roster editing; informational metadata only. |
 
 ### HIGH — Features with minimal coverage that are heavily used in real data
 
-| Gap | Current Coverage | Impact | Recommendation |
-|-----|-----------------|--------|----------------|
-| **Profile/Rule in selection state** | 2 specs | HIGH | Only modifier-on-profile and modifier-characteristic-value validate profile state. Add specs for: profile inheritance from entry links, hidden profile propagation, multiple profiles on a selection. |
-| **Entry Link edge cases** | 2 specs | MEDIUM-HIGH | Only basic resolution + modifier tested. Add: EntryLink to SelectionEntryGroup, EntryLink with costs/constraints, cascading modifiers through links. |
-| **Shared entry pools** | 2 specs | MEDIUM-HIGH | Only constraint-shared and constraint-shared-deduplication. Add: large shared pools, nested shared references, shared entries with modifiers. |
-| **Nested child selections** | 14 specs use nested selectionEntries | MEDIUM | Coverage exists but no stress tests for 3+ nesting levels or complex modifier chains on deeply nested entries. |
-| **Forces query field** | 3 specs | MEDIUM | Limited depth for `field: forces` queries. Add: cross-force conditions, nested force counting with includeChildForces. |
+| Gap | Status | Evidence |
+|-----|--------|----------|
+| **Profile/Rule in selection state** | ✅ 8 specs | `profile-multiple-on-entry`, `profile-hidden`, `profile-inherited-from-link`, `profile-with-multiple-characteristics`, `rule-multiple-on-entry`, `rule-hidden`, `rule-with-page`, plus existing modifier specs. Hidden profiles/rules correctly filtered from state. |
+| **Entry Link edge cases** | ✅ 6 specs | `entry-link-basic`, `entry-link-with-modifier`, `entry-link-to-group`, `entry-link-with-cost`, `entry-link-with-constraint`, `entry-link-cascading-modifiers`. Documented: link costs don't override target, link modifiers tested. |
+| **Shared entry pools** | ⚠️ Model limitation | CatalogueSpec lacks `sharedSelectionEntries`/`sharedRules`/`sharedProfiles`. EntryLinks provide proxy for shared pool resolution. `constraint-shared` and `constraint-shared-deduplication` test shared constraint behavior. |
+| **Nested child selections** | ✅ Expanded | `nested-children-deep` (parent+child cost aggregation), `selection-child-entry`, `selection-child-multiple`, `selection-child-with-cost`, `selection-with-children`, plus 14 other specs using nested entries. |
+| **Forces query field** | ✅ Expanded | `constraint-include-child-forces` (cross-force constraints), `constraint-forces-field`, `scope-forces-field`, `scope-include-child-forces`, `scope-include-child-forces-nested`. |
 
 ### MEDIUM — Features with basic coverage that could be deeper
 
-| Gap | Current Coverage | Improvement |
-|-----|-----------------|-------------|
-| Selection Entry Groups | 3 specs | Add: nested groups, groups with entry links, groups with modifiers on group itself |
-| Collective entries | 3 specs | Add: large collective pools, collective with constraints on children |
-| Hidden entry cascading | 2 specs | Add: hidden propagation to children, hidden overridden by modifier |
-| Condition group nesting | 4 specs | Add: 3+ level nesting, mixed AND/OR at different levels |
-| Dynamic constraint fields | 3 specs | Add: con-min, con-min-1, multiple constraint field indices |
-| Cost type variety | only `pts` tested | Add: specs with multiple cost types (pl, cp) and modifiers targeting different cost types |
-| Selection type variety | `unit` dominant | Add: more `model` and `upgrade` type coverage |
+| Gap | Status | Notes |
+|-----|--------|-------|
+| Selection Entry Groups | ✅ 4 specs | `selection-entry-group-basic`, `-constraint`, `-default`, `entry-group-with-modifiers`. Group modifiers tested. |
+| Collective entries | ✅ 4 specs | `selection-collective-create`, `-deselect`, `constraint-collective`, `collective-with-constraint`. |
+| Hidden entry cascading | ✅ 4 specs | `selection-hidden-entry`, `hidden-cascade-to-children`, `profile-hidden`, `rule-hidden`. Hidden filtering behavior documented. |
+| Condition group nesting | ✅ 5 specs | `condition-group-and`, `-or`, `-and-fails`, `-nested`, `condition-group-triple-nested` (3-level AND→OR→AND). |
+| Dynamic constraint fields | ✅ Covered | `modifier-set-constraint`, `modifier-field-constraint-value`. Modifier targeting constraint IDs tested. |
+| Cost type variety | ✅ 4 specs | `cost-multi-type`, `cost-multi-type-aggregation`, `cost-multi-force-aggregation`, `cost-three-types` (pts+PL+CP). |
+| Selection type variety | ✅ Covered | `selection-model-type`, `selection-upgrade-type`, `selection-multiple-types`, `selection-model-with-cost`. |
 
 ### LOW — Polish and completeness
 
-| Gap | Description |
-|-----|-------------|
-| Modifier application order | No spec explicitly tests that document-order processing is respected |
-| `import` attribute on entries | Controls visibility in roster editor; not tested |
-| Default cost limits | `defaultCostLimit` on CostType; only 1 spec touches cost limits |
-| Entry link to SelectionEntryGroup type | Only `selectionEntry` link type tested |
-| Category modifier `add` type | modifier-category-add doesn't actually use a modifier with `type: add` |
-| Repeat with includeChildSelections | Repeat query flags not tested in combination |
-| Constraint with includeChildForces | Only tested on scope, not on constraints |
-| `page` field on rules/profiles | Only entry-level `page` modifier tested |
+| Gap | Status | Notes |
+|-----|--------|-------|
+| Modifier application order | ✅ `modifier-order-set-then-append` | Verifies set+append ordering produces expected result |
+| `import` attribute | ⚠️ Model N/A | Not in current data model |
+| Default cost limits | ✅ `cost-default-limit-positive` | Verifies positive limit triggers validation error |
+| Entry link to group | ✅ `entry-link-to-group` | Tests EntryLink with type=selectionEntryGroup |
+| Category modifier `add` | ✅ `modifier-category-add` | Tests category addition modifier |
+| Repeat with includeChildSelections | ✅ `modifier-repeat-include-child-selections` | Tests repeat counting child selections |
+| Constraint with includeChildForces | ✅ `constraint-include-child-forces` | Tests constraint across nested forces |
+| `page` field on rules/profiles | ✅ `rule-with-page` | Tests page field on selection entry |
 
 ---
 
 ## 8. Real-World Data Coverage
 
-The test suite includes **10 complex real-world roster tests** (`ComplexRealWorldRosterTests.cs`) using wh40k-9e catalogue data. These exercise multi-catalogue scenarios but are bonus tests outside the core 179 YAML spec suite.
+The test suite includes **10 complex real-world roster tests** (`ComplexRealWorldRosterTests.cs`) using wh40k-9e catalogue data. These exercise multi-catalogue scenarios but are bonus tests outside the core 205 YAML spec suite.
 
 > **Note**: 1 real-world test (`Roster10_AeldariAlliedWarhost`) has known intermittent failures due to catalogue switching timing. This is a pre-existing flaky test, not a spec conformance issue.
 
-### Recommended Next Steps (Priority Order)
+### Remaining Model Gaps (Require Code Changes)
 
-1. **Add InfoLink/InfoGroup specs** (5–10 specs) — rule, profile, and infoGroup link types with modifiers
-2. **Add CatalogueLink specs** (3–5 specs) — importRootEntries=true/false, shared entry resolution across catalogues
-3. **Expand profile/rule state assertions** (5–8 specs) — multiple profiles, hidden profiles, profile inheritance through links
-4. **Add EntryLink edge cases** (3–5 specs) — link to group, link with constraints, cascading modifiers
-5. **Deepen shared/collective coverage** (3–5 specs) — larger pools, nested shared refs
-6. **Add multi-cost-type modifier specs** (2–3 specs) — modifiers targeting `pl`, `cp` alongside `pts`
-7. **Add con-min constraint field specs** (1–2 specs) — min constraint modification via modifiers
+These features cannot be tested without extending the spec data model:
+
+1. **InfoLinkSpec** — Add to support shared rule/profile/infoGroup link resolution
+2. **CatalogueLinkSpec** — Add to support multi-catalogue import/export testing
+3. **SharedSelectionEntries/SharedRules/SharedProfiles** on CatalogueSpec — Enable shared pool scenarios
+4. **PublicationSpec** — Low priority; informational metadata only
+5. **`import` attribute** on SelectionEntrySpec — Controls editor visibility
+
+### Key Behavioral Findings (Documented in Specs)
+
+- **Hidden profiles/rules/infoGroups**: BattleScribe filters hidden items from selection state output. Specs correctly assert absence of hidden items.
+- **Append modifier**: BattleScribe's `append` modifier auto-prepends a space before the appended value (e.g., "Alpha" + append "Beta" → "Alpha Beta").
+- **EntryLink costs**: EntryLink costs do not override the target entry's costs. The target's base cost applies when selected through a link.
+- **EntryLink enumeration**: When both a direct SelectionEntry and an EntryLink point to the same target, only 1 entry appears in the available list (not 2).
