@@ -9,6 +9,7 @@ string? specsDir = null;
 var output = "summary";
 string? filter = null;
 string? tag = null;
+string? engineFilter = null;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -28,6 +29,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--tag" when i + 1 < args.Length:
             tag = args[++i];
+            break;
+        case "--engine" when i + 1 < args.Length:
+            engineFilter = args[++i];
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -127,6 +131,11 @@ foreach (var (_, id, category, loader) in specSources)
 
     // Apply tag filter
     if (tag is not null && !(spec.Tags?.Contains(tag, StringComparer.OrdinalIgnoreCase) ?? false))
+        continue;
+
+    // Apply engine filter — null engines means "all engines"
+    if (engineFilter is not null && spec.Engines is not null
+        && !spec.Engines.Contains(engineFilter, StringComparer.OrdinalIgnoreCase))
         continue;
 
     // Run spec via protocol engine
@@ -232,6 +241,8 @@ void PrintUsage()
           --output <format>   Output format: summary (default), json, github-actions
           --filter <pattern>  Only run specs matching pattern
           --tag <tag>         Only run specs with this tag
+          --engine <name>     Only run specs applicable to this engine
+                              (battlescribe, newrecruit, phalanx)
           -h, --help          Show this help
         """);
 }

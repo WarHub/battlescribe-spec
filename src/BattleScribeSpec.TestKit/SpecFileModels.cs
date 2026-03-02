@@ -24,6 +24,13 @@ public sealed class SpecFile
     [YamlMember(Alias = "tags")]
     public List<string>? Tags { get; set; }
 
+    /// <summary>
+    /// Which engines this spec applies to. Null means all engines.
+    /// Canonical names: "battlescribe", "newrecruit", "phalanx".
+    /// </summary>
+    [YamlMember(Alias = "engines")]
+    public List<string>? Engines { get; set; }
+
     [YamlMember(Alias = "setup")]
     public SetupDef Setup { get; set; } = new();
 
