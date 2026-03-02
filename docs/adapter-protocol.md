@@ -184,12 +184,28 @@ Each validation error is a structured object with the following fields:
 |-------|------|-------------|
 | `message` | string | Human-readable error message (always present) |
 | `ownerType` | string? | Type of roster element: `"roster"`, `"force"`, `"category"`, `"selection"` |
-| `ownerId` | string? | ID of the owning roster element |
-| `ownerEntryId` | string? | Entry ID of the owner (for force/category/selection) |
-| `entryId` | string? | ID of the entry whose constraint was violated |
-| `constraintId` | string? | ID of the constraint that failed |
+| `ownerId` | string? | Runtime ID of the owning roster element |
+| `ownerEntryId` | string? | Catalogue entry ID of the owner (for force/category/selection) |
+| `entryId` | string? | ID of the entry whose constraint was violated, or `"costLimits"` for cost limit errors |
+| `constraintId` | string? | ID of the constraint that failed, or the cost type ID for cost limit errors |
 
 Null fields are omitted from the JSON.
+
+#### Cost limit errors
+
+When a roster exceeds a cost limit, the error uses a special convention:
+- `ownerType` is `"roster"`
+- `entryId` is `"costLimits"` (pseudo-entry)
+- `constraintId` is the cost type ID (e.g., `"ct-pts"`)
+
+```json
+{
+  "message": "Roster is over the pts limit by 50pts",
+  "ownerType": "roster",
+  "entryId": "costLimits",
+  "constraintId": "ct-pts"
+}
+```
 
 ### `errors`
 
