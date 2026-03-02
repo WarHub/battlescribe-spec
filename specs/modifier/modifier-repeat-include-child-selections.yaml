@@ -1,0 +1,54 @@
+id: modifier-repeat-include-child-selections
+category: modifier
+description: Repeat with includeChildSelections counts parent and child selections
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-parent
+        name: Squad
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 0
+        modifiers:
+          - type: increment
+            field: pts
+            value: "5"
+            repeats:
+              - value: 1
+                repeats: 1
+                field: selections
+                scope: parent
+                includeChildSelections: true
+        selectionEntries:
+          - id: se-child
+            name: Trooper
+            type: model
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Repeat counts selections in parent scope including child selections.
+  # The parent selection itself counts as 1 in the parent scope.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad

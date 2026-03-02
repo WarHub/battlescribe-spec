@@ -1,0 +1,41 @@
+id: rule-with-page
+category: selection
+description: Selection entry with page field and a rule preserves page on the selection
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Veteran
+        type: unit
+        page: "42"
+        rules:
+          - id: rule-1
+            name: Stubborn
+            description: This unit never falls back
+            page: "42"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # page is assertable on the selection; rule.page is NOT assertable
+  - expectedState:
+      forces:
+        - selections:
+            - name: Veteran
+              page: "42"
+              rules:
+                - name: Stubborn
+                  description: This unit never falls back

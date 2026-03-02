@@ -1,0 +1,37 @@
+id: hidden-cascade-to-children
+category: selection
+description: Hidden parent entry with visible children can still be selected
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-squad
+        name: Hidden Squad
+        type: unit
+        hidden: true
+        selectionEntries:
+          - id: se-soldier
+            name: Soldier
+            type: model
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Hidden Squad
+              hidden: true
