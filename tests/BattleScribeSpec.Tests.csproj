@@ -24,6 +24,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- Copy IKVM-generated assemblies that aren't transitively referenced -->
   <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
     <ItemGroup>
