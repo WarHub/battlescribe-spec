@@ -171,15 +171,12 @@ public sealed class BattleScribeOracle : IDisposable
         }
         catch (NullReferenceException ex)
         {
-            var parentType = parent?.GetType().Name ?? "null";
             var entryId = entry?.getId() ?? "null";
             var entryName = entry?.getName() ?? "null";
             throw new InvalidOperationException(
-                $"NullRef in Java SelectEntry(parent={parentType}, entry={entryId}/{entryName}). " +
-                $"Parent is Force: {parent is Force}. " +
-                $"CatalogueMap count: {_forceCatalogueMap.Count}, " +
-                $"PerCatalogueEntries count: {_perCatalogueEntries.Count}, " +
-                $"SetupCatalogues count: {_setupCatalogues.Count}", ex);
+                $"NullRef in Java SelectEntry(entry={entryId}/{entryName}). " +
+                $"Parent type: {parent?.GetType().Name ?? "null"}, is Force: {parent is Force}. " +
+                $"Forces: {GetForces().Count}.", ex);
         }
     }
 
@@ -263,7 +260,9 @@ public sealed class BattleScribeOracle : IDisposable
     public List<Force> GetForces()
     {
         EnsureInitialized();
-        return JavaListToList<Force>(_engine.l());
+        // Use roster's force list (ArrayList, insertion order) instead of engine's
+        // getAllForces() which returns HashMap.values() with non-deterministic order.
+        return JavaListToList<Force>(GetRoster().getForces());
     }
 
     /// <summary>
@@ -359,12 +358,22 @@ public sealed class BattleScribeOracle : IDisposable
     /// Add a force by index (from setup force entries) using the specified catalogue.
     /// Automatically resolves linked catalogues from the active catalogue.
     /// </summary>
-    public List<string> AddForceByIndex(int index, int catalogueIndex = 0)
+    public List<string> AddForceByIndex(int index, int catalogueIndex = -1)
     {
         EnsureInitialized();
         if (_setupCatalogues.Count == 0)
             throw new InvalidOperationException("Call SetupWith* or SetupFromSpec before AddForceByIndex.");
-        if (catalogueIndex < 0 || catalogueIndex >= _setupCatalogues.Count)
+        // Use active catalogue when no explicit index given
+        if (catalogueIndex < 0 && _setupCatalogue != null)
+        {
+            catalogueIndex = _setupCatalogues.IndexOf(_setupCatalogue);
+            if (catalogueIndex < 0) catalogueIndex = 0;
+        }
+        else if (catalogueIndex < 0)
+        {
+            catalogueIndex = 0;
+        }
+        if (catalogueIndex >= _setupCatalogues.Count)
             throw new ArgumentOutOfRangeException(nameof(catalogueIndex),
                 $"Catalogue index {catalogueIndex} out of range (have {_setupCatalogues.Count})");
         var catalogue = _setupCatalogues[catalogueIndex];
