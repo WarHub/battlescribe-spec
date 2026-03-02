@@ -99,7 +99,12 @@ public record CatalogueSpec(
     string GameSystemId = "test-gs",
     SelectionEntrySpec[]? SelectionEntries = null,
     SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
-    EntryLinkSpec[]? EntryLinks = null);
+    EntryLinkSpec[]? EntryLinks = null,
+    SelectionEntrySpec[]? SharedSelectionEntries = null,
+    SelectionEntryGroupSpec[]? SharedSelectionEntryGroups = null,
+    RuleSpec[]? SharedRules = null,
+    ProfileSpec[]? SharedProfiles = null,
+    InfoGroupSpec[]? SharedInfoGroups = null);
 
 public record ConditionGroupSpec(
     string Type,

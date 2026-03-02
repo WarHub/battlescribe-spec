@@ -929,19 +929,45 @@ public sealed class BattleScribeOracle : IDisposable
             var selectionEntries = catSpec.SelectionEntries?
                 .Select(BuildSelectionEntry).ToArray();
             var entryLinks = catSpec.EntryLinks?.Select(BuildEntryLink).ToArray();
+            var sharedSelectionEntries = catSpec.SharedSelectionEntries?
+                .Select(BuildSelectionEntry).ToArray();
+            var sharedSelectionEntryGroups = catSpec.SharedSelectionEntryGroups?
+                .Select(BuildSelectionEntryGroup).ToArray();
+            var sharedRules = catSpec.SharedRules?.Select(BuildRule).ToArray();
+            var sharedProfiles = catSpec.SharedProfiles?.Select(BuildProfile).ToArray();
+            var sharedInfoGroups = catSpec.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();
 
             var cat = JavaModelFactory.CreateCatalogue(
                 catSpec.Id, catSpec.Name, catSpec.GameSystemId,
                 selectionEntries: selectionEntries,
-                entryLinks: entryLinks);
+                entryLinks: entryLinks,
+                sharedSelectionEntries: sharedSelectionEntries,
+                sharedSelectionEntryGroups: sharedSelectionEntryGroups,
+                sharedRules: sharedRules,
+                sharedProfiles: sharedProfiles,
+                sharedInfoGroups: sharedInfoGroups);
 
             catalogueDict[catSpec.Id] = cat;
             _setupCatalogues.Add(cat);
 
-            // Track per-catalogue entries
+            // Build shared entry lookup for resolving entry links
+            var sharedEntryLookup = new Dictionary<string, SelectionEntry>();
+            if (sharedSelectionEntries != null)
+                foreach (var se in sharedSelectionEntries)
+                    sharedEntryLookup[se.getId()] = se;
+
+            // Track per-catalogue entries (direct entries + entry link targets)
             var catEntries = new List<SelectionEntry>();
             if (selectionEntries != null)
                 catEntries.AddRange(selectionEntries);
+            if (entryLinks != null)
+                foreach (var el in entryLinks)
+                {
+                    var targetId = el.getTargetId();
+                    if (targetId != null && sharedEntryLookup.TryGetValue(targetId, out var target)
+                        && !catEntries.Contains(target))
+                        catEntries.Add(target);
+                }
             _perCatalogueEntries.Add(catEntries);
 
             // Add to flat lists for backward compat
@@ -951,6 +977,9 @@ public sealed class BattleScribeOracle : IDisposable
                 foreach (var se in selectionEntries)
                     IndexEntries(se);
             }
+            if (sharedSelectionEntries != null)
+                foreach (var se in sharedSelectionEntries)
+                    IndexEntries(se);
         }
 
         // Primary catalogue is the first one (backward compat)
@@ -1069,6 +1098,30 @@ public sealed class BattleScribeOracle : IDisposable
             selectionEntries: childEntries,
             constraints: constraints,
             modifiers: modifiers);
+    }
+
+    private static Rule BuildRule(RuleSpec spec)
+    {
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        return JavaModelFactory.CreateRule(spec.Id, spec.Name, spec.Description,
+            spec.Hidden, spec.Page, modifiers);
+    }
+
+    private static Profile BuildProfile(ProfileSpec spec)
+    {
+        var chars = spec.Characteristics?.Select(c =>
+            JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        return JavaModelFactory.CreateProfile(spec.Id, spec.Name,
+            spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers);
+    }
+
+    private static InfoGroup BuildInfoGroup(InfoGroupSpec spec)
+    {
+        var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        return JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers);
     }
 
     private static EntryLink BuildEntryLink(EntryLinkSpec spec)

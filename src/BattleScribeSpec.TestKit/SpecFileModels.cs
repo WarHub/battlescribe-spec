@@ -93,6 +93,21 @@ public sealed class CatalogueDef
 
     [YamlMember(Alias = "entryLinks")]
     public List<EntryLinkDef>? EntryLinks { get; set; }
+
+    [YamlMember(Alias = "sharedSelectionEntries")]
+    public List<SelectionEntryDef>? SharedSelectionEntries { get; set; }
+
+    [YamlMember(Alias = "sharedSelectionEntryGroups")]
+    public List<SelectionEntryGroupDef>? SharedSelectionEntryGroups { get; set; }
+
+    [YamlMember(Alias = "sharedRules")]
+    public List<RuleDef>? SharedRules { get; set; }
+
+    [YamlMember(Alias = "sharedProfiles")]
+    public List<ProfileDef>? SharedProfiles { get; set; }
+
+    [YamlMember(Alias = "sharedInfoGroups")]
+    public List<InfoGroupDef>? SharedInfoGroups { get; set; }
 }
 
 public sealed class CostTypeDef

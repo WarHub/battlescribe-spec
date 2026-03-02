@@ -168,7 +168,12 @@ public static class JavaModelFactory
         int revision = 1,
         string bsVersion = "2.03",
         IEnumerable<SelectionEntry>? selectionEntries = null,
-        IEnumerable<EntryLink>? entryLinks = null)
+        IEnumerable<EntryLink>? entryLinks = null,
+        IEnumerable<SelectionEntry>? sharedSelectionEntries = null,
+        IEnumerable<SelectionEntryGroup>? sharedSelectionEntryGroups = null,
+        IEnumerable<Rule>? sharedRules = null,
+        IEnumerable<Profile>? sharedProfiles = null,
+        IEnumerable<InfoGroup>? sharedInfoGroups = null)
     {
         var cat = new Catalogue();
         cat.setId(id);
@@ -185,6 +190,26 @@ public static class JavaModelFactory
         if (entryLinks != null)
             foreach (var el in entryLinks)
                 cat.getEntryLinks().add(el);
+
+        if (sharedSelectionEntries != null)
+            foreach (var se in sharedSelectionEntries)
+                cat.getSharedSelectionEntries().add(se);
+
+        if (sharedSelectionEntryGroups != null)
+            foreach (var seg in sharedSelectionEntryGroups)
+                cat.getSharedSelectionEntryGroups().add(seg);
+
+        if (sharedRules != null)
+            foreach (var r in sharedRules)
+                cat.getSharedRules().add(r);
+
+        if (sharedProfiles != null)
+            foreach (var p in sharedProfiles)
+                cat.getSharedProfiles().add(p);
+
+        if (sharedInfoGroups != null)
+            foreach (var ig in sharedInfoGroups)
+                cat.getSharedInfoGroups().add(ig);
 
         return cat;
     }

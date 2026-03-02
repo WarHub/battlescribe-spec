@@ -150,7 +150,14 @@ public static class SpecLoader
                 .Select(ConvertSelectionEntry).ToArray(),
             SelectionEntryGroups: def.SelectionEntryGroups?
                 .Select(ConvertSelectionEntryGroup).ToArray(),
-            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray());
+            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray(),
+            SharedSelectionEntries: def.SharedSelectionEntries?
+                .Select(ConvertSelectionEntry).ToArray(),
+            SharedSelectionEntryGroups: def.SharedSelectionEntryGroups?
+                .Select(ConvertSelectionEntryGroup).ToArray(),
+            SharedRules: def.SharedRules?.Select(ConvertRule).ToArray(),
+            SharedProfiles: def.SharedProfiles?.Select(ConvertProfile).ToArray(),
+            SharedInfoGroups: def.SharedInfoGroups?.Select(ConvertInfoGroup).ToArray());
     }
 
     private static SelectionEntrySpec ConvertSelectionEntry(SelectionEntryDef def)
