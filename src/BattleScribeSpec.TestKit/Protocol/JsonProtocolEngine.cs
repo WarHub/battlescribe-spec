@@ -7,16 +7,18 @@ namespace BattleScribeSpec.Protocol;
 public sealed class JsonProtocolEngine : IRosterEngine
 {
     private readonly AdapterProcess _adapter;
+    private readonly TimeSpan _requestTimeout;
 
-    public JsonProtocolEngine(AdapterProcess adapter)
+    public JsonProtocolEngine(AdapterProcess adapter, TimeSpan? requestTimeout = null)
     {
         _adapter = adapter;
+        _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
     }
 
     public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
         var cmd = ProtocolConverter.ToSetupCommand(gameSystem, catalogues);
-        var response = _adapter.SendCommandAsync(cmd).GetAwaiter().GetResult();
+        var response = SendCommand(cmd);
         return response switch
         {
             SetupResult sr => sr.Errors,
@@ -94,7 +96,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
 
     public RosterState GetRosterState()
     {
-        var response = _adapter.SendCommandAsync(new GetStateCommand()).GetAwaiter().GetResult();
+        var response = SendCommand(new GetStateCommand());
         return response switch
         {
             StateResponse sr => ProtocolConverter.ToRosterState(sr),
@@ -105,7 +107,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
 
     public IReadOnlyList<string> GetValidationErrors()
     {
-        var response = _adapter.SendCommandAsync(new GetErrorsCommand()).GetAwaiter().GetResult();
+        var response = SendCommand(new GetErrorsCommand());
         return response switch
         {
             ErrorsResponse er => er.Errors,
@@ -123,7 +125,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
     {
         try
         {
-            _adapter.SendCommandAsync(new TeardownCommand()).GetAwaiter().GetResult();
+            SendCommand(new TeardownCommand());
         }
         catch
         {
@@ -133,7 +135,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
 
     private void SendAction(ActionCommand cmd)
     {
-        var response = _adapter.SendCommandAsync(cmd).GetAwaiter().GetResult();
+        var response = SendCommand(cmd);
         switch (response)
         {
             case ActionResult { Ok: true }:
@@ -144,6 +146,20 @@ public sealed class JsonProtocolEngine : IRosterEngine
                 throw new InvalidOperationException($"Adapter error: {pe.Message}");
             default:
                 throw new InvalidOperationException($"Unexpected response type: {response.Type}");
+        }
+    }
+
+    private ProtocolResponse SendCommand(ProtocolCommand command)
+    {
+        using var cts = new CancellationTokenSource(_requestTimeout);
+        try
+        {
+            return _adapter.SendCommandAsync(command, cts.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Adapter timed out after {_requestTimeout.TotalSeconds:0}s while handling '{command.Type}'.", ex);
         }
     }
 }

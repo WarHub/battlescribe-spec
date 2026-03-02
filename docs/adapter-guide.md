@@ -61,10 +61,10 @@ Your adapter must initialize the engine with this data and respond with a
 
 ```json
 // Input
-{"type":"setup","gameSystem":{...},"catalogues":[...],"roster":{...}}
+{"type":"setup","version":"1.0","gameSystem":{...},"catalogue":{...},"catalogues":[...]}
 
 // Output
-{"type":"setupResult","success":true}
+{"type":"setupResult","errors":[]}
 ```
 
 ### 3. Handle `action` Commands
@@ -74,20 +74,21 @@ what to do:
 
 | Action | Description |
 |--------|-------------|
-| `addForce` | Add a force with the given forceEntryId and catalogueId |
+| `addForce` | Add a force with `forceEntryIndex` and optional `catalogueIndex` |
 | `removeForce` | Remove the force at the given index |
-| `selectEntry` | Select an entry in the given force |
-| `deselectEntry` | Deselect a selection by force and selection index |
-| `setSelectionCount` | Change the count of a selection |
+| `selectEntry` | Select an entry in the given force using `entryIndex` |
+| `selectChildEntry` | Select a child entry using `childEntryIndex` |
+| `deselectSelection` | Deselect a selection by force and selection index |
+| `setSelectionCount` | Change quantity by `entryIndex` + `count` |
 | `duplicateSelection` | Duplicate a selection |
 | `setCostLimit` | Set a cost limit value |
 
 ```json
 // Input
-{"type":"action","action":"selectEntry","forceIndex":0,"entryId":"entry-1"}
+{"type":"action","action":"selectEntry","forceIndex":0,"entryIndex":0}
 
 // Output
-{"type":"actionResult","success":true}
+{"type":"actionResult","ok":true}
 ```
 
 ### 4. Handle `getState` Command
@@ -101,30 +102,27 @@ Return the current roster state as a `state` response.
 // Output
 {
   "type": "state",
-  "roster": {
-    "name": "My Roster",
-    "gameSystemId": "gs-1",
-    "costs": [{"typeId":"pts","name":"Points","value":100}],
-    "costLimits": [],
-    "forces": [
-      {
-        "catalogueId": "cat-1",
-        "name": "Battalion",
-        "categories": [{"id":"cat-1","name":"HQ","primary":false}],
-        "selections": [
-          {
-            "entryId": "entry-1",
-            "name": "Commander",
-            "type": "model",
-            "count": 1,
-            "costs": [{"typeId":"pts","name":"Points","value":50}],
-            "categories": [],
-            "children": []
-          }
-        ]
-      }
-    ]
-  }
+  "name": "My Roster",
+  "gameSystemId": "gs-1",
+  "costs": [{"typeId":"pts","name":"Points","value":100}],
+  "forces": [
+    {
+      "catalogueId": "cat-1",
+      "name": "Battalion",
+      "selections": [
+        {
+          "entryId": "entry-1",
+          "name": "Commander",
+          "type": "model",
+          "number": 1,
+          "hidden": false,
+          "costs": [{"typeId":"pts","name":"Points","value":50}],
+          "children": []
+        }
+      ]
+    }
+  ],
+  "validationErrors": []
 }
 ```
 
@@ -149,7 +147,7 @@ Clean up any engine state.
 {"type":"teardown"}
 
 // Output
-{"type":"teardownResult","success":true}
+{"type":"teardownResult"}
 ```
 
 ### 7. Error Handling

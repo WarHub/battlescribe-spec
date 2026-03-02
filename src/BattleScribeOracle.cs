@@ -49,7 +49,15 @@ public sealed class BattleScribeOracle : IDisposable
             ?? fields.Where(f => f.FieldType == platformType).Skip(3).FirstOrDefault()
             ?? throw new InvalidOperationException(
                 $"Desktop platform field not found. Available fields: {string.Join(", ", fields.Select(f => f.Name))}");
-        return desktopField.GetValue(null)!;
+        var platformValue = desktopField.GetValue(null)
+            ?? throw new InvalidOperationException("Desktop platform field was found but had null value.");
+        var enumName = platformValue.GetType().GetMethod("name")?.Invoke(platformValue, null)?.ToString();
+        var isDesktop = string.Equals(enumName, "d", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(enumName, "DESKTOP", StringComparison.OrdinalIgnoreCase);
+        if (!isDesktop)
+            throw new InvalidOperationException(
+                $"Resolved platform enum is '{enumName ?? "<null>"}' instead of expected desktop.");
+        return platformValue;
     }
 
     /// <summary>
@@ -59,6 +67,7 @@ public sealed class BattleScribeOracle : IDisposable
     {
         _gameSystem = gameSystem;
         _catalogues.Clear();
+        _forceCatalogueMap.Clear();
         foreach (var kvp in catalogues)
             _catalogues[kvp.Key] = kvp.Value;
 
@@ -214,7 +223,11 @@ public sealed class BattleScribeOracle : IDisposable
     public bool RemoveForce(Force force)
     {
         EnsureInitialized();
-        return _engine.g(force);
+        var forceIndex = GetForces().IndexOf(force);
+        var removed = _engine.g(force);
+        if (removed && forceIndex >= 0 && forceIndex < _forceCatalogueMap.Count)
+            _forceCatalogueMap.RemoveAt(forceIndex);
+        return removed;
     }
 
     /// <summary>
@@ -378,8 +391,11 @@ public sealed class BattleScribeOracle : IDisposable
                 $"Catalogue index {catalogueIndex} out of range (have {_setupCatalogues.Count})");
         var catalogue = _setupCatalogues[catalogueIndex];
         var linked = ResolveLinkedCatalogues(catalogue);
-        _forceCatalogueMap.Add(catalogueIndex);
+        var forceCountBefore = GetForces().Count;
         var (_, errors) = AddForce(catalogue, _setupForceEntries[index], linked);
+        var forceCountAfter = GetForces().Count;
+        for (var i = forceCountBefore; i < forceCountAfter; i++)
+            _forceCatalogueMap.Add(catalogueIndex);
         return errors;
     }
 
@@ -595,19 +611,9 @@ public sealed class BattleScribeOracle : IDisposable
         var idToFile = new Dictionary<string, string>();
         foreach (var file in catFiles)
         {
-            // Quick parse just the root element to get the catalogue ID
-            try
-            {
-                using var reader = new System.IO.StreamReader(file);
-                // Read enough to find the id attribute
-                var buffer = new char[2000];
-                reader.Read(buffer, 0, buffer.Length);
-                var header = new string(buffer);
-                var idMatch = System.Text.RegularExpressions.Regex.Match(header, @"\bid=""([^""]+)""");
-                if (idMatch.Success)
-                    idToFile[idMatch.Groups[1].Value] = file;
-            }
-            catch { /* skip unreadable files */ }
+            var catalogueId = ReadRootIdAttribute(file)
+                ?? throw new InvalidOperationException($"Could not read root 'id' from catalogue file: {file}");
+            idToFile[catalogueId] = file;
         }
 
         // Recursively load linked catalogues
@@ -650,6 +656,24 @@ public sealed class BattleScribeOracle : IDisposable
         var result = persister.read(javaClass, file, false);
         return (T)(result ?? throw new InvalidOperationException(
             $"SimpleXML deserialization returned null for {filePath}"));
+    }
+
+    private static string? ReadRootIdAttribute(string filePath)
+    {
+        var settings = new System.Xml.XmlReaderSettings
+        {
+            DtdProcessing = System.Xml.DtdProcessing.Ignore,
+            IgnoreComments = true,
+            IgnoreWhitespace = true
+        };
+        using var reader = System.Xml.XmlReader.Create(filePath, settings);
+        while (reader.Read())
+        {
+            if (reader.NodeType != System.Xml.XmlNodeType.Element)
+                continue;
+            return reader.GetAttribute("id");
+        }
+        return null;
     }
 
     /// <summary>
@@ -1000,6 +1024,7 @@ public sealed class BattleScribeOracle : IDisposable
         var catalogueDict = new Dictionary<string, Catalogue>();
         _setupCatalogues.Clear();
         _perCatalogueEntries.Clear();
+        _forceCatalogueMap.Clear();
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
 
@@ -1322,6 +1347,15 @@ public sealed class BattleScribeOracle : IDisposable
     /// Get a setup selection entry by index (for OracleRosterEngine).
     /// </summary>
     internal SelectionEntry GetSetupSelectionEntry(int index) => _setupSelectionEntries[index];
+
+    internal SelectionEntry GetSelectionEntryForForce(int forceIndex, int entryIndex)
+    {
+        var entries = GetEntriesForForce(forceIndex);
+        if (entryIndex < 0 || entryIndex >= entries.Count)
+            throw new ArgumentOutOfRangeException(nameof(entryIndex),
+                $"Entry index {entryIndex} out of range (have {entries.Count} entries for force {forceIndex})");
+        return entries[entryIndex];
+    }
 
     /// <summary>
     /// Get a cost type by ID (for SetCostLimit).

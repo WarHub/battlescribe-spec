@@ -70,7 +70,7 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forces = _oracle.GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
-        var entry = _oracle.GetSetupSelectionEntry(entryIndex);
+        var entry = _oracle.GetSelectionEntryForForce(forceIndex, entryIndex);
         _oracle.SetNumSelections(forces[forceIndex], entry, count);
     }
 
@@ -129,19 +129,20 @@ public sealed class OracleRosterEngine : IRosterEngine
     // Expose oracle for advanced operations in existing tests
     internal BattleScribeOracle Oracle => _oracle;
 
-    private static SelectionState CaptureSelection(net.battlescribe.model.roster.Selection sel)
+    private SelectionState CaptureSelection(net.battlescribe.model.roster.Selection sel)
     {
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
         var profiles = JavaListToList<net.battlescribe.model.data.Profile>(sel.getProfiles());
         var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());
         var categories = JavaListToList<net.battlescribe.model.roster.Category>(sel.getCategories());
+        var hidden = _oracle.GetEntryById(sel.getEntryId())?.isHidden() ?? false;
         return new SelectionState(
             sel.getName() ?? "",
             sel.getEntryId(),
             sel.getType(),
             sel.getNumber(),
-            false, // hidden status requires checking the entry, not the selection
+            hidden,
             costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList(),
             children.Select(CaptureSelection).ToList(),
             Profiles: profiles.Select(CaptureProfile).ToList(),

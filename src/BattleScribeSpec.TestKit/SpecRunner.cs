@@ -23,7 +23,13 @@ public sealed class SpecRunner
         {
             // Setup
             var scenario = SpecLoader.ToSpecModels(spec.Setup);
-            _engine.Setup(scenario.GameSystem, scenario.Catalogues);
+            var setupErrors = _engine.Setup(scenario.GameSystem, scenario.Catalogues);
+            if (setupErrors.Count > 0)
+            {
+                foreach (var setupError in setupErrors)
+                    _errors.Add($"Setup error: {setupError}");
+                return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
+            }
 
             // Execute steps
             for (var i = 0; i < spec.Steps.Count; i++)
@@ -41,6 +47,8 @@ public sealed class SpecRunner
                 catch (Exception ex)
                 {
                     _errors.Add($"Step {i}: {ex.GetType().Name}: {ex.Message}");
+                    if (step.Action is not null)
+                        break;
                 }
             }
         }
@@ -294,6 +302,9 @@ public sealed class SpecRunner
             if (es.Number is { } num)
                 AssertEqual(stepIndex, $"{selPrefix}.number", num, a.Number);
 
+            if (es.Hidden is { } hidden)
+                AssertEqual(stepIndex, $"{selPrefix}.hidden", hidden, a.Hidden);
+
             if (es.Page is not null)
                 AssertEqual(stepIndex, $"{selPrefix}.page", es.Page, a.Page);
 
@@ -412,6 +423,20 @@ public sealed class SpecRunner
 
     private void AssertEqual<T>(int stepIndex, string field, T expected, T actual)
     {
+        if (expected is double ed && actual is double ad)
+        {
+            if (Math.Abs(ed - ad) > 1e-9)
+                _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
+            return;
+        }
+
+        if (expected is float ef && actual is float af)
+        {
+            if (Math.Abs(ef - af) > 1e-6f)
+                _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
+            return;
+        }
+
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
             _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
     }

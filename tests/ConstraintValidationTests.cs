@@ -33,11 +33,11 @@ public class ConstraintValidationTests
     }
 
     [Theory]
-    [InlineData(0, true)]
-    [InlineData(-1, true)]
-    [InlineData(1, true)]
-    [InlineData(10, true)]
-    public void Constraint_SpecialValues_AreRecognized(decimal value, bool isValid)
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(1)]
+    [InlineData(10)]
+    public void Constraint_SpecialValues_AreRecognized(decimal value)
     {
         var constraint = new ConstraintCore
         {
@@ -49,7 +49,9 @@ public class ConstraintValidationTests
         }.ToNode();
 
         Assert.Equal(value, constraint.Value);
-        Assert.True(isValid);
+        Assert.Equal(ConstraintKind.Maximum, constraint.Type);
+        Assert.Equal("force", constraint.Scope);
+        Assert.Equal("selections", constraint.Field);
     }
 
     [Fact]

@@ -16,7 +16,8 @@ public static class ModelConverter
         string? Name,
         string? Type,
         int Number,
-        ImmutableArray<CostSnapshot> Costs);
+        ImmutableArray<CostSnapshot> Costs,
+        ImmutableArray<SelectionSnapshot> Children);
 
     /// <summary>
     /// Represents a simplified cost entry for comparison.
@@ -74,11 +75,13 @@ public static class ModelConverter
     private static SelectionSnapshot CaptureSelection(net.battlescribe.model.roster.Selection sel)
     {
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
+        var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
         return new SelectionSnapshot(
             sel.getName(),
             sel.getType(),
             sel.getNumber(),
-            costs.Select(c => new CostSnapshot(c.getName(), c.getTypeId(), c.getValue())).ToImmutableArray());
+            costs.Select(c => new CostSnapshot(c.getName(), c.getTypeId(), c.getValue())).ToImmutableArray(),
+            children.Select(CaptureSelection).ToImmutableArray());
     }
 
     /// <summary>
@@ -107,11 +110,13 @@ public static class ModelConverter
     {
         var costs = sel.Costs.Select(c =>
             new CostSnapshot(c.Name, c.TypeId, (double)c.Value)).ToImmutableArray();
+        var children = sel.Selections.Select(CaptureWhamSelection).ToImmutableArray();
         return new SelectionSnapshot(
             sel.Name,
             sel.Type.ToString(),
             sel.Number,
-            costs);
+            costs,
+            children);
     }
 
     private static List<T> JavaListToList<T>(java.util.List? javaList)

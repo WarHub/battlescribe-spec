@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace BattleScribeSpec.Protocol;
@@ -10,13 +11,15 @@ public sealed class AdapterProcess : IDisposable
     private readonly Process _process;
     private readonly StreamWriter _stdin;
     private readonly StreamReader _stdout;
+    private readonly ConcurrentQueue<string> _stderrLines;
     private bool _disposed;
 
-    private AdapterProcess(Process process)
+    private AdapterProcess(Process process, ConcurrentQueue<string> stderrLines)
     {
         _process = process;
         _stdin = process.StandardInput;
         _stdout = process.StandardOutput;
+        _stderrLines = stderrLines;
         _stdin.AutoFlush = true;
     }
 
@@ -38,8 +41,15 @@ public sealed class AdapterProcess : IDisposable
 
         var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start adapter process: {executable}");
+        var stderrLines = new ConcurrentQueue<string>();
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                stderrLines.Enqueue(e.Data);
+        };
+        process.BeginErrorReadLine();
 
-        return new AdapterProcess(process);
+        return new AdapterProcess(process, stderrLines);
     }
 
     /// <summary>
@@ -50,7 +60,8 @@ public sealed class AdapterProcess : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         if (_process.HasExited)
-            throw new InvalidOperationException($"Adapter process has exited with code {_process.ExitCode}.");
+            throw new InvalidOperationException(
+                $"Adapter process has exited with code {_process.ExitCode}. Stderr tail: {GetStderrTail()}");
 
         await _stdin.WriteLineAsync(jsonLine.AsMemory(), ct);
 
@@ -84,6 +95,7 @@ public sealed class AdapterProcess : IDisposable
                 if (!_process.WaitForExit(5000))
                     _process.Kill();
             }
+            _process.CancelErrorRead();
         }
         catch
         {
@@ -93,5 +105,15 @@ public sealed class AdapterProcess : IDisposable
         {
             _process.Dispose();
         }
+    }
+
+    private string GetStderrTail(int maxLines = 10)
+    {
+        if (_stderrLines.IsEmpty)
+            return "<empty>";
+
+        var lines = _stderrLines.ToArray();
+        var tail = lines.Skip(Math.Max(0, lines.Length - maxLines));
+        return string.Join(" | ", tail);
     }
 }
