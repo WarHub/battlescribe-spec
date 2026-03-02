@@ -122,3 +122,91 @@ instead of reading `.forces.array[].selections[]` properties.
 ### Expected impact
 - 217 currently-skipped synthetic specs become runnable against NR
 - Estimated run time: ~3-5 min (shared browser, JS-level operations, no network latency for data)
+
+---
+
+## Alternative: Folder-Based Data Loading
+
+NR supports loading game systems from a local folder via the File System Access API.
+This is accessible through the "Add from folder" button in the My Games dialog
+(`/app/MySystems#install`).
+
+### How it works
+
+1. NR calls `window.showDirectoryPicker()` to let user select a directory
+2. NR scans the directory for `.gst`/`.cat`/`.gstz`/`.catz` files via async iterator
+3. Files are parsed through the same pipeline as remote downloads
+4. System is added to `localLibrary` and becomes selectable
+5. NR shows "Hot Reload for local system is working" notification
+
+### Mock `showDirectoryPicker` approach (verified working)
+
+Playwright cannot trigger the native OS directory picker, but we can mock
+`showDirectoryPicker()` to return a virtual `FileSystemDirectoryHandle`:
+
+```javascript
+// Create mock file handles from generated XML
+const files = { 'system.gst': gstXml, 'catalogue.cat': catXml };
+
+const mockFileHandle = (name, content) => ({
+    kind: 'file',
+    name: name,
+    getFile: () => Promise.resolve(new File([content], name, { type: 'text/xml' }))
+});
+
+const mockDirHandle = {
+    kind: 'directory',
+    name: 'spec-data',
+    values: function() {
+        const entries = Object.entries(files).map(([n, c]) => mockFileHandle(n, c));
+        let i = 0;
+        return {
+            next: () => i < entries.length
+                ? Promise.resolve({ value: entries[i++], done: false })
+                : Promise.resolve({ done: true }),
+            [Symbol.asyncIterator]() { return this; }
+        };
+    },
+    [Symbol.asyncIterator]: function() { return this.values(); },
+    requestPermission: () => Promise.resolve('granted'),
+    queryPermission: () => Promise.resolve('granted')
+};
+
+window.showDirectoryPicker = () => Promise.resolve(mockDirHandle);
+// Then click "Add from folder" button, or call the upload handler directly
+```
+
+**Result**: NR parses both files, creates a local system, and adds it to the dropdown.
+The system is fully functional — books are loaded, rosters can be created.
+
+### "Add from GitHub" feature
+
+NR also has a built-in "Add from GitHub" feature at `/app/MySystems#install`:
+
+```
+Input: owner/repo (e.g., "BSData/wh40k-10e")
+Version: Latest Release | Latest Commit (Head) | Custom tag/branch
+```
+
+This can be triggered programmatically via:
+
+```javascript
+const sysStore = pinia._s.get('systemsStore');
+await sysStore.addGithubSystem('BSData/wh40k-10e', 'latest'); // or specific version
+```
+
+**Implication for Phase 5**: For real-world BSData specs, we may be able to use NR's
+built-in GitHub integration instead of building our own DataSource resolver. NR already
+knows how to download, parse, and manage BSData repositories.
+
+### Comparison of data loading approaches
+
+| Approach | Synthetic Specs | Real BSData | Hot Reload | Complexity |
+|----------|:-:|:-:|:-:|:-:|
+| `loadSystemFromFs` (current) | ✅ | ❌ | ❌ | Low |
+| Mock `showDirectoryPicker` | ✅ | ❌ | Partial | Medium |
+| `addGithubSystem` | ❌ | ✅ | ❌ | Low |
+| Real folder (local clone) | ❌ | ✅ | ✅ | High |
+
+**Recommendation**: Keep `loadSystemFromFs` for synthetic specs (simplest, proven).
+Use `addGithubSystem` for Phase 5 real-world specs against NR.
