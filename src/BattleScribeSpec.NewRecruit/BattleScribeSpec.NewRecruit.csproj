@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BattleScribeSpec.TestKit\BattleScribeSpec.TestKit.csproj" />
+    <ProjectReference Include="..\..\..\wham\src\WarHub.ArmouryModel.Source\WarHub.ArmouryModel.Source.csproj" />
+    <ProjectReference Include="..\..\..\wham\src\WarHub.ArmouryModel.Source.BattleScribe\WarHub.ArmouryModel.Source.BattleScribe.csproj" />
   </ItemGroup>
 
 </Project>
