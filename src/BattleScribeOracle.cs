@@ -164,8 +164,20 @@ public sealed class BattleScribeOracle : IDisposable
     public List<Selection> SelectEntry(BaseSelectionParent parent, SelectionEntry entry)
     {
         EnsureInitialized();
-        var javaList = _engine.b(parent, entry);
-        return JavaListToList<Selection>(javaList);
+        try
+        {
+            var javaList = _engine.b(parent, entry);
+            return JavaListToList<Selection>(javaList);
+        }
+        catch (NullReferenceException ex)
+        {
+            var entryId = entry?.getId() ?? "null";
+            var entryName = entry?.getName() ?? "null";
+            throw new InvalidOperationException(
+                $"NullRef in Java SelectEntry(entry={entryId}/{entryName}). " +
+                $"Parent type: {parent?.GetType().Name ?? "null"}, is Force: {parent is Force}. " +
+                $"Forces: {GetForces().Count}.", ex);
+        }
     }
 
     /// <summary>
@@ -248,7 +260,9 @@ public sealed class BattleScribeOracle : IDisposable
     public List<Force> GetForces()
     {
         EnsureInitialized();
-        return JavaListToList<Force>(_engine.l());
+        // Use roster's force list (ArrayList, insertion order) instead of engine's
+        // getAllForces() which returns HashMap.values() with non-deterministic order.
+        return JavaListToList<Force>(GetRoster().getForces());
     }
 
     /// <summary>
@@ -277,10 +291,15 @@ public sealed class BattleScribeOracle : IDisposable
     // ===== High-level encapsulated API (hides Java types from callers) =====
 
     private Catalogue? _setupCatalogue;
+    private readonly List<Catalogue> _setupCatalogues = [];
     private readonly List<ForceEntry> _setupForceEntries = [];
     private readonly List<SelectionEntry> _setupSelectionEntries = [];
     private readonly List<CostType> _setupCostTypes = [];
     private readonly Dictionary<string, SelectionEntry> _entryLookup = new();
+    // Per-catalogue entry lists for multi-catalogue support
+    private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
+    // Maps force (by insertion order) to catalogue index
+    private readonly List<int> _forceCatalogueMap = [];
 
     /// <summary>
     /// Set up the oracle with a Patrol force entry (no units).
@@ -289,12 +308,18 @@ public sealed class BattleScribeOracle : IDisposable
     {
         var forceEntry = JavaModelFactory.CreateForceEntry("fe-patrol", "Patrol");
         var gs = JavaModelFactory.CreateGameSystem(forceEntries: [forceEntry]);
-        _setupCatalogue = JavaModelFactory.CreateCatalogue("cat-1", "Cat", "test-gs");
+        var cat = JavaModelFactory.CreateCatalogue("cat-1", "Cat", "test-gs");
+        _setupCatalogue = cat;
+        _setupCatalogues.Clear();
+        _setupCatalogues.Add(cat);
+        _perCatalogueEntries.Clear();
+        _perCatalogueEntries.Add([]);
+        _forceCatalogueMap.Clear();
         _setupForceEntries.Clear();
         _setupForceEntries.Add(forceEntry);
         _setupSelectionEntries.Clear();
 
-        Initialize(gs, new Dictionary<string, Catalogue> { ["cat-1"] = _setupCatalogue });
+        Initialize(gs, new Dictionary<string, Catalogue> { ["cat-1"] = cat });
     }
 
     /// <summary>
@@ -312,28 +337,49 @@ public sealed class BattleScribeOracle : IDisposable
             ? new[] { JavaModelFactory.CreateCostType("pts", "pts", defaultCostLimit: 2000) }
             : null;
         var gs = JavaModelFactory.CreateGameSystem(forceEntries: [forceEntry], costTypes: costTypes);
-        _setupCatalogue = JavaModelFactory.CreateCatalogue("cat-1", "Cat", "test-gs",
+        var cat = JavaModelFactory.CreateCatalogue("cat-1", "Cat", "test-gs",
             selectionEntries: [unitEntry]);
+        _setupCatalogue = cat;
+        _setupCatalogues.Clear();
+        _setupCatalogues.Add(cat);
+        _perCatalogueEntries.Clear();
+        _perCatalogueEntries.Add([unitEntry]);
+        _forceCatalogueMap.Clear();
 
         _setupForceEntries.Clear();
         _setupForceEntries.Add(forceEntry);
         _setupSelectionEntries.Clear();
         _setupSelectionEntries.Add(unitEntry);
 
-        Initialize(gs, new Dictionary<string, Catalogue> { ["cat-1"] = _setupCatalogue });
+        Initialize(gs, new Dictionary<string, Catalogue> { ["cat-1"] = cat });
     }
 
     /// <summary>
-    /// Add a force by index (from setup force entries).
+    /// Add a force by index (from setup force entries) using the specified catalogue.
     /// Automatically resolves linked catalogues from the active catalogue.
     /// </summary>
-    public List<string> AddForceByIndex(int index)
+    public List<string> AddForceByIndex(int index, int catalogueIndex = -1)
     {
         EnsureInitialized();
-        if (_setupCatalogue is null)
-            throw new InvalidOperationException("Call SetupWith* before AddForceByIndex.");
-        var linked = ResolveLinkedCatalogues(_setupCatalogue);
-        var (_, errors) = AddForce(_setupCatalogue, _setupForceEntries[index], linked);
+        if (_setupCatalogues.Count == 0)
+            throw new InvalidOperationException("Call SetupWith* or SetupFromSpec before AddForceByIndex.");
+        // Use active catalogue when no explicit index given
+        if (catalogueIndex < 0 && _setupCatalogue != null)
+        {
+            catalogueIndex = _setupCatalogues.IndexOf(_setupCatalogue);
+            if (catalogueIndex < 0) catalogueIndex = 0;
+        }
+        else if (catalogueIndex < 0)
+        {
+            catalogueIndex = 0;
+        }
+        if (catalogueIndex >= _setupCatalogues.Count)
+            throw new ArgumentOutOfRangeException(nameof(catalogueIndex),
+                $"Catalogue index {catalogueIndex} out of range (have {_setupCatalogues.Count})");
+        var catalogue = _setupCatalogues[catalogueIndex];
+        var linked = ResolveLinkedCatalogues(catalogue);
+        _forceCatalogueMap.Add(catalogueIndex);
+        var (_, errors) = AddForce(catalogue, _setupForceEntries[index], linked);
         return errors;
     }
 
@@ -373,7 +419,7 @@ public sealed class BattleScribeOracle : IDisposable
 
     /// <summary>
     /// Select a specific entry by index on a specific force by index.
-    /// Entry index refers to _setupSelectionEntries order.
+    /// Entry index refers to entries from the force's catalogue.
     /// </summary>
     public List<Selection> SelectEntryByIndex(int forceIndex, int entryIndex)
     {
@@ -381,9 +427,34 @@ public sealed class BattleScribeOracle : IDisposable
         var forces = GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
-        if (entryIndex < 0 || entryIndex >= _setupSelectionEntries.Count)
-            throw new ArgumentOutOfRangeException(nameof(entryIndex));
-        return SelectEntry(forces[forceIndex], _setupSelectionEntries[entryIndex]);
+
+        // Resolve entries from the force's catalogue
+        var entries = GetEntriesForForce(forceIndex);
+        if (entryIndex < 0 || entryIndex >= entries.Count)
+            throw new ArgumentOutOfRangeException(nameof(entryIndex),
+                $"Entry index {entryIndex} out of range (have {entries.Count} entries for force {forceIndex})");
+        var force = forces[forceIndex];
+        var entry = entries[entryIndex];
+        if (force is null)
+            throw new InvalidOperationException($"Force at index {forceIndex} is null");
+        if (entry is null)
+            throw new InvalidOperationException($"Entry at index {entryIndex} for force {forceIndex} is null");
+        return SelectEntry(force, entry);
+    }
+
+    /// <summary>
+    /// Get the selection entries available for a given force, based on its catalogue.
+    /// Falls back to the flat list for backward compatibility.
+    /// </summary>
+    private List<SelectionEntry> GetEntriesForForce(int forceIndex)
+    {
+        if (forceIndex < _forceCatalogueMap.Count && _perCatalogueEntries.Count > 0)
+        {
+            var catIdx = _forceCatalogueMap[forceIndex];
+            if (catIdx < _perCatalogueEntries.Count)
+                return _perCatalogueEntries[catIdx];
+        }
+        return _setupSelectionEntries;
     }
 
     /// <summary>
@@ -546,9 +617,23 @@ public sealed class BattleScribeOracle : IDisposable
         while (feIter.hasNext())
             _setupForceEntries.Add((ForceEntry)feIter.next());
 
-        // Set up catalogue reference for AddForceByIndex
+        // Set up catalogue references for AddForceByIndex
+        _setupCatalogues.Clear();
+        _perCatalogueEntries.Clear();
+        _forceCatalogueMap.Clear();
         if (_catalogues.Count > 0)
+        {
             _setupCatalogue = _catalogues.Values.First();
+            foreach (var cat in _catalogues.Values)
+            {
+                _setupCatalogues.Add(cat);
+                var entries = new List<SelectionEntry>();
+                var seIter = cat.getSelectionEntries().iterator();
+                while (seIter.hasNext())
+                    entries.Add((SelectionEntry)seIter.next());
+                _perCatalogueEntries.Add(entries);
+            }
+        }
 
         return Initialize(_gameSystem, new Dictionary<string, Catalogue>(_catalogues));
     }
@@ -862,32 +947,97 @@ public sealed class BattleScribeOracle : IDisposable
             categoryEntries: categoryEntries,
             profileTypes: profileTypes);
 
-        var selectionEntries = scenario.Catalogue.SelectionEntries?
-            .Select(BuildSelectionEntry).ToArray();
-        var entryLinks = scenario.Catalogue.EntryLinks?.Select(BuildEntryLink).ToArray();
+        // Build all catalogues
+        var catalogueDict = new Dictionary<string, Catalogue>();
+        _setupCatalogues.Clear();
+        _perCatalogueEntries.Clear();
+        _setupSelectionEntries.Clear();
+        _entryLookup.Clear();
 
-        var cat = JavaModelFactory.CreateCatalogue(
-            scenario.Catalogue.Id, scenario.Catalogue.Name,
-            scenario.Catalogue.GameSystemId,
-            selectionEntries: selectionEntries,
-            entryLinks: entryLinks);
+        foreach (var catSpec in scenario.Catalogues)
+        {
+            var selectionEntries = catSpec.SelectionEntries?
+                .Select(BuildSelectionEntry).ToArray();
+            var entryLinks = catSpec.EntryLinks?.Select(BuildEntryLink).ToArray();
+            var sharedSelectionEntries = catSpec.SharedSelectionEntries?
+                .Select(BuildSelectionEntry).ToArray();
+            var sharedSelectionEntryGroups = catSpec.SharedSelectionEntryGroups?
+                .Select(BuildSelectionEntryGroup).ToArray();
+            var sharedRules = catSpec.SharedRules?.Select(BuildRule).ToArray();
+            var sharedProfiles = catSpec.SharedProfiles?.Select(BuildProfile).ToArray();
+            var sharedInfoGroups = catSpec.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();
 
-        _setupCatalogue = cat;
+            var cat = JavaModelFactory.CreateCatalogue(
+                catSpec.Id, catSpec.Name, catSpec.GameSystemId,
+                selectionEntries: selectionEntries,
+                entryLinks: entryLinks,
+                sharedSelectionEntries: sharedSelectionEntries,
+                sharedSelectionEntryGroups: sharedSelectionEntryGroups,
+                sharedRules: sharedRules,
+                sharedProfiles: sharedProfiles,
+                sharedInfoGroups: sharedInfoGroups);
+
+            if (catSpec.InfoLinks != null)
+                foreach (var il in catSpec.InfoLinks)
+                    cat.getInfoLinks().add(BuildInfoLink(il));
+
+            if (catSpec.CatalogueLinks != null)
+                foreach (var clSpec in catSpec.CatalogueLinks)
+                    cat.getCatalogueLinks().add(
+                        JavaModelFactory.CreateCatalogueLink(clSpec.Id, clSpec.Name, clSpec.TargetId, clSpec.ImportRootEntries));
+
+            if (catSpec.Publications != null)
+                foreach (var pubSpec in catSpec.Publications)
+                    cat.getPublications().add(
+                        JavaModelFactory.CreatePublication(pubSpec.Id, pubSpec.Name, pubSpec.ShortName,
+                            pubSpec.Publisher, pubSpec.PublicationDate, pubSpec.PublisherUrl));
+
+            catalogueDict[catSpec.Id] = cat;
+            _setupCatalogues.Add(cat);
+
+            // Build shared entry lookup for resolving entry links
+            var sharedEntryLookup = new Dictionary<string, SelectionEntry>();
+            if (sharedSelectionEntries != null)
+                foreach (var se in sharedSelectionEntries)
+                    sharedEntryLookup[se.getId()] = se;
+
+            // Track per-catalogue entries (direct entries + entry link targets)
+            var catEntries = new List<SelectionEntry>();
+            if (selectionEntries != null)
+                catEntries.AddRange(selectionEntries);
+            if (entryLinks != null)
+                foreach (var el in entryLinks)
+                {
+                    var targetId = el.getTargetId();
+                    if (targetId != null && sharedEntryLookup.TryGetValue(targetId, out var target)
+                        && !catEntries.Contains(target))
+                        catEntries.Add(target);
+                }
+            _perCatalogueEntries.Add(catEntries);
+
+            // Add to flat lists for backward compat
+            if (selectionEntries != null)
+            {
+                _setupSelectionEntries.AddRange(selectionEntries);
+                foreach (var se in selectionEntries)
+                    IndexEntries(se);
+            }
+            if (sharedSelectionEntries != null)
+                foreach (var se in sharedSelectionEntries)
+                    IndexEntries(se);
+        }
+
+        // Primary catalogue is the first one (backward compat)
+        _setupCatalogue = _setupCatalogues.Count > 0 ? _setupCatalogues[0] : null;
+
         _setupForceEntries.Clear();
         if (forceEntries != null)
             _setupForceEntries.AddRange(forceEntries);
-        _setupSelectionEntries.Clear();
-        if (selectionEntries != null)
-            _setupSelectionEntries.AddRange(selectionEntries);
         _setupCostTypes.Clear();
         if (costTypes != null)
             _setupCostTypes.AddRange(costTypes);
-        _entryLookup.Clear();
-        if (selectionEntries != null)
-            foreach (var se in selectionEntries)
-                IndexEntries(se);
 
-        return Initialize(gs, new Dictionary<string, Catalogue> { [scenario.Catalogue.Id] = cat });
+        return Initialize(gs, catalogueDict);
     }
 
     private static ForceEntry BuildForceEntry(ForceEntrySpec feSpec)
@@ -972,6 +1122,10 @@ public sealed class BattleScribeOracle : IDisposable
             foreach (var el in spec.EntryLinks)
                 entry.getEntryLinks().add(BuildEntryLink(el));
 
+        if (spec.InfoLinks != null)
+            foreach (var il in spec.InfoLinks)
+                entry.getInfoLinks().add(BuildInfoLink(il));
+
         if (!string.IsNullOrEmpty(spec.Page))
             entry.setPage(spec.Page);
 
@@ -993,6 +1147,41 @@ public sealed class BattleScribeOracle : IDisposable
             selectionEntries: childEntries,
             constraints: constraints,
             modifiers: modifiers);
+    }
+
+    private static Rule BuildRule(RuleSpec spec)
+    {
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        return JavaModelFactory.CreateRule(spec.Id, spec.Name, spec.Description,
+            spec.Hidden, spec.Page, modifiers);
+    }
+
+    private static Profile BuildProfile(ProfileSpec spec)
+    {
+        var chars = spec.Characteristics?.Select(c =>
+            JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        return JavaModelFactory.CreateProfile(spec.Id, spec.Name,
+            spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers);
+    }
+
+    private static InfoGroup BuildInfoGroup(InfoGroupSpec spec)
+    {
+        var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var ig = JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers);
+        if (spec.InfoLinks != null)
+            foreach (var il in spec.InfoLinks)
+                ig.getInfoLinks().add(BuildInfoLink(il));
+        return ig;
+    }
+
+    private static InfoLink BuildInfoLink(InfoLinkSpec spec)
+    {
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        return JavaModelFactory.CreateInfoLink(spec.Id, spec.Name, spec.TargetId, spec.Type,
+            spec.Hidden, modifiers);
     }
 
     private static EntryLink BuildEntryLink(EntryLinkSpec spec)

@@ -20,10 +20,10 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             new GameSystemSpec(
                 ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
                 CostTypes: [new CostTypeSpec("pts", "pts", 2000)]),
-            new CatalogueSpec(SelectionEntries: [
+            [new CatalogueSpec(SelectionEntries: [
                 new SelectionEntrySpec("se-1", "Tactical Squad",
                     Costs: [new CostSpec("pts", "pts", 65.0)])
-            ]));
+            ])]);
 
         oracle.SetupFromSpec(scenario);
 
@@ -54,9 +54,9 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
         using var oracle = new BattleScribeOracle();
         var scenario = new ScenarioSpec(
             new GameSystemSpec(ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")]),
-            new CatalogueSpec(SelectionEntries: [
+            [new CatalogueSpec(SelectionEntries: [
                 new SelectionEntrySpec("se-1", "Marine Squad")
-            ]));
+            ])]);
 
         oracle.SetupFromSpec(scenario);
         oracle.AddForceByIndex(0);
@@ -79,10 +79,10 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             new GameSystemSpec(
                 ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
                 CostTypes: [new CostTypeSpec("pts", "pts", 2000)]),
-            new CatalogueSpec(SelectionEntries: [
+            [new CatalogueSpec(SelectionEntries: [
                 new SelectionEntrySpec("se-1", "Marine Squad",
                     Costs: [new CostSpec("pts", "pts", 100.0)])
-            ]));
+            ])]);
 
         oracle.SetupFromSpec(scenario);
         oracle.AddForceByIndex(0);
@@ -108,9 +108,9 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
         using var oracle = new BattleScribeOracle();
         var scenario = new ScenarioSpec(
             new GameSystemSpec(ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")]),
-            new CatalogueSpec(SelectionEntries: [
+            [new CatalogueSpec(SelectionEntries: [
                 new SelectionEntrySpec("se-1", "Marine Squad")
-            ]));
+            ])]);
 
         oracle.SetupFromSpec(scenario);
         oracle.AddForceByIndex(0);
@@ -134,7 +134,7 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             new GameSystemSpec(
                 ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
                 CostTypes: [new CostTypeSpec("pts", "pts", 2000)]),
-            new CatalogueSpec(SelectionEntries: [
+            [new CatalogueSpec(SelectionEntries: [
                 new SelectionEntrySpec("se-1", "Marine Squad",
                     Costs: [new CostSpec("pts", "pts", 50.0)],
                     Modifiers: [new ModifierSpec("increment", "pts", "10")],
@@ -142,7 +142,7 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
                         new ConstraintSpec("c-min", "min", 1, "selections", "parent"),
                         new ConstraintSpec("c-max", "max", 3, "selections", "parent")
                     ])
-            ]));
+            ])]);
 
         oracle.SetupFromSpec(scenario);
         oracle.AddForceByIndex(0);
@@ -179,7 +179,7 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             new SelectionEntrySpec("se-2", "Assault Squad",
                 Costs: [new CostSpec("pts", "pts", 80.0)])
         ]);
-        oracle.SetupFromSpec(new ScenarioSpec(gs, cat));
+        oracle.SetupFromSpec(new ScenarioSpec(gs, [cat]));
         oracle.AddForceByIndex(0);
 
         // Select the first entry (index 0)

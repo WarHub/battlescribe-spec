@@ -113,10 +113,10 @@ public static class SpecLoader
     }
 
     /// <summary>
-    /// Convert YAML setup definitions to existing SpecModels records
-    /// for use with IRosterEngine.Setup().
+    /// Convert YAML setup definitions to ScenarioSpec.
+    /// Supports both singular 'catalogue' and plural 'catalogues'.
     /// </summary>
-    public static (GameSystemSpec, CatalogueSpec) ToSpecModels(SetupDef setup)
+    public static ScenarioSpec ToSpecModels(SetupDef setup)
     {
         var gs = new GameSystemSpec(
             Id: setup.GameSystem.Id,
@@ -131,17 +131,38 @@ public static class SpecLoader
                 .Select(pt => new ProfileTypeSpec(pt.Id, pt.Name,
                     pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray());
 
-        var cat = new CatalogueSpec(
-            Id: setup.Catalogue.Id,
-            Name: setup.Catalogue.Name,
-            GameSystemId: setup.Catalogue.GameSystemId,
-            SelectionEntries: setup.Catalogue.SelectionEntries?
-                .Select(ConvertSelectionEntry).ToArray(),
-            SelectionEntryGroups: setup.Catalogue.SelectionEntryGroups?
-                .Select(ConvertSelectionEntryGroup).ToArray(),
-            EntryLinks: setup.Catalogue.EntryLinks?.Select(ConvertEntryLink).ToArray());
+        // Support both singular 'catalogue' and plural 'catalogues'
+        var catalogueDefs = setup.Catalogues
+            ?? (setup.Catalogue is { } singleCat ? [singleCat] : [new CatalogueDef()]);
 
-        return (gs, cat);
+        var catalogues = catalogueDefs.Select(ConvertCatalogue).ToArray();
+
+        return new ScenarioSpec(gs, catalogues);
+    }
+
+    private static CatalogueSpec ConvertCatalogue(CatalogueDef def)
+    {
+        return new CatalogueSpec(
+            Id: def.Id,
+            Name: def.Name,
+            GameSystemId: def.GameSystemId,
+            SelectionEntries: def.SelectionEntries?
+                .Select(ConvertSelectionEntry).ToArray(),
+            SelectionEntryGroups: def.SelectionEntryGroups?
+                .Select(ConvertSelectionEntryGroup).ToArray(),
+            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray(),
+            SharedSelectionEntries: def.SharedSelectionEntries?
+                .Select(ConvertSelectionEntry).ToArray(),
+            SharedSelectionEntryGroups: def.SharedSelectionEntryGroups?
+                .Select(ConvertSelectionEntryGroup).ToArray(),
+            SharedRules: def.SharedRules?.Select(ConvertRule).ToArray(),
+            SharedProfiles: def.SharedProfiles?.Select(ConvertProfile).ToArray(),
+            SharedInfoGroups: def.SharedInfoGroups?.Select(ConvertInfoGroup).ToArray(),
+            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray(),
+            CatalogueLinks: def.CatalogueLinks?.Select(cl =>
+                new CatalogueLinkSpec(cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries)).ToArray(),
+            Publications: def.Publications?.Select(p =>
+                new PublicationSpec(p.Id, p.Name, p.ShortName, p.Publisher, p.PublicationDate, p.PublisherUrl)).ToArray());
     }
 
     private static SelectionEntrySpec ConvertSelectionEntry(SelectionEntryDef def)
@@ -166,7 +187,8 @@ public static class SpecLoader
             Profiles: def.Profiles?.Select(ConvertProfile).ToArray(),
             InfoGroups: def.InfoGroups?.Select(ConvertInfoGroup).ToArray(),
             Page: def.Page,
-            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray());
+            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray(),
+            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray());
     }
 
     private static ForceEntrySpec ConvertForceEntry(ForceEntryDef fe) =>
@@ -233,7 +255,8 @@ public static class SpecLoader
         new(def.Id, def.Name, def.Hidden,
             def.Profiles?.Select(ConvertProfile).ToArray(),
             def.Rules?.Select(ConvertRule).ToArray(),
-            def.Modifiers?.Select(ConvertModifier).ToArray());
+            def.Modifiers?.Select(ConvertModifier).ToArray(),
+            def.InfoLinks?.Select(ConvertInfoLink).ToArray());
 
     private static EntryLinkSpec ConvertEntryLink(EntryLinkDef def) =>
         new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
@@ -244,4 +267,8 @@ public static class SpecLoader
             def.Modifiers?.Select(ConvertModifier).ToArray(),
             def.CategoryLinks?.Select(cl =>
                 new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray());
+
+    private static InfoLinkSpec ConvertInfoLink(InfoLinkDef def) =>
+        new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
+            def.Modifiers?.Select(ConvertModifier).ToArray());
 }

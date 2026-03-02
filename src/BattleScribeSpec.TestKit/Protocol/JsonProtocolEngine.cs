@@ -13,9 +13,9 @@ public sealed class JsonProtocolEngine : IRosterEngine
         _adapter = adapter;
     }
 
-    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec catalogue)
+    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
-        var cmd = ProtocolConverter.ToSetupCommand(gameSystem, catalogue);
+        var cmd = ProtocolConverter.ToSetupCommand(gameSystem, catalogues);
         var response = _adapter.SendCommandAsync(cmd).GetAwaiter().GetResult();
         return response switch
         {
@@ -25,9 +25,9 @@ public sealed class JsonProtocolEngine : IRosterEngine
         };
     }
 
-    public void AddForce(int forceEntryIndex)
+    public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
     {
-        SendAction(new ActionCommand { Action = "addForce", ForceEntryIndex = forceEntryIndex });
+        SendAction(new ActionCommand { Action = "addForce", ForceEntryIndex = forceEntryIndex, CatalogueIndex = catalogueIndex });
     }
 
     public void RemoveForce(int forceIndex)

@@ -168,7 +168,12 @@ public static class JavaModelFactory
         int revision = 1,
         string bsVersion = "2.03",
         IEnumerable<SelectionEntry>? selectionEntries = null,
-        IEnumerable<EntryLink>? entryLinks = null)
+        IEnumerable<EntryLink>? entryLinks = null,
+        IEnumerable<SelectionEntry>? sharedSelectionEntries = null,
+        IEnumerable<SelectionEntryGroup>? sharedSelectionEntryGroups = null,
+        IEnumerable<Rule>? sharedRules = null,
+        IEnumerable<Profile>? sharedProfiles = null,
+        IEnumerable<InfoGroup>? sharedInfoGroups = null)
     {
         var cat = new Catalogue();
         cat.setId(id);
@@ -185,6 +190,26 @@ public static class JavaModelFactory
         if (entryLinks != null)
             foreach (var el in entryLinks)
                 cat.getEntryLinks().add(el);
+
+        if (sharedSelectionEntries != null)
+            foreach (var se in sharedSelectionEntries)
+                cat.getSharedSelectionEntries().add(se);
+
+        if (sharedSelectionEntryGroups != null)
+            foreach (var seg in sharedSelectionEntryGroups)
+                cat.getSharedSelectionEntryGroups().add(seg);
+
+        if (sharedRules != null)
+            foreach (var r in sharedRules)
+                cat.getSharedRules().add(r);
+
+        if (sharedProfiles != null)
+            foreach (var p in sharedProfiles)
+                cat.getSharedProfiles().add(p);
+
+        if (sharedInfoGroups != null)
+            foreach (var ig in sharedInfoGroups)
+                cat.getSharedInfoGroups().add(ig);
 
         return cat;
     }
@@ -532,5 +557,46 @@ public static class JavaModelFactory
         ct.setId(id);
         ct.setName(name);
         return ct;
+    }
+
+    public static InfoLink CreateInfoLink(
+        string id, string name, string targetId, string type = "profile",
+        bool hidden = false, IEnumerable<Modifier>? modifiers = null)
+    {
+        var il = new InfoLink();
+        il.setId(id);
+        il.setName(name);
+        il.setTargetId(targetId);
+        il.setType(type);
+        il.setHidden(hidden);
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                il.getModifiers().add(m);
+        return il;
+    }
+
+    public static CatalogueLink CreateCatalogueLink(
+        string id, string name, string targetId, bool importRootEntries = true)
+    {
+        var cl = new CatalogueLink();
+        cl.setId(id);
+        cl.setName(name);
+        cl.setTargetId(targetId);
+        cl.setImportRootEntries(importRootEntries);
+        return cl;
+    }
+
+    public static Publication CreatePublication(
+        string id, string name, string shortName = "", string publisher = "",
+        string publicationDate = "", string publisherUrl = "")
+    {
+        var pub = new Publication();
+        pub.setId(id);
+        pub.setName(name);
+        if (!string.IsNullOrEmpty(shortName)) pub.setShortName(shortName);
+        if (!string.IsNullOrEmpty(publisher)) pub.setPublisher(publisher);
+        if (!string.IsNullOrEmpty(publicationDate)) pub.setPublicationDate(publicationDate);
+        if (!string.IsNullOrEmpty(publisherUrl)) pub.setPublisherUrl(publisherUrl);
+        return pub;
     }
 }

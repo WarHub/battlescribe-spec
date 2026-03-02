@@ -16,7 +16,7 @@ public class ConstraintOracleTests(ITestOutputHelper output)
         return new ScenarioSpec(
             new GameSystemSpec(
                 ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")]),
-            new CatalogueSpec(SelectionEntries: entries));
+            [new CatalogueSpec(SelectionEntries: entries)]);
     }
 
     [Fact]

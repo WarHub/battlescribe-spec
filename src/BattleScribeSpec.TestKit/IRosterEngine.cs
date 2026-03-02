@@ -12,13 +12,14 @@ public interface IRosterEngine : IDisposable
     /// Must be called before any roster operations.
     /// Returns initialization errors (empty list = success).
     /// </summary>
-    IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec catalogue);
+    IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues);
 
     /// <summary>
     /// Add a force to the roster using a force entry by index.
     /// Index refers to the order in <see cref="GameSystemSpec.ForceEntries"/>.
+    /// CatalogueIndex specifies which catalogue's entries to use (default 0).
     /// </summary>
-    void AddForce(int forceEntryIndex);
+    void AddForce(int forceEntryIndex, int catalogueIndex = 0);
 
     /// <summary>
     /// Remove a force from the roster by its index.

@@ -33,14 +33,24 @@ public sealed class SpecFile
 
 /// <summary>
 /// Setup section defining game system and catalogue data.
+/// Supports both singular 'catalogue' (backward compat) and plural 'catalogues'.
 /// </summary>
 public sealed class SetupDef
 {
     [YamlMember(Alias = "gameSystem")]
     public GameSystemDef GameSystem { get; set; } = new();
 
+    /// <summary>
+    /// Single catalogue (backward compatible). Auto-wrapped to 1-element array.
+    /// </summary>
     [YamlMember(Alias = "catalogue")]
-    public CatalogueDef Catalogue { get; set; } = new();
+    public CatalogueDef? Catalogue { get; set; }
+
+    /// <summary>
+    /// Multiple catalogues for multi-catalogue scenarios.
+    /// </summary>
+    [YamlMember(Alias = "catalogues")]
+    public List<CatalogueDef>? Catalogues { get; set; }
 }
 
 public sealed class GameSystemDef
@@ -83,6 +93,66 @@ public sealed class CatalogueDef
 
     [YamlMember(Alias = "entryLinks")]
     public List<EntryLinkDef>? EntryLinks { get; set; }
+
+    [YamlMember(Alias = "sharedSelectionEntries")]
+    public List<SelectionEntryDef>? SharedSelectionEntries { get; set; }
+
+    [YamlMember(Alias = "sharedSelectionEntryGroups")]
+    public List<SelectionEntryGroupDef>? SharedSelectionEntryGroups { get; set; }
+
+    [YamlMember(Alias = "sharedRules")]
+    public List<RuleDef>? SharedRules { get; set; }
+
+    [YamlMember(Alias = "sharedProfiles")]
+    public List<ProfileDef>? SharedProfiles { get; set; }
+
+    [YamlMember(Alias = "sharedInfoGroups")]
+    public List<InfoGroupDef>? SharedInfoGroups { get; set; }
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
+
+    [YamlMember(Alias = "catalogueLinks")]
+    public List<CatalogueLinkDef>? CatalogueLinks { get; set; }
+
+    [YamlMember(Alias = "publications")]
+    public List<PublicationDef>? Publications { get; set; }
+}
+
+public sealed class CatalogueLinkDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "targetId")]
+    public string TargetId { get; set; } = "";
+
+    [YamlMember(Alias = "importRootEntries")]
+    public bool ImportRootEntries { get; set; } = true;
+}
+
+public sealed class PublicationDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "shortName")]
+    public string ShortName { get; set; } = "";
+
+    [YamlMember(Alias = "publisher")]
+    public string Publisher { get; set; } = "";
+
+    [YamlMember(Alias = "publicationDate")]
+    public string PublicationDate { get; set; } = "";
+
+    [YamlMember(Alias = "publisherUrl")]
+    public string PublisherUrl { get; set; } = "";
 }
 
 public sealed class CostTypeDef
@@ -185,6 +255,9 @@ public sealed class SelectionEntryDef
 
     [YamlMember(Alias = "page")]
     public string Page { get; set; } = "";
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
 }
 
 public sealed class SelectionEntryGroupDef
@@ -458,6 +531,9 @@ public sealed class InfoGroupDef
 
     [YamlMember(Alias = "modifiers")]
     public List<ModifierDef>? Modifiers { get; set; }
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
 }
 
 public sealed class EntryLinkDef
@@ -490,6 +566,27 @@ public sealed class EntryLinkDef
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
 }
 
+public sealed class InfoLinkDef
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = "";
+
+    [YamlMember(Alias = "targetId")]
+    public string TargetId { get; set; } = "";
+
+    [YamlMember(Alias = "type")]
+    public string Type { get; set; } = "profile";
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+}
+
 // ===== Step definitions =====
 
 /// <summary>
@@ -514,6 +611,9 @@ public sealed class StepDef
 
     [YamlMember(Alias = "childEntryIndex")]
     public int? ChildEntryIndex { get; set; }
+
+    [YamlMember(Alias = "catalogueIndex")]
+    public int? CatalogueIndex { get; set; }
 
     [YamlMember(Alias = "costTypeId")]
     public string? CostTypeId { get; set; }

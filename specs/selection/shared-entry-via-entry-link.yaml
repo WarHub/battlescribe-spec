@@ -1,0 +1,38 @@
+id: shared-entry-via-entry-link
+category: selection
+description: An EntryLink targeting a shared selection entry resolves correctly
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    sharedSelectionEntries:
+      - id: shared-se-1
+        name: Elite Marine
+        type: unit
+    entryLinks:
+      - id: el-1
+        name: Elite Marine
+        targetId: shared-se-1
+        type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Patrol
+          selections:
+            - name: Elite Marine

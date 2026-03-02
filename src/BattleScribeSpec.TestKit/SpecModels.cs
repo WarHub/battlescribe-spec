@@ -64,7 +64,8 @@ public record SelectionEntrySpec(
     ProfileSpec[]? Profiles = null,
     InfoGroupSpec[]? InfoGroups = null,
     string Page = "",
-    EntryLinkSpec[]? EntryLinks = null);
+    EntryLinkSpec[]? EntryLinks = null,
+    InfoLinkSpec[]? InfoLinks = null);
 
 public record ForceEntrySpec(
     string Id,
@@ -99,7 +100,29 @@ public record CatalogueSpec(
     string GameSystemId = "test-gs",
     SelectionEntrySpec[]? SelectionEntries = null,
     SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
-    EntryLinkSpec[]? EntryLinks = null);
+    EntryLinkSpec[]? EntryLinks = null,
+    SelectionEntrySpec[]? SharedSelectionEntries = null,
+    SelectionEntryGroupSpec[]? SharedSelectionEntryGroups = null,
+    RuleSpec[]? SharedRules = null,
+    ProfileSpec[]? SharedProfiles = null,
+    InfoGroupSpec[]? SharedInfoGroups = null,
+    InfoLinkSpec[]? InfoLinks = null,
+    CatalogueLinkSpec[]? CatalogueLinks = null,
+    PublicationSpec[]? Publications = null);
+
+public record CatalogueLinkSpec(
+    string Id,
+    string Name,
+    string TargetId,
+    bool ImportRootEntries = true);
+
+public record PublicationSpec(
+    string Id,
+    string Name,
+    string ShortName = "",
+    string Publisher = "",
+    string PublicationDate = "",
+    string PublisherUrl = "");
 
 public record ConditionGroupSpec(
     string Type,
@@ -159,7 +182,8 @@ public record InfoGroupSpec(
     bool Hidden = false,
     ProfileSpec[]? Profiles = null,
     RuleSpec[]? Rules = null,
-    ModifierSpec[]? Modifiers = null);
+    ModifierSpec[]? Modifiers = null,
+    InfoLinkSpec[]? InfoLinks = null);
 
 public record EntryLinkSpec(
     string Id,
@@ -172,12 +196,21 @@ public record EntryLinkSpec(
     ModifierSpec[]? Modifiers = null,
     CategoryLinkSpec[]? CategoryLinks = null);
 
+public record InfoLinkSpec(
+    string Id,
+    string Name,
+    string TargetId,
+    string Type = "profile",
+    bool Hidden = false,
+    ModifierSpec[]? Modifiers = null);
+
 /// <summary>
 /// Complete test scenario specification.
+/// Supports multiple catalogues — each force can be from a different catalogue.
 /// </summary>
 public record ScenarioSpec(
     GameSystemSpec GameSystem,
-    CatalogueSpec Catalogue);
+    CatalogueSpec[] Catalogues);
 
 public record ProfileTypeSpec(
     string Id,

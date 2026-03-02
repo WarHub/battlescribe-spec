@@ -60,8 +60,8 @@ public static class AdapterHandler
     {
         engine?.Dispose();
         engine = factory();
-        var (gs, cat) = ProtocolConverter.FromSetupCommand(cmd);
-        var errors = engine.Setup(gs, cat);
+        var (gs, catalogues) = ProtocolConverter.FromSetupCommand(cmd);
+        var errors = engine.Setup(gs, catalogues);
         return new SetupResult { Errors = errors.ToList() };
     }
 
@@ -75,7 +75,7 @@ public static class AdapterHandler
             switch (cmd.Action)
             {
                 case "addForce":
-                    engine.AddForce(cmd.ForceEntryIndex ?? 0);
+                    engine.AddForce(cmd.ForceEntryIndex ?? 0, cmd.CatalogueIndex ?? 0);
                     break;
                 case "removeForce":
                     engine.RemoveForce(cmd.ForceIndex ?? 0);

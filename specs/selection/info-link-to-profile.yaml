@@ -1,0 +1,57 @@
+id: info-link-to-profile
+category: selection
+description: InfoLink of type profile resolves a shared profile onto an entry
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+    profileTypes:
+      - id: pt-stats
+        name: Unit Stats
+        characteristicTypes:
+          - id: ct-ws
+            name: WS
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    sharedProfiles:
+      - id: shared-prof-1
+        name: Marine Stats
+        typeId: pt-stats
+        typeName: Unit Stats
+        characteristics:
+          - name: WS
+            typeId: ct-ws
+            value: "3+"
+    selectionEntries:
+      - id: se-1
+        name: Marine
+        type: unit
+        infoLinks:
+          - id: il-1
+            name: Marine Stats
+            targetId: shared-prof-1
+            type: profile
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine
+              profiles:
+                - name: Marine Stats
+                  characteristics:
+                    - name: WS
+                      value: "3+"

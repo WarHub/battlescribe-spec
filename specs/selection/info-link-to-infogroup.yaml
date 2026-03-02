@@ -1,0 +1,60 @@
+id: info-link-to-infogroup
+category: selection
+description: InfoLink of type infoGroup resolves a shared info group onto an entry
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+    profileTypes:
+      - id: pt-stats
+        name: Weapon Stats
+        characteristicTypes:
+          - id: ct-range
+            name: Range
+  catalogue:
+    id: cat-1
+    name: Test Catalogue
+    gameSystemId: test-gs
+    sharedInfoGroups:
+      - id: shared-ig-1
+        name: Weapons
+        profiles:
+          - id: prof-bolter
+            name: Bolt Rifle
+            typeId: pt-stats
+            typeName: Weapon Stats
+            characteristics:
+              - name: Range
+                typeId: ct-range
+                value: "30\""
+    selectionEntries:
+      - id: se-1
+        name: Marine
+        type: unit
+        infoLinks:
+          - id: il-1
+            name: Weapons
+            targetId: shared-ig-1
+            type: infoGroup
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine
+              profiles:
+                - name: Bolt Rifle
+                  characteristics:
+                    - name: Range
+                      value: "30\""
