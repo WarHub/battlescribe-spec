@@ -246,6 +246,9 @@ public sealed class SpecRunner
                 if (ef.SelectionCount is { } sc)
                     AssertEqual(stepIndex, $"force[{fi}].selectionCount", sc, af.Selections.Count);
 
+                if (ef.AvailableEntryCount is { } aec && af.AvailableEntryCount is { } actualAec)
+                    AssertEqual(stepIndex, $"force[{fi}].availableEntryCount", aec, actualAec);
+
                 if (ef.Selections is { } expectedSels)
                     AssertSelections(stepIndex, $"force[{fi}]", expectedSels, af.Selections);
             }

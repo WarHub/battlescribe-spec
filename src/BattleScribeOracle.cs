@@ -467,6 +467,55 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
+    /// Get the number of available root selection entries for a force,
+    /// as resolved by the Java engine (respects import filtering and CatalogueLink merging).
+    /// </summary>
+    public int GetAvailableEntryCountForForce(int forceIndex)
+    {
+        EnsureInitialized();
+        var forces = GetForces();
+        if (forceIndex < 0 || forceIndex >= forces.Count)
+            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        var force = forces[forceIndex];
+        var entryNames = new HashSet<string>();
+        var categories = JavaListToList<Category>(force.getCategories());
+        foreach (var category in categories)
+        {
+            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
+            foreach (var entry in entries)
+                entryNames.Add(entry.getName() ?? entry.getId());
+        }
+        return entryNames.Count;
+    }
+
+    /// <summary>
+    /// Get the names of available root selection entries for a force,
+    /// as resolved by the Java engine (respects import filtering and CatalogueLink merging).
+    /// </summary>
+    public List<string> GetAvailableEntryNamesForForce(int forceIndex)
+    {
+        EnsureInitialized();
+        var forces = GetForces();
+        if (forceIndex < 0 || forceIndex >= forces.Count)
+            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        var force = forces[forceIndex];
+        var names = new List<string>();
+        var seen = new HashSet<string>();
+        var categories = JavaListToList<Category>(force.getCategories());
+        foreach (var category in categories)
+        {
+            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
+            foreach (var entry in entries)
+            {
+                var name = entry.getName() ?? "?";
+                if (seen.Add(name))
+                    names.Add(name);
+            }
+        }
+        return names;
+    }
+
+    /// <summary>
     /// Get total selection count in the roster (flat list).
     /// </summary>
     public int GetAllSelectionCount()
@@ -1068,7 +1117,8 @@ public sealed class BattleScribeOracle : IDisposable
             modifiers: modifiers,
             selectionEntries: childEntries,
             categoryLinks: categoryLinks,
-            collective: spec.Collective);
+            collective: spec.Collective,
+            import: spec.Import);
 
         if (spec.ModifierGroups != null)
             foreach (var mg in spec.ModifierGroups)
@@ -1146,7 +1196,8 @@ public sealed class BattleScribeOracle : IDisposable
             defaultSelectionEntryId: spec.DefaultSelectionEntryId,
             selectionEntries: childEntries,
             constraints: constraints,
-            modifiers: modifiers);
+            modifiers: modifiers,
+            import: spec.Import);
     }
 
     private static Rule BuildRule(RuleSpec spec)
@@ -1196,7 +1247,7 @@ public sealed class BattleScribeOracle : IDisposable
 
         return JavaModelFactory.CreateEntryLink(
             spec.Id, spec.Name, spec.TargetId, spec.Type, spec.Hidden,
-            costs, constraints, modifiers, categoryLinks);
+            costs, constraints, modifiers, categoryLinks, import: spec.Import);
     }
 
     private static Modifier BuildModifier(ModifierSpec spec)

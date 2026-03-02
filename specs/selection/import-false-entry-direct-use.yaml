@@ -1,0 +1,55 @@
+id: import-false-entry-direct-use
+category: selection
+description: Entry with import=false is visible when its catalogue is used directly (not through a link)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-base
+      name: Base Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-base-1
+          name: Public Unit
+          type: unit
+          import: true
+        - id: se-base-2
+          name: Internal Unit
+          type: unit
+          import: false
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+    catalogueIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Patrol
+          selectionCount: 1
+          selections:
+            - name: Public Unit
+              type: unit
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - name: Patrol
+          selectionCount: 2
+          selections:
+            - name: Public Unit
+              type: unit
+            - name: Internal Unit
+              type: unit

@@ -258,6 +258,9 @@ public sealed class SelectionEntryDef
 
     [YamlMember(Alias = "infoLinks")]
     public List<InfoLinkDef>? InfoLinks { get; set; }
+
+    [YamlMember(Alias = "import")]
+    public bool Import { get; set; } = true;
 }
 
 public sealed class SelectionEntryGroupDef
@@ -282,6 +285,9 @@ public sealed class SelectionEntryGroupDef
 
     [YamlMember(Alias = "selectionEntries")]
     public List<SelectionEntryDef>? SelectionEntries { get; set; }
+
+    [YamlMember(Alias = "import")]
+    public bool Import { get; set; } = true;
 }
 
 public sealed class CostDef
@@ -564,6 +570,9 @@ public sealed class EntryLinkDef
 
     [YamlMember(Alias = "categoryLinks")]
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
+
+    [YamlMember(Alias = "import")]
+    public bool Import { get; set; } = true;
 }
 
 public sealed class InfoLinkDef
@@ -674,6 +683,9 @@ public sealed class ExpectedForceDef
 
     [YamlMember(Alias = "selectionCount")]
     public int? SelectionCount { get; set; }
+
+    [YamlMember(Alias = "availableEntryCount")]
+    public int? AvailableEntryCount { get; set; }
 
     [YamlMember(Alias = "selections")]
     public List<ExpectedSelectionDef>? Selections { get; set; }

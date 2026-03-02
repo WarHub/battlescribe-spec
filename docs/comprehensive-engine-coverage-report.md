@@ -219,7 +219,7 @@ The following are intentionally outside this conformance suite scope:
 | Gap | Status | Notes |
 |-----|--------|-------|
 | Modifier application order | ✅ `modifier-order-set-then-append` | Verifies set+append ordering produces expected result |
-| `import` attribute | ⚠️ Model N/A | Not in current data model. Only remaining model gap. |
+| `import` attribute | ✅ 3 specs | `import-true-entry-visible-via-link`, `import-false-entry-hidden-via-link`, `import-false-entry-direct-use`. Tests import visibility control on entries. |
 | Default cost limits | ✅ `cost-default-limit-positive` | Verifies positive limit triggers validation error |
 | Entry link to group | ✅ `entry-link-to-group` | Tests EntryLink with type=selectionEntryGroup |
 | Category modifier `add` | ✅ `modifier-category-add` | Tests category addition modifier |
@@ -244,7 +244,7 @@ Most gaps from the original report have been addressed:
 | **Shared pools** | ✅ Implemented | CatalogueSpec now has sharedSelectionEntries/Rules/Profiles/InfoGroups |
 | **PublicationSpec** | ✅ Implemented | 1 spec covering catalogue publications |
 | **Multi-catalogue** | ✅ Implemented | `force-multi-catalogue-two-forces` tests multi-catalogue force creation |
-| **`import` attribute** | ⚠️ Not yet | Controls editor visibility of entries. Low priority. |
+| **`import` attribute** | ✅ Implemented | 3 specs covering import visibility control on entries via CatalogueLinks |
 
 ### Key Behavioral Findings (Documented in Specs)
 

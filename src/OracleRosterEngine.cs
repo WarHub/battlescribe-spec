@@ -98,13 +98,14 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forces = _oracle.GetForces();
         var errors = _oracle.GetValidationErrors();
 
-        var forceStates = forces.Select(f =>
+        var forceStates = forces.Select((f, i) =>
         {
             var selections = JavaListToList<net.battlescribe.model.roster.Selection>(f.getSelections());
             return new ForceState(
                 f.getName() ?? "",
                 f.getCatalogueId(),
-                selections.Select(CaptureSelection).ToList());
+                selections.Select(CaptureSelection).ToList(),
+                _oracle.GetAvailableEntryCountForForce(i));
         }).ToList();
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());

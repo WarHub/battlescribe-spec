@@ -130,7 +130,8 @@ public static class JavaModelFactory
         IEnumerable<Cost>? costs = null,
         IEnumerable<Constraint>? constraints = null,
         IEnumerable<Modifier>? modifiers = null,
-        IEnumerable<CategoryLink>? categoryLinks = null)
+        IEnumerable<CategoryLink>? categoryLinks = null,
+        bool import = true)
     {
         var el = new EntryLink();
         el.setId(id);
@@ -138,6 +139,7 @@ public static class JavaModelFactory
         el.setTargetId(targetId);
         el.setType(type);
         el.setHidden(hidden);
+        el.setImported(import);
 
         if (costs != null)
             foreach (var c in costs)
@@ -228,7 +230,8 @@ public static class JavaModelFactory
         IEnumerable<CategoryLink>? categoryLinks = null,
         IEnumerable<Constraint>? constraints = null,
         IEnumerable<Modifier>? modifiers = null,
-        bool collective = false)
+        bool collective = false,
+        bool import = true)
     {
         var se = new SelectionEntry();
         se.setId(id);
@@ -236,6 +239,7 @@ public static class JavaModelFactory
         se.setType(type);
         se.setHidden(hidden);
         se.setCollective(collective);
+        se.setImported(import);
 
         if (costs != null)
             foreach (var c in costs)
@@ -274,12 +278,14 @@ public static class JavaModelFactory
         string? defaultSelectionEntryId = null,
         IEnumerable<SelectionEntry>? selectionEntries = null,
         IEnumerable<Constraint>? constraints = null,
-        IEnumerable<Modifier>? modifiers = null)
+        IEnumerable<Modifier>? modifiers = null,
+        bool import = true)
     {
         var seg = new SelectionEntryGroup();
         seg.setId(id);
         seg.setName(name);
         seg.setHidden(hidden);
+        seg.setImported(import);
         if (!string.IsNullOrEmpty(defaultSelectionEntryId))
             seg.setDefaultSelectionEntryId(defaultSelectionEntryId);
 
