@@ -1,0 +1,46 @@
+id: entry-link-with-constraint
+category: selection
+description: EntryLink with a max constraint limits how many times the linked entry can be selected
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-target
+        name: Elite Guard
+        type: unit
+    entryLinks:
+      - id: el-constrained
+        name: Elite Guard
+        targetId: se-target
+        type: selectionEntry
+        constraints:
+          - id: con-max-2
+            type: max
+            value: 2
+            field: selections
+            scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Two selections of the linked entry — exactly at the max constraint.
+  - assert: selectionCount
+    forceIndex: 0
+    expected: 2
+  - assert: noValidationErrors

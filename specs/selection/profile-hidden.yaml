@@ -1,0 +1,61 @@
+id: profile-hidden
+category: selection
+description: A profile with hidden true is filtered from selection state (not exposed)
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-stats
+        name: Unit Stats
+        characteristicTypes:
+          - id: char-ws
+            name: WS
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-stealth
+        name: Stealth Unit
+        type: unit
+        profiles:
+          - id: prof-visible
+            name: Visible Stats
+            typeId: pt-stats
+            typeName: Unit Stats
+            characteristics:
+              - name: WS
+                typeId: char-ws
+                value: "4"
+          - id: prof-hidden
+            name: Stealth Stats
+            typeId: pt-stats
+            typeName: Unit Stats
+            hidden: true
+            characteristics:
+              - name: WS
+                typeId: char-ws
+                value: "3"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Hidden profiles are filtered from state; only non-hidden profile appears
+  - expectedState:
+      forces:
+        - selections:
+            - name: Stealth Unit
+              profiles:
+                - name: Visible Stats
+                  characteristics:
+                    - name: WS
+                      value: "4"

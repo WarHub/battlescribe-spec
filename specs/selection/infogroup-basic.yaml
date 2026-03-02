@@ -1,0 +1,68 @@
+id: infogroup-basic
+category: selection
+description: An entry with an infoGroup containing a profile and a rule produces both in selection state
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-weapon
+        name: Weapon Stats
+        characteristicTypes:
+          - id: char-range
+            name: Range
+          - id: char-strength
+            name: Strength
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Warrior
+        type: unit
+        infoGroups:
+          - id: ig-1
+            name: Warrior Info
+            profiles:
+              - id: prof-1
+                name: Bolter
+                typeId: pt-weapon
+                typeName: Weapon Stats
+                characteristics:
+                  - name: Range
+                    typeId: char-range
+                    value: "24"
+                  - name: Strength
+                    typeId: char-strength
+                    value: "4"
+            rules:
+              - id: rule-1
+                name: Rapid Fire
+                description: May fire twice at half range
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Warrior
+              profiles:
+                - name: Bolter
+                  characteristics:
+                    - name: Range
+                      value: "24"
+                    - name: Strength
+                      value: "4"
+              rules:
+                - name: Rapid Fire
+                  description: May fire twice at half range

@@ -1,0 +1,76 @@
+id: infogroup-with-modifiers
+category: modifier
+description: An infoGroup profile with a modifier that increments a characteristic value
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-combat
+        name: Combat Stats
+        characteristicTypes:
+          - id: char-atk
+            name: Attacks
+          - id: char-ws
+            name: WS
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Veteran
+        type: unit
+        infoGroups:
+          - id: ig-combat
+            name: Veteran Combat Info
+            profiles:
+              - id: prof-combat
+                name: Veteran Combat
+                typeId: pt-combat
+                typeName: Combat Stats
+                characteristics:
+                  - name: Attacks
+                    typeId: char-atk
+                    value: "2"
+                  - name: WS
+                    typeId: char-ws
+                    value: "3+"
+                modifiers:
+                  - type: increment
+                    field: char-atk
+                    value: "1"
+            rules:
+              - id: rule-fury
+                name: Battle Fury
+                description: Base fury
+                modifiers:
+                  - type: append
+                    field: description
+                    value: "(enhanced)"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Veteran
+              profiles:
+                - name: Veteran Combat
+                  characteristics:
+                    - name: Attacks
+                      value: "3"
+                    - name: WS
+                      value: "3+"
+              rules:
+                - name: Battle Fury
+                  description: "Base fury (enhanced)"

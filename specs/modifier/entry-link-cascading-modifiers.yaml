@@ -1,0 +1,43 @@
+id: entry-link-cascading-modifiers
+category: modifier
+description: EntryLink with set-name modifier overrides the target entry name
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-base-unit
+        name: Warrior
+        type: unit
+    entryLinks:
+      - id: el-cascade
+        name: Elite Warrior
+        targetId: se-base-unit
+        type: selectionEntry
+        modifiers:
+          - type: set
+            field: name
+            value: Elite Warrior
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Selecting entryIndex 0 picks the selectionEntry "Warrior" directly.
+  # The entryLink's modifier applies only when selecting through the link.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Warrior

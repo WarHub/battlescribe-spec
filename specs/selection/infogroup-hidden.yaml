@@ -1,0 +1,69 @@
+id: infogroup-hidden
+category: selection
+description: A hidden infoGroup filters its profiles and rules from selection state
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-stats
+        name: Unit Stats
+        characteristicTypes:
+          - id: char-mv
+            name: Move
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-1
+        name: Scout
+        type: unit
+        profiles:
+          - id: prof-visible
+            name: Scout Weapons
+            typeId: pt-stats
+            typeName: Unit Stats
+            characteristics:
+              - name: Move
+                typeId: char-mv
+                value: "8"
+        infoGroups:
+          - id: ig-hidden
+            name: Hidden Info
+            hidden: true
+            profiles:
+              - id: prof-hidden
+                name: Scout Stats
+                typeId: pt-stats
+                typeName: Unit Stats
+                characteristics:
+                  - name: Move
+                    typeId: char-mv
+                    value: "6"
+            rules:
+              - id: rule-hidden
+                name: Infiltrate
+                description: May deploy outside deployment zone
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # Hidden infoGroup's contents are filtered; only the top-level visible profile appears
+  - expectedState:
+      forces:
+        - selections:
+            - name: Scout
+              profiles:
+                - name: Scout Weapons
+                  characteristics:
+                    - name: Move
+                      value: "8"

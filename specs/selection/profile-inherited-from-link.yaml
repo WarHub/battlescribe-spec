@@ -1,0 +1,66 @@
+id: profile-inherited-from-link
+category: selection
+description: An entryLink resolves its target entry and the target's profile appears in selection state
+tags: []
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-weapon
+        name: Weapon Stats
+        characteristicTypes:
+          - id: char-range
+            name: Range
+          - id: char-dmg
+            name: Damage
+  catalogue:
+    id: cat-1
+    name: Cat
+    gameSystemId: test-gs
+    selectionEntries:
+      - id: se-shared
+        name: Linked Blade
+        type: upgrade
+        profiles:
+          - id: prof-blade
+            name: Blade Profile
+            typeId: pt-weapon
+            typeName: Weapon Stats
+            characteristics:
+              - name: Range
+                typeId: char-range
+                value: Melee
+              - name: Damage
+                typeId: char-dmg
+                value: "2"
+    entryLinks:
+      - id: el-blade
+        name: Blade Link
+        targetId: se-shared
+        type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  # The entryLink resolves se-shared, so selecting entryIndex 0 creates
+  # a selection with the target's profile inherited.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Linked Blade
+              profiles:
+                - name: Blade Profile
+                  characteristics:
+                    - name: Range
+                      value: Melee
+                    - name: Damage
+                      value: "2"
