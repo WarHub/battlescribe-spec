@@ -2,21 +2,19 @@ namespace BattleScribeSpec.NewRecruit;
 
 /// <summary>
 /// IRosterEngine implementation that wraps the New Recruit web app via Playwright.
-/// Follows the same pattern as OracleRosterEngine but drives a browser session.
 ///
-/// Data flow:
-/// 1. Setup: Generate .gst/.cat XML → upload to NR via BSFilesUploaded() → create new list
-/// 2. Actions: Drive NR's UI via Playwright locators or JS evaluation
-/// 3. State: Read from NR's Pinia stores (lists, listsPage) via page.EvaluateAsync()
+/// Uses NR's Pinia store API discovered via bundle decompilation:
+/// 1. Setup: Select system from NR library → load book → createRoster → addList
+/// 2. Actions: Interact with roster nodes via prototype methods (getEntries, setAmount, etc.)
+/// 3. State: Read from roster tree via getCurrentList().army
+///
+/// Currently only supports real-world data (systems from NR's library).
+/// Synthetic spec data cannot be loaded into NR's web mode.
 /// </summary>
 public sealed class NewRecruitRosterEngine : IRosterEngine
 {
     private readonly NewRecruitBrowser _browser;
     private bool _disposed;
-
-    // Cached game system and catalogue specs for index-based lookups during actions
-    private GameSystemSpec? _gameSystem;
-    private CatalogueSpec[]? _catalogues;
 
     private NewRecruitRosterEngine(NewRecruitBrowser browser)
     {
@@ -36,8 +34,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
-        _gameSystem = gameSystem;
-        _catalogues = catalogues;
         return SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
     }
 
@@ -47,110 +43,78 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
         try
         {
-            // Step 1: Generate .gst and .cat XML from spec data
-            var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-            var catXmlList = new List<(string name, string xml)>();
-            foreach (var cat in catalogues)
-            {
-                var catXml = CatXmlGenerator.GenerateCatalogueXml(gameSystem, cat);
-                catXmlList.Add(($"{cat.Name}.cat", catXml));
-            }
-
-            // Step 2: Navigate to NR app
+            // Navigate to /app and wait for systems to load
             await _browser.NavigateToAppAsync();
+            await _browser.Page.WaitForTimeoutAsync(2000);
 
-            // Step 3: Upload .gst/.cat files via NR's systemsStore.BSFilesUploaded()
-            // This creates a local system from the uploaded files.
-            // BSFilesUploaded() expects File objects — we create them via JS.
-            var uploadResult = await _browser.Page.EvaluateAsync<string?>("""
-                async ({gstName, gstContent, catFiles}) => {
+            // Select system by name, load book by catalogue name, create roster + list
+            var setupResult = await _browser.Page.EvaluateAsync<string?>($$"""
+                async ({systemName, catalogueName}) => {
                     try {
-                        const app = document.querySelector('#__nuxt')?.__vue_app__;
-                        const pinia = app?.config?.globalProperties?.$pinia;
+                        const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
 
-                        const systemsStore = pinia._s.get('systemsStore');
-                        if (!systemsStore) return 'systemsStore not found';
+                        const sysStore = pinia._s.get('systemsStore');
+                        const listsStore = pinia._s.get('lists');
+                        if (!sysStore || !listsStore) return 'Required stores not found';
 
-                        // Create File objects from our generated XML
-                        const files = [];
-                        files.push(new File([gstContent], gstName, { type: 'application/xml' }));
-                        for (const cf of catFiles) {
-                            files.push(new File([cf.content], cf.name, { type: 'application/xml' }));
+                        // Step 1: Select matching system from NR library
+                        const systems = sysStore.systems || [];
+                        let sys = systems.find(s => s.name === systemName);
+                        if (!sys) {
+                            // Try partial match
+                            sys = systems.find(s => s.name.includes(systemName) || systemName.includes(s.name));
                         }
+                        if (!sys) return 'System not found in NR library: ' + systemName + '. Available: ' + systems.map(s => s.name).slice(0, 10).join(', ');
 
-                        // Upload via NR's BSFilesUploaded method
-                        await systemsStore.BSFilesUploaded(files);
+                        // Select the system (triggers book loading)
+                        await sysStore.selectSystem(sys);
+
+                        // Step 2: Find matching playable book
+                        const playableBooks = sys.books?.array?.filter(b => b.playable) || [];
+                        if (!playableBooks.length) return 'No playable books for system: ' + sys.name;
+
+                        let selectedBook = playableBooks.find(b => b.name === catalogueName);
+                        if (!selectedBook) {
+                            selectedBook = playableBooks.find(b => b.name.includes(catalogueName) || catalogueName.includes(b.name));
+                        }
+                        if (!selectedBook) selectedBook = playableBooks[0];
+
+                        // Step 3: Load book data
+                        const bookData = await sys.getBook(selectedBook.id);
+                        if (!bookData) return 'Failed to load book data for: ' + selectedBook.name;
+
+                        // Step 4: Create roster
+                        const costs = bookData.getCosts();
+                        const roster = bookData.createRoster(costs);
+                        if (!roster) return 'Failed to create roster';
+                        roster.setCustomName('Spec Test');
+
+                        // Step 5: Build row metadata and add list
+                        const row = {
+                            list_key: 'spec_' + Date.now(),
+                            name: 'Spec Test',
+                            id_game_system: selectedBook.id_game_system || sys.id,
+                            id_system: selectedBook.id || sys.id,
+                            nrversion: selectedBook.nrversion,
+                            date_mod: new Date(),
+                            date_create: new Date(),
+                            synced: false,
+                            uid: null,
+                            bsid_book: selectedBook.bsid,
+                            bsid_system: sys.bsid
+                        };
+
+                        await listsStore.addList({row, army: roster, book: bookData});
                         return null; // success
                     } catch(e) {
-                        return 'Upload error: ' + e.message;
+                        return 'Setup error: ' + e.message;
                     }
                 }
-                """, new
-            {
-                gstName = $"{gameSystem.Name}.gst",
-                gstContent = gstXml,
-                catFiles = catXmlList.Select(c => new { name = c.name, content = c.xml }).ToArray()
-            });
+                """, new { systemName = gameSystem.Name, catalogueName = catalogues.FirstOrDefault()?.Name ?? "" });
 
-            if (uploadResult != null)
-            {
-                errors.Add(uploadResult);
-                return errors;
-            }
-
-            // Step 4: Select the uploaded system
-            var selectResult = await _browser.Page.EvaluateAsync<string?>("""
-                async (systemName) => {
-                    try {
-                        const app = document.querySelector('#__nuxt')?.__vue_app__;
-                        const pinia = app?.config?.globalProperties?.$pinia;
-                        const systemsStore = pinia._s.get('systemsStore');
-
-                        // Find and select our uploaded system
-                        const allSystems = systemsStore.allSystems || [];
-                        const system = allSystems.find(s => s.name === systemName);
-                        if (!system) return 'System not found after upload: ' + systemName;
-
-                        await systemsStore.selectSystem(system);
-                        return null;
-                    } catch(e) {
-                        return 'Select error: ' + e.message;
-                    }
-                }
-                """, gameSystem.Name);
-
-            if (selectResult != null)
-            {
-                errors.Add(selectResult);
-                return errors;
-            }
-
-            // Step 5: Create a new list with this system
-            var createResult = await _browser.Page.EvaluateAsync<string?>("""
-                async () => {
-                    try {
-                        const app = document.querySelector('#__nuxt')?.__vue_app__;
-                        const pinia = app?.config?.globalProperties?.$pinia;
-                        const lists = pinia._s.get('lists');
-                        if (!lists) return 'lists store not found';
-
-                        await lists.addList();
-                        return null;
-                    } catch(e) {
-                        return 'Create list error: ' + e.message;
-                    }
-                }
-                """);
-
-            if (createResult != null)
-            {
-                errors.Add(createResult);
-                return errors;
-            }
-
-            // Wait for NR to process the list creation
-            await _browser.Page.WaitForTimeoutAsync(1000);
+            if (setupResult != null)
+                errors.Add(setupResult);
         }
         catch (Exception ex)
         {

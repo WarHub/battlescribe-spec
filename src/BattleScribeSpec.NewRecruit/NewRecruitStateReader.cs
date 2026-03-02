@@ -3,16 +3,16 @@ using Microsoft.Playwright;
 namespace BattleScribeSpec.NewRecruit;
 
 /// <summary>
-/// Reads roster state from New Recruit's Pinia store via page.EvaluateAsync().
-/// Maps NR's internal JavaScript state to BattleScribeSpec RosterState records.
+/// Reads roster state from NR's Pinia store via page.EvaluateAsync().
+/// Maps NR's internal JS tree to BattleScribeSpec RosterState records.
 ///
-/// Based on NR store discovery (docs/nr-store-mapping.md):
-/// - `lists` store: treeData, listData, getCurrentList()
-/// - `listsPage` store: editedForce, editedUnit, addingUnit
-/// - `gameStore`: gameUnit
-///
-/// The roster data model is accessed via lists.getCurrentList() which returns
-/// the active list object containing the roster, forces, and selections.
+/// Access: lists.getCurrentList() → {row, army, book}
+/// The 'army' is the roster object with prototype methods:
+/// - getName(), getForces(), getCosts(), getTotalCosts()
+/// - getSelections(), getEntries(), getChildren()
+/// - getModifiedProfiles(), getModifiedRules()
+/// - getPrimaryCategory(), getSelectionCategories()
+/// - errors/allErrors properties for validation
 /// </summary>
 public static class NewRecruitStateReader
 {
@@ -34,83 +34,90 @@ public static class NewRecruitStateReader
                 const lists = pinia._s.get('lists');
                 if (!lists) return empty;
 
-                const currentList = lists.getCurrentList();
-                if (!currentList) return empty;
+                const list = lists.getCurrentList();
+                if (!list) return empty;
 
-                // The roster object is either currentList.roster or currentList itself
-                const roster = currentList.roster || currentList;
+                const army = list.army;
+                if (!army) return empty;
 
                 try {
                     return {
-                        name: roster.name || currentList.name || '',
-                        gameSystemId: roster.gameSystemId || currentList.gameSystemId || '',
-                        forces: extractForces(roster),
-                        costs: extractCosts(roster),
-                        validationErrors: extractErrors(roster)
+                        name: army.getCustomName?.() || army.getName?.() || list.row?.name || '',
+                        gameSystemId: list.row?.bsid_system || '',
+                        forces: extractForces(army),
+                        costs: extractTotalCosts(army),
+                        validationErrors: extractErrors(army)
                     };
                 } catch(e) {
                     return { ...empty, validationErrors: ['State read error: ' + e.message] };
                 }
 
-                function extractForces(roster) {
-                    const forces = roster.forces || [];
+                function extractForces(army) {
+                    const forces = army.getForces?.() || [];
                     return forces.map(f => ({
-                        name: f.name || f.forceName || '',
-                        catalogueId: f.catalogueId || f.catalogue?.id || null,
+                        name: f.getName?.() || '',
+                        catalogueId: f.catalogueId || f.getId?.() || null,
                         selections: extractSelections(f)
                     }));
                 }
 
                 function extractSelections(parent) {
-                    // Selections may be in different properties depending on NR's model
-                    const selections = parent.selections || parent.units || parent.children || [];
+                    const selections = parent.getSelections?.() || [];
                     return selections.map(s => extractSelection(s));
                 }
 
                 function extractSelection(sel) {
+                    const costs = sel.getCosts?.() || [];
+                    const profiles = sel.getModifiedProfiles?.() || [];
+                    const rules = sel.getModifiedRules?.() || [];
+                    const cats = sel.getSelectionCategories?.() || [];
+
                     return {
-                        name: sel.name || '',
-                        entryId: sel.entryId || sel.id || null,
-                        type: sel.type || null,
-                        number: sel.number || sel.count || 1,
-                        hidden: sel.hidden || false,
-                        costs: extractCosts(sel),
+                        name: sel.getName?.() || '',
+                        entryId: sel.getId?.() || null,
+                        type: sel.getType?.() || null,
+                        number: sel.getAmount?.() || 1,
+                        hidden: sel.isHidden?.() || false,
+                        costs: costs.map(c => ({
+                            name: c.name || '',
+                            typeId: c.typeId || '',
+                            value: c.value || 0
+                        })),
                         children: extractSelections(sel),
-                        profiles: (sel.profiles || []).map(p => ({
-                            name: p.name || '',
+                        profiles: profiles.map(p => ({
+                            name: p.name || p.getName?.() || '',
                             typeId: p.typeId || null,
                             typeName: p.typeName || null,
                             hidden: p.hidden || false,
                             characteristics: (p.characteristics || []).map(ch => ({
                                 name: ch.name || '',
                                 typeId: ch.typeId || '',
-                                value: ch.value?.toString() || ''
+                                value: (ch.value ?? '').toString()
                             }))
                         })),
-                        rules: (sel.rules || []).map(r => ({
-                            name: r.name || '',
+                        rules: rules.map(r => ({
+                            name: r.name || r.getName?.() || '',
                             description: r.description || '',
                             hidden: r.hidden || false
                         })),
-                        categories: (sel.categories || []).map(cat => ({
-                            name: cat.name || '',
-                            entryId: cat.entryId || cat.id || null,
+                        categories: cats.map(cat => ({
+                            name: cat.name || cat.getName?.() || '',
+                            entryId: cat.entryId || cat.getId?.() || null,
                             primary: cat.primary || false
                         })),
-                        page: sel.page || null
+                        page: null
                     };
                 }
 
-                function extractCosts(obj) {
-                    const costs = obj.costs || [];
+                function extractTotalCosts(army) {
+                    const costs = army.getTotalCosts?.() || army.getCosts?.() || [];
                     if (Array.isArray(costs)) {
                         return costs.map(c => ({
                             name: c.name || '',
-                            typeId: c.typeId || c.id || '',
+                            typeId: c.typeId || '',
                             value: c.value || 0
                         }));
                     }
-                    // Costs might be an object { pts: 100, pl: 5 }
                     if (typeof costs === 'object') {
                         return Object.entries(costs).map(([key, val]) => ({
                             name: key,
@@ -121,12 +128,9 @@ public static class NewRecruitStateReader
                     return [];
                 }
 
-                function extractErrors(roster) {
-                    // Try multiple paths for validation errors
-                    const errors = roster.validationErrors
-                        || roster.errors
-                        || roster.validationMessages
-                        || [];
+                function extractErrors(army) {
+                    // NR uses errors/allErrors properties on nodes
+                    const errors = army.allErrors || army.errors || [];
                     if (Array.isArray(errors)) {
                         return errors.map(e => typeof e === 'string' ? e : (e.message || e.text || JSON.stringify(e)));
                     }

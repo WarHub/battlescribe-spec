@@ -3,304 +3,266 @@ using Microsoft.Playwright;
 namespace BattleScribeSpec.NewRecruit;
 
 /// <summary>
-/// Translates IRosterEngine action calls to New Recruit browser interactions.
-/// 
-/// NR's roster engine is in the private nr-shared module and NOT exposed as
-/// Pinia store actions. The Pinia stores (lists, listsPage, etc.) manage UI
-/// state, not engine operations. Therefore we use a hybrid approach:
-/// - Pinia store methods where available (e.g., listsPage.setAddingUnit)
-/// - Direct JS evaluation to access the engine through the current list object
-/// - UI-level Playwright automation as fallback
+/// Translates IRosterEngine action calls to NR roster tree operations.
 ///
-/// The key entry point is `lists.getCurrentList()` which returns the current
-/// roster list object with the engine's data model.
+/// NR uses a unified node model where roster, force, category, entry, and selection
+/// objects share the same prototype chain with methods like:
+/// - getForces(), getEntries(), getSelections(), getChildren()
+/// - setAmount(n), incrementAmount(), decrementAmount()
+/// - getName(), getId(), getCosts(), delete(), dupe()
+///
+/// Access pattern: lists.getCurrentList() → {row, army, book}
+/// The 'army' property IS the roster object.
 /// </summary>
 public static class NewRecruitActions
 {
-    private const string PiniaAccess =
-        "document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia";
+    private const string GetArmy =
+        "document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army";
 
-    private static string StoreAccess(string storeId) =>
-        $"{PiniaAccess}?._s?.get('{storeId}')";
+    private const string GetBook =
+        "document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.book";
 
     /// <summary>
     /// Add a force to the roster by force entry index.
-    /// NR's list object should have force management in its data model.
+    /// Uses book.getForces()[index] to get the force definition, then army.insertForce(book, forceId).
     /// </summary>
     public static async Task AddForceAsync(IPage page, int forceEntryIndex, int catalogueIndex = 0)
     {
-        await page.EvaluateAsync("""
-            async ({forceEntryIndex, catalogueIndex}) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s?.get('lists');
-                if (!lists) throw new Error('lists store not found');
+        var error = await page.EvaluateAsync<string?>("""
+            ({forceEntryIndex}) => {
+                try {
+                    const list = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList();
+                    if (!list) return 'No current list';
+                    const army = list.army;
+                    const book = list.book;
+                    if (!army || !book) return 'No army or book on list';
 
-                const currentList = lists.getCurrentList();
-                if (!currentList) throw new Error('No current list');
+                    const forces = book.getForces();
+                    if (forceEntryIndex >= forces.length) return `Force entry index ${forceEntryIndex} out of range (${forces.length} available)`;
 
-                // Access the roster from the current list
-                const roster = currentList.roster || currentList;
-
-                // Get game system force entries
-                const gameSystem = currentList.gameSystem || currentList.system;
-                if (!gameSystem) throw new Error('No game system on current list');
-
-                const forceEntries = gameSystem.forceEntries || [];
-                if (forceEntryIndex >= forceEntries.length) {
-                    throw new Error(`Force entry index ${forceEntryIndex} out of range (${forceEntries.length} entries)`);
-                }
-
-                const forceEntry = forceEntries[forceEntryIndex];
-
-                // Try to call addForce on the roster/list object
-                if (typeof roster.addForce === 'function') {
-                    roster.addForce(forceEntry, catalogueIndex);
-                } else if (typeof currentList.addForce === 'function') {
-                    currentList.addForce(forceEntry, catalogueIndex);
-                } else {
-                    throw new Error('addForce method not found on roster or list object. Available keys: ' +
-                        Object.keys(roster).filter(k => typeof roster[k] === 'function').join(', '));
+                    const force = forces[forceEntryIndex];
+                    army.insertForce(book, force.id);
+                    return null;
+                } catch(e) {
+                    return 'AddForce error: ' + e.message;
                 }
             }
-            """, new { forceEntryIndex, catalogueIndex });
+            """, new { forceEntryIndex });
+        if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
     /// Remove a force from the roster by index.
+    /// Uses army.getForces()[index].delete().
     /// </summary>
     public static async Task RemoveForceAsync(IPage page, int forceIndex)
     {
-        await page.EvaluateAsync("""
-            async (forceIndex) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s?.get('lists');
-                const currentList = lists?.getCurrentList();
-                if (!currentList) throw new Error('No current list');
+        var error = await page.EvaluateAsync<string?>("""
+            (forceIndex) => {
+                try {
+                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    if (!army) return 'No current roster';
 
-                const roster = currentList.roster || currentList;
-                const forces = roster.forces || [];
-                if (forceIndex >= forces.length) {
-                    throw new Error(`Force index ${forceIndex} out of range (${forces.length} forces)`);
-                }
+                    const forces = army.getForces();
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
 
-                if (typeof roster.removeForce === 'function') {
-                    roster.removeForce(forces[forceIndex]);
-                } else if (typeof currentList.removeForce === 'function') {
-                    currentList.removeForce(forces[forceIndex]);
-                } else {
-                    // Fallback: splice from array
-                    forces.splice(forceIndex, 1);
+                    forces[forceIndex].delete();
+                    return null;
+                } catch(e) {
+                    return 'RemoveForce error: ' + e.message;
                 }
             }
             """, forceIndex);
+        if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
-    /// Select an entry in the specified force, creating a new selection.
+    /// Select an entry in the specified force, adding it to the roster.
+    /// Uses force.getEntries()[entryIndex].incrementAmount().
     /// </summary>
     public static async Task SelectEntryAsync(IPage page, int forceIndex, int entryIndex)
     {
-        await page.EvaluateAsync("""
-            async ({forceIndex, entryIndex}) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s?.get('lists');
-                const currentList = lists?.getCurrentList();
-                if (!currentList) throw new Error('No current list');
+        var error = await page.EvaluateAsync<string?>("""
+            ({forceIndex, entryIndex}) => {
+                try {
+                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    if (!army) return 'No current roster';
 
-                const roster = currentList.roster || currentList;
-                const forces = roster.forces || [];
-                if (forceIndex >= forces.length) {
-                    throw new Error(`Force index ${forceIndex} out of range`);
-                }
+                    const forces = army.getForces();
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                const force = forces[forceIndex];
-                // Get available entries for this force (from catalogue or force entry)
-                const entries = force.availableEntries || force.entries || force.selectionEntries || [];
-                if (entryIndex >= entries.length) {
-                    throw new Error(`Entry index ${entryIndex} out of range (${entries.length} entries)`);
-                }
+                    const entries = forces[forceIndex].getEntries();
+                    if (entryIndex >= entries.length) return `Entry index ${entryIndex} out of range (${entries.length} entries)`;
 
-                const entry = entries[entryIndex];
-
-                if (typeof force.addSelection === 'function') {
-                    force.addSelection(entry);
-                } else if (typeof roster.selectEntry === 'function') {
-                    roster.selectEntry(force, entry);
-                } else if (typeof currentList.selectEntry === 'function') {
-                    currentList.selectEntry(force, entry);
-                } else {
-                    throw new Error('selectEntry/addSelection not found. Force keys: ' +
-                        Object.keys(force).filter(k => typeof force[k] === 'function').join(', '));
+                    const entry = entries[entryIndex];
+                    if (entry.getAmount() === 0) {
+                        entry.incrementAmount();
+                    } else {
+                        entry.setAmount(entry.getAmount() + 1);
+                    }
+                    return null;
+                } catch(e) {
+                    return 'SelectEntry error: ' + e.message;
                 }
             }
             """, new { forceIndex, entryIndex });
+        if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
     /// Select a child entry under an existing selection.
+    /// Uses force.getSelections()[selectionIndex].getEntries()[childEntryIndex].incrementAmount().
     /// </summary>
     public static async Task SelectChildEntryAsync(IPage page, int forceIndex, int selectionIndex, int childEntryIndex)
     {
-        await page.EvaluateAsync("""
-            async ({forceIndex, selectionIndex, childEntryIndex}) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s?.get('lists');
-                const currentList = lists?.getCurrentList();
-                if (!currentList) throw new Error('No current list');
+        var error = await page.EvaluateAsync<string?>("""
+            ({forceIndex, selectionIndex, childEntryIndex}) => {
+                try {
+                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    if (!army) return 'No current roster';
 
-                const roster = currentList.roster || currentList;
-                const forces = roster.forces || [];
-                const force = forces[forceIndex];
-                if (!force) throw new Error(`Force index ${forceIndex} out of range`);
+                    const forces = army.getForces();
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                const selections = force.selections || [];
-                const selection = selections[selectionIndex];
-                if (!selection) throw new Error(`Selection index ${selectionIndex} out of range`);
+                    const selections = forces[forceIndex].getSelections();
+                    if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
-                const childEntries = selection.availableEntries || selection.entries || selection.selectionEntries || [];
-                if (childEntryIndex >= childEntries.length) {
-                    throw new Error(`Child entry index ${childEntryIndex} out of range (${childEntries.length} entries)`);
-                }
+                    const childEntries = selections[selectionIndex].getEntries();
+                    if (childEntryIndex >= childEntries.length) return `Child entry index ${childEntryIndex} out of range (${childEntries.length} entries)`;
 
-                const childEntry = childEntries[childEntryIndex];
-
-                if (typeof selection.addSelection === 'function') {
-                    selection.addSelection(childEntry);
-                } else if (typeof roster.selectChildEntry === 'function') {
-                    roster.selectChildEntry(selection, childEntry);
-                } else {
-                    throw new Error('selectChildEntry/addSelection not found on selection');
+                    const entry = childEntries[childEntryIndex];
+                    if (entry.getAmount() === 0) {
+                        entry.incrementAmount();
+                    } else {
+                        entry.setAmount(entry.getAmount() + 1);
+                    }
+                    return null;
+                } catch(e) {
+                    return 'SelectChildEntry error: ' + e.message;
                 }
             }
             """, new { forceIndex, selectionIndex, childEntryIndex });
+        if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
-    /// Deselect (remove) a selection by its index within the force.
+    /// Deselect (remove) a selection by setting its amount to 0 or calling delete().
     /// </summary>
     public static async Task DeselectSelectionAsync(IPage page, int forceIndex, int selectionIndex)
     {
-        await page.EvaluateAsync("""
-            async ({forceIndex, selectionIndex}) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s?.get('lists');
-                const currentList = lists?.getCurrentList();
-                if (!currentList) throw new Error('No current list');
+        var error = await page.EvaluateAsync<string?>("""
+            ({forceIndex, selectionIndex}) => {
+                try {
+                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    if (!army) return 'No current roster';
 
-                const roster = currentList.roster || currentList;
-                const forces = roster.forces || [];
-                const force = forces[forceIndex];
-                if (!force) throw new Error(`Force index ${forceIndex} out of range`);
+                    const forces = army.getForces();
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                const selections = force.selections || [];
-                const selection = selections[selectionIndex];
-                if (!selection) throw new Error(`Selection index ${selectionIndex} out of range`);
+                    const selections = forces[forceIndex].getSelections();
+                    if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
-                if (typeof force.removeSelection === 'function') {
-                    force.removeSelection(selection);
-                } else if (typeof roster.removeSelection === 'function') {
-                    roster.removeSelection(force, selection);
-                } else if (typeof currentList.removeSelection === 'function') {
-                    currentList.removeSelection(force, selection);
-                } else {
-                    // Fallback: splice from array
-                    selections.splice(selectionIndex, 1);
+                    const sel = selections[selectionIndex];
+                    if (typeof sel.delete === 'function') {
+                        sel.delete();
+                    } else {
+                        sel.setAmount(0);
+                    }
+                    return null;
+                } catch(e) {
+                    return 'DeselectSelection error: ' + e.message;
                 }
             }
             """, new { forceIndex, selectionIndex });
+        if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
-    /// Set the number of instances for a selection entry.
+    /// Set the number of instances for a selection entry using setAmount().
     /// </summary>
     public static async Task SetSelectionCountAsync(IPage page, int forceIndex, int entryIndex, int count)
     {
-        await page.EvaluateAsync("""
-            async ({forceIndex, entryIndex, count}) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s?.get('lists');
-                const currentList = lists?.getCurrentList();
-                if (!currentList) throw new Error('No current list');
+        var error = await page.EvaluateAsync<string?>("""
+            ({forceIndex, entryIndex, count}) => {
+                try {
+                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    if (!army) return 'No current roster';
 
-                const roster = currentList.roster || currentList;
-                const forces = roster.forces || [];
-                const force = forces[forceIndex];
-                if (!force) throw new Error(`Force index ${forceIndex} out of range`);
+                    const forces = army.getForces();
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                const selections = force.selections || [];
-                const selection = selections[entryIndex];
-                if (!selection) throw new Error(`Selection index ${entryIndex} out of range`);
+                    const selections = forces[forceIndex].getSelections();
+                    if (entryIndex >= selections.length) return `Selection index ${entryIndex} out of range`;
 
-                if (typeof selection.setNumber === 'function') {
-                    selection.setNumber(count);
-                } else if (selection.number !== undefined) {
-                    selection.number = count;
-                } else {
-                    throw new Error('Cannot set selection count — no setNumber method or number property');
+                    selections[entryIndex].setAmount(count);
+                    return null;
+                } catch(e) {
+                    return 'SetSelectionCount error: ' + e.message;
                 }
             }
             """, new { forceIndex, entryIndex, count });
+        if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
-    /// Duplicate a selection within a force.
+    /// Duplicate a selection within a force using dupe().
     /// </summary>
     public static async Task DuplicateSelectionAsync(IPage page, int forceIndex, int selectionIndex)
     {
-        await page.EvaluateAsync("""
-            async ({forceIndex, selectionIndex}) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s?.get('lists');
-                const currentList = lists?.getCurrentList();
-                if (!currentList) throw new Error('No current list');
+        var error = await page.EvaluateAsync<string?>("""
+            ({forceIndex, selectionIndex}) => {
+                try {
+                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    if (!army) return 'No current roster';
 
-                const roster = currentList.roster || currentList;
-                const forces = roster.forces || [];
-                const force = forces[forceIndex];
-                if (!force) throw new Error(`Force index ${forceIndex} out of range`);
+                    const forces = army.getForces();
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                const selections = force.selections || [];
-                const selection = selections[selectionIndex];
-                if (!selection) throw new Error(`Selection index ${selectionIndex} out of range`);
+                    const selections = forces[forceIndex].getSelections();
+                    if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
-                if (typeof force.duplicateSelection === 'function') {
-                    force.duplicateSelection(selection);
-                } else if (typeof roster.duplicateSelection === 'function') {
-                    roster.duplicateSelection(force, selection);
-                } else {
-                    throw new Error('duplicateSelection not found');
+                    const sel = selections[selectionIndex];
+                    if (typeof sel.dupe === 'function') {
+                        sel.dupe();
+                    } else {
+                        return 'dupe() method not available on selection';
+                    }
+                    return null;
+                } catch(e) {
+                    return 'DuplicateSelection error: ' + e.message;
                 }
             }
             """, new { forceIndex, selectionIndex });
+        if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
-    /// Set cost limit for a cost type.
+    /// Set cost limit for a cost type using army.setMaxCosts() or updating maxCosts array.
     /// </summary>
     public static async Task SetCostLimitAsync(IPage page, string costTypeId, double value)
     {
-        await page.EvaluateAsync("""
-            async ({costTypeId, value}) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s?.get('lists');
-                const currentList = lists?.getCurrentList();
-                if (!currentList) throw new Error('No current list');
+        var error = await page.EvaluateAsync<string?>("""
+            ({costTypeId, value}) => {
+                try {
+                    const army = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('lists').getCurrentList()?.army;
+                    if (!army) return 'No current roster';
 
-                const roster = currentList.roster || currentList;
-
-                if (typeof roster.setCostLimit === 'function') {
-                    roster.setCostLimit(costTypeId, value);
-                } else {
-                    // Try to find cost limits on the roster
-                    const costLimits = roster.costLimits || roster.costs || [];
-                    const costLimit = costLimits.find(c => c.typeId === costTypeId || c.id === costTypeId);
-                    if (costLimit) {
-                        costLimit.value = value;
-                    } else {
-                        throw new Error(`Cost type ${costTypeId} not found in roster cost limits`);
+                    // Try setMaxCosts method first
+                    const maxCosts = army.getMaxCosts?.();
+                    if (maxCosts && Array.isArray(maxCosts)) {
+                        const cost = maxCosts.find(c => c.typeId === costTypeId || c.name === costTypeId);
+                        if (cost) {
+                            cost.value = value;
+                            army.setMaxCosts(maxCosts);
+                            return null;
+                        }
                     }
+                    return `Cost type '${costTypeId}' not found in roster maxCosts`;
+                } catch(e) {
+                    return 'SetCostLimit error: ' + e.message;
                 }
             }
             """, new { costTypeId, value });
+        if (error != null) throw new InvalidOperationException(error);
     }
 }
