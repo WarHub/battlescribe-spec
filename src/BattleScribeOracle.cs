@@ -164,8 +164,23 @@ public sealed class BattleScribeOracle : IDisposable
     public List<Selection> SelectEntry(BaseSelectionParent parent, SelectionEntry entry)
     {
         EnsureInitialized();
-        var javaList = _engine.b(parent, entry);
-        return JavaListToList<Selection>(javaList);
+        try
+        {
+            var javaList = _engine.b(parent, entry);
+            return JavaListToList<Selection>(javaList);
+        }
+        catch (NullReferenceException ex)
+        {
+            var parentType = parent?.GetType().Name ?? "null";
+            var entryId = entry?.getId() ?? "null";
+            var entryName = entry?.getName() ?? "null";
+            throw new InvalidOperationException(
+                $"NullRef in Java SelectEntry(parent={parentType}, entry={entryId}/{entryName}). " +
+                $"Parent is Force: {parent is Force}. " +
+                $"CatalogueMap count: {_forceCatalogueMap.Count}, " +
+                $"PerCatalogueEntries count: {_perCatalogueEntries.Count}, " +
+                $"SetupCatalogues count: {_setupCatalogues.Count}", ex);
+        }
     }
 
     /// <summary>
@@ -409,7 +424,13 @@ public sealed class BattleScribeOracle : IDisposable
         if (entryIndex < 0 || entryIndex >= entries.Count)
             throw new ArgumentOutOfRangeException(nameof(entryIndex),
                 $"Entry index {entryIndex} out of range (have {entries.Count} entries for force {forceIndex})");
-        return SelectEntry(forces[forceIndex], entries[entryIndex]);
+        var force = forces[forceIndex];
+        var entry = entries[entryIndex];
+        if (force is null)
+            throw new InvalidOperationException($"Force at index {forceIndex} is null");
+        if (entry is null)
+            throw new InvalidOperationException($"Entry at index {entryIndex} for force {forceIndex} is null");
+        return SelectEntry(force, entry);
     }
 
     /// <summary>
