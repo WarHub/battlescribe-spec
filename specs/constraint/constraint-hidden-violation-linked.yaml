@@ -44,8 +44,5 @@ steps:
     entryIndex: 0
 
   - expectedState:
-      hasValidationErrors: true
-      validationErrors:
-        - message: hidden
-          ownerType: category
-          ownerEntryId: cat-troops
+      errors:
+        - on: category cat-troops

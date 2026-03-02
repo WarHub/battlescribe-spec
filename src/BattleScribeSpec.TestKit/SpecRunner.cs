@@ -293,6 +293,63 @@ public sealed class SpecRunner
                 }
             }
         }
+
+        if (expected.Errors is { } errorsAssertions)
+        {
+            var actualErrors = _engine.GetValidationErrors();
+            if (errorsAssertions.Count == 0)
+            {
+                // errors: [] means expect no errors
+                if (actualErrors.Count > 0)
+                    _errors.Add($"Step {stepIndex}: expected no errors but got {actualErrors.Count}: " +
+                        string.Join("; ", actualErrors.Select(FormatError)));
+            }
+            else
+            {
+                foreach (var ea in errorsAssertions)
+                {
+                    var (expectedOwnerType, expectedOwnerEntryId) = ParseOn(ea.On);
+                    var (expectedEntryId, expectedConstraintId) = ParseFrom(ea.From);
+
+                    var match = actualErrors.FirstOrDefault(ae =>
+                        ae.OwnerType == expectedOwnerType &&
+                        (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
+                        (expectedEntryId is null || ae.EntryId == expectedEntryId) &&
+                        (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId) &&
+                        (ea.Message is null || ae.Message.Contains(ea.Message)));
+                    if (match is null)
+                    {
+                        var desc = $"on='{ea.On}'";
+                        if (ea.From is not null) desc += $", from='{ea.From}'";
+                        if (ea.Message is not null) desc += $", message~'{ea.Message}'";
+                        _errors.Add($"Step {stepIndex}: expected error [{desc}] not found in: [{string.Join("; ", actualErrors.Select(FormatError))}]");
+                    }
+                }
+            }
+        }
+    }
+
+    private static string FormatError(ValidationErrorState e)
+    {
+        var on = e.OwnerType ?? "?";
+        if (e.OwnerEntryId is not null) on += $" {e.OwnerEntryId}";
+        var from = e.EntryId is not null && e.ConstraintId is not null ? $"{e.EntryId}/{e.ConstraintId}" : null;
+        return from is not null ? $"{on} <- {from}: {e.Message}" : $"{on}: {e.Message}";
+    }
+
+    private static (string ownerType, string? ownerEntryId) ParseOn(string on)
+    {
+        var spaceIdx = on.IndexOf(' ');
+        if (spaceIdx < 0) return (on, null);
+        return (on[..spaceIdx], on[(spaceIdx + 1)..]);
+    }
+
+    private static (string? entryId, string? constraintId) ParseFrom(string? from)
+    {
+        if (from is null) return (null, null);
+        var slashIdx = from.IndexOf('/');
+        if (slashIdx < 0) return (from, null);
+        return (from[..slashIdx], from[(slashIdx + 1)..]);
     }
 
     private void AssertSelections(int stepIndex, string prefix,

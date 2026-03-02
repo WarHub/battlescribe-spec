@@ -49,17 +49,13 @@ steps:
     entryIndex: 0
 
   - expectedState:
-      hasValidationErrors: false
+      errors: []
 
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   - expectedState:
-      hasValidationErrors: true
-      validationErrors:
-        - message: too many
-          ownerType: category
-          ownerEntryId: cat-troops
-          entryId: se-unit-a
-          constraintId: con-max-1
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-max-1

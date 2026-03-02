@@ -57,10 +57,6 @@ steps:
     entryIndex: 0
 
   - expectedState:
-      hasValidationErrors: true
-      validationErrors:
-        - message: too much
-          ownerType: category
-          ownerEntryId: cat-troops
-          entryId: se-unit-a
-          constraintId: con-cost-max
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-cost-max

@@ -57,10 +57,6 @@ steps:
     entryIndex: 0
 
   - expectedState:
-      hasValidationErrors: true
-      validationErrors:
-        - message: must spend
-          ownerType: category
-          ownerEntryId: cat-troops
-          entryId: se-unit-a
-          constraintId: con-cost-min
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-cost-min

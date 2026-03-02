@@ -49,9 +49,6 @@ steps:
     entryIndex: 0
 
   - expectedState:
-      hasValidationErrors: true
-      validationErrors:
-        - message: must have
-          ownerType: force
-          entryId: se-unit-a
-          constraintId: con-min-force
+      errors:
+        - on: force
+          from: se-unit-a/con-min-force

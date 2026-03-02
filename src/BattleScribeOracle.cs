@@ -249,8 +249,8 @@ public sealed class BattleScribeOracle : IDisposable
         EnsureInitialized();
         var result = new List<ValidationErrorState>();
         var roster = _engine.a();
-        // Roster-level errors (e.g., cost limit)
-        CollectElementErrors(roster, "roster", roster.getId(), null, result);
+        // Roster-level errors (e.g., cost limit) — resolve cost type from message
+        CollectRosterErrors(roster, result);
         // Walk forces → categories → selections
         foreach (var force in JavaListToList<Force>(roster.getForces()))
         {
@@ -273,6 +273,44 @@ public sealed class BattleScribeOracle : IDisposable
         foreach (var child in JavaListToList<Selection>(selection.getSelections()))
         {
             CollectSelectionErrors(child, result);
+        }
+    }
+
+    private void CollectRosterErrors(Roster roster, List<ValidationErrorState> result)
+    {
+        var errors = roster.getValidationErrors();
+        if (errors is null || errors.size() == 0) return;
+
+        // Build cost limit lookup for resolving cost type IDs
+        var costLimits = JavaListToList<Cost>(roster.getCostLimits());
+
+        var iter = errors.iterator();
+        while (iter.hasNext())
+        {
+            var item = iter.next();
+            if (item?.GetType().FullName != "net.battlescribe.engine.b.a")
+            {
+                result.Add(new ValidationErrorState(item?.ToString() ?? "(null error)"));
+                continue;
+            }
+            dynamic error = item;
+            var message = (string?)error.b() ?? "(null error)";
+
+            // Resolve cost type from message (cost limit errors mention the cost name)
+            string? costTypeId = null;
+            foreach (var limit in costLimits)
+            {
+                var costName = limit.getName();
+                if (costName is not null && message.Contains(costName))
+                {
+                    costTypeId = limit.getTypeId();
+                    break;
+                }
+            }
+
+            result.Add(new ValidationErrorState(message, "roster", roster.getId(), null,
+                EntryId: costTypeId is not null ? "costLimits" : null,
+                ConstraintId: costTypeId));
         }
     }
 

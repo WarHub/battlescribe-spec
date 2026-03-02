@@ -65,15 +65,8 @@ steps:
     forceEntryIndex: 0
 
   - expectedState:
-      hasValidationErrors: true
-      validationErrors:
-        - message: must have
-          ownerType: category
-          ownerEntryId: cat-troops
-          entryId: se-unit-a
-          constraintId: con-min-troops
-        - message: must have
-          ownerType: category
-          ownerEntryId: cat-hq
-          entryId: se-hq
-          constraintId: con-min-hq
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-min-troops
+        - on: category cat-hq
+          from: se-hq/con-min-hq
