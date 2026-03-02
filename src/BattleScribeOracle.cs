@@ -240,13 +240,181 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Get all validation errors for the current roster.
+    /// Get all validation errors for the current roster with structured entry links.
+    /// Walks the roster tree per-element (like BattleScribe's rosterManager.d()),
+    /// using validationErrorIds for shared entries and engine entry data for non-shared.
     /// </summary>
-    public List<string> GetValidationErrors()
+    public List<ValidationErrorState> GetValidationErrors()
     {
         EnsureInitialized();
-        var javaErrors = _engine.q();
-        return JavaListToStringErrors(javaErrors);
+        var result = new List<ValidationErrorState>();
+        var roster = _engine.a();
+        // Roster-level errors (e.g., cost limit) — resolve cost type from message
+        CollectRosterErrors(roster, result);
+        // Walk forces → categories → selections
+        foreach (var force in JavaListToList<Force>(roster.getForces()))
+        {
+            CollectElementErrors(force, "force", force.getId(), force.getEntryId(), result);
+            foreach (var category in JavaListToList<Category>(force.getCategories()))
+            {
+                CollectElementErrors(category, "category", category.getId(), category.getEntryId(), result);
+            }
+            foreach (var selection in JavaListToList<Selection>(force.getSelections()))
+            {
+                CollectSelectionErrors(selection, result);
+            }
+        }
+        return result;
+    }
+
+    private void CollectSelectionErrors(Selection selection, List<ValidationErrorState> result)
+    {
+        CollectElementErrors(selection, "selection", selection.getId(), selection.getEntryId(), result);
+        foreach (var child in JavaListToList<Selection>(selection.getSelections()))
+        {
+            CollectSelectionErrors(child, result);
+        }
+    }
+
+    private void CollectRosterErrors(Roster roster, List<ValidationErrorState> result)
+    {
+        var errors = roster.getValidationErrors();
+        if (errors is null || errors.size() == 0) return;
+
+        // Build cost limit lookup for resolving cost type IDs
+        var costLimits = JavaListToList<Cost>(roster.getCostLimits());
+
+        var iter = errors.iterator();
+        while (iter.hasNext())
+        {
+            var item = iter.next();
+            if (item?.GetType().FullName != "net.battlescribe.engine.b.a")
+            {
+                result.Add(new ValidationErrorState(item?.ToString() ?? "(null error)"));
+                continue;
+            }
+            dynamic error = item;
+            var message = (string?)error.b() ?? "(null error)";
+
+            // Resolve cost type from message (cost limit errors mention the cost name)
+            string? costTypeId = null;
+            foreach (var limit in costLimits)
+            {
+                var costName = limit.getName();
+                if (costName is not null && message.Contains(costName))
+                {
+                    costTypeId = limit.getTypeId();
+                    break;
+                }
+            }
+
+            result.Add(new ValidationErrorState(message, "roster", roster.getId(), null,
+                EntryId: costTypeId is not null ? "costLimits" : null,
+                ConstraintId: costTypeId));
+        }
+    }
+
+    private void CollectElementErrors(
+        BaseRosterElement element, string ownerType, string? ownerId, string? ownerEntryId,
+        List<ValidationErrorState> result)
+    {
+        var errors = element.getValidationErrors();
+        if (errors is null || errors.size() == 0) return;
+
+        // Build a lookup of error IDs on this element (shared entries only)
+        // Format: ownerId::entryId::constraintId
+        var errorIdMap = new Dictionary<string, (string entryId, string constraintId)>();
+        var errorIds = element.getValidationErrorIds();
+        if (errorIds is not null)
+        {
+            var idIter = errorIds.iterator();
+            while (idIter.hasNext())
+            {
+                var errorId = idIter.next()?.ToString();
+                if (errorId is null) continue;
+                var parts = errorId.Split("::");
+                if (parts.Length >= 3)
+                {
+                    errorIdMap[parts[1]] = (parts[1], parts[2]);
+                }
+            }
+        }
+
+        var iter = errors.iterator();
+        while (iter.hasNext())
+        {
+            var item = iter.next();
+            if (item?.GetType().FullName != "net.battlescribe.engine.b.a")
+            {
+                result.Add(new ValidationErrorState(item?.ToString() ?? "(null error)"));
+                continue;
+            }
+
+            dynamic error = item;
+            var message = (string?)error.b() ?? "(null error)";
+
+            string? entryId = null;
+            string? constraintId = null;
+
+            // Try shared entry error IDs first
+            foreach (var kvp in errorIdMap)
+            {
+                var entry = GetEntryById(kvp.Value.entryId);
+                if (entry is not null && message.Contains(entry.getName()))
+                {
+                    entryId = kvp.Value.entryId;
+                    constraintId = kvp.Value.constraintId;
+                    break;
+                }
+            }
+
+            // Fall back to engine entry data for non-shared entries
+            if (entryId is null)
+            {
+                (entryId, constraintId) = ResolveEntryFromMessage(message);
+            }
+
+            // Detect hidden entry errors: "cannot have any selections of {name} (hidden)"
+            if (entryId is null && message.Contains("(hidden)"))
+            {
+                foreach (var (id, entry) in _entryLookup)
+                {
+                    var entryName = entry.getName();
+                    if (entryName is not null && message.Contains(entryName))
+                    {
+                        entryId = id;
+                        constraintId = "hidden";
+                        break;
+                    }
+                }
+            }
+
+            result.Add(new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId));
+        }
+    }
+
+    /// <summary>
+    /// Resolve entryId and constraintId by matching the error message against
+    /// the engine's own entry data (names and constraint types).
+    /// </summary>
+    private (string? entryId, string? constraintId) ResolveEntryFromMessage(string message)
+    {
+        foreach (var (id, entry) in _entryLookup)
+        {
+            var entryName = entry.getName();
+            if (entryName is null || !message.Contains(entryName)) continue;
+            var constraints = JavaListToList<Constraint>(entry.getConstraints());
+            foreach (var c in constraints)
+            {
+                var type = c.getType();
+                if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
+                    (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                {
+                    return (id, c.getId());
+                }
+            }
+        }
+        return (null, null);
     }
 
     /// <summary>
@@ -1439,6 +1607,7 @@ public sealed class BattleScribeOracle : IDisposable
         }
         return result;
     }
+
 
     private static List<string> JavaListToStringErrors(JavaList? javaList)
     {

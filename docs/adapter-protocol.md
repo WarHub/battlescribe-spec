@@ -165,14 +165,80 @@ Sent after each spec test completes. The adapter should reset its state.
     }
   ],
   "costs": [{ "name": "pts", "typeId": "ct-pts", "value": 50 }],
-  "validationErrors": []
+  "validationErrors": [
+    {
+      "message": "Patrol must have 1 more selections of Unit A (minimum 1)",
+      "ownerType": "category",
+      "ownerId": "abc-123",
+      "ownerEntryId": "cat-troops",
+      "entryId": "se-unit-a",
+      "constraintId": "con-min-1"
+    }
+  ]
+}
+```
+
+Each validation error is a structured object with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | string | Human-readable error message (always present) |
+| `ownerType` | string? | Type of roster element: `"roster"`, `"force"`, `"category"`, `"selection"` |
+| `ownerId` | string? | Runtime ID of the owning roster element |
+| `ownerEntryId` | string? | Catalogue entry ID of the owner (for force/category/selection) |
+| `entryId` | string? | ID of the entry whose constraint was violated, or `"costLimits"` for cost limit errors |
+| `constraintId` | string? | ID of the constraint that failed, the cost type ID for cost limit errors, or `"hidden"` for hidden entry errors |
+
+Null fields are omitted from the JSON.
+
+#### Cost limit errors
+
+When a roster exceeds a cost limit, the error uses a special convention:
+- `ownerType` is `"roster"`
+- `entryId` is `"costLimits"` (pseudo-entry)
+- `constraintId` is the cost type ID (e.g., `"ct-pts"`)
+
+```json
+{
+  "message": "Roster is over the pts limit by 50pts",
+  "ownerType": "roster",
+  "entryId": "costLimits",
+  "constraintId": "ct-pts"
+}
+```
+
+#### Hidden entry errors
+
+When a hidden entry is selected, the error uses:
+- `entryId` is the hidden entry's ID
+- `constraintId` is `"hidden"` (pseudo-constraint)
+
+```json
+{
+  "message": "Patrol cannot have any selections of Unit A (hidden)",
+  "ownerType": "category",
+  "ownerEntryId": "cat-troops",
+  "entryId": "se-unit-a",
+  "constraintId": "hidden"
 }
 ```
 
 ### `errors`
 
 ```json
-{"type":"errors","errors":["Min 1 selection required for HQ"]}
+{
+  "type": "errors",
+  "errors": [
+    {
+      "message": "Patrol must have 1 more selections of Unit A (minimum 1)",
+      "ownerType": "category",
+      "ownerId": "abc-123",
+      "ownerEntryId": "cat-troops",
+      "entryId": "se-unit-a",
+      "constraintId": "con-min-1"
+    }
+  ]
+}
 ```
 
 ### `teardownResult`

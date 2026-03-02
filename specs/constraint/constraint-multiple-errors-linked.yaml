@@ -1,0 +1,72 @@
+id: constraint-multiple-errors-linked
+category: constraint
+description: Multiple simultaneous errors each carry their own structured entry links
+tags:
+  - validation-errors
+  - structured-errors
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+      - id: cat-hq
+        name: HQ
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: con-min-troops
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+        - id: se-hq
+          name: HQ Leader
+          type: unit
+          categoryLinks:
+            - id: cl-hq-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
+          constraints:
+            - id: con-min-hq
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - expectedState:
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-min-troops
+        - on: category cat-hq
+          from: se-hq/con-min-hq

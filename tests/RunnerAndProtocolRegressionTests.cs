@@ -170,9 +170,7 @@ public class RunnerAndProtocolRegressionTests
             return State;
         }
 
-        public IReadOnlyList<string> GetValidationErrors() => State.ValidationErrors;
-
-        public bool HasValidationErrors() => State.ValidationErrors.Count > 0;
+        public IReadOnlyList<ValidationErrorState> GetValidationErrors() => State.ValidationErrors;
 
         public void Dispose()
         {

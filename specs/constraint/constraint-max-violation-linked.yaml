@@ -1,0 +1,61 @@
+id: constraint-max-violation-linked
+category: constraint
+description: Max selection constraint produces structured error with entry and constraint links
+tags:
+  - validation-errors
+  - structured-errors
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: con-max-1
+              type: max
+              value: 1
+              field: selections
+              scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      errors: []
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-max-1

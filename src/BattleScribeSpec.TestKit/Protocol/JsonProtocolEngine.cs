@@ -105,20 +105,16 @@ public sealed class JsonProtocolEngine : IRosterEngine
         };
     }
 
-    public IReadOnlyList<string> GetValidationErrors()
+    public IReadOnlyList<ValidationErrorState> GetValidationErrors()
     {
         var response = SendCommand(new GetErrorsCommand());
         return response switch
         {
-            ErrorsResponse er => er.Errors,
-            ProtocolError pe => [pe.Message],
-            _ => [$"Unexpected response type: {response.Type}"],
+            ErrorsResponse er => er.Errors.Select(e => new ValidationErrorState(
+                e.Message, e.OwnerType, e.OwnerId, e.OwnerEntryId, e.EntryId, e.ConstraintId)).ToList(),
+            ProtocolError pe => [new ValidationErrorState(pe.Message)],
+            _ => [new ValidationErrorState($"Unexpected response type: {response.Type}")],
         };
-    }
-
-    public bool HasValidationErrors()
-    {
-        return GetValidationErrors().Count > 0;
     }
 
     public void Dispose()

@@ -9,11 +9,9 @@ namespace BattleScribeSpec;
 public sealed class OracleRosterEngine : IRosterEngine
 {
     private readonly BattleScribeOracle _oracle = new();
-    private CatalogueSpec[]? _catalogueSpecs;
 
     public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
-        _catalogueSpecs = catalogues;
         var scenario = new ScenarioSpec(gameSystem, catalogues);
         return _oracle.SetupFromSpec(scenario);
     }
@@ -120,9 +118,7 @@ public sealed class OracleRosterEngine : IRosterEngine
             errors);
     }
 
-    public IReadOnlyList<string> GetValidationErrors() => _oracle.GetValidationErrors();
-
-    public bool HasValidationErrors() => _oracle.HasValidationErrors();
+    public IReadOnlyList<ValidationErrorState> GetValidationErrors() => _oracle.GetValidationErrors();
 
     public void Dispose() => _oracle.Dispose();
 
