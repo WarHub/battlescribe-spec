@@ -14,18 +14,18 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Squad
-        type: unit
-        costs:
-          - name: pts
-            typeId: pts
-            value: 100
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 100
 
 steps:
   - action: addForce

@@ -12,39 +12,39 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Agent
-        type: unit
-        costs:
-          - name: pts
-            typeId: pts
-            value: 100
-        modifierGroups:
-          - conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: parent
-                childId: se-1
-            modifiers:
-              - type: set
-                field: name
-                value: Active Agent
-          - conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: parent
-                childId: se-1
-            modifiers:
-              - type: increment
-                field: pts
-                value: "25"
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Agent
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 100
+          modifierGroups:
+            - conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: parent
+                  childId: se-1
+              modifiers:
+                - type: set
+                  field: name
+                  value: Active Agent
+            - conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: parent
+                  childId: se-1
+              modifiers:
+                - type: increment
+                  field: pts
+                  value: "25"
 
 steps:
   - action: addForce

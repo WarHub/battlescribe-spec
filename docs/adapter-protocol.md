@@ -41,7 +41,7 @@ sequenceDiagram
 
 ### `setup` — Initialize Engine
 
-Sent once at the start of each spec test. Provides game system and catalogue data.
+Sent once at the start of each spec test. Provides game system and catalogues data.
 
 ```json
 {
@@ -64,22 +64,24 @@ Sent once at the start of each spec test. Provides game system and catalogue dat
       { "id": "cat-1", "name": "HQ" }
     ]
   },
-  "catalogue": {
-    "id": "cat-1",
-    "name": "Test Catalogue",
-    "gameSystemId": "test-gs",
-    "selectionEntries": [
-      {
-        "id": "se-1", "name": "Unit", "type": "unit", "hidden": false, "collective": false,
-        "costs": [{ "name": "pts", "typeId": "ct-pts", "value": 50 }],
-        "constraints": [], "modifiers": [], "modifierGroups": [],
-        "selectionEntries": [], "selectionEntryGroups": [],
-        "entryLinks": [], "categoryLinks": [], "rules": [], "profiles": [], "infoGroups": []
-      }
-    ],
-    "selectionEntryGroups": [],
-    "entryLinks": []
-  }
+  "catalogues": [
+    {
+      "id": "cat-1",
+      "name": "Test Catalogue",
+      "gameSystemId": "test-gs",
+      "selectionEntries": [
+        {
+          "id": "se-1", "name": "Unit", "type": "unit", "hidden": false, "collective": false,
+          "costs": [{ "name": "pts", "typeId": "ct-pts", "value": 50 }],
+          "constraints": [], "modifiers": [], "modifierGroups": [],
+          "selectionEntries": [], "selectionEntryGroups": [],
+          "entryLinks": [], "categoryLinks": [], "rules": [], "profiles": [], "infoGroups": []
+        }
+      ],
+      "selectionEntryGroups": [],
+      "entryLinks": []
+    }
+  ]
 }
 ```
 
@@ -253,7 +255,7 @@ while line = readline(stdin):
     command = json_parse(line)
     match command.type:
         "setup":
-            errors = engine.setup(command.gameSystem, command.catalogue)
+            errors = engine.setup(command.gameSystem, command.catalogues)
             write(stdout, {"type":"setupResult","errors":errors})
         "action":
             try:

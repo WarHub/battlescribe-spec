@@ -33,18 +33,11 @@ public sealed class SpecFile
 
 /// <summary>
 /// Setup section defining game system and catalogue data.
-/// Supports both singular 'catalogue' (backward compat) and plural 'catalogues'.
 /// </summary>
 public sealed class SetupDef
 {
     [YamlMember(Alias = "gameSystem")]
     public GameSystemDef GameSystem { get; set; } = new();
-
-    /// <summary>
-    /// Single catalogue (backward compatible). Auto-wrapped to 1-element array.
-    /// </summary>
-    [YamlMember(Alias = "catalogue")]
-    public CatalogueDef? Catalogue { get; set; }
 
     /// <summary>
     /// Multiple catalogues for multi-catalogue scenarios.

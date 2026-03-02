@@ -114,7 +114,7 @@ public static class SpecLoader
 
     /// <summary>
     /// Convert YAML setup definitions to ScenarioSpec.
-    /// Supports both singular 'catalogue' and plural 'catalogues'.
+    /// Requires plural 'catalogues' with at least one catalogue.
     /// </summary>
     public static ScenarioSpec ToSpecModels(SetupDef setup)
     {
@@ -131,9 +131,9 @@ public static class SpecLoader
                 .Select(pt => new ProfileTypeSpec(pt.Id, pt.Name,
                     pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray());
 
-        // Support both singular 'catalogue' and plural 'catalogues'
-        var catalogueDefs = setup.Catalogues
-            ?? (setup.Catalogue is { } singleCat ? [singleCat] : [new CatalogueDef()]);
+        var catalogueDefs = setup.Catalogues;
+        if (catalogueDefs is null || catalogueDefs.Count == 0)
+            throw new InvalidOperationException("Setup requires 'catalogues' with at least one catalogue.");
 
         var catalogues = catalogueDefs.Select(ConvertCatalogue).ToArray();
 

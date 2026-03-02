@@ -9,19 +9,19 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    sharedSelectionEntries:
-      - id: shared-se-1
-        name: Elite Marine
-        type: unit
-    entryLinks:
-      - id: el-1
-        name: Elite Marine
-        targetId: shared-se-1
-        type: selectionEntry
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-se-1
+          name: Elite Marine
+          type: unit
+      entryLinks:
+        - id: el-1
+          name: Elite Marine
+          targetId: shared-se-1
+          type: selectionEntry
 
 steps:
   - action: addForce

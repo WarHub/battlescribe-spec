@@ -16,35 +16,35 @@ setup:
         characteristicTypes:
           - id: char-attacks
             name: Attacks
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Marine
-        type: unit
-        profiles:
-          - id: prof-1
-            name: Marine Stats
-            typeId: stat-type
-            typeName: Unit Stats
-            characteristics:
-              - name: Attacks
-                typeId: char-attacks
-                value: "1"
-            modifiers:
-              - type: increment
-                field: char-attacks
-                value: "1"
-        rules:
-          - id: rule-1
-            name: Rapid Fire
-            description: Base description
-            modifiers:
-              - type: append
-                field: description
-                value: (enhanced)
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          profiles:
+            - id: prof-1
+              name: Marine Stats
+              typeId: stat-type
+              typeName: Unit Stats
+              characteristics:
+                - name: Attacks
+                  typeId: char-attacks
+                  value: "1"
+              modifiers:
+                - type: increment
+                  field: char-attacks
+                  value: "1"
+          rules:
+            - id: rule-1
+              name: Rapid Fire
+              description: Base description
+              modifiers:
+                - type: append
+                  field: description
+                  value: (enhanced)
 
 steps:
   - action: addForce

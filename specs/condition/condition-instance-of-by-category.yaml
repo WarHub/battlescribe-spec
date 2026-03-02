@@ -16,32 +16,32 @@ setup:
             targetId: cat-hq
             name: HQ
             primary: false
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-detector
-        name: Detector
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: HQ Found
-            conditions:
-              - type: instanceOf
-                value: 1
-                field: selections
-                scope: force
-                childId: cat-hq
-      - id: se-commander
-        name: Commander
-        type: unit
-        categoryLinks:
-          - id: cl-cmd-hq
-            targetId: cat-hq
-            name: HQ
-            primary: true
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-detector
+          name: Detector
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: HQ Found
+              conditions:
+                - type: instanceOf
+                  value: 1
+                  field: selections
+                  scope: force
+                  childId: cat-hq
+        - id: se-commander
+          name: Commander
+          type: unit
+          categoryLinks:
+            - id: cl-cmd-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
 
 steps:
   - action: addForce

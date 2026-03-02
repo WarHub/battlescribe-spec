@@ -16,31 +16,31 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit
-        name: Unit
-        type: unit
-        costs:
-          - typeId: ct-pts
-            value: 50
-          - typeId: ct-pl
-            value: 3
-      - id: se-watcher
-        name: Watcher
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Limit Resolved
-            conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: roster
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit
+          type: unit
+          costs:
+            - typeId: ct-pts
+              value: 50
+            - typeId: ct-pl
+              value: 3
+        - id: se-watcher
+          name: Watcher
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Limit Resolved
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: roster
 
 steps:
   - action: addForce

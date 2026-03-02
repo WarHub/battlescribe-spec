@@ -9,24 +9,24 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit-a
-        name: Self Check
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Self Found
-            conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: self
-                childId: se-unit-a
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Self Check
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Self Found
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: self
+                  childId: se-unit-a
 
 steps:
   - action: addForce

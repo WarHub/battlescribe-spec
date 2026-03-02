@@ -16,7 +16,7 @@ public class RunnerAndProtocolRegressionTests
             Id = "setup-errors",
             Category = "runner",
             Description = "setup errors should stop execution",
-            Setup = new SetupDef { GameSystem = new GameSystemDef() },
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
             Steps = [new StepDef { Action = "addForce", ForceEntryIndex = 0 }]
         };
 
@@ -37,7 +37,7 @@ public class RunnerAndProtocolRegressionTests
             Id = "action-stop",
             Category = "runner",
             Description = "action failure should stop later steps",
-            Setup = new SetupDef { GameSystem = new GameSystemDef() },
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
             Steps =
             [
                 new StepDef { Action = "addForce", ForceEntryIndex = 0 },
@@ -71,7 +71,7 @@ public class RunnerAndProtocolRegressionTests
             Id = "hidden-assert",
             Category = "runner",
             Description = "hidden field should be asserted",
-            Setup = new SetupDef { GameSystem = new GameSystemDef() },
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
             Steps =
             [
                 new StepDef

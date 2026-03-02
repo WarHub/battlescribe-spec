@@ -17,19 +17,19 @@ setup:
             targetId: cat-entry-hq
             name: HQ
             primary: false
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Commander
-        type: unit
-        categoryLinks:
-          - id: cl-1
-            targetId: cat-entry-hq
-            name: HQ
-            primary: true
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Commander
+          type: unit
+          categoryLinks:
+            - id: cl-1
+              targetId: cat-entry-hq
+              name: HQ
+              primary: true
 
 steps:
   - action: addForce

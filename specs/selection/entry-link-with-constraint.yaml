@@ -10,25 +10,25 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-target
-        name: Elite Guard
-        type: unit
-    entryLinks:
-      - id: el-constrained
-        name: Elite Guard
-        targetId: se-target
-        type: selectionEntry
-        constraints:
-          - id: con-max-2
-            type: max
-            value: 2
-            field: selections
-            scope: parent
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-target
+          name: Elite Guard
+          type: unit
+      entryLinks:
+        - id: el-constrained
+          name: Elite Guard
+          targetId: se-target
+          type: selectionEntry
+          constraints:
+            - id: con-max-2
+              type: max
+              value: 2
+              field: selections
+              scope: parent
 
 steps:
   - action: addForce

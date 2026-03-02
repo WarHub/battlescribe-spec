@@ -9,25 +9,25 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-squad
-        name: Squad
-        type: unit
-        constraints:
-          - id: con-max-2
-            type: max
-            value: 2
-            field: selections
-            scope: parent
-        selectionEntries:
-          - id: se-weapon
-            name: Weapon
-            type: model
-            collective: true
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          constraints:
+            - id: con-max-2
+              type: max
+              value: 2
+              field: selections
+              scope: parent
+          selectionEntries:
+            - id: se-weapon
+              name: Weapon
+              type: model
+              collective: true
 
 steps:
   - action: addForce

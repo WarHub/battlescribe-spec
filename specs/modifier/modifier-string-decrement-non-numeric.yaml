@@ -9,18 +9,18 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Alpha Squad
-        type: unit
-        modifiers:
-          - type: decrement
-            field: name
-            value: "10"
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Alpha Squad
+          type: unit
+          modifiers:
+            - type: decrement
+              field: name
+              value: "10"
 
 steps:
   - action: addForce

@@ -11,27 +11,27 @@ setup:
         name: Patrol
       - id: fe-battalion
         name: Battalion
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-detector
-        name: Detector
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Force Entry Matched
-            conditions:
-              - type: instanceOf
-                value: 1
-                field: forces
-                scope: roster
-                childId: fe-patrol
-      - id: se-unit
-        name: Unit
-        type: unit
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-detector
+          name: Detector
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Force Entry Matched
+              conditions:
+                - type: instanceOf
+                  value: 1
+                  field: forces
+                  scope: roster
+                  childId: fe-patrol
+        - id: se-unit
+          name: Unit
+          type: unit
 
 steps:
   - action: addForce

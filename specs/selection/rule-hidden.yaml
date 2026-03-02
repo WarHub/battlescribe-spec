@@ -10,22 +10,22 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-covert
-        name: Covert Operative
-        type: unit
-        rules:
-          - id: rule-visible
-            name: Rapid Fire
-            description: Can fire twice at half range
-          - id: rule-hidden-ability
-            name: Hidden Deployment
-            description: This unit may be placed in reserves during deployment
-            hidden: true
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-covert
+          name: Covert Operative
+          type: unit
+          rules:
+            - id: rule-visible
+              name: Rapid Fire
+              description: Can fire twice at half range
+            - id: rule-hidden-ability
+              name: Hidden Deployment
+              description: This unit may be placed in reserves during deployment
+              hidden: true
 
 steps:
   - action: addForce

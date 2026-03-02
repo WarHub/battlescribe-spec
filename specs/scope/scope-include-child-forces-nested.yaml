@@ -13,24 +13,24 @@ setup:
         forceEntries:
           - id: fe-detach
             name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Squad
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Veteran Squad
-            conditions:
-              - type: atLeast
-                value: 1
-                field: selections
-                scope: force
-                includeChildForces: true
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Veteran Squad
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: force
+                  includeChildForces: true
 
 steps:
   - action: addForce

@@ -18,31 +18,31 @@ setup:
             name: Range
           - id: char-dmg
             name: Damage
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-shared
-        name: Linked Blade
-        type: upgrade
-        profiles:
-          - id: prof-blade
-            name: Blade Profile
-            typeId: pt-weapon
-            typeName: Weapon Stats
-            characteristics:
-              - name: Range
-                typeId: char-range
-                value: Melee
-              - name: Damage
-                typeId: char-dmg
-                value: "2"
-    entryLinks:
-      - id: el-blade
-        name: Blade Link
-        targetId: se-shared
-        type: selectionEntry
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-shared
+          name: Linked Blade
+          type: upgrade
+          profiles:
+            - id: prof-blade
+              name: Blade Profile
+              typeId: pt-weapon
+              typeName: Weapon Stats
+              characteristics:
+                - name: Range
+                  typeId: char-range
+                  value: Melee
+                - name: Damage
+                  typeId: char-dmg
+                  value: "2"
+      entryLinks:
+        - id: el-blade
+          name: Blade Link
+          targetId: se-shared
+          type: selectionEntry
 
 steps:
   - action: addForce

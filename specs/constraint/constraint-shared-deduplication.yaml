@@ -10,21 +10,21 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Squad
-        type: unit
-        constraints:
-          - id: con-1
-            type: min
-            value: 2
-            field: selections
-            scope: parent
-            shared: true
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          constraints:
+            - id: con-1
+              type: min
+              value: 2
+              field: selections
+              scope: parent
+              shared: true
 
 steps:
   - action: addForce

@@ -9,19 +9,19 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-squad
-        name: Hidden Squad
-        type: unit
-        hidden: true
-        selectionEntries:
-          - id: se-soldier
-            name: Soldier
-            type: model
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Hidden Squad
+          type: unit
+          hidden: true
+          selectionEntries:
+            - id: se-soldier
+              name: Soldier
+              type: model
 
 steps:
   - action: addForce

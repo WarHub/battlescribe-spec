@@ -10,21 +10,21 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-veteran
-        name: Veteran Squad
-        type: unit
-        rules:
-          - id: rule-fearless
-            name: Fearless
-            description: This unit automatically passes morale tests
-          - id: rule-scout
-            name: Scout Move
-            description: This unit may make a normal move before the first turn
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-veteran
+          name: Veteran Squad
+          type: unit
+          rules:
+            - id: rule-fearless
+              name: Fearless
+              description: This unit automatically passes morale tests
+            - id: rule-scout
+              name: Scout Move
+              description: This unit may make a normal move before the first turn
 
 steps:
   - action: addForce

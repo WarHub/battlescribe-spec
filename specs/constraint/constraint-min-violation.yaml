@@ -17,25 +17,25 @@ setup:
             targetId: cat-troops
             name: Troops
             primary: false
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit-a
-        name: Unit A
-        type: unit
-        categoryLinks:
-          - id: cl-sea-troops
-            targetId: cat-troops
-            name: Troops
-            primary: true
-        constraints:
-          - id: con-min-1
-            type: min
-            value: 1
-            field: selections
-            scope: parent
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: con-min-1
+              type: min
+              value: 1
+              field: selections
+              scope: parent
 
 steps:
   - action: addForce

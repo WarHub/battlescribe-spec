@@ -13,25 +13,25 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit-a
-        name: Base
-        type: unit
-        costs:
-          - name: Points
-            typeId: pts
-            value: 100
-        modifiers:
-          - type: set
-            field: name
-            value: New Name
-          - type: increment
-            field: pts
-            value: "50"
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Base
+          type: unit
+          costs:
+            - name: Points
+              typeId: pts
+              value: 100
+          modifiers:
+            - type: set
+              field: name
+              value: New Name
+            - type: increment
+              field: pts
+              value: "50"
 
 steps:
   - action: addForce

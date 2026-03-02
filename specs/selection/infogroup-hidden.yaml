@@ -16,40 +16,40 @@ setup:
         characteristicTypes:
           - id: char-mv
             name: Move
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Scout
-        type: unit
-        profiles:
-          - id: prof-visible
-            name: Scout Weapons
-            typeId: pt-stats
-            typeName: Unit Stats
-            characteristics:
-              - name: Move
-                typeId: char-mv
-                value: "8"
-        infoGroups:
-          - id: ig-hidden
-            name: Hidden Info
-            hidden: true
-            profiles:
-              - id: prof-hidden
-                name: Scout Stats
-                typeId: pt-stats
-                typeName: Unit Stats
-                characteristics:
-                  - name: Move
-                    typeId: char-mv
-                    value: "6"
-            rules:
-              - id: rule-hidden
-                name: Infiltrate
-                description: May deploy outside deployment zone
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Scout
+          type: unit
+          profiles:
+            - id: prof-visible
+              name: Scout Weapons
+              typeId: pt-stats
+              typeName: Unit Stats
+              characteristics:
+                - name: Move
+                  typeId: char-mv
+                  value: "8"
+          infoGroups:
+            - id: ig-hidden
+              name: Hidden Info
+              hidden: true
+              profiles:
+                - id: prof-hidden
+                  name: Scout Stats
+                  typeId: pt-stats
+                  typeName: Unit Stats
+                  characteristics:
+                    - name: Move
+                      typeId: char-mv
+                      value: "6"
+              rules:
+                - id: rule-hidden
+                  name: Infiltrate
+                  description: May deploy outside deployment zone
 
 steps:
   - action: addForce

@@ -9,29 +9,29 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Guard
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Should Not Apply
-            conditionGroups:
-              - type: and
-                conditions:
-                  - type: atLeast
-                    value: 1
-                    field: selections
-                    scope: self
-                  - type: atLeast
-                    value: 100
-                    field: selections
-                    scope: self
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Guard
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Should Not Apply
+              conditionGroups:
+                - type: and
+                  conditions:
+                    - type: atLeast
+                      value: 1
+                      field: selections
+                      scope: self
+                    - type: atLeast
+                      value: 100
+                      field: selections
+                      scope: self
 
 steps:
   - action: addForce

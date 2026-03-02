@@ -9,27 +9,27 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-detector
-        name: Detector
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Model Found
-            conditions:
-              - type: instanceOf
-                value: 1
-                field: selections
-                scope: force
-                childId: model
-      - id: se-model
-        name: Basic Model
-        type: model
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-detector
+          name: Detector
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Model Found
+              conditions:
+                - type: instanceOf
+                  value: 1
+                  field: selections
+                  scope: force
+                  childId: model
+        - id: se-model
+          name: Basic Model
+          type: model
 
 steps:
   - action: addForce

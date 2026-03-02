@@ -9,28 +9,28 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-parent
-        name: Parent Unit
-        type: unit
-        selectionEntries:
-          - id: se-child
-            name: Child Model
-            type: model
-            modifiers:
-              - type: set
-                field: name
-                value: Has Ancestor
-                conditions:
-                  - type: instanceOf
-                    value: 1
-                    field: selections
-                    scope: ancestor
-                    childId: se-parent
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Parent Unit
+          type: unit
+          selectionEntries:
+            - id: se-child
+              name: Child Model
+              type: model
+              modifiers:
+                - type: set
+                  field: name
+                  value: Has Ancestor
+                  conditions:
+                    - type: instanceOf
+                      value: 1
+                      field: selections
+                      scope: ancestor
+                      childId: se-parent
 
 steps:
   - action: addForce

@@ -9,20 +9,20 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit
-        name: Infantry Squad
-        type: unit
-      - id: se-model
-        name: Sergeant
-        type: model
-      - id: se-upgrade
-        name: Power Sword
-        type: upgrade
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Infantry Squad
+          type: unit
+        - id: se-model
+          name: Sergeant
+          type: model
+        - id: se-upgrade
+          name: Power Sword
+          type: upgrade
 
 steps:
   - action: addForce

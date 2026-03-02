@@ -16,32 +16,32 @@ setup:
         characteristicTypes:
           - id: char-ws
             name: WS
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-stealth
-        name: Stealth Unit
-        type: unit
-        profiles:
-          - id: prof-visible
-            name: Visible Stats
-            typeId: pt-stats
-            typeName: Unit Stats
-            characteristics:
-              - name: WS
-                typeId: char-ws
-                value: "4"
-          - id: prof-hidden
-            name: Stealth Stats
-            typeId: pt-stats
-            typeName: Unit Stats
-            hidden: true
-            characteristics:
-              - name: WS
-                typeId: char-ws
-                value: "3"
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-stealth
+          name: Stealth Unit
+          type: unit
+          profiles:
+            - id: prof-visible
+              name: Visible Stats
+              typeId: pt-stats
+              typeName: Unit Stats
+              characteristics:
+                - name: WS
+                  typeId: char-ws
+                  value: "4"
+            - id: prof-hidden
+              name: Stealth Stats
+              typeId: pt-stats
+              typeName: Unit Stats
+              hidden: true
+              characteristics:
+                - name: WS
+                  typeId: char-ws
+                  value: "3"
 
 steps:
   - action: addForce

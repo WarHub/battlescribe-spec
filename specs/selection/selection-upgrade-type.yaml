@@ -9,14 +9,14 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-upgrade-a
-        name: Upgrade A
-        type: upgrade
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-upgrade-a
+          name: Upgrade A
+          type: upgrade
 
 steps:
   - action: addForce

@@ -9,10 +9,10 @@ setup:
     forceEntries:
       - id: fe-1
         name: Formation
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: custom-gs-123
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: custom-gs-123
 
 steps:
   - expectedState:

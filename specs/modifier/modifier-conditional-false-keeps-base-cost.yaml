@@ -13,31 +13,31 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-trigger
-        name: Trigger
-        type: unit
-      - id: se-target
-        name: Target
-        type: unit
-        costs:
-          - name: Points
-            typeId: pts
-            value: 100
-        modifiers:
-          - type: set
-            field: pts
-            value: "0"
-            conditions:
-              - type: atLeast
-                value: 99
-                field: selections
-                scope: force
-                childId: se-trigger
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-trigger
+          name: Trigger
+          type: unit
+        - id: se-target
+          name: Target
+          type: unit
+          costs:
+            - name: Points
+              typeId: pts
+              value: 100
+          modifiers:
+            - type: set
+              field: pts
+              value: "0"
+              conditions:
+                - type: atLeast
+                  value: 99
+                  field: selections
+                  scope: force
+                  childId: se-trigger
 
 steps:
   - action: addForce

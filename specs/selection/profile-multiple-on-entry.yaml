@@ -18,37 +18,37 @@ setup:
             name: Range
           - id: char-str
             name: Strength
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-dual
-        name: Dual Wielder
-        type: unit
-        profiles:
-          - id: prof-axe
-            name: Power Axe
-            typeId: pt-weapon
-            typeName: Weapon Stats
-            characteristics:
-              - name: Range
-                typeId: char-range
-                value: Melee
-              - name: Strength
-                typeId: char-str
-                value: "6"
-          - id: prof-sword
-            name: Chain Sword
-            typeId: pt-weapon
-            typeName: Weapon Stats
-            characteristics:
-              - name: Range
-                typeId: char-range
-                value: Melee
-              - name: Strength
-                typeId: char-str
-                value: "4"
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-dual
+          name: Dual Wielder
+          type: unit
+          profiles:
+            - id: prof-axe
+              name: Power Axe
+              typeId: pt-weapon
+              typeName: Weapon Stats
+              characteristics:
+                - name: Range
+                  typeId: char-range
+                  value: Melee
+                - name: Strength
+                  typeId: char-str
+                  value: "6"
+            - id: prof-sword
+              name: Chain Sword
+              typeId: pt-weapon
+              typeName: Weapon Stats
+              characteristics:
+                - name: Range
+                  typeId: char-range
+                  value: Melee
+                - name: Strength
+                  typeId: char-str
+                  value: "4"
 
 steps:
   - action: addForce

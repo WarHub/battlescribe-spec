@@ -10,24 +10,24 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-visible
-        name: Visible Unit
-        type: unit
-      - id: se-hidden
-        name: Hidden Unit
-        type: unit
-        hidden: true
-        constraints:
-          - id: con-min
-            type: min
-            value: 1
-            field: selections
-            scope: parent
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-visible
+          name: Visible Unit
+          type: unit
+        - id: se-hidden
+          name: Hidden Unit
+          type: unit
+          hidden: true
+          constraints:
+            - id: con-min
+              type: min
+              value: 1
+              field: selections
+              scope: parent
 
 steps:
   - action: addForce

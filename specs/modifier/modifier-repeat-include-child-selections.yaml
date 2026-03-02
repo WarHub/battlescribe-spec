@@ -13,32 +13,32 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-parent
-        name: Squad
-        type: unit
-        costs:
-          - name: pts
-            typeId: pts
-            value: 0
-        modifiers:
-          - type: increment
-            field: pts
-            value: "5"
-            repeats:
-              - value: 1
-                repeats: 1
-                field: selections
-                scope: parent
-                includeChildSelections: true
-        selectionEntries:
-          - id: se-child
-            name: Trooper
-            type: model
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 0
+          modifiers:
+            - type: increment
+              field: pts
+              value: "5"
+              repeats:
+                - value: 1
+                  repeats: 1
+                  field: selections
+                  scope: parent
+                  includeChildSelections: true
+          selectionEntries:
+            - id: se-child
+              name: Trooper
+              type: model
 
 steps:
   - action: addForce

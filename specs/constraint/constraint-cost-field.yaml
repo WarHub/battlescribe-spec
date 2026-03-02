@@ -13,24 +13,24 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-1
-        name: Expensive Unit
-        type: unit
-        costs:
-          - name: pts
-            typeId: pts
-            value: 200
-        constraints:
-          - id: c1
-            type: max
-            value: 500
-            field: costs
-            scope: parent
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Expensive Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 200
+          constraints:
+            - id: c1
+              type: max
+              value: 500
+              field: costs
+              scope: parent
 
 steps:
   - action: addForce

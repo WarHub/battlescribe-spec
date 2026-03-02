@@ -10,23 +10,23 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-base-unit
-        name: Warrior
-        type: unit
-    entryLinks:
-      - id: el-cascade
-        name: Elite Warrior
-        targetId: se-base-unit
-        type: selectionEntry
-        modifiers:
-          - type: set
-            field: name
-            value: Elite Warrior
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-base-unit
+          name: Warrior
+          type: unit
+      entryLinks:
+        - id: el-cascade
+          name: Elite Warrior
+          targetId: se-base-unit
+          type: selectionEntry
+          modifiers:
+            - type: set
+              field: name
+              value: Elite Warrior
 
 steps:
   - action: addForce

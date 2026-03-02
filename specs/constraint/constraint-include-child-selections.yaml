@@ -9,25 +9,25 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-parent
-        name: Squad
-        type: unit
-        constraints:
-          - id: c1
-            type: max
-            value: 3
-            field: selections
-            scope: parent
-            includeChildSelections: true
-        selectionEntries:
-          - id: se-child
-            name: Trooper
-            type: model
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Squad
+          type: unit
+          constraints:
+            - id: c1
+              type: max
+              value: 3
+              field: selections
+              scope: parent
+              includeChildSelections: true
+          selectionEntries:
+            - id: se-child
+              name: Trooper
+              type: model
 
 steps:
   - action: addForce

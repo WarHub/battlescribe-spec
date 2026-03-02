@@ -22,32 +22,32 @@ setup:
             name: BS
           - id: char-wounds
             name: Wounds
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-trooper
-        name: Heavy Trooper
-        type: unit
-        profiles:
-          - id: prof-trooper
-            name: Heavy Trooper Stats
-            typeId: pt-unit
-            typeName: Unit Stats
-            characteristics:
-              - name: Move
-                typeId: char-mv
-                value: "5"
-              - name: WS
-                typeId: char-ws
-                value: "3"
-              - name: BS
-                typeId: char-bs
-                value: "4"
-              - name: Wounds
-                typeId: char-wounds
-                value: "2"
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-trooper
+          name: Heavy Trooper
+          type: unit
+          profiles:
+            - id: prof-trooper
+              name: Heavy Trooper Stats
+              typeId: pt-unit
+              typeName: Unit Stats
+              characteristics:
+                - name: Move
+                  typeId: char-mv
+                  value: "5"
+                - name: WS
+                  typeId: char-ws
+                  value: "3"
+                - name: BS
+                  typeId: char-bs
+                  value: "4"
+                - name: Wounds
+                  typeId: char-wounds
+                  value: "2"
 
 steps:
   - action: addForce

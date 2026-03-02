@@ -11,14 +11,14 @@ setup:
         name: Patrol
       - id: fe-battalion
         name: Battalion
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit
-        name: Unit A
-        type: unit
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
 
 steps:
   - action: addForce

@@ -11,6 +11,10 @@ setup:
         name: Patrol
       - id: fe-2
         name: Battalion
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
 
 steps:
   - action: addForce

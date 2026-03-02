@@ -14,27 +14,27 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
-  catalogue:
-    id: cat-1
-    name: Cat
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-base
-        name: Plasma Rifle
-        type: upgrade
-        costs:
-          - name: pts
-            typeId: pts
-            value: 15
-    entryLinks:
-      - id: el-cost-1
-        name: Plasma Rifle
-        targetId: se-base
-        type: selectionEntry
-        costs:
-          - name: pts
-            typeId: pts
-            value: 25
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-base
+          name: Plasma Rifle
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 15
+      entryLinks:
+        - id: el-cost-1
+          name: Plasma Rifle
+          targetId: se-base
+          type: selectionEntry
+          costs:
+            - name: pts
+              typeId: pts
+              value: 25
 
 steps:
   - action: addForce

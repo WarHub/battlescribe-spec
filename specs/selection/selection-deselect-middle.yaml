@@ -9,20 +9,20 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit-a
-        name: Alpha
-        type: unit
-      - id: se-unit-b
-        name: Beta
-        type: unit
-      - id: se-unit-c
-        name: Gamma
-        type: unit
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Alpha
+          type: unit
+        - id: se-unit-b
+          name: Beta
+          type: unit
+        - id: se-unit-c
+          name: Gamma
+          type: unit
 
 steps:
   - action: addForce

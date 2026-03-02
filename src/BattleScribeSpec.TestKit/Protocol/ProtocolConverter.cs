@@ -15,8 +15,7 @@ public static class ProtocolConverter
         return new SetupCommand
         {
             GameSystem = ToProtocol(gs),
-            Catalogue = ToProtocol(catalogues[0]),
-            Catalogues = catalogues.Length > 1 ? catalogues.Select(ToProtocol).ToList() : null,
+            Catalogues = catalogues.Select(ToProtocol).ToList(),
         };
     }
 
@@ -199,8 +198,9 @@ public static class ProtocolConverter
     public static (GameSystemSpec, CatalogueSpec[]) FromSetupCommand(SetupCommand cmd)
     {
         var gs = FromProtocol(cmd.GameSystem);
-        var catalogues = cmd.Catalogues?.Select(FromProtocol).ToArray()
-            ?? [FromProtocol(cmd.Catalogue)];
+        if (cmd.Catalogues.Count == 0)
+            throw new ArgumentException("Setup command requires at least one catalogue.", nameof(cmd));
+        var catalogues = cmd.Catalogues.Select(FromProtocol).ToArray();
         return (gs, catalogues);
     }
 

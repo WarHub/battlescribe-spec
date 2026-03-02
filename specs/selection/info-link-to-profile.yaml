@@ -15,28 +15,28 @@ setup:
         characteristicTypes:
           - id: ct-ws
             name: WS
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    sharedProfiles:
-      - id: shared-prof-1
-        name: Marine Stats
-        typeId: pt-stats
-        typeName: Unit Stats
-        characteristics:
-          - name: WS
-            typeId: ct-ws
-            value: "3+"
-    selectionEntries:
-      - id: se-1
-        name: Marine
-        type: unit
-        infoLinks:
-          - id: il-1
-            name: Marine Stats
-            targetId: shared-prof-1
-            type: profile
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      sharedProfiles:
+        - id: shared-prof-1
+          name: Marine Stats
+          typeId: pt-stats
+          typeName: Unit Stats
+          characteristics:
+            - name: WS
+              typeId: ct-ws
+              value: "3+"
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          infoLinks:
+            - id: il-1
+              name: Marine Stats
+              targetId: shared-prof-1
+              type: profile
 
 steps:
   - action: addForce

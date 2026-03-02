@@ -9,24 +9,24 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
-  catalogue:
-    id: cat-1
-    name: Test Catalogue
-    gameSystemId: test-gs
-    selectionEntries:
-      - id: se-unit
-        name: Unit A
-        type: unit
-        modifiers:
-          - type: set
-            field: name
-            value: Percent Met
-            conditions:
-              - type: atLeast
-                value: 50
-                field: selections
-                scope: force
-                percentValue: true
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Percent Met
+              conditions:
+                - type: atLeast
+                  value: 50
+                  field: selections
+                  scope: force
+                  percentValue: true
 
 steps:
   - action: addForce
