@@ -5,6 +5,14 @@ namespace BattleScribeSpec.NewRecruit;
 /// <summary>
 /// Reads roster state from New Recruit's Pinia store via page.EvaluateAsync().
 /// Maps NR's internal JavaScript state to BattleScribeSpec RosterState records.
+///
+/// Based on NR store discovery (docs/nr-store-mapping.md):
+/// - `lists` store: treeData, listData, getCurrentList()
+/// - `listsPage` store: editedForce, editedUnit, addingUnit
+/// - `gameStore`: gameUnit
+///
+/// The roster data model is accessed via lists.getCurrentList() which returns
+/// the active list object containing the roster, forces, and selections.
 /// </summary>
 public static class NewRecruitStateReader
 {
@@ -13,63 +21,61 @@ public static class NewRecruitStateReader
     /// </summary>
     public static async Task<RosterState> ReadRosterStateAsync(IPage page)
     {
-        // Evaluate JS in the NR page context to extract roster state from the Pinia store.
-        // NR uses Pinia for state management — the store is accessible via Vue's app context.
-        // The exact store shape needs to be discovered via browser DevTools during initial development.
         var state = await page.EvaluateAsync<NrRosterSnapshot>("""
             (() => {
-                // Access the NR roster store — exact path TBD during integration
-                // This is a placeholder that will be refined when testing against the live site
+                const empty = { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
+
                 const app = document.querySelector('#__nuxt')?.__vue_app__;
-                if (!app) return { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
+                if (!app) return empty;
 
-                // Try to find the Pinia store containing roster state
                 const pinia = app.config.globalProperties.$pinia;
-                if (!pinia) return { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
+                if (!pinia) return empty;
 
-                // Iterate stores to find the roster store
-                // Placeholder — exact store ID will be discovered during integration
-                const stores = pinia._s;
-                for (const [id, store] of stores) {
-                    if (store.roster || store.forces) {
-                        return extractRosterState(store);
-                    }
+                const lists = pinia._s.get('lists');
+                if (!lists) return empty;
+
+                const currentList = lists.getCurrentList();
+                if (!currentList) return empty;
+
+                // The roster object is either currentList.roster or currentList itself
+                const roster = currentList.roster || currentList;
+
+                try {
+                    return {
+                        name: roster.name || currentList.name || '',
+                        gameSystemId: roster.gameSystemId || currentList.gameSystemId || '',
+                        forces: extractForces(roster),
+                        costs: extractCosts(roster),
+                        validationErrors: extractErrors(roster)
+                    };
+                } catch(e) {
+                    return { ...empty, validationErrors: ['State read error: ' + e.message] };
                 }
 
-                return { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
+                function extractForces(roster) {
+                    const forces = roster.forces || [];
+                    return forces.map(f => ({
+                        name: f.name || f.forceName || '',
+                        catalogueId: f.catalogueId || f.catalogue?.id || null,
+                        selections: extractSelections(f)
+                    }));
+                }
 
-                function extractRosterState(store) {
-                    // Placeholder extraction — will be refined based on actual NR store shape
-                    return {
-                        name: store.roster?.name || store.name || '',
-                        gameSystemId: store.roster?.gameSystemId || store.gameSystemId || '',
-                        forces: (store.roster?.forces || store.forces || []).map(f => ({
-                            name: f.name || '',
-                            catalogueId: f.catalogueId || null,
-                            selections: (f.selections || []).map(s => extractSelection(s))
-                        })),
-                        costs: (store.roster?.costs || store.costs || []).map(c => ({
-                            name: c.name || '',
-                            typeId: c.typeId || '',
-                            value: c.value || 0
-                        })),
-                        validationErrors: store.roster?.validationErrors || store.validationErrors || []
-                    };
+                function extractSelections(parent) {
+                    // Selections may be in different properties depending on NR's model
+                    const selections = parent.selections || parent.units || parent.children || [];
+                    return selections.map(s => extractSelection(s));
                 }
 
                 function extractSelection(sel) {
                     return {
                         name: sel.name || '',
-                        entryId: sel.entryId || null,
+                        entryId: sel.entryId || sel.id || null,
                         type: sel.type || null,
-                        number: sel.number || 1,
+                        number: sel.number || sel.count || 1,
                         hidden: sel.hidden || false,
-                        costs: (sel.costs || []).map(c => ({
-                            name: c.name || '',
-                            typeId: c.typeId || '',
-                            value: c.value || 0
-                        })),
-                        children: (sel.selections || sel.children || []).map(c => extractSelection(c)),
+                        costs: extractCosts(sel),
+                        children: extractSelections(sel),
                         profiles: (sel.profiles || []).map(p => ({
                             name: p.name || '',
                             typeId: p.typeId || null,
@@ -78,7 +84,7 @@ public static class NewRecruitStateReader
                             characteristics: (p.characteristics || []).map(ch => ({
                                 name: ch.name || '',
                                 typeId: ch.typeId || '',
-                                value: ch.value || ''
+                                value: ch.value?.toString() || ''
                             }))
                         })),
                         rules: (sel.rules || []).map(r => ({
@@ -88,11 +94,43 @@ public static class NewRecruitStateReader
                         })),
                         categories: (sel.categories || []).map(cat => ({
                             name: cat.name || '',
-                            entryId: cat.entryId || null,
+                            entryId: cat.entryId || cat.id || null,
                             primary: cat.primary || false
                         })),
                         page: sel.page || null
                     };
+                }
+
+                function extractCosts(obj) {
+                    const costs = obj.costs || [];
+                    if (Array.isArray(costs)) {
+                        return costs.map(c => ({
+                            name: c.name || '',
+                            typeId: c.typeId || c.id || '',
+                            value: c.value || 0
+                        }));
+                    }
+                    // Costs might be an object { pts: 100, pl: 5 }
+                    if (typeof costs === 'object') {
+                        return Object.entries(costs).map(([key, val]) => ({
+                            name: key,
+                            typeId: key,
+                            value: typeof val === 'number' ? val : 0
+                        }));
+                    }
+                    return [];
+                }
+
+                function extractErrors(roster) {
+                    // Try multiple paths for validation errors
+                    const errors = roster.validationErrors
+                        || roster.errors
+                        || roster.validationMessages
+                        || [];
+                    if (Array.isArray(errors)) {
+                        return errors.map(e => typeof e === 'string' ? e : (e.message || e.text || JSON.stringify(e)));
+                    }
+                    return [];
                 }
             })()
             """);

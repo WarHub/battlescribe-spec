@@ -4,14 +4,19 @@ namespace BattleScribeSpec.NewRecruit;
 /// IRosterEngine implementation that wraps the New Recruit web app via Playwright.
 /// Follows the same pattern as OracleRosterEngine but drives a browser session.
 ///
-/// Since IRosterEngine is synchronous, async Playwright calls are bridged via
-/// .GetAwaiter().GetResult(). For the test runner, this is acceptable — each
-/// spec run is sequential. A future IAsyncRosterEngine could eliminate this.
+/// Data flow:
+/// 1. Setup: Generate .gst/.cat XML → upload to NR via BSFilesUploaded() → create new list
+/// 2. Actions: Drive NR's UI via Playwright locators or JS evaluation
+/// 3. State: Read from NR's Pinia stores (lists, listsPage) via page.EvaluateAsync()
 /// </summary>
 public sealed class NewRecruitRosterEngine : IRosterEngine
 {
     private readonly NewRecruitBrowser _browser;
     private bool _disposed;
+
+    // Cached game system and catalogue specs for index-based lookups during actions
+    private GameSystemSpec? _gameSystem;
+    private CatalogueSpec[]? _catalogues;
 
     private NewRecruitRosterEngine(NewRecruitBrowser browser)
     {
@@ -31,24 +36,128 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
-        // Generate .cat/.gst XML from spec data using WarHub.ArmouryModel,
-        // then load into NR via route interception or store injection.
-        // This is the key bridge between synthetic spec data and NR's real engine.
+        _gameSystem = gameSystem;
+        _catalogues = catalogues;
         return SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
     }
 
     private async Task<IReadOnlyList<string>> SetupAsync(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
-        // TODO Phase 2 implementation:
-        // 1. Generate .cat/.gst XML from gameSystem and catalogue specs
-        //    using CatXmlGenerator (WarHub.ArmouryModel serialization)
-        // 2. Intercept NR's network requests to serve our generated XML
-        //    OR inject data directly into NR's Pinia store
-        // 3. Navigate to editor with our data loaded
-        // 4. Return any initialization errors
+        var errors = new List<string>();
 
-        await _browser.NavigateToEditorAsync();
-        return [];
+        try
+        {
+            // Step 1: Generate .gst and .cat XML from spec data
+            var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
+            var catXmlList = new List<(string name, string xml)>();
+            foreach (var cat in catalogues)
+            {
+                var catXml = CatXmlGenerator.GenerateCatalogueXml(gameSystem, cat);
+                catXmlList.Add(($"{cat.Name}.cat", catXml));
+            }
+
+            // Step 2: Navigate to NR app
+            await _browser.NavigateToAppAsync();
+
+            // Step 3: Upload .gst/.cat files via NR's systemsStore.BSFilesUploaded()
+            // This creates a local system from the uploaded files.
+            // BSFilesUploaded() expects File objects — we create them via JS.
+            var uploadResult = await _browser.Page.EvaluateAsync<string?>("""
+                async ({gstName, gstContent, catFiles}) => {
+                    try {
+                        const app = document.querySelector('#__nuxt')?.__vue_app__;
+                        const pinia = app?.config?.globalProperties?.$pinia;
+                        if (!pinia) return 'Pinia store not found';
+
+                        const systemsStore = pinia._s.get('systemsStore');
+                        if (!systemsStore) return 'systemsStore not found';
+
+                        // Create File objects from our generated XML
+                        const files = [];
+                        files.push(new File([gstContent], gstName, { type: 'application/xml' }));
+                        for (const cf of catFiles) {
+                            files.push(new File([cf.content], cf.name, { type: 'application/xml' }));
+                        }
+
+                        // Upload via NR's BSFilesUploaded method
+                        await systemsStore.BSFilesUploaded(files);
+                        return null; // success
+                    } catch(e) {
+                        return 'Upload error: ' + e.message;
+                    }
+                }
+                """, new
+            {
+                gstName = $"{gameSystem.Name}.gst",
+                gstContent = gstXml,
+                catFiles = catXmlList.Select(c => new { name = c.name, content = c.xml }).ToArray()
+            });
+
+            if (uploadResult != null)
+            {
+                errors.Add(uploadResult);
+                return errors;
+            }
+
+            // Step 4: Select the uploaded system
+            var selectResult = await _browser.Page.EvaluateAsync<string?>("""
+                async (systemName) => {
+                    try {
+                        const app = document.querySelector('#__nuxt')?.__vue_app__;
+                        const pinia = app?.config?.globalProperties?.$pinia;
+                        const systemsStore = pinia._s.get('systemsStore');
+
+                        // Find and select our uploaded system
+                        const allSystems = systemsStore.allSystems || [];
+                        const system = allSystems.find(s => s.name === systemName);
+                        if (!system) return 'System not found after upload: ' + systemName;
+
+                        await systemsStore.selectSystem(system);
+                        return null;
+                    } catch(e) {
+                        return 'Select error: ' + e.message;
+                    }
+                }
+                """, gameSystem.Name);
+
+            if (selectResult != null)
+            {
+                errors.Add(selectResult);
+                return errors;
+            }
+
+            // Step 5: Create a new list with this system
+            var createResult = await _browser.Page.EvaluateAsync<string?>("""
+                async () => {
+                    try {
+                        const app = document.querySelector('#__nuxt')?.__vue_app__;
+                        const pinia = app?.config?.globalProperties?.$pinia;
+                        const lists = pinia._s.get('lists');
+                        if (!lists) return 'lists store not found';
+
+                        await lists.addList();
+                        return null;
+                    } catch(e) {
+                        return 'Create list error: ' + e.message;
+                    }
+                }
+                """);
+
+            if (createResult != null)
+            {
+                errors.Add(createResult);
+                return errors;
+            }
+
+            // Wait for NR to process the list creation
+            await _browser.Page.WaitForTimeoutAsync(1000);
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Setup exception: {ex.Message}");
+        }
+
+        return errors;
     }
 
     public void AddForce(int forceEntryIndex, int catalogueIndex = 0)

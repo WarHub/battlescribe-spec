@@ -42,18 +42,75 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         await Page.GotoAsync(BaseUrl, new PageGotoOptions
         {
             WaitUntil = WaitUntilState.NetworkIdle,
+            Timeout = 30_000,
         });
+        // Dismiss cookie/consent dialogs if present
+        await DismissDialogsAsync();
     }
 
     /// <summary>
-    /// Navigate to the roster editor for a fresh roster.
+    /// Navigate to the NR app page where systems can be selected/loaded.
     /// </summary>
-    public async Task NavigateToEditorAsync()
+    public async Task NavigateToAppAsync()
     {
-        await Page.GotoAsync($"{BaseUrl}/roster", new PageGotoOptions
+        await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
         {
             WaitUntil = WaitUntilState.NetworkIdle,
+            Timeout = 30_000,
         });
+        await DismissDialogsAsync();
+    }
+
+    /// <summary>
+    /// Navigate to the roster editor for a specific list.
+    /// </summary>
+    public async Task NavigateToEditorAsync(string? listId = null)
+    {
+        if (listId != null)
+        {
+            await Page.GotoAsync($"{BaseUrl}/app/Lists/{listId}", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = 30_000,
+            });
+        }
+        else
+        {
+            await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = 30_000,
+            });
+        }
+        await DismissDialogsAsync();
+    }
+
+    /// <summary>
+    /// Access the Pinia store by ID from within the page context.
+    /// Returns the JS expression to access a given store.
+    /// </summary>
+    public static string PiniaStoreAccess(string storeId) =>
+        $"document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('{storeId}')";
+
+    /// <summary>
+    /// Try to dismiss any consent/cookie dialogs that might block interaction.
+    /// </summary>
+    private async Task DismissDialogsAsync()
+    {
+        try
+        {
+            // NR shows a consent dialog — look for "Do not consent" or similar buttons
+            var consentButton = Page.GetByRole(AriaRole.Button, new() { Name = "Do not consent" });
+            if (await consentButton.IsVisibleAsync())
+            {
+                await consentButton.ClickAsync();
+                await Page.WaitForTimeoutAsync(500);
+            }
+        }
+        catch
+        {
+            // Consent dialog may not be present — that's fine
+        }
     }
 
     public async ValueTask DisposeAsync()
