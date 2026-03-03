@@ -31,7 +31,7 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
         oracle.AddForceByIndex(0);
         var snap1 = ModelConverter.CaptureOracleSnapshot(oracle);
         output.WriteLine($"After AddForce: forces={snap1.Forces.Length}, selections=0");
-        Assert.Equal(1, snap1.Forces.Length);
+        Assert.Single(snap1.Forces);
         Assert.Empty(snap1.Forces[0].Selections);
 
         // Step 2: Select unit
