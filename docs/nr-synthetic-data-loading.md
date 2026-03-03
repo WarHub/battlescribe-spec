@@ -1,10 +1,11 @@
-# New Recruit: Synthetic Data Loading via `loadSystemFromFs`
+# New Recruit: Data Loading via `loadSystemFromFs`
 
-## Discovery Summary
+## Overview
 
-NR's internal `systemsStore.loadSystemFromFs()` API can load custom BattleScribe XML
-(`.gst`/`.cat` files) as local game systems. This enables running all 217 synthetic spec
-tests against NR — not just the 5 real-world specs that use remote BSData repositories.
+NR's internal `systemsStore.loadSystemFromFs()` API loads custom BattleScribe XML
+(`.gst`/`.cat` files) as local game systems. The NR adapter uses this single API for
+**both** synthetic specs (inline YAML → generated XML) and real-world DataSource specs
+(git-cloned BSData repos → raw XML files). All 233 specs run through this path.
 
 ## API
 
@@ -107,106 +108,28 @@ instead of reading `.forces.array[].selections[]` properties.
 - Grandchildren: selection nodes (units/models) with `getName()`, `getType()`, `getCosts()`
 - Each node: `selectors` array (categories), `state` object (reactive state)
 
-## Implications for Adapter
+## How the Adapter Uses This
 
-### What changes
-1. `NewRecruitRosterEngine.SetupAsync()` — add `loadSystemFromFs` path for inline data specs
-2. `NewRecruitStateReader` — use `getChildren()` API instead of `.forces.array` properties
-3. Skip the UI click for system selection — use programmatic `selectSystem()` directly
+### Synthetic specs (inline YAML data)
 
-### What stays the same
-1. CatXmlGenerator still generates the XML (no change needed)
-2. Playwright browser lifecycle (shared fixture)
-3. Expected failures for real-world specs (DataSource resolver still needed for those)
+1. `CatXmlGenerator` converts the spec's inline game system + catalogue YAML into
+   BattleScribe XML (`.gst` + `.cat`)
+2. XML strings are loaded via `loadSystemFromFs`
+3. `costIndex` is populated manually (see below)
+4. Roster is created and force inserted via Pinia store API
 
-### Expected impact
-- 217 currently-skipped synthetic specs become runnable against NR
-- Estimated run time: ~3-5 min (shared browser, JS-level operations, no network latency for data)
+### Real-world DataSource specs (e.g., wh40k-10e)
 
----
+1. `DataSourceResolver` resolves `github:BSData/wh40k-10e@v10.14.0` → git clone
+   to `~/.battlescribe-spec/datasource-cache/`
+2. All `.gst`/`.cat` files are read as raw XML strings
+3. Loaded via the same `loadSystemFromFs` call
+4. All playable books are loaded; name-based entry selection is used (since there
+   are no C# models to resolve indices against)
 
-## Alternative: Folder-Based Data Loading
+### Other data loading approaches (investigated, not used)
 
-NR supports loading game systems from a local folder via the File System Access API.
-This is accessible through the "Add from folder" button in the My Games dialog
-(`/app/MySystems#install`).
-
-### How it works
-
-1. NR calls `window.showDirectoryPicker()` to let user select a directory
-2. NR scans the directory for `.gst`/`.cat`/`.gstz`/`.catz` files via async iterator
-3. Files are parsed through the same pipeline as remote downloads
-4. System is added to `localLibrary` and becomes selectable
-5. NR shows "Hot Reload for local system is working" notification
-
-### Mock `showDirectoryPicker` approach (verified working)
-
-Playwright cannot trigger the native OS directory picker, but we can mock
-`showDirectoryPicker()` to return a virtual `FileSystemDirectoryHandle`:
-
-```javascript
-// Create mock file handles from generated XML
-const files = { 'system.gst': gstXml, 'catalogue.cat': catXml };
-
-const mockFileHandle = (name, content) => ({
-    kind: 'file',
-    name: name,
-    getFile: () => Promise.resolve(new File([content], name, { type: 'text/xml' }))
-});
-
-const mockDirHandle = {
-    kind: 'directory',
-    name: 'spec-data',
-    values: function() {
-        const entries = Object.entries(files).map(([n, c]) => mockFileHandle(n, c));
-        let i = 0;
-        return {
-            next: () => i < entries.length
-                ? Promise.resolve({ value: entries[i++], done: false })
-                : Promise.resolve({ done: true }),
-            [Symbol.asyncIterator]() { return this; }
-        };
-    },
-    [Symbol.asyncIterator]: function() { return this.values(); },
-    requestPermission: () => Promise.resolve('granted'),
-    queryPermission: () => Promise.resolve('granted')
-};
-
-window.showDirectoryPicker = () => Promise.resolve(mockDirHandle);
-// Then click "Add from folder" button, or call the upload handler directly
-```
-
-**Result**: NR parses both files, creates a local system, and adds it to the dropdown.
-The system is fully functional — books are loaded, rosters can be created.
-
-### "Add from GitHub" feature
-
-NR also has a built-in "Add from GitHub" feature at `/app/MySystems#install`:
-
-```
-Input: owner/repo (e.g., "BSData/wh40k-10e")
-Version: Latest Release | Latest Commit (Head) | Custom tag/branch
-```
-
-This can be triggered programmatically via:
-
-```javascript
-const sysStore = pinia._s.get('systemsStore');
-await sysStore.addGithubSystem('BSData/wh40k-10e', 'latest'); // or specific version
-```
-
-**Implication for Phase 5**: For real-world BSData specs, we may be able to use NR's
-built-in GitHub integration instead of building our own DataSource resolver. NR already
-knows how to download, parse, and manage BSData repositories.
-
-### Comparison of data loading approaches
-
-| Approach | Synthetic Specs | Real BSData | Hot Reload | Complexity |
-|----------|:-:|:-:|:-:|:-:|
-| `loadSystemFromFs` (current) | ✅ | ❌ | ❌ | Low |
-| Mock `showDirectoryPicker` | ✅ | ❌ | Partial | Medium |
-| `addGithubSystem` | ❌ | ✅ | ❌ | Low |
-| Real folder (local clone) | ❌ | ✅ | ✅ | High |
-
-**Recommendation**: Keep `loadSystemFromFs` for synthetic specs (simplest, proven).
-Use `addGithubSystem` for Phase 5 real-world specs against NR.
+- **Mock `showDirectoryPicker`**: Works but more complex than `loadSystemFromFs`
+- **`addGithubSystem`**: NR's built-in GitHub download; not used because
+  `loadSystemFromFs` with local git clone gives us version pinning and offline support
+- **Real OS folder picker**: Requires native UI interaction, impractical for automation
