@@ -1,30 +1,5 @@
 [
   {
-    "specId": "wh40k-10e-create-army",
-    "reason": "DataSource resolver not implemented — cannot resolve github:BSData/wh40k-10e@v10.14.0",
-    "category": "infrastructure"
-  },
-  {
-    "specId": "wh40k-10e-captain",
-    "reason": "DataSource resolver not implemented — cannot resolve github:BSData/wh40k-10e@v10.14.0",
-    "category": "infrastructure"
-  },
-  {
-    "specId": "wh40k-10e-multi-unit",
-    "reason": "DataSource resolver not implemented — cannot resolve github:BSData/wh40k-10e@v10.14.0",
-    "category": "infrastructure"
-  },
-  {
-    "specId": "wh40k-10e-points-cost",
-    "reason": "DataSource resolver not implemented — cannot resolve github:BSData/wh40k-10e@v10.14.0",
-    "category": "infrastructure"
-  },
-  {
-    "specId": "wh40k-10e-space-marines-intercessors",
-    "reason": "DataSource resolver not implemented — cannot resolve github:BSData/wh40k-10e@v10.14.0",
-    "category": "infrastructure"
-  },
-  {
     "specId": "refresh/refresh-after-select",
     "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
     "category": "nr-auto-select"

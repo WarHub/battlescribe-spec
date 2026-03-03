@@ -77,6 +77,156 @@ public static class NewRecruitActions
         """;
 
     /// <summary>
+    /// JS helper: recursively find a selector by name in the selector tree.
+    /// </summary>
+    private const string JsFindSelectorByName = """
+        function findSelectorByName(node, targetName) {
+            if (!node) return null;
+            // Check this node's name
+            if (node.getName?.() === targetName || node.name === targetName) return node;
+            // Check selectors array
+            const sels = node.selectors || [];
+            for (const s of sels) {
+                if (s.getName?.() === targetName || s.name === targetName) return s;
+                // Go deeper via first()
+                if (typeof s.first === 'function') {
+                    const inst = s.first();
+                    if (inst?.selectors) {
+                        const found = findSelectorByName(inst, targetName);
+                        if (found) return found;
+                    }
+                }
+                if (s.selectors) {
+                    const found = findSelectorByName(s, targetName);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+        """;
+
+    /// <summary>
+    /// Add a force to the roster by force entry name.
+    /// Searches the game system's force entries for a matching name.
+    /// </summary>
+    public static async Task AddForceByNameAsync(IPage page, string forceName, int catalogueIndex = 0)
+    {
+        var error = await page.EvaluateAsync<string?>("""
+            ({forceName, catalogueIndex}) => {
+                try {
+                    const spec = window.__bsspec;
+                    if (!spec) return 'No spec state — was Setup called?';
+                    const army = spec.army;
+                    const books = spec.books || [spec.book];
+                    const book = books[catalogueIndex] || books[0];
+                    if (!army || !book) return 'No army or book';
+
+                    // Find force entry by name in the book's catalogue
+                    const cat = book.catalogue;
+                    if (!cat) return 'No catalogue in book';
+
+                    // Search forceEntries for matching name
+                    const forceEntries = cat.forceEntries || cat.gameSystem?.forceEntries || [];
+                    let forceId = null;
+                    for (const fe of forceEntries) {
+                        if (fe.name === forceName) {
+                            forceId = fe.id;
+                            break;
+                        }
+                    }
+                    if (!forceId) return `Force entry '${forceName}' not found in catalogue`;
+
+                    army.insertForce(book, forceId);
+                    return null;
+                } catch(e) {
+                    return 'AddForceByName error: ' + e.message;
+                }
+            }
+            """, new { forceName, catalogueIndex });
+        if (error != null) throw new InvalidOperationException(error);
+    }
+
+    /// <summary>
+    /// Select an entry in the specified force by entry name.
+    /// Searches the force's selector tree for a matching name.
+    /// </summary>
+    public static async Task SelectEntryByNameAsync(IPage page, int forceIndex, string entryName)
+    {
+        var error = await page.EvaluateAsync<string?>($$"""
+            ({forceIndex, entryName}) => {
+                try {
+                    const army = window.__bsspec?.army;
+                    if (!army) return 'No current roster';
+
+                    {{JsGetForces}}
+                    const forces = getForces(army);
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
+
+                    const force = forces[forceIndex];
+
+                    {{JsFindSelectorByName}}
+                    const selector = findSelectorByName(force, entryName);
+                    if (!selector) return `Entry '${entryName}' not found in force selector tree`;
+
+                    if (typeof selector.addInstance === 'function') {
+                        selector.addInstance();
+                    } else if (selector.getAmount?.() === 0 && typeof selector.incrementAmount === 'function') {
+                        selector.incrementAmount();
+                    } else {
+                        selector.setAmount?.((selector.getAmount?.() || 0) + 1);
+                    }
+                    return null;
+                } catch(e) {
+                    return 'SelectEntryByName error: ' + e.message;
+                }
+            }
+            """, new { forceIndex, entryName });
+        if (error != null) throw new InvalidOperationException(error);
+    }
+
+    /// <summary>
+    /// Select a child entry under an existing selection by child entry name.
+    /// </summary>
+    public static async Task SelectChildEntryByNameAsync(IPage page, int forceIndex, int selectionIndex, string childEntryName)
+    {
+        var error = await page.EvaluateAsync<string?>($$"""
+            ({forceIndex, selectionIndex, childEntryName}) => {
+                try {
+                    const army = window.__bsspec?.army;
+                    if (!army) return 'No current roster';
+
+                    {{JsGetForces}}
+                    {{JsGetSelections}}
+                    const forces = getForces(army);
+                    if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
+
+                    const selections = getSelections(forces[forceIndex]);
+                    if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
+
+                    const sel = selections[selectionIndex];
+
+                    {{JsFindSelectorByName}}
+                    const found = sel.selector ? findSelectorByName(sel.selector, childEntryName) : null;
+                    const result = found || findSelectorByName(sel, childEntryName);
+                    if (!result) return `Child entry '${childEntryName}' not found under selection`;
+
+                    if (typeof result.addInstance === 'function') {
+                        result.addInstance();
+                    } else if (result.getAmount?.() === 0 && typeof result.incrementAmount === 'function') {
+                        result.incrementAmount();
+                    } else {
+                        result.setAmount?.((result.getAmount?.() || 0) + 1);
+                    }
+                    return null;
+                } catch(e) {
+                    return 'SelectChildEntryByName error: ' + e.message;
+                }
+            }
+            """, new { forceIndex, selectionIndex, childEntryName });
+        if (error != null) throw new InvalidOperationException(error);
+    }
+
+    /// <summary>
     /// Add a force to the roster by force entry ID, using the specified catalogue book.
     /// </summary>
     public static async Task AddForceByIdAsync(IPage page, string forceId, int catalogueIndex = 0)

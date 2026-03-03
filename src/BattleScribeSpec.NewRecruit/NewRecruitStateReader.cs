@@ -163,7 +163,7 @@ public static class NewRecruitStateReader
     /// <summary>
     /// Read validation errors from NR's store.
     /// </summary>
-    public static async Task<IReadOnlyList<string>> ReadValidationErrorsAsync(IPage page)
+    public static async Task<IReadOnlyList<ValidationErrorState>> ReadValidationErrorsAsync(IPage page)
     {
         var state = await ReadRosterStateAsync(page);
         return state.ValidationErrors;
@@ -185,7 +185,7 @@ public static class NewRecruitStateReader
             snapshot.GameSystemId,
             forces,
             costs,
-            snapshot.ValidationErrors);
+            snapshot.ValidationErrors.Select(e => new ValidationErrorState(e)).ToList());
     }
 
     private static SelectionState MapSelection(NrSelectionSnapshot sel)

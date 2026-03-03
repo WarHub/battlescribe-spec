@@ -167,6 +167,142 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return errors;
     }
 
+    public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        _gameSystem = null;
+        _catalogues = null;
+        return SetupFromFilesAsync(files).GetAwaiter().GetResult();
+    }
+
+    private async Task<IReadOnlyList<string>> SetupFromFilesAsync(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        var errors = new List<string>();
+        try
+        {
+            await _browser.NavigateToAppAsync();
+            await _browser.Page.WaitForTimeoutAsync(2000);
+
+            // Build files array for loadSystemFromFs
+            var fileData = files.Select(f => new { name = f.FileName, path = $"/spec/{f.FileName}", data = f.Content }).ToArray();
+
+            var setupResult = await _browser.Page.EvaluateAsync<string?>("""
+                async ([fileData]) => {
+                    try {
+                        const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                        if (!pinia) return 'Pinia store not found';
+
+                        const sysStore = pinia._s.get('systemsStore');
+                        const listsStore = pinia._s.get('lists');
+                        if (!sysStore || !listsStore) return 'Required stores not found';
+
+                        // Load real data files into NR's local library
+                        const files = fileData.map(f => ({ name: f.name, path: f.path, data: f.data }));
+                        await sysStore.loadSystemFromFs(files);
+
+                        // Find the loaded game system in localLibrary
+                        const systemIds = Object.keys(sysStore.localLibrary);
+                        if (!systemIds.length) return 'No systems found in localLibrary after loading files';
+                        const systemId = systemIds[systemIds.length - 1]; // most recently added
+                        const localSys = sysStore.localLibrary[systemId];
+                        sysStore.selectSystem(localSys);
+
+                        const sys = sysStore._selectedSystem;
+                        if (!sys) return 'No selected system after selectSystem()';
+
+                        // Find playable books (catalogues)
+                        const playableBooks = sys.books?.array?.filter(b => b.playable) || [];
+                        if (!playableBooks.length) return 'No playable books for system: ' + sys.name;
+
+                        // Load ALL playable book data
+                        const allBooks = [];
+                        for (const pb of playableBooks) {
+                            const bd = await sys.getBook(pb.id);
+                            if (bd) {
+                                const gs = bd.catalogue.gameSystem;
+                                bd.catalogue.costIndex = {};
+                                if (gs?.costTypes) {
+                                    for (const ct of gs.costTypes) {
+                                        bd.catalogue.costIndex[ct.id] = ct;
+                                    }
+                                }
+                                allBooks.push({ name: pb.name, bookRef: pb, bookData: bd });
+                            }
+                        }
+                        if (!allBooks.length) return 'No book data loaded';
+
+                        // Create roster from first book, remove auto-forces
+                        const primaryBook = allBooks[0].bookData;
+                        const costs = primaryBook.getCosts();
+                        const roster = primaryBook.createRoster(costs);
+                        if (!roster) return 'Failed to create roster';
+                        roster.setCustomName('Spec Test');
+
+                        const autoForces = roster.getForces?.() || [];
+                        for (const f of [...autoForces]) {
+                            if (typeof f.delete === 'function') f.delete();
+                        }
+
+                        const selectedBook = allBooks[0].bookRef;
+                        const row = {
+                            list_key: 'spec_' + Date.now(),
+                            name: 'Spec Test',
+                            id_game_system: selectedBook.id_game_system || sys.id,
+                            id_system: selectedBook.id || sys.id,
+                            nrversion: selectedBook.nrversion,
+                            date_mod: new Date(),
+                            date_create: new Date(),
+                            synced: false,
+                            uid: null,
+                            bsid_book: selectedBook.bsid,
+                            bsid_system: sys.bsid
+                        };
+
+                        await listsStore.addList({row, army: roster, book: primaryBook});
+
+                        window.__bsspec = {
+                            army: roster,
+                            book: primaryBook,
+                            books: allBooks.map(b => b.bookData),
+                            row
+                        };
+
+                        return null; // success
+                    } catch(e) {
+                        return 'Setup error: ' + e.message + '\n' + e.stack;
+                    }
+                }
+                """, new object[] { fileData });
+
+            if (setupResult != null)
+                errors.Add(setupResult);
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Setup exception: {ex.Message}");
+        }
+
+        return errors;
+    }
+
+    public void AddForceByName(string forceName, int catalogueIndex = 0)
+    {
+        NewRecruitActions.AddForceByNameAsync(_browser.Page, forceName, catalogueIndex)
+            .GetAwaiter().GetResult();
+        _forceCatalogueMap.Add(catalogueIndex);
+    }
+
+    public void SelectEntryByName(int forceIndex, string entryName)
+    {
+        NewRecruitActions.SelectEntryByNameAsync(_browser.Page, forceIndex, entryName)
+            .GetAwaiter().GetResult();
+    }
+
+    public void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+    {
+        NewRecruitActions.SelectChildEntryByNameAsync(_browser.Page, forceIndex, selectionIndex, childEntryName)
+            .GetAwaiter().GetResult();
+    }
+
     public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
     {
         var forceEntry = _gameSystem?.ForceEntries?.ElementAtOrDefault(forceEntryIndex);
@@ -279,15 +415,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             .GetAwaiter().GetResult();
     }
 
-    public IReadOnlyList<string> GetValidationErrors()
+    public IReadOnlyList<ValidationErrorState> GetValidationErrors()
     {
-        return NewRecruitStateReader.ReadValidationErrorsAsync(_browser.Page)
-            .GetAwaiter().GetResult();
-    }
-
-    public bool HasValidationErrors()
-    {
-        return GetValidationErrors().Count > 0;
+        return GetRosterState().ValidationErrors;
     }
 
     public void Dispose()

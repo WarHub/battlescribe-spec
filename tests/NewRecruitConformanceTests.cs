@@ -61,7 +61,7 @@ public sealed class NewRecruitConformanceTests
         _output.WriteLine($"Running spec: {specName} — {spec.Description}");
 
         var engine = _fixture.Engine!;
-        var runner = new SpecRunner(engine);
+        var runner = new SpecRunner(engine, new DataSourceResolver());
         var result = runner.Run(spec);
 
         if (!result.Passed)

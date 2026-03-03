@@ -183,7 +183,7 @@ foreach (var (_, id, category, loader) in specSources)
 
     // Run spec via protocol engine
     using var engine = new JsonProtocolEngine(adapterProcess);
-    var runner = new SpecRunner(engine);
+    var runner = new SpecRunner(engine, new DataSourceResolver());
     var result = runner.Run(spec);
     results.Add(result);
     reportResults.Add(new SpecResultSummary(

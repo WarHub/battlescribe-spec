@@ -66,4 +66,31 @@ public interface IRosterEngine : IDisposable
     /// Get all current validation errors with structured entry links.
     /// </summary>
     IReadOnlyList<ValidationErrorState> GetValidationErrors();
+
+    // ===== DataSource support (file-based setup + name-based actions) =====
+
+    /// <summary>
+    /// Configure the engine with raw BattleScribe XML files (e.g. from a DataSource).
+    /// Returns initialization errors (empty list = success).
+    /// </summary>
+    IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+        => throw new NotSupportedException("This engine does not support file-based setup.");
+
+    /// <summary>
+    /// Add a force by name (for DataSource specs where index-based resolution isn't available).
+    /// </summary>
+    void AddForceByName(string forceName, int catalogueIndex = 0)
+        => throw new NotSupportedException("This engine does not support name-based force addition.");
+
+    /// <summary>
+    /// Select an entry by name within the specified force.
+    /// </summary>
+    void SelectEntryByName(int forceIndex, string entryName)
+        => throw new NotSupportedException("This engine does not support name-based entry selection.");
+
+    /// <summary>
+    /// Select a child entry by name under an existing selection.
+    /// </summary>
+    void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+        => throw new NotSupportedException("This engine does not support name-based child entry selection.");
 }
