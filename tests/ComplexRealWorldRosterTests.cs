@@ -178,7 +178,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         // Should have 1 force with 7+ selections (some units create sub-models)
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 7,
             $"Expected at least 7 selections, got {snapshot.Forces[0].Selections.Length}");
 
@@ -225,7 +225,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 4,
             $"Expected at least 4 selections, got {snapshot.Forces[0].Selections.Length}");
 
@@ -270,7 +270,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 6,
             $"Expected at least 6 selections, got {snapshot.Forces[0].Selections.Length}");
 
@@ -316,7 +316,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 7,
             $"Expected at least 7 selections, got {snapshot.Forces[0].Selections.Length}");
 
@@ -362,7 +362,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 8,
             $"Expected at least 8 selections, got {snapshot.Forces[0].Selections.Length}");
 
@@ -404,7 +404,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 8,
             $"Expected at least 8 selections, got {snapshot.Forces[0].Selections.Length}");
 
@@ -451,7 +451,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 9,
             $"Expected at least 9 selections, got {snapshot.Forces[0].Selections.Length}");
 
@@ -495,7 +495,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 6,
             $"Expected at least 6 selections, got {snapshot.Forces[0].Selections.Length}");
 
@@ -537,7 +537,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
-        Assert.Equal(1, snapshot.Forces.Length);
+        Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Length >= 5,
             $"Expected at least 5 selections, got {snapshot.Forces[0].Selections.Length}");
 

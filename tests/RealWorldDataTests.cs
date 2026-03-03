@@ -26,8 +26,8 @@ public class RealWorldDataTests
         Assert.IsType<GamesystemNode>(node);
         var gs = (GamesystemNode)node;
         Assert.Equal("2.03", gs.BattleScribeVersion);
-        Assert.NotEmpty(gs.Name);
-        Assert.NotEmpty(gs.Id);
+        Assert.NotEmpty(gs.Name!);
+        Assert.NotEmpty(gs.Id!);
     }
 
     [SkippableFact]
@@ -43,8 +43,8 @@ public class RealWorldDataTests
         {
             Assert.IsType<CatalogueNode>(cat);
             var catalogueNode = (CatalogueNode)cat;
-            Assert.NotEmpty(catalogueNode.Name);
-            Assert.NotEmpty(catalogueNode.GamesystemId);
+            Assert.NotEmpty(catalogueNode.Name!);
+            Assert.NotEmpty(catalogueNode.GamesystemId!);
         }
     }
 

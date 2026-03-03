@@ -317,8 +317,8 @@ public static class ProtocolConverter
         cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries);
 
     static PublicationSpec FromProtocol(ProtocolPublication pub) => new(
-        pub.Id, pub.Name, pub.ShortName, pub.Publisher,
-        pub.PublicationDate, pub.PublisherUrl);
+        pub.Id, pub.Name, pub.ShortName ?? "", pub.Publisher ?? "",
+        pub.PublicationDate ?? "", pub.PublisherUrl ?? "");
 
     // ===== Protocol → Engine state records =====
 

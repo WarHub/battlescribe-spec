@@ -87,10 +87,8 @@ public sealed class BattleScribeOracle : IDisposable
 
         // Set up cost types and cost limits from game system (after engine init)
         var ctIter = gameSystem.getCostTypes().iterator();
-        var hasAnyCostTypes = false;
         while (ctIter.hasNext())
         {
-            hasAnyCostTypes = true;
             var ct = (CostType)ctIter.next();
             // Cost limit
             var limit = new net.battlescribe.model.data.Cost();
@@ -1555,7 +1553,7 @@ public sealed class BattleScribeOracle : IDisposable
     public List<string?> GetAllSelectionNames()
     {
         EnsureInitialized();
-        return GetAllSelections().Select(s => s.getName()).ToList();
+        return GetAllSelections().Select(s => (string?)s.getName()).ToList();
     }
 
     /// <summary>
