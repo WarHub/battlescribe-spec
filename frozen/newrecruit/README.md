@@ -1,6 +1,8 @@
 # Frozen NR Snapshots
 
-This directory contains Playwright HAR (HTTP Archive) files for offline NR testing.
+This directory holds Playwright HAR (HTTP Archive) files for offline NR testing.
+Files are **not** committed here — they are downloaded from
+[WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har) releases at CI time.
 
 ## Purpose
 
@@ -11,17 +13,26 @@ without a network connection. This provides:
 - **Determinism**: Same NR version every run
 - **Speed**: No network latency
 
+## Local setup
+
+Download the snapshot for local testing:
+
+```bash
+gh release download v1 -R WarHub/newrecruit-har -D frozen/newrecruit
+```
+
 ## Updating the frozen snapshot
 
-To record a new snapshot from the live site:
+1. Record a new snapshot from the live site:
 
 ```bash
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "HarRecordingTests" -e NR_ENGINE_URL=https://newrecruit.eu
 ```
 
-After recording, review the changes and commit the updated files.
+2. Create a new release in [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har):
 
-## Files
+```bash
+gh release create v2 frozen/newrecruit/newrecruit.har frozen/newrecruit/metadata.json -R WarHub/newrecruit-har --title "NR snapshot v2"
+```
 
-- `newrecruit.har` — Playwright HAR file with all HTTP responses
-- `metadata.json` — Recording metadata (timestamp, source URL)
+3. Update the release tag in `.github/workflows/ci.yml` if needed.

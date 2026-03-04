@@ -8,6 +8,7 @@ namespace BattleScribeSpec.Tests;
 /// Utility test for recording a new HAR snapshot from the live NR website.
 /// Run to update the frozen snapshot:
 ///   dotnet test tests/BattleScribeSpec.Tests.csproj --filter "HarRecordingTests" -e NR_ENGINE_URL=https://newrecruit.eu
+/// Then upload to https://github.com/WarHub/newrecruit-har as a new release.
 /// </summary>
 public sealed class HarRecordingTests
 {
