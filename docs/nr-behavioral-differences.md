@@ -8,9 +8,9 @@
 | Metric | Value |
 |--------|-------|
 | Total specs applicable to NR | 233 |
-| Passing | 206 |
-| Known behavioral differences | 27 |
-| Conformance rate | 88.4% |
+| Passing | 209 |
+| Known behavioral differences | 24 |
+| Conformance rate | 89.7% |
 
 ## Difference Categories
 
@@ -18,7 +18,7 @@
 |----------|-------|----------|
 | [Entry ordering](#1-entry-ordering) | 13 | Low — cosmetic, data is correct |
 | [Child cost aggregation](#2-child-cost-aggregation) | 5 | Medium — affects total cost display |
-| [Auto-select on min constraints](#3-auto-select-on-min-constraints) | 5 | Medium — different UX model |
+| [Auto-select on min constraints](#3-auto-select-on-min-constraints) | 2 | Low — residual edge cases |
 | [Missing page number support](#4-missing-page-number-support) | 2 | Low — feature gap |
 | [Other behavioral differences](#5-other-behavioral-differences) | 2 | Low–Medium |
 
@@ -108,36 +108,41 @@ with complex nested selections that have costs at multiple tree levels.
 
 ## 3. Auto-Select on Min Constraints
 
-**5 specs affected** — category `nr-auto-select`
+**2 specs affected** — category `nr-auto-select`
 
 ### Description
 
-When a force is added, BattleScribe creates the force with zero selections and
-waits for the user to manually add entries. New Recruit **automatically selects
-entries that have `min >= 1` constraints**, pre-populating the force.
+Both BattleScribe and New Recruit **automatically select entries that have
+`min >= 1` constraints** when creating a roster. This was confirmed by
+decompiling the BattleScribe Java engine:
 
-This means:
-- After `addForce`, NR already has selections present (BS has 0).
-- Selection count assertions immediately after `addForce` differ.
-- Cost totals differ because auto-selected entries contribute costs.
-- The `refresh-full-lifecycle` spec sees doubled costs because the spec
-  manually selects an entry that NR already auto-selected.
+- **BattleScribe** has a private method `x()` ("Select default root entries")
+  in `engine.a.f` (line 978) that iterates all forces and auto-selects entries
+  where `getDefaultAmount >= 1`. It's called during `setRoster(bl=true)` when
+  a new roster is created.
+- **New Recruit** implements the same behavior — entries with min constraints
+  are pre-populated when a force is added.
+
+The Oracle adapter now replicates this by calling `x()` via reflection after
+the first `addForce`, matching the desktop BattleScribe behavior. Three specs
+that previously differed (`refresh-after-select`, `refresh-validation-update`,
+`constraint-min-and-max`) have been updated to account for auto-selection and
+now pass on both engines.
+
+The remaining 2 expected failures in this category are edge cases that need
+further investigation.
 
 ### Impact
 
-**Medium.** This is a deliberate UX design choice by New Recruit — it's more
-user-friendly to pre-select required entries. However, it changes the
-observable state at each step compared to BattleScribe.
+**Low.** The core auto-select behavior is now aligned between the spec suite
+and both engines. The 2 remaining differences are minor edge cases.
 
 ### Affected Specs
 
 | Spec | Specific Difference |
 |------|---------------------|
-| `refresh/refresh-after-select` | Unexpected selections after addForce |
-| `refresh/refresh-validation-update` | Unexpected selections after addForce |
-| `refresh/refresh-full-lifecycle` | Doubled costs from auto-select |
-| `constraint/constraint-min-and-max` | Unexpected selections after addForce |
-| `constraint/constraint-forces-field` | Unexpected selections after addForce |
+| `refresh/refresh-full-lifecycle` | Lifecycle cost tracking with auto-selected entries |
+| `constraint/constraint-forces-field` | `field=forces` constraint with auto-selection |
 
 ---
 
@@ -227,8 +232,11 @@ All 5 real-world wh40k-10e specs pass successfully.
    intentional. If intentional, document the expected cost model difference in
    the spec format.
 
-3. **Auto-select behavior**: Consider adding an `expectAutoSelect: true` flag
-   or alternative expected states for engines that pre-select required entries.
+3. **Auto-select behavior**: ~~Consider adding an `expectAutoSelect: true` flag~~
+   **Resolved** — both engines auto-select entries with `min >= 1`. The Oracle
+   adapter now calls the engine's `x()` method via reflection after force
+   creation to match desktop BattleScribe behavior. Specs have been updated to
+   account for auto-selection.
 
 4. **Page numbers**: Low priority. Could be added to NR's state reader if the
    data is available internally but just not exposed.
