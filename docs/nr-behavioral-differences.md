@@ -7,10 +7,17 @@
 
 | Metric | Value |
 |--------|-------|
-| Total specs applicable to NR | 233 |
-| Passing | 209 |
-| Known behavioral differences | 24 |
-| Conformance rate | 89.7% |
+| Total specs | 236 |
+| Oracle (BattleScribe) baseline | 282/282 passing (100%) |
+| NR known differences | 24 (in `expected-failures/newrecruit.json`) |
+| NR last validated run | 222 specs — 195 pass, 27 fail (24 expected + 3 unexpected) |
+| NR conformance rate | ~89% (of validated specs) |
+
+> **Note:** 14 new specs (constraint rewrites + entry link specs) have been
+> added since the last NR validation run. The 3 unexpected failures
+> (`constraint-min-and-max`, `refresh-after-select`, `refresh-validation-update`)
+> were caused by an intermediate spec state and are expected to pass now that
+> both engines correctly handle auto-selection.
 
 ## Difference Categories
 
@@ -123,19 +130,15 @@ decompiling the BattleScribe Java engine:
 - **New Recruit** implements the same behavior — entries with min constraints
   are pre-populated when a force is added.
 
-The Oracle adapter now replicates this by calling `x()` via reflection after
-the first `addForce`, matching the desktop BattleScribe behavior. Three specs
-that previously differed (`refresh-after-select`, `refresh-validation-update`,
-`constraint-min-and-max`) have been updated to account for auto-selection and
-now pass on both engines.
-
-The remaining 2 expected failures in this category are edge cases that need
-further investigation.
+The Oracle adapter replicates this by calling `x()` via reflection after
+`addForce`, matching the desktop BattleScribe behavior. Specs have been updated
+to account for auto-selection and most previously-affected specs now pass on
+both engines.
 
 ### Impact
 
-**Low.** The core auto-select behavior is now aligned between the spec suite
-and both engines. The 2 remaining differences are minor edge cases.
+**Low.** The core auto-select behavior is aligned between both engines.
+The 2 remaining differences are edge cases.
 
 ### Affected Specs
 
@@ -193,6 +196,51 @@ or may not enforce limits in the same scenarios.
 
 ---
 
+## 6. Entry Link Resolution and Constraint Enforcement
+
+**Discovery** — not a behavioral difference; an Oracle adapter bug that was fixed.
+
+### Background
+
+BattleScribe's engine performs **catalogue expansion** during force creation:
+entry links in the catalogue are resolved by copying the target shared entry
+and merging the link's properties (constraints, modifiers, costs) into the copy.
+The expanded copy gets a composite ID (`linkId::sharedEntryId`) and is registered
+as a regular (non-shared) selection entry.
+
+### What Was Fixed
+
+The Oracle adapter's `GetEntriesForForce()` was manually resolving entry links
+from a pre-computed list, which returned raw shared entries instead of their
+expanded copies. This caused:
+
+- Constraints on shared entries not firing via entry links
+- Constraints on entry links themselves not being evaluated
+- Shared counting (`shared=true`) not working across entry links
+
+The fix queries the engine's catalogue manager (`_engine.e(force).R()`) which
+returns properly expanded entries with merged constraints.
+
+### Key Findings
+
+1. **`scope=parent` on entry link constraints refers to the catalogue root**,
+   not the force. Use `scope=force` or `scope=roster` instead.
+2. **`shared=true` counting works across multiple entry links** to the same
+   shared target — the engine counts by `sharedEntryId`.
+3. **Constraints from both the shared entry and the entry link are merged**
+   into the expanded copy and evaluated independently.
+
+### New Specs
+
+| Spec | What It Tests |
+|------|--------------|
+| `constraint-entry-link-shared-target` | Shared entry constraint fires via entry link |
+| `constraint-entry-link-own` | Entry link's own constraint fires (scope=force) |
+| `constraint-entry-link-merged` | Both shared + link constraints enforced |
+| `constraint-entry-link-shared-counting` | Two links to same target, shared counting |
+
+---
+
 ## Architecture Notes
 
 ### How NR Was Tested
@@ -232,11 +280,13 @@ All 5 real-world wh40k-10e specs pass successfully.
    intentional. If intentional, document the expected cost model difference in
    the spec format.
 
-3. **Auto-select behavior**: ~~Consider adding an `expectAutoSelect: true` flag~~
-   **Resolved** — both engines auto-select entries with `min >= 1`. The Oracle
-   adapter now calls the engine's `x()` method via reflection after force
-   creation to match desktop BattleScribe behavior. Specs have been updated to
-   account for auto-selection.
+3. **Auto-select behavior**: **Resolved** — both engines auto-select entries
+   with `min >= 1`. The Oracle adapter calls the engine's `x()` method via
+   reflection after force creation. Specs account for auto-selection.
 
 4. **Page numbers**: Low priority. Could be added to NR's state reader if the
    data is available internally but just not exposed.
+
+5. **Re-validate NR**: The NR test suite needs a fresh run against the current
+   236 specs (14 new since last validation). The 3 unexpected failures from the
+   previous run are expected to be resolved.
