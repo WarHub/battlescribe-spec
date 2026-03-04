@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using net.battlescribe.model.data;
 using net.battlescribe.model.roster;
 using JavaEngine = net.battlescribe.engine.a.f;
@@ -21,6 +22,7 @@ public sealed class BattleScribeOracle : IDisposable
     private GameSystem? _gameSystem;
     private readonly Dictionary<string, Catalogue> _catalogues = new();
     private bool _initialized;
+    private bool _autoSelectDone;
 
     public BattleScribeOracle(int threadCount = 1)
     {
@@ -161,6 +163,19 @@ public sealed class BattleScribeOracle : IDisposable
         var errors = new JavaArrayList();
 
         var force = _engine.b(_gameSystem, catalogue, linkedCatMap, forceEntry, favourites, errors);
+
+        // After creating the force, auto-select default root entries (entries with min>=1).
+        // The BattleScribe desktop UI bundles force creation into setRoster(bl=true),
+        // which calls the engine's private x() method ("Select default root entries").
+        // Our flow creates forces separately via selectRootForce, which doesn't call x().
+        // We replicate the desktop behavior by calling x() once after the first force.
+        // Note: x() processes ALL forces and always creates new selections, so calling
+        // it more than once would create duplicates. The desktop only calls it once too.
+        if (!_autoSelectDone)
+        {
+            _autoSelectDone = true;
+            SelectDefaultRootEntries();
+        }
 
         return (force, JavaListToStringErrors(errors));
     }
@@ -1585,6 +1600,26 @@ public sealed class BattleScribeOracle : IDisposable
     public void Dispose()
     {
         // No explicit Java resource cleanup needed with IKVM
+    }
+
+    /// <summary>
+    /// Calls the engine's private x() method ("Select default root entries").
+    /// In the BattleScribe desktop UI, this is triggered during setRoster(bl=true)
+    /// which runs when loading or creating a new roster. It auto-selects entries
+    /// that have a minimum constraint >= 1 on the force's root entries.
+    /// Since our Oracle creates forces via selectRootForce (which doesn't call x()),
+    /// we must invoke it separately to match the desktop behavior.
+    /// </summary>
+    private void SelectDefaultRootEntries()
+    {
+        // x() is a private method on the engine (net.battlescribe.engine.a.f)
+        var method = _engine.GetType().GetMethod("x",
+            BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+            binder: null, types: Type.EmptyTypes, modifiers: null);
+        if (method is null)
+            throw new InvalidOperationException(
+                "Could not find engine method x() for auto-selecting default root entries.");
+        method.Invoke(_engine, null);
     }
 
     [MemberNotNull(nameof(_gameSystem))]

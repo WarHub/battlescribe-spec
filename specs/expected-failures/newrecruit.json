@@ -1,22 +1,7 @@
 [
   {
-    "specId": "refresh/refresh-after-select",
-    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
-    "category": "nr-auto-select"
-  },
-  {
-    "specId": "refresh/refresh-validation-update",
-    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
-    "category": "nr-auto-select"
-  },
-  {
     "specId": "refresh/refresh-full-lifecycle",
     "reason": "NR auto-selects entries with min>=1 constraints — costs doubled",
-    "category": "nr-auto-select"
-  },
-  {
-    "specId": "constraint/constraint-min-and-max",
-    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
     "category": "nr-auto-select"
   },
   {

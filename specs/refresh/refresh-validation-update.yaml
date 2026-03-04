@@ -33,16 +33,7 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  # Empty force
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 0
-
-  - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
-
-  # 1 selection
+  # Auto-selected 1 (min=1)
   - assert: selectionCount
     forceIndex: 0
     expected: 1
@@ -51,7 +42,7 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # 2 selections
+  # 2 selections (1 auto + 1 manual)
   - assert: selectionCount
     forceIndex: 0
     expected: 2
@@ -65,11 +56,20 @@ steps:
     forceIndex: 0
     expected: 3
 
-  - action: deselectSelection
+  - action: selectEntry
     forceIndex: 0
-    selectionIndex: 2
+    entryIndex: 0
 
-  # Back to 2
+  # 4 selections
   - assert: selectionCount
     forceIndex: 0
-    expected: 2
+    expected: 4
+
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 3
+
+  # Back to 3
+  - assert: selectionCount
+    forceIndex: 0
+    expected: 3

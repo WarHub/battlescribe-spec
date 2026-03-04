@@ -44,9 +44,10 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: selectEntry
+  # Auto-select creates 2 selections (min=2 scope=force), remove one to trigger error
+  - action: deselectSelection
     forceIndex: 0
-    entryIndex: 0
+    selectionIndex: 0
 
   - expectedState:
       errors:

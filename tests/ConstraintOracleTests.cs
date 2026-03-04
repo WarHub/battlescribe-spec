@@ -50,8 +50,13 @@ public class ConstraintOracleTests
         oracle.SetupFromSpec(scenario);
         oracle.AddForceByIndex(0);
 
+        // Auto-select satisfies min=1 — no error yet
+        Assert.False(oracle.HasValidationErrors(), "Min=1 constraint should be satisfied by auto-selection.");
+
+        // Remove the auto-selected entry to trigger violation
+        oracle.DeselectFirstSelection();
         var errors = oracle.GetValidationErrors();
-        Assert.True(oracle.HasValidationErrors(), "Expected a min-constraint validation error.");
+        Assert.True(oracle.HasValidationErrors(), "Expected a min-constraint validation error after deselecting.");
         Assert.NotEmpty(errors);
     }
 

@@ -44,6 +44,11 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  # Auto-select satisfies min=1, remove it to trigger structured error
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
   - expectedState:
       errors:
         - on: category cat-troops

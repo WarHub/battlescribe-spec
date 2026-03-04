@@ -41,5 +41,14 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  # Auto-select creates 1 selection (min=1 entry), constraint satisfied
+  - assert: hasValidationErrors
+    expected: false
+
+  # Remove the auto-selected entry to trigger min violation
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
   - assert: hasValidationErrors
     expected: true

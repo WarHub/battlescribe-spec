@@ -36,19 +36,20 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  # Auto-select creates 1 selection (min=1) with 100 pts
   - expectedState:
       forces:
-        - selectionCount: 0
+        - selectionCount: 1
 
-  # After selection: cost updated
+  # After second selection: cost updated to 200
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   - expectedState:
       forces:
-        - selectionCount: 1
+        - selectionCount: 2
 
   - assert: totalCost
     costTypeId: pts
-    expected: 100
+    expected: 200

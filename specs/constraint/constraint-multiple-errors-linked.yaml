@@ -64,6 +64,15 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  # Auto-select satisfies both min=1 constraints, remove both to trigger errors
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 1
+
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
   - expectedState:
       errors:
         - on: category cat-troops

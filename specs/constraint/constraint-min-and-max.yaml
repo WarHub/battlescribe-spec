@@ -30,23 +30,14 @@ setup:
               scope: parent
 
 steps:
-  # Empty force
+  # Auto-select creates 1 selection (min=1)
   - action: addForce
     forceEntryIndex: 0
 
   - assert: forceCount
     expected: 1
 
-  # One selection
-  - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
-
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 1
-
-  # Two selections
+  # Two selections (1 auto + 1 manual)
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -55,7 +46,7 @@ steps:
     forceIndex: 0
     expected: 2
 
-  # Three selections
+  # Three selections (1 auto + 2 manual)
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -63,3 +54,12 @@ steps:
   - assert: selectionCount
     forceIndex: 0
     expected: 3
+
+  # Four selections (1 auto + 3 manual)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - assert: selectionCount
+    forceIndex: 0
+    expected: 4
