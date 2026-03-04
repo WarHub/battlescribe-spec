@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
@@ -10,7 +11,20 @@ namespace BattleScribeSpec.NewRecruit;
 public static class HarRecorder
 {
     /// <summary>
+    /// Domains to keep in the HAR file. Everything else is stripped.
+    /// </summary>
+    private static readonly string[] AllowedDomains =
+    [
+        "newrecruit.eu",
+        "www.newrecruit.eu",
+        "raw.githubusercontent.com",
+        "fonts.googleapis.com",
+        "fonts.gstatic.com",
+    ];
+
+    /// <summary>
     /// Records a HAR file by navigating the NR web app and capturing all network traffic.
+    /// Post-processes to strip ad/tracker domains.
     /// </summary>
     public static async Task RecordAsync(
         string harFilePath,
@@ -31,7 +45,7 @@ public static class HarRecorder
         await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
             RecordHarPath = harFilePath,
-            RecordHarUrlFilter = $"{baseUrl.TrimEnd('/')}/**",
+            RecordHarMode = HarMode.Minimal,
         });
 
         var page = await context.NewPageAsync();
@@ -68,17 +82,78 @@ public static class HarRecorder
         // Close context to finalize the HAR file
         await context.CloseAsync();
 
+        // Post-process: strip non-essential entries (ads, trackers)
+        await StripNonEssentialEntriesAsync(harFilePath);
+
         if (metadataFilePath is not null)
         {
             var metadata = new HarMetadata
             {
                 FrozenAt = DateTimeOffset.UtcNow,
                 SourceUrl = baseUrl,
-                Notes = "Recorded by HarRecorder for offline testing.",
+                Notes = "Recorded by HarRecorder for offline testing. Non-essential domains stripped.",
             };
             var json = JsonSerializer.Serialize(metadata, HarMetadataContext.Default.HarMetadata);
             await File.WriteAllTextAsync(metadataFilePath, json);
         }
+    }
+
+    /// <summary>
+    /// Strips HAR entries from non-essential domains and deduplicates by request URL.
+    /// Keeps only entries matching <see cref="AllowedDomains"/>.
+    /// </summary>
+    public static async Task StripNonEssentialEntriesAsync(string harFilePath)
+    {
+        var json = await File.ReadAllTextAsync(harFilePath);
+        var doc = JsonNode.Parse(json);
+        var entries = doc?["log"]?["entries"]?.AsArray();
+        if (entries is null) return;
+
+        // First pass: mark indices to keep (allowed domain + dedup GETs by URL)
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var keep = new HashSet<int>();
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var url = entries[i]?["request"]?["url"]?.GetValue<string>();
+            var method = entries[i]?["request"]?["method"]?.GetValue<string>() ?? "GET";
+            if (url is null || !IsAllowedUrl(url))
+                continue;
+            // Keep all POSTs with unique bodies (may have different responses); dedup GETs/HEADs
+            if (method is "POST" or "PUT" or "PATCH")
+            {
+                var body = entries[i]?["request"]?["postData"]?["text"]?.GetValue<string>() ?? "";
+                if (seen.Add($"{method} {url} {body}"))
+                    keep.Add(i);
+            }
+            else if (seen.Add($"{method} {url}"))
+            {
+                keep.Add(i);
+            }
+        }
+
+        // Second pass: remove non-kept entries in reverse
+        for (var i = entries.Count - 1; i >= 0; i--)
+        {
+            if (!keep.Contains(i))
+                entries.RemoveAt(i);
+        }
+
+        var options = new JsonSerializerOptions { WriteIndented = false };
+        await File.WriteAllTextAsync(harFilePath, doc!.ToJsonString(options));
+    }
+
+    private static bool IsAllowedUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return false;
+        var host = uri.Host;
+        foreach (var domain in AllowedDomains)
+        {
+            if (host.Equals(domain, StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

@@ -10,6 +10,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
 {
     private IPlaywright? _playwright;
     private IBrowser? _browser;
+    private bool _isFrozen;
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
@@ -49,6 +50,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
 
     private async Task InitializeAsync(bool headless, string? harFilePath)
     {
+        _isFrozen = harFilePath is not null;
         _playwright = await Playwright.CreateAsync();
         _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
@@ -60,17 +62,21 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             await Page.RouteFromHARAsync(harFilePath, new PageRouteFromHAROptions
             {
                 Url = "**",
-                NotFound = HarNotFound.Fallback,
+                NotFound = HarNotFound.Abort,
             });
         }
+        var waitUntil = NavigationWaitStrategy;
         await Page.GotoAsync(BaseUrl, new PageGotoOptions
         {
-            WaitUntil = WaitUntilState.NetworkIdle,
+            WaitUntil = waitUntil,
             Timeout = 60_000,
         });
         // Dismiss cookie/consent dialogs if present
         await DismissDialogsAsync();
     }
+
+    private WaitUntilState NavigationWaitStrategy =>
+        _isFrozen ? WaitUntilState.Load : WaitUntilState.NetworkIdle;
 
     /// <summary>
     /// Navigate to the NR app page where systems can be selected/loaded.
@@ -79,7 +85,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     {
         await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
         {
-            WaitUntil = WaitUntilState.NetworkIdle,
+            WaitUntil = NavigationWaitStrategy,
             Timeout = 30_000,
         });
         await DismissDialogsAsync();
@@ -94,7 +100,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         {
             await Page.GotoAsync($"{BaseUrl}/app/Lists/{listId}", new PageGotoOptions
             {
-                WaitUntil = WaitUntilState.NetworkIdle,
+                WaitUntil = NavigationWaitStrategy,
                 Timeout = 30_000,
             });
         }
@@ -102,7 +108,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         {
             await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
             {
-                WaitUntil = WaitUntilState.NetworkIdle,
+                WaitUntil = NavigationWaitStrategy,
                 Timeout = 30_000,
             });
         }
