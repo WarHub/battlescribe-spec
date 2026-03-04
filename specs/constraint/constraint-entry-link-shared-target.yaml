@@ -1,0 +1,74 @@
+id: constraint-entry-link-shared-target
+category: constraint
+description: >
+  Constraint on a shared selection entry is enforced on selections created
+  via entry link. During catalogue expansion, the engine copies the shared
+  entry (including its constraints) into a new entry keyed by the entry link.
+  The constraint is evaluated on selections of that expanded entry.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+        categoryLinks:
+          - targetId: cat-troops
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-unit
+          name: Elite Guard
+          type: unit
+          categoryLinks:
+            - targetId: cat-troops
+              primary: true
+          constraints:
+            - id: con-max
+              type: max
+              value: 2
+              field: selections
+              scope: roster
+              shared: true
+      entryLinks:
+        - id: link-1
+          name: Elite Guard
+          targetId: shared-unit
+          type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Two selections — at the max=2 limit, no errors
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Elite Guard
+            - name: Elite Guard
+      hasValidationErrors: false
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Three selections — exceeds max=2, constraint fires
+  - expectedState:
+      forces:
+        - selectionCount: 3
+      hasValidationErrors: true

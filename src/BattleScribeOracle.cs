@@ -4,6 +4,7 @@ using System.Reflection;
 using net.battlescribe.model.data;
 using net.battlescribe.model.roster;
 using JavaEngine = net.battlescribe.engine.a.f;
+using JavaCatalogueManager = net.battlescribe.engine.a.d;
 using JavaPerfMetrics = net.battlescribe.engine.b.e;
 using JavaHashMap = java.util.HashMap;
 using JavaList = java.util.List;
@@ -641,10 +642,33 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Get the selection entries available for a given force, based on its catalogue.
+    /// Get the selection entries available for a given force, using the engine's
+    /// catalogue manager which has already resolved entry links into expanded copies.
+    /// Falls back to the pre-computed list if the catalogue manager isn't available.
     /// </summary>
     private List<SelectionEntry> GetEntriesForForce(int forceIndex)
     {
+        var forces = GetForces();
+        if (forceIndex < 0 || forceIndex >= forces.Count)
+            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+
+        // Use the engine's catalogue manager (d.R()) which returns properly expanded entries.
+        // Entry links are resolved to copies with merged constraints and composite IDs.
+        try
+        {
+            var force = forces[forceIndex];
+            var catMgr = _engine.e(force);
+            if (catMgr != null)
+            {
+                return JavaListToList<SelectionEntry>(catMgr.R());
+            }
+        }
+        catch
+        {
+            // Fall through to legacy path
+        }
+
+        // Fallback: pre-computed entries (may lack entry link expansion)
         if (forceIndex < _forceCatalogueMap.Count && _perCatalogueEntries.Count > 0)
         {
             var catIdx = _forceCatalogueMap[forceIndex];

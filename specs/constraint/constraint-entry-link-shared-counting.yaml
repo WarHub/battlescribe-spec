@@ -1,0 +1,88 @@
+id: constraint-entry-link-shared-counting
+category: constraint
+description: >
+  Two entry links reference the same shared selection entry which has a
+  shared max constraint. The shared=true flag causes the engine to count
+  selections by sharedEntryId across all expanded entry links, so selecting
+  from either link counts toward the shared limit.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+        categoryLinks:
+          - targetId: cat-troops
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-unit
+          name: Tactical Squad
+          type: unit
+          categoryLinks:
+            - targetId: cat-troops
+              primary: true
+          constraints:
+            - id: con-max-shared
+              type: max
+              value: 3
+              field: selections
+              scope: roster
+              shared: true
+      entryLinks:
+        - id: link-alpha
+          name: Alpha Tactical
+          targetId: shared-unit
+          type: selectionEntry
+        - id: link-beta
+          name: Beta Tactical
+          targetId: shared-unit
+          type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select 2 from first entry link (link-alpha = entryIndex 0)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # 2 selections via link-alpha — below shared max=3
+  - expectedState:
+      forces:
+        - selectionCount: 2
+      hasValidationErrors: false
+
+  # Select 1 from second entry link (link-beta = entryIndex 1)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  # 3 total (2 from alpha + 1 from beta) — at shared limit, no errors
+  - expectedState:
+      forces:
+        - selectionCount: 3
+      hasValidationErrors: false
+
+  # Select 1 more from second entry link
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  # 4 total — shared counting exceeds max=3, constraint fires
+  - expectedState:
+      forces:
+        - selectionCount: 4
+      hasValidationErrors: true
