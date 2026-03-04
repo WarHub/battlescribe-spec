@@ -29,12 +29,17 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  # The constraint uses field=forces, which counts forces not selections.
-  # With synthetic data, constraint validation doesn't fire.
+  # field=forces constraint counts forces, not selections — no validation triggered
   - expectedState:
       forces:
         - selectionCount: 1
+          selections:
+            - name: Unit A

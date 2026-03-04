@@ -60,7 +60,16 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  # Auto-select satisfies both shared constraints, remove both to trigger violation
+  # Auto-select creates Unit A and Unit B (each has shared min=1), satisfied
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Unit A
+            - name: Unit B
+      errors: []
+
+  # Remove both auto-selected entries to trigger shared constraint violation
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 1
@@ -70,6 +79,8 @@ steps:
     selectionIndex: 0
 
   - expectedState:
+      forces:
+        - selectionCount: 0
       errors:
         - on: category cat-troops
           from: se-unit-a/con-min-shared

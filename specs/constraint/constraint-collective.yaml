@@ -40,6 +40,10 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
   # Select Unit A twice
   - action: selectEntry
     forceIndex: 0
@@ -48,7 +52,7 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # Select Unit B twice - shared constraint means total across A+B <= 4
+  # Select Unit B twice — shared constraint means total across A+B <= 4
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1
@@ -59,3 +63,9 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 4
+          selections:
+            - name: Unit A
+            - name: Unit A
+            - name: Unit B
+            - name: Unit B
+      hasValidationErrors: false

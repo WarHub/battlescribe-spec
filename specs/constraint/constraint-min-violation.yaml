@@ -41,14 +41,20 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  # Auto-select creates 1 selection (min=1 entry), constraint satisfied
-  - assert: hasValidationErrors
-    expected: false
+  # Auto-select creates 1 Unit A (min=1), constraint satisfied
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A
+      hasValidationErrors: false
 
-  # Remove the auto-selected entry to trigger min violation
+  # Remove auto-selected entry to trigger min violation
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 0
 
-  - assert: hasValidationErrors
-    expected: true
+  - expectedState:
+      forces:
+        - selectionCount: 0
+      hasValidationErrors: true

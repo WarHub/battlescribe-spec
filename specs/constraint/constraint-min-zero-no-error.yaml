@@ -28,4 +28,8 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - assert: noValidationErrors
+  # min=0 means entry is optional — no auto-select, no error
+  - expectedState:
+      forces:
+        - selectionCount: 0
+      hasValidationErrors: false

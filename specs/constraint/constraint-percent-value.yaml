@@ -36,9 +36,18 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
+  # percentValue=true: max 50% of selections (relative to other constraints/context)
   - expectedState:
       forces:
         - selectionCount: 1
+          selections:
+            - name: Elite

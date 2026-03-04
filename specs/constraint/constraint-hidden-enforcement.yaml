@@ -33,7 +33,14 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  # Hidden Unit auto-selected (min=1 constraint), select the visible unit
+  # Hidden Unit auto-selected (min=1 constraint) — hidden from user but enforced by engine
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Hidden Unit
+
+  # Manually add Visible Unit
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

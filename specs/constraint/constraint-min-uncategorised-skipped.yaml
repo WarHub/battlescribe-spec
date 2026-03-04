@@ -28,7 +28,12 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  # Expected current behavior: with no category wiring, entry resolves to "(No Category)"
-  # and that category is skipped by validation traversal in the reference engine path.
-  - assert: hasValidationErrors
-    expected: false
+  # Auto-select creates 1 Unit A (min=1 still triggers auto-select even without categories).
+  # With no category wiring, entry resolves to "(No Category)" which is skipped
+  # by validation traversal — so the min constraint produces no error.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A
+      hasValidationErrors: false

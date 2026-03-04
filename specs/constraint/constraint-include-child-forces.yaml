@@ -31,14 +31,19 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
-  # Army force created; Sub-Detachment is available as a nested force entry.
-  # The constraint with includeChildForces=true means the max limit
-  # counts selections across the parent force and any child forces.
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Army
+          selectionCount: 0
+
+  # includeChildForces=true means the max limit counts across parent and child forces
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
-      forceCount: 1
       forces:
         - name: Army
           selectionCount: 1

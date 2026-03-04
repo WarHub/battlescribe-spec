@@ -44,18 +44,28 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # 1 selection — at max=1 limit, no error
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   - expectedState:
+      forces:
+        - selectionCount: 1
       errors: []
 
+  # 2 selections — exceeds max=1, structured error
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   - expectedState:
+      forces:
+        - selectionCount: 2
       errors:
         - on: category cat-troops
           from: se-unit-a/con-max-1

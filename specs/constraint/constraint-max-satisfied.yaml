@@ -28,12 +28,20 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 0
 
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: noValidationErrors
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # 2 selections < max=3 — satisfied, no error
+  - expectedState:
+      forces:
+        - selectionCount: 2
+      hasValidationErrors: false

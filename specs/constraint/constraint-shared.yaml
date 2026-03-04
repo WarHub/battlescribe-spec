@@ -38,15 +38,24 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # Select one of each — shared max=5 counts across both entries
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1
+
   - expectedState:
       forces:
         - selectionCount: 2
           selections:
             - name: Unit A
             - name: Unit B
+      hasValidationErrors: false

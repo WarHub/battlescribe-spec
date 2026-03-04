@@ -39,11 +39,21 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  - expectedState:
+      forces:
+        - selectionCount: 0
+      errors: []
+
+  # Selecting a hidden entry — engine allows it but produces validation error
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A
       errors:
         - on: category cat-troops
           from: se-unit-a/hidden

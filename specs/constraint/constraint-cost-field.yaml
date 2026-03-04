@@ -35,9 +35,18 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
+  # 200 pts < max 500 pts — cost constraint satisfied
   - expectedState:
       forces:
         - selectionCount: 1
+          selections:
+            - name: Expensive Unit
