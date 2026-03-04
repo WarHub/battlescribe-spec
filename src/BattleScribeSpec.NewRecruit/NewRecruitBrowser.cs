@@ -27,11 +27,27 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         bool headless = true)
     {
         var browser = new NewRecruitBrowser(baseUrl);
-        await browser.InitializeAsync(headless);
+        await browser.InitializeAsync(headless, harFilePath: null);
         return browser;
     }
 
-    private async Task InitializeAsync(bool headless)
+    /// <summary>
+    /// Create a browser session that replays from a HAR file (frozen/offline mode).
+    /// All network requests matching the HAR are served from the file — no internet required.
+    /// </summary>
+    public static async Task<NewRecruitBrowser> CreateFrozenAsync(
+        string harFilePath,
+        string baseUrl = "https://newrecruit.eu",
+        bool headless = true)
+    {
+        if (!File.Exists(harFilePath))
+            throw new FileNotFoundException($"HAR file not found: {harFilePath}", harFilePath);
+        var browser = new NewRecruitBrowser(baseUrl);
+        await browser.InitializeAsync(headless, harFilePath);
+        return browser;
+    }
+
+    private async Task InitializeAsync(bool headless, string? harFilePath)
     {
         _playwright = await Playwright.CreateAsync();
         _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
@@ -39,10 +55,18 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             Headless = headless,
         });
         Page = await _browser.NewPageAsync();
+        if (harFilePath is not null)
+        {
+            await Page.RouteFromHARAsync(harFilePath, new PageRouteFromHAROptions
+            {
+                Url = "**",
+                NotFound = HarNotFound.Fallback,
+            });
+        }
         await Page.GotoAsync(BaseUrl, new PageGotoOptions
         {
             WaitUntil = WaitUntilState.NetworkIdle,
-            Timeout = 30_000,
+            Timeout = 60_000,
         });
         // Dismiss cookie/consent dialogs if present
         await DismissDialogsAsync();

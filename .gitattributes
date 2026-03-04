@@ -1,0 +1,2 @@
+# HAR files are large JSON; treat as binary for diff
+frozen/**/*.har binary
