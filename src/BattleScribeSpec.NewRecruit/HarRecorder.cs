@@ -188,7 +188,7 @@ public static class HarRecorder
         var dir = startDir ?? Directory.GetCurrentDirectory();
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir, "frozen", "newrecruit", "newrecruit.har");
+            var candidate = Path.Combine(dir, ".testdata", "newrecruit-har", "newrecruit.har");
             if (File.Exists(candidate))
                 return candidate;
             dir = Path.GetDirectoryName(dir);

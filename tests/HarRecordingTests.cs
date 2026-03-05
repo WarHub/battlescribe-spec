@@ -25,7 +25,7 @@ public sealed class HarRecordingTests
 
         var frozenDir = FindFrozenDirectory()
             ?? throw new InvalidOperationException(
-                "Could not find 'frozen/newrecruit' directory. Run from the repo root.");
+                "Could not find '.testdata/newrecruit-har' directory. Run from the repo root.");
 
         var harPath = Path.Combine(frozenDir, "newrecruit.har");
         var metadataPath = Path.Combine(frozenDir, "metadata.json");
@@ -51,9 +51,16 @@ public sealed class HarRecordingTests
         var dir = Directory.GetCurrentDirectory();
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir, "frozen", "newrecruit");
+            var candidate = Path.Combine(dir, ".testdata", "newrecruit-har");
             if (Directory.Exists(candidate))
                 return candidate;
+            // Also create the directory if .testdata exists (first recording)
+            var testdataDir = Path.Combine(dir, ".testdata");
+            if (Directory.Exists(testdataDir))
+            {
+                Directory.CreateDirectory(candidate);
+                return candidate;
+            }
             dir = Path.GetDirectoryName(dir);
         }
         return null;

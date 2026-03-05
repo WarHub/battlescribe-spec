@@ -11,7 +11,7 @@ namespace BattleScribeSpec.Tests;
 /// this runs against a committed HAR file — fully offline and deterministic.
 ///
 /// Tests are skipped if:
-/// - The frozen HAR file doesn't exist (frozen/newrecruit/newrecruit.har)
+/// - The frozen HAR file doesn't exist (.testdata/newrecruit-har/newrecruit.har)
 /// - NR_FROZEN_SKIP=true is set
 /// - Playwright browsers are not installed
 ///
