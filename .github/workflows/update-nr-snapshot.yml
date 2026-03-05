@@ -1,0 +1,149 @@
+name: Update NR Snapshot
+
+on:
+  schedule:
+    - cron: '30 4 * * *' # daily at 04:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-snapshot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone wham
+        run: git clone https://github.com/WarHub/wham.git ../wham
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build HarTool
+        run: dotnet build src/BattleScribeSpec.NewRecruit.HarTool
+
+      - name: Install Playwright browsers
+        run: pwsh src/BattleScribeSpec.NewRecruit/bin/Debug/net10.0/playwright.ps1 install chromium
+
+      - name: Record new HAR snapshot
+        id: record
+        run: |
+          dotnet run --project src/BattleScribeSpec.NewRecruit.HarTool --no-build -- -o .har-staging
+          HAR_SHA256=$(sha256sum .har-staging/newrecruit.har | cut -d' ' -f1)
+          echo "har_sha256=$HAR_SHA256" >> "$GITHUB_OUTPUT"
+
+          CLIENT_VERSION=$(grep -oP '"ClientVersion":\s*"\K[^"]+' .har-staging/metadata.json || echo "unknown")
+          echo "client_version=$CLIENT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Get current release digest
+        id: current
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch the current latest release asset digest for newrecruit.har
+          DIGEST=$(gh api repos/WarHub/newrecruit-har/releases/latest \
+            --jq '.assets[] | select(.name == "newrecruit.har") | .digest' 2>/dev/null || echo "")
+          # digest format is "sha256:hexstring" — extract just the hex
+          CURRENT_SHA256="${DIGEST#sha256:}"
+          echo "current_sha256=$CURRENT_SHA256" >> "$GITHUB_OUTPUT"
+
+          CURRENT_TAG=$(gh api repos/WarHub/newrecruit-har/releases/latest --jq '.tag_name' 2>/dev/null || echo "")
+          echo "current_tag=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Check for changes
+        id: check
+        run: |
+          NEW="${{ steps.record.outputs.har_sha256 }}"
+          OLD="${{ steps.current.outputs.current_sha256 }}"
+          echo "new_sha256=$NEW"
+          echo "old_sha256=$OLD"
+          if [ "$NEW" = "$OLD" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes detected — snapshot is identical."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected — new snapshot needed."
+          fi
+
+      - name: Determine release tag
+        if: steps.check.outputs.changed == 'true'
+        id: tag
+        run: |
+          VERSION="${{ steps.record.outputs.client_version }}"
+          CURRENT_TAG="${{ steps.current.outputs.current_tag }}"
+          BASE_TAG="v${VERSION}"
+
+          if [ "$CURRENT_TAG" = "$BASE_TAG" ] || [[ "$CURRENT_TAG" == "${BASE_TAG}-"* ]]; then
+            # Same version — append date
+            NEW_TAG="${BASE_TAG}-$(date +%Y%m%d)"
+          else
+            NEW_TAG="$BASE_TAG"
+          fi
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $NEW_TAG"
+
+      - name: Publish release to WarHub/newrecruit-har
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.new_tag }}"
+          VERSION="${{ steps.record.outputs.client_version }}"
+          gh release create "$TAG" \
+            .har-staging/newrecruit.har \
+            .har-staging/metadata.json \
+            -R WarHub/newrecruit-har \
+            --title "NR snapshot $TAG" \
+            --notes "Automated snapshot of newrecruit.eu client version ${VERSION}."
+
+      - name: Open PR to update testdata.json
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.new_tag }}"
+          VERSION="${{ steps.record.outputs.client_version }}"
+          BRANCH="update-nr-snapshot-${TAG}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+
+          # Update testdata.json with new tag
+          cat > testdata.json << EOF
+          {
+            "newrecruit-har": {
+              "repo": "WarHub/newrecruit-har",
+              "tag": "$TAG"
+            }
+          }
+          EOF
+          # Normalize indentation (remove leading spaces from heredoc)
+          python3 -c "
+          import json, pathlib
+          p = pathlib.Path('testdata.json')
+          d = json.loads(p.read_text())
+          p.write_text(json.dumps(d, indent=2) + '\n')
+          "
+
+          git add testdata.json
+          git commit -m "chore: update NR snapshot to $TAG
+
+          New Recruit client version: $VERSION
+          Release: https://github.com/WarHub/newrecruit-har/releases/tag/$TAG"
+
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "Update NR snapshot to $TAG" \
+            --body "Automated update from the daily snapshot workflow.
+
+          **NR client version:** $VERSION
+          **Release:** https://github.com/WarHub/newrecruit-har/releases/tag/$TAG
+          **HAR SHA256:** ${{ steps.record.outputs.har_sha256 }}" \
+            --base main

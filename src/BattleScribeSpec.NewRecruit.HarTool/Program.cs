@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using BattleScribeSpec.NewRecruit;
 
 var baseUrl = "https://newrecruit.eu";
@@ -40,9 +41,11 @@ Console.WriteLine();
 await HarRecorder.RecordAsync(harPath, metadataPath, baseUrl, headless);
 
 var harSize = new FileInfo(harPath).Length;
+var harHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(harPath)));
 var clientVersion = HarRecorder.ExtractClientVersion(harPath);
 
 Console.WriteLine($"HAR recorded: {harPath} ({harSize / 1024} KB)");
+Console.WriteLine($"SHA256: {harHash}");
 Console.WriteLine($"NR client version: {clientVersion ?? "unknown"}");
 Console.WriteLine($"Metadata: {metadataPath}");
 Console.WriteLine();
