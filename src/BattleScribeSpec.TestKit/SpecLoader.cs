@@ -251,7 +251,8 @@ public static class SpecLoader
     private static ProfileSpec ConvertProfile(ProfileDef def) =>
         new(def.Id, def.Name, def.TypeId, def.TypeName, def.Hidden,
             def.Characteristics?.Select(c => new CharacteristicSpec(c.Name, c.TypeId, c.Value)).ToArray(),
-            def.Modifiers?.Select(ConvertModifier).ToArray());
+            def.Modifiers?.Select(ConvertModifier).ToArray(),
+            def.Page);
 
     private static InfoGroupSpec ConvertInfoGroup(InfoGroupDef def) =>
         new(def.Id, def.Name, def.Hidden,

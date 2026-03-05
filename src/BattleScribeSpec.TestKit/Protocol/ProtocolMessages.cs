@@ -290,6 +290,10 @@ public sealed class ProtocolSelectionProfile
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
 
+    [JsonPropertyName("page")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Page { get; set; }
+
     [JsonPropertyName("characteristics")]
     public List<ProtocolCharacteristic> Characteristics { get; set; } = [];
 }
@@ -304,6 +308,10 @@ public sealed class ProtocolSelectionRule
 
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
+
+    [JsonPropertyName("page")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Page { get; set; }
 }
 
 public sealed class ProtocolSelectionCategory
@@ -841,6 +849,10 @@ public sealed class ProtocolProfile
 
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
+
+    [JsonPropertyName("page")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Page { get; set; }
 
     [JsonPropertyName("characteristics")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

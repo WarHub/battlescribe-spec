@@ -171,7 +171,8 @@ public record ProfileSpec(
     string TypeName = "",
     bool Hidden = false,
     CharacteristicSpec[]? Characteristics = null,
-    ModifierSpec[]? Modifiers = null);
+    ModifierSpec[]? Modifiers = null,
+    string Page = "");
 
 public record CharacteristicSpec(
     string Name,

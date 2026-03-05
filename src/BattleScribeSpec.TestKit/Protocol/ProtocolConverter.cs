@@ -161,6 +161,7 @@ public static class ProtocolConverter
     static ProtocolProfile ToProtocol(ProfileSpec p) => new()
     {
         Id = p.Id, Name = p.Name, TypeId = p.TypeId, TypeName = p.TypeName, Hidden = p.Hidden,
+        Page = string.IsNullOrEmpty(p.Page) ? null : p.Page,
         Characteristics = p.Characteristics?.Select(c => new ProtocolCharacteristic
         { Name = c.Name, TypeId = c.TypeId, Value = c.Value }).ToList(),
         Modifiers = p.Modifiers?.Select(ToProtocol).ToList(),
@@ -300,7 +301,8 @@ public static class ProtocolConverter
     static ProfileSpec FromProtocol(ProtocolProfile p) => new(
         p.Id, p.Name, p.TypeId, p.TypeName, p.Hidden,
         p.Characteristics?.Select(c => new CharacteristicSpec(c.Name, c.TypeId, c.Value)).ToArray(),
-        p.Modifiers?.Select(FromProtocol).ToArray());
+        p.Modifiers?.Select(FromProtocol).ToArray(),
+        p.Page ?? "");
 
     static InfoGroupSpec FromProtocol(ProtocolInfoGroup ig) => new(
         ig.Id, ig.Name, ig.Hidden,
@@ -339,8 +341,9 @@ public static class ProtocolConverter
         s.Children.Select(ToSelectionState).ToList(),
         Profiles: s.Profiles?.Select(p => new ProfileState(
             p.Name, p.TypeId, p.TypeName, p.Hidden,
-            p.Characteristics.Select(c => new CharacteristicState(c.Name, c.TypeId, c.Value)).ToList())).ToList()!,
-        Rules: s.Rules?.Select(r => new RuleState(r.Name, r.Description, r.Hidden)).ToList()!,
+            p.Characteristics.Select(c => new CharacteristicState(c.Name, c.TypeId, c.Value)).ToList(),
+            p.Page)).ToList()!,
+        Rules: s.Rules?.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page)).ToList()!,
         Categories: s.Categories?.Select(c => new CategoryState(c.Name, c.EntryId, c.Primary)).ToList()!,
         Page: s.Page);
 
@@ -385,12 +388,12 @@ public static class ProtocolConverter
         Children = s.Children.Select(ToProtocolSelection).ToList(),
         Profiles = s.Profiles?.Select(p => new ProtocolSelectionProfile
         {
-            Name = p.Name, TypeId = p.TypeId, TypeName = p.TypeName, Hidden = p.Hidden,
+            Name = p.Name, TypeId = p.TypeId, TypeName = p.TypeName, Hidden = p.Hidden, Page = p.Page,
             Characteristics = p.Characteristics.Select(c => new ProtocolCharacteristic
             { Name = c.Name, TypeId = c.TypeId ?? "", Value = c.Value }).ToList(),
         }).ToList(),
         Rules = s.Rules?.Select(r => new ProtocolSelectionRule
-        { Name = r.Name, Description = r.Description, Hidden = r.Hidden }).ToList(),
+        { Name = r.Name, Description = r.Description, Hidden = r.Hidden, Page = r.Page }).ToList(),
         Categories = s.Categories?.Select(c => new ProtocolSelectionCategory
         { Name = c.Name, EntryId = c.EntryId, Primary = c.Primary }).ToList(),
         Page = s.Page,

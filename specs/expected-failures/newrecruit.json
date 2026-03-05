@@ -70,7 +70,7 @@
     "category": "nr-missing-feature"
   },
   {
-    "specId": "selection/rule-with-page",
+    "specId": "selection/selection-page",
     "reason": "NR does not expose page numbers on selections",
     "category": "nr-missing-feature"
   },

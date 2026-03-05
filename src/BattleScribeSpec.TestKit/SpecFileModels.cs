@@ -510,6 +510,9 @@ public sealed class ProfileDef
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
 
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
+
     [YamlMember(Alias = "characteristics")]
     public List<CharacteristicDef>? Characteristics { get; set; }
 
@@ -834,6 +837,9 @@ public sealed class ExpectedProfileDef
     [YamlMember(Alias = "hidden")]
     public bool? Hidden { get; set; }
 
+    [YamlMember(Alias = "page")]
+    public string? Page { get; set; }
+
     [YamlMember(Alias = "characteristics")]
     public List<ExpectedCharacteristicDef>? Characteristics { get; set; }
 }
@@ -860,6 +866,9 @@ public sealed class ExpectedRuleDef
 
     [YamlMember(Alias = "hidden")]
     public bool? Hidden { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string? Page { get; set; }
 }
 
 public sealed class ExpectedCategoryDef

@@ -498,7 +498,8 @@ public static class JavaModelFactory
         string id, string name, string typeId = "", string typeName = "",
         bool hidden = false,
         IEnumerable<Characteristic>? characteristics = null,
-        IEnumerable<Modifier>? modifiers = null)
+        IEnumerable<Modifier>? modifiers = null,
+        string? page = null)
     {
         var p = new Profile();
         p.setId(id);
@@ -506,6 +507,8 @@ public static class JavaModelFactory
         p.setTypeId(typeId);
         p.setTypeName(typeName);
         p.setHidden(hidden);
+        if (page != null)
+            p.setPage(page);
         if (characteristics != null)
             foreach (var c in characteristics)
                 p.getCharacteristics().add(c);

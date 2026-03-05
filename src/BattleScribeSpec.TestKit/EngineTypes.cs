@@ -54,7 +54,8 @@ public record ProfileState(
     string? TypeId,
     string? TypeName,
     bool Hidden,
-    IReadOnlyList<CharacteristicState> Characteristics);
+    IReadOnlyList<CharacteristicState> Characteristics,
+    string? Page = null);
 
 public record CharacteristicState(
     string Name,
@@ -64,7 +65,8 @@ public record CharacteristicState(
 public record RuleState(
     string Name,
     string Description,
-    bool Hidden);
+    bool Hidden,
+    string? Page = null);
 
 public record CategoryState(
     string Name,

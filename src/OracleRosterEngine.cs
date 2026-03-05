@@ -142,7 +142,7 @@ public sealed class OracleRosterEngine : IRosterEngine
             costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList(),
             children.Select(CaptureSelection).ToList(),
             Profiles: profiles.Select(CaptureProfile).ToList(),
-            Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden())).ToList(),
+            Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage())).ToList(),
             Categories: categories.Select(c => new CategoryState(c.getName() ?? "", c.getEntryId(), c.isPrimary())).ToList(),
             Page: sel.getPage());
     }
@@ -155,7 +155,8 @@ public sealed class OracleRosterEngine : IRosterEngine
             prof.getTypeId(),
             prof.getTypeName(),
             prof.isHidden(),
-            chars.Select(c => new CharacteristicState(c.getName() ?? "", c.getTypeId(), c.getValue() ?? "")).ToList());
+            chars.Select(c => new CharacteristicState(c.getName() ?? "", c.getTypeId(), c.getValue() ?? "")).ToList(),
+            prof.getPage());
     }
 
     private static List<T> JavaListToList<T>(java.util.List? javaList)

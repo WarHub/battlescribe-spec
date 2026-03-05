@@ -1369,34 +1369,11 @@ public sealed class BattleScribeOracle : IDisposable
 
         if (spec.Profiles != null)
             foreach (var profileSpec in spec.Profiles)
-            {
-                var chars = profileSpec.Characteristics?.Select(c =>
-                    JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
-                var profileModifiers = profileSpec.Modifiers?.Select(BuildModifier).ToArray();
-                var profile = JavaModelFactory.CreateProfile(profileSpec.Id, profileSpec.Name,
-                    profileSpec.TypeId, profileSpec.TypeName, profileSpec.Hidden, chars, profileModifiers);
-                entry.getProfiles().add(profile);
-            }
+                entry.getProfiles().add(BuildProfile(profileSpec));
 
         if (spec.InfoGroups != null)
             foreach (var igSpec in spec.InfoGroups)
-            {
-                var igProfiles = igSpec.Profiles?.Select(ps =>
-                {
-                    var cs = ps.Characteristics?.Select(c =>
-                        JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
-                    var ms = ps.Modifiers?.Select(BuildModifier).ToArray();
-                    return JavaModelFactory.CreateProfile(ps.Id, ps.Name, ps.TypeId, ps.TypeName, ps.Hidden, cs, ms);
-                }).ToArray();
-                var igRules = igSpec.Rules?.Select(rs =>
-                {
-                    var ms = rs.Modifiers?.Select(BuildModifier).ToArray();
-                    return JavaModelFactory.CreateRule(rs.Id, rs.Name, rs.Description, rs.Hidden, rs.Page, ms);
-                }).ToArray();
-                var igModifiers = igSpec.Modifiers?.Select(BuildModifier).ToArray();
-                entry.getInfoGroups().add(
-                    JavaModelFactory.CreateInfoGroup(igSpec.Id, igSpec.Name, igSpec.Hidden, igProfiles, igRules, igModifiers));
-            }
+                entry.getInfoGroups().add(BuildInfoGroup(igSpec));
 
         if (spec.EntryLinks != null)
             foreach (var el in spec.EntryLinks)
@@ -1442,8 +1419,9 @@ public sealed class BattleScribeOracle : IDisposable
         var chars = spec.Characteristics?.Select(c =>
             JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var page = string.IsNullOrEmpty(spec.Page) ? null : spec.Page;
         return JavaModelFactory.CreateProfile(spec.Id, spec.Name,
-            spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers);
+            spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers, page);
     }
 
     private static InfoGroup BuildInfoGroup(InfoGroupSpec spec)

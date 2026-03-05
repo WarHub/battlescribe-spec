@@ -1,0 +1,53 @@
+id: profile-with-page
+category: selection
+description: Profile on a selection preserves its page field
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-stats
+        name: Unit Stats
+        characteristicTypes:
+          - id: ct-m
+            name: M
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Veteran
+          type: unit
+          profiles:
+            - id: prof-1
+              name: Veteran
+              typeId: pt-stats
+              typeName: Unit Stats
+              page: "55"
+              characteristics:
+                - name: M
+                  typeId: ct-m
+                  value: "6"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Veteran
+              profiles:
+                - name: Veteran
+                  typeName: Unit Stats
+                  page: "55"
+                  characteristics:
+                    - name: M
+                      value: "6"

@@ -479,12 +479,13 @@ public static class CatXmlGenerator
 
     private static ProfileNode MapProfile(ProfileSpec spec)
     {
+        var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var node = Profile(
             comment: null,
             id: spec.Id,
             name: spec.Name,
             publicationId: null,
-            page: null,
+            page: page,
             hidden: spec.Hidden,
             typeId: spec.TypeId,
             typeName: spec.TypeName);

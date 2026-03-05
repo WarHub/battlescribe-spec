@@ -593,6 +593,9 @@ public sealed class SpecRunner
             if (ep.Hidden is { } h)
                 AssertEqual(stepIndex, $"{profPrefix}.hidden", h, ap.Hidden);
 
+            if (ep.Page is not null)
+                AssertEqual(stepIndex, $"{profPrefix}.page", ep.Page, ap.Page ?? "");
+
             if (ep.Characteristics is { } eChars)
             {
                 foreach (var ec in eChars)
@@ -633,6 +636,9 @@ public sealed class SpecRunner
 
             if (er.Hidden is { } h)
                 AssertEqual(stepIndex, $"{rulePrefix}.hidden", h, ar.Hidden);
+
+            if (er.Page is not null)
+                AssertEqual(stepIndex, $"{rulePrefix}.page", er.Page, ar.Page ?? "");
         }
     }
 

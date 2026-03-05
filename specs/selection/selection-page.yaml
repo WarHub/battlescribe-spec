@@ -1,6 +1,6 @@
-id: rule-with-page
+id: selection-page
 category: selection
-description: Rule on a selection preserves its page field
+description: Selection entry preserves its page field from the catalogue definition
 
 setup:
   gameSystem:
@@ -17,11 +17,7 @@ setup:
         - id: se-1
           name: Veteran
           type: unit
-          rules:
-            - id: rule-1
-              name: Stubborn
-              description: This unit never falls back
-              page: "42"
+          page: "42"
 
 steps:
   - action: addForce
@@ -33,7 +29,4 @@ steps:
       forces:
         - selections:
             - name: Veteran
-              rules:
-                - name: Stubborn
-                  description: This unit never falls back
-                  page: "42"
+              page: "42"
