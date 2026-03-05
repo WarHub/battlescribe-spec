@@ -5,8 +5,8 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared fixture that creates a NewRecruitRosterEngine in frozen (HAR replay) mode.
-/// Uses a committed HAR file — no live NR website or env var needed.
-/// Skipped when the HAR file doesn't exist or NR_FROZEN_SKIP=true.
+/// Uses a pre-recorded HAR snapshot downloaded from WarHub/newrecruit-har GitHub Releases.
+/// No live NR website or env var needed. Skipped when the HAR file doesn't exist or NR_FROZEN_SKIP=true.
 /// </summary>
 public sealed class FrozenNewRecruitFixture : IAsyncLifetime
 {

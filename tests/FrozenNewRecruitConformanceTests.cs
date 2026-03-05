@@ -8,7 +8,9 @@ namespace BattleScribeSpec.Tests;
 /// Runs declarative YAML spec files against a frozen New Recruit snapshot (HAR replay).
 /// 
 /// Unlike <see cref="NewRecruitConformanceTests"/> which tests the live website,
-/// this runs against a committed HAR file — fully offline and deterministic.
+/// this runs against a pre-recorded HAR snapshot — fully offline and deterministic.
+/// HAR snapshots are published as GitHub Releases in WarHub/newrecruit-har
+/// and downloaded into .testdata/newrecruit-har/ before running.
 ///
 /// Tests are skipped if:
 /// - The frozen HAR file doesn't exist (.testdata/newrecruit-har/newrecruit.har)

@@ -38,7 +38,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     /// <summary>
     /// Create a NewRecruitRosterEngine in frozen (HAR replay) mode.
-    /// All network requests are served from the committed HAR file.
+    /// All network requests are served from a pre-recorded HAR file (no internet required).
     /// </summary>
     public static async Task<NewRecruitRosterEngine> CreateFrozenAsync(
         string harFilePath,
