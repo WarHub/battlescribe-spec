@@ -36,9 +36,12 @@ public sealed class HarRecordingTests
         await HarRecorder.RecordAsync(harPath, metadataPath, baseUrl, headless);
 
         var harSize = new FileInfo(harPath).Length;
+        var clientVersion = HarRecorder.ExtractClientVersion(harPath);
         _output.WriteLine($"HAR recorded: {harPath} ({harSize / 1024} KB)");
+        _output.WriteLine($"NR client version: {clientVersion ?? "unknown"}");
         _output.WriteLine($"Metadata: {metadataPath}");
-        _output.WriteLine("Review and commit the updated files.");
+        if (clientVersion is not null)
+            _output.WriteLine($"Suggested release: gh release create v{clientVersion} {harPath} {metadataPath} -R WarHub/newrecruit-har --title \"NR snapshot v{clientVersion}\"");
 
         Assert.True(File.Exists(harPath), "HAR file should exist after recording");
     }

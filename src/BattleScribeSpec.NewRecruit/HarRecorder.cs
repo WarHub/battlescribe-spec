@@ -85,12 +85,15 @@ public static class HarRecorder
         // Post-process: strip non-essential entries (ads, trackers)
         await StripNonEssentialEntriesAsync(harFilePath);
 
+        var clientVersion = ExtractClientVersion(harFilePath);
+
         if (metadataFilePath is not null)
         {
             var metadata = new HarMetadata
             {
                 FrozenAt = DateTimeOffset.UtcNow,
                 SourceUrl = baseUrl,
+                ClientVersion = clientVersion,
                 Notes = "Recorded by HarRecorder for offline testing. Non-essential domains stripped.",
             };
             var json = JsonSerializer.Serialize(metadata, HarMetadataContext.Default.HarMetadata);
@@ -157,6 +160,27 @@ public static class HarRecorder
     }
 
     /// <summary>
+    /// Extracts the NR clientVersion from the HAR's HTML responses.
+    /// Looks for <c>clientVersion:"X.Y"</c> in Nuxt's __NUXT_CONFIG__.
+    /// </summary>
+    public static string? ExtractClientVersion(string harFilePath)
+    {
+        var json = File.ReadAllText(harFilePath);
+        var doc = JsonNode.Parse(json);
+        var entries = doc?["log"]?["entries"]?.AsArray();
+        if (entries is null) return null;
+        foreach (var entry in entries)
+        {
+            var text = entry?["response"]?["content"]?["text"]?.GetValue<string>();
+            if (text is null) continue;
+            var match = System.Text.RegularExpressions.Regex.Match(text, @"clientVersion:""([^""]+)""");
+            if (match.Success)
+                return match.Groups[1].Value;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Finds the frozen HAR file by searching upward from the given directory.
     /// </summary>
     public static string? FindFrozenHarFile(string? startDir = null)
@@ -177,6 +201,7 @@ public record HarMetadata
 {
     public DateTimeOffset FrozenAt { get; init; }
     public string SourceUrl { get; init; } = "";
+    public string? ClientVersion { get; init; }
     public string Notes { get; init; } = "";
 }
 
