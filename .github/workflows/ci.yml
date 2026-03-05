@@ -33,7 +33,7 @@ jobs:
         run: dotnet build --no-restore
 
       - name: Test
-        run: dotnet test --no-build --logger GitHubActions --filter "FullyQualifiedName!~NewRecruit&FullyQualifiedName!~FrozenNewRecruit&FullyQualifiedName!~HarRecording"
+        run: dotnet test --no-build --logger GitHubActions --filter "FullyQualifiedName!~NewRecruit&FullyQualifiedName!~FrozenNewRecruit"
         env:
           WH40K_DATA_DIR: ${{ github.workspace }}/../wh40k-9e
 
