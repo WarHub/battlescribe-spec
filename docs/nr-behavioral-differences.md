@@ -9,122 +9,26 @@
 
 | Metric | Value |
 |--------|-------|
-| Total specs run (NR) | 240 |
-| NR passing | 200 (83%) |
-| NR failing | 40 |
-| Oracle (BattleScribe) baseline | 282/282 passing (100%) |
+| Total specs run (NR) | 236 |
+| NR passing | 215 (91%) |
+| NR expected failures | 21 |
+| NR flaky (pass individually) | ~6 |
+| Oracle (BattleScribe) baseline | 236/236 passing (100%) |
 
 ### Failure Breakdown
 
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
-| [Structured error links](#1-structured-error-links) | 10 | Medium | NR returns errors but without structured from/on links |
-| [Entry ordering](#2-entry-ordering) | 10 | Low | Selection order differs, data is correct |
-| [Constraint behavior](#3-constraint-behavior-differences) | 6 | Medium | NR differs on entry-link constraints and hidden entries |
-| [DataSource resolution](#4-datasource-resolution) | 5 | Infra | wh40k-10e v10.14.0 tag removed upstream |
-| [Missing features](#5-missing-features) | 4 | Low | Page numbers, unset-primary, cost limits |
-| [Auto-select edge cases](#6-auto-select-edge-cases) | 2 | Low | Residual auto-select side effects |
-| [Adapter bugs](#7-adapter-bugs) | 2 | Adapter | Multi-catalogue entry lookup failures |
-| [Flaky / timeout](#8-flaky-tests) | 1 | Infra | NR page load timeout |
+| [DataSource resolution](#1-datasource-resolution) | 5 | Infra | wh40k-10e v10.14.0 tag removed upstream |
+| [Error placement](#2-error-placement) | 4 | Medium | NR places constraint errors on selection, not category |
+| [Import ordering](#3-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
+| [Missing features](#4-missing-features) | 3 | Low | Page numbers, unset-primary |
+| [Scope/condition evaluation](#5-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and percent conditions differently |
+| [Other behavioral differences](#6-other-behavioral-differences) | 3 | Medium | Cost limit error format, auto-select, hidden enforcement |
 
 ---
 
-## 1. Structured Error Links
-
-**10 specs** — NR validates constraints but returns errors as simple strings,
-not as structured objects with `from` (entry/constraint path) and `on` (roster
-element) fields.
-
-All 10 specs expect error assertions like:
-```yaml
-error:
-  on: "category cat-troops"
-  from: "se-unit-a/con-max-1"
-```
-
-NR's validation errors are present (it does enforce constraints) but can't be
-matched because the adapter reads them as flat strings without structured links.
-
-| Spec | Expected error link |
-|------|-------------------|
-| `constraint/constraint-cost-limit-linked` | `on='roster', from='costLimits/ct-pts'` |
-| `constraint/constraint-cost-max-linked` | `on='category', from='se-unit-a/con-cost-max'` |
-| `constraint/constraint-cost-min-linked` | `on='category', from='se-unit-a/con-cost-min'` |
-| `constraint/constraint-hidden-violation-linked` | `on='category', from='se-unit-a/hidden'` |
-| `constraint/constraint-max-violation-linked` | `on='category', from='se-unit-a/con-max-1'` |
-| `constraint/constraint-min-violation-linked` | `on='category', from='se-unit-a/con-min-1'` |
-| `constraint/constraint-min-on-force-linked` | `on='force', from='se-unit-a/con-min-force'` |
-| `constraint/constraint-min-and-max` | `on='category', from='se-unit-a/con-max-2'` |
-| `constraint/constraint-multiple-errors-linked` | Two errors with different links |
-| `constraint/constraint-shared-linked` | `on='category', from='se-unit-a/con-min-shared'` |
-
-**Root cause**: The NR state reader extracts validation errors from the NR
-diagnostic store, but NR's error objects don't expose the source entry ID or
-constraint ID in the same way BattleScribe does. Fixing this requires either
-NR-side changes or adapter-side heuristic matching.
-
----
-
-## 2. Entry Ordering
-
-**10 specs** — NR returns selections in a different order than BattleScribe.
-
-NR orders entries by its internal selector tree traversal (typically by category,
-then by selector order), while BattleScribe uses the catalogue's declared
-`selectionEntries` order. The data is identical — only position differs.
-
-| Spec | Expected first | NR returns first |
-|------|---------------|-----------------|
-| `condition/condition-instance-of-by-type` | Detector | Basic Model |
-| `condition/condition-percent-value` | Unit A | Percent Met |
-| `scope/scope-include-child-forces` | Unit A | Child Forces Included |
-| `scope/scope-include-child-forces-nested` | Squad | Veteran Squad |
-| `selection/catalogue-link-import` | Faction Unit | Common Unit |
-| `selection/import-false-entry-direct-use` | Public Unit | Internal Unit |
-| `selection/import-false-entry-hidden-via-link` | Faction Unit | Shared Unit |
-| `selection/import-true-entry-visible-via-link` | Faction Unit | Shared Unit |
-| `selection/selection-child-entry` | Sergeant | Medic |
-| `selection/selection-multiple-types` | Sergeant (model) | Power Sword (upgrade) |
-
-**Impact**: Low. Consider adding `matchOrder: false` to the spec format for
-position-insensitive assertions.
-
----
-
-## 3. Constraint Behavior Differences
-
-**6 specs** — NR doesn't fire validation errors for entry-link constraints or
-produces different behavior for hidden entries.
-
-### Entry Link Constraints (4 specs)
-
-NR doesn't enforce constraints that were defined on entry links or on shared
-entries accessed via entry links. In BattleScribe, catalogue expansion copies
-constraints from shared entries and entry links into expanded entries. NR may
-handle entry link resolution differently.
-
-| Spec | Issue |
-|------|-------|
-| `constraint/constraint-entry-link-merged` | No error when both shared + link constraints violated |
-| `constraint/constraint-entry-link-own` | No error for constraint on entry link itself |
-| `constraint/constraint-entry-link-shared-counting` | Shared counting across entry links not working |
-| `constraint/constraint-entry-link-shared-target` | Shared entry constraint not enforced via link |
-
-### Min Violation (1 spec)
-
-| Spec | Issue |
-|------|-------|
-| `constraint/constraint-min-violation` | `hasValidationErrors: expected True but got False` — NR may not validate min constraints in same scenarios |
-
-### Hidden Entry Enforcement (1 spec)
-
-| Spec | Issue |
-|------|-------|
-| `constraint/constraint-hidden-enforcement` | NR doesn't auto-select hidden entries or counts them differently — expected 1 selection, got 0 |
-
----
-
-## 4. DataSource Resolution
+## 1. DataSource Resolution
 
 **5 specs** — All wh40k-10e real-world specs fail because the upstream BSData
 repository removed the `v10.14.0` tag.
@@ -145,50 +49,107 @@ fatal: Remote branch v10.14.0 not found in upstream origin
 
 ---
 
-## 5. Missing Features
+## 2. Error Placement
 
-**4 specs** — NR doesn't implement or expose certain BattleScribe features.
+**4 specs** — NR places max/cost constraint errors on the **selection** node,
+while BattleScribe places them on the **category** node.
+
+All 4 specs expect error assertions like:
+```yaml
+error:
+  on: "category cat-troops"    # BattleScribe puts error here
+  from: "se-unit-a/con-max-1"
+```
+
+NR fires the same validation error but attaches it to the selection that violated
+the constraint, not the category the selection belongs to.
+
+| Spec | Expected `on` | NR `on` |
+|------|--------------|---------|
+| `constraint/constraint-cost-max-linked` | `category cat-troops` | `selection se-unit-a` |
+| `constraint/constraint-hidden-violation-linked` | `category cat-troops` | `selection se-unit-a` |
+| `constraint/constraint-max-violation-linked` | `category cat-troops` | `selection se-unit-a` |
+| `constraint/constraint-min-and-max` | `category cat-troops` | `selection se-unit-a` |
+
+**Root cause**: NR's `checkConstraints()` method reports errors on the node
+being checked. For max constraints with `scope=parent`, NR reports on the
+selection. BattleScribe's engine collects errors per-category during force
+validation and attributes them to the category node.
+
+---
+
+## 3. Import Ordering
+
+**3 specs** — NR orders imported entries from CatalogueLinks BEFORE
+faction-specific entries. BattleScribe puts faction entries first.
+
+| Spec | Expected first selection | NR returns first |
+|------|-------------------------|-----------------|
+| `selection/catalogue-link-import` | Faction Unit | Common Unit |
+| `selection/import-false-entry-hidden-via-link` | Faction Unit | Common Unit |
+| `selection/import-true-entry-visible-via-link` | Squad | Veteran Squad |
+
+**Impact**: Low — cosmetic ordering difference. Data is correct.
+
+---
+
+## 4. Missing Features
+
+**3 specs** — NR doesn't implement or expose certain BattleScribe features.
 
 | Spec | Feature | Detail |
 |------|---------|--------|
 | `modifier/modifier-entry-page` | Page numbers | NR doesn't expose `page` on selections |
 | `selection/rule-with-page` | Page numbers | NR doesn't expose `page` on selections |
 | `modifier/modifier-category-unset-primary` | Unset-primary modifier | NR ignores the `unset-primary` category modifier |
-| `cost/cost-default-limit-positive` | Cost limit validation | NR doesn't enforce `defaultCostLimit` the same way |
 
 ---
 
-## 6. Auto-Select Edge Cases
+## 5. Scope/Condition Evaluation
 
-**2 specs** — Both engines auto-select entries with `min >= 1` constraints, but
-edge cases remain.
+**3 specs** — NR evaluates certain condition types differently, causing
+modifiers to trigger when they shouldn't (or vice versa).
 
 | Spec | Issue |
 |------|-------|
-| `constraint/constraint-forces-field` | Auto-selected entries counted when spec expects empty force |
-| `refresh/refresh-full-lifecycle` | Costs doubled (150→210, 60→120) — auto-selected entries not properly accounted for in lifecycle |
+| `scope/scope-include-child-forces` | Condition with `scope=force, childForces=true` triggers when it shouldn't |
+| `scope/scope-include-child-forces-nested` | Same issue in nested force scenario |
+| `condition/condition-percent-value` | Percent-value condition evaluates differently — modifier name change triggered incorrectly |
+
+These specs test complex condition evaluation where NR's implementation
+diverges from BattleScribe's. The modifier fires (changing the selection name),
+proving the condition evaluates to true in NR but false in BS.
 
 ---
 
-## 7. Adapter Bugs
+## 6. Other Behavioral Differences
 
-**2 specs** — Failures caused by the NR adapter's entry lookup logic, not by
-NR itself.
+**3 specs** with distinct NR behavioral differences:
 
-| Spec | Error |
+### Cost Limit Error Format
+| Spec | Issue |
 |------|-------|
-| `force/force-multi-catalogue-two-forces` | `Entry 'se-a1' not found in force selector tree` — adapter can't find entry in second force's catalogue |
-| `selection/catalogue-link-shared-entry` | `Entry index 0 out of range (catalogue has 0 entries)` — adapter doesn't find shared entries from linked catalogue |
+| `constraint/constraint-cost-limit-linked` | Error `from` field uses `ct-pts` instead of `costLimits/ct-pts` |
 
----
+NR fires the cost limit error correctly but the constraint path format differs.
 
-## 8. Flaky Tests
-
-**1 spec** — Intermittent timeout loading the NR web app.
-
-| Spec | Error |
+### Auto-Select Root Entries
+| Spec | Issue |
 |------|-------|
-| `selection/selection-entry-group-default` | `Timeout 30000ms exceeded` navigating to newrecruit.eu |
+| `constraint/constraint-forces-field` | NR auto-selects root entry with `min>=1` when adding force; BS doesn't |
+
+After `addForce`, spec expects 0 selections but NR has 1 (auto-selected entry
+with `type=model, min=1`). BattleScribe only auto-selects child entries, not
+root entries in the forces field.
+
+### Hidden Selection Filtering
+| Spec | Issue |
+|------|-------|
+| `constraint/constraint-hidden-enforcement` | NR filters hidden selections entirely from the tree |
+
+BattleScribe keeps hidden selections in the tree (visible to assertions) but
+marks them hidden. NR removes them completely — `selectionCount` is 0 instead
+of 1 for a hidden auto-selected entry.
 
 ---
 
@@ -196,6 +157,19 @@ NR itself.
 
 Technical findings from reverse-engineering NR's internal API and comparing
 with BattleScribe's decompiled Java engine.
+
+### NR Selection Ordering
+
+NR sorts selections **alphabetically by name** within each category. BattleScribe
+uses **insertion order** — selections appear in the order the user added them.
+
+The adapter tracks insertion order by tagging new selections with a monotonically
+increasing `__bsspec_seq` sequence number on the raw Vue object. The state reader
+sorts by this tag, with auto-selected entries (untagged) sorting first in
+catalogue definition order.
+
+Child selections always sort by **catalogue definition order** (entryOrder) since
+they're part of the entry definition, not user-ordered.
 
 ### NR Selection Model: `incrementAmount()` vs `addInstance()`
 
@@ -209,15 +183,6 @@ parent is selected. These are placeholder objects representing available entries
 
 This discovery resolved the **child cost aggregation** issue (8 specs fixed).
 
-Key NR node structure:
-- `sel.selector` — back-reference to entry definition template
-- `sel.selectors` — array of child entry templates
-- `sel.state.costs.pts` — raw cost number
-- `sel.state.totalCosts.pts` — total including children
-- `sel.state.selections` — count of selected children
-- Prototype methods: `getAmount()`, `incrementAmount()`, `decrementAmount()`,
-  `getCosts()`, `getTotalCosts()`, `getSelections()`, `getEntries()`, etc.
-
 ### BattleScribe Auto-Select Mechanism
 
 Decompiled from `engine.a.f` (BattleScribe Java engine):
@@ -228,6 +193,18 @@ Decompiled from `engine.a.f` (BattleScribe Java engine):
 - `getDefaultAmount` returns the entry's `min` constraint value
 
 The Oracle adapter replicates this via reflection: `_autoSelectMethod.Invoke()`.
+
+### NR Error Extraction
+
+NR validation errors are extracted by calling `checkConstraints()` on each
+roster node, then reading the node's error arrays. Key findings:
+
+- `checkConstraints()` must be called explicitly per node
+- Can crash with undefined reference errors — wrapped in try-catch
+- Errors on army node are cost limit violations
+- Error structure: `{message, constraintId?, ownerType, ownerEntryId}`
+- ConstraintId format differs from BS (no `costLimits/` prefix for cost limits)
+- Max constraint errors go on the selection, not the category (unlike BS)
 
 ### Catalogue Expansion and Entry Links
 
@@ -265,15 +242,6 @@ Three methods for loading game data:
 2. **`addGithubSystem()`** — downloads from BSData GitHub repos
 3. **Mock `showDirectoryPicker()`** — intercepts folder upload UI
 
-### Debug Code and Pinia Reactivity
-
-Adding extra JS function calls to NR's reactive APIs (e.g., `calcTotalCosts()`,
-`getTotalCosts()`) during the SAME `EvaluateAsync` that reads state causes
-Pinia reactivity interference — costs disappear, forces go missing, complete
-state read failure.
-
-**Solution**: Always probe NR's API in SEPARATE `EvaluateAsync` calls.
-
 ---
 
 ## Architecture Notes
@@ -290,7 +258,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   `incrementAmount`, `delete`, `setAmount`)
 - **State reading**: `getCurrentList().army` tree traversal using NR's reactive
   object API (`getForces`, `getSelections`, `getName`, `getCosts`, etc.)
-- **Validation**: Error extraction from NR's diagnostic store
+- **Validation**: Error extraction via `checkConstraints()` per node
 
 ### Test Infrastructure
 
@@ -299,13 +267,18 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 - **Gating**: NR tests only run when `NR_ENGINE_URL` environment variable is set
 - **Expected failures**: `specs/expected-failures/newrecruit.json` lists known
   differences so they don't block CI
-- **Oracle comparison**: All 282 Oracle (BattleScribe Java engine) tests pass
+- **Flaky tests**: ~6 specs pass individually but timeout in full suite runs
+  (~30 min, 236 specs serial) due to NR session degradation
+- **Oracle comparison**: All 236 Oracle (BattleScribe Java engine) tests pass
   as the reference baseline
 
-### Resolved Issues
+### Resolved Issues (This Session)
 
 | Issue | Fix | Specs Fixed |
 |-------|-----|-------------|
+| Selection ordering | Insertion-order tracking via `__bsspec_seq` tags | ~15 |
+| Action/state index mismatch | `getSortedSelections()` helper for all action methods | 3 |
 | Child cost aggregation | `incrementAmount()` instead of `addInstance()` | 8 |
-| Auto-select not replicated | Oracle adapter calls `x()` via reflection | ~15 |
+| Error extraction | Tree-walking `checkConstraints()` with structured error parsing | ~10 |
 | Entry link resolution | Oracle queries `_engine.e(force).R()` for expanded entries | 4 |
+| Auto-select replication | Oracle adapter calls `x()` via reflection | ~15 |

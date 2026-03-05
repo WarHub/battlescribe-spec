@@ -46,6 +46,30 @@ public static class NewRecruitActions
         """;
 
     /// <summary>
+    /// JS helper: get selections sorted by insertion order (matching state reader).
+    /// Untagged selections (auto-selected by NR) sort first in catalogue order.
+    /// User-selected entries sort by the sequence number tagged during SelectEntry.
+    /// </summary>
+    private const string JsGetSortedSelections = """
+        function getSortedSelections(force) {
+            const sels = getSelections(force);
+            const entryOrder = window.__bsspec?.entryOrder || [];
+            const orderMap = {};
+            entryOrder.forEach((id, i) => { orderMap[id] = i; });
+            return [...sels].sort((a, b) => {
+                const ra = a?.__v_raw || a;
+                const rb = b?.__v_raw || b;
+                const seqA = ra?.__bsspec_seq ?? -1;
+                const seqB = rb?.__bsspec_seq ?? -1;
+                if (seqA !== seqB) return seqA - seqB;
+                const idA = ra?.selector?.source?.id || ra?.source?.id;
+                const idB = rb?.selector?.source?.id || rb?.source?.id;
+                return (orderMap[idA] ?? 999) - (orderMap[idB] ?? 999);
+            });
+        }
+        """;
+
+    /// <summary>
     /// JS helper: recursively find a selector by ID in the selector tree.
     /// NR's tree: node.selectors[].first().selectors[] — entries are leaf selectors.
     /// </summary>
@@ -294,6 +318,12 @@ public static class NewRecruitActions
 
                     const force = forces[forceIndex];
 
+                    // Record existing selections before adding
+                    {{JsGetSelections}}
+                    const before = new Set(
+                        getSelections(force).map(s => (s?.__v_raw || s)?.uid || '')
+                    );
+
                     {{JsFindSelectorById}}
                     const selector = findSelectorById(force, entryId);
                     if (!selector) return `Entry '${entryId}' not found in force selector tree`;
@@ -306,6 +336,20 @@ public static class NewRecruitActions
                     } else {
                         selector.setAmount?.((selector.getAmount?.() || 0) + 1);
                     }
+
+                    // Tag the new selection with insertion sequence number.
+                    // BattleScribe displays selections in insertion order;
+                    // NR sorts alphabetically. Tagging lets the state reader
+                    // reconstruct the correct insertion order.
+                    window.__bsspec._selSeq = (window.__bsspec._selSeq || 0) + 1;
+                    const after = getSelections(force);
+                    for (const s of after) {
+                        const raw = s?.__v_raw || s;
+                        if (raw && !before.has(raw.uid || '') && raw.__bsspec_seq === undefined) {
+                            raw.__bsspec_seq = window.__bsspec._selSeq;
+                        }
+                    }
+
                     return null;
                 } catch(e) {
                     return 'SelectEntry error: ' + e.message;
@@ -381,10 +425,11 @@ public static class NewRecruitActions
 
                     {{JsGetForces}}
                     {{JsGetSelections}}
+                    {{JsGetSortedSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                    const selections = getSelections(forces[forceIndex]);
+                    const selections = getSortedSelections(forces[forceIndex]);
                     if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
                     const sel = selections[selectionIndex];
@@ -439,10 +484,11 @@ public static class NewRecruitActions
 
                     {{JsGetForces}}
                     {{JsGetSelections}}
+                    {{JsGetSortedSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                    const selections = getSelections(forces[forceIndex]);
+                    const selections = getSortedSelections(forces[forceIndex]);
                     if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
                     const sel = selections[selectionIndex];
@@ -473,10 +519,11 @@ public static class NewRecruitActions
 
                     {{JsGetForces}}
                     {{JsGetSelections}}
+                    {{JsGetSortedSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                    const selections = getSelections(forces[forceIndex]);
+                    const selections = getSortedSelections(forces[forceIndex]);
                     if (entryIndex >= selections.length) return `Selection index ${entryIndex} out of range`;
 
                     selections[entryIndex].setAmount(count);
@@ -502,10 +549,18 @@ public static class NewRecruitActions
 
                     {{JsGetForces}}
                     {{JsGetSelections}}
+                    {{JsGetSortedSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
-                    const selections = getSelections(forces[forceIndex]);
+                    const force = forces[forceIndex];
+
+                    // Record existing selections before duplicating
+                    const before = new Set(
+                        getSelections(force).map(s => (s?.__v_raw || s)?.uid || '')
+                    );
+
+                    const selections = getSortedSelections(force);
                     if (selectionIndex >= selections.length) return `Selection index ${selectionIndex} out of range`;
 
                     const sel = selections[selectionIndex];
@@ -514,6 +569,17 @@ public static class NewRecruitActions
                     } else {
                         return 'dupe() method not available on selection';
                     }
+
+                    // Tag the duplicated selection with insertion sequence
+                    window.__bsspec._selSeq = (window.__bsspec._selSeq || 0) + 1;
+                    const after = getSelections(force);
+                    for (const s of after) {
+                        const raw = s?.__v_raw || s;
+                        if (raw && !before.has(raw.uid || '') && raw.__bsspec_seq === undefined) {
+                            raw.__bsspec_seq = window.__bsspec._selSeq;
+                        }
+                    }
+
                     return null;
                 } catch(e) {
                     return 'DuplicateSelection error: ' + e.message;

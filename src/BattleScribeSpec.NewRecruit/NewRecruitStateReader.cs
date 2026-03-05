@@ -28,14 +28,15 @@ public static class NewRecruitStateReader
         // Return JSON string to avoid Playwright's type coercion issues with nested records
         var json = await page.EvaluateAsync<string>("""
             (() => {
+                const emptyErr = msg => ({ message: msg, ownerType: null, ownerEntryId: null, entryId: null, constraintId: null });
                 const empty = { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
 
                 // Read from global reference saved during Setup
                 const spec = window.__bsspec;
-                if (!spec) return JSON.stringify({...empty, validationErrors: ['window.__bsspec not set — was Setup called?']});
+                if (!spec) return JSON.stringify({...empty, validationErrors: [emptyErr('window.__bsspec not set — was Setup called?')]});
 
                 const army = spec.army;
-                if (army === null || army === undefined) return JSON.stringify({...empty, validationErrors: ['army is null']});
+                if (army === null || army === undefined) return JSON.stringify({...empty, validationErrors: [emptyErr('army is null')]});
 
                 try {
                     const result = {
@@ -47,7 +48,7 @@ public static class NewRecruitStateReader
                     };
                     return JSON.stringify(result);
                 } catch(e) {
-                    return JSON.stringify({ ...empty, validationErrors: ['State read error: ' + e.message] });
+                    return JSON.stringify({ ...empty, validationErrors: [emptyErr('State read error: ' + e.message)] });
                 }
 
                 function extractForces(army) {
@@ -59,16 +60,58 @@ public static class NewRecruitStateReader
                     return forces.map(f => ({
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
-                        selections: extractSelections(f)
+                        selections: extractSelections(f, false)
                     }));
                 }
 
-                function extractSelections(parent) {
+                function extractSelections(parent, sortByEntryOrder) {
                     // getSelections() returns selected entries; getChildren() is fallback
                     let selections = parent.getSelections?.();
                     if (!selections?.length) selections = parent.getChildren?.();
                     if (!selections?.length) selections = [];
-                    return selections.map(s => extractSelection(s));
+
+                    const entryOrder = window.__bsspec?.entryOrder || [];
+                    const orderMap = {};
+                    entryOrder.forEach((id, i) => { orderMap[id] = i; });
+
+                    if (!sortByEntryOrder) {
+                        // Top-level: sort by insertion sequence (tagged during
+                        // SelectEntry/DuplicateSelection). Untagged entries
+                        // (auto-selected by NR) sort first in catalogue order.
+                        const sorted = [...selections].sort((a, b) => {
+                            const ra = a?.__v_raw || a;
+                            const rb = b?.__v_raw || b;
+                            const seqA = ra?.__bsspec_seq ?? -1;
+                            const seqB = rb?.__bsspec_seq ?? -1;
+                            if (seqA !== seqB) return seqA - seqB;
+                            // Tiebreak: catalogue order for auto-selected entries
+                            const idA = ra?.selector?.source?.id || ra?.source?.id;
+                            const idB = rb?.selector?.source?.id || rb?.source?.id;
+                            const oA = orderMap[idA] ?? 999;
+                            const oB = orderMap[idB] ?? 999;
+                            return oA - oB;
+                        });
+                        return sorted.map(s => extractSelection(s));
+                    }
+
+                    // Child selections: sort by catalogue-defined entry order.
+                    // NR sorts children alphabetically, but BS uses catalogue
+                    // definition order. Children are part of the entry definition,
+                    // not user-ordered, so catalogue order is correct.
+                    const sorted = [...selections].sort((a, b) => {
+                        const ra = a?.__v_raw || a;
+                        const rb = b?.__v_raw || b;
+                        const idA = ra?.selector?.source?.id || ra?.source?.id;
+                        const idB = rb?.selector?.source?.id || rb?.source?.id;
+                        const orderA = orderMap[idA] ?? 999;
+                        const orderB = orderMap[idB] ?? 999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        const nameA = ra?.getName?.() || ra?.source?.name || '';
+                        const nameB = rb?.getName?.() || rb?.source?.name || '';
+                        return nameA.localeCompare(nameB);
+                    });
+
+                    return sorted.map(s => extractSelection(s));
                 }
 
                 function extractSelection(sel) {
@@ -88,7 +131,7 @@ public static class NewRecruitStateReader
                             typeId: c.typeId || '',
                             value: c.value || 0
                         })),
-                        children: extractSelections(sel),
+                        children: extractSelections(sel, true),
                         profiles: profiles.map(p => ({
                             name: p.name || p.getName?.() || '',
                             typeId: p.typeId || null,
@@ -163,12 +206,147 @@ public static class NewRecruitStateReader
                 }
 
                 function extractErrors(army) {
-                    // NR uses errors/allErrors properties on nodes
-                    const errors = army.allErrors || army.errors || [];
-                    if (Array.isArray(errors)) {
-                        return errors.map(e => typeof e === 'string' ? e : (e.message || e.text || JSON.stringify(e)));
+                    // NR doesn't validate lazily — must explicitly call
+                    // checkConstraints() to populate error arrays on each node.
+                    try { army.checkConstraints(); } catch(e) {}
+                    const forces = army.getForces?.() || [];
+                    for (const f of forces) {
+                        try { f.checkConstraints?.(); } catch(e) {}
+                        for (const cat of (f.getCategories?.() || []))
+                            try { cat.checkConstraints?.(); } catch(e) {}
+                        for (const sel of (f.getSelections?.() || [])) {
+                            try { sel.checkConstraints?.(); } catch(e) {}
+                            // Also check children recursively
+                            (function checkChildSels(parent) {
+                                for (const child of (parent.getSelections?.() || [])) {
+                                    try { child.checkConstraints?.(); } catch(e) {}
+                                    checkChildSels(child);
+                                }
+                            })(sel);
+                        }
                     }
-                    return [];
+
+                    // Walk the tree, collecting errors per-node with
+                    // position-based ownerType (roster/force/category/selection).
+                    const seen = new Set();
+                    const result = [];
+
+                    function addError(e, ownerType, ownerNode) {
+                        const hash = e.hash || '';
+                        if (seen.has(hash) && hash) return;
+                        if (hash) seen.add(hash);
+
+                        const msg = typeof e === 'string' ? e
+                            : (e.msg || e.message || e.text || '');
+                        const cleanMsg = msg.replace(/<[^>]*>/g, '');
+
+                        // ownerEntryId: try the node's source.id (contains the
+                        // catalogue XML ID of the category link / entry),
+                        // then look up the targetId if it's a category link.
+                        let ownerEntryId = null;
+                        const raw = ownerNode?.__v_raw || ownerNode;
+                        if (raw) {
+                            // For categories: source references the categoryLink,
+                            // we need the categoryEntry targetId
+                            const srcId = raw.source?.id;
+                            const targetId = raw.source?.targetId;
+                            ownerEntryId = targetId || srcId || raw.getId?.() || null;
+                        }
+
+                        // constraintId from the constraint object (preserves XML ID)
+                        let constraintId = null;
+                        if (e.constraint?.id) constraintId = e.constraint.id;
+
+                        // entryId: find which child entry defined this constraint
+                        // by searching selectors under the owner node — each selector
+                        // has source.constraints[] that preserves XML constraint IDs.
+                        let entryId = null;
+                        if (constraintId && ownerNode) {
+                            const rawOwner = ownerNode.__v_raw || ownerNode;
+                            const selectors = rawOwner.selectors || [];
+                            for (const sel of selectors) {
+                                const rawSel = sel?.__v_raw || sel;
+                                const srcCons = rawSel?.source?.constraints || [];
+                                for (const c of srcCons) {
+                                    if (c.id === constraintId) {
+                                        entryId = rawSel.source?.id || null;
+                                        break;
+                                    }
+                                }
+                                if (entryId) break;
+                            }
+                            // Also check entries if selectors didn't find it
+                            if (!entryId) {
+                                const entries = rawOwner.getEntries?.() || [];
+                                for (const entry of entries) {
+                                    const rawEntry = entry?.__v_raw || entry;
+                                    const selSrc = rawEntry?.selector?.source;
+                                    if (selSrc?.constraints) {
+                                        for (const c of selSrc.constraints) {
+                                            if (c.id === constraintId) {
+                                                entryId = selSrc.id || rawEntry.source?.id || null;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (entryId) break;
+                                }
+                            }
+                        }
+
+                        result.push({
+                            message: cleanMsg,
+                            ownerType, ownerEntryId,
+                            entryId, constraintId
+                        });
+                    }
+
+                    // Roster-level errors
+                    for (const e of (army.errors || []))
+                        addError(e, 'roster', army);
+
+                    for (const f of forces) {
+                        // Force-level errors
+                        for (const e of (f.errors || []))
+                            addError(e, 'force', f);
+                        // Category-level errors
+                        for (const cat of (f.getCategories?.() || []))
+                            for (const e of (cat.errors || []))
+                                addError(e, 'category', cat);
+                        // Selection-level errors (recursive)
+                        function walkSel(sel) {
+                            for (const e of (sel.errors || []))
+                                addError(e, 'selection', sel);
+                            for (const child of (sel.getSelections?.() || []))
+                                walkSel(child);
+                        }
+                        for (const sel of (f.getSelections?.() || []))
+                            walkSel(sel);
+                    }
+
+                    // If tree walk found nothing, try getErrors() as fallback
+                    // (walks the tree internally, returns all errors)
+                    if (result.length === 0) {
+                        try {
+                            const errs = army.getErrors?.() || [];
+                            for (const e of errs) {
+                                const hash = e.hash || '';
+                                if (seen.has(hash) && hash) continue;
+                                if (hash) seen.add(hash);
+                                const msg = (e.msg || e.message || '').replace(/<[^>]*>/g, '');
+                                const constraintId = e.constraint?.id || null;
+                                result.push({
+                                    message: msg,
+                                    ownerType: e.scope || null,
+                                    ownerEntryId: null,
+                                    entryId: null,
+                                    constraintId
+                                });
+                            }
+                        } catch(ex) {}
+                    }
+
+                    return result;
                 }
             })()
             """);
@@ -203,7 +381,12 @@ public static class NewRecruitStateReader
             snapshot.GameSystemId,
             forces,
             costs,
-            snapshot.ValidationErrors.Select(e => new ValidationErrorState(e)).ToList());
+            snapshot.ValidationErrors.Select(e => new ValidationErrorState(
+                e.Message,
+                OwnerType: e.OwnerType,
+                OwnerEntryId: e.OwnerEntryId,
+                EntryId: e.EntryId,
+                ConstraintId: e.ConstraintId)).ToList());
     }
 
     private static SelectionState MapSelection(NrSelectionSnapshot sel)
@@ -235,7 +418,16 @@ public static class NewRecruitStateReader
         public string GameSystemId { get; init; } = "";
         public List<NrForceSnapshot> Forces { get; init; } = [];
         public List<NrCostSnapshot> Costs { get; init; } = [];
-        public List<string> ValidationErrors { get; init; } = [];
+        public List<NrErrorSnapshot> ValidationErrors { get; init; } = [];
+    }
+
+    internal record NrErrorSnapshot
+    {
+        public string Message { get; init; } = "";
+        public string? OwnerType { get; init; }
+        public string? OwnerEntryId { get; init; }
+        public string? EntryId { get; init; }
+        public string? ConstraintId { get; init; }
     }
 
     internal record NrForceSnapshot

@@ -14,6 +14,11 @@ namespace BattleScribeSpec.NewRecruit;
 public sealed class NewRecruitRosterEngine : IRosterEngine
 {
     private readonly NewRecruitBrowser _browser;
+
+    /// <summary>
+    /// Exposes the underlying browser for advanced probing in integration tests.
+    /// </summary>
+    internal NewRecruitBrowser Browser => _browser;
     private bool _disposed;
     private GameSystemSpec? _gameSystem;
     private CatalogueSpec[]? _catalogues;
@@ -158,6 +163,18 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
             if (setupResult != null)
                 errors.Add(setupResult);
+
+            // Save catalogue-defined entry order to window.__bsspec.entryOrder
+            // so the state reader can sort selections to match BS ordering.
+            if (setupResult == null && catalogues.Length > 0)
+            {
+                var entryOrder = new List<string>();
+                foreach (var cat in catalogues)
+                    CollectEntryIds(cat.SelectionEntries, entryOrder);
+                await _browser.Page.EvaluateAsync(
+                    "entryOrder => { if (window.__bsspec) window.__bsspec.entryOrder = entryOrder; }",
+                    entryOrder.ToArray());
+            }
         }
         catch (Exception ex)
         {
@@ -426,6 +443,20 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         {
             _disposed = true;
             _browser.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    /// <summary>
+    /// Recursively collect entry IDs from selection entries in catalogue-defined order.
+    /// Used to preserve XML ordering for state reader sorting.
+    /// </summary>
+    private static void CollectEntryIds(SelectionEntrySpec[]? entries, List<string> ids)
+    {
+        if (entries is null) return;
+        foreach (var entry in entries)
+        {
+            ids.Add(entry.Id);
+            CollectEntryIds(entry.ChildEntries, ids);
         }
     }
 }
