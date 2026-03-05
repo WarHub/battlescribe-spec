@@ -367,7 +367,9 @@ public static class NewRecruitActions
 
     /// <summary>
     /// Select a child entry under an existing selection.
-    /// Child entries are in the selection's selector tree.
+    /// In NR, child entries already exist as nodes with amount=0 when the parent
+    /// is selected. To "select" a child, we call incrementAmount() on the
+    /// existing child node (not addInstance() on the selector template).
     /// </summary>
     public static async Task SelectChildEntryByIdAsync(IPage page, int forceIndex, int selectionIndex, string childEntryId)
     {
@@ -387,16 +389,30 @@ public static class NewRecruitActions
 
                     const sel = selections[selectionIndex];
 
+                    // NR pre-creates child nodes with amount=0 for all child entries.
+                    // Find the existing child node by ID and increment its amount.
+                    const children = sel.getSelections?.() || sel.getChildren?.() || [];
+                    let child = children.find(c => c.getId?.() === childEntryId);
+
+                    if (child) {
+                        // Increment amount on the existing child node
+                        if (typeof child.incrementAmount === 'function') {
+                            child.incrementAmount();
+                        } else if (typeof child.setAmount === 'function') {
+                            child.setAmount((child.getAmount?.() || 0) + 1);
+                        }
+                        return null;
+                    }
+
+                    // Fallback: search the selector tree (for entries not yet instantiated)
                     {{JsFindSelectorById}}
-                    // Search in the selection's selector tree
                     const selector = sel.selector ? findSelectorById(sel.selector, childEntryId) : null;
-                    // Also try the selection node itself
                     const found = selector || findSelectorById(sel, childEntryId);
                     if (!found) return `Child entry '${childEntryId}' not found under selection`;
 
                     if (typeof found.addInstance === 'function') {
                         found.addInstance();
-                    } else if (found.getAmount?.() === 0 && typeof found.incrementAmount === 'function') {
+                    } else if (typeof found.incrementAmount === 'function') {
                         found.incrementAmount();
                     } else {
                         found.setAmount?.((found.getAmount?.() || 0) + 1);

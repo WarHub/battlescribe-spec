@@ -60,11 +60,6 @@
     "category": "nr-entry-order"
   },
   {
-    "specId": "selection/selection-child-multiple",
-    "reason": "NR returns child selections in different order than BattleScribe",
-    "category": "nr-entry-order"
-  },
-  {
     "specId": "selection/selection-child-entry",
     "reason": "NR returns child selections in different order than BattleScribe",
     "category": "nr-entry-order"
@@ -73,31 +68,6 @@
     "specId": "force/force-multi-catalogue-two-forces",
     "reason": "NR multi-catalogue force entry association differs from BattleScribe",
     "category": "nr-entry-order"
-  },
-  {
-    "specId": "cost/cost-child-aggregation",
-    "reason": "NR does not aggregate child selection costs into roster total the same way",
-    "category": "nr-child-cost"
-  },
-  {
-    "specId": "selection/selection-child-with-cost",
-    "reason": "NR does not aggregate child selection costs into roster total the same way",
-    "category": "nr-child-cost"
-  },
-  {
-    "specId": "selection/nested-children-deep",
-    "reason": "NR does not aggregate child selection costs into roster total the same way",
-    "category": "nr-child-cost"
-  },
-  {
-    "specId": "refresh/refresh-after-child-select",
-    "reason": "NR does not aggregate child selection costs into roster total the same way",
-    "category": "nr-child-cost"
-  },
-  {
-    "specId": "selection/selection-model-with-cost",
-    "reason": "NR does not aggregate child model costs into roster total",
-    "category": "nr-child-cost"
   },
   {
     "specId": "modifier/modifier-entry-page",

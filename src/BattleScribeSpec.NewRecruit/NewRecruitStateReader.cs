@@ -115,16 +115,41 @@ public static class NewRecruitStateReader
                 }
 
                 function extractTotalCosts(army) {
-                    // calcTotalCosts() works for locally-loaded systems
-                    const costs = army.calcTotalCosts?.() || army.getTotalCosts?.() || army.getCosts?.() || [];
-                    if (Array.isArray(costs) && costs.length > 0) {
-                        return costs.map(c => ({
+                    // With proper child selection (incrementAmount), NR's
+                    // calcTotalCosts() returns correct aggregated totals.
+                    const apiCosts = army.calcTotalCosts?.() || [];
+                    if (Array.isArray(apiCosts) && apiCosts.length > 0) {
+                        return apiCosts.map(c => ({
                             name: c.name || '',
                             typeId: c.typeId || '',
                             value: c.value || 0
                         }));
                     }
-                    // Fallback: return cost types from game system with value 0
+                    // Fallback: recursive walk for cases where calcTotalCosts
+                    // doesn't work (sums costs of nodes with amount > 0).
+                    const forces = army.getForces?.() || [];
+                    const totals = {};
+                    function sumNodeCosts(node) {
+                        const children = node.getSelections?.() || node.getChildren?.() || [];
+                        for (const sel of children) {
+                            const amount = sel.getAmount?.() ?? 0;
+                            if (amount <= 0) continue;
+                            const costs = sel.getCosts?.() || [];
+                            for (const c of costs) {
+                                const tid = c.typeId || '';
+                                if (!totals[tid]) totals[tid] = { name: c.name || '', typeId: tid, value: 0 };
+                                totals[tid].value += (c.value || 0) * amount;
+                            }
+                            sumNodeCosts(sel);
+                        }
+                    }
+                    for (const force of forces) {
+                        sumNodeCosts(force);
+                    }
+                    const result = Object.values(totals);
+                    if (result.length > 0) return result;
+
+                    // Last resort: return cost types from game system with value 0
                     const spec = window.__bsspec;
                     const gs = spec?.book?.catalogue?.gameSystem;
                     if (gs?.costTypes) {
@@ -132,13 +157,6 @@ public static class NewRecruitStateReader
                             name: ct.name || '',
                             typeId: ct.id || '',
                             value: 0
-                        }));
-                    }
-                    if (typeof costs === 'object' && !Array.isArray(costs)) {
-                        return Object.entries(costs).map(([key, val]) => ({
-                            name: key,
-                            typeId: key,
-                            value: typeof val === 'number' ? val : 0
                         }));
                     }
                     return [];
