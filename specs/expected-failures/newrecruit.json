@@ -1,13 +1,13 @@
 [
   {
-    "specId": "refresh/refresh-full-lifecycle",
-    "reason": "NR auto-selects entries with min>=1 constraints — costs doubled",
-    "category": "nr-auto-select"
+    "specId": "condition/condition-instance-of-by-type",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
   },
   {
-    "specId": "constraint/constraint-forces-field",
-    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
-    "category": "nr-auto-select"
+    "specId": "condition/condition-percent-value",
+    "reason": "NR returns selections in different order than BattleScribe",
+    "category": "nr-entry-order"
   },
   {
     "specId": "scope/scope-include-child-forces",
@@ -20,23 +20,8 @@
     "category": "nr-entry-order"
   },
   {
-    "specId": "condition/condition-percent-value",
-    "reason": "NR returns selections in different order than BattleScribe",
-    "category": "nr-entry-order"
-  },
-  {
-    "specId": "condition/condition-instance-of-by-type",
-    "reason": "NR returns selections in different order than BattleScribe",
-    "category": "nr-entry-order"
-  },
-  {
     "specId": "selection/catalogue-link-import",
     "reason": "NR orders imported entries differently from BattleScribe",
-    "category": "nr-entry-order"
-  },
-  {
-    "specId": "selection/catalogue-link-shared-entry",
-    "reason": "NR multi-catalogue entry resolution differs from BattleScribe",
     "category": "nr-entry-order"
   },
   {
@@ -65,9 +50,94 @@
     "category": "nr-entry-order"
   },
   {
-    "specId": "force/force-multi-catalogue-two-forces",
-    "reason": "NR multi-catalogue force entry association differs from BattleScribe",
-    "category": "nr-entry-order"
+    "specId": "constraint/constraint-cost-limit-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-cost-max-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-cost-min-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-hidden-violation-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-max-violation-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-min-violation-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-min-on-force-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-min-and-max",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-multiple-errors-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-shared-linked",
+    "reason": "NR returns validation errors without structured from/on links",
+    "category": "nr-no-linked-errors"
+  },
+  {
+    "specId": "constraint/constraint-entry-link-merged",
+    "reason": "NR does not enforce entry-link merged constraints",
+    "category": "nr-constraint-behavior"
+  },
+  {
+    "specId": "constraint/constraint-entry-link-own",
+    "reason": "NR does not enforce constraints defined on entry links",
+    "category": "nr-constraint-behavior"
+  },
+  {
+    "specId": "constraint/constraint-entry-link-shared-counting",
+    "reason": "NR does not implement shared counting across entry links",
+    "category": "nr-constraint-behavior"
+  },
+  {
+    "specId": "constraint/constraint-entry-link-shared-target",
+    "reason": "NR does not enforce shared entry constraints via entry link",
+    "category": "nr-constraint-behavior"
+  },
+  {
+    "specId": "constraint/constraint-min-violation",
+    "reason": "NR does not fire validation errors for min constraint violation in this scenario",
+    "category": "nr-constraint-behavior"
+  },
+  {
+    "specId": "constraint/constraint-hidden-enforcement",
+    "reason": "NR handles hidden entry auto-selection differently",
+    "category": "nr-constraint-behavior"
+  },
+  {
+    "specId": "constraint/constraint-forces-field",
+    "reason": "NR auto-selects entries with min>=1 constraints when adding a force",
+    "category": "nr-auto-select"
+  },
+  {
+    "specId": "refresh/refresh-full-lifecycle",
+    "reason": "NR auto-selects entries with min>=1 constraints — costs doubled",
+    "category": "nr-auto-select"
   },
   {
     "specId": "modifier/modifier-entry-page",
@@ -81,12 +151,52 @@
   },
   {
     "specId": "modifier/modifier-category-unset-primary",
-    "reason": "NR does not unset primary category via modifier",
-    "category": "nr-behavior"
+    "reason": "NR does not implement unset-primary category modifier",
+    "category": "nr-missing-feature"
   },
   {
     "specId": "cost/cost-default-limit-positive",
-    "reason": "NR does not enforce cost limit validation the same way",
-    "category": "nr-behavior"
+    "reason": "NR does not enforce defaultCostLimit validation the same way",
+    "category": "nr-missing-feature"
+  },
+  {
+    "specId": "force/force-multi-catalogue-two-forces",
+    "reason": "NR adapter cannot find entries in second force's catalogue selector tree",
+    "category": "nr-adapter-bug"
+  },
+  {
+    "specId": "selection/catalogue-link-shared-entry",
+    "reason": "NR adapter cannot resolve shared entries from linked catalogue",
+    "category": "nr-adapter-bug"
+  },
+  {
+    "specId": "real-world/wh40k-10e-captain",
+    "reason": "BSData wh40k-10e v10.14.0 tag removed upstream",
+    "category": "datasource-broken"
+  },
+  {
+    "specId": "real-world/wh40k-10e-create-army",
+    "reason": "BSData wh40k-10e v10.14.0 tag removed upstream",
+    "category": "datasource-broken"
+  },
+  {
+    "specId": "real-world/wh40k-10e-multi-unit",
+    "reason": "BSData wh40k-10e v10.14.0 tag removed upstream",
+    "category": "datasource-broken"
+  },
+  {
+    "specId": "real-world/wh40k-10e-points-cost",
+    "reason": "BSData wh40k-10e v10.14.0 tag removed upstream",
+    "category": "datasource-broken"
+  },
+  {
+    "specId": "real-world/wh40k-10e-space-marines-intercessors",
+    "reason": "BSData wh40k-10e v10.14.0 tag removed upstream",
+    "category": "datasource-broken"
+  },
+  {
+    "specId": "selection/selection-entry-group-default",
+    "reason": "Intermittent timeout loading NR web app",
+    "category": "flaky"
   }
 ]
