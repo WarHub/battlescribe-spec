@@ -50,13 +50,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download frozen NR snapshot
-        run: pwsh ./testdata-setup.ps1
+      - name: Setup dependencies
+        run: pwsh ./setup.ps1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Clone wham
-        run: git clone https://github.com/WarHub/wham.git ../wham
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4

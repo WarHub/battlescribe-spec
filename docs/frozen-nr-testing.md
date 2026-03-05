@@ -15,7 +15,7 @@ immune to site downtime or breaking changes.
    version (e.g. `v34.14`).
 
 3. **Version pinning** — The file `testdata.json` in the repo root pins the exact release tag
-   to use. The `testdata-setup.ps1` script reads it and downloads the pinned version.
+   to use. The `setup.ps1` script reads it and downloads the pinned version.
 
 4. **HAR replay** — During testing, Playwright's `Page.RouteFromHARAsync()` serves all
    requests from the downloaded snapshot. Unmatched requests are aborted (`HarNotFound.Abort`)
@@ -31,7 +31,7 @@ immune to site downtime or breaking changes.
 │  WarHub/newrecruit-har   │  GitHub Releases (tagged by NR version)
 │  (HAR snapshots)         │  ← recorded by bs-nr-har-tool
 └────────────┬─────────────┘
-             │ testdata-setup.ps1 (reads testdata.json)
+             │ setup.ps1 (reads testdata.json)
              ▼
 ┌──────────────────────────┐
 │  .testdata/newrecruit-har│  Local (gitignored)
@@ -61,7 +61,7 @@ The `testdata.json` file pins the HAR release version:
 ```
 
 This ensures all developers and CI use the same snapshot version. To update, change the `tag`
-value and re-run `testdata-setup.ps1`.
+value and re-run `setup.ps1`.
 
 ## Recording a New Snapshot
 
@@ -106,7 +106,7 @@ gh release create v<version> \
 
 ```bash
 # Download the pinned snapshot
-./testdata-setup.ps1
+./setup.ps1
 
 # Install Playwright browsers (first time)
 pwsh src/BattleScribeSpec.NewRecruit/bin/Debug/net10.0/playwright.ps1 install chromium
@@ -118,7 +118,7 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FrozenNewRecruitConfor
 ### In CI
 
 The `nr-frozen` job in `.github/workflows/ci.yml` handles this automatically:
-1. Runs `testdata-setup.ps1` to download the pinned HAR snapshot
+1. Runs `setup.ps1` to download the pinned HAR snapshot
 2. Installs Playwright Chromium
 3. Runs `FrozenNewRecruitConformanceTests`
 
@@ -162,7 +162,7 @@ The `update-nr-snapshot.yml` workflow runs daily and on manual dispatch:
 | Path | Description |
 |------|-------------|
 | `testdata.json` | Pinned HAR release version |
-| `testdata-setup.ps1` | Downloads pinned test data |
+| `setup.ps1` | Clones dependencies and downloads pinned test data |
 | `src/BattleScribeSpec.NewRecruit/HarRecorder.cs` | Recording, post-processing, version extraction |
 | `src/BattleScribeSpec.NewRecruit.HarTool/` | Console app for recording HAR snapshots |
 | `tests/FrozenNewRecruitFixture.cs` | xUnit fixture (HAR discovery, engine setup) |
