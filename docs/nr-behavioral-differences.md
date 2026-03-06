@@ -7,15 +7,19 @@
 
 ## Summary
 
-| Metric | Value |
-|--------|-------|
-| Total specs | 249 |
-| NR expected to pass | ~231 |
-| NR expected to fail | 18 (encoded in spec `engines` field) |
-| NR skipped (dataSource) | 0 |
-| BS expected to pass | ~242 |
-| BS expected to fail | 2 (NR-specific condition specs) |
-| BS skipped (dataSource) | 5 (real-world wh40k-10e specs) |
+| Metric | BattleScribe | New Recruit |
+|--------|-------------|-------------|
+| Total specs | 249 | 249 |
+| Expected to pass | 242 | 231 |
+| Expected to fail | 2 | 18 |
+| Skipped | 5 | 0 |
+
+**BattleScribe expected failures** (2): NR-specific condition specs where BS
+returns NaN for null childId (`condition-null-childid-nr-force`,
+`condition-null-childid-nr-self`).
+
+**BattleScribe skipped** (5): Real-world `wh40k-10e` DataSource specs that
+require external game data repos unavailable to the BS oracle.
 
 Expected failures are encoded in each spec's `engines` YAML field:
 ```yaml
@@ -25,7 +29,7 @@ engines:
   # unlisted engines default to "pass"
 ```
 
-### Failure Breakdown
+### NR Failure Breakdown
 
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
@@ -117,6 +121,10 @@ absent, causing the query to return NaN and the condition to evaluate as false.
 NR defaults missing childId based on node type: forces/groups use `"any"` (count
 everything), other nodes use `"self"` (count self). See [NR Condition Engine](#nr-condition-engine-internals)
 discovery section for the decompiled code analysis.
+
+Two companion specs (`condition-null-childid-nr-force`, `condition-null-childid-nr-self`)
+assert NR's alternative defaults for missing childId. These pass on NR but are
+expected to fail on BS (`engines: {battlescribe: fail}`).
 
 ---
 
@@ -340,10 +348,11 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   failure suddenly passes, the test FAILS (detecting behavior changes).
   Previously tracked in separate JSON files (`specs/expected-failures/*.json`)
   which have been removed in favor of this single-source-of-truth approach.
-- **Oracle comparison**: 241 Oracle (BattleScribe Java engine) tests pass as the
-  reference baseline, with 5 expected failures (broken DataSource tag)
+- **Oracle (BattleScribe)**: 242 specs expected to pass, 2 expected to fail
+  (NR-specific null-childId condition behavior), 5 skipped (real-world
+  DataSource specs requiring external data repos)
 
-### Resolved Issues (This Session)
+### Resolved Issues
 
 | Issue | Fix | Specs Fixed |
 |-------|-----|-------------|
