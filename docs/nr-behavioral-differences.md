@@ -103,7 +103,9 @@ diverges from BattleScribe's. For scope specs, the modifier fires (changing the
 selection name), proving the condition evaluates to true in NR but false in BS.
 For the null-childId spec, BattleScribe's resolver returns null when childId is
 absent, causing the query to return NaN and the condition to evaluate as false.
-NR treats missing childId as "count everything", making the condition true.
+NR defaults missing childId based on node type: forces/groups use `"any"` (count
+everything), other nodes use `"self"` (count self). See [NR Condition Engine](#nr-condition-engine-internals)
+discovery section for the decompiled code analysis.
 
 ---
 
@@ -241,6 +243,50 @@ document.querySelector('#__nuxt')?.__vue_app__
 Key stores: `lists`, `listsPage`, `systemsStore`, `gameStore`.
 
 Roster access: `lists.getCurrentList()` returns `{row, army, book}`.
+
+### NR Condition Engine Internals
+
+Analysis of NR's minified JS bundles (`rfaH3HIo.js`) reveals the condition
+evaluation chain for missing `childId`:
+
+**Evaluation chain**: `Ty()` → `pR()` → `sj()` → `state.eval()`
+
+```javascript
+// state.eval — key method on roster node state
+eval(e, t) {
+    // ...
+    // When node isGroup() and childId missing → defaults to "any"
+    this.isGroup() && !e.childId
+        ? n = this.hash({field: e.field, childId: "any"})
+        : n = this.hash(e);
+    return this.do_get(n) || 0;
+}
+
+// hash — builds lookup key, defaults childId
+hash(e) {
+    return `${prefix}::${field}::${e.childId || (this.isForce() ? "any" : "self")}`;
+}
+```
+
+**Default childId by node type**:
+| Node type | Missing childId defaults to | Effect |
+|-----------|----------------------------|--------|
+| Group (`isGroup()`) | `"any"` (in eval) | Counts all children |
+| Force (`isForce()`) | `"any"` (in hash) | Counts all selections |
+| Other (selection) | `"self"` (in hash) | Counts self |
+
+**Comparison operator** (`Zl` function):
+```javascript
+case "atLeast": return scope === "self" && count === 0 ? false : count >= value;
+```
+
+NR has a special case: `atLeast` with `scope=self` and `count=0` returns `false`
+regardless of value.
+
+**BattleScribe comparison**: BattleScribe's `BaseFilteredQuery` (decompiled Java)
+resolves `childId` via `h.d(string)` → returns `null` for empty/missing →
+query returns `Double.NaN` → any comparison with NaN returns `false`. This means
+BattleScribe silently ignores conditions with missing childId (always false).
 
 ### NR Data Loading
 
