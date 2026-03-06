@@ -68,6 +68,7 @@ public static class ProtocolConverter
     {
         Id = se.Id, Name = se.Name, Type = se.Type, Hidden = se.Hidden, Import = se.Import,
         Collective = se.Collective, Page = string.IsNullOrEmpty(se.Page) ? null : se.Page,
+        PublicationId = string.IsNullOrEmpty(se.PublicationId) ? null : se.PublicationId,
         Costs = se.Costs?.Select(ToProtocolCostValue).ToList(),
         Constraints = se.Constraints?.Select(ToProtocol).ToList(),
         Modifiers = se.Modifiers?.Select(ToProtocol).ToList(),
@@ -155,6 +156,7 @@ public static class ProtocolConverter
     {
         Id = r.Id, Name = r.Name, Description = r.Description, Hidden = r.Hidden,
         Page = string.IsNullOrEmpty(r.Page) ? null : r.Page,
+        PublicationId = string.IsNullOrEmpty(r.PublicationId) ? null : r.PublicationId,
         Modifiers = r.Modifiers?.Select(ToProtocol).ToList(),
     };
 
@@ -162,6 +164,7 @@ public static class ProtocolConverter
     {
         Id = p.Id, Name = p.Name, TypeId = p.TypeId, TypeName = p.TypeName, Hidden = p.Hidden,
         Page = string.IsNullOrEmpty(p.Page) ? null : p.Page,
+        PublicationId = string.IsNullOrEmpty(p.PublicationId) ? null : p.PublicationId,
         Characteristics = p.Characteristics?.Select(c => new ProtocolCharacteristic
         { Name = c.Name, TypeId = c.TypeId, Value = c.Value }).ToList(),
         Modifiers = p.Modifiers?.Select(ToProtocol).ToList(),
@@ -179,6 +182,8 @@ public static class ProtocolConverter
     static ProtocolInfoLink ToProtocol(InfoLinkSpec il) => new()
     {
         Id = il.Id, Name = il.Name, TargetId = il.TargetId, Type = il.Type, Hidden = il.Hidden,
+        PublicationId = string.IsNullOrEmpty(il.PublicationId) ? null : il.PublicationId,
+        Page = string.IsNullOrEmpty(il.Page) ? null : il.Page,
         Modifiers = il.Modifiers?.Select(ToProtocol).ToList(),
     };
 
@@ -234,7 +239,7 @@ public static class ProtocolConverter
 
     static SelectionEntrySpec FromProtocol(ProtocolSelectionEntry se) => new(
         Id: se.Id, Name: se.Name, Type: se.Type, Hidden: se.Hidden, Import: se.Import, Collective: se.Collective,
-        Page: se.Page ?? "",
+        Page: se.Page ?? "", PublicationId: se.PublicationId ?? "",
         Costs: se.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
         Constraints: se.Constraints?.Select(FromProtocol).ToArray(),
         Modifiers: se.Modifiers?.Select(FromProtocol).ToArray(),
@@ -296,13 +301,14 @@ public static class ProtocolConverter
 
     static RuleSpec FromProtocol(ProtocolRule r) => new(
         r.Id, r.Name, r.Description, r.Hidden, r.Page ?? "",
-        r.Modifiers?.Select(FromProtocol).ToArray());
+        r.Modifiers?.Select(FromProtocol).ToArray(),
+        r.PublicationId ?? "");
 
     static ProfileSpec FromProtocol(ProtocolProfile p) => new(
         p.Id, p.Name, p.TypeId, p.TypeName, p.Hidden,
         p.Characteristics?.Select(c => new CharacteristicSpec(c.Name, c.TypeId, c.Value)).ToArray(),
         p.Modifiers?.Select(FromProtocol).ToArray(),
-        p.Page ?? "");
+        p.Page ?? "", p.PublicationId ?? "");
 
     static InfoGroupSpec FromProtocol(ProtocolInfoGroup ig) => new(
         ig.Id, ig.Name, ig.Hidden,
@@ -313,7 +319,8 @@ public static class ProtocolConverter
 
     static InfoLinkSpec FromProtocol(ProtocolInfoLink il) => new(
         il.Id, il.Name, il.TargetId, il.Type, il.Hidden,
-        il.Modifiers?.Select(FromProtocol).ToArray());
+        il.Modifiers?.Select(FromProtocol).ToArray(),
+        il.PublicationId ?? "", il.Page ?? "");
 
     static CatalogueLinkSpec FromProtocol(ProtocolCatalogueLink cl) => new(
         cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries);
@@ -342,10 +349,11 @@ public static class ProtocolConverter
         Profiles: s.Profiles?.Select(p => new ProfileState(
             p.Name, p.TypeId, p.TypeName, p.Hidden,
             p.Characteristics.Select(c => new CharacteristicState(c.Name, c.TypeId, c.Value)).ToList(),
-            p.Page)).ToList()!,
-        Rules: s.Rules?.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page)).ToList()!,
+            p.Page, p.PublicationId)).ToList()!,
+        Rules: s.Rules?.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList()!,
         Categories: s.Categories?.Select(c => new CategoryState(c.Name, c.EntryId, c.Primary)).ToList()!,
-        Page: s.Page);
+        Page: s.Page,
+        PublicationId: s.PublicationId);
 
     static CostState ToCostState(ProtocolCost c) => new(c.Name, c.TypeId, c.Value);
 
@@ -388,15 +396,17 @@ public static class ProtocolConverter
         Children = s.Children.Select(ToProtocolSelection).ToList(),
         Profiles = s.Profiles?.Select(p => new ProtocolSelectionProfile
         {
-            Name = p.Name, TypeId = p.TypeId, TypeName = p.TypeName, Hidden = p.Hidden, Page = p.Page,
+            Name = p.Name, TypeId = p.TypeId, TypeName = p.TypeName, Hidden = p.Hidden,
+            Page = p.Page, PublicationId = p.PublicationId,
             Characteristics = p.Characteristics.Select(c => new ProtocolCharacteristic
             { Name = c.Name, TypeId = c.TypeId ?? "", Value = c.Value }).ToList(),
         }).ToList(),
         Rules = s.Rules?.Select(r => new ProtocolSelectionRule
-        { Name = r.Name, Description = r.Description, Hidden = r.Hidden, Page = r.Page }).ToList(),
+        { Name = r.Name, Description = r.Description, Hidden = r.Hidden, Page = r.Page, PublicationId = r.PublicationId }).ToList(),
         Categories = s.Categories?.Select(c => new ProtocolSelectionCategory
         { Name = c.Name, EntryId = c.EntryId, Primary = c.Primary }).ToList(),
         Page = s.Page,
+        PublicationId = s.PublicationId,
     };
 
     static ProtocolCost ToProtocolCost(CostState c) => new()

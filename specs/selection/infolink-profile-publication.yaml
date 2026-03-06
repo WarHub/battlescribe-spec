@@ -1,0 +1,61 @@
+id: infolink-profile-publication
+category: selection
+description: Profile linked via InfoLink preserves target profile's publicationId
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-stats
+        name: Unit Stats
+        characteristicTypes:
+          - id: ct-m
+            name: M
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      publications:
+        - id: pub-1
+          name: Core Rulebook
+      sharedProfiles:
+        - id: shared-prof-1
+          name: Marine Stats
+          typeId: pt-stats
+          typeName: Unit Stats
+          publicationId: pub-1
+          characteristics:
+            - name: M
+              typeId: ct-m
+              value: "6"
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          infoLinks:
+            - id: il-1
+              name: Marine Stats
+              targetId: shared-prof-1
+              type: profile
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine
+              profiles:
+                - name: Marine Stats
+                  typeName: Unit Stats
+                  publicationId: pub-1
+                  characteristics:
+                    - name: M
+                      value: "6"

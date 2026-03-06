@@ -9,11 +9,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total specs run (NR) | 236 |
-| NR passing | 215 (91%) |
-| NR expected failures | 21 |
+| Total specs run (NR) | 246 |
+| NR passing | ~206 (84%) |
+| NR expected failures | 22 |
 | NR flaky (pass individually) | ~6 |
-| Oracle (BattleScribe) baseline | 236/236 passing (100%) |
+| Oracle (BattleScribe) baseline | 246/246 passing (100%) |
 
 ### Failure Breakdown
 
@@ -22,7 +22,7 @@
 | [DataSource resolution](#1-datasource-resolution) | 5 | Infra | wh40k-10e v10.14.0 tag removed upstream |
 | [Error placement](#2-error-placement) | 4 | Medium | NR places constraint errors on selection, not category |
 | [Import ordering](#3-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#4-missing-features) | 3 | Low | Page numbers, unset-primary |
+| [Missing features](#4-missing-features) | 5 | Low | Page numbers, publicationId on selections, unset-primary |
 | [Scope/condition evaluation](#5-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and percent conditions differently |
 | [Other behavioral differences](#6-other-behavioral-differences) | 3 | Medium | Cost limit error format, auto-select, hidden enforcement |
 
@@ -95,13 +95,18 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ## 4. Missing Features
 
-**3 specs** — NR doesn't implement or expose certain BattleScribe features.
+**5 specs** — NR doesn't implement or expose certain BattleScribe features.
 
 | Spec | Feature | Detail |
 |------|---------|--------|
 | `modifier/modifier-entry-page` | Page numbers | NR doesn't expose `page` on selections |
-| `selection/rule-with-page` | Page numbers | NR doesn't expose `page` on selections |
+| `selection/selection-page` | Page numbers | NR doesn't expose `page` on selections |
+| `selection/selection-publication` | PublicationId | NR doesn't expose `publicationId` on selections |
+| `selection/selection-publication-and-page` | PublicationId + Page | NR doesn't expose `publicationId` or `page` on selections |
 | `modifier/modifier-category-unset-primary` | Unset-primary modifier | NR ignores the `unset-primary` category modifier |
+
+**Note**: NR does expose `publicationId` and `page` on **profiles** and **rules** —
+only the selection-level publication/page fields are missing.
 
 ---
 
@@ -157,6 +162,29 @@ of 1 for a hidden auto-selected entry.
 
 Technical findings from reverse-engineering NR's internal API and comparing
 with BattleScribe's decompiled Java engine.
+
+### Publication and Page Field Resolution
+
+BattleScribe stores `publicationId` and `page` on virtually every catalogue node
+(except CostType and ProfileType). These fields are resolved during roster creation:
+
+**Selection-level**: The selection inherits `publicationId` from its source entry
+(`BaseSelectable.setPublicationId(baseEntry.getPublicationId())`). Both `page` and
+`publicationId` are raw IDs/strings, not resolved names.
+
+**Profile/Rule-level**: Profiles and rules inherit `publicationId` from their
+definition via `BaseBookData.getPublicationId()`. The page field is also preserved.
+
+**InfoLink behavior**: InfoLink `publicationId` and `page` do **NOT** override the
+linked target's values. When an InfoLink references a shared rule with
+`publicationId: pub-core` and the InfoLink itself has `publicationId: pub-faq`,
+the resulting rule on the selection has `publicationId: pub-core` (the target's
+value, not the link's).
+
+**NR behavior**:
+- Selections: NR does not expose `publicationId` or `page`
+- Profiles: NR preserves `publicationId` and `page` from the data definition
+- Rules: NR preserves `publicationId` and `page` from the data definition
 
 ### NR Selection Ordering
 
@@ -268,8 +296,8 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 - **Expected failures**: `specs/expected-failures/newrecruit.json` lists known
   differences so they don't block CI
 - **Flaky tests**: ~6 specs pass individually but timeout in full suite runs
-  (~30 min, 236 specs serial) due to NR session degradation
-- **Oracle comparison**: All 236 Oracle (BattleScribe Java engine) tests pass
+  (~60 min, 246 specs serial) due to NR session degradation
+- **Oracle comparison**: All 246 Oracle (BattleScribe Java engine) tests pass
   as the reference baseline
 
 ### Resolved Issues (This Session)

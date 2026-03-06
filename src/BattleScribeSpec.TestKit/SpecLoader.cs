@@ -189,7 +189,8 @@ public static class SpecLoader
             Page: def.Page,
             EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray(),
             InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray(),
-            Import: def.Import);
+            Import: def.Import,
+            PublicationId: def.PublicationId);
     }
 
     private static ForceEntrySpec ConvertForceEntry(ForceEntryDef fe) =>
@@ -246,20 +247,22 @@ public static class SpecLoader
 
     private static RuleSpec ConvertRule(RuleDef def) =>
         new(def.Id, def.Name, def.Description, def.Hidden, def.Page,
-            def.Modifiers?.Select(ConvertModifier).ToArray());
+            def.Modifiers?.Select(ConvertModifier).ToArray(),
+            def.PublicationId);
 
     private static ProfileSpec ConvertProfile(ProfileDef def) =>
         new(def.Id, def.Name, def.TypeId, def.TypeName, def.Hidden,
             def.Characteristics?.Select(c => new CharacteristicSpec(c.Name, c.TypeId, c.Value)).ToArray(),
             def.Modifiers?.Select(ConvertModifier).ToArray(),
-            def.Page);
+            def.Page, def.PublicationId);
 
     private static InfoGroupSpec ConvertInfoGroup(InfoGroupDef def) =>
         new(def.Id, def.Name, def.Hidden,
             def.Profiles?.Select(ConvertProfile).ToArray(),
             def.Rules?.Select(ConvertRule).ToArray(),
             def.Modifiers?.Select(ConvertModifier).ToArray(),
-            def.InfoLinks?.Select(ConvertInfoLink).ToArray());
+            def.InfoLinks?.Select(ConvertInfoLink).ToArray(),
+            def.PublicationId, def.Page);
 
     private static EntryLinkSpec ConvertEntryLink(EntryLinkDef def) =>
         new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
@@ -270,9 +273,12 @@ public static class SpecLoader
             def.Modifiers?.Select(ConvertModifier).ToArray(),
             def.CategoryLinks?.Select(cl =>
                 new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
-            Import: def.Import);
+            Import: def.Import,
+            PublicationId: def.PublicationId,
+            Page: def.Page);
 
     private static InfoLinkSpec ConvertInfoLink(InfoLinkDef def) =>
         new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
-            def.Modifiers?.Select(ConvertModifier).ToArray());
+            def.Modifiers?.Select(ConvertModifier).ToArray(),
+            def.PublicationId, def.Page);
 }

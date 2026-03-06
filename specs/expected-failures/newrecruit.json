@@ -103,5 +103,15 @@
     "specId": "real-world/wh40k-10e-space-marines-intercessors",
     "reason": "BSData wh40k-10e v10.14.0 tag removed upstream",
     "category": "datasource-broken"
+  },
+  {
+    "specId": "selection/selection-publication",
+    "reason": "NR does not expose publicationId on selections",
+    "category": "nr-missing-feature"
+  },
+  {
+    "specId": "selection/selection-publication-and-page",
+    "reason": "NR does not expose publicationId or page on selections",
+    "category": "nr-missing-feature"
   }
 ]

@@ -544,6 +544,9 @@ public sealed class SpecRunner
             if (es.Page is not null)
                 AssertEqual(stepIndex, $"{selPrefix}.page", es.Page, a.Page);
 
+            if (es.PublicationId is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.publicationId", es.PublicationId, a.PublicationId ?? "");
+
             if (es.Costs is { } eCosts)
             {
                 foreach (var ec in eCosts)
@@ -596,6 +599,9 @@ public sealed class SpecRunner
             if (ep.Page is not null)
                 AssertEqual(stepIndex, $"{profPrefix}.page", ep.Page, ap.Page ?? "");
 
+            if (ep.PublicationId is not null)
+                AssertEqual(stepIndex, $"{profPrefix}.publicationId", ep.PublicationId, ap.PublicationId ?? "");
+
             if (ep.Characteristics is { } eChars)
             {
                 foreach (var ec in eChars)
@@ -639,6 +645,9 @@ public sealed class SpecRunner
 
             if (er.Page is not null)
                 AssertEqual(stepIndex, $"{rulePrefix}.page", er.Page, ar.Page ?? "");
+
+            if (er.PublicationId is not null)
+                AssertEqual(stepIndex, $"{rulePrefix}.publicationId", er.PublicationId, ar.PublicationId ?? "");
         }
     }
 

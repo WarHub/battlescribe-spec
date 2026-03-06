@@ -133,7 +133,9 @@ public static class JavaModelFactory
         IEnumerable<Constraint>? constraints = null,
         IEnumerable<Modifier>? modifiers = null,
         IEnumerable<CategoryLink>? categoryLinks = null,
-        bool import = true)
+        bool import = true,
+        string? publicationId = null,
+        string? page = null)
     {
         var el = new EntryLink();
         el.setId(id);
@@ -142,6 +144,10 @@ public static class JavaModelFactory
         el.setType(type);
         el.setHidden(hidden);
         el.setImported(import);
+        if (!string.IsNullOrEmpty(publicationId))
+            el.setPublicationId(publicationId);
+        if (!string.IsNullOrEmpty(page))
+            el.setPage(page);
 
         if (costs != null)
             foreach (var c in costs)
@@ -233,7 +239,8 @@ public static class JavaModelFactory
         IEnumerable<Constraint>? constraints = null,
         IEnumerable<Modifier>? modifiers = null,
         bool collective = false,
-        bool import = true)
+        bool import = true,
+        string? publicationId = null)
     {
         var se = new SelectionEntry();
         se.setId(id);
@@ -242,6 +249,8 @@ public static class JavaModelFactory
         se.setHidden(hidden);
         se.setCollective(collective);
         se.setImported(import);
+        if (!string.IsNullOrEmpty(publicationId))
+            se.setPublicationId(publicationId);
 
         if (costs != null)
             foreach (var c in costs)
@@ -479,7 +488,7 @@ public static class JavaModelFactory
 
     public static net.battlescribe.model.data.Rule CreateRule(
         string id, string name, string description = "", bool hidden = false, string page = "",
-        IEnumerable<Modifier>? modifiers = null)
+        IEnumerable<Modifier>? modifiers = null, string? publicationId = null)
     {
         var r = new net.battlescribe.model.data.Rule();
         r.setId(id);
@@ -488,6 +497,8 @@ public static class JavaModelFactory
         r.setHidden(hidden);
         if (!string.IsNullOrEmpty(page))
             r.setPage(page);
+        if (!string.IsNullOrEmpty(publicationId))
+            r.setPublicationId(publicationId);
         if (modifiers != null)
             foreach (var m in modifiers)
                 r.getModifiers().add(m);
@@ -499,7 +510,8 @@ public static class JavaModelFactory
         bool hidden = false,
         IEnumerable<Characteristic>? characteristics = null,
         IEnumerable<Modifier>? modifiers = null,
-        string? page = null)
+        string? page = null,
+        string? publicationId = null)
     {
         var p = new Profile();
         p.setId(id);
@@ -509,6 +521,8 @@ public static class JavaModelFactory
         p.setHidden(hidden);
         if (page != null)
             p.setPage(page);
+        if (!string.IsNullOrEmpty(publicationId))
+            p.setPublicationId(publicationId);
         if (characteristics != null)
             foreach (var c in characteristics)
                 p.getCharacteristics().add(c);
@@ -531,7 +545,8 @@ public static class JavaModelFactory
         string id, string name, bool hidden = false,
         IEnumerable<Profile>? profiles = null,
         IEnumerable<net.battlescribe.model.data.Rule>? rules = null,
-        IEnumerable<Modifier>? modifiers = null)
+        IEnumerable<Modifier>? modifiers = null,
+        string? publicationId = null, string? page = null)
     {
         var ig = new InfoGroup();
         ig.setId(id);
@@ -546,6 +561,10 @@ public static class JavaModelFactory
         if (modifiers != null)
             foreach (var m in modifiers)
                 ig.getModifiers().add(m);
+        if (!string.IsNullOrEmpty(publicationId))
+            ig.setPublicationId(publicationId);
+        if (!string.IsNullOrEmpty(page))
+            ig.setPage(page);
         return ig;
     }
 
@@ -572,7 +591,8 @@ public static class JavaModelFactory
 
     public static InfoLink CreateInfoLink(
         string id, string name, string targetId, string type = "profile",
-        bool hidden = false, IEnumerable<Modifier>? modifiers = null)
+        bool hidden = false, IEnumerable<Modifier>? modifiers = null,
+        string? publicationId = null, string? page = null)
     {
         var il = new InfoLink();
         il.setId(id);
@@ -580,6 +600,10 @@ public static class JavaModelFactory
         il.setTargetId(targetId);
         il.setType(type);
         il.setHidden(hidden);
+        if (!string.IsNullOrEmpty(publicationId))
+            il.setPublicationId(publicationId);
+        if (!string.IsNullOrEmpty(page))
+            il.setPage(page);
         if (modifiers != null)
             foreach (var m in modifiers)
                 il.getModifiers().add(m);

@@ -184,11 +184,12 @@ public static class CatXmlGenerator
     private static SelectionEntryNode MapSelectionEntry(SelectionEntrySpec spec)
     {
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var node = SelectionEntry(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
+            publicationId: pubId,
             page: page,
             hidden: spec.Hidden,
             collective: spec.Collective,
@@ -294,12 +295,14 @@ public static class CatXmlGenerator
 
     private static EntryLinkNode MapEntryLink(EntryLinkSpec spec)
     {
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
+        var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var node = EntryLink(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
-            page: null,
+            publicationId: pubId,
+            page: page,
             hidden: spec.Hidden,
             collective: false,
             exported: spec.Import,
@@ -460,11 +463,12 @@ public static class CatXmlGenerator
     private static RuleNode MapRule(RuleSpec spec)
     {
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var node = Rule(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
+            publicationId: pubId,
             page: page,
             hidden: spec.Hidden,
             description: spec.Description);
@@ -480,11 +484,12 @@ public static class CatXmlGenerator
     private static ProfileNode MapProfile(ProfileSpec spec)
     {
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var node = Profile(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
+            publicationId: pubId,
             page: page,
             hidden: spec.Hidden,
             typeId: spec.TypeId,
@@ -508,12 +513,14 @@ public static class CatXmlGenerator
 
     private static InfoGroupNode MapInfoGroup(InfoGroupSpec spec)
     {
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
+        var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var node = InfoGroup(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
-            page: null,
+            publicationId: pubId,
+            page: page,
             hidden: spec.Hidden);
 
         foreach (var profile in spec.Profiles ?? [])
@@ -566,12 +573,14 @@ public static class CatXmlGenerator
 
     private static InfoLinkNode MapInfoLink(InfoLinkSpec spec)
     {
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
+        var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var node = InfoLink(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
-            page: null,
+            publicationId: pubId,
+            page: page,
             hidden: spec.Hidden,
             targetId: spec.TargetId,
             type: MapInfoLinkKind(spec.Type));

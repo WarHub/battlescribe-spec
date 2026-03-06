@@ -1,0 +1,47 @@
+id: infolink-publication-not-inherited
+category: selection
+description: InfoLink publicationId is not inherited by linked rule that has no publicationId of its own
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      publications:
+        - id: pub-faq
+          name: FAQ Update
+      sharedRules:
+        - id: shared-rule-1
+          name: Fearless
+          description: Immune to morale
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          infoLinks:
+            - id: il-1
+              name: Fearless
+              targetId: shared-rule-1
+              type: rule
+              publicationId: pub-faq
+              page: "42"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine
+              rules:
+                - name: Fearless
+                  description: Immune to morale

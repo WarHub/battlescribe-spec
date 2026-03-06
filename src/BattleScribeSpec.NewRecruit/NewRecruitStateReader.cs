@@ -138,6 +138,7 @@ public static class NewRecruitStateReader
                             typeName: p.typeName || null,
                             hidden: p.hidden || false,
                             page: p.page != null ? String(p.page) : null,
+                            publicationId: p.publicationId || null,
                             characteristics: (p.characteristics || []).map(ch => ({
                                 name: ch.name || '',
                                 typeId: ch.typeId || '',
@@ -148,7 +149,8 @@ public static class NewRecruitStateReader
                             name: r.name || r.getName?.() || '',
                             description: r.description || '',
                             hidden: r.hidden || false,
-                            page: r.page != null ? String(r.page) : null
+                            page: r.page != null ? String(r.page) : null,
+                            publicationId: r.publicationId || null
                         })),
                         categories: cats.map(cat => ({
                             name: cat.name || cat.getName?.() || '',
@@ -407,9 +409,10 @@ public static class NewRecruitStateReader
                 p.TypeName,
                 p.Hidden,
                 p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
-                p.Page
+                p.Page,
+                p.PublicationId
             )).ToList(),
-            Rules: sel.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page)).ToList(),
+            Rules: sel.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
             Categories: sel.Categories.Select(c => new CategoryState(c.Name, c.EntryId, c.Primary)).ToList(),
             Page: sel.Page);
     }
@@ -469,6 +472,7 @@ public static class NewRecruitStateReader
         public string? TypeName { get; init; }
         public bool Hidden { get; init; }
         public string? Page { get; init; }
+        public string? PublicationId { get; init; }
         public List<NrCharacteristicSnapshot> Characteristics { get; init; } = [];
     }
 
@@ -485,6 +489,7 @@ public static class NewRecruitStateReader
         public string Description { get; init; } = "";
         public bool Hidden { get; init; }
         public string? Page { get; init; }
+        public string? PublicationId { get; init; }
     }
 
     internal record NrCategorySnapshot

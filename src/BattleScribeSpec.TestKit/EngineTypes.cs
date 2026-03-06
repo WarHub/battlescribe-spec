@@ -37,7 +37,8 @@ public record SelectionState(
     IReadOnlyList<ProfileState> Profiles = default!,
     IReadOnlyList<RuleState> Rules = default!,
     IReadOnlyList<CategoryState> Categories = default!,
-    string? Page = null)
+    string? Page = null,
+    string? PublicationId = null)
 {
     public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
     public IReadOnlyList<RuleState> Rules { get; init; } = Rules ?? [];
@@ -55,7 +56,8 @@ public record ProfileState(
     string? TypeName,
     bool Hidden,
     IReadOnlyList<CharacteristicState> Characteristics,
-    string? Page = null);
+    string? Page = null,
+    string? PublicationId = null);
 
 public record CharacteristicState(
     string Name,
@@ -66,7 +68,8 @@ public record RuleState(
     string Name,
     string Description,
     bool Hidden,
-    string? Page = null);
+    string? Page = null,
+    string? PublicationId = null);
 
 public record CategoryState(
     string Name,

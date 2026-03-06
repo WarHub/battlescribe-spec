@@ -267,6 +267,9 @@ public sealed class SelectionEntryDef
     [YamlMember(Alias = "page")]
     public string Page { get; set; } = "";
 
+    [YamlMember(Alias = "publicationId")]
+    public string PublicationId { get; set; } = "";
+
     [YamlMember(Alias = "infoLinks")]
     public List<InfoLinkDef>? InfoLinks { get; set; }
 
@@ -489,6 +492,9 @@ public sealed class RuleDef
     [YamlMember(Alias = "page")]
     public string Page { get; set; } = "";
 
+    [YamlMember(Alias = "publicationId")]
+    public string PublicationId { get; set; } = "";
+
     [YamlMember(Alias = "modifiers")]
     public List<ModifierDef>? Modifiers { get; set; }
 }
@@ -512,6 +518,9 @@ public sealed class ProfileDef
 
     [YamlMember(Alias = "page")]
     public string Page { get; set; } = "";
+
+    [YamlMember(Alias = "publicationId")]
+    public string PublicationId { get; set; } = "";
 
     [YamlMember(Alias = "characteristics")]
     public List<CharacteristicDef>? Characteristics { get; set; }
@@ -542,6 +551,12 @@ public sealed class InfoGroupDef
 
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "publicationId")]
+    public string PublicationId { get; set; } = "";
+
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
 
     [YamlMember(Alias = "profiles")]
     public List<ProfileDef>? Profiles { get; set; }
@@ -587,6 +602,12 @@ public sealed class EntryLinkDef
 
     [YamlMember(Alias = "import")]
     public bool Import { get; set; } = true;
+
+    [YamlMember(Alias = "publicationId")]
+    public string PublicationId { get; set; } = "";
+
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
 }
 
 public sealed class InfoLinkDef
@@ -605,6 +626,12 @@ public sealed class InfoLinkDef
 
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "publicationId")]
+    public string PublicationId { get; set; } = "";
+
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
 
     [YamlMember(Alias = "modifiers")]
     public List<ModifierDef>? Modifiers { get; set; }
@@ -809,6 +836,9 @@ public sealed class ExpectedSelectionDef
 
     [YamlMember(Alias = "page")]
     public string? Page { get; set; }
+
+    [YamlMember(Alias = "publicationId")]
+    public string? PublicationId { get; set; }
 }
 
 public sealed class ExpectedCostDef
@@ -840,6 +870,9 @@ public sealed class ExpectedProfileDef
     [YamlMember(Alias = "page")]
     public string? Page { get; set; }
 
+    [YamlMember(Alias = "publicationId")]
+    public string? PublicationId { get; set; }
+
     [YamlMember(Alias = "characteristics")]
     public List<ExpectedCharacteristicDef>? Characteristics { get; set; }
 }
@@ -869,6 +902,9 @@ public sealed class ExpectedRuleDef
 
     [YamlMember(Alias = "page")]
     public string? Page { get; set; }
+
+    [YamlMember(Alias = "publicationId")]
+    public string? PublicationId { get; set; }
 }
 
 public sealed class ExpectedCategoryDef

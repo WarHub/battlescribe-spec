@@ -1348,7 +1348,8 @@ public sealed class BattleScribeOracle : IDisposable
             selectionEntries: childEntries,
             categoryLinks: categoryLinks,
             collective: spec.Collective,
-            import: spec.Import);
+            import: spec.Import,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
 
         if (spec.ModifierGroups != null)
             foreach (var mg in spec.ModifierGroups)
@@ -1363,7 +1364,8 @@ public sealed class BattleScribeOracle : IDisposable
             {
                 var ruleModifiers = ruleSpec.Modifiers?.Select(BuildModifier).ToArray();
                 var rule = JavaModelFactory.CreateRule(ruleSpec.Id, ruleSpec.Name, ruleSpec.Description,
-                    ruleSpec.Hidden, ruleSpec.Page, ruleModifiers);
+                    ruleSpec.Hidden, ruleSpec.Page, ruleModifiers,
+                    string.IsNullOrEmpty(ruleSpec.PublicationId) ? null : ruleSpec.PublicationId);
                 entry.getRules().add(rule);
             }
 
@@ -1411,7 +1413,8 @@ public sealed class BattleScribeOracle : IDisposable
     {
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         return JavaModelFactory.CreateRule(spec.Id, spec.Name, spec.Description,
-            spec.Hidden, spec.Page, modifiers);
+            spec.Hidden, spec.Page, modifiers,
+            string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
     }
 
     private static Profile BuildProfile(ProfileSpec spec)
@@ -1420,8 +1423,9 @@ public sealed class BattleScribeOracle : IDisposable
             JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         var page = string.IsNullOrEmpty(spec.Page) ? null : spec.Page;
+        var pubId = string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId;
         return JavaModelFactory.CreateProfile(spec.Id, spec.Name,
-            spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers, page);
+            spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers, page, pubId);
     }
 
     private static InfoGroup BuildInfoGroup(InfoGroupSpec spec)
@@ -1429,7 +1433,9 @@ public sealed class BattleScribeOracle : IDisposable
         var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
         var rules = spec.Rules?.Select(BuildRule).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
-        var ig = JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers);
+        var pubId = string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId;
+        var page = string.IsNullOrEmpty(spec.Page) ? null : spec.Page;
+        var ig = JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers, pubId, page);
         if (spec.InfoLinks != null)
             foreach (var il in spec.InfoLinks)
                 ig.getInfoLinks().add(BuildInfoLink(il));
@@ -1439,8 +1445,10 @@ public sealed class BattleScribeOracle : IDisposable
     private static InfoLink BuildInfoLink(InfoLinkSpec spec)
     {
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var pubId = string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId;
+        var page = string.IsNullOrEmpty(spec.Page) ? null : spec.Page;
         return JavaModelFactory.CreateInfoLink(spec.Id, spec.Name, spec.TargetId, spec.Type,
-            spec.Hidden, modifiers);
+            spec.Hidden, modifiers, pubId, page);
     }
 
     private static EntryLink BuildEntryLink(EntryLinkSpec spec)
@@ -1455,7 +1463,9 @@ public sealed class BattleScribeOracle : IDisposable
 
         return JavaModelFactory.CreateEntryLink(
             spec.Id, spec.Name, spec.TargetId, spec.Type, spec.Hidden,
-            costs, constraints, modifiers, categoryLinks, import: spec.Import);
+            costs, constraints, modifiers, categoryLinks, import: spec.Import,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
     }
 
     private static Modifier BuildModifier(ModifierSpec spec)

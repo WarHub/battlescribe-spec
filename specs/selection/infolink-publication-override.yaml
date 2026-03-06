@@ -1,0 +1,50 @@
+id: infolink-publication-override
+category: selection
+description: InfoLink publicationId does NOT override linked target - target's own publicationId is preserved
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      publications:
+        - id: pub-core
+          name: Core Rulebook
+        - id: pub-faq
+          name: FAQ Update
+      sharedRules:
+        - id: shared-rule-1
+          name: Fearless
+          description: Immune to morale
+          publicationId: pub-core
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          infoLinks:
+            - id: il-1
+              name: Fearless
+              targetId: shared-rule-1
+              type: rule
+              publicationId: pub-faq
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine
+              rules:
+                - name: Fearless
+                  description: Immune to morale
+                  publicationId: pub-core

@@ -66,7 +66,8 @@ public record SelectionEntrySpec(
     string Page = "",
     EntryLinkSpec[]? EntryLinks = null,
     InfoLinkSpec[]? InfoLinks = null,
-    bool Import = true);
+    bool Import = true,
+    string PublicationId = "");
 
 public record ForceEntrySpec(
     string Id,
@@ -162,7 +163,8 @@ public record RuleSpec(
     string Description = "",
     bool Hidden = false,
     string Page = "",
-    ModifierSpec[]? Modifiers = null);
+    ModifierSpec[]? Modifiers = null,
+    string PublicationId = "");
 
 public record ProfileSpec(
     string Id,
@@ -172,7 +174,8 @@ public record ProfileSpec(
     bool Hidden = false,
     CharacteristicSpec[]? Characteristics = null,
     ModifierSpec[]? Modifiers = null,
-    string Page = "");
+    string Page = "",
+    string PublicationId = "");
 
 public record CharacteristicSpec(
     string Name,
@@ -186,7 +189,9 @@ public record InfoGroupSpec(
     ProfileSpec[]? Profiles = null,
     RuleSpec[]? Rules = null,
     ModifierSpec[]? Modifiers = null,
-    InfoLinkSpec[]? InfoLinks = null);
+    InfoLinkSpec[]? InfoLinks = null,
+    string PublicationId = "",
+    string Page = "");
 
 public record EntryLinkSpec(
     string Id,
@@ -198,7 +203,9 @@ public record EntryLinkSpec(
     ConstraintSpec[]? Constraints = null,
     ModifierSpec[]? Modifiers = null,
     CategoryLinkSpec[]? CategoryLinks = null,
-    bool Import = true);
+    bool Import = true,
+    string PublicationId = "",
+    string Page = "");
 
 public record InfoLinkSpec(
     string Id,
@@ -206,7 +213,9 @@ public record InfoLinkSpec(
     string TargetId,
     string Type = "profile",
     bool Hidden = false,
-    ModifierSpec[]? Modifiers = null);
+    ModifierSpec[]? Modifiers = null,
+    string PublicationId = "",
+    string Page = "");
 
 /// <summary>
 /// Complete test scenario specification.

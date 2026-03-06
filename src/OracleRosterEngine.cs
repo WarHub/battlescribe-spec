@@ -133,6 +133,7 @@ public sealed class OracleRosterEngine : IRosterEngine
         var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());
         var categories = JavaListToList<net.battlescribe.model.roster.Category>(sel.getCategories());
         var hidden = _oracle.GetEntryById(sel.getEntryId())?.isHidden() ?? false;
+        var pubId = sel.getPublicationId();
         return new SelectionState(
             sel.getName() ?? "",
             sel.getEntryId(),
@@ -142,21 +143,25 @@ public sealed class OracleRosterEngine : IRosterEngine
             costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList(),
             children.Select(CaptureSelection).ToList(),
             Profiles: profiles.Select(CaptureProfile).ToList(),
-            Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage())).ToList(),
+            Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
+                string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
             Categories: categories.Select(c => new CategoryState(c.getName() ?? "", c.getEntryId(), c.isPrimary())).ToList(),
-            Page: sel.getPage());
+            Page: sel.getPage(),
+            PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId);
     }
 
     private static ProfileState CaptureProfile(net.battlescribe.model.data.Profile prof)
     {
         var chars = JavaListToList<net.battlescribe.model.data.Characteristic>(prof.getCharacteristics());
+        var pubId = prof.getPublicationId();
         return new ProfileState(
             prof.getName() ?? "",
             prof.getTypeId(),
             prof.getTypeName(),
             prof.isHidden(),
             chars.Select(c => new CharacteristicState(c.getName() ?? "", c.getTypeId(), c.getValue() ?? "")).ToList(),
-            prof.getPage());
+            prof.getPage(),
+            string.IsNullOrEmpty(pubId) ? null : pubId);
     }
 
     private static List<T> JavaListToList<T>(java.util.List? javaList)
