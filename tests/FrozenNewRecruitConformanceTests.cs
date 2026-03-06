@@ -76,7 +76,8 @@ public sealed class FrozenNewRecruitConformanceTests
 
             if (classification == SpecResultClassification.ExpectedFailure)
             {
-                var entry = _expectedFailures!.GetEntry(result.SpecId);
+                var fullId = string.IsNullOrEmpty(result.Category) ? result.SpecId : $"{result.Category}/{result.SpecId}";
+                var entry = _expectedFailures!.GetEntry(fullId) ?? _expectedFailures.GetEntry(result.SpecId);
                 _output.WriteLine($"[FROZEN/EXPECTED] {message}");
                 _output.WriteLine($"  Reason: {entry?.Reason}");
                 return;
@@ -85,7 +86,7 @@ public sealed class FrozenNewRecruitConformanceTests
             _output.WriteLine(message);
             Assert.Fail(message);
         }
-        else if (_expectedFailures?.IsExpectedFailure(result.SpecId) == true)
+        else if (_expectedFailures?.Classify(result) == SpecResultClassification.UnexpectedPass)
         {
             _output.WriteLine($"[FROZEN/UNEXPECTED PASS] Spec '{specName}' is in expected failures but now passes!");
         }

@@ -88,10 +88,12 @@ public sealed class ExpectedFailures
 
     /// <summary>
     /// Classify a spec result considering expected failures.
+    /// Checks both plain specId and category/specId formats.
     /// </summary>
     public SpecResultClassification Classify(SpecResult result)
     {
-        var isExpected = IsExpectedFailure(result.SpecId);
+        var fullId = string.IsNullOrEmpty(result.Category) ? result.SpecId : $"{result.Category}/{result.SpecId}";
+        var isExpected = IsExpectedFailure(result.SpecId) || IsExpectedFailure(fullId);
 
         if (result.Passed && !isExpected)
             return SpecResultClassification.Passed;

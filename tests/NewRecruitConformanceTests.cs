@@ -74,7 +74,8 @@ public sealed class NewRecruitConformanceTests
 
             if (classification == SpecResultClassification.ExpectedFailure)
             {
-                var entry = _expectedFailures!.GetEntry(result.SpecId);
+                var fullId = string.IsNullOrEmpty(result.Category) ? result.SpecId : $"{result.Category}/{result.SpecId}";
+                var entry = _expectedFailures!.GetEntry(fullId) ?? _expectedFailures.GetEntry(result.SpecId);
                 _output.WriteLine($"[EXPECTED FAILURE] {message}");
                 _output.WriteLine($"  Reason: {entry?.Reason}");
                 return; // Don't fail the test
@@ -83,7 +84,7 @@ public sealed class NewRecruitConformanceTests
             _output.WriteLine(message);
             Assert.Fail(message);
         }
-        else if (_expectedFailures?.IsExpectedFailure(result.SpecId) == true)
+        else if (_expectedFailures?.Classify(result) == SpecResultClassification.UnexpectedPass)
         {
             _output.WriteLine($"[UNEXPECTED PASS] Spec '{specName}' is in expected failures but now passes! " +
                 "Consider removing it from specs/expected-failures/newrecruit.json");

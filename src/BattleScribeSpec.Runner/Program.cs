@@ -12,6 +12,7 @@ string? tag = null;
 string? engineFilter = null;
 string? reportPath = null;
 string? matrixDir = null;
+string? expectedFailuresEngine = null;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -40,6 +41,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--matrix" when i + 1 < args.Length:
             matrixDir = args[++i];
+            break;
+        case "--expected-failures" when i + 1 < args.Length:
+            expectedFailuresEngine = args[++i];
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -106,6 +110,13 @@ if (totalSpecs == 0)
 {
     Console.Error.WriteLine("Error: no spec files found.");
     return 1;
+}
+
+// ===== Load expected failures =====
+ExpectedFailures? expectedFailures = null;
+if (expectedFailuresEngine is not null)
+{
+    expectedFailures = ExpectedFailures.Load(expectedFailuresEngine, specsDir);
 }
 
 // ===== Start adapter process =====
@@ -198,7 +209,17 @@ sw.Stop();
 
 // ===== Output results =====
 var passed = results.Count(r => r.Passed);
-var failed = results.Count(r => !r.Passed);
+int failed;
+int expectedFailureCount = 0;
+if (expectedFailures is not null)
+{
+    failed = results.Count(r => !r.Passed && expectedFailures.Classify(r) == SpecResultClassification.Failed);
+    expectedFailureCount = results.Count(r => !r.Passed && expectedFailures.Classify(r) == SpecResultClassification.ExpectedFailure);
+}
+else
+{
+    failed = results.Count(r => !r.Passed);
+}
 var exitCode = failed > 0 ? 1 : 0;
 
 switch (output)
@@ -237,7 +258,8 @@ void OutputSummary(List<SpecResult> results, TimeSpan elapsed)
         }
     }
     Console.WriteLine();
-    Console.WriteLine($"Results: {passed} passed, {failed} failed, {results.Count} total ({elapsed.TotalSeconds:F1}s)");
+    var xfailLabel = expectedFailureCount > 0 ? $", {expectedFailureCount} expected failures" : "";
+    Console.WriteLine($"Results: {passed} passed, {failed} failed{xfailLabel}, {results.Count} total ({elapsed.TotalSeconds:F1}s)");
 }
 
 void OutputJson(List<SpecResult> results, TimeSpan elapsed)
@@ -267,7 +289,8 @@ void OutputGitHubActions(List<SpecResult> results, TimeSpan elapsed)
     // Step summary as markdown table
     Console.WriteLine($"## BattleScribe Spec Conformance Results{engineLabel}");
     Console.WriteLine();
-    Console.WriteLine($"**{passed}** passed, **{failed}** failed, **{results.Count}** total ({elapsed.TotalSeconds:F1}s)");
+    var xfailLabel = expectedFailureCount > 0 ? $", **{expectedFailureCount}** expected failures" : "";
+    Console.WriteLine($"**{passed}** passed, **{failed}** failed{xfailLabel}, **{results.Count}** total ({elapsed.TotalSeconds:F1}s)");
     Console.WriteLine();
 
     if (failed > 0)
@@ -276,7 +299,7 @@ void OutputGitHubActions(List<SpecResult> results, TimeSpan elapsed)
         Console.WriteLine();
         Console.WriteLine("| Spec | Failures |");
         Console.WriteLine("|------|----------|");
-        foreach (var result in results.Where(r => !r.Passed))
+        foreach (var result in results.Where(r => !r.Passed && (expectedFailures is null || expectedFailures.Classify(r) == SpecResultClassification.Failed)))
         {
             var failures = string.Join("<br>", result.Failures.Select(f => f.Replace("|", "\\|")));
             Console.WriteLine($"| {result.Category}/{result.SpecId} | {failures} |");
@@ -303,6 +326,9 @@ void PrintUsage()
           --engine <name>     Only run specs applicable to this engine
                               (battlescribe, newrecruit, phalanx)
           --report <path>     Write conformance report JSON to file
+          --expected-failures <engine>
+                              Load expected failures for engine (e.g. battlescribe, newrecruit)
+                              Expected failures don't count toward exit code
           -h, --help          Show this help
         """);
 }
