@@ -9,10 +9,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total specs | 248 |
-| NR passing | ~230 (~92.7%) |
+| Total specs | 250 |
+| NR passing | ~232 (~92.8%) |
 | NR expected failures | 18 |
-| Oracle (BattleScribe) baseline | 242 passed, 5 NR-only skipped = 247 total |
+| Oracle (BattleScribe) baseline | 242 passed, 7 NR-only skipped = 249 total |
 
 ### Failure Breakdown
 

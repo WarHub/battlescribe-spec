@@ -1,11 +1,11 @@
 # BattleScribe Engine Conformance Test Coverage Matrix
-# Current state: 215 specs, 361 tests, all passing
-# Last updated: 2026-03-02
+# Current state: 217 specs, 363 tests, all passing
+# Last updated: 2026-03-06
 
 summary:
-  total_specs: 215
-  total_tests: 361  # 215 spec conformance + 146 infrastructure/unit
-  passed: 361
+  total_specs: 217
+  total_tests: 363  # 217 spec conformance + 146 infrastructure/unit
+  passed: 363
   skipped: 0
   failed: 0
   categories_covered: 9
@@ -13,7 +13,7 @@ summary:
 
 spec_inventory:
   condition:
-    count: 29
+    count: 31
     specs:
       - condition-at-least
       - condition-at-most
@@ -42,6 +42,8 @@ spec_inventory:
       - condition-not-equal-to
       - condition-not-instance-of
       - condition-null-childid
+      - condition-null-childid-nr-force
+      - condition-null-childid-nr-self
       - condition-percent-value
       - condition-scope-roster
   constraint:
@@ -589,8 +591,11 @@ infrastructure_coverage:
     specs: [condition-percent-value, constraint-percent-value, modifier-repeat-percent-value]
   null_childid:
     status: covered
-    specs: [condition-null-childid]
-    note: Condition without childId always evaluates false in BattleScribe (query returns NaN)
+    specs: [condition-null-childid, condition-null-childid-nr-force, condition-null-childid-nr-self]
+    note: >
+      BS: missing childId → NaN → condition always false.
+      NR: defaults to "any" on force/group scope, "self" on other nodes.
+      NR-only specs document the positive NR behavior.
   include_child_forces:
     status: covered
     specs: [scope-include-child-forces, scope-include-child-forces-nested]

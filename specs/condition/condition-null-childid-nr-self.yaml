@@ -1,0 +1,49 @@
+id: condition-null-childid-nr-self
+category: condition
+engines: [newrecruit]
+description: >
+  NR-specific: condition without childId on parent scope defaults to counting "self".
+  NR's hash uses childId || (isForce ? "any" : "self"), so on a non-force node,
+  missing childId counts the node itself. An atLeast 1 condition on parent scope
+  with missing childId fires when the entry is selected (it counts itself).
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Self Counted
+              conditions:
+                # No childId — NR defaults to "self" on parent scope
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Selection counts itself (self=1), atLeast 1 → true → modifier fires
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Self Counted
