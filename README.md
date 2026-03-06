@@ -89,7 +89,9 @@ battlescribe-spec/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.csproj     # Oracle engine (IKVM + BattleScribe JARs)
 │   ├── BattleScribeSpec.Runner/    # CLI runner (bs-spec-runner)
-│   └── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps oracle)
+│   ├── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps oracle)
+│   ├── BattleScribeSpec.NewRecruit/        # New Recruit adapter (Playwright)
+│   └── BattleScribeSpec.NewRecruit.HarTool/  # HAR recording console tool
 ├── tests/                          # xUnit tests using oracle engine
 ├── docker/                         # Dockerfiles + compose
 ├── docs/                           # Protocol spec, guides, ADRs
@@ -101,6 +103,7 @@ battlescribe-spec/
 - [Adapter Protocol Specification](docs/adapter-protocol.md) — JSON-line protocol reference
 - [Adapter Implementation Guide](docs/adapter-guide.md) — Step-by-step adapter writing guide
 - [CI Integration Guide](docs/ci-guide.md) — GitHub Actions and CI setup
+- [Frozen NR Testing](docs/frozen-nr-testing.md) — Offline New Recruit testing via HAR replay
 - [ADR 001: Spec Test Kit Architecture](docs/adr/001-spec-test-kit-architecture.md) — Architecture decisions
 - [Coverage Report](docs/comprehensive-engine-coverage-report.md) — Detailed coverage analysis
 
@@ -134,6 +137,20 @@ dotnet src/BattleScribeSpec.Runner/bin/Debug/net10.0/bs-spec-runner.dll \
   --specs specs \
   --output summary
 ```
+
+## New Recruit Testing
+
+The project includes a [New Recruit](https://newrecruit.eu) adapter that tests NR's conformance
+via Playwright browser automation. Two testing modes are available:
+
+- **Live** (`nr-conformance` CI job) — Tests against the live NR website. Triggered manually
+  or with `[nr-test]` in commit message. Requires `NR_ENGINE_URL` env var.
+- **Frozen** (`nr-frozen` CI job) — Tests against a pre-recorded HAR snapshot, fully offline.
+  Runs automatically on every push. Snapshots stored in
+  [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har).
+
+See [Frozen NR Testing](docs/frozen-nr-testing.md) for details on recording, publishing,
+and running frozen tests.
 
 ## Future Steps
 

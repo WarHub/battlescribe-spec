@@ -41,6 +41,19 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return new NewRecruitRosterEngine(browser);
     }
 
+    /// <summary>
+    /// Create a NewRecruitRosterEngine in frozen (HAR replay) mode.
+    /// All network requests are served from a pre-recorded HAR file (no internet required).
+    /// </summary>
+    public static async Task<NewRecruitRosterEngine> CreateFrozenAsync(
+        string harFilePath,
+        string baseUrl = "https://newrecruit.eu",
+        bool headless = true)
+    {
+        var browser = await NewRecruitBrowser.CreateFrozenAsync(harFilePath, baseUrl, headless);
+        return new NewRecruitRosterEngine(browser);
+    }
+
     public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
     {
         _gameSystem = gameSystem;
