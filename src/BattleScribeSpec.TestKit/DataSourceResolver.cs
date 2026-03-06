@@ -12,10 +12,29 @@ public sealed class DataSourceResolver
     {
         _cacheDir = cacheDir
             ?? Environment.GetEnvironmentVariable("BSSPEC_DATASOURCE_CACHE_DIR")
-            ?? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".battlescribe-spec",
-                "datasource-cache");
+            ?? FindDefaultCacheDir();
+    }
+
+    /// <summary>
+    /// Default cache goes into .testdata/datasource-cache under the repo root.
+    /// Falls back to ~/.battlescribe-spec/datasource-cache if repo root can't be found.
+    /// </summary>
+    private static string FindDefaultCacheDir()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx"))
+                || Directory.Exists(Path.Combine(dir, ".testdata")))
+            {
+                return Path.Combine(dir, ".testdata", "datasource-cache");
+            }
+            dir = Path.GetDirectoryName(dir);
+        }
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".battlescribe-spec",
+            "datasource-cache");
     }
 
     public string Resolve(string dataSourceUri) => Resolve(DataSourceUri.Parse(dataSourceUri));

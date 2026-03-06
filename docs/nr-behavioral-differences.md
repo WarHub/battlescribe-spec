@@ -10,45 +10,23 @@
 | Metric | Value |
 |--------|-------|
 | Total specs | 247 |
-| NR passing | ~224 (~90.7%) |
-| NR expected failures | 23 |
-| Oracle (BattleScribe) baseline | 241 passed + 5 expected failures = 246 total |
+| NR passing | ~229 (~92.7%) |
+| NR expected failures | 18 |
+| Oracle (BattleScribe) baseline | 241 passed, 5 NR-only skipped = 246 total |
 
 ### Failure Breakdown
 
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
-| [DataSource resolution](#1-datasource-resolution) | 5 | Infra | wh40k-10e v10.14.0 tag removed upstream |
-| [Error placement](#2-error-placement) | 4 | Medium | NR places constraint errors on selection, not category |
-| [Import ordering](#3-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#4-missing-features) | 5 | Low | Page numbers, publicationId on selections, unset-primary |
-| [Scope/condition evaluation](#5-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and percent conditions differently |
-| [Other behavioral differences](#6-other-behavioral-differences) | 3 | Medium | Cost limit error format, auto-select, hidden enforcement |
+| [Error placement](#1-error-placement) | 4 | Medium | NR places constraint errors on selection, not category |
+| [Import ordering](#2-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
+| [Missing features](#3-missing-features) | 5 | Low | Page numbers, publicationId on selections, unset-primary |
+| [Scope/condition evaluation](#4-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and percent conditions differently |
+| [Other behavioral differences](#5-other-behavioral-differences) | 3 | Medium | Cost limit error format, auto-select, hidden enforcement |
 
 ---
 
-## 1. DataSource Resolution
-
-**5 specs** — All wh40k-10e real-world specs fail because the upstream BSData
-repository removed the `v10.14.0` tag.
-
-```
-fatal: Remote branch v10.14.0 not found in upstream origin
-```
-
-| Spec |
-|------|
-| `real-world/wh40k-10e-captain` |
-| `real-world/wh40k-10e-create-army` |
-| `real-world/wh40k-10e-multi-unit` |
-| `real-world/wh40k-10e-points-cost` |
-| `real-world/wh40k-10e-space-marines-intercessors` |
-
-**Fix**: Update specs to reference a valid tag/commit SHA from the BSData repo.
-
----
-
-## 2. Error Placement
+## 1. Error Placement
 
 **4 specs** — NR places max/cost constraint errors on the **selection** node,
 while BattleScribe places them on the **category** node.
@@ -77,7 +55,7 @@ validation and attributes them to the category node.
 
 ---
 
-## 3. Import Ordering
+## 2. Import Ordering
 
 **3 specs** — NR orders imported entries from CatalogueLinks BEFORE
 faction-specific entries. BattleScribe puts faction entries first.
@@ -92,7 +70,7 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ---
 
-## 4. Missing Features
+## 3. Missing Features
 
 **5 specs** — NR doesn't implement or expose certain BattleScribe features.
 
@@ -109,7 +87,7 @@ only the selection-level publication/page fields are missing.
 
 ---
 
-## 5. Scope/Condition Evaluation
+## 4. Scope/Condition Evaluation
 
 **3 specs** — NR evaluates certain condition types differently, causing
 modifiers to trigger when they shouldn't (or vice versa).
@@ -126,7 +104,7 @@ proving the condition evaluates to true in NR but false in BS.
 
 ---
 
-## 6. Other Behavioral Differences
+## 5. Other Behavioral Differences
 
 **3 specs** with distinct NR behavioral differences:
 

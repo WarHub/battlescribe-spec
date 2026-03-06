@@ -5,13 +5,13 @@ tags: [wh40k-10e, real-world]
 engines: [newrecruit]
 
 setup:
-  dataSource: "github:BSData/wh40k-10e@v10.14.0"
+  dataSource: "github:BSData/wh40k-10e@v10.6.0"
 
 steps:
   - action: addForce
-    forceEntryName: "Strike Force"
+    forceEntryName: "Army Roster"
 
   - expectedState:
       forceCount: 1
       forces:
-        - name: "Strike Force"
+        - name: "Army Roster"
