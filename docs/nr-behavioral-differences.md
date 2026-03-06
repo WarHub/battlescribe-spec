@@ -3,17 +3,16 @@
 > Based on conformance testing against [newrecruit.eu](https://newrecruit.eu)
 > using the battlescribe-spec test suite.
 >
-> Last validated: 2026-03-05
+> Last validated: 2026-03-06
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
-| Total specs run (NR) | 246 |
-| NR passing | ~206 (84%) |
-| NR expected failures | 22 |
-| NR flaky (pass individually) | ~6 |
-| Oracle (BattleScribe) baseline | 246/246 passing (100%) |
+| Total specs | 247 |
+| NR passing | ~224 (~90.7%) |
+| NR expected failures | 23 |
+| Oracle (BattleScribe) baseline | 241 passed + 5 expected failures = 246 total |
 
 ### Failure Breakdown
 
@@ -292,13 +291,16 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 
 - **Browser lifecycle**: `NewRecruitFixture` (xUnit collection fixture) shares
   one Playwright browser across all NR tests, which run serially
-- **Gating**: NR tests only run when `NR_ENGINE_URL` environment variable is set
-- **Expected failures**: `specs/expected-failures/newrecruit.json` lists known
+- **Live testing**: NR tests only run when `NR_ENGINE_URL` environment variable
+  is set (on-demand via `workflow_dispatch` or `[nr-test]` commit message)
+- **Frozen testing**: `FrozenNewRecruitFixture` loads HAR recordings from
+  [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har) for fully
+  offline, deterministic replay via Playwright's `RouteFromHARAsync`
+- **Expected failures**: `specs/expected-failures/newrecruit.json` (23 entries)
+  and `specs/expected-failures/battlescribe.json` (5 entries) list known
   differences so they don't block CI
-- **Flaky tests**: ~6 specs pass individually but timeout in full suite runs
-  (~60 min, 246 specs serial) due to NR session degradation
-- **Oracle comparison**: All 246 Oracle (BattleScribe Java engine) tests pass
-  as the reference baseline
+- **Oracle comparison**: 241 Oracle (BattleScribe Java engine) tests pass as the
+  reference baseline, with 5 expected failures (broken DataSource tag)
 
 ### Resolved Issues (This Session)
 
