@@ -1,7 +1,7 @@
 [
   {
-    "specId": "condition/condition-percent-value",
-    "reason": "NR evaluates percent conditions differently — modifier triggers when it shouldn't",
+    "specId": "condition/condition-null-childid",
+    "reason": "NR treats missing childId as 'count everything' instead of NaN (condition fires when it shouldn't)",
     "category": "nr-condition-behavior"
   },
   {

@@ -9,10 +9,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total specs | 247 |
-| NR passing | ~229 (~92.7%) |
+| Total specs | 248 |
+| NR passing | ~230 (~92.7%) |
 | NR expected failures | 18 |
-| Oracle (BattleScribe) baseline | 241 passed, 5 NR-only skipped = 246 total |
+| Oracle (BattleScribe) baseline | 242 passed, 5 NR-only skipped = 247 total |
 
 ### Failure Breakdown
 
@@ -21,7 +21,7 @@
 | [Error placement](#1-error-placement) | 4 | Medium | NR places constraint errors on selection, not category |
 | [Import ordering](#2-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
 | [Missing features](#3-missing-features) | 5 | Low | Page numbers, publicationId on selections, unset-primary |
-| [Scope/condition evaluation](#4-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and percent conditions differently |
+| [Scope/condition evaluation](#4-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
 | [Other behavioral differences](#5-other-behavioral-differences) | 3 | Medium | Cost limit error format, auto-select, hidden enforcement |
 
 ---
@@ -96,11 +96,14 @@ modifiers to trigger when they shouldn't (or vice versa).
 |------|-------|
 | `scope/scope-include-child-forces` | Condition with `scope=force, childForces=true` triggers when it shouldn't |
 | `scope/scope-include-child-forces-nested` | Same issue in nested force scenario |
-| `condition/condition-percent-value` | Percent-value condition evaluates differently — modifier name change triggered incorrectly |
+| `condition/condition-null-childid` | Missing childId: NR counts all selections (condition fires), BS returns NaN (condition false) |
 
 These specs test complex condition evaluation where NR's implementation
-diverges from BattleScribe's. The modifier fires (changing the selection name),
-proving the condition evaluates to true in NR but false in BS.
+diverges from BattleScribe's. For scope specs, the modifier fires (changing the
+selection name), proving the condition evaluates to true in NR but false in BS.
+For the null-childId spec, BattleScribe's resolver returns null when childId is
+absent, causing the query to return NaN and the condition to evaluate as false.
+NR treats missing childId as "count everything", making the condition true.
 
 ---
 

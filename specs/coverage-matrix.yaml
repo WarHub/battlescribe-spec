@@ -13,7 +13,7 @@ summary:
 
 spec_inventory:
   condition:
-    count: 28
+    count: 29
     specs:
       - condition-at-least
       - condition-at-most
@@ -41,6 +41,7 @@ spec_inventory:
       - condition-multiple-and
       - condition-not-equal-to
       - condition-not-instance-of
+      - condition-null-childid
       - condition-percent-value
       - condition-scope-roster
   constraint:
@@ -586,6 +587,10 @@ infrastructure_coverage:
   percent_value:
     status: covered
     specs: [condition-percent-value, constraint-percent-value, modifier-repeat-percent-value]
+  null_childid:
+    status: covered
+    specs: [condition-null-childid]
+    note: Condition without childId always evaluates false in BattleScribe (query returns NaN)
   include_child_forces:
     status: covered
     specs: [scope-include-child-forces, scope-include-child-forces-nested]
