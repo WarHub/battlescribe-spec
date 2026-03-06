@@ -40,11 +40,24 @@ public sealed class SpecConformanceTests
             return;
         }
 
-        _output.WriteLine($"Running spec: {specName} — {spec.Description}");
+        var expectedToFail = spec.IsExpectedToFail("battlescribe");
+        _output.WriteLine($"Running spec: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         using var engine = new OracleRosterEngine();
         var runner = new SpecRunner(engine);
         var result = runner.Run(spec);
+
+        if (result.Passed && expectedToFail)
+        {
+            Assert.Fail($"Spec '{specName}' was expected to fail on battlescribe but now passes! " +
+                "Update the spec's engines field to remove the 'fail' expectation.");
+        }
+
+        if (!result.Passed && expectedToFail)
+        {
+            _output.WriteLine($"[EXPECTED FAILURE] Spec '{specName}' failed as expected on battlescribe.");
+            return;
+        }
 
         if (!result.Passed)
         {

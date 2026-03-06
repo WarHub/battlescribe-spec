@@ -112,12 +112,9 @@ if (totalSpecs == 0)
     return 1;
 }
 
-// ===== Load expected failures =====
-ExpectedFailures? expectedFailures = null;
-if (expectedFailuresEngine is not null)
-{
-    expectedFailures = ExpectedFailures.Load(expectedFailuresEngine, specsDir);
-}
+// ===== Engine expectations from spec-level engines field =====
+// The --expected-failures flag is now used only as the engine name for spec-level expectations.
+// Per-spec expected failures are encoded in the YAML engines field, not in separate JSON files.
 
 // ===== Start adapter process =====
 // Support "dotnet:path.dll" syntax for .NET adapters
@@ -138,6 +135,7 @@ using var adapterProcess = AdapterProcess.Start(adapterExe, adapterArgs);
 // ===== Run specs =====
 var results = new List<SpecResult>();
 var reportResults = new List<SpecResultSummary>();
+var specsByResult = new Dictionary<SpecResult, SpecFile>();
 var skipped = 0;
 var sw = Stopwatch.StartNew();
 
@@ -197,11 +195,24 @@ foreach (var (_, id, category, loader) in specSources)
     var runner = new SpecRunner(engine, new DataSourceResolver());
     var result = runner.Run(spec);
     results.Add(result);
+    specsByResult[result] = spec;
+
+    // Determine status considering engine expectations
+    var status = result.Passed ? "passed" : "failed";
+    if (expectedFailuresEngine is not null)
+    {
+        var isExpectedFail = spec.IsExpectedToFail(expectedFailuresEngine);
+        if (!result.Passed && isExpectedFail)
+            status = "expected-failure";
+        else if (result.Passed && isExpectedFail)
+            status = "unexpected-pass";
+    }
+
     reportResults.Add(new SpecResultSummary(
         result.SpecId,
         result.Category,
         result.Description,
-        result.Passed ? "passed" : "failed",
+        status,
         [.. result.Failures]));
 }
 
@@ -211,10 +222,22 @@ sw.Stop();
 var passed = results.Count(r => r.Passed);
 int failed;
 int expectedFailureCount = 0;
-if (expectedFailures is not null)
+int unexpectedPassCount = 0;
+if (expectedFailuresEngine is not null)
 {
-    failed = results.Count(r => !r.Passed && expectedFailures.Classify(r) == SpecResultClassification.Failed);
-    expectedFailureCount = results.Count(r => !r.Passed && expectedFailures.Classify(r) == SpecResultClassification.ExpectedFailure);
+    failed = 0;
+    foreach (var r in results)
+    {
+        var spec = specsByResult.TryGetValue(r, out var s) ? s : null;
+        var isExpectedFail = spec?.IsExpectedToFail(expectedFailuresEngine) ?? false;
+        if (!r.Passed && !isExpectedFail)
+            failed++;
+        if (!r.Passed && isExpectedFail)
+            expectedFailureCount++;
+        if (r.Passed && isExpectedFail)
+            unexpectedPassCount++;
+    }
+    failed += unexpectedPassCount; // Unexpected passes count as failures
 }
 else
 {
@@ -290,7 +313,8 @@ void OutputGitHubActions(List<SpecResult> results, TimeSpan elapsed)
     Console.WriteLine($"## BattleScribe Spec Conformance Results{engineLabel}");
     Console.WriteLine();
     var xfailLabel = expectedFailureCount > 0 ? $", **{expectedFailureCount}** expected failures" : "";
-    Console.WriteLine($"**{passed}** passed, **{failed}** failed{xfailLabel}, **{results.Count}** total ({elapsed.TotalSeconds:F1}s)");
+    var xpassLabel = unexpectedPassCount > 0 ? $", **{unexpectedPassCount}** unexpected passes" : "";
+    Console.WriteLine($"**{passed}** passed, **{failed}** failed{xfailLabel}{xpassLabel}, **{results.Count}** total ({elapsed.TotalSeconds:F1}s)");
     Console.WriteLine();
 
     if (failed > 0)
@@ -299,10 +323,20 @@ void OutputGitHubActions(List<SpecResult> results, TimeSpan elapsed)
         Console.WriteLine();
         Console.WriteLine("| Spec | Failures |");
         Console.WriteLine("|------|----------|");
-        foreach (var result in results.Where(r => !r.Passed && (expectedFailures is null || expectedFailures.Classify(r) == SpecResultClassification.Failed)))
+        foreach (var result in results)
         {
-            var failures = string.Join("<br>", result.Failures.Select(f => f.Replace("|", "\\|")));
-            Console.WriteLine($"| {result.Category}/{result.SpecId} | {failures} |");
+            var spec = specsByResult.TryGetValue(result, out var s) ? s : null;
+            var isExpectedFail = expectedFailuresEngine is not null && (spec?.IsExpectedToFail(expectedFailuresEngine) ?? false);
+            var isRealFailure = !result.Passed && !isExpectedFail;
+            var isUnexpectedPass = result.Passed && isExpectedFail;
+            if (isRealFailure || isUnexpectedPass)
+            {
+                var label = isUnexpectedPass ? " ⚠️ UNEXPECTED PASS" : "";
+                var failures = isUnexpectedPass
+                    ? "Expected to fail but passed — update spec engines field"
+                    : string.Join("<br>", result.Failures.Select(f => f.Replace("|", "\\|")));
+                Console.WriteLine($"| {result.Category}/{result.SpecId}{label} | {failures} |");
+            }
         }
     }
 }
@@ -327,8 +361,8 @@ void PrintUsage()
                               (battlescribe, newrecruit, phalanx)
           --report <path>     Write conformance report JSON to file
           --expected-failures <engine>
-                              Load expected failures for engine (e.g. battlescribe, newrecruit)
-                              Expected failures don't count toward exit code
+                              Engine name for spec-level expected failures (from engines YAML field)
+                              Expected failures don't count toward exit code; unexpected passes do
           -h, --help          Show this help
         """);
 }

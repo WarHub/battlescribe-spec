@@ -14,21 +14,20 @@ namespace BattleScribeSpec.Tests;
 /// Tests are skipped if the NR_ENGINE_URL environment variable is not set.
 /// Set NR_ENGINE_URL=https://newrecruit.eu (or a local instance) to enable.
 ///
-/// Expected failures: Specs listed in specs/expected-failures/newrecruit.json
-/// are still run but don't fail the suite. This allows tracking conformance progress.
+/// Expected failures are encoded in each spec's `engines` YAML field.
+/// Specs with `engines: {newrecruit: fail}` are expected to fail on NR.
+/// If an expected failure suddenly passes, the test FAILS (behavior change detected).
 /// </summary>
 [Collection("NewRecruit")]
 public sealed class NewRecruitConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly NewRecruitFixture _fixture;
-    private readonly ExpectedFailures? _expectedFailures;
 
     public NewRecruitConformanceTests(ITestOutputHelper output, NewRecruitFixture fixture)
     {
         _output = output;
         _fixture = fixture;
-        _expectedFailures = fixture.Available ? ExpectedFailures.Load("newrecruit") : null;
     }
 
     public static IEnumerable<object[]> AllSpecs()
@@ -58,36 +57,31 @@ public sealed class NewRecruitConformanceTests
             return;
         }
 
-        _output.WriteLine($"Running spec: {specName} — {spec.Description}");
+        var expectedToFail = spec.IsExpectedToFail("newrecruit");
+        _output.WriteLine($"Running spec: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         var engine = _fixture.Engine!;
         var runner = new SpecRunner(engine, new DataSourceResolver());
         var result = runner.Run(spec);
 
+        if (result.Passed && expectedToFail)
+        {
+            Assert.Fail($"Spec '{specName}' was expected to fail on newrecruit but now passes! " +
+                "Update the spec's engines field to remove the 'fail' expectation.");
+        }
+
+        if (!result.Passed && expectedToFail)
+        {
+            _output.WriteLine($"[EXPECTED FAILURE] Spec '{specName}' failed as expected on newrecruit.");
+            return;
+        }
+
         if (!result.Passed)
         {
-            var classification = _expectedFailures?.Classify(result)
-                ?? SpecResultClassification.Failed;
-
             var message = $"Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
                 string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
-
-            if (classification == SpecResultClassification.ExpectedFailure)
-            {
-                var fullId = string.IsNullOrEmpty(result.Category) ? result.SpecId : $"{result.Category}/{result.SpecId}";
-                var entry = _expectedFailures!.GetEntry(fullId) ?? _expectedFailures.GetEntry(result.SpecId);
-                _output.WriteLine($"[EXPECTED FAILURE] {message}");
-                _output.WriteLine($"  Reason: {entry?.Reason}");
-                return; // Don't fail the test
-            }
-
             _output.WriteLine(message);
             Assert.Fail(message);
-        }
-        else if (_expectedFailures?.Classify(result) == SpecResultClassification.UnexpectedPass)
-        {
-            _output.WriteLine($"[UNEXPECTED PASS] Spec '{specName}' is in expected failures but now passes! " +
-                "Consider removing it from specs/expected-failures/newrecruit.json");
         }
     }
 }

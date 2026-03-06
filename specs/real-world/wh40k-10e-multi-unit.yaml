@@ -2,7 +2,8 @@ id: wh40k-10e-multi-unit
 category: real-world
 description: Add multiple units to a Space Marines army and verify roster state
 tags: [wh40k-10e, real-world, space-marines]
-engines: [newrecruit]
+engines:
+  battlescribe: skip
 
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"

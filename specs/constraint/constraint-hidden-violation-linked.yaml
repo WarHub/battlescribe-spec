@@ -1,5 +1,7 @@
 id: constraint-hidden-violation-linked
 category: constraint
+engines:
+  newrecruit: fail
 description: Hidden entry selection produces structured validation error
 tags:
   - validation-errors

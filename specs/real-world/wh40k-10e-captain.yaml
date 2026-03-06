@@ -2,7 +2,8 @@ id: wh40k-10e-captain
 category: real-world
 description: Add a Space Marines Captain and verify unit profiles
 tags: [wh40k-10e, real-world, space-marines, profile]
-engines: [newrecruit]
+engines:
+  battlescribe: skip
 
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"

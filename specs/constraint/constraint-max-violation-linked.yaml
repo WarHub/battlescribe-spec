@@ -1,5 +1,7 @@
 id: constraint-max-violation-linked
 category: constraint
+engines:
+  newrecruit: fail
 description: Max selection constraint produces structured error with entry and constraint links
 tags:
   - validation-errors

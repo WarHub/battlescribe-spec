@@ -1,5 +1,7 @@
 id: selection-publication
 category: selection
+engines:
+  newrecruit: fail
 description: Selection entry preserves its publicationId from the catalogue definition
 
 setup:

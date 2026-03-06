@@ -2,7 +2,8 @@ id: wh40k-10e-space-marines-intercessors
 category: real-world
 description: Add Intercessor Squad to a Space Marines army and verify selection
 tags: [wh40k-10e, real-world, space-marines]
-engines: [newrecruit]
+engines:
+  battlescribe: skip
 
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"

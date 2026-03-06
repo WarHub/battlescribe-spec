@@ -1,5 +1,7 @@
 id: scope-include-child-forces
 category: scope
+engines:
+  newrecruit: fail
 description: Condition with includeChildForces flag includes child forces in query scope
 tags: []
 

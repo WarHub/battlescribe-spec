@@ -1,5 +1,7 @@
 id: selection-page
 category: selection
+engines:
+  newrecruit: fail
 description: Selection entry preserves its page field from the catalogue definition
 
 setup:

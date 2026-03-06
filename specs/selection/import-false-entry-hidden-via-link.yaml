@@ -1,5 +1,7 @@
 id: import-false-entry-hidden-via-link
 category: selection
+engines:
+  newrecruit: fail
 description: Entry with import=false on base catalogue is filtered when catalogue is imported via CatalogueLink
 
 setup:

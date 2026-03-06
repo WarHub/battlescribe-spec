@@ -1,5 +1,7 @@
 id: constraint-cost-limit-linked
 category: constraint
+engines:
+  newrecruit: fail
 description: Roster cost limit violation produces structured error owned by roster
 tags:
   - validation-errors

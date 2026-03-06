@@ -1,5 +1,7 @@
 id: condition-null-childid
 category: condition
+engines:
+  newrecruit: fail
 description: Condition with no childId evaluates to false — query cannot resolve target and returns NaN
 
 setup:

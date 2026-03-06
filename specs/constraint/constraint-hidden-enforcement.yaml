@@ -1,5 +1,7 @@
 id: constraint-hidden-enforcement
 category: constraint
+engines:
+  newrecruit: fail
 description: Hidden entries are not shown to users but constraints still apply to them
 tags: []
 

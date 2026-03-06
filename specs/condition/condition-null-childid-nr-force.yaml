@@ -1,6 +1,7 @@
 id: condition-null-childid-nr-force
 category: condition
-engines: [newrecruit]
+engines:
+  battlescribe: fail
 description: >
   NR-specific: condition without childId on force scope defaults to counting all selections.
   NR's state.eval() hash uses childId || (isForce ? "any" : "self"), so on a force node,

@@ -25,11 +25,13 @@ public sealed class SpecFile
     public List<string>? Tags { get; set; }
 
     /// <summary>
-    /// Which engines this spec applies to. Null means all engines.
-    /// Canonical names: "battlescribe", "newrecruit", "phalanx".
+    /// Per-engine expectations. Null means all engines expected to pass.
+    /// Map of engine name to expectation: "pass" (default), "fail", or "skip".
+    /// Canonical engine names: "battlescribe", "newrecruit", "phalanx".
+    /// Unlisted engines are expected to pass.
     /// </summary>
     [YamlMember(Alias = "engines")]
-    public List<string>? Engines { get; set; }
+    public Dictionary<string, string>? Engines { get; set; }
 
     [YamlMember(Alias = "setup")]
     public SetupDef Setup { get; set; } = new();
@@ -38,12 +40,44 @@ public sealed class SpecFile
     public List<StepDef> Steps { get; set; } = [];
 
     /// <summary>
-    /// Check if this spec applies to the given engine.
+    /// Check if this spec should run on the given engine (not "skip").
     /// Null/empty engines means applicable to all engines.
     /// </summary>
     public bool IsApplicableTo(string engineName)
-        => Engines is null || Engines.Count == 0
-        || Engines.Contains(engineName, StringComparer.OrdinalIgnoreCase);
+        => !ShouldSkip(engineName);
+
+    /// <summary>
+    /// Check if this spec should be skipped entirely for the given engine.
+    /// </summary>
+    public bool ShouldSkip(string engineName)
+    {
+        if (Engines is null || Engines.Count == 0)
+            return false;
+        return Engines.TryGetValue(engineName, out var expectation)
+            && string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Check if this spec is expected to fail on the given engine.
+    /// </summary>
+    public bool IsExpectedToFail(string engineName)
+    {
+        if (Engines is null || Engines.Count == 0)
+            return false;
+        return Engines.TryGetValue(engineName, out var expectation)
+            && string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Get the expectation for a given engine: "pass", "fail", or "skip".
+    /// Defaults to "pass" if engine is not listed or engines is null.
+    /// </summary>
+    public string GetExpectation(string engineName)
+    {
+        if (Engines is null || Engines.Count == 0)
+            return "pass";
+        return Engines.TryGetValue(engineName, out var expectation) ? expectation : "pass";
+    }
 }
 
 /// <summary>

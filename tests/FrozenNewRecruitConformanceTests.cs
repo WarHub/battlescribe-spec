@@ -17,7 +17,7 @@ namespace BattleScribeSpec.Tests;
 /// - NR_FROZEN_SKIP=true is set
 /// - Playwright browsers are not installed
 ///
-/// Uses the same expected-failures as live NR tests since the frozen version
+/// Uses the same spec-level engine expectations as live NR tests since the frozen version
 /// matches the NR behavior that was baselined.
 /// </summary>
 [Collection("FrozenNewRecruit")]
@@ -25,13 +25,11 @@ public sealed class FrozenNewRecruitConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly FrozenNewRecruitFixture _fixture;
-    private readonly ExpectedFailures? _expectedFailures;
 
     public FrozenNewRecruitConformanceTests(ITestOutputHelper output, FrozenNewRecruitFixture fixture)
     {
         _output = output;
         _fixture = fixture;
-        _expectedFailures = fixture.Available ? ExpectedFailures.Load("newrecruit") : null;
     }
 
     public static IEnumerable<object[]> AllSpecs()
@@ -60,35 +58,31 @@ public sealed class FrozenNewRecruitConformanceTests
             return;
         }
 
-        _output.WriteLine($"[FROZEN] Running spec: {specName} — {spec.Description}");
+        var expectedToFail = spec.IsExpectedToFail("newrecruit");
+        _output.WriteLine($"[FROZEN] Running spec: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         var engine = _fixture.Engine!;
         var runner = new SpecRunner(engine, new DataSourceResolver());
         var result = runner.Run(spec);
 
+        if (result.Passed && expectedToFail)
+        {
+            Assert.Fail($"[FROZEN] Spec '{specName}' was expected to fail on newrecruit but now passes! " +
+                "Update the spec's engines field to remove the 'fail' expectation.");
+        }
+
+        if (!result.Passed && expectedToFail)
+        {
+            _output.WriteLine($"[FROZEN/EXPECTED] Spec '{specName}' failed as expected on newrecruit.");
+            return;
+        }
+
         if (!result.Passed)
         {
-            var classification = _expectedFailures?.Classify(result)
-                ?? SpecResultClassification.Failed;
-
             var message = $"[FROZEN] Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
                 string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
-
-            if (classification == SpecResultClassification.ExpectedFailure)
-            {
-                var fullId = string.IsNullOrEmpty(result.Category) ? result.SpecId : $"{result.Category}/{result.SpecId}";
-                var entry = _expectedFailures!.GetEntry(fullId) ?? _expectedFailures.GetEntry(result.SpecId);
-                _output.WriteLine($"[FROZEN/EXPECTED] {message}");
-                _output.WriteLine($"  Reason: {entry?.Reason}");
-                return;
-            }
-
             _output.WriteLine(message);
             Assert.Fail(message);
-        }
-        else if (_expectedFailures?.Classify(result) == SpecResultClassification.UnexpectedPass)
-        {
-            _output.WriteLine($"[FROZEN/UNEXPECTED PASS] Spec '{specName}' is in expected failures but now passes!");
         }
     }
 }

@@ -9,10 +9,21 @@
 
 | Metric | Value |
 |--------|-------|
-| Total specs | 250 |
-| NR passing | ~232 (~92.8%) |
-| NR expected failures | 18 |
-| Oracle (BattleScribe) baseline | 242 passed, 7 NR-only skipped = 249 total |
+| Total specs | 249 |
+| NR expected to pass | ~231 |
+| NR expected to fail | 18 (encoded in spec `engines` field) |
+| NR skipped (dataSource) | 0 |
+| BS expected to pass | ~242 |
+| BS expected to fail | 2 (NR-specific condition specs) |
+| BS skipped (dataSource) | 5 (real-world wh40k-10e specs) |
+
+Expected failures are encoded in each spec's `engines` YAML field:
+```yaml
+engines:
+  newrecruit: fail    # expected to fail on NR
+  battlescribe: skip  # don't run on BS at all
+  # unlisted engines default to "pass"
+```
 
 ### Failure Breakdown
 
@@ -323,9 +334,12 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 - **Frozen testing**: `FrozenNewRecruitFixture` loads HAR recordings from
   [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har) for fully
   offline, deterministic replay via Playwright's `RouteFromHARAsync`
-- **Expected failures**: `specs/expected-failures/newrecruit.json` (23 entries)
-  and `specs/expected-failures/battlescribe.json` (5 entries) list known
-  differences so they don't block CI
+- **Expected failures**: Encoded directly in spec YAML files via the `engines`
+  field (map of engine name → expectation: `pass`, `fail`, or `skip`).
+  If a spec is expected to fail and does fail, the test passes. If an expected
+  failure suddenly passes, the test FAILS (detecting behavior changes).
+  Previously tracked in separate JSON files (`specs/expected-failures/*.json`)
+  which have been removed in favor of this single-source-of-truth approach.
 - **Oracle comparison**: 241 Oracle (BattleScribe Java engine) tests pass as the
   reference baseline, with 5 expected failures (broken DataSource tag)
 

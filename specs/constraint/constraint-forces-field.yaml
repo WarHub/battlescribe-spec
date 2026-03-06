@@ -1,5 +1,7 @@
 id: constraint-forces-field
 category: constraint
+engines:
+  newrecruit: fail
 description: Constraint with field=forces applies to force count instead of selection count
 tags: []
 
