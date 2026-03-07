@@ -244,6 +244,10 @@ All data model features from the BattleScribe XSD are now represented in the spe
 
 The test suite includes **10 complex real-world roster tests** (`ComplexRealWorldRosterTests.cs`) using wh40k-9e catalogue data. These exercise multi-catalogue scenarios, linked catalogues, conditions, modifiers, constraints, and cost calculations with real game data. All 10 tests pass consistently.
 
+Additionally, **2 declarative DataSource specs** use `github:BSData/wh40k-10e@v10.6.0` to test against real wh40k 10th Edition data:
+- `wh40k-10e-create-army` — minimal smoke test: loads all 44 catalogues, creates an Army Roster force
+- `wh40k-10e-space-marines-army` — rich multi-step spec: verifies auto-selected mandatory entries (Detachment, Show/Hide Options, Battle Size), adds Captain and Intercessor Squad with progressive type, cost, and selection count assertions
+
 ---
 
 ## 9. CatalogueManager Import Filtering — Architecture Note

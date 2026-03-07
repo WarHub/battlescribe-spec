@@ -16,12 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Data loading uses DataUtils via reflection to avoid IKVM namespace collision (CS0434).
 - `catalogueName` field on spec YAML step actions — resolves faction catalogue by name for `addForce` in DataSource mode.
 - `commons-io-2.4.jar` IKVM dependency required by DataUtils.
-- 5 real-world wh40k-10e specs using `dataSource: "github:BSData/wh40k-10e@v10.6.0"`:
-  - `wh40k-10e-create-army` — creates a basic Army Roster force ✅
-  - `wh40k-10e-points-cost` — verifies Intercessor Squad points cost ✅
-  - `wh40k-10e-captain` — adds Captain, checks selection (expected fail: auto-selection)
-  - `wh40k-10e-space-marines-intercessors` — adds Intercessor Squad (expected fail: auto-selection)
-  - `wh40k-10e-multi-unit` — adds multiple units (expected fail: auto-selection)
+- 2 real-world wh40k-10e specs using `dataSource: "github:BSData/wh40k-10e@v10.6.0"`:
+  - `wh40k-10e-create-army` — minimal smoke test (force creation without catalogue)
+  - `wh40k-10e-space-marines-army` — rich multi-step spec: auto-selections, Captain + Intercessor
+    Squad with progressive type, cost, and selection count assertions
 
 ### Changed
 

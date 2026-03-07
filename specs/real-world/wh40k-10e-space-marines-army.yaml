@@ -1,0 +1,82 @@
+id: wh40k-10e-space-marines-army
+category: real-world
+description: Build a Space Marines army — verify auto-selections, unit types, and points costs
+tags: [wh40k-10e, real-world, space-marines, cost, profile]
+setup:
+  dataSource: "github:BSData/wh40k-10e@v10.6.0"
+
+steps:
+  - action: addForce
+    forceEntryName: "Army Roster"
+    catalogueName: "Imperium - Space Marines"
+
+  # After force creation, mandatory entries are auto-selected
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: "Army Roster"
+          selectionCount: 3
+          selections:
+            - name: "Detachment"
+              type: upgrade
+            - name: "Show/Hide Options"
+              type: upgrade
+            - name: "Battle Size"
+              type: upgrade
+
+  - action: selectEntry
+    forceIndex: 0
+    entryName: "Captain"
+
+  - expectedState:
+      costs:
+        - name: "pts"
+          value: 80
+      forces:
+        - name: "Army Roster"
+          selectionCount: 4
+          selections:
+            - name: "Detachment"
+              type: upgrade
+            - name: "Show/Hide Options"
+              type: upgrade
+            - name: "Battle Size"
+              type: upgrade
+            - name: "Captain"
+              type: model
+
+  - action: selectEntry
+    forceIndex: 0
+    entryName: "Intercessor Squad"
+
+  - expectedState:
+      costs:
+        - name: "pts"
+          value: 160
+      forces:
+        - name: "Army Roster"
+          selectionCount: 5
+          selections:
+            - name: "Detachment"
+              type: upgrade
+            - name: "Show/Hide Options"
+              type: upgrade
+            - name: "Battle Size"
+              type: upgrade
+            - name: "Captain"
+              type: model
+            - name: "Intercessor Squad"
+              type: unit
+
+  - action: selectEntry
+    forceIndex: 0
+    entryName: "Intercessor Squad"
+
+  # Final state: 3 auto + 3 user = 6 selections, 80+80+80 = 240 pts
+  - expectedState:
+      costs:
+        - name: "pts"
+          value: 240
+      forces:
+        - name: "Army Roster"
+          selectionCount: 6
