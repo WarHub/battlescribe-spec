@@ -71,8 +71,18 @@ public sealed class DataSourceResolver
         if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
             return cachePath;
 
-        if (Directory.Exists(cachePath))
-            Directory.Delete(cachePath, recursive: true);
+        // Clean up empty/corrupt cache directories — wrapped in try-catch for concurrent access
+        try
+        {
+            if (Directory.Exists(cachePath))
+                Directory.Delete(cachePath, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Another process may be writing; if it now has content, use it
+            if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
+                return cachePath;
+        }
 
         var parent = Path.GetDirectoryName(cachePath);
         if (!string.IsNullOrWhiteSpace(parent))
@@ -121,11 +131,16 @@ public sealed class DataSourceResolver
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start git process.");
-        var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
+
+        // Read stdout and stderr in parallel to avoid deadlock when buffers fill
+        var stdOutTask = process.StandardOutput.ReadToEndAsync();
+        var stdErrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
+        var stdOut = stdOutTask.GetAwaiter().GetResult();
+        var stdErr = stdErrTask.GetAwaiter().GetResult();
 
         if (process.ExitCode != 0)
-            throw new InvalidOperationException($"git command failed ({process.ExitCode}): {stdErr}{stdOut}");
+            throw new InvalidOperationException(
+                $"git command failed ({process.ExitCode}):\nSTDERR: {stdErr}\nSTDOUT: {stdOut}");
     }
 }

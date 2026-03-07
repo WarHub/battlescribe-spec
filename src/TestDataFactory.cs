@@ -8,6 +8,11 @@ namespace BattleScribeSpec;
 /// pair designed to test a specific specification area.
 /// Uses Core records with .ToNode() for immutable construction.
 /// </summary>
+/// <remarks>
+/// TODO: Consider moving to the test project (BattleScribeSpec.Tests) since this is
+/// test infrastructure that doesn't need to ship with the main library. Currently in
+/// src/ because both OracleTestFixture and test project depend on it.
+/// </remarks>
 public static class TestDataFactory
 {
     private static string NewId() => Guid.NewGuid().ToString();

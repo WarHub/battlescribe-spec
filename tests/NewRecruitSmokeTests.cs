@@ -11,6 +11,7 @@ namespace BattleScribeSpec.Tests;
 /// Skipped when NR_ENGINE_URL is not set.
 /// </summary>
 [Collection("NewRecruit")]
+[Trait("Category", "Smoke")]
 public sealed class NewRecruitSmokeTests
 {
     private readonly ITestOutputHelper _output;

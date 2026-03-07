@@ -7,6 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// Category 9: Cost Calculation
 /// Tests that cost structures are correctly defined and calculable.
 /// </summary>
+[Trait("Category", "Unit")]
 public class CostCalculationTests
 {
     [Fact]

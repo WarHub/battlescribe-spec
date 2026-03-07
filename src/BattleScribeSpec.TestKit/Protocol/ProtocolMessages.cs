@@ -1064,7 +1064,10 @@ public static class ProtocolSerializer
     public static ProtocolResponse? DeserializeResponse(string json)
     {
         using var doc = JsonDocument.Parse(json);
-        var type = doc.RootElement.GetProperty("type").GetString();
+        if (!doc.RootElement.TryGetProperty("type", out var typeProp))
+            throw new JsonException("Protocol response missing required 'type' field");
+        var type = typeProp.GetString()
+            ?? throw new JsonException("Protocol response 'type' field is null");
         return type switch
         {
             "setupResult" => JsonSerializer.Deserialize<SetupResult>(json, Options),
@@ -1073,14 +1076,17 @@ public static class ProtocolSerializer
             "errors" => JsonSerializer.Deserialize<ErrorsResponse>(json, Options),
             "teardownResult" => JsonSerializer.Deserialize<TeardownResult>(json, Options),
             "error" => JsonSerializer.Deserialize<ProtocolError>(json, Options),
-            _ => throw new JsonException($"Unknown response type: {type}"),
+            _ => throw new JsonException($"Unknown response type: '{type}'"),
         };
     }
 
     public static ProtocolCommand? DeserializeCommand(string json)
     {
         using var doc = JsonDocument.Parse(json);
-        var type = doc.RootElement.GetProperty("type").GetString();
+        if (!doc.RootElement.TryGetProperty("type", out var typeProp))
+            throw new JsonException("Protocol command missing required 'type' field");
+        var type = typeProp.GetString()
+            ?? throw new JsonException("Protocol command 'type' field is null");
         return type switch
         {
             "setup" => JsonSerializer.Deserialize<SetupCommand>(json, Options),
@@ -1089,7 +1095,7 @@ public static class ProtocolSerializer
             "getState" => JsonSerializer.Deserialize<GetStateCommand>(json, Options),
             "getErrors" => JsonSerializer.Deserialize<GetErrorsCommand>(json, Options),
             "teardown" => JsonSerializer.Deserialize<TeardownCommand>(json, Options),
-            _ => throw new JsonException($"Unknown command type: {type}"),
+            _ => throw new JsonException($"Unknown command type: '{type}'"),
         };
     }
 }

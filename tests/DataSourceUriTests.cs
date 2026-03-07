@@ -2,6 +2,7 @@ using BattleScribeSpec;
 
 namespace BattleScribeSpec.Tests;
 
+[Trait("Category", "Unit")]
 public class DataSourceUriTests
 {
     [Fact]

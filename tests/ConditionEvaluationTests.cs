@@ -4,11 +4,12 @@ using WarHub.ArmouryModel.Source;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Category 6: Condition Evaluation
-/// Tests that conditions are correctly structured with proper types,
-/// scopes, fields, and comparison values.
+/// Tests that condition data structures are correctly constructed with proper types,
+/// scopes, fields, and comparison values via TestDataFactory.
+/// Note: These verify structure only, NOT runtime condition evaluation.
 /// </summary>
-public class ConditionEvaluationTests
+[Trait("Category", "Unit")]
+public class ConditionStructureTests
 {
     [Fact]
     public void Condition_AtLeast_HasCorrectStructure()

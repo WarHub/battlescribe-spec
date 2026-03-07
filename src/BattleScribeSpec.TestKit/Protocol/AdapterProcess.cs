@@ -26,6 +26,11 @@ public sealed class AdapterProcess : IDisposable
     /// <summary>
     /// Start an adapter process from the given executable path and optional arguments.
     /// </summary>
+    /// <remarks>
+    /// Stderr is collected asynchronously via BeginErrorReadLine. When the process exits
+    /// quickly, not all stderr lines may be captured before GetStderrTail() is called.
+    /// The Dispose method calls WaitForExit to ensure stderr is fully drained.
+    /// </remarks>
     public static AdapterProcess Start(string executable, string? arguments = null)
     {
         var psi = new ProcessStartInfo

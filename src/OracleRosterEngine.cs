@@ -154,7 +154,11 @@ public sealed class OracleRosterEngine : IRosterEngine
         }
         finally
         {
-            try { Directory.Delete(tempDir, recursive: true); } catch { /* best effort cleanup */ }
+            try { Directory.Delete(tempDir, recursive: true); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[OracleRosterEngine] Failed to clean up temp dir '{tempDir}': {ex.Message}");
+            }
         }
     }
 

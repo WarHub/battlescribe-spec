@@ -4,10 +4,13 @@ using WarHub.ArmouryModel.Source;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Category 7: Constraint Validation
-/// Tests that constraints are correctly structured for min/max enforcement.
+/// Tests that constraint data structures are correctly constructed for min/max enforcement
+/// via TestDataFactory.
+/// Note: These verify structure only, NOT runtime constraint enforcement.
+/// See ConstraintOracleTests for runtime enforcement tests.
 /// </summary>
-public class ConstraintValidationTests
+[Trait("Category", "Unit")]
+public class ConstraintStructureTests
 {
     [Fact]
     public void Constraint_Minimum_IsCorrectlyDefined()

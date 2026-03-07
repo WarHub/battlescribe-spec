@@ -8,6 +8,7 @@ namespace BattleScribeSpec.Tests;
 /// These validate that the spec handles production-quality data.
 /// Skipped if data is not present.
 /// </summary>
+[Trait("Category", "Integration")]
 public class RealWorldDataTests
 {
     private static string Wh40kDataDir => TestPaths.Wh40kDataDir!;

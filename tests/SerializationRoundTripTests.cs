@@ -5,9 +5,11 @@ using WarHub.ArmouryModel.Source.BattleScribe;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Category 11: Serialization Round-Trip
+/// Serialization Round-Trip Tests.
 /// Tests that BattleScribe data survives serialize → deserialize cycles.
+/// Includes both property-level and XML-level round-trip verification.
 /// </summary>
+[Trait("Category", "Unit")]
 public class SerializationRoundTripTests
 {
     private static MemoryStream SerializeToStream(SourceNode node)
@@ -19,6 +21,13 @@ public class SerializationRoundTripTests
         }
         memStream.Position = 0;
         return memStream;
+    }
+
+    private static string SerializeToString(SourceNode node)
+    {
+        using var writer = new StringWriter();
+        BattleScribeXmlSerializer.Instance.Serialize(node, writer);
+        return writer.ToString();
     }
 
     [Fact]
@@ -140,5 +149,29 @@ public class SerializationRoundTripTests
         Assert.Equal(roster.GameSystemName, deserialized.GameSystemName);
         Assert.Single(deserialized.CostLimits);
         Assert.Equal(2000m, deserialized.CostLimits[0].Value);
+    }
+
+    [Fact]
+    public void Gamesystem_XmlRoundTrip_ProducesSameOutput()
+    {
+        var gs = TestDataFactory.CreateMinimalGamesystem();
+        var xml1 = SerializeToString(gs);
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(xml1));
+        var deserialized = stream.DeserializeGamesystem();
+        Assert.NotNull(deserialized);
+        var xml2 = SerializeToString(deserialized);
+        Assert.Equal(xml1, xml2);
+    }
+
+    [Fact]
+    public void Catalogue_XmlRoundTrip_ProducesSameOutput()
+    {
+        var cat = TestDataFactory.CreateBasicCatalogue();
+        var xml1 = SerializeToString(cat);
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(xml1));
+        var deserialized = stream.DeserializeCatalogue();
+        Assert.NotNull(deserialized);
+        var xml2 = SerializeToString(deserialized);
+        Assert.Equal(xml1, xml2);
     }
 }

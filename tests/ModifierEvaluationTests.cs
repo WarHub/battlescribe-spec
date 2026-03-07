@@ -4,11 +4,13 @@ using WarHub.ArmouryModel.Source;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Category 5: Modifier Evaluation
-/// Tests that modifiers are correctly defined with appropriate types,
-/// fields, values, and conditions.
+/// Tests that modifier data structures are correctly constructed with appropriate types,
+/// fields, values, and conditions via TestDataFactory.
+/// Note: These verify structure only, NOT runtime modifier evaluation.
+/// See ModifierOracleTests for runtime evaluation tests.
 /// </summary>
-public class ModifierEvaluationTests
+[Trait("Category", "Unit")]
+public class ModifierStructureTests
 {
     private readonly CatalogueNode _catalogue = TestDataFactory.CreateModifierTestCatalogue();
 

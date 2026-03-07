@@ -10,6 +10,7 @@ namespace BattleScribeSpec.Tests;
 /// select entries, deselect, modify costs, and verify the complete state
 /// after each operation (modifiers re-evaluated, constraints re-checked, costs recalculated).
 /// </summary>
+[Trait("Category", "Unit")]
 public class RefreshCycleOracleTests(ITestOutputHelper output)
 {
     [Fact]

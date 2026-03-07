@@ -4,6 +4,7 @@ using WarHub.ArmouryModel.Source.BattleScribe;
 
 namespace BattleScribeSpec.Tests;
 
+[Trait("Category", "Unit")]
 public class RunnerAndProtocolRegressionTests
 {
     [Fact]

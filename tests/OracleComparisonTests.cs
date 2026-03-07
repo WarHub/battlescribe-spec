@@ -9,6 +9,7 @@ namespace BattleScribeSpec.Tests;
 /// and verify the behavior matches expected patterns. These establish the canonical
 /// behavior specification that any conforming implementation must match.
 /// </summary>
+[Trait("Category", "Unit")]
 public class OracleComparisonTests(ITestOutputHelper output)
 {
     [Fact]
@@ -72,15 +73,10 @@ public class OracleComparisonTests(ITestOutputHelper output)
 
         // The selection should have a cost
         output.WriteLine($"Selection costs: {string.Join(", ", selection.Costs.Select(c => $"{c.Name}={c.Value}"))}");
-        if (selection.Costs.Length > 0)
-        {
-            var ptsCost = selection.Costs.FirstOrDefault(c => c.TypeId == "pts");
-            if (ptsCost != null)
-            {
-                Assert.Equal(100.0, ptsCost.Value);
-                output.WriteLine($"Cost verified: {ptsCost.Name} = {ptsCost.Value}");
-            }
-        }
+        Assert.NotEmpty(selection.Costs);
+        var ptsCost = Assert.Single(selection.Costs, c => c.TypeId == "pts");
+        Assert.Equal(100.0, ptsCost.Value);
+        output.WriteLine($"Cost verified: {ptsCost.Name} = {ptsCost.Value}");
 
         // Check roster-level costs too
         output.WriteLine($"Roster costs: {string.Join(", ", snapshot.Costs.Select(c => $"{c.Name}={c.Value}"))}");

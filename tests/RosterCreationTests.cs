@@ -7,6 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// Category 3 & 4: Roster Creation and Selection Operations
 /// Tests the roster node construction and selection tree structure.
 /// </summary>
+[Trait("Category", "Unit")]
 public class RosterCreationTests
 {
     private static CostCore Pts(decimal value) => new() { TypeId = "pts", Name = "pts", Value = value };
