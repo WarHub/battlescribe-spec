@@ -3,29 +3,30 @@
 > Based on conformance testing against [newrecruit.eu](https://newrecruit.eu)
 > using the battlescribe-spec test suite.
 >
-> Last validated: 2026-03-06
+> Last validated: 2026-03-07
 
 ## Summary
 
 | Metric | BattleScribe | New Recruit |
 |--------|-------------|-------------|
-| Total specs | 249 | 249 |
-| Expected to pass | 242 | 231 |
-| Expected to fail | 2 | 18 |
-| Skipped | 5 | 0 |
+| Total specs | 247 | 245 |
+| Expected to pass | 245 | 228 |
+| Expected to fail | 2 | 17 |
 
 **BattleScribe expected failures** (2): NR-specific condition specs where BS
 returns NaN for null childId (`condition-null-childid-nr-force`,
 `condition-null-childid-nr-self`).
 
-**BattleScribe skipped** (5): Real-world `wh40k-10e` DataSource specs that
-require external game data repos unavailable to the BS oracle.
+**NR DataSource skipped** (2): Real-world `wh40k-10e` DataSource specs require
+loading external game data from a GitHub repository. The NR adapter cannot load
+data this way — it uses NR's built-in game library. BattleScribe runs these
+specs using its IKVM engine with `DataUtils` XML loading.
 
 Expected failures are encoded in each spec's `engines` YAML field:
 ```yaml
 engines:
   newrecruit: fail    # expected to fail on NR
-  battlescribe: skip  # don't run on BS at all
+  battlescribe: fail  # expected to fail on BS
   # unlisted engines default to "pass"
 ```
 
@@ -37,7 +38,7 @@ engines:
 | [Import ordering](#2-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
 | [Missing features](#3-missing-features) | 5 | Low | Page numbers, publicationId on selections, unset-primary |
 | [Scope/condition evaluation](#4-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
-| [Other behavioral differences](#5-other-behavioral-differences) | 3 | Medium | Cost limit error format, auto-select, hidden enforcement |
+| [Other behavioral differences](#5-other-behavioral-differences) | 2 | Medium | Auto-select root entries, hidden selection filtering |
 
 ---
 
@@ -130,14 +131,7 @@ expected to fail on BS (`engines: {battlescribe: fail}`).
 
 ## 5. Other Behavioral Differences
 
-**3 specs** with distinct NR behavioral differences:
-
-### Cost Limit Error Format
-| Spec | Issue |
-|------|-------|
-| `constraint/constraint-cost-limit-linked` | Error `from` field uses `ct-pts` instead of `costLimits/ct-pts` |
-
-NR fires the cost limit error correctly but the constraint path format differs.
+**2 specs** with distinct NR behavioral differences:
 
 ### Auto-Select Root Entries
 | Spec | Issue |
@@ -232,7 +226,8 @@ roster node, then reading the node's error arrays. Key findings:
 - Can crash with undefined reference errors — wrapped in try-catch
 - Errors on army node are cost limit violations
 - Error structure: `{message, constraintId?, ownerType, ownerEntryId}`
-- ConstraintId format differs from BS (no `costLimits/` prefix for cost limits)
+- ConstraintId format: NR now maps cost limit errors to the `costLimits/`
+  pseudo-entry convention (matching BattleScribe's format)
 - Max constraint errors go on the selection, not the category (unlike BS)
 
 ### Catalogue Expansion and Entry Links
@@ -348,9 +343,9 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   failure suddenly passes, the test FAILS (detecting behavior changes).
   Previously tracked in separate JSON files (`specs/expected-failures/*.json`)
   which have been removed in favor of this single-source-of-truth approach.
-- **Oracle (BattleScribe)**: 242 specs expected to pass, 2 expected to fail
-  (NR-specific null-childId condition behavior), 5 skipped (real-world
-  DataSource specs requiring external data repos)
+- **Oracle (BattleScribe)**: 245 specs expected to pass, 2 expected to fail
+  (NR-specific null-childId condition behavior). DataSource specs (2 real-world
+  wh40k-10e) are fully supported via IKVM engine with DataUtils XML loading.
 
 ### Resolved Issues
 
