@@ -78,8 +78,9 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Add a force by name (for DataSource specs where index-based resolution isn't available).
+    /// catalogueName identifies which faction/catalogue to use.
     /// </summary>
-    void AddForceByName(string forceName, int catalogueIndex = 0)
+    void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
         => throw new NotSupportedException("This engine does not support name-based force addition.");
 
     /// <summary>

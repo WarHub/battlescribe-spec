@@ -2,15 +2,13 @@ id: wh40k-10e-captain
 category: real-world
 description: Add a Space Marines Captain and verify unit profiles
 tags: [wh40k-10e, real-world, space-marines, profile]
-engines:
-  battlescribe: skip
-
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
 
 steps:
   - action: addForce
     forceEntryName: "Army Roster"
+    catalogueName: "Imperium - Space Marines"
 
   - action: selectEntry
     forceIndex: 0
@@ -20,5 +18,13 @@ steps:
       forces:
         - name: "Army Roster"
           selections:
+            # Auto-selected mandatory entries
+            - name: "Detachment"
+              type: upgrade
+            - name: "Show/Hide Options"
+              type: upgrade
+            - name: "Battle Size"
+              type: upgrade
+            # User-selected entry
             - name: "Captain"
               type: model

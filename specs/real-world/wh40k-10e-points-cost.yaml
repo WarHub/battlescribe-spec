@@ -2,15 +2,13 @@ id: wh40k-10e-points-cost
 category: real-world
 description: Verify points cost calculation for Space Marines units
 tags: [wh40k-10e, real-world, space-marines, cost]
-engines:
-  battlescribe: skip
-
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
 
 steps:
   - action: addForce
     forceEntryName: "Army Roster"
+    catalogueName: "Imperium - Space Marines"
 
   - action: selectEntry
     forceIndex: 0

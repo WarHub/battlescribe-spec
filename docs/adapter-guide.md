@@ -197,3 +197,20 @@ that wraps the BattleScribe oracle engine. It's only ~10 lines of code thanks to
 - **Stderr is yours** — use it for debug logging without interfering with the protocol
 - **State is per-session** — a new adapter process is started for each spec
 - **Exact matching** — state values (names, IDs, costs) must match exactly
+
+## DataSource Specs
+
+Some specs use `dataSource` in their setup (e.g., `github:BSData/wh40k-10e@v10.6.0`) instead
+of inline game system/catalogue XML. These specs load real-world BattleScribe data files and
+use name-based actions (`forceEntryName`, `entryName`, `catalogueName`) instead of index-based.
+
+DataSource specs are resolved by the test runner using `DataSourceResolver` and are supported
+by engines that implement the `IRosterEngine` file-based interface methods:
+
+- `SetupFromFiles(files)` — load raw `.gst`/`.cat` XML files
+- `AddForceByName(forceName, catalogueName)` — add a force, optionally specifying the faction catalogue
+- `SelectEntryByName(forceIndex, entryName)` — select an entry by name
+- `SelectChildEntryByName(forceIndex, selectionIndex, childEntryName)` — select a child entry by name
+
+The protocol adapter does not need to support DataSource specs — they are handled internally
+by the spec runner and the `IRosterEngine` implementation.

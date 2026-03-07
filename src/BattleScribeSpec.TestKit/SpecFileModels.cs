@@ -708,6 +708,9 @@ public sealed class StepDef
     [YamlMember(Alias = "catalogueIndex")]
     public int? CatalogueIndex { get; set; }
 
+    [YamlMember(Alias = "catalogueName")]
+    public string? CatalogueName { get; set; }
+
     [YamlMember(Alias = "costTypeId")]
     public string? CostTypeId { get; set; }
 

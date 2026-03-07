@@ -36,7 +36,11 @@
     <IkvmReference Include="..\lib\DataUtils.jar">
       <AssemblyName>DataUtils</AssemblyName>
       <AssemblyVersion>2.3.21.0</AssemblyVersion>
-      <References>..\lib\simple-xml-2.7.1.jar;..\lib\kotlin-stdlib-1.3.71.jar;..\lib\kotlin-stdlib-common-1.3.71.jar;..\lib\annotations-13.0.jar</References>
+      <References>..\lib\BattleScribeEngine.jar;..\lib\simple-xml-2.7.1.jar;..\lib\commons-io-2.4.jar;..\lib\kotlin-stdlib-1.3.71.jar;..\lib\kotlin-stdlib-common-1.3.71.jar;..\lib\annotations-13.0.jar</References>
+    </IkvmReference>
+    <IkvmReference Include="..\lib\commons-io-2.4.jar">
+      <AssemblyName>CommonsIo</AssemblyName>
+      <AssemblyVersion>2.4.0.0</AssemblyVersion>
     </IkvmReference>
     <IkvmReference Include="..\lib\simple-xml-2.7.1.jar">
       <AssemblyName>SimpleXml</AssemblyName>

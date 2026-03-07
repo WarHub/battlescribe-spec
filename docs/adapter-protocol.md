@@ -89,7 +89,7 @@ Sent once at the start of each spec test. Provides game system and catalogues da
 
 | Action | Required Fields | Description |
 |--------|----------------|-------------|
-| `addForce` | `forceEntryIndex` | Add a force using a force entry by index |
+| `addForce` | `forceEntryIndex` | Add a force using a force entry by index. Optional: `catalogueIndex` (default 0) |
 | `removeForce` | `forceIndex` | Remove a force by index |
 | `selectEntry` | `forceIndex`, `entryIndex` | Add a selection to a force |
 | `selectChildEntry` | `forceIndex`, `selectionIndex`, `childEntryIndex` | Add a child selection |
@@ -101,6 +101,7 @@ Sent once at the start of each spec test. Provides game system and catalogues da
 Example:
 ```json
 {"type":"action","action":"addForce","forceEntryIndex":0}
+{"type":"action","action":"addForce","forceEntryIndex":0,"catalogueIndex":3}
 {"type":"action","action":"selectEntry","forceIndex":0,"entryIndex":0}
 {"type":"action","action":"setCostLimit","costTypeId":"ct-pts","value":500}
 ```

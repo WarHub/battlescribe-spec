@@ -314,7 +314,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return errors;
     }
 
-    public void AddForceByName(string forceName, int catalogueIndex = 0)
+    public void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
     {
         NewRecruitActions.AddForceByNameAsync(_browser.Page, forceName, catalogueIndex)
             .GetAwaiter().GetResult();

@@ -2,15 +2,13 @@ id: wh40k-10e-space-marines-intercessors
 category: real-world
 description: Add Intercessor Squad to a Space Marines army and verify selection
 tags: [wh40k-10e, real-world, space-marines]
-engines:
-  battlescribe: skip
-
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
 
 steps:
   - action: addForce
     forceEntryName: "Army Roster"
+    catalogueName: "Imperium - Space Marines"
 
   - action: selectEntry
     forceIndex: 0
@@ -21,5 +19,13 @@ steps:
       forces:
         - name: "Army Roster"
           selections:
+            # Auto-selected mandatory entries
+            - name: "Detachment"
+              type: upgrade
+            - name: "Show/Hide Options"
+              type: upgrade
+            - name: "Battle Size"
+              type: upgrade
+            # User-selected entry
             - name: "Intercessor Squad"
               type: unit

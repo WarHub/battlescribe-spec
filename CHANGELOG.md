@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **DataSource spec support** for the BattleScribe oracle engine:
+  - `OracleRosterEngine` implements `SetupFromFiles`, `AddForceByName`, `SelectEntryByName`, `SelectChildEntryByName`.
+  - `DataSourceResolver` wired into `SpecConformanceTests` for resolving `github:` data source references.
+  - XML pre-processing adds missing `value=""` attributes on `<modifier>` elements to work around
+    SimpleXML `@Attribute(required=true)` validation on newer data files.
+  - Data loading uses DataUtils via reflection to avoid IKVM namespace collision (CS0434).
+- `catalogueName` field on spec YAML step actions — resolves faction catalogue by name for `addForce` in DataSource mode.
+- `commons-io-2.4.jar` IKVM dependency required by DataUtils.
+- 5 real-world wh40k-10e specs using `dataSource: "github:BSData/wh40k-10e@v10.6.0"`:
+  - `wh40k-10e-create-army` — creates a basic Army Roster force ✅
+  - `wh40k-10e-points-cost` — verifies Intercessor Squad points cost ✅
+  - `wh40k-10e-captain` — adds Captain, checks selection (expected fail: auto-selection)
+  - `wh40k-10e-space-marines-intercessors` — adds Intercessor Squad (expected fail: auto-selection)
+  - `wh40k-10e-multi-unit` — adds multiple units (expected fail: auto-selection)
+
+### Changed
+
+- Cost assertions in `SpecRunner` now match by `name` when `typeId` is not specified, allowing
+  specs to use human-readable cost names (e.g., `name: "pts"`) instead of requiring UUIDs.
+- `IRosterEngine.AddForceByName` signature updated to accept optional `catalogueName` parameter.
+- `BattleScribeOracle` data loading switched from direct SimpleXML deserialization to DataUtils
+  loader via reflection, with XML pre-processing for compatibility with modern data files.
+- `BattleScribeSpec.csproj`: `DataUtils` IKVM reference now includes `BattleScribeEngine.jar`
+  dependency; added `CommonsIo` IKVM reference.
+
+### Added
+
 - `ValidationErrorState` record with `Message`, `OwnerType`, `OwnerId`, `OwnerEntryId`, `EntryId`, and `ConstraintId` fields.
 - `ProtocolValidationError` structured type in the adapter protocol.
 - Compact `errors` assertion format in spec YAML using `on`/`from`/`message` syntax:

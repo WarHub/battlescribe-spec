@@ -44,7 +44,7 @@ public sealed class SpecConformanceTests
         _output.WriteLine($"Running spec: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         using var engine = new OracleRosterEngine();
-        var runner = new SpecRunner(engine);
+        var runner = new SpecRunner(engine, new DataSourceResolver());
         var result = runner.Run(spec);
 
         if (result.Passed && expectedToFail)

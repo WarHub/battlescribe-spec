@@ -781,25 +781,86 @@ public sealed class BattleScribeOracle : IDisposable
             .ToList();
     }
 
-    // ===== File-loading API (loads real XML data via SimpleXML Persister) =====
+    // ===== File-loading API (loads real XML data via DataUtils) =====
 
     /// <summary>
-    /// Load a game system from a .gst XML file using SimpleXML deserialization.
-    /// Bypasses DataUtils wrapper to avoid IKVM cross-assembly class loading issues.
+    /// Load a game system from a .gst XML file using DataUtils deserialization.
+    /// DataUtils uses SimpleXML with AnnotationStrategy for full deserialization.
+    /// Called via reflection because obfuscated class names create C# namespace conflicts.
+    /// Pre-processes XML to fix compatibility issues with newer data formats.
     /// </summary>
     public void LoadGameSystemFile(string gstFilePath)
     {
-        var gs = DeserializeXml<GameSystem>(gstFilePath);
+        using var bis = CreatePreprocessedStream(gstFilePath);
+        var gs = (GameSystem)InvokeDataUtils("e", typeof(java.io.InputStream), bis);
         _gameSystem = gs;
     }
 
     /// <summary>
-    /// Load a catalogue from a .cat XML file using SimpleXML deserialization.
+    /// Load a catalogue from a .cat XML file using DataUtils deserialization.
     /// </summary>
     public void LoadCatalogueFile(string catFilePath)
     {
-        var cat = DeserializeXml<Catalogue>(catFilePath);
+        using var bis = CreatePreprocessedStream(catFilePath);
+        var cat = (Catalogue)InvokeDataUtils("f", typeof(java.io.InputStream), bis);
         _catalogues[cat.getId()] = cat;
+    }
+
+    /// <summary>
+    /// Read XML file and pre-process to fix compatibility with BattleScribe 2.3.21's model.
+    /// Adds default value="" attribute to modifier elements missing it, since the engine's
+    /// Modifier class has @Attribute(required=true) on the value field, but newer data
+    /// formats allow omitting it.
+    /// </summary>
+    private static java.io.BufferedInputStream CreatePreprocessedStream(string xmlFilePath)
+    {
+        var xml = File.ReadAllText(xmlFilePath);
+        xml = AddMissingModifierValues(xml);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(xml);
+        var bais = new java.io.ByteArrayInputStream(bytes);
+        return new java.io.BufferedInputStream(bais);
+    }
+
+    /// <summary>
+    /// Add value="" to modifier elements that are missing the value attribute.
+    /// Uses regex to find &lt;modifier elements without a value= attribute and adds one.
+    /// </summary>
+    private static string AddMissingModifierValues(string xml)
+    {
+        // Match <modifier (or <repeat) tags that don't already have a value= attribute.
+        // The pattern finds the tag up to > or /> and checks for absence of value=.
+        return System.Text.RegularExpressions.Regex.Replace(
+            xml,
+            @"(<modifier\b(?![^>]*\bvalue\s*=))([^>]*?)(\/?>)",
+            "$1 value=\"\"$2$3");
+    }
+
+    /// <summary>
+    /// Invoke a static method on the DataUtils serializer class (net.battlescribe.a.c.e)
+    /// via reflection. Direct call is impossible due to IKVM obfuscated name collisions
+    /// (class 'c' in net.battlescribe.a conflicts with namespace net.battlescribe.a.c).
+    /// </summary>
+    private static object InvokeDataUtils(string methodName, Type parameterType, object arg)
+    {
+        var dataUtilsAssembly = System.Reflection.Assembly.Load("DataUtils");
+        var serializerType = dataUtilsAssembly.GetType("net.battlescribe.a.c.e")
+            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+        var method = serializerType.GetMethod(methodName,
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            [parameterType])
+            ?? throw new InvalidOperationException(
+                $"DataUtils method '{methodName}({parameterType.Name})' not found.");
+        try
+        {
+            return method.Invoke(null, [arg])
+                ?? throw new InvalidOperationException(
+                    $"DataUtils.{methodName} returned null.");
+        }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw; // unreachable
+        }
     }
 
     /// <summary>
@@ -846,22 +907,6 @@ public sealed class BattleScribeOracle : IDisposable
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Deserialize an XML file to a Java model type using SimpleXML Persister.
-    /// This replicates what DataUtils does internally without cross-assembly issues.
-    /// </summary>
-    private static T DeserializeXml<T>(string filePath) where T : class
-    {
-        // Use the default Persister with strict=false (matching @Root(strict=false) annotations)
-        var persister = new org.simpleframework.xml.core.Persister();
-        var file = new java.io.File(filePath);
-        // Get java.lang.Class from .NET Type using IKVM intrinsics
-        var javaClass = java.lang.Class.forName(typeof(T).FullName!.Replace('+', '$'));
-        var result = persister.read(javaClass, file, false);
-        return (T)(result ?? throw new InvalidOperationException(
-            $"SimpleXML deserialization returned null for {filePath}"));
     }
 
     private static string? ReadRootIdAttribute(string filePath)
@@ -923,6 +968,24 @@ public sealed class BattleScribeOracle : IDisposable
     public List<string> GetAvailableForceEntryNames()
     {
         return _setupForceEntries.Select(fe => fe.getName() ?? "?").ToList();
+    }
+
+    /// <summary>
+    /// Get the count and names of loaded catalogues (for diagnostics).
+    /// </summary>
+    public int GetLoadedCatalogueCount() => _catalogues.Count;
+
+    public List<string> GetLoadedCatalogueNames() =>
+        _catalogues.Values.Select(c => $"{c.getName()} ({c.getId()})").ToList();
+
+    public int GetCatalogueIndexByName(string name)
+    {
+        for (int i = 0; i < _setupCatalogues.Count; i++)
+        {
+            if (string.Equals(_setupCatalogues[i].getName(), name, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
     }
 
     /// <summary>

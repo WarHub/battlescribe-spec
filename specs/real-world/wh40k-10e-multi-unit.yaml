@@ -2,15 +2,13 @@ id: wh40k-10e-multi-unit
 category: real-world
 description: Add multiple units to a Space Marines army and verify roster state
 tags: [wh40k-10e, real-world, space-marines]
-engines:
-  battlescribe: skip
-
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
 
 steps:
   - action: addForce
     forceEntryName: "Army Roster"
+    catalogueName: "Imperium - Space Marines"
 
   - action: selectEntry
     forceIndex: 0
@@ -27,4 +25,4 @@ steps:
   - expectedState:
       forces:
         - name: "Army Roster"
-          selectionCount: 3
+          selectionCount: 6

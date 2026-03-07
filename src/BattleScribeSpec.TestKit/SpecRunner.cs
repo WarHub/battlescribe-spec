@@ -112,7 +112,7 @@ public sealed class SpecRunner
                 var addForceCatalogueIndex = step.CatalogueIndex ?? 0;
                 if (_isDataSourceMode && step.ForceEntryName is { Length: > 0 } dsForceEntryName)
                 {
-                    _engine.AddForceByName(dsForceEntryName, addForceCatalogueIndex);
+                    _engine.AddForceByName(dsForceEntryName, step.CatalogueName, addForceCatalogueIndex);
                 }
                 else
                 {
@@ -391,11 +391,16 @@ public sealed class SpecRunner
         {
             foreach (var ec in expectedCosts)
             {
-                var actual = state.Costs.FirstOrDefault(c => c.TypeId == ec.TypeId);
+                var matchKey = ec.TypeId ?? ec.Name;
+                var actual = ec.TypeId is { Length: > 0 }
+                    ? state.Costs.FirstOrDefault(c => c.TypeId == ec.TypeId)
+                    : ec.Name is { Length: > 0 }
+                        ? state.Costs.FirstOrDefault(c => c.Name == ec.Name)
+                        : null;
                 if (actual is null)
-                    _errors.Add($"Step {stepIndex}: cost type '{ec.TypeId}' not found in roster");
+                    _errors.Add($"Step {stepIndex}: cost type '{matchKey}' not found in roster");
                 else if (ec.Value is { } v)
-                    AssertEqual(stepIndex, $"cost[{ec.TypeId}].value", v, actual.Value);
+                    AssertEqual(stepIndex, $"cost[{matchKey}].value", v, actual.Value);
             }
         }
 
@@ -551,11 +556,16 @@ public sealed class SpecRunner
             {
                 foreach (var ec in eCosts)
                 {
-                    var ac = a.Costs.FirstOrDefault(c => c.TypeId == ec.TypeId);
+                    var matchKey = ec.TypeId ?? ec.Name;
+                    var ac = ec.TypeId is { Length: > 0 }
+                        ? a.Costs.FirstOrDefault(c => c.TypeId == ec.TypeId)
+                        : ec.Name is { Length: > 0 }
+                            ? a.Costs.FirstOrDefault(c => c.Name == ec.Name)
+                            : null;
                     if (ac is null)
-                        _errors.Add($"Step {stepIndex}: {selPrefix} cost type '{ec.TypeId}' not found");
+                        _errors.Add($"Step {stepIndex}: {selPrefix} cost type '{matchKey}' not found");
                     else if (ec.Value is { } v)
-                        AssertEqual(stepIndex, $"{selPrefix}.cost[{ec.TypeId}]", v, ac.Value);
+                        AssertEqual(stepIndex, $"{selPrefix}.cost[{matchKey}]", v, ac.Value);
                 }
             }
 

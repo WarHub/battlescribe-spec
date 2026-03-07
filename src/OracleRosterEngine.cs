@@ -120,6 +120,95 @@ public sealed class OracleRosterEngine : IRosterEngine
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors() => _oracle.GetValidationErrors();
 
+    // ===== DataSource support (file-based setup + name-based actions) =====
+
+    public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        // Write files to a temp directory so the oracle can load them via SimpleXML
+        var tempDir = Path.Combine(Path.GetTempPath(), "bsspec-oracle-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            foreach (var (fileName, content) in files)
+            {
+                var filePath = Path.Combine(tempDir, fileName);
+                File.WriteAllText(filePath, content);
+            }
+
+            // Load .gst file (game system)
+            var gstFiles = Directory.GetFiles(tempDir, "*.gst");
+            if (gstFiles.Length == 0)
+                return ["No .gst (game system) file found in data source files."];
+            if (gstFiles.Length > 1)
+                return [$"Expected exactly one .gst file, found {gstFiles.Length}."];
+            _oracle.LoadGameSystemFile(gstFiles[0]);
+
+            // Load all .cat files with dependency resolution
+            var catFiles = Directory.GetFiles(tempDir, "*.cat");
+            foreach (var catFile in catFiles)
+            {
+                _oracle.LoadCatalogueWithDependencies(catFile, tempDir);
+            }
+
+            return _oracle.InitializeFromLoadedData();
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { /* best effort cleanup */ }
+        }
+    }
+
+    public void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
+    {
+        var index = _oracle.GetForceEntryIndexByName(forceName);
+        if (index < 0)
+            throw new InvalidOperationException(
+                $"Force entry '{forceName}' not found. Available: {string.Join(", ", _oracle.GetAvailableForceEntryNames())}");
+        if (catalogueName is { Length: > 0 })
+        {
+            catalogueIndex = _oracle.GetCatalogueIndexByName(catalogueName);
+            if (catalogueIndex < 0)
+                throw new InvalidOperationException(
+                    $"Catalogue '{catalogueName}' not found. Available: {string.Join(", ", _oracle.GetLoadedCatalogueNames())}");
+        }
+        _oracle.AddForceByIndex(index, catalogueIndex);
+    }
+
+    public void SelectEntryByName(int forceIndex, string entryName)
+    {
+        var result = _oracle.SelectEntryByNameOnForce(entryName, forceIndex);
+        if (result < 0)
+            throw new InvalidOperationException(
+                $"Entry '{entryName}' not found on force {forceIndex}. Available: {string.Join(", ", _oracle.GetAllAvailableEntryNames().Take(30))}");
+    }
+
+    public void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+    {
+        var forces = _oracle.GetForces();
+        if (forceIndex < 0 || forceIndex >= forces.Count)
+            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        var selections = JavaListToList<net.battlescribe.model.roster.Selection>(forces[forceIndex].getSelections());
+        if (selectionIndex < 0 || selectionIndex >= selections.Count)
+            throw new ArgumentOutOfRangeException(nameof(selectionIndex));
+        var parentSelection = selections[selectionIndex];
+
+        // Search child entries of the parent selection's entry by name
+        var parentEntryId = parentSelection.getEntryId();
+        var parentEntry = _oracle.GetEntryById(parentEntryId);
+        if (parentEntry is null)
+            throw new InvalidOperationException($"Parent entry '{parentEntryId}' not found.");
+
+        var childEntries = JavaListToList<net.battlescribe.model.data.SelectionEntry>(parentEntry.getSelectionEntries());
+        var childEntry = childEntries.FirstOrDefault(
+            ce => string.Equals(ce.getName(), childEntryName, StringComparison.OrdinalIgnoreCase));
+        if (childEntry is null)
+            throw new InvalidOperationException(
+                $"Child entry '{childEntryName}' not found under '{parentEntry.getName()}'. " +
+                $"Available: {string.Join(", ", childEntries.Select(c => c.getName()))}");
+
+        _oracle.SelectEntry(parentSelection, childEntry);
+    }
+
     public void Dispose() => _oracle.Dispose();
 
     // Expose oracle for advanced operations in existing tests
