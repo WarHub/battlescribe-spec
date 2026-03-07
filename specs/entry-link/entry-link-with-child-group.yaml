@@ -1,0 +1,51 @@
+id: entry-link-with-child-group
+category: entry-link
+description: >
+  EntryLink can define child selectionEntryGroups that add option groups
+  to the linked entry. The group's entries become available as children.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: se-shared-unit
+          name: Base Unit
+          type: upgrade
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          entryLinks:
+            - id: el-unit
+              name: Base Unit
+              targetId: se-shared-unit
+              type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Base Unit

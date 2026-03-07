@@ -1,0 +1,34 @@
+id: force-entry-hidden
+category: force
+description: >
+  ForceEntry with hidden=true is not visible or selectable.
+  A modifier can change hidden state based on conditions.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+      - id: fe-hidden
+        name: Hidden Detachment
+        hidden: true
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+
+steps:
+  # Only 1 force entry should be available (the non-hidden one)
+  - action: addForce
+    forceEntryIndex: 0
+
+  - expectedState:
+      forceCount: 1
+      hasValidationErrors: false

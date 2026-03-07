@@ -1280,12 +1280,27 @@ public sealed class BattleScribeOracle : IDisposable
         var forceEntries = scenario.GameSystem.ForceEntries?.Select(BuildForceEntry).ToArray();
 
         var categoryEntries = scenario.GameSystem.CategoryEntries?.Select(ce =>
-            JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name)).ToArray();
+            JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name, ce.Hidden,
+                ce.Constraints?.Select(BuildConstraint).ToArray(),
+                ce.Modifiers?.Select(BuildModifier).ToArray())).ToArray();
 
         var profileTypes = scenario.GameSystem.ProfileTypes?.Select(pt =>
             JavaModelFactory.CreateProfileType(pt.Id, pt.Name,
                 pt.CharacteristicTypes?.Select(ct =>
                     JavaModelFactory.CreateCharacteristicType(ct.Id, ct.Name)))).ToArray();
+
+        var gsPublications = scenario.GameSystem.Publications?.Select(p =>
+            JavaModelFactory.CreatePublication(p.Id, p.Name, p.ShortName, p.Publisher,
+                p.PublicationDate, p.PublisherUrl)).ToArray();
+        var gsSelectionEntries = scenario.GameSystem.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var gsEntryLinks = scenario.GameSystem.EntryLinks?.Select(BuildEntryLink).ToArray();
+        var gsRules = scenario.GameSystem.Rules?.Select(BuildRule).ToArray();
+        var gsInfoLinks = scenario.GameSystem.InfoLinks?.Select(BuildInfoLink).ToArray();
+        var gsSharedSelectionEntries = scenario.GameSystem.SharedSelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var gsSharedSelectionEntryGroups = scenario.GameSystem.SharedSelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var gsSharedRules = scenario.GameSystem.SharedRules?.Select(BuildRule).ToArray();
+        var gsSharedProfiles = scenario.GameSystem.SharedProfiles?.Select(BuildProfile).ToArray();
+        var gsSharedInfoGroups = scenario.GameSystem.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();
 
         var gs = JavaModelFactory.CreateGameSystem(
             id: scenario.GameSystem.Id,
@@ -1293,7 +1308,17 @@ public sealed class BattleScribeOracle : IDisposable
             costTypes: costTypes,
             forceEntries: forceEntries,
             categoryEntries: categoryEntries,
-            profileTypes: profileTypes);
+            profileTypes: profileTypes,
+            publications: gsPublications,
+            selectionEntries: gsSelectionEntries,
+            entryLinks: gsEntryLinks,
+            rules: gsRules,
+            infoLinks: gsInfoLinks,
+            sharedSelectionEntries: gsSharedSelectionEntries,
+            sharedSelectionEntryGroups: gsSharedSelectionEntryGroups,
+            sharedRules: gsSharedRules,
+            sharedProfiles: gsSharedProfiles,
+            sharedInfoGroups: gsSharedInfoGroups);
 
         // Build all catalogues
         var catalogueDict = new Dictionary<string, Catalogue>();
@@ -1315,6 +1340,7 @@ public sealed class BattleScribeOracle : IDisposable
             var sharedRules = catSpec.SharedRules?.Select(BuildRule).ToArray();
             var sharedProfiles = catSpec.SharedProfiles?.Select(BuildProfile).ToArray();
             var sharedInfoGroups = catSpec.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();
+            var catRules = catSpec.Rules?.Select(BuildRule).ToArray();
 
             var cat = JavaModelFactory.CreateCatalogue(
                 catSpec.Id, catSpec.Name, catSpec.GameSystemId,
@@ -1324,7 +1350,8 @@ public sealed class BattleScribeOracle : IDisposable
                 sharedSelectionEntryGroups: sharedSelectionEntryGroups,
                 sharedRules: sharedRules,
                 sharedProfiles: sharedProfiles,
-                sharedInfoGroups: sharedInfoGroups);
+                sharedInfoGroups: sharedInfoGroups,
+                rules: catRules);
 
             if (catSpec.InfoLinks != null)
                 foreach (var il in catSpec.InfoLinks)
@@ -1390,26 +1417,24 @@ public sealed class BattleScribeOracle : IDisposable
 
     private static ForceEntry BuildForceEntry(ForceEntrySpec feSpec)
     {
-        var categoryLinks = feSpec.CategoryLinks?.Select(cl =>
-            JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray();
+        var categoryLinks = feSpec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
         var childForceEntries = feSpec.ForceEntries?.Select(BuildForceEntry).ToArray();
-        var constraints = feSpec.Constraints?.Select(c =>
-            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
-                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
+        var constraints = feSpec.Constraints?.Select(BuildConstraint).ToArray();
+        var modifiers = feSpec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = feSpec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
         return JavaModelFactory.CreateForceEntry(feSpec.Id, feSpec.Name,
-            categoryLinks: categoryLinks, forceEntries: childForceEntries, constraints: constraints);
+            hidden: feSpec.Hidden,
+            categoryLinks: categoryLinks, forceEntries: childForceEntries,
+            constraints: constraints, modifiers: modifiers, modifierGroups: modifierGroups);
     }
 
     private static SelectionEntry BuildSelectionEntry(SelectionEntrySpec spec)
     {
         var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
-        var constraints = spec.Constraints?.Select(c =>
-            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
-                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
+        var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         var childEntries = spec.ChildEntries?.Select(BuildSelectionEntry).ToArray();
-        var categoryLinks = spec.CategoryLinks?.Select(cl =>
-            JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray();
+        var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
 
         var entry = JavaModelFactory.CreateSelectionEntry(
             spec.Id, spec.Name, spec.Type,
@@ -1465,19 +1490,38 @@ public sealed class BattleScribeOracle : IDisposable
 
     private static SelectionEntryGroup BuildSelectionEntryGroup(SelectionEntryGroupSpec spec)
     {
-        var constraints = spec.Constraints?.Select(c =>
-            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
-                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
+        var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
         var childEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var childGroups = spec.SelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var entryLinks = spec.EntryLinks?.Select(BuildEntryLink).ToArray();
+        var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
+        var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
+        var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+        var infoGroups = spec.InfoGroups?.Select(BuildInfoGroup).ToArray();
+        var infoLinks = spec.InfoLinks?.Select(BuildInfoLink).ToArray();
 
         return JavaModelFactory.CreateSelectionEntryGroup(
             spec.Id, spec.Name,
             hidden: spec.Hidden,
             defaultSelectionEntryId: spec.DefaultSelectionEntryId,
+            collective: spec.Collective,
             selectionEntries: childEntries,
+            selectionEntryGroups: childGroups,
+            entryLinks: entryLinks,
+            categoryLinks: categoryLinks,
+            costs: costs,
             constraints: constraints,
             modifiers: modifiers,
+            modifierGroups: modifierGroups,
+            profiles: profiles,
+            rules: rules,
+            infoGroups: infoGroups,
+            infoLinks: infoLinks,
+            page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
             import: spec.Import);
     }
 
@@ -1526,19 +1570,39 @@ public sealed class BattleScribeOracle : IDisposable
     private static EntryLink BuildEntryLink(EntryLinkSpec spec)
     {
         var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
-        var constraints = spec.Constraints?.Select(c =>
-            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
-                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
+        var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
-        var categoryLinks = spec.CategoryLinks?.Select(cl =>
-            JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
+        var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
+        var selectionEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var selectionEntryGroups = spec.SelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var entryLinks = spec.EntryLinks?.Select(BuildEntryLink).ToArray();
+        var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+        var infoGroups = spec.InfoGroups?.Select(BuildInfoGroup).ToArray();
+        var infoLinks = spec.InfoLinks?.Select(BuildInfoLink).ToArray();
 
         return JavaModelFactory.CreateEntryLink(
             spec.Id, spec.Name, spec.TargetId, spec.Type, spec.Hidden,
-            costs, constraints, modifiers, categoryLinks, import: spec.Import,
+            collective: spec.Collective,
+            costs: costs, constraints: constraints, modifiers: modifiers,
+            modifierGroups: modifierGroups, categoryLinks: categoryLinks,
+            selectionEntries: selectionEntries, selectionEntryGroups: selectionEntryGroups,
+            entryLinks: entryLinks, profiles: profiles, rules: rules,
+            infoGroups: infoGroups, infoLinks: infoLinks,
+            import: spec.Import,
             publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
             page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
     }
+
+    private static CategoryLink BuildCategoryLink(CategoryLinkSpec cl) =>
+        JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary, cl.Hidden,
+            cl.Constraints?.Select(BuildConstraint).ToArray(),
+            cl.Modifiers?.Select(BuildModifier).ToArray());
+
+    private static Constraint BuildConstraint(ConstraintSpec c) =>
+        JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
+            c.Shared, c.IncludeChildSelections, c.IncludeChildForces);
 
     private static Modifier BuildModifier(ModifierSpec spec)
     {
@@ -1633,6 +1697,22 @@ public sealed class BattleScribeOracle : IDisposable
     /// </summary>
     internal SelectionEntry? GetEntryById(string id) =>
         _entryLookup.TryGetValue(id, out var entry) ? entry : null;
+
+    /// <summary>
+    /// Find a selection entry by a composite ID like "linkId::targetId".
+    /// EntryLinks create composite IDs at runtime; try both parts.
+    /// </summary>
+    internal SelectionEntry? GetEntryByCompositeId(string compositeId)
+    {
+        if (compositeId.Contains("::"))
+        {
+            var parts = compositeId.Split("::");
+            foreach (var part in parts)
+                if (_entryLookup.TryGetValue(part, out var entry))
+                    return entry;
+        }
+        return null;
+    }
 
     internal GameSystem? GetGameSystem() => _gameSystem;
 

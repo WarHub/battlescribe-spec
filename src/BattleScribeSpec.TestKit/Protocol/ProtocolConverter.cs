@@ -21,16 +21,25 @@ public static class ProtocolConverter
 
     public static ProtocolGameSystem ToProtocol(GameSystemSpec gs) => new()
     {
-        Id = gs.Id,
-        Name = gs.Name,
+        Id = gs.Id, Name = gs.Name,
         CostTypes = gs.CostTypes?.Select(ToProtocol).ToList(),
         ForceEntries = gs.ForceEntries?.Select(ToProtocol).ToList(),
-        CategoryEntries = gs.CategoryEntries?.Select(ct => new ProtocolCategoryEntry { Id = ct.Id, Name = ct.Name }).ToList(),
+        CategoryEntries = gs.CategoryEntries?.Select(ToProtocol).ToList(),
         ProfileTypes = gs.ProfileTypes?.Select(pt => new ProtocolProfileType
         {
             Id = pt.Id, Name = pt.Name,
             CharacteristicTypes = pt.CharacteristicTypes?.Select(ct => new ProtocolCharacteristicType { Id = ct.Id, Name = ct.Name }).ToList(),
         }).ToList(),
+        Publications = gs.Publications?.Select(ToProtocol).ToList(),
+        SelectionEntries = gs.SelectionEntries?.Select(ToProtocol).ToList(),
+        EntryLinks = gs.EntryLinks?.Select(ToProtocol).ToList(),
+        Rules = gs.Rules?.Select(ToProtocol).ToList(),
+        InfoLinks = gs.InfoLinks?.Select(ToProtocol).ToList(),
+        SharedSelectionEntries = gs.SharedSelectionEntries?.Select(ToProtocol).ToList(),
+        SharedSelectionEntryGroups = gs.SharedSelectionEntryGroups?.Select(ToProtocol).ToList(),
+        SharedRules = gs.SharedRules?.Select(ToProtocol).ToList(),
+        SharedProfiles = gs.SharedProfiles?.Select(ToProtocol).ToList(),
+        SharedInfoGroups = gs.SharedInfoGroups?.Select(ToProtocol).ToList(),
     };
 
     public static ProtocolCatalogue ToProtocol(CatalogueSpec cat) => new()
@@ -46,6 +55,7 @@ public static class ProtocolConverter
         SharedRules = cat.SharedRules?.Select(ToProtocol).ToList(),
         SharedProfiles = cat.SharedProfiles?.Select(ToProtocol).ToList(),
         SharedInfoGroups = cat.SharedInfoGroups?.Select(ToProtocol).ToList(),
+        Rules = cat.Rules?.Select(ToProtocol).ToList(),
         InfoLinks = cat.InfoLinks?.Select(ToProtocol).ToList(),
         CatalogueLinks = cat.CatalogueLinks?.Select(ToProtocol).ToList(),
         Publications = cat.Publications?.Select(ToProtocol).ToList(),
@@ -59,8 +69,10 @@ public static class ProtocolConverter
 
     static ProtocolForceEntry ToProtocol(ForceEntrySpec fe) => new()
     {
-        Id = fe.Id, Name = fe.Name,
+        Id = fe.Id, Name = fe.Name, Hidden = fe.Hidden,
         Constraints = fe.Constraints?.Select(ToProtocol).ToList(),
+        Modifiers = fe.Modifiers?.Select(ToProtocol).ToList(),
+        ModifierGroups = fe.ModifierGroups?.Select(ToProtocol).ToList(),
         CategoryLinks = fe.CategoryLinks?.Select(ToProtocol).ToList(),
         ForceEntries = fe.ForceEntries?.Select(ToProtocol).ToList(),
     };
@@ -86,24 +98,57 @@ public static class ProtocolConverter
 
     static ProtocolSelectionEntryGroup ToProtocol(SelectionEntryGroupSpec seg) => new()
     {
-        Id = seg.Id, Name = seg.Name, Hidden = seg.Hidden, Import = seg.Import,
+        Id = seg.Id, Name = seg.Name, Hidden = seg.Hidden, Import = seg.Import, Collective = seg.Collective,
         DefaultSelectionEntryId = string.IsNullOrEmpty(seg.DefaultSelectionEntryId) ? null : seg.DefaultSelectionEntryId,
         Constraints = seg.Constraints?.Select(ToProtocol).ToList(),
         Modifiers = seg.Modifiers?.Select(ToProtocol).ToList(),
+        ModifierGroups = seg.ModifierGroups?.Select(ToProtocol).ToList(),
         SelectionEntries = seg.SelectionEntries?.Select(ToProtocol).ToList(),
+        SelectionEntryGroups = seg.SelectionEntryGroups?.Select(ToProtocol).ToList(),
+        EntryLinks = seg.EntryLinks?.Select(ToProtocol).ToList(),
+        CategoryLinks = seg.CategoryLinks?.Select(ToProtocol).ToList(),
+        Costs = seg.Costs?.Select(ToProtocolCostValue).ToList(),
+        Profiles = seg.Profiles?.Select(ToProtocol).ToList(),
+        Rules = seg.Rules?.Select(ToProtocol).ToList(),
+        InfoGroups = seg.InfoGroups?.Select(ToProtocol).ToList(),
+        InfoLinks = seg.InfoLinks?.Select(ToProtocol).ToList(),
+        Page = string.IsNullOrEmpty(seg.Page) ? null : seg.Page,
+        PublicationId = string.IsNullOrEmpty(seg.PublicationId) ? null : seg.PublicationId,
     };
 
     static ProtocolEntryLink ToProtocol(EntryLinkSpec el) => new()
     {
-        Id = el.Id, Name = el.Name, TargetId = el.TargetId, Type = el.Type, Hidden = el.Hidden, Import = el.Import,
+        Id = el.Id, Name = el.Name, TargetId = el.TargetId, Type = el.Type, Hidden = el.Hidden,
+        Collective = el.Collective, Import = el.Import,
         Costs = el.Costs?.Select(ToProtocolCostValue).ToList(),
         Constraints = el.Constraints?.Select(ToProtocol).ToList(),
         Modifiers = el.Modifiers?.Select(ToProtocol).ToList(),
+        ModifierGroups = el.ModifierGroups?.Select(ToProtocol).ToList(),
         CategoryLinks = el.CategoryLinks?.Select(ToProtocol).ToList(),
+        SelectionEntries = el.SelectionEntries?.Select(ToProtocol).ToList(),
+        SelectionEntryGroups = el.SelectionEntryGroups?.Select(ToProtocol).ToList(),
+        EntryLinks = el.EntryLinks?.Select(ToProtocol).ToList(),
+        Profiles = el.Profiles?.Select(ToProtocol).ToList(),
+        Rules = el.Rules?.Select(ToProtocol).ToList(),
+        InfoGroups = el.InfoGroups?.Select(ToProtocol).ToList(),
+        InfoLinks = el.InfoLinks?.Select(ToProtocol).ToList(),
+        PublicationId = string.IsNullOrEmpty(el.PublicationId) ? null : el.PublicationId,
+        Page = string.IsNullOrEmpty(el.Page) ? null : el.Page,
     };
 
     static ProtocolCategoryLink ToProtocol(CategoryLinkSpec cl) => new()
-    { Id = cl.Id, TargetId = cl.TargetId, Name = cl.Name, Primary = cl.Primary };
+    {
+        Id = cl.Id, TargetId = cl.TargetId, Name = cl.Name, Primary = cl.Primary, Hidden = cl.Hidden,
+        Constraints = cl.Constraints?.Select(ToProtocol).ToList(),
+        Modifiers = cl.Modifiers?.Select(ToProtocol).ToList(),
+    };
+
+    static ProtocolCategoryEntry ToProtocol(CategoryEntrySpec ce) => new()
+    {
+        Id = ce.Id, Name = ce.Name, Hidden = ce.Hidden,
+        Constraints = ce.Constraints?.Select(ToProtocol).ToList(),
+        Modifiers = ce.Modifiers?.Select(ToProtocol).ToList(),
+    };
 
     static ProtocolCostValue ToProtocolCostValue(CostSpec c) => new()
     { Name = c.Name, TypeId = c.TypeId, Value = c.Value };
@@ -215,9 +260,19 @@ public static class ProtocolConverter
         Id: gs.Id, Name: gs.Name,
         ForceEntries: gs.ForceEntries?.Select(FromProtocol).ToArray(),
         CostTypes: gs.CostTypes?.Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray(),
-        CategoryEntries: gs.CategoryEntries?.Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray(),
+        CategoryEntries: gs.CategoryEntries?.Select(FromProtocol).ToArray(),
         ProfileTypes: gs.ProfileTypes?.Select(pt => new ProfileTypeSpec(pt.Id, pt.Name,
-            pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray());
+            pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray(),
+        Publications: gs.Publications?.Select(FromProtocol).ToArray(),
+        SelectionEntries: gs.SelectionEntries?.Select(FromProtocol).ToArray(),
+        EntryLinks: gs.EntryLinks?.Select(FromProtocol).ToArray(),
+        Rules: gs.Rules?.Select(FromProtocol).ToArray(),
+        InfoLinks: gs.InfoLinks?.Select(FromProtocol).ToArray(),
+        SharedSelectionEntries: gs.SharedSelectionEntries?.Select(FromProtocol).ToArray(),
+        SharedSelectionEntryGroups: gs.SharedSelectionEntryGroups?.Select(FromProtocol).ToArray(),
+        SharedRules: gs.SharedRules?.Select(FromProtocol).ToArray(),
+        SharedProfiles: gs.SharedProfiles?.Select(FromProtocol).ToArray(),
+        SharedInfoGroups: gs.SharedInfoGroups?.Select(FromProtocol).ToArray());
 
     public static CatalogueSpec FromProtocol(ProtocolCatalogue cat) => new(
         Id: cat.Id, Name: cat.Name, GameSystemId: cat.GameSystemId,
@@ -229,15 +284,19 @@ public static class ProtocolConverter
         SharedRules: cat.SharedRules?.Select(FromProtocol).ToArray(),
         SharedProfiles: cat.SharedProfiles?.Select(FromProtocol).ToArray(),
         SharedInfoGroups: cat.SharedInfoGroups?.Select(FromProtocol).ToArray(),
+        Rules: cat.Rules?.Select(FromProtocol).ToArray(),
         InfoLinks: cat.InfoLinks?.Select(FromProtocol).ToArray(),
         CatalogueLinks: cat.CatalogueLinks?.Select(FromProtocol).ToArray(),
         Publications: cat.Publications?.Select(FromProtocol).ToArray());
 
     static ForceEntrySpec FromProtocol(ProtocolForceEntry fe) => new(
         fe.Id, fe.Name,
-        fe.CategoryLinks?.Select(FromProtocol).ToArray(),
-        fe.ForceEntries?.Select(FromProtocol).ToArray(),
-        fe.Constraints?.Select(FromProtocol).ToArray());
+        Hidden: fe.Hidden,
+        CategoryLinks: fe.CategoryLinks?.Select(FromProtocol).ToArray(),
+        ForceEntries: fe.ForceEntries?.Select(FromProtocol).ToArray(),
+        Constraints: fe.Constraints?.Select(FromProtocol).ToArray(),
+        Modifiers: fe.Modifiers?.Select(FromProtocol).ToArray(),
+        ModifierGroups: fe.ModifierGroups?.Select(FromProtocol).ToArray());
 
     static SelectionEntrySpec FromProtocol(ProtocolSelectionEntry se) => new(
         Id: se.Id, Name: se.Name, Type: se.Type, Hidden: se.Hidden, Import: se.Import, Collective: se.Collective,
@@ -256,20 +315,48 @@ public static class ProtocolConverter
         InfoLinks: se.InfoLinks?.Select(FromProtocol).ToArray());
 
     static SelectionEntryGroupSpec FromProtocol(ProtocolSelectionEntryGroup seg) => new(
-        Id: seg.Id, Name: seg.Name, Hidden: seg.Hidden, Import: seg.Import,
+        Id: seg.Id, Name: seg.Name, Hidden: seg.Hidden, Import: seg.Import, Collective: seg.Collective,
         DefaultSelectionEntryId: seg.DefaultSelectionEntryId ?? "",
         Constraints: seg.Constraints?.Select(FromProtocol).ToArray(),
         Modifiers: seg.Modifiers?.Select(FromProtocol).ToArray(),
-        SelectionEntries: seg.SelectionEntries?.Select(FromProtocol).ToArray());
+        ModifierGroups: seg.ModifierGroups?.Select(FromProtocol).ToArray(),
+        SelectionEntries: seg.SelectionEntries?.Select(FromProtocol).ToArray(),
+        SelectionEntryGroups: seg.SelectionEntryGroups?.Select(FromProtocol).ToArray(),
+        EntryLinks: seg.EntryLinks?.Select(FromProtocol).ToArray(),
+        CategoryLinks: seg.CategoryLinks?.Select(FromProtocol).ToArray(),
+        Costs: seg.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
+        Profiles: seg.Profiles?.Select(FromProtocol).ToArray(),
+        Rules: seg.Rules?.Select(FromProtocol).ToArray(),
+        InfoGroups: seg.InfoGroups?.Select(FromProtocol).ToArray(),
+        InfoLinks: seg.InfoLinks?.Select(FromProtocol).ToArray(),
+        Page: seg.Page ?? "", PublicationId: seg.PublicationId ?? "");
 
     static EntryLinkSpec FromProtocol(ProtocolEntryLink el) => new(
-        Id: el.Id, Name: el.Name, TargetId: el.TargetId, Type: el.Type, Hidden: el.Hidden, Import: el.Import,
+        Id: el.Id, Name: el.Name, TargetId: el.TargetId, Type: el.Type, Hidden: el.Hidden,
+        Collective: el.Collective, Import: el.Import,
         Costs: el.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
         Constraints: el.Constraints?.Select(FromProtocol).ToArray(),
         Modifiers: el.Modifiers?.Select(FromProtocol).ToArray(),
-        CategoryLinks: el.CategoryLinks?.Select(FromProtocol).ToArray());
+        ModifierGroups: el.ModifierGroups?.Select(FromProtocol).ToArray(),
+        CategoryLinks: el.CategoryLinks?.Select(FromProtocol).ToArray(),
+        SelectionEntries: el.SelectionEntries?.Select(FromProtocol).ToArray(),
+        SelectionEntryGroups: el.SelectionEntryGroups?.Select(FromProtocol).ToArray(),
+        EntryLinks: el.EntryLinks?.Select(FromProtocol).ToArray(),
+        Profiles: el.Profiles?.Select(FromProtocol).ToArray(),
+        Rules: el.Rules?.Select(FromProtocol).ToArray(),
+        InfoGroups: el.InfoGroups?.Select(FromProtocol).ToArray(),
+        InfoLinks: el.InfoLinks?.Select(FromProtocol).ToArray(),
+        PublicationId: el.PublicationId ?? "", Page: el.Page ?? "");
 
-    static CategoryLinkSpec FromProtocol(ProtocolCategoryLink cl) => new(cl.Id, cl.TargetId, cl.Name, cl.Primary);
+    static CategoryLinkSpec FromProtocol(ProtocolCategoryLink cl) => new(
+        cl.Id, cl.TargetId, cl.Name, cl.Primary, cl.Hidden,
+        cl.Constraints?.Select(FromProtocol).ToArray(),
+        cl.Modifiers?.Select(FromProtocol).ToArray());
+
+    static CategoryEntrySpec FromProtocol(ProtocolCategoryEntry ce) => new(
+        ce.Id, ce.Name, ce.Hidden,
+        ce.Constraints?.Select(FromProtocol).ToArray(),
+        ce.Modifiers?.Select(FromProtocol).ToArray());
 
     static ConstraintSpec FromProtocol(ProtocolConstraint c) => new(
         c.Id, c.Type, c.Value, c.Field, c.Scope, c.Shared,

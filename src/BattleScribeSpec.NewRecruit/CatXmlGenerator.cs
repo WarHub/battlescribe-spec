@@ -49,24 +49,46 @@ public static class CatXmlGenerator
         var node = Gamesystem(name: gameSystem.Name, id: gameSystem.Id);
 
         foreach (var costType in gameSystem.CostTypes ?? [])
-        {
             node = node.AddCostTypes(MapCostType(costType));
-        }
 
         foreach (var forceEntry in gameSystem.ForceEntries ?? [])
-        {
             node = node.AddForceEntries(MapForceEntry(forceEntry));
-        }
 
         foreach (var categoryEntry in gameSystem.CategoryEntries ?? [])
-        {
             node = node.AddCategoryEntries(MapCategoryEntry(categoryEntry));
-        }
 
         foreach (var profileType in gameSystem.ProfileTypes ?? [])
-        {
             node = node.AddProfileTypes(MapProfileType(profileType));
-        }
+
+        foreach (var pub in gameSystem.Publications ?? [])
+            node = node.AddPublications(MapPublication(pub));
+
+        foreach (var se in gameSystem.SelectionEntries ?? [])
+            node = node.AddSelectionEntries(MapSelectionEntry(se));
+
+        foreach (var el in gameSystem.EntryLinks ?? [])
+            node = node.AddEntryLinks(MapEntryLink(el));
+
+        foreach (var rule in gameSystem.Rules ?? [])
+            node = node.AddRules(MapRule(rule));
+
+        foreach (var il in gameSystem.InfoLinks ?? [])
+            node = node.AddInfoLinks(MapInfoLink(il));
+
+        foreach (var se in gameSystem.SharedSelectionEntries ?? [])
+            node = node.AddSharedSelectionEntries(MapSelectionEntry(se));
+
+        foreach (var seg in gameSystem.SharedSelectionEntryGroups ?? [])
+            node = node.AddSharedSelectionEntryGroups(MapSelectionEntryGroup(seg));
+
+        foreach (var rule in gameSystem.SharedRules ?? [])
+            node = node.AddSharedRules(MapRule(rule));
+
+        foreach (var profile in gameSystem.SharedProfiles ?? [])
+            node = node.AddSharedProfiles(MapProfile(profile));
+
+        foreach (var ig in gameSystem.SharedInfoGroups ?? [])
+            node = node.AddSharedInfoGroups(MapInfoGroup(ig));
 
         return node;
     }
@@ -111,9 +133,10 @@ public static class CatXmlGenerator
         }
 
         foreach (var sharedInfoGroup in catalogue.SharedInfoGroups ?? [])
-        {
             node = node.AddSharedInfoGroups(MapInfoGroup(sharedInfoGroup));
-        }
+
+        foreach (var rule in catalogue.Rules ?? [])
+            node = node.AddRules(MapRule(rule));
 
         foreach (var infoLink in catalogue.InfoLinks ?? [])
         {
@@ -149,28 +172,38 @@ public static class CatXmlGenerator
             name: spec.Name,
             publicationId: null,
             page: null,
-            hidden: false);
+            hidden: spec.Hidden);
 
         foreach (var constraint in spec.Constraints ?? [])
-        {
             node = node.AddConstraints(MapConstraint(constraint));
-        }
+
+        foreach (var modifier in spec.Modifiers ?? [])
+            node = node.AddModifiers(MapModifier(modifier));
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
 
         foreach (var categoryLink in spec.CategoryLinks ?? [])
-        {
             node = node.AddCategoryLinks(MapCategoryLink(categoryLink));
-        }
 
         foreach (var forceEntry in spec.ForceEntries ?? [])
-        {
             node = node.AddForceEntries(MapForceEntry(forceEntry));
-        }
 
         return node;
     }
 
-    private static CategoryEntryNode MapCategoryEntry(CategoryEntrySpec spec) =>
-        CategoryEntry(name: spec.Name, id: spec.Id);
+    private static CategoryEntryNode MapCategoryEntry(CategoryEntrySpec spec)
+    {
+        var node = CategoryEntry(name: spec.Name, id: spec.Id);
+
+        foreach (var constraint in spec.Constraints ?? [])
+            node = node.AddConstraints(MapConstraint(constraint));
+
+        foreach (var modifier in spec.Modifiers ?? [])
+            node = node.AddModifiers(MapModifier(modifier));
+
+        return node;
+    }
 
     private static ProfileTypeNode MapProfileType(ProfileTypeSpec spec)
     {
@@ -269,31 +302,51 @@ public static class CatXmlGenerator
         var defaultSelectionEntryId = string.IsNullOrWhiteSpace(spec.DefaultSelectionEntryId)
             ? null
             : spec.DefaultSelectionEntryId;
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
+        var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var node = SelectionEntryGroup(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
-            page: null,
+            publicationId: pubId,
+            page: page,
             hidden: spec.Hidden,
-            collective: false,
+            collective: spec.Collective,
             exported: spec.Import,
             defaultSelectionEntryId: defaultSelectionEntryId);
 
         foreach (var constraint in spec.Constraints ?? [])
-        {
             node = node.AddConstraints(MapConstraint(constraint));
-        }
 
         foreach (var modifier in spec.Modifiers ?? [])
-        {
             node = node.AddModifiers(MapModifier(modifier));
-        }
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
 
         foreach (var selectionEntry in spec.SelectionEntries ?? [])
-        {
             node = node.AddSelectionEntries(MapSelectionEntry(selectionEntry));
-        }
+
+        foreach (var childGroup in spec.SelectionEntryGroups ?? [])
+            node = node.AddSelectionEntryGroups(MapSelectionEntryGroup(childGroup));
+
+        foreach (var entryLink in spec.EntryLinks ?? [])
+            node = node.AddEntryLinks(MapEntryLink(entryLink));
+
+        foreach (var categoryLink in spec.CategoryLinks ?? [])
+            node = node.AddCategoryLinks(MapCategoryLink(categoryLink));
+
+        foreach (var profile in spec.Profiles ?? [])
+            node = node.AddProfiles(MapProfile(profile));
+
+        foreach (var rule in spec.Rules ?? [])
+            node = node.AddRules(MapRule(rule));
+
+        foreach (var infoGroup in spec.InfoGroups ?? [])
+            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+
+        foreach (var infoLink in spec.InfoLinks ?? [])
+            node = node.AddInfoLinks(MapInfoLink(infoLink));
 
         return node;
     }
@@ -309,30 +362,46 @@ public static class CatXmlGenerator
             publicationId: pubId,
             page: page,
             hidden: spec.Hidden,
-            collective: false,
+            collective: spec.Collective,
             exported: spec.Import,
             targetId: spec.TargetId,
             type: MapEntryLinkKind(spec.Type));
 
         foreach (var cost in spec.Costs ?? [])
-        {
             node = node.AddCosts(MapCost(cost));
-        }
 
         foreach (var constraint in spec.Constraints ?? [])
-        {
             node = node.AddConstraints(MapConstraint(constraint));
-        }
 
         foreach (var modifier in spec.Modifiers ?? [])
-        {
             node = node.AddModifiers(MapModifier(modifier));
-        }
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
 
         foreach (var categoryLink in spec.CategoryLinks ?? [])
-        {
             node = node.AddCategoryLinks(MapCategoryLink(categoryLink));
-        }
+
+        foreach (var se in spec.SelectionEntries ?? [])
+            node = node.AddSelectionEntries(MapSelectionEntry(se));
+
+        foreach (var seg in spec.SelectionEntryGroups ?? [])
+            node = node.AddSelectionEntryGroups(MapSelectionEntryGroup(seg));
+
+        foreach (var el in spec.EntryLinks ?? [])
+            node = node.AddEntryLinks(MapEntryLink(el));
+
+        foreach (var profile in spec.Profiles ?? [])
+            node = node.AddProfiles(MapProfile(profile));
+
+        foreach (var rule in spec.Rules ?? [])
+            node = node.AddRules(MapRule(rule));
+
+        foreach (var ig in spec.InfoGroups ?? [])
+            node = node.AddInfoGroups(MapInfoGroup(ig));
+
+        foreach (var il in spec.InfoLinks ?? [])
+            node = node.AddInfoLinks(MapInfoLink(il));
 
         return node;
     }
@@ -454,16 +523,26 @@ public static class CatXmlGenerator
             roundUp: spec.RoundUp);
     }
 
-    private static CategoryLinkNode MapCategoryLink(CategoryLinkSpec spec) =>
-        CategoryLink(
+    private static CategoryLinkNode MapCategoryLink(CategoryLinkSpec spec)
+    {
+        var node = CategoryLink(
             comment: null,
             id: spec.Id,
             name: spec.Name,
             publicationId: null,
             page: null,
-            hidden: false,
+            hidden: spec.Hidden,
             targetId: spec.TargetId,
             primary: spec.Primary);
+
+        foreach (var constraint in spec.Constraints ?? [])
+            node = node.AddConstraints(MapConstraint(constraint));
+
+        foreach (var modifier in spec.Modifiers ?? [])
+            node = node.AddModifiers(MapModifier(modifier));
+
+        return node;
+    }
 
     private static RuleNode MapRule(RuleSpec spec)
     {

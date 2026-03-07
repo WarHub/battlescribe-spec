@@ -20,7 +20,17 @@ public static class JavaModelFactory
         IEnumerable<CostType>? costTypes = null,
         IEnumerable<ForceEntry>? forceEntries = null,
         IEnumerable<CategoryEntry>? categoryEntries = null,
-        IEnumerable<ProfileType>? profileTypes = null)
+        IEnumerable<ProfileType>? profileTypes = null,
+        IEnumerable<Publication>? publications = null,
+        IEnumerable<SelectionEntry>? selectionEntries = null,
+        IEnumerable<EntryLink>? entryLinks = null,
+        IEnumerable<net.battlescribe.model.data.Rule>? rules = null,
+        IEnumerable<InfoLink>? infoLinks = null,
+        IEnumerable<SelectionEntry>? sharedSelectionEntries = null,
+        IEnumerable<SelectionEntryGroup>? sharedSelectionEntryGroups = null,
+        IEnumerable<net.battlescribe.model.data.Rule>? sharedRules = null,
+        IEnumerable<Profile>? sharedProfiles = null,
+        IEnumerable<InfoGroup>? sharedInfoGroups = null)
     {
         var gs = new GameSystem();
         gs.setId(id);
@@ -44,6 +54,46 @@ public static class JavaModelFactory
         if (profileTypes != null)
             foreach (var pt in profileTypes)
                 gs.getProfileTypes().add(pt);
+
+        if (publications != null)
+            foreach (var pub in publications)
+                gs.getPublications().add(pub);
+
+        if (selectionEntries != null)
+            foreach (var se in selectionEntries)
+                gs.getSelectionEntries().add(se);
+
+        if (entryLinks != null)
+            foreach (var el in entryLinks)
+                gs.getEntryLinks().add(el);
+
+        if (rules != null)
+            foreach (var r in rules)
+                gs.getRules().add(r);
+
+        if (infoLinks != null)
+            foreach (var il in infoLinks)
+                gs.getInfoLinks().add(il);
+
+        if (sharedSelectionEntries != null)
+            foreach (var se in sharedSelectionEntries)
+                gs.getSharedSelectionEntries().add(se);
+
+        if (sharedSelectionEntryGroups != null)
+            foreach (var seg in sharedSelectionEntryGroups)
+                gs.getSharedSelectionEntryGroups().add(seg);
+
+        if (sharedRules != null)
+            foreach (var r in sharedRules)
+                gs.getSharedRules().add(r);
+
+        if (sharedProfiles != null)
+            foreach (var p in sharedProfiles)
+                gs.getSharedProfiles().add(p);
+
+        if (sharedInfoGroups != null)
+            foreach (var ig in sharedInfoGroups)
+                gs.getSharedInfoGroups().add(ig);
 
         return gs;
     }
@@ -72,12 +122,24 @@ public static class JavaModelFactory
     /// <summary>
     /// Create a CategoryEntry.
     /// </summary>
-    public static CategoryEntry CreateCategoryEntry(string id, string name, bool hidden = false)
+    public static CategoryEntry CreateCategoryEntry(
+        string id, string name, bool hidden = false,
+        IEnumerable<Constraint>? constraints = null,
+        IEnumerable<Modifier>? modifiers = null)
     {
         var ce = new CategoryEntry();
         ce.setId(id);
         ce.setName(name);
         ce.setHidden(hidden);
+
+        if (constraints != null)
+            foreach (var c in constraints)
+                ce.getConstraints().add(c);
+
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                ce.getModifiers().add(m);
+
         return ce;
     }
 
@@ -90,7 +152,9 @@ public static class JavaModelFactory
         bool hidden = false,
         IEnumerable<CategoryLink>? categoryLinks = null,
         IEnumerable<ForceEntry>? forceEntries = null,
-        IEnumerable<Constraint>? constraints = null)
+        IEnumerable<Constraint>? constraints = null,
+        IEnumerable<Modifier>? modifiers = null,
+        IEnumerable<ModifierGroup>? modifierGroups = null)
     {
         var fe = new ForceEntry();
         fe.setId(id);
@@ -109,19 +173,41 @@ public static class JavaModelFactory
             foreach (var c in constraints)
                 fe.getConstraints().add(c);
 
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                fe.getModifiers().add(m);
+
+        if (modifierGroups != null)
+            foreach (var mg in modifierGroups)
+                fe.getModifierGroups().add(mg);
+
         return fe;
     }
 
     /// <summary>
     /// Create a CategoryLink linking a ForceEntry to a CategoryEntry.
     /// </summary>
-    public static CategoryLink CreateCategoryLink(string id, string targetId, string name, bool primary = false)
+    public static CategoryLink CreateCategoryLink(
+        string id, string targetId, string name, bool primary = false,
+        bool hidden = false,
+        IEnumerable<Constraint>? constraints = null,
+        IEnumerable<Modifier>? modifiers = null)
     {
         var cl = new CategoryLink();
         cl.setId(id);
         cl.setTargetId(targetId);
         cl.setName(name);
         cl.setPrimary(primary);
+        cl.setHidden(hidden);
+
+        if (constraints != null)
+            foreach (var c in constraints)
+                cl.getConstraints().add(c);
+
+        if (modifiers != null)
+            foreach (var m in modifiers)
+                cl.getModifiers().add(m);
+
         return cl;
     }
 
@@ -134,10 +220,19 @@ public static class JavaModelFactory
         string targetId,
         string type = "selectionEntry",
         bool hidden = false,
+        bool collective = false,
         IEnumerable<Cost>? costs = null,
         IEnumerable<Constraint>? constraints = null,
         IEnumerable<Modifier>? modifiers = null,
+        IEnumerable<ModifierGroup>? modifierGroups = null,
         IEnumerable<CategoryLink>? categoryLinks = null,
+        IEnumerable<SelectionEntry>? selectionEntries = null,
+        IEnumerable<SelectionEntryGroup>? selectionEntryGroups = null,
+        IEnumerable<EntryLink>? entryLinks = null,
+        IEnumerable<Profile>? profiles = null,
+        IEnumerable<net.battlescribe.model.data.Rule>? rules = null,
+        IEnumerable<InfoGroup>? infoGroups = null,
+        IEnumerable<InfoLink>? infoLinks = null,
         bool import = true,
         string? publicationId = null,
         string? page = null)
@@ -148,6 +243,7 @@ public static class JavaModelFactory
         el.setTargetId(targetId);
         el.setType(type);
         el.setHidden(hidden);
+        el.setCollective(collective);
         el.setImported(import);
         if (!string.IsNullOrEmpty(publicationId))
             el.setPublicationId(publicationId);
@@ -166,9 +262,41 @@ public static class JavaModelFactory
             foreach (var m in modifiers)
                 el.getModifiers().add(m);
 
+        if (modifierGroups != null)
+            foreach (var mg in modifierGroups)
+                el.getModifierGroups().add(mg);
+
         if (categoryLinks != null)
             foreach (var cl in categoryLinks)
                 el.getCategoryLinks().add(cl);
+
+        if (selectionEntries != null)
+            foreach (var se in selectionEntries)
+                el.getSelectionEntries().add(se);
+
+        if (selectionEntryGroups != null)
+            foreach (var seg in selectionEntryGroups)
+                el.getSelectionEntryGroups().add(seg);
+
+        if (entryLinks != null)
+            foreach (var link in entryLinks)
+                el.getEntryLinks().add(link);
+
+        if (profiles != null)
+            foreach (var p in profiles)
+                el.getProfiles().add(p);
+
+        if (rules != null)
+            foreach (var r in rules)
+                el.getRules().add(r);
+
+        if (infoGroups != null)
+            foreach (var ig in infoGroups)
+                el.getInfoGroups().add(ig);
+
+        if (infoLinks != null)
+            foreach (var il in infoLinks)
+                el.getInfoLinks().add(il);
 
         return el;
     }
@@ -188,7 +316,8 @@ public static class JavaModelFactory
         IEnumerable<SelectionEntryGroup>? sharedSelectionEntryGroups = null,
         IEnumerable<Rule>? sharedRules = null,
         IEnumerable<Profile>? sharedProfiles = null,
-        IEnumerable<InfoGroup>? sharedInfoGroups = null)
+        IEnumerable<InfoGroup>? sharedInfoGroups = null,
+        IEnumerable<Rule>? rules = null)
     {
         var cat = new Catalogue();
         cat.setId(id);
@@ -225,6 +354,10 @@ public static class JavaModelFactory
         if (sharedInfoGroups != null)
             foreach (var ig in sharedInfoGroups)
                 cat.getSharedInfoGroups().add(ig);
+
+        if (rules != null)
+            foreach (var r in rules)
+                cat.getRules().add(r);
 
         return cat;
     }
@@ -292,22 +425,55 @@ public static class JavaModelFactory
         string name,
         bool hidden = false,
         string? defaultSelectionEntryId = null,
+        bool collective = false,
         IEnumerable<SelectionEntry>? selectionEntries = null,
+        IEnumerable<SelectionEntryGroup>? selectionEntryGroups = null,
+        IEnumerable<EntryLink>? entryLinks = null,
+        IEnumerable<CategoryLink>? categoryLinks = null,
+        IEnumerable<Cost>? costs = null,
         IEnumerable<Constraint>? constraints = null,
         IEnumerable<Modifier>? modifiers = null,
+        IEnumerable<ModifierGroup>? modifierGroups = null,
+        IEnumerable<Profile>? profiles = null,
+        IEnumerable<net.battlescribe.model.data.Rule>? rules = null,
+        IEnumerable<InfoGroup>? infoGroups = null,
+        IEnumerable<InfoLink>? infoLinks = null,
+        string? page = null,
+        string? publicationId = null,
         bool import = true)
     {
         var seg = new SelectionEntryGroup();
         seg.setId(id);
         seg.setName(name);
         seg.setHidden(hidden);
+        seg.setCollective(collective);
         seg.setImported(import);
         if (!string.IsNullOrEmpty(defaultSelectionEntryId))
             seg.setDefaultSelectionEntryId(defaultSelectionEntryId);
+        if (!string.IsNullOrEmpty(page))
+            seg.setPage(page);
+        if (!string.IsNullOrEmpty(publicationId))
+            seg.setPublicationId(publicationId);
 
         if (selectionEntries != null)
             foreach (var se in selectionEntries)
                 seg.getSelectionEntries().add(se);
+
+        if (selectionEntryGroups != null)
+            foreach (var child in selectionEntryGroups)
+                seg.getSelectionEntryGroups().add(child);
+
+        if (entryLinks != null)
+            foreach (var el in entryLinks)
+                seg.getEntryLinks().add(el);
+
+        if (categoryLinks != null)
+            foreach (var cl in categoryLinks)
+                seg.getCategoryLinks().add(cl);
+
+        if (costs != null)
+            foreach (var c in costs)
+                seg.getCosts().add(c);
 
         if (constraints != null)
             foreach (var c in constraints)
@@ -316,6 +482,26 @@ public static class JavaModelFactory
         if (modifiers != null)
             foreach (var m in modifiers)
                 seg.getModifiers().add(m);
+
+        if (modifierGroups != null)
+            foreach (var mg in modifierGroups)
+                seg.getModifierGroups().add(mg);
+
+        if (profiles != null)
+            foreach (var p in profiles)
+                seg.getProfiles().add(p);
+
+        if (rules != null)
+            foreach (var r in rules)
+                seg.getRules().add(r);
+
+        if (infoGroups != null)
+            foreach (var ig in infoGroups)
+                seg.getInfoGroups().add(ig);
+
+        if (infoLinks != null)
+            foreach (var il in infoLinks)
+                seg.getInfoLinks().add(il);
 
         return seg;
     }

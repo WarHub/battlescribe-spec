@@ -1,0 +1,47 @@
+id: catalogue-root-rules
+category: catalogue
+description: >
+  Rules defined at the catalogue root level (non-shared) are available
+  to entries in that catalogue via infoLinks.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      rules:
+        - id: rule-cat
+          name: Catalogue Rule
+          description: A rule defined at catalogue root
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          infoLinks:
+            - id: il-rule
+              name: Catalogue Rule
+              targetId: rule-cat
+              type: rule
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              rules:
+                - name: Catalogue Rule
+                  description: A rule defined at catalogue root

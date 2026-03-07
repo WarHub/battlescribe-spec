@@ -72,9 +72,12 @@ public record SelectionEntrySpec(
 public record ForceEntrySpec(
     string Id,
     string Name,
+    bool Hidden = false,
     CategoryLinkSpec[]? CategoryLinks = null,
     ForceEntrySpec[]? ForceEntries = null,
-    ConstraintSpec[]? Constraints = null);
+    ConstraintSpec[]? Constraints = null,
+    ModifierSpec[]? Modifiers = null,
+    ModifierGroupSpec[]? ModifierGroups = null);
 
 public record GameSystemSpec(
     string Id = "test-gs",
@@ -82,20 +85,45 @@ public record GameSystemSpec(
     ForceEntrySpec[]? ForceEntries = null,
     CostTypeSpec[]? CostTypes = null,
     CategoryEntrySpec[]? CategoryEntries = null,
-    ProfileTypeSpec[]? ProfileTypes = null);
+    ProfileTypeSpec[]? ProfileTypes = null,
+    PublicationSpec[]? Publications = null,
+    SelectionEntrySpec[]? SelectionEntries = null,
+    EntryLinkSpec[]? EntryLinks = null,
+    RuleSpec[]? Rules = null,
+    InfoLinkSpec[]? InfoLinks = null,
+    SelectionEntrySpec[]? SharedSelectionEntries = null,
+    SelectionEntryGroupSpec[]? SharedSelectionEntryGroups = null,
+    RuleSpec[]? SharedRules = null,
+    ProfileSpec[]? SharedProfiles = null,
+    InfoGroupSpec[]? SharedInfoGroups = null);
 
 public record CategoryEntrySpec(
     string Id,
-    string Name);
+    string Name,
+    bool Hidden = false,
+    ConstraintSpec[]? Constraints = null,
+    ModifierSpec[]? Modifiers = null);
 
 public record SelectionEntryGroupSpec(
     string Id,
     string Name,
     bool Hidden = false,
     string DefaultSelectionEntryId = "",
+    bool Collective = false,
     ConstraintSpec[]? Constraints = null,
     ModifierSpec[]? Modifiers = null,
+    ModifierGroupSpec[]? ModifierGroups = null,
     SelectionEntrySpec[]? SelectionEntries = null,
+    SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
+    EntryLinkSpec[]? EntryLinks = null,
+    CategoryLinkSpec[]? CategoryLinks = null,
+    CostSpec[]? Costs = null,
+    ProfileSpec[]? Profiles = null,
+    RuleSpec[]? Rules = null,
+    InfoGroupSpec[]? InfoGroups = null,
+    InfoLinkSpec[]? InfoLinks = null,
+    string Page = "",
+    string PublicationId = "",
     bool Import = true);
 
 public record CatalogueSpec(
@@ -110,6 +138,7 @@ public record CatalogueSpec(
     RuleSpec[]? SharedRules = null,
     ProfileSpec[]? SharedProfiles = null,
     InfoGroupSpec[]? SharedInfoGroups = null,
+    RuleSpec[]? Rules = null,
     InfoLinkSpec[]? InfoLinks = null,
     CatalogueLinkSpec[]? CatalogueLinks = null,
     PublicationSpec[]? Publications = null);
@@ -156,7 +185,10 @@ public record CategoryLinkSpec(
     string Id,
     string TargetId,
     string Name,
-    bool Primary = false);
+    bool Primary = false,
+    bool Hidden = false,
+    ConstraintSpec[]? Constraints = null,
+    ModifierSpec[]? Modifiers = null);
 
 public record RuleSpec(
     string Id,
@@ -200,10 +232,19 @@ public record EntryLinkSpec(
     string TargetId,
     string Type = "selectionEntry",
     bool Hidden = false,
+    bool Collective = false,
     CostSpec[]? Costs = null,
     ConstraintSpec[]? Constraints = null,
     ModifierSpec[]? Modifiers = null,
+    ModifierGroupSpec[]? ModifierGroups = null,
     CategoryLinkSpec[]? CategoryLinks = null,
+    SelectionEntrySpec[]? SelectionEntries = null,
+    SelectionEntryGroupSpec[]? SelectionEntryGroups = null,
+    EntryLinkSpec[]? EntryLinks = null,
+    ProfileSpec[]? Profiles = null,
+    RuleSpec[]? Rules = null,
+    InfoGroupSpec[]? InfoGroups = null,
+    InfoLinkSpec[]? InfoLinks = null,
     bool Import = true,
     string PublicationId = "",
     string Page = "");

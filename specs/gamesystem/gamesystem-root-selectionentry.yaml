@@ -1,0 +1,36 @@
+id: gamesystem-root-selectionentry
+category: gamesystem
+description: >
+  SelectionEntry defined at GameSystem level is available in all forces,
+  regardless of which catalogue is used.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+    selectionEntries:
+      - id: se-gs-unit
+        name: GS Unit
+        type: unit
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: GS Unit

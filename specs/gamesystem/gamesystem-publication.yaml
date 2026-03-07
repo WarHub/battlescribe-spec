@@ -1,0 +1,46 @@
+id: gamesystem-publication
+category: gamesystem
+description: >
+  Publication defined at GameSystem level can be referenced by entries
+  in catalogues via publicationId. The publication metadata flows to
+  selections.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+    publications:
+      - id: pub-core
+        name: Core Rulebook
+        shortName: CR
+        publisher: Test Publisher
+        publicationDate: "2024"
+        publisherUrl: https://example.com
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          publicationId: pub-core
+          page: "42"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              page: "42"

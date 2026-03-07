@@ -45,8 +45,9 @@ public sealed class OracleRosterEngine : IRosterEngine
         var parentSelection = selections[selectionIndex];
         var parentEntryId = parentSelection.getEntryId();
         var parentEntry = _oracle.GetEntryById(parentEntryId)
+            ?? _oracle.GetEntryByCompositeId(parentEntryId)
             ?? throw new InvalidOperationException($"Parent entry '{parentEntryId}' not found in entry lookup.");
-        var childEntries = JavaListToList<net.battlescribe.model.data.SelectionEntry>(parentEntry.getSelectionEntries());
+        var childEntries = FlattenChildEntries(parentEntry);
         if (childEntryIndex < 0 || childEntryIndex >= childEntries.Count)
             throw new ArgumentOutOfRangeException(nameof(childEntryIndex));
         _oracle.SelectEntry(parentSelection, childEntries[childEntryIndex]);
@@ -196,13 +197,13 @@ public sealed class OracleRosterEngine : IRosterEngine
             throw new ArgumentOutOfRangeException(nameof(selectionIndex));
         var parentSelection = selections[selectionIndex];
 
-        // Search child entries of the parent selection's entry by name
         var parentEntryId = parentSelection.getEntryId();
-        var parentEntry = _oracle.GetEntryById(parentEntryId);
+        var parentEntry = _oracle.GetEntryById(parentEntryId)
+            ?? _oracle.GetEntryByCompositeId(parentEntryId);
         if (parentEntry is null)
             throw new InvalidOperationException($"Parent entry '{parentEntryId}' not found.");
 
-        var childEntries = JavaListToList<net.battlescribe.model.data.SelectionEntry>(parentEntry.getSelectionEntries());
+        var childEntries = FlattenChildEntries(parentEntry);
         var childEntry = childEntries.FirstOrDefault(
             ce => string.Equals(ce.getName(), childEntryName, StringComparison.OrdinalIgnoreCase));
         if (childEntry is null)
@@ -211,6 +212,33 @@ public sealed class OracleRosterEngine : IRosterEngine
                 $"Available: {string.Join(", ", childEntries.Select(c => c.getName()))}");
 
         _oracle.SelectEntry(parentSelection, childEntry);
+    }
+
+    /// <summary>
+    /// Flatten child entries including those inside selectionEntryGroups recursively.
+    /// </summary>
+    private static List<net.battlescribe.model.data.SelectionEntry> FlattenChildEntries(
+        net.battlescribe.model.data.SelectionEntry entry)
+    {
+        var result = new List<net.battlescribe.model.data.SelectionEntry>();
+        result.AddRange(JavaListToList<net.battlescribe.model.data.SelectionEntry>(entry.getSelectionEntries()));
+        foreach (var group in JavaListToList<net.battlescribe.model.data.SelectionEntryGroup>(entry.getSelectionEntryGroups()))
+            FlattenGroupEntries(group, result);
+        return result;
+    }
+
+    private static void FlattenGroupEntries(
+        net.battlescribe.model.data.SelectionEntryGroup group,
+        List<net.battlescribe.model.data.SelectionEntry> result)
+    {
+        result.AddRange(JavaListToList<net.battlescribe.model.data.SelectionEntry>(group.getSelectionEntries()));
+        foreach (var nested in JavaListToList<net.battlescribe.model.data.SelectionEntryGroup>(group.getSelectionEntryGroups()))
+            FlattenGroupEntries(nested, result);
+        foreach (var link in JavaListToList<net.battlescribe.model.data.EntryLink>(group.getEntryLinks()))
+        {
+            var resolved = JavaListToList<net.battlescribe.model.data.SelectionEntry>(link.getSelectionEntries());
+            result.AddRange(resolved);
+        }
     }
 
     public void Dispose() => _oracle.Dispose();

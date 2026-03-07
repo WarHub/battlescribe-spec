@@ -1,0 +1,52 @@
+id: entry-group-nested-groups
+category: entry-group
+description: >
+  SelectionEntryGroup can contain nested SelectionEntryGroups.
+  The nested group's entries are available when the parent group is active.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          selectionEntryGroups:
+            - id: seg-outer
+              name: Equipment
+              selectionEntryGroups:
+                - id: seg-inner
+                  name: Melee Weapons
+                  selectionEntries:
+                    - id: se-sword
+                      name: Sword
+                      type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              children:
+                - name: Sword

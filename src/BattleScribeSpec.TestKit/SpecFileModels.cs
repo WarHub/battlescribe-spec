@@ -117,6 +117,36 @@ public sealed class GameSystemDef
 
     [YamlMember(Alias = "profileTypes")]
     public List<ProfileTypeDef>? ProfileTypes { get; set; }
+
+    [YamlMember(Alias = "publications")]
+    public List<PublicationDef>? Publications { get; set; }
+
+    [YamlMember(Alias = "selectionEntries")]
+    public List<SelectionEntryDef>? SelectionEntries { get; set; }
+
+    [YamlMember(Alias = "entryLinks")]
+    public List<EntryLinkDef>? EntryLinks { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<RuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
+
+    [YamlMember(Alias = "sharedSelectionEntries")]
+    public List<SelectionEntryDef>? SharedSelectionEntries { get; set; }
+
+    [YamlMember(Alias = "sharedSelectionEntryGroups")]
+    public List<SelectionEntryGroupDef>? SharedSelectionEntryGroups { get; set; }
+
+    [YamlMember(Alias = "sharedRules")]
+    public List<RuleDef>? SharedRules { get; set; }
+
+    [YamlMember(Alias = "sharedProfiles")]
+    public List<ProfileDef>? SharedProfiles { get; set; }
+
+    [YamlMember(Alias = "sharedInfoGroups")]
+    public List<InfoGroupDef>? SharedInfoGroups { get; set; }
 }
 
 public sealed class CatalogueDef
@@ -153,6 +183,9 @@ public sealed class CatalogueDef
 
     [YamlMember(Alias = "sharedInfoGroups")]
     public List<InfoGroupDef>? SharedInfoGroups { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<RuleDef>? Rules { get; set; }
 
     [YamlMember(Alias = "infoLinks")]
     public List<InfoLinkDef>? InfoLinks { get; set; }
@@ -232,6 +265,12 @@ public sealed class ForceEntryDef
     [YamlMember(Alias = "constraints")]
     public List<ConstraintDef>? Constraints { get; set; }
 
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
+
+    [YamlMember(Alias = "modifierGroups")]
+    public List<ModifierGroupDef>? ModifierGroups { get; set; }
+
     [YamlMember(Alias = "categoryLinks")]
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
 
@@ -249,6 +288,12 @@ public sealed class CategoryEntryDef
 
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "constraints")]
+    public List<ConstraintDef>? Constraints { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
 }
 
 public sealed class SelectionEntryDef
@@ -325,6 +370,9 @@ public sealed class SelectionEntryGroupDef
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
 
+    [YamlMember(Alias = "collective")]
+    public bool Collective { get; set; }
+
     [YamlMember(Alias = "defaultSelectionEntryId")]
     public string DefaultSelectionEntryId { get; set; } = "";
 
@@ -334,8 +382,41 @@ public sealed class SelectionEntryGroupDef
     [YamlMember(Alias = "modifiers")]
     public List<ModifierDef>? Modifiers { get; set; }
 
+    [YamlMember(Alias = "modifierGroups")]
+    public List<ModifierGroupDef>? ModifierGroups { get; set; }
+
     [YamlMember(Alias = "selectionEntries")]
     public List<SelectionEntryDef>? SelectionEntries { get; set; }
+
+    [YamlMember(Alias = "selectionEntryGroups")]
+    public List<SelectionEntryGroupDef>? SelectionEntryGroups { get; set; }
+
+    [YamlMember(Alias = "entryLinks")]
+    public List<EntryLinkDef>? EntryLinks { get; set; }
+
+    [YamlMember(Alias = "categoryLinks")]
+    public List<CategoryLinkDef>? CategoryLinks { get; set; }
+
+    [YamlMember(Alias = "costs")]
+    public List<CostDef>? Costs { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<RuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "infoGroups")]
+    public List<InfoGroupDef>? InfoGroups { get; set; }
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string Page { get; set; } = "";
+
+    [YamlMember(Alias = "publicationId")]
+    public string PublicationId { get; set; } = "";
 
     [YamlMember(Alias = "import")]
     public bool Import { get; set; } = true;
@@ -510,6 +591,15 @@ public sealed class CategoryLinkDef
 
     [YamlMember(Alias = "primary")]
     public bool Primary { get; set; }
+
+    [YamlMember(Alias = "hidden")]
+    public bool Hidden { get; set; }
+
+    [YamlMember(Alias = "constraints")]
+    public List<ConstraintDef>? Constraints { get; set; }
+
+    [YamlMember(Alias = "modifiers")]
+    public List<ModifierDef>? Modifiers { get; set; }
 }
 
 public sealed class RuleDef
@@ -625,6 +715,9 @@ public sealed class EntryLinkDef
     [YamlMember(Alias = "hidden")]
     public bool Hidden { get; set; }
 
+    [YamlMember(Alias = "collective")]
+    public bool Collective { get; set; }
+
     [YamlMember(Alias = "costs")]
     public List<CostDef>? Costs { get; set; }
 
@@ -634,8 +727,32 @@ public sealed class EntryLinkDef
     [YamlMember(Alias = "modifiers")]
     public List<ModifierDef>? Modifiers { get; set; }
 
+    [YamlMember(Alias = "modifierGroups")]
+    public List<ModifierGroupDef>? ModifierGroups { get; set; }
+
     [YamlMember(Alias = "categoryLinks")]
     public List<CategoryLinkDef>? CategoryLinks { get; set; }
+
+    [YamlMember(Alias = "selectionEntries")]
+    public List<SelectionEntryDef>? SelectionEntries { get; set; }
+
+    [YamlMember(Alias = "selectionEntryGroups")]
+    public List<SelectionEntryGroupDef>? SelectionEntryGroups { get; set; }
+
+    [YamlMember(Alias = "entryLinks")]
+    public List<EntryLinkDef>? EntryLinks { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<RuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "infoGroups")]
+    public List<InfoGroupDef>? InfoGroups { get; set; }
+
+    [YamlMember(Alias = "infoLinks")]
+    public List<InfoLinkDef>? InfoLinks { get; set; }
 
     [YamlMember(Alias = "import")]
     public bool Import { get; set; } = true;

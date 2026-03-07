@@ -1,0 +1,52 @@
+id: gamesystem-shared-entry
+category: gamesystem
+description: >
+  SharedSelectionEntry defined at GameSystem level can be referenced by
+  EntryLinks in catalogues via targetId. The linked entry appears as a
+  child of the selection that contains the link.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+    sharedSelectionEntries:
+      - id: se-shared-weapon
+        name: Shared Weapon
+        type: upgrade
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          entryLinks:
+            - id: el-weapon
+              name: Shared Weapon
+              targetId: se-shared-weapon
+              type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              children:
+                - name: Shared Weapon
