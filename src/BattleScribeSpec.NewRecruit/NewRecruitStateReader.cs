@@ -230,6 +230,16 @@ public static class NewRecruitStateReader
                         }
                     }
 
+                    // Build cost limit lookup for detecting cost limit errors.
+                    // Cost types come from the game system; maxCosts from the army.
+                    const maxCosts = army.getMaxCosts?.() || [];
+                    const costTypeLookup = [];
+                    const spec = window.__bsspec;
+                    const costTypes = spec?.book?.catalogue?.gameSystem?.costTypes || [];
+                    for (const ct of costTypes) {
+                        costTypeLookup.push({ name: ct.name, typeId: ct.id });
+                    }
+
                     // Walk the tree, collecting errors per-node with
                     // position-based ownerType (roster/force/category/selection).
                     const seen = new Set();
@@ -298,12 +308,23 @@ public static class NewRecruitStateReader
                             }
                         }
 
+                        // Detect cost limit errors on roster: if the error
+                        // message mentions a cost type name, tag as costLimits/.
+                        if (ownerType === 'roster' && !entryId && cleanMsg) {
+                            for (const ct of costTypeLookup) {
+                                if (ct.name && cleanMsg.includes(ct.name)) {
+                                    entryId = 'costLimits';
+                                    constraintId = ct.typeId;
+                                    break;
+                                }
+                            }
+                        }
+
                         result.push({
                             message: cleanMsg,
                             ownerType, ownerEntryId,
                             entryId, constraintId
                         });
-                    }
 
                     // Roster-level errors
                     for (const e of (army.errors || []))
