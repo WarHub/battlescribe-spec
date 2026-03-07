@@ -5,7 +5,7 @@
 NR's internal `systemsStore.loadSystemFromFs()` API loads custom BattleScribe XML
 (`.gst`/`.cat` files) as local game systems. The NR adapter uses this single API for
 **both** synthetic specs (inline YAML → generated XML) and real-world DataSource specs
-(git-cloned BSData repos → raw XML files). All 233 specs run through this path.
+(git-cloned BSData repos → raw XML files). All 246 specs run through this path.
 
 ## API
 

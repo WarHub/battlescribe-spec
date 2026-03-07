@@ -23,7 +23,7 @@ conformance suites like the [ConnectRPC Conformance Suite](https://github.com/co
 
 ### Key Constraint
 
-The `SpecRunner` assertion logic (~320 lines of recursive matching for nested forces,
+The `SpecRunner` assertion logic (~630 lines of recursive matching for nested forces,
 selections, costs, and validation errors) must **not** be reimplemented per engine. Any
 architecture that requires each engine author to reimplement the runner defeats the purpose of
 a conformance suite, as subtle interpretation differences would lead to false positives/negatives.
@@ -115,7 +115,7 @@ Adapter implementation cost: ~50 lines for .NET, ~200 lines for other languages.
 Publish only the YAML specs; each engine author writes their own runner.
 
 - **Pros:** Simple, universal reach
-- **Cons:** Every engine must reimplement SpecRunner's assertion logic (~320 lines of
+- **Cons:** Every engine must reimplement SpecRunner's assertion logic (~630 lines of
   non-trivial recursive matching). Different runners will inevitably diverge, defeating the
   purpose of a conformance suite.
 - **Verdict:** Viable as a complement (Layer 1 data), but insufficient alone.

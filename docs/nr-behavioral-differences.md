@@ -9,18 +9,13 @@
 
 | Metric | BattleScribe | New Recruit |
 |--------|-------------|-------------|
-| Total specs | 247 | 245 |
-| Expected to pass | 245 | 228 |
+| Total specs | 246 | 246 |
+| Expected to pass | 244 | 229 |
 | Expected to fail | 2 | 17 |
 
 **BattleScribe expected failures** (2): NR-specific condition specs where BS
 returns NaN for null childId (`condition-null-childid-nr-force`,
 `condition-null-childid-nr-self`).
-
-**NR DataSource skipped** (2): Real-world `wh40k-10e` DataSource specs require
-loading external game data from a GitHub repository. The NR adapter cannot load
-data this way — it uses NR's built-in game library. BattleScribe runs these
-specs using its IKVM engine with `DataUtils` XML loading.
 
 Expected failures are encoded in each spec's `engines` YAML field:
 ```yaml
@@ -343,7 +338,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   failure suddenly passes, the test FAILS (detecting behavior changes).
   Previously tracked in separate JSON files (`specs/expected-failures/*.json`)
   which have been removed in favor of this single-source-of-truth approach.
-- **Oracle (BattleScribe)**: 245 specs expected to pass, 2 expected to fail
+- **Oracle (BattleScribe)**: 244 specs expected to pass, 2 expected to fail
   (NR-specific null-childId condition behavior). DataSource specs (2 real-world
   wh40k-10e) are fully supported via IKVM engine with DataUtils XML loading.
 

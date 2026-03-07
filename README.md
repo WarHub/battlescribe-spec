@@ -1,7 +1,7 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 180+ spec files covering the
+Any engine, in any language, can validate its behavior against 246 spec files covering the
 complete BattleScribe data model and editing operations.
 
 ## Quick Start
@@ -58,33 +58,33 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 180 declarative spec files covering all BattleScribe operations |
+| **YAML Specs** | 246 declarative spec files covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **CLI Runner** | Standalone console app that drives any adapter via JSON-line protocol |
 | **Adapters** | Thin wrappers translating protocol commands to engine API calls |
 
 ## Spec Coverage
 
-180 specs across 10 categories:
+246 specs across 10 categories:
 
 | Category | Specs | Description |
-|----------|-------|-------------|
-| condition | 28 | All condition types, groups, scopes, instanceOf |
-| constraint | 19 | Min/max validation, shared, percent, hidden, cost fields |
-| cost | 17 | Calculation, aggregation, limits, multi-type, negative |
-| force | 10 | Add/remove, nested, categories, multi-catalogue |
-| modifier | 35 | All modifier types, groups, repeats, profiles, rules |
+|----------|------:|-------------|
+| condition | 31 | All condition types, groups, scopes, instanceOf, null-childId |
+| constraint | 34 | Min/max validation, shared, percent, hidden, cost limits, linked errors |
+| cost | 19 | Calculation, aggregation, limits, multi-type, negative |
+| force | 11 | Add/remove, nested, categories, multi-catalogue |
+| modifier | 48 | All modifier types, groups, repeats, profiles, rules, characteristics |
+| real-world | 2 | DataSource specs using wh40k-10e external data |
 | refresh | 10 | State refresh after every mutation type |
 | roster | 9 | Creation, metadata, cost types |
 | scope | 14 | All scope types, child ID filters, include flags |
-| selection | 25 | Lifecycle, groups, links, collective, types |
-| coverage | 1 | Coverage matrix validation |
+| selection | 68 | Lifecycle, groups, links, collective, types, entry links, publications |
 
 ## Project Structure
 
 ```
 battlescribe-spec/
-├── specs/                          # 180 YAML spec files
+├── specs/                          # 246 YAML spec files
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.csproj     # Oracle engine (IKVM + BattleScribe JARs)
