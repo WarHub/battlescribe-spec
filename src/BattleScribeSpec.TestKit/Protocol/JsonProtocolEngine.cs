@@ -27,9 +27,29 @@ public sealed class JsonProtocolEngine : IRosterEngine
         };
     }
 
+    public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        var cmd = new SetupFromFilesCommand
+        {
+            Files = files.Select(f => new ProtocolDataFile { FileName = f.FileName, Content = f.Content }).ToList()
+        };
+        var response = SendCommand(cmd, TimeSpan.FromMinutes(5));
+        return response switch
+        {
+            SetupResult sr => sr.Errors,
+            ProtocolError pe => [pe.Message],
+            _ => [$"Unexpected response type: {response.Type}"],
+        };
+    }
+
     public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
     {
         SendAction(new ActionCommand { Action = "addForce", ForceEntryIndex = forceEntryIndex, CatalogueIndex = catalogueIndex });
+    }
+
+    public void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
+    {
+        SendAction(new ActionCommand { Action = "addForce", ForceEntryName = forceName, CatalogueName = catalogueName, CatalogueIndex = catalogueIndex });
     }
 
     public void RemoveForce(int forceIndex)
@@ -42,6 +62,11 @@ public sealed class JsonProtocolEngine : IRosterEngine
         SendAction(new ActionCommand { Action = "selectEntry", ForceIndex = forceIndex, EntryIndex = entryIndex });
     }
 
+    public void SelectEntryByName(int forceIndex, string entryName)
+    {
+        SendAction(new ActionCommand { Action = "selectEntry", ForceIndex = forceIndex, EntryName = entryName });
+    }
+
     public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex)
     {
         SendAction(new ActionCommand
@@ -50,6 +75,17 @@ public sealed class JsonProtocolEngine : IRosterEngine
             ForceIndex = forceIndex,
             SelectionIndex = selectionIndex,
             ChildEntryIndex = childEntryIndex,
+        });
+    }
+
+    public void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+    {
+        SendAction(new ActionCommand
+        {
+            Action = "selectChildEntry",
+            ForceIndex = forceIndex,
+            SelectionIndex = selectionIndex,
+            ChildEntryName = childEntryName,
         });
     }
 
@@ -145,9 +181,10 @@ public sealed class JsonProtocolEngine : IRosterEngine
         }
     }
 
-    private ProtocolResponse SendCommand(ProtocolCommand command)
+    private ProtocolResponse SendCommand(ProtocolCommand command, TimeSpan? timeout = null)
     {
-        using var cts = new CancellationTokenSource(_requestTimeout);
+        var effectiveTimeout = timeout ?? _requestTimeout;
+        using var cts = new CancellationTokenSource(effectiveTimeout);
         try
         {
             return _adapter.SendCommandAsync(command, cts.Token).GetAwaiter().GetResult();
@@ -155,7 +192,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
         catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
         {
             throw new TimeoutException(
-                $"Adapter timed out after {_requestTimeout.TotalSeconds:0}s while handling '{command.Type}'.", ex);
+                $"Adapter timed out after {effectiveTimeout.TotalSeconds:0}s while handling '{command.Type}'.", ex);
         }
     }
 }

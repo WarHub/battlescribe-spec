@@ -47,6 +47,31 @@ public sealed class SetupCommand : ProtocolCommand
 }
 
 /// <summary>
+/// Initialize the engine with raw data files (.gst and .cat XML).
+/// Used for DataSource specs that load real-world game data.
+/// </summary>
+public sealed class SetupFromFilesCommand : ProtocolCommand
+{
+    [JsonPropertyName("type")]
+    public override string Type => "setupFromFiles";
+
+    [JsonPropertyName("files")]
+    public List<ProtocolDataFile> Files { get; set; } = [];
+}
+
+/// <summary>
+/// A data file (game system .gst or catalogue .cat) with its content.
+/// </summary>
+public sealed class ProtocolDataFile
+{
+    [JsonPropertyName("fileName")]
+    public string FileName { get; set; } = "";
+
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = "";
+}
+
+/// <summary>
 /// Execute a roster editing action.
 /// </summary>
 public sealed class ActionCommand : ProtocolCommand
@@ -92,6 +117,24 @@ public sealed class ActionCommand : ProtocolCommand
     [JsonPropertyName("value")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Value { get; set; }
+
+    // Name-based fields for DataSource specs
+
+    [JsonPropertyName("forceEntryName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ForceEntryName { get; set; }
+
+    [JsonPropertyName("catalogueName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CatalogueName { get; set; }
+
+    [JsonPropertyName("entryName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EntryName { get; set; }
+
+    [JsonPropertyName("childEntryName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ChildEntryName { get; set; }
 }
 
 public sealed class GetStateCommand : ProtocolCommand
@@ -1041,6 +1084,7 @@ public static class ProtocolSerializer
         return type switch
         {
             "setup" => JsonSerializer.Deserialize<SetupCommand>(json, Options),
+            "setupFromFiles" => JsonSerializer.Deserialize<SetupFromFilesCommand>(json, Options),
             "action" => JsonSerializer.Deserialize<ActionCommand>(json, Options),
             "getState" => JsonSerializer.Deserialize<GetStateCommand>(json, Options),
             "getErrors" => JsonSerializer.Deserialize<GetErrorsCommand>(json, Options),

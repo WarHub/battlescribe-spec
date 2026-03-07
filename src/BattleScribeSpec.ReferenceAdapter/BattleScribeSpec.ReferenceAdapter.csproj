@@ -18,4 +18,11 @@
     <ProjectReference Include="..\BattleScribeSpec.csproj" />
   </ItemGroup>
 
+  <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
+    <ItemGroup>
+      <IkvmDlls Include="..\bin\$(Configuration)\$(TargetFramework)\DataUtils.dll;..\bin\$(Configuration)\$(TargetFramework)\CommonsIo.dll;..\bin\$(Configuration)\$(TargetFramework)\KotlinStdlib.dll;..\bin\$(Configuration)\$(TargetFramework)\KotlinStdlibCommon.dll;..\bin\$(Configuration)\$(TargetFramework)\Stax.dll;..\bin\$(Configuration)\$(TargetFramework)\StaxApi.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

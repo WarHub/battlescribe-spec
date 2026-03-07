@@ -190,8 +190,9 @@ foreach (var (_, id, category, loader) in specSources)
         continue;
     }
 
-    // Run spec via protocol engine
-    using var engine = new JsonProtocolEngine(adapterProcess);
+    // Run spec via protocol engine — use longer timeout for DataSource specs
+    var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
+    using var engine = new JsonProtocolEngine(adapterProcess, timeout);
     var runner = new SpecRunner(engine, new DataSourceResolver());
     var result = runner.Run(spec);
     results.Add(result);
