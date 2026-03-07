@@ -1,7 +1,5 @@
 # BattleScribe Engine Conformance Spec — Coverage Report
 
-Machine-readable coverage matrix: [`specs/coverage-matrix.yaml`](../specs/coverage-matrix.yaml).
-
 Current suite status: **246 YAML specs** across 10 categories, with **427 test cases** (**427 passed, 0 skipped, 0 failed**).
 Known limitation tags: **0** (all previously synthetic specs now fully execute).
 Remaining model gaps: **0** (all data model features fully covered).

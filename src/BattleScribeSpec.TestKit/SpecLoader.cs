@@ -36,7 +36,7 @@ public static class SpecLoader
         foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
         {
             var dir = Path.GetDirectoryName(file);
-            // Skip files in the root specs directory (e.g. coverage-matrix.yaml)
+            // Skip files in the root specs directory
             if (string.Equals(Path.GetFullPath(dir!), Path.GetFullPath(specsDir), StringComparison.OrdinalIgnoreCase))
                 continue;
             var category = Path.GetFileName(dir) ?? "unknown";
