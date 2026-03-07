@@ -325,6 +325,7 @@ public static class NewRecruitStateReader
                             ownerType, ownerEntryId,
                             entryId, constraintId
                         });
+                    }
 
                     // Roster-level errors
                     for (const e of (army.errors || []))
