@@ -4,6 +4,7 @@ using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 
+[Trait("Category", "Unit")]
 public class MultiCatalogueProtocolTests(ITestOutputHelper output)
 {
     [Fact]

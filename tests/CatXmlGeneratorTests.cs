@@ -9,6 +9,7 @@ namespace BattleScribeSpec.Tests;
 /// Round-trip tests for CatXmlGenerator: generate XML from spec models,
 /// deserialize back with WarHub.ArmouryModel, and verify structural correctness.
 /// </summary>
+[Trait("Category", "Unit")]
 public class CatXmlGeneratorTests
 {
     [Fact]
@@ -498,5 +499,51 @@ public class CatXmlGeneratorTests
     {
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(xml));
         return stream.DeserializeCatalogue()!;
+    }
+
+    [Fact]
+    public void GenerateCatalogueXml_EmptyCatalogueArray_Throws()
+    {
+        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        Assert.Throws<ArgumentException>(() =>
+            CatXmlGenerator.GenerateCatalogueXml(gs, Array.Empty<CatalogueSpec>()));
+    }
+
+    [Fact]
+    public void GenerateGameSystemXml_MinimalSpec_ProducesValidXml()
+    {
+        var gs = new GameSystemSpec();
+        var xml = CatXmlGenerator.GenerateGameSystemXml(gs);
+        Assert.NotNull(xml);
+        Assert.Contains("<?xml", xml);
+        Assert.Contains("gameSystem", xml);
+    }
+
+    [Fact]
+    public void GenerateCatalogueXml_SpecialXmlCharsInName_ProducesValidXml()
+    {
+        var gs = new GameSystemSpec(Id: "gs-1", Name: "Test & <System>");
+        var cat = new CatalogueSpec(
+            Id: "cat-1",
+            Name: "Catalogue with \"quotes\" & <angles>",
+            GameSystemId: "gs-1");
+
+        var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
+        // XML should be well-formed — deserialize to verify
+        var node = DeserializeCatalogue(xml);
+        Assert.Contains("quotes", node.Name);
+        Assert.Contains("angles", node.Name);
+    }
+
+    [Fact]
+    public void GenerateCatalogueXml_EmptyCatalogue_ProducesValidXml()
+    {
+        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        var cat = new CatalogueSpec(Id: "cat-1", Name: "Empty Cat", GameSystemId: "gs-1");
+
+        var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
+        var node = DeserializeCatalogue(xml);
+        Assert.Equal("Empty Cat", node.Name);
+        Assert.Empty(node.SelectionEntries);
     }
 }

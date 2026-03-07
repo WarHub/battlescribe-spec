@@ -7,6 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// Category 2: Data Model Integrity
 /// Tests that data model relationships are correctly defined.
 /// </summary>
+[Trait("Category", "Unit")]
 public class DataModelIntegrityTests
 {
     [Fact]

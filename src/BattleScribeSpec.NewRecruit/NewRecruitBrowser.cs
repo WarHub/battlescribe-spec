@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
@@ -115,13 +116,19 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         await DismissDialogsAsync();
     }
 
+    private static readonly Regex SafeStoreIdPattern = new("^[a-zA-Z0-9_-]+$", RegexOptions.Compiled);
+
     /// <summary>
     /// Access the Pinia store by ID from within the page context.
     /// Returns the JS expression to access a given store.
     /// </summary>
-    public static string PiniaStoreAccess(string storeId) =>
-        $"document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('{storeId}')";
-
+    public static string PiniaStoreAccess(string storeId)
+    {
+        if (!SafeStoreIdPattern.IsMatch(storeId))
+            throw new ArgumentException(
+                $"Invalid Pinia store ID '{storeId}'. Must match [a-zA-Z0-9_-]+.", nameof(storeId));
+        return $"document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('{storeId}')";
+    }
     /// <summary>
     /// Try to dismiss any consent/cookie dialogs that might block interaction.
     /// </summary>
@@ -145,6 +152,11 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Page is not null)
+        {
+            try { await Page.CloseAsync(); } catch { /* best effort */ }
+            Page = null!;
+        }
         if (_browser is not null)
         {
             await _browser.CloseAsync();

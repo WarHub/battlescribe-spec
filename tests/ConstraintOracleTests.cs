@@ -4,6 +4,7 @@ using Xunit;
 
 namespace BattleScribeSpec.Tests;
 
+[Trait("Category", "Unit")]
 public class ConstraintOracleTests
 {
     private static ScenarioSpec MakeUncategorisedScenario(SelectionEntrySpec[] entries)

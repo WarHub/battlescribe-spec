@@ -10,6 +10,7 @@ namespace BattleScribeSpec.Tests;
 /// and validates costs, selections, and validation state against the oracle engine.
 /// Tests skip when wh40k-9e data is not available.
 /// </summary>
+[Trait("Category", "Integration")]
 public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 {
     private static string Wh40kDataDir => TestPaths.Wh40kDataDir!;

@@ -11,6 +11,7 @@ namespace BattleScribeSpec.Tests;
 /// Skipped unless NR_ENGINE_URL is set.
 /// </summary>
 [Collection("NewRecruit")]
+[Trait("Category", "Integration")]
 public sealed class NrIntegrationTests
 {
     private readonly ITestOutputHelper _output;
@@ -34,8 +35,9 @@ public sealed class NrIntegrationTests
         _output.WriteLine($"Setup errors: [{string.Join(", ", errors)}]");
         Assert.Empty(errors);
 
-        // Small delay to let Pinia store settle
-        Thread.Sleep(1000);
+        // Allow Pinia store to settle after setup — polling the state reader
+        // will capture the latest snapshot once stable.
+        WaitForStoreSettled();
 
         var state = _fixture.Engine.GetRosterState();
         _output.WriteLine($"Roster: '{state.Name}', Forces: {state.Forces.Count}");
@@ -179,7 +181,7 @@ public sealed class NrIntegrationTests
         _output.WriteLine($"Setup errors: [{string.Join(", ", setupErrors)}]");
 
         _fixture.Engine.AddForce(0);
-        Thread.Sleep(1000);
+        WaitForStoreSettled();
 
         var state = _fixture.Engine.GetRosterState();
         _output.WriteLine($"Forces: {state.Forces.Count}, Selections: {state.Forces[0].Selections.Count}");
@@ -388,11 +390,11 @@ public sealed class NrIntegrationTests
 
         _fixture.Engine!.Setup(gs, [cat]);
         _fixture.Engine.AddForce(0);
-        Thread.Sleep(500);
+        WaitForStoreSettled(500);
 
         // Should auto-select 1 Unit A (min=1), now deselect to violate
         _fixture.Engine.DeselectSelection(0, 0);
-        Thread.Sleep(500);
+        WaitForStoreSettled(500);
 
         var probeResult = _fixture.Engine!.Browser.Page.EvaluateAsync<string>("""
             (() => {
@@ -530,7 +532,7 @@ public sealed class NrIntegrationTests
 
         _fixture.Engine!.Setup(gs, [cat]);
         _fixture.Engine.AddForce(0);
-        Thread.Sleep(500);
+        WaitForStoreSettled(500);
         // Don't deselect — just probe the category structure
 
         var probeResult = _fixture.Engine!.Browser.Page.EvaluateAsync<string>("""
@@ -660,13 +662,13 @@ public sealed class NrIntegrationTests
 
         _fixture.Engine!.Setup(gs, [cat]);
         _fixture.Engine.AddForce(0);
-        Thread.Sleep(500);
+        WaitForStoreSettled(500);
         _fixture.Engine.SelectEntry(0, 0);
-        Thread.Sleep(300);
+        WaitForStoreSettled(300);
         _fixture.Engine.SelectEntry(0, 1);
-        Thread.Sleep(300);
+        WaitForStoreSettled(300);
         _fixture.Engine.SelectEntry(0, 2);
-        Thread.Sleep(300);
+        WaitForStoreSettled(300);
 
         var probeResult = _fixture.Engine!.Browser.Page.EvaluateAsync<string>("""
             (() => {
@@ -718,5 +720,14 @@ public sealed class NrIntegrationTests
             """).GetAwaiter().GetResult();
 
         _output.WriteLine(probeResult);
+    }
+
+    /// <summary>
+    /// Wait for the NR Pinia store to settle after an action.
+    /// Uses Playwright's timeout mechanism instead of Thread.Sleep.
+    /// </summary>
+    private void WaitForStoreSettled(int timeoutMs = 1000)
+    {
+        _fixture.Engine!.Browser.Page.WaitForTimeoutAsync(timeoutMs).GetAwaiter().GetResult();
     }
 }

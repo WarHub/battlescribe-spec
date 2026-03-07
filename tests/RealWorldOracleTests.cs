@@ -10,6 +10,7 @@ namespace BattleScribeSpec.Tests;
 /// initializes the engine, and exercises real roster operations.
 /// Skipped if data is not present.
 /// </summary>
+[Trait("Category", "Integration")]
 public class RealWorldOracleTests(ITestOutputHelper output)
 {
     private static string Wh40kDataDir => TestPaths.Wh40kDataDir!;

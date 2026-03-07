@@ -10,6 +10,7 @@ namespace BattleScribeSpec.Tests;
 /// to different field types (string, number, boolean, category).
 /// These define the canonical modifier behavior that conforming implementations must match.
 /// </summary>
+[Trait("Category", "Unit")]
 public class ModifierOracleTests(ITestOutputHelper output)
 {
     private static ScenarioSpec MakeScenario(
@@ -97,11 +98,9 @@ public class ModifierOracleTests(ITestOutputHelper output)
         output.WriteLine($"Selection costs: {string.Join(", ", selCosts.Select(c => $"{c.Name}={c.Value}"))}");
 
         var ptsCost = selCosts.FirstOrDefault(c => c.TypeId == "pts");
-        if (ptsCost != null)
-        {
-            output.WriteLine($"Expected 75 (50 base + 25 increment), got {ptsCost.Value}");
-            Assert.Equal(75.0, ptsCost.Value);
-        }
+        Assert.NotNull(ptsCost);
+        output.WriteLine($"Expected 75 (50 base + 25 increment), got {ptsCost.Value}");
+        Assert.Equal(75.0, ptsCost.Value);
     }
 
     [Fact]
@@ -122,11 +121,9 @@ public class ModifierOracleTests(ITestOutputHelper output)
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
         var ptsCost = snapshot.Forces[0].Selections[0].Costs.FirstOrDefault(c => c.TypeId == "pts");
-        if (ptsCost != null)
-        {
-            output.WriteLine($"Expected 70 (100 base - 30 decrement), got {ptsCost.Value}");
-            Assert.Equal(70.0, ptsCost.Value);
-        }
+        Assert.NotNull(ptsCost);
+        output.WriteLine($"Expected 70 (100 base - 30 decrement), got {ptsCost.Value}");
+        Assert.Equal(70.0, ptsCost.Value);
     }
 
     [Fact]

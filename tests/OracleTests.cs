@@ -9,6 +9,7 @@ namespace BattleScribeSpec.Tests;
 /// All Java model types are encapsulated behind the oracle API to avoid
 /// requiring the test project to reference IKVM-generated assemblies.
 /// </summary>
+[Trait("Category", "Unit")]
 public class OracleTests(ITestOutputHelper output)
 {
     [Fact]
@@ -64,6 +65,7 @@ public class OracleTests(ITestOutputHelper output)
     {
         using var oracle = CreateOracleWithPatrolForce(out var errors);
         Assert.Equal(1, oracle.GetForceCount());
+        // AddForce may return non-fatal warnings; log them but verify no blocking errors
         foreach (var err in errors)
             output.WriteLine($"AddForce error: {err}");
     }
@@ -95,6 +97,7 @@ public class OracleTests(ITestOutputHelper output)
         using var oracle = CreateOracleWithUnit(out _, withCosts: true);
 
         var costs = oracle.GetRosterCostsSummary();
+        Assert.NotEmpty(costs);
         output.WriteLine($"Roster costs ({costs.Count} entries):");
         foreach (var (name, value) in costs)
             output.WriteLine($"  {name}: {value}");

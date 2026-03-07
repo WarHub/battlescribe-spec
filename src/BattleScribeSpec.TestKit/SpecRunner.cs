@@ -242,9 +242,15 @@ public sealed class SpecRunner
         var parentEntry = catalogue?.SelectionEntries?
             .FirstOrDefault(se => string.Equals(se.Name, parentSelectionName, StringComparison.OrdinalIgnoreCase));
 
-        if (parentEntry?.ChildEntries is null)
+        if (parentEntry is null)
         {
-            _errors.Add($"Step {stepIndex}: parent entry '{parentSelectionName}' not found or has no child entries in catalogue[{catalogueIndex}]");
+            _errors.Add($"Step {stepIndex}: parent entry '{parentSelectionName}' not found in catalogue[{catalogueIndex}]");
+            return -1;
+        }
+
+        if (parentEntry.ChildEntries is null)
+        {
+            _errors.Add($"Step {stepIndex}: parent entry '{parentSelectionName}' has no child entries in catalogue[{catalogueIndex}]");
             return -1;
         }
 
@@ -391,12 +397,24 @@ public sealed class SpecRunner
         {
             foreach (var ec in expectedCosts)
             {
-                var matchKey = ec.TypeId ?? ec.Name;
-                var actual = ec.TypeId is { Length: > 0 }
-                    ? state.Costs.FirstOrDefault(c => c.TypeId == ec.TypeId)
-                    : ec.Name is { Length: > 0 }
-                        ? state.Costs.FirstOrDefault(c => c.Name == ec.Name)
-                        : null;
+                CostState? actual;
+                string matchKey;
+                if (ec.TypeId is { Length: > 0 } typeId)
+                {
+                    matchKey = typeId;
+                    actual = state.Costs.FirstOrDefault(c => c.TypeId == typeId);
+                }
+                else if (ec.Name is { Length: > 0 } name)
+                {
+                    matchKey = name;
+                    actual = state.Costs.FirstOrDefault(c => c.Name == name);
+                }
+                else
+                {
+                    _errors.Add($"Step {stepIndex}: cost assertion has neither typeId nor name");
+                    continue;
+                }
+
                 if (actual is null)
                     _errors.Add($"Step {stepIndex}: cost type '{matchKey}' not found in roster");
                 else if (ec.Value is { } v)

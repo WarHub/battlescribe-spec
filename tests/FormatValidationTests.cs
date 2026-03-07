@@ -7,6 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// Category 1: Format Validation
 /// Tests that BattleScribe XML documents conform to the v2.03 schema.
 /// </summary>
+[Trait("Category", "Unit")]
 public class FormatValidationTests
 {
     [Fact]

@@ -454,8 +454,14 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     {
         if (!_disposed)
         {
-            _disposed = true;
-            _browser.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            try
+            {
+                _browser.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            finally
+            {
+                _disposed = true;
+            }
         }
     }
 

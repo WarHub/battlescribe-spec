@@ -17,6 +17,11 @@ namespace BattleScribeSpec;
 /// for oracle testing. Enables running the same operations in both the original
 /// BattleScribe engine and the wham/.NET implementation, then comparing results.
 /// </summary>
+/// <remarks>
+/// This class is NOT thread-safe. All methods must be called from a single thread.
+/// The <c>threadCount</c> constructor parameter controls the Java engine's internal
+/// thread pool, not the thread-safety of this wrapper.
+/// </remarks>
 public sealed class BattleScribeOracle : IDisposable
 {
     private readonly JavaEngine _engine;
@@ -237,10 +242,9 @@ public sealed class BattleScribeOracle : IDisposable
     public bool RemoveForce(Force force)
     {
         EnsureInitialized();
-        var forceIndex = GetForces().IndexOf(force);
         var removed = _engine.g(force);
-        if (removed && forceIndex >= 0 && forceIndex < _forceCatalogueMap.Count)
-            _forceCatalogueMap.RemoveAt(forceIndex);
+        if (removed)
+            _forceCatalogueMap.Remove(force);
         return removed;
     }
 
@@ -493,8 +497,8 @@ public sealed class BattleScribeOracle : IDisposable
     private readonly Dictionary<string, SelectionEntry> _entryLookup = new();
     // Per-catalogue entry lists for multi-catalogue support
     private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
-    // Maps force (by insertion order) to catalogue index
-    private readonly List<int> _forceCatalogueMap = [];
+    // Maps force object identity to catalogue index (avoids positional corruption on removal)
+    private readonly Dictionary<Force, int> _forceCatalogueMap = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
     /// Set up the oracle with a Patrol force entry (no units).
@@ -573,11 +577,13 @@ public sealed class BattleScribeOracle : IDisposable
                 $"Catalogue index {catalogueIndex} out of range (have {_setupCatalogues.Count})");
         var catalogue = _setupCatalogues[catalogueIndex];
         var linked = ResolveLinkedCatalogues(catalogue);
-        var forceCountBefore = GetForces().Count;
+        var forcesBefore = new HashSet<Force>(GetForces(), ReferenceEqualityComparer.Instance);
         var (_, errors) = AddForce(catalogue, _setupForceEntries[index], linked);
-        var forceCountAfter = GetForces().Count;
-        for (var i = forceCountBefore; i < forceCountAfter; i++)
-            _forceCatalogueMap.Add(catalogueIndex);
+        foreach (var force in GetForces())
+        {
+            if (!forcesBefore.Contains(force))
+                _forceCatalogueMap[force] = catalogueIndex;
+        }
         return errors;
     }
 
@@ -669,11 +675,11 @@ public sealed class BattleScribeOracle : IDisposable
         }
 
         // Fallback: pre-computed entries (may lack entry link expansion)
-        if (forceIndex < _forceCatalogueMap.Count && _perCatalogueEntries.Count > 0)
+        var forceObj = forces[forceIndex];
+        if (_forceCatalogueMap.TryGetValue(forceObj, out var catIdx)
+            && catIdx < _perCatalogueEntries.Count)
         {
-            var catIdx = _forceCatalogueMap[forceIndex];
-            if (catIdx < _perCatalogueEntries.Count)
-                return _perCatalogueEntries[catIdx];
+            return _perCatalogueEntries[catIdx];
         }
         throw new InvalidOperationException(
             $"No catalogue mapping found for force {forceIndex}. Force must be added via AddForceByIndex.");
@@ -1674,7 +1680,16 @@ public sealed class BattleScribeOracle : IDisposable
 
     public void Dispose()
     {
-        // No explicit Java resource cleanup needed with IKVM
+        _initialized = false;
+        _gameSystem = null;
+        _catalogues.Clear();
+        _forceCatalogueMap.Clear();
+        _setupCatalogues.Clear();
+        _perCatalogueEntries.Clear();
+        _setupForceEntries.Clear();
+        _setupSelectionEntries.Clear();
+        _entryLookup.Clear();
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>
@@ -1685,6 +1700,12 @@ public sealed class BattleScribeOracle : IDisposable
     /// Since our Oracle creates forces via selectRootForce (which doesn't call x()),
     /// we must invoke it separately to match the desktop behavior.
     /// </summary>
+    /// <remarks>
+    /// WARNING: This uses reflection on an obfuscated private method name "x".
+    /// This WILL break if the BattleScribe engine JAR is re-obfuscated or updated.
+    /// The method signature is: private void x() in net.battlescribe.engine.a.f
+    /// (decompiled source reference: BattleScribeEngine line 978-987).
+    /// </remarks>
     private void SelectDefaultRootEntries()
     {
         // x() is a private method on the engine (net.battlescribe.engine.a.f)
@@ -1711,7 +1732,12 @@ public sealed class BattleScribeOracle : IDisposable
         var iter = javaList.iterator();
         while (iter.hasNext())
         {
-            result.Add((T)iter.next());
+            var next = iter.next();
+            if (next is T typed)
+                result.Add(typed);
+            else
+                throw new InvalidCastException(
+                    $"Java list element is {next?.GetType().Name ?? "null"}, expected {typeof(T).Name}");
         }
         return result;
     }

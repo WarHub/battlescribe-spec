@@ -4,11 +4,12 @@ using WarHub.ArmouryModel.Source;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Category 8: Query Scope Resolution
-/// Tests that query scopes, fields, and filters can be constructed
-/// correctly for conditions and constraints.
+/// Tests that query scope, field, and filter properties round-trip correctly
+/// through Core → Node conversion (via .ToNode()).
+/// Note: These test the WarHub.ArmouryModel data model layer, not runtime query resolution.
 /// </summary>
-public class QueryScopeTests
+[Trait("Category", "Unit")]
+public class QueryScopeStructureTests
 {
     [Theory]
     [InlineData("self")]
