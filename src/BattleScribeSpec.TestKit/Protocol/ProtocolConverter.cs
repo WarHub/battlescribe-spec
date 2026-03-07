@@ -60,6 +60,7 @@ public static class ProtocolConverter
     static ProtocolForceEntry ToProtocol(ForceEntrySpec fe) => new()
     {
         Id = fe.Id, Name = fe.Name,
+        Constraints = fe.Constraints?.Select(ToProtocol).ToList(),
         CategoryLinks = fe.CategoryLinks?.Select(ToProtocol).ToList(),
         ForceEntries = fe.ForceEntries?.Select(ToProtocol).ToList(),
     };
@@ -235,7 +236,8 @@ public static class ProtocolConverter
     static ForceEntrySpec FromProtocol(ProtocolForceEntry fe) => new(
         fe.Id, fe.Name,
         fe.CategoryLinks?.Select(FromProtocol).ToArray(),
-        fe.ForceEntries?.Select(FromProtocol).ToArray());
+        fe.ForceEntries?.Select(FromProtocol).ToArray(),
+        fe.Constraints?.Select(FromProtocol).ToArray());
 
     static SelectionEntrySpec FromProtocol(ProtocolSelectionEntry se) => new(
         Id: se.Id, Name: se.Name, Type: se.Type, Hidden: se.Hidden, Import: se.Import, Collective: se.Collective,

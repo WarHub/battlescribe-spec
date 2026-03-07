@@ -525,6 +525,10 @@ public sealed class ProtocolForceEntry
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
 
+    [JsonPropertyName("constraints")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolConstraint>? Constraints { get; set; }
+
     [JsonPropertyName("categoryLinks")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolCategoryLink>? CategoryLinks { get; set; }

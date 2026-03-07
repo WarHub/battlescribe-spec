@@ -1,0 +1,48 @@
+id: constraint-forces-field-min-error
+category: constraint
+engines:
+  newrecruit: fail
+description: >
+  Constraint with field=forces min on a ForceEntry requires a minimum number of
+  forces. Unlike field=selections min, field=forces min does NOT auto-select.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        constraints:
+          - id: con-min-forces
+            type: min
+            value: 2
+            field: forces
+            scope: roster
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # 1 Patrol force added, min 2 required → validation error.
+  # Note: field=forces min does NOT auto-add forces (unlike field=selections min).
+  - expectedState:
+      forceCount: 1
+      hasValidationErrors: true
+
+  - action: addForce
+    forceEntryIndex: 0
+
+  # 2 Patrol forces, min 2 → constraint satisfied
+  - expectedState:
+      forceCount: 2
+      hasValidationErrors: false

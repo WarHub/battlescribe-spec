@@ -1393,8 +1393,11 @@ public sealed class BattleScribeOracle : IDisposable
         var categoryLinks = feSpec.CategoryLinks?.Select(cl =>
             JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray();
         var childForceEntries = feSpec.ForceEntries?.Select(BuildForceEntry).ToArray();
+        var constraints = feSpec.Constraints?.Select(c =>
+            JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                c.Shared, c.IncludeChildSelections, c.IncludeChildForces)).ToArray();
         return JavaModelFactory.CreateForceEntry(feSpec.Id, feSpec.Name,
-            categoryLinks: categoryLinks, forceEntries: childForceEntries);
+            categoryLinks: categoryLinks, forceEntries: childForceEntries, constraints: constraints);
     }
 
     private static SelectionEntry BuildSelectionEntry(SelectionEntrySpec spec)

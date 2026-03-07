@@ -151,6 +151,11 @@ public static class CatXmlGenerator
             page: null,
             hidden: false);
 
+        foreach (var constraint in spec.Constraints ?? [])
+        {
+            node = node.AddConstraints(MapConstraint(constraint));
+        }
+
         foreach (var categoryLink in spec.CategoryLinks ?? [])
         {
             node = node.AddCategoryLinks(MapCategoryLink(categoryLink));

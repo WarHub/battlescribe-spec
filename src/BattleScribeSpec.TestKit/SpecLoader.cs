@@ -197,7 +197,10 @@ public static class SpecLoader
         new(fe.Id, fe.Name,
             fe.CategoryLinks?.Select(cl =>
                 new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
-            fe.ForceEntries?.Select(ConvertForceEntry).ToArray());
+            fe.ForceEntries?.Select(ConvertForceEntry).ToArray(),
+            fe.Constraints?.Select(c =>
+                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
+                    c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray());
 
     private static SelectionEntryGroupSpec ConvertSelectionEntryGroup(SelectionEntryGroupDef def)
     {

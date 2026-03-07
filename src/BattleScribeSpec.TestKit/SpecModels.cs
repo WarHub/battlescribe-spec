@@ -73,7 +73,8 @@ public record ForceEntrySpec(
     string Id,
     string Name,
     CategoryLinkSpec[]? CategoryLinks = null,
-    ForceEntrySpec[]? ForceEntries = null);
+    ForceEntrySpec[]? ForceEntries = null,
+    ConstraintSpec[]? Constraints = null);
 
 public record GameSystemSpec(
     string Id = "test-gs",
