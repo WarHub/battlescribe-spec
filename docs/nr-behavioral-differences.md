@@ -10,8 +10,8 @@
 | Metric | BattleScribe | New Recruit |
 |--------|-------------|-------------|
 | Total specs | 246 | 246 |
-| Expected to pass | 244 | 229 |
-| Expected to fail | 2 | 17 |
+| Expected to pass | 244 | 220 |
+| Expected to fail | 2 | 26 |
 
 **BattleScribe expected failures** (2): NR-specific condition specs where BS
 returns NaN for null childId (`condition-null-childid-nr-force`,
@@ -31,9 +31,10 @@ engines:
 |----------|-------|----------|-------------|
 | [Error placement](#1-error-placement) | 4 | Medium | NR places constraint errors on selection, not category |
 | [Import ordering](#2-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#3-missing-features) | 5 | Low | Page numbers, publicationId on selections, unset-primary |
+| [Missing features](#3-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
 | [Scope/condition evaluation](#4-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
-| [Other behavioral differences](#5-other-behavioral-differences) | 2 | Medium | Auto-select root entries, hidden selection filtering |
+| [Entry group behavior](#5-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
+| [Other behavioral differences](#6-other-behavioral-differences) | 3 | Medium | Auto-select root entries, hidden selection filtering, real-world data |
 
 ---
 
@@ -83,7 +84,9 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ## 3. Missing Features
 
-**5 specs** — NR doesn't implement or expose certain BattleScribe features.
+**11 specs** — NR doesn't implement or expose certain BattleScribe features.
+
+### Selection-level publication/page (4 specs)
 
 | Spec | Feature | Detail |
 |------|---------|--------|
@@ -91,10 +94,30 @@ faction-specific entries. BattleScribe puts faction entries first.
 | `selection/selection-page` | Page numbers | NR doesn't expose `page` on selections |
 | `selection/selection-publication` | PublicationId | NR doesn't expose `publicationId` on selections |
 | `selection/selection-publication-and-page` | PublicationId + Page | NR doesn't expose `publicationId` or `page` on selections |
-| `modifier/modifier-category-unset-primary` | Unset-primary modifier | NR ignores the `unset-primary` category modifier |
 
-**Note**: NR does expose `publicationId` and `page` on **profiles** and **rules** —
-only the selection-level publication/page fields are missing.
+### Rule/profile publication and page (6 specs)
+
+| Spec | Feature | Detail |
+|------|---------|--------|
+| `selection/rule-publication` | Rule publicationId | Rule on a selection should preserve its publicationId |
+| `selection/profile-publication` | Profile publicationId | Profile on a selection should preserve its publicationId |
+| `selection/infolink-profile-publication` | InfoLink profile publicationId | Profile linked via InfoLink should preserve target's publicationId |
+| `selection/infolink-publication-override` | InfoLink publication non-override | InfoLink publicationId should NOT override linked target's own publicationId |
+| `gamesystem/gamesystem-publication` | GameSystem publication | Publication defined at GameSystem level should be referenceable by entries |
+| `selection/infolink-page-override` | InfoLink page non-override | InfoLink page should NOT override linked rule's own page |
+
+**Root cause**: NR's data model doesn't fully wire publication resolution
+through the InfoLink chain. While NR does expose `publicationId` and `page` on
+some profiles and rules, it fails when: (a) the publication is defined at the
+GameSystem level rather than catalogue level, (b) an InfoLink references a
+shared rule/profile that has its own publicationId — NR loses the target's
+publication during link resolution.
+
+### Unset-primary modifier (1 spec)
+
+| Spec | Feature | Detail |
+|------|---------|--------|
+| `modifier/modifier-category-unset-primary` | Unset-primary modifier | NR ignores the `unset-primary` category modifier |
 
 ---
 
@@ -124,9 +147,33 @@ expected to fail on BS (`engines: {battlescribe: fail}`).
 
 ---
 
-## 5. Other Behavioral Differences
+## 5. Entry Group Behavior
 
-**2 specs** with distinct NR behavioral differences:
+**2 specs** — NR handles entry groups differently from BattleScribe.
+
+### Child Ordering in Collective Groups
+| Spec | Issue |
+|------|-------|
+| `entry-group/entry-group-collective` | NR sorts children alphabetically within collective groups |
+
+When a `SelectionEntryGroup` has `collective=true`, its child selections should
+appear in **catalogue definition order**. NR instead sorts them alphabetically
+by name (e.g., "Axe" before "Sword" regardless of XML order).
+
+### Category Link Propagation
+| Spec | Issue |
+|------|-------|
+| `entry-group/entry-group-with-category-links` | NR doesn't propagate category links from entry groups to child selections |
+
+When a `SelectionEntryGroup` has `categoryLinks`, the child selections within
+that group should inherit those category assignments. NR ignores category links
+on entry groups, so child selections don't appear under the expected categories.
+
+---
+
+## 6. Other Behavioral Differences
+
+**3 specs** with distinct NR behavioral differences:
 
 ### Auto-Select Root Entries
 | Spec | Issue |
@@ -145,6 +192,16 @@ root entries in the forces field.
 BattleScribe keeps hidden selections in the tree (visible to assertions) but
 marks them hidden. NR removes them completely — `selectionCount` is 0 instead
 of 1 for a hidden auto-selected entry.
+
+### Real-World Data Source
+| Spec | Issue |
+|------|-------|
+| `real-world/wh40k-10e-space-marines-army` | NR produces different auto-selections and cost calculations for complex multi-catalogue armies |
+
+This real-world spec builds a Space Marines army and verifies auto-selections,
+unit types, and points costs. NR's results differ from BattleScribe when
+dealing with multi-catalogue data interactions and complex entry resolution
+chains in production game systems.
 
 ---
 
@@ -352,3 +409,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 | Error extraction | Tree-walking `checkConstraints()` with structured error parsing | ~10 |
 | Entry link resolution | Oracle queries `_engine.e(force).R()` for expanded entries | 4 |
 | Auto-select replication | Oracle adapter calls `x()` via reflection | ~15 |
+| GameSystem entry resolution | `SelectEntry` now includes GS-level SelectionEntries and EntryLinks | 2 |
+| SelectChildEntry flattening | `FlattenChildEntries` resolves EntryLinks and nested SelectionEntryGroups | 6 |
+| FindEntryById scope | `FindEntryById` now searches GameSystem entries in addition to catalogue | 2 |
+| Force-catalogue map state leak | `_forceCatalogueMap.Clear()` in Setup prevents cross-test contamination | 1 |

@@ -1,5 +1,7 @@
 id: entry-group-with-category-links
 category: entry-group
+engines:
+  newrecruit: fail
 description: >
   SelectionEntryGroup with categoryLinks causes selections within the group
   to inherit those categories.

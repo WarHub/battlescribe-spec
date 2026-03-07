@@ -58,6 +58,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     {
         _gameSystem = gameSystem;
         _catalogues = catalogues;
+        _forceCatalogueMap.Clear();
         return SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
     }
 
@@ -201,6 +202,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     {
         _gameSystem = null;
         _catalogues = null;
+        _forceCatalogueMap.Clear();
         return SetupFromFilesAsync(files).GetAwaiter().GetResult();
     }
 
@@ -358,9 +360,11 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         // Determine which catalogue this force belongs to
         var catIdx = forceIndex < _forceCatalogueMap.Count ? _forceCatalogueMap[forceIndex] : 0;
         var cat = _catalogues?.ElementAtOrDefault(catIdx) ?? _catalogues?.FirstOrDefault();
-        // Build ordered list: direct SelectionEntries followed by resolved EntryLinks
+        // Build ordered list: catalogue entries, then GameSystem-level entries
         var entryIds = (cat?.SelectionEntries ?? []).Select(e => e.Id)
             .Concat((cat?.EntryLinks ?? []).Select(el => el.TargetId))
+            .Concat((_gameSystem?.SelectionEntries ?? []).Select(e => e.Id))
+            .Concat((_gameSystem?.EntryLinks ?? []).Select(el => el.TargetId))
             .ToList();
         if (entryIndex >= entryIds.Count)
             throw new ArgumentOutOfRangeException(nameof(entryIndex),
@@ -371,8 +375,8 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex)
     {
-        // Resolve child entry ID: find the parent selection's entry in the catalogue,
-        // then get the child entry by index
+        // Resolve child entry ID: find the parent selection's entry,
+        // then flatten all children (direct, groups, links) by index
         var state = GetRosterState();
         if (forceIndex >= state.Forces.Count)
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
@@ -381,23 +385,34 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
         var parentEntryId = state.Forces[forceIndex].Selections[selectionIndex].EntryId;
         var parentEntry = FindEntryById(parentEntryId);
-        var childEntries = parentEntry?.ChildEntries;
-        if (childEntries is null || childEntryIndex >= childEntries.Length)
+        var childEntries = FlattenChildEntries(parentEntry);
+        if (childEntryIndex >= childEntries.Count)
             throw new ArgumentOutOfRangeException(nameof(childEntryIndex),
                 $"Child entry index {childEntryIndex} out of range for parent '{parentEntryId}'");
 
-        var childEntryId = childEntries[childEntryIndex].Id;
+        var childEntryId = childEntries[childEntryIndex];
         NewRecruitActions.SelectChildEntryByIdAsync(_browser.Page, forceIndex, selectionIndex, childEntryId)
             .GetAwaiter().GetResult();
     }
 
     private SelectionEntrySpec? FindEntryById(string? id)
     {
-        if (id is null || _catalogues is null) return null;
-        foreach (var cat in _catalogues)
+        if (id is null) return null;
+        // Search catalogues
+        if (_catalogues is not null)
         {
-            var found = FindEntryRecursive(cat.SelectionEntries, id)
-                ?? FindEntryRecursive(cat.SharedSelectionEntries, id);
+            foreach (var cat in _catalogues)
+            {
+                var found = FindEntryRecursive(cat.SelectionEntries, id)
+                    ?? FindEntryRecursive(cat.SharedSelectionEntries, id);
+                if (found is not null) return found;
+            }
+        }
+        // Search GameSystem entries
+        if (_gameSystem is not null)
+        {
+            var found = FindEntryRecursive(_gameSystem.SelectionEntries, id)
+                ?? FindEntryRecursive(_gameSystem.SharedSelectionEntries, id);
             if (found is not null) return found;
         }
         return null;
@@ -462,6 +477,46 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             {
                 _disposed = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// Flatten child entry IDs from a parent entry, including direct children,
+    /// entries from SelectionEntryGroups (recursive), and resolved EntryLinks.
+    /// Mirrors OracleRosterEngine.FlattenChildEntries behavior.
+    /// </summary>
+    private IReadOnlyList<string> FlattenChildEntries(SelectionEntrySpec? entry)
+    {
+        if (entry is null) return [];
+        var result = new List<string>();
+        if (entry.ChildEntries is not null)
+            result.AddRange(entry.ChildEntries.Select(e => e.Id));
+        if (entry.SelectionEntryGroups is not null)
+        {
+            foreach (var group in entry.SelectionEntryGroups)
+                FlattenGroupEntries(group, result);
+        }
+        if (entry.EntryLinks is not null)
+        {
+            foreach (var link in entry.EntryLinks)
+                result.Add(link.TargetId);
+        }
+        return result;
+    }
+
+    private void FlattenGroupEntries(SelectionEntryGroupSpec group, List<string> result)
+    {
+        if (group.SelectionEntries is not null)
+            result.AddRange(group.SelectionEntries.Select(e => e.Id));
+        if (group.SelectionEntryGroups is not null)
+        {
+            foreach (var nested in group.SelectionEntryGroups)
+                FlattenGroupEntries(nested, result);
+        }
+        if (group.EntryLinks is not null)
+        {
+            foreach (var link in group.EntryLinks)
+                result.Add(link.TargetId);
         }
     }
 

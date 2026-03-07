@@ -1,6 +1,8 @@
 id: infolink-profile-publication
 category: selection
 description: Profile linked via InfoLink preserves target profile's publicationId
+engines:
+  newrecruit: fail
 
 setup:
   gameSystem:

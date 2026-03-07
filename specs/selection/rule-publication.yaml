@@ -1,6 +1,8 @@
 id: rule-publication
 category: selection
 description: Rule on a selection preserves its publicationId
+engines:
+  newrecruit: fail
 
 setup:
   gameSystem:

@@ -1,6 +1,8 @@
 id: infolink-publication-override
 category: selection
 description: InfoLink publicationId does NOT override linked target - target's own publicationId is preserved
+engines:
+  newrecruit: fail
 
 setup:
   gameSystem:
