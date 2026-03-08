@@ -1291,8 +1291,8 @@ public sealed class BattleScribeOracle : IDisposable
                     JavaModelFactory.CreateCharacteristicType(ct.Id, ct.Name)))).ToArray();
 
         var gsPublications = gameSystem.Publications?.Select(p =>
-            JavaModelFactory.CreatePublication(p.Id, p.Name, p.ShortName, p.Publisher,
-                p.PublicationDate, p.PublisherUrl)).ToArray();
+            JavaModelFactory.CreatePublication(p.Id, p.Name, p.ShortName ?? "", p.Publisher ?? "",
+                p.PublicationDate ?? "", p.PublisherUrl ?? "")).ToArray();
         var gsSelectionEntries = gameSystem.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
         var gsEntryLinks = gameSystem.EntryLinks?.Select(BuildEntryLink).ToArray();
         var gsRules = gameSystem.Rules?.Select(BuildRule).ToArray();
@@ -1366,8 +1366,8 @@ public sealed class BattleScribeOracle : IDisposable
             if (catSpec.Publications != null)
                 foreach (var pubSpec in catSpec.Publications)
                     cat.getPublications().add(
-                        JavaModelFactory.CreatePublication(pubSpec.Id, pubSpec.Name, pubSpec.ShortName,
-                            pubSpec.Publisher, pubSpec.PublicationDate, pubSpec.PublisherUrl));
+                        JavaModelFactory.CreatePublication(pubSpec.Id, pubSpec.Name, pubSpec.ShortName ?? "",
+                            pubSpec.Publisher ?? "", pubSpec.PublicationDate ?? "", pubSpec.PublisherUrl ?? ""));
 
             catalogueDict[catSpec.Id] = cat;
             _setupCatalogues.Add(cat);
@@ -1462,7 +1462,7 @@ public sealed class BattleScribeOracle : IDisposable
             {
                 var ruleModifiers = ruleSpec.Modifiers?.Select(BuildModifier).ToArray();
                 var rule = JavaModelFactory.CreateRule(ruleSpec.Id, ruleSpec.Name, ruleSpec.Description,
-                    ruleSpec.Hidden, ruleSpec.Page, ruleModifiers,
+                    ruleSpec.Hidden, ruleSpec.Page ?? "", ruleModifiers,
                     string.IsNullOrEmpty(ruleSpec.PublicationId) ? null : ruleSpec.PublicationId);
                 entry.getRules().add(rule);
             }
@@ -1530,7 +1530,7 @@ public sealed class BattleScribeOracle : IDisposable
     {
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         return JavaModelFactory.CreateRule(spec.Id, spec.Name, spec.Description,
-            spec.Hidden, spec.Page, modifiers,
+            spec.Hidden, spec.Page ?? "", modifiers,
             string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
     }
 

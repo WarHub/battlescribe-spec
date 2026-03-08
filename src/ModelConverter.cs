@@ -59,19 +59,19 @@ public static class ModelConverter
     {
         var forces = roster.Forces.Select(f =>
             new ForceState(
-                f.Name,
+                f.Name ?? "",
                 f.CatalogueId,
                 f.Selections.Select(CaptureWhamSelection).ToList())).ToList();
 
         var costs = roster.Costs.Select(c =>
-            new CostState(c.Name, c.TypeId, (double)c.Value)).ToList();
+            new CostState(c.Name ?? "", c.TypeId ?? "", (double)c.Value)).ToList();
 
         var errors = validationErrors?.Select(e => new ValidationErrorState(e)).ToList()
             ?? new List<ValidationErrorState>();
 
         return new RosterState(
-            roster.Name,
-            roster.GameSystemId,
+            roster.Name ?? "",
+            roster.GameSystemId ?? "",
             forces,
             costs,
             errors);
@@ -80,10 +80,10 @@ public static class ModelConverter
     private static SelectionState CaptureWhamSelection(SelectionNode sel)
     {
         var costs = sel.Costs.Select(c =>
-            new CostState(c.Name, c.TypeId, (double)c.Value)).ToList();
+            new CostState(c.Name ?? "", c.TypeId ?? "", (double)c.Value)).ToList();
         var children = sel.Selections.Select(CaptureWhamSelection).ToList();
         return new SelectionState(
-            sel.Name,
+            sel.Name ?? "",
             EntryId: null,
             sel.Type.ToString(),
             sel.Number,
