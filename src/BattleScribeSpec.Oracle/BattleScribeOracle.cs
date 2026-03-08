@@ -977,11 +977,6 @@ public sealed class BattleScribeOracle : IDisposable
         return _setupForceEntries.Select(fe => fe.getName() ?? "?").ToList();
     }
 
-    /// <summary>
-    /// Get the count and names of loaded catalogues (for diagnostics).
-    /// </summary>
-    public int GetLoadedCatalogueCount() => _catalogues.Count;
-
     public List<string> GetLoadedCatalogueNames() =>
         _catalogues.Values.Select(c => $"{c.getName()} ({c.getId()})").ToList();
 
@@ -991,65 +986,6 @@ public sealed class BattleScribeOracle : IDisposable
         {
             if (string.Equals(_setupCatalogues[i].getName(), name, StringComparison.OrdinalIgnoreCase))
                 return i;
-        }
-        return -1;
-    }
-
-    /// <summary>
-    /// Get game system cost type names (for diagnostics).
-    /// </summary>
-    public List<string> GetGameSystemCostTypeNames()
-    {
-        if (_gameSystem is null) return [];
-        var result = new List<string>();
-        var iter = _gameSystem.getCostTypes().iterator();
-        while (iter.hasNext())
-        {
-            var ct = (CostType)iter.next();
-            result.Add($"{ct.getName()} ({ct.getId()})");
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Get available selection entry names from a catalogue.
-    /// </summary>
-    public List<string> GetCatalogueSelectionEntryNames(string catalogueId)
-    {
-        if (!_catalogues.TryGetValue(catalogueId, out var cat))
-            return [];
-        var result = new List<string>();
-        var iter = cat.getSelectionEntries().iterator();
-        while (iter.hasNext())
-        {
-            var se = (SelectionEntry)iter.next();
-            result.Add(se.getName() ?? "?");
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Select a catalogue selection entry by name (first match) on the first force.
-    /// Returns count of selections created, or -1 if not found.
-    /// </summary>
-    public int SelectCatalogueEntryByName(string entryName, string catalogueId)
-    {
-        EnsureInitialized();
-        if (!_catalogues.TryGetValue(catalogueId, out var cat))
-            return -1;
-
-        var forces = GetForces();
-        if (forces.Count == 0) return -1;
-
-        var iter = cat.getSelectionEntries().iterator();
-        while (iter.hasNext())
-        {
-            var se = (SelectionEntry)iter.next();
-            if (se.getName() == entryName)
-            {
-                var sels = SelectEntry(forces[0], se);
-                return sels.Count;
-            }
         }
         return -1;
     }
@@ -1108,26 +1044,6 @@ public sealed class BattleScribeOracle : IDisposable
             }
         }
         return names.OrderBy(x => x).ToList();
-    }
-
-    /// <summary>
-    /// Diagnostic: get entries per category for a force.
-    /// </summary>
-    public List<(string Category, List<string> Entries)> GetEntriesByCategory(int forceIndex)
-    {
-        EnsureInitialized();
-        var forces = GetForces();
-        if (forceIndex < 0 || forceIndex >= forces.Count) return [];
-        var force = forces[forceIndex];
-        var result = new List<(string, List<string>)>();
-        var categories = JavaListToList<Category>(force.getCategories());
-        foreach (var category in categories)
-        {
-            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
-            result.Add((category.getName() ?? "?",
-                entries.Select(e => e.getName() ?? "?").ToList()));
-        }
-        return result;
     }
 
     /// <summary>
@@ -1200,72 +1116,6 @@ public sealed class BattleScribeOracle : IDisposable
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// Diagnostic: dump cost state of roster, forces, and selections.
-    /// </summary>
-    public string DiagnoseCosts()
-    {
-        EnsureInitialized();
-        var sb = new System.Text.StringBuilder();
-        var roster = GetRoster();
-
-        sb.AppendLine($"Roster costs ({roster.getCosts().size()}):");
-        var cIter = roster.getCosts().iterator();
-        while (cIter.hasNext())
-        {
-            var c = (Cost)cIter.next();
-            sb.AppendLine($"  {c.getName()} ({c.getTypeId()}) = {c.getValue()} hidden={c.isHidden()}");
-        }
-
-        sb.AppendLine($"Roster costLimits ({roster.getCostLimits().size()}):");
-        var clIter = roster.getCostLimits().iterator();
-        while (clIter.hasNext())
-        {
-            var c = (Cost)clIter.next();
-            sb.AppendLine($"  {c.getName()} ({c.getTypeId()}) = {c.getValue()}");
-        }
-
-        var forces = GetForces();
-        sb.AppendLine($"Forces ({forces.Count}):");
-        foreach (var force in forces)
-        {
-            sb.AppendLine($"  Force: {force.getName()} (catId={force.getCatalogueId()})");
-
-            var selIter = force.getSelections().iterator();
-            while (selIter.hasNext())
-            {
-                var sel = (Selection)selIter.next();
-                sb.Append($"    Sel: {sel.getName()} (type={sel.getType()}, num={sel.getNumber()}, entryId={sel.getEntryId()})");
-                var scIter = sel.getCosts().iterator();
-                var hasCosts = false;
-                while (scIter.hasNext())
-                {
-                    var c = (Cost)scIter.next();
-                    sb.Append($" [{c.getName()}={c.getValue()}]");
-                    hasCosts = true;
-                }
-                if (!hasCosts) sb.Append(" [NO COSTS]");
-                sb.AppendLine();
-
-                // Child selections (one level)
-                var childIter = sel.getSelections().iterator();
-                while (childIter.hasNext())
-                {
-                    var child = (Selection)childIter.next();
-                    sb.Append($"      Child: {child.getName()} (num={child.getNumber()})");
-                    var ccIter = child.getCosts().iterator();
-                    while (ccIter.hasNext())
-                    {
-                        var c = (Cost)ccIter.next();
-                        sb.Append($" [{c.getName()}={c.getValue()}]");
-                    }
-                    sb.AppendLine();
-                }
-            }
-        }
-        return sb.ToString();
     }
 
     // ===== Protocol-based API (primary setup path) =====
@@ -1725,41 +1575,6 @@ public sealed class BattleScribeOracle : IDisposable
         EnsureInitialized();
         var selections = GetAllSelections();
         return selections.Count > 0 ? selections[0].getName() : null;
-    }
-
-    /// <summary>
-    /// Get all selection names in the roster.
-    /// </summary>
-    public List<string?> GetAllSelectionNames()
-    {
-        EnsureInitialized();
-        return GetAllSelections().Select(s => (string?)s.getName()).ToList();
-    }
-
-    /// <summary>
-    /// Diagnostic: list types in the BattleScribeEngine assembly for debugging IKVM type resolution.
-    /// </summary>
-    public static List<string> DiagnosticListEngineTypes()
-    {
-        var engineAsm = typeof(JavaEngine).Assembly;
-        var result = new List<string>();
-        foreach (var t in engineAsm.GetTypes()
-            .Where(t => t.FullName?.Contains("constants") == true
-                     || t.FullName?.Contains("engine.b") == true)
-            .OrderBy(t => t.FullName))
-        {
-            result.Add($"{t.FullName} | IsEnum={t.IsEnum} | IsClass={t.IsClass} | Base={t.BaseType?.Name}");
-            if (t.FullName == "net.battlescribe.engine.constants.a+e")
-            {
-                foreach (var f in t.GetFields(System.Reflection.BindingFlags.Public
-                    | System.Reflection.BindingFlags.Static
-                    | System.Reflection.BindingFlags.NonPublic))
-                {
-                    result.Add($"  Field: {f.Name} | Type={f.FieldType.Name} | Static={f.IsStatic}");
-                }
-            }
-        }
-        return result;
     }
 
     public void Dispose()
