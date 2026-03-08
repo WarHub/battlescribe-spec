@@ -23,17 +23,8 @@ public sealed class FrozenNewRecruitFixture : IAsyncLifetime
         if (HarFilePath is null)
             return;
 
-        try
-        {
-            var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
-            Engine = await NewRecruitRosterEngine.CreateFrozenAsync(HarFilePath, headless: headless);
-        }
-        catch (Exception ex)
-        {
-            // If Playwright browsers aren't installed or launch fails, skip gracefully
-            Console.Error.WriteLine($"[FrozenNewRecruitFixture] Failed to create frozen engine: {ex.Message}");
-            Engine = null;
-        }
+        var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
+        Engine = await NewRecruitRosterEngine.CreateFrozenAsync(HarFilePath, headless: headless);
     }
 
     public Task DisposeAsync()

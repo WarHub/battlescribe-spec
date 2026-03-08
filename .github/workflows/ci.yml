@@ -52,21 +52,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Clone wham
-        run: git clone https://github.com/WarHub/wham.git ../wham
-
-      - name: Setup dependencies
-        run: pwsh ./setup.ps1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install Playwright browsers
-        run: dotnet build src/BattleScribeSpec.NewRecruit && pwsh src/BattleScribeSpec.NewRecruit/bin/Debug/net10.0/playwright.ps1 install --with-deps
+      - name: Setup dependencies
+        run: pwsh ./setup.ps1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: dotnet build
@@ -83,16 +77,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Clone wham
-        run: git clone https://github.com/WarHub/wham.git ../wham
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install Playwright browsers
-        run: dotnet build src/BattleScribeSpec.NewRecruit && pwsh src/BattleScribeSpec.NewRecruit/bin/Debug/net10.0/playwright.ps1 install --with-deps
+      - name: Setup dependencies
+        run: pwsh ./setup.ps1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: dotnet build
