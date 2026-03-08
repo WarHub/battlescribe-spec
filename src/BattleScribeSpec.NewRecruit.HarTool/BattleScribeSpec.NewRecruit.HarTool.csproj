@@ -2,9 +2,6 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <RootNamespace>BattleScribeSpec.NewRecruit.HarTool</RootNamespace>
     <AssemblyName>bs-nr-har-tool</AssemblyName>
     <Description>Records frozen HAR snapshots of newrecruit.eu for offline spec testing.</Description>

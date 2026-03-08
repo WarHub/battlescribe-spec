@@ -1,9 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <RootNamespace>BattleScribeSpec</RootNamespace>
     <NoWarn>$(NoWarn);IKVM0100;IKVM0109;IKVM0141</NoWarn>
   </PropertyGroup>
@@ -20,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="IKVM" Version="8.15.0" />
+    <PackageReference Include="IKVM" />
   </ItemGroup>
 
   <ItemGroup>

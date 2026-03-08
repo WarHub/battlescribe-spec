@@ -3,6 +3,8 @@ WORKDIR /src
 
 # Copy project files for restore
 COPY BattleScribeSpec.slnx .
+COPY Directory.Build.props .
+COPY Directory.Packages.props .
 COPY src/BattleScribeSpec.TestKit/BattleScribeSpec.TestKit.csproj src/BattleScribeSpec.TestKit/
 COPY src/BattleScribeSpec.Runner/BattleScribeSpec.Runner.csproj src/BattleScribeSpec.Runner/
 RUN dotnet restore src/BattleScribeSpec.Runner/BattleScribeSpec.Runner.csproj

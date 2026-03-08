@@ -1,19 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="GitHubActionsTestLogger" Version="2.4.1" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
-    <PackageReference Include="Xunit.SkippableFact" Version="1.5.61" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="GitHubActionsTestLogger" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Xunit.SkippableFact" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,8 +28,11 @@
 
   <!-- Copy IKVM-generated assemblies that aren't transitively referenced -->
   <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
+    <PropertyGroup>
+      <_OracleBinPath>$(ArtifactsPath)\bin\BattleScribeSpec.Oracle\$(ArtifactsPivots)\</_OracleBinPath>
+    </PropertyGroup>
     <ItemGroup>
-      <IkvmDlls Include="..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\DataUtils.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\CommonsIo.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\KotlinStdlib.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\KotlinStdlibCommon.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\Stax.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\StaxApi.dll" />
+      <IkvmDlls Include="$(_OracleBinPath)DataUtils.dll;$(_OracleBinPath)CommonsIo.dll;$(_OracleBinPath)KotlinStdlib.dll;$(_OracleBinPath)KotlinStdlibCommon.dll;$(_OracleBinPath)Stax.dll;$(_OracleBinPath)StaxApi.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
