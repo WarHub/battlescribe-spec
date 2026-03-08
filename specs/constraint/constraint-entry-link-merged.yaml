@@ -1,0 +1,73 @@
+id: constraint-entry-link-merged
+category: constraint
+description: >
+  Both the shared selection entry and the entry link define constraints.
+  During catalogue expansion, constraints from both sources are merged
+  into the expanded copy. Both constraints are evaluated independently —
+  the more restrictive one effectively limits selection count.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-unit
+          name: Heavy Support
+          type: unit
+          constraints:
+            - id: con-shared-max
+              type: max
+              value: 4
+              field: selections
+              scope: roster
+              shared: true
+      entryLinks:
+        - id: link-1
+          name: Heavy Support
+          targetId: shared-unit
+          type: selectionEntry
+          constraints:
+            - id: con-link-max
+              type: max
+              value: 2
+              field: selections
+              scope: force
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # At entry link max=2, below shared max=4 — no errors
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Heavy Support
+            - name: Heavy Support
+      hasValidationErrors: false
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Exceeds entry link max=2 (scope=force) — link's constraint fires
+  # even though the shared entry's max=4 is not yet reached
+  - expectedState:
+      forces:
+        - selectionCount: 3
+      hasValidationErrors: true

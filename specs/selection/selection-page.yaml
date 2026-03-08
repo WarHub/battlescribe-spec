@@ -1,0 +1,34 @@
+id: selection-page
+category: selection
+engines:
+  newrecruit: fail
+description: Selection entry preserves its page field from the catalogue definition
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Veteran
+          type: unit
+          page: "42"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Veteran
+              page: "42"

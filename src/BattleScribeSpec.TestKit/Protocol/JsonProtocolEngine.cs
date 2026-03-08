@@ -15,10 +15,29 @@ public sealed class JsonProtocolEngine : IRosterEngine
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
     }
 
-    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
-        var cmd = ProtocolConverter.ToSetupCommand(gameSystem, catalogues);
+        var cmd = new SetupCommand
+        {
+            GameSystem = gameSystem,
+            Catalogues = catalogues.ToList(),
+        };
         var response = SendCommand(cmd);
+        return response switch
+        {
+            SetupResult sr => sr.Errors,
+            ProtocolError pe => [pe.Message],
+            _ => [$"Unexpected response type: {response.Type}"],
+        };
+    }
+
+    public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        var cmd = new SetupFromFilesCommand
+        {
+            Files = files.Select(f => new ProtocolDataFile { FileName = f.FileName, Content = f.Content }).ToList()
+        };
+        var response = SendCommand(cmd, TimeSpan.FromMinutes(5));
         return response switch
         {
             SetupResult sr => sr.Errors,
@@ -32,6 +51,11 @@ public sealed class JsonProtocolEngine : IRosterEngine
         SendAction(new ActionCommand { Action = "addForce", ForceEntryIndex = forceEntryIndex, CatalogueIndex = catalogueIndex });
     }
 
+    public void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
+    {
+        SendAction(new ActionCommand { Action = "addForce", ForceEntryName = forceName, CatalogueName = catalogueName, CatalogueIndex = catalogueIndex });
+    }
+
     public void RemoveForce(int forceIndex)
     {
         SendAction(new ActionCommand { Action = "removeForce", ForceIndex = forceIndex });
@@ -42,6 +66,11 @@ public sealed class JsonProtocolEngine : IRosterEngine
         SendAction(new ActionCommand { Action = "selectEntry", ForceIndex = forceIndex, EntryIndex = entryIndex });
     }
 
+    public void SelectEntryByName(int forceIndex, string entryName)
+    {
+        SendAction(new ActionCommand { Action = "selectEntry", ForceIndex = forceIndex, EntryName = entryName });
+    }
+
     public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex)
     {
         SendAction(new ActionCommand
@@ -50,6 +79,17 @@ public sealed class JsonProtocolEngine : IRosterEngine
             ForceIndex = forceIndex,
             SelectionIndex = selectionIndex,
             ChildEntryIndex = childEntryIndex,
+        });
+    }
+
+    public void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+    {
+        SendAction(new ActionCommand
+        {
+            Action = "selectChildEntry",
+            ForceIndex = forceIndex,
+            SelectionIndex = selectionIndex,
+            ChildEntryName = childEntryName,
         });
     }
 
@@ -99,7 +139,12 @@ public sealed class JsonProtocolEngine : IRosterEngine
         var response = SendCommand(new GetStateCommand());
         return response switch
         {
-            StateResponse sr => ProtocolConverter.ToRosterState(sr),
+            StateResponse sr => new RosterState(
+                sr.Name,
+                sr.GameSystemId,
+                sr.Forces,
+                sr.Costs,
+                sr.ValidationErrors),
             ProtocolError pe => throw new InvalidOperationException($"Adapter error: {pe.Message}"),
             _ => throw new InvalidOperationException($"Unexpected response type: {response.Type}"),
         };
@@ -110,8 +155,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
         var response = SendCommand(new GetErrorsCommand());
         return response switch
         {
-            ErrorsResponse er => er.Errors.Select(e => new ValidationErrorState(
-                e.Message, e.OwnerType, e.OwnerId, e.OwnerEntryId, e.EntryId, e.ConstraintId)).ToList(),
+            ErrorsResponse er => er.Errors,
             ProtocolError pe => [new ValidationErrorState(pe.Message)],
             _ => [new ValidationErrorState($"Unexpected response type: {response.Type}")],
         };
@@ -145,9 +189,10 @@ public sealed class JsonProtocolEngine : IRosterEngine
         }
     }
 
-    private ProtocolResponse SendCommand(ProtocolCommand command)
+    private ProtocolResponse SendCommand(ProtocolCommand command, TimeSpan? timeout = null)
     {
-        using var cts = new CancellationTokenSource(_requestTimeout);
+        var effectiveTimeout = timeout ?? _requestTimeout;
+        using var cts = new CancellationTokenSource(effectiveTimeout);
         try
         {
             return _adapter.SendCommandAsync(command, cts.Token).GetAwaiter().GetResult();
@@ -155,7 +200,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
         catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
         {
             throw new TimeoutException(
-                $"Adapter timed out after {_requestTimeout.TotalSeconds:0}s while handling '{command.Type}'.", ex);
+                $"Adapter timed out after {effectiveTimeout.TotalSeconds:0}s while handling '{command.Type}'.", ex);
         }
     }
 }

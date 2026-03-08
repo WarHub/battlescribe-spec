@@ -15,7 +15,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BattleScribeSpec.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.Oracle\BattleScribeSpec.Oracle.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
+    <ItemGroup>
+      <IkvmDlls Include="..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\DataUtils.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\CommonsIo.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\KotlinStdlib.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\KotlinStdlibCommon.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\Stax.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\StaxApi.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

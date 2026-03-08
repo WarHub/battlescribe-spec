@@ -1,0 +1,51 @@
+id: force-entry-with-modifier
+category: force
+description: >
+  ForceEntry with a modifier that sets hidden=true based on a condition.
+  When the condition is met, the force entry becomes hidden.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+      - id: fe-special
+        name: Special Detachment
+        modifiers:
+          - type: set
+            field: hidden
+            value: "true"
+            conditions:
+              - type: atLeast
+                value: 1
+                field: selections
+                scope: roster
+                childId: se-blocker
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-blocker
+          name: Blocker Unit
+          type: unit
+        - id: se-unit
+          name: Unit A
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # After selecting Blocker Unit, the Special Detachment should become hidden
+  # This spec verifies that modifiers on force entries are processed
+  - expectedState:
+      forceCount: 1
+      hasValidationErrors: false

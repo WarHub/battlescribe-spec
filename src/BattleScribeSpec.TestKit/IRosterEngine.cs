@@ -1,3 +1,5 @@
+using BattleScribeSpec.Protocol;
+
 namespace BattleScribeSpec;
 
 /// <summary>
@@ -12,11 +14,11 @@ public interface IRosterEngine : IDisposable
     /// Must be called before any roster operations.
     /// Returns initialization errors (empty list = success).
     /// </summary>
-    IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues);
+    IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues);
 
     /// <summary>
     /// Add a force to the roster using a force entry by index.
-    /// Index refers to the order in <see cref="GameSystemSpec.ForceEntries"/>.
+    /// Index refers to the order in <see cref="ProtocolGameSystem.ForceEntries"/>.
     /// CatalogueIndex specifies which catalogue's entries to use (default 0).
     /// </summary>
     void AddForce(int forceEntryIndex, int catalogueIndex = 0);
@@ -28,7 +30,7 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Select (add) an entry in the specified force, creating a new selection.
-    /// Entry index refers to order in <see cref="CatalogueSpec.SelectionEntries"/>.
+    /// Entry index refers to order in <see cref="ProtocolCatalogue.SelectionEntries"/>.
     /// </summary>
     void SelectEntry(int forceIndex, int entryIndex);
 
@@ -66,4 +68,32 @@ public interface IRosterEngine : IDisposable
     /// Get all current validation errors with structured entry links.
     /// </summary>
     IReadOnlyList<ValidationErrorState> GetValidationErrors();
+
+    // ===== DataSource support (file-based setup + name-based actions) =====
+
+    /// <summary>
+    /// Configure the engine with raw BattleScribe XML files (e.g. from a DataSource).
+    /// Returns initialization errors (empty list = success).
+    /// </summary>
+    IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+        => throw new NotSupportedException("This engine does not support file-based setup.");
+
+    /// <summary>
+    /// Add a force by name (for DataSource specs where index-based resolution isn't available).
+    /// catalogueName identifies which faction/catalogue to use.
+    /// </summary>
+    void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
+        => throw new NotSupportedException("This engine does not support name-based force addition.");
+
+    /// <summary>
+    /// Select an entry by name within the specified force.
+    /// </summary>
+    void SelectEntryByName(int forceIndex, string entryName)
+        => throw new NotSupportedException("This engine does not support name-based entry selection.");
+
+    /// <summary>
+    /// Select a child entry by name under an existing selection.
+    /// </summary>
+    void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+        => throw new NotSupportedException("This engine does not support name-based child entry selection.");
 }

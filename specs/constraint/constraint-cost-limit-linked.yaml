@@ -33,11 +33,21 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  - expectedState:
+      forces:
+        - selectionCount: 0
+      errors: []
+
+  # Unit A costs 150 pts, exceeding 100 pts roster cost limit
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A
       errors:
         - on: roster
           from: costLimits/ct-pts

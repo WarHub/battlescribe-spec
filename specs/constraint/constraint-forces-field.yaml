@@ -1,7 +1,11 @@
 id: constraint-forces-field
 category: constraint
-description: Constraint with field=forces applies to force count instead of selection count
-tags: []
+engines:
+  newrecruit: fail
+description: >
+  Constraint with field=forces on a SelectionEntry always counts 0 forces
+  because the child filter resolves to the owning SelectionEntry (not a ForceEntry),
+  so force matching fails. An atLeast 1 constraint is therefore always violated.
 
 setup:
   gameSystem:
@@ -20,7 +24,7 @@ setup:
           type: unit
           constraints:
             - id: con-force-field
-              type: atLeast
+              type: min
               value: 1
               field: forces
               scope: roster
@@ -29,12 +33,23 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  - expectedState:
+      forces:
+        - selectionCount: 0
+      # No selections yet, but the min 1 field=forces constraint on the entry
+      # is evaluated. Because the owning entry is a SelectionEntry (not ForceEntry),
+      # force count is always 0 → validation error.
+      hasValidationErrors: true
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  # The constraint uses field=forces, which counts forces not selections.
-  # With synthetic data, constraint validation doesn't fire.
+  # Even after selecting, the constraint still counts forces (not selections).
+  # Force count is still 0 → validation error persists.
   - expectedState:
       forces:
         - selectionCount: 1
+          selections:
+            - name: Unit A
+      hasValidationErrors: true

@@ -39,6 +39,12 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # First selection: triggers the modifier condition (atLeast 1 selection)
+  # which increments max from 1 to 3
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -47,8 +53,7 @@ steps:
       forces:
         - selectionCount: 1
 
-  # With synthetic data, constraint modification may not be observable
-  # but the structure is correctly defined for engines that process it
+  # Second selection: allowed because modifier changed max to 3
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -56,3 +61,4 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 2
+      hasValidationErrors: false

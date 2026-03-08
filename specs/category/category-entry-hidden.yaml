@@ -1,0 +1,59 @@
+id: category-entry-hidden
+category: category
+description: >
+  CategoryEntry with hidden=true is not visible on selections.
+  Selections assigned to a hidden category still function but the
+  category is not displayed.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+      - id: cat-hidden
+        name: Hidden Category
+        hidden: true
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+          - id: cl-hidden
+            targetId: cat-hidden
+            name: Hidden Category
+            primary: false
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-unit-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              categories:
+                - name: Troops
+                  primary: true

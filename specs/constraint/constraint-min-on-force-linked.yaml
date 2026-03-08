@@ -44,11 +44,23 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: selectEntry
+  # Auto-select creates 2 Unit A (min=2, scope=force), constraint satisfied
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Unit A
+            - name: Unit A
+      errors: []
+
+  # Remove one auto-selected entry (need 2, have 1 → violation)
+  - action: deselectSelection
     forceIndex: 0
-    entryIndex: 0
+    selectionIndex: 0
 
   - expectedState:
+      forces:
+        - selectionCount: 1
       errors:
         - on: force
           from: se-unit-a/con-min-force

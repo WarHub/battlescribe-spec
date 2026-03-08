@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>BattleScribeSpec.NewRecruit</RootNamespace>
+    <Description>New Recruit roster engine adapter using Playwright browser automation.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BattleScribeSpec.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Playwright" Version="1.51.0" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BattleScribeSpec.TestKit\BattleScribeSpec.TestKit.csproj" />
+    <ProjectReference Include="..\..\..\wham\src\WarHub.ArmouryModel.Source\WarHub.ArmouryModel.Source.csproj" />
+    <ProjectReference Include="..\..\..\wham\src\WarHub.ArmouryModel.Source.BattleScribe\WarHub.ArmouryModel.Source.BattleScribe.csproj" />
+  </ItemGroup>
+
+</Project>

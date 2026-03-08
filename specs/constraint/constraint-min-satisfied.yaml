@@ -1,14 +1,22 @@
 id: constraint-min-satisfied
 category: constraint
-description: A minimum constraint of 1 is satisfied when a selection is present
+description: A minimum constraint of 1 is satisfied immediately by auto-select
 
 setup:
   gameSystem:
     id: test-gs
     name: Test Game System
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
     forceEntries:
       - id: fe-patrol
         name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
   catalogues:
     - id: cat-1
       name: Test Catalogue
@@ -17,6 +25,11 @@ setup:
         - id: se-unit-a
           name: Unit A
           type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
           constraints:
             - id: con-min-1
               type: min
@@ -28,8 +41,10 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
-
-  - assert: noValidationErrors
+  # Auto-select creates 1 Unit A (min=1), constraint satisfied immediately
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A
+      errors: []

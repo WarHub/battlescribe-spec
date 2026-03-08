@@ -1,6 +1,6 @@
 id: condition-percent-value
 category: condition
-description: Condition with percentValue=true computes threshold as percentage of query result
+description: Condition with percentValue=true computes threshold as percentage of total selections in scope
 
 setup:
   gameSystem:
@@ -14,8 +14,11 @@ setup:
       name: Test Catalogue
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-unit
-          name: Unit A
+        - id: se-trigger
+          name: Trigger Unit
+          type: unit
+        - id: se-target
+          name: Target Unit
           type: unit
           modifiers:
             - type: set
@@ -26,21 +29,31 @@ setup:
                   value: 50
                   field: selections
                   scope: force
+                  childId: se-trigger
                   percentValue: true
 
 steps:
   - action: addForce
     forceEntryIndex: 0
 
+  # Add target first
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  # 0 triggers / 1 total → threshold = 1/100*50 = 0.5 → 0 >= 0.5 → false
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target Unit
+
+  # Add trigger
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  # percentValue: value=50, queryResult=1 → threshold = 50*1/100 = 0.5
-  # actual count=1, atLeast 0.5 → true. But with synthetic data, the percent
-  # calculation may differ. Verify basic structure.
-  - expectedState:
-      forces:
-        - selectionCount: 1
-          selections:
-            - name: Unit A
+  # 1 trigger / 2 total → threshold = 2/100*50 = 1.0 → 1 >= 1.0 → true
+  - assert: selectionName
+    forceIndex: 0
+    selectionIndex: 0
+    expected: Percent Met

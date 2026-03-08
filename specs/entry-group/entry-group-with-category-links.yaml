@@ -1,0 +1,72 @@
+id: entry-group-with-category-links
+category: entry-group
+engines:
+  newrecruit: fail
+description: >
+  SelectionEntryGroup with categoryLinks causes selections within the group
+  to inherit those categories.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-infantry
+        name: Infantry
+      - id: cat-elites
+        name: Elites
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-infantry
+            targetId: cat-infantry
+            name: Infantry
+            primary: false
+          - id: cl-elites
+            targetId: cat-elites
+            name: Elites
+            primary: false
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntryGroups:
+            - id: seg-weapons
+              name: Weapons
+              categoryLinks:
+                - id: cl-seg-elites
+                  targetId: cat-elites
+                  name: Elites
+                  primary: false
+              selectionEntries:
+                - id: se-sword
+                  name: Sword
+                  type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sword
+                  categories:
+                    - name: Elites

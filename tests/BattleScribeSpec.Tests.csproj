@@ -17,7 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\BattleScribeSpec.csproj" />
+    <ProjectReference Include="..\src\BattleScribeSpec.Oracle\BattleScribeSpec.Oracle.csproj" />
+    <ProjectReference Include="..\src\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,7 +32,7 @@
   <!-- Copy IKVM-generated assemblies that aren't transitively referenced -->
   <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
     <ItemGroup>
-      <IkvmDlls Include="..\src\bin\$(Configuration)\$(TargetFramework)\DataUtils.dll;..\src\bin\$(Configuration)\$(TargetFramework)\KotlinStdlib.dll;..\src\bin\$(Configuration)\$(TargetFramework)\KotlinStdlibCommon.dll;..\src\bin\$(Configuration)\$(TargetFramework)\Stax.dll;..\src\bin\$(Configuration)\$(TargetFramework)\StaxApi.dll" />
+      <IkvmDlls Include="..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\DataUtils.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\CommonsIo.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\KotlinStdlib.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\KotlinStdlibCommon.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\Stax.dll;..\src\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\StaxApi.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>

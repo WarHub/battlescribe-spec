@@ -1,3 +1,4 @@
+using BattleScribeSpec.Protocol;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -36,7 +37,7 @@ public static class SpecLoader
         foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
         {
             var dir = Path.GetDirectoryName(file);
-            // Skip files in the root specs directory (e.g. coverage-matrix.yaml)
+            // Skip files in the root specs directory
             if (string.Equals(Path.GetFullPath(dir!), Path.GetFullPath(specsDir), StringComparison.OrdinalIgnoreCase))
                 continue;
             var category = Path.GetFileName(dir) ?? "unknown";
@@ -113,165 +114,15 @@ public static class SpecLoader
     }
 
     /// <summary>
-    /// Convert YAML setup definitions to ScenarioSpec.
+    /// Extract setup data as Protocol types directly from the deserialized YAML.
     /// Requires plural 'catalogues' with at least one catalogue.
     /// </summary>
-    public static ScenarioSpec ToSpecModels(SetupDef setup)
+    public static (ProtocolGameSystem GameSystem, ProtocolCatalogue[] Catalogues) GetSetupData(SetupDef setup)
     {
-        var gs = new GameSystemSpec(
-            Id: setup.GameSystem.Id,
-            Name: setup.GameSystem.Name,
-            ForceEntries: setup.GameSystem.ForceEntries?
-                .Select(fe => ConvertForceEntry(fe)).ToArray(),
-            CostTypes: setup.GameSystem.CostTypes?
-                .Select(ct => new CostTypeSpec(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray(),
-            CategoryEntries: setup.GameSystem.CategoryEntries?
-                .Select(ce => new CategoryEntrySpec(ce.Id, ce.Name)).ToArray(),
-            ProfileTypes: setup.GameSystem.ProfileTypes?
-                .Select(pt => new ProfileTypeSpec(pt.Id, pt.Name,
-                    pt.CharacteristicTypes?.Select(ct => new CharacteristicTypeSpec(ct.Id, ct.Name)).ToArray())).ToArray());
-
-        var catalogueDefs = setup.Catalogues;
-        if (catalogueDefs is null || catalogueDefs.Count == 0)
+        var catalogues = setup.Catalogues;
+        if (catalogues is null || catalogues.Count == 0)
             throw new InvalidOperationException("Setup requires 'catalogues' with at least one catalogue.");
 
-        var catalogues = catalogueDefs.Select(ConvertCatalogue).ToArray();
-
-        return new ScenarioSpec(gs, catalogues);
+        return (setup.GameSystem, catalogues.ToArray());
     }
-
-    private static CatalogueSpec ConvertCatalogue(CatalogueDef def)
-    {
-        return new CatalogueSpec(
-            Id: def.Id,
-            Name: def.Name,
-            GameSystemId: def.GameSystemId,
-            SelectionEntries: def.SelectionEntries?
-                .Select(ConvertSelectionEntry).ToArray(),
-            SelectionEntryGroups: def.SelectionEntryGroups?
-                .Select(ConvertSelectionEntryGroup).ToArray(),
-            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray(),
-            SharedSelectionEntries: def.SharedSelectionEntries?
-                .Select(ConvertSelectionEntry).ToArray(),
-            SharedSelectionEntryGroups: def.SharedSelectionEntryGroups?
-                .Select(ConvertSelectionEntryGroup).ToArray(),
-            SharedRules: def.SharedRules?.Select(ConvertRule).ToArray(),
-            SharedProfiles: def.SharedProfiles?.Select(ConvertProfile).ToArray(),
-            SharedInfoGroups: def.SharedInfoGroups?.Select(ConvertInfoGroup).ToArray(),
-            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray(),
-            CatalogueLinks: def.CatalogueLinks?.Select(cl =>
-                new CatalogueLinkSpec(cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries)).ToArray(),
-            Publications: def.Publications?.Select(p =>
-                new PublicationSpec(p.Id, p.Name, p.ShortName, p.Publisher, p.PublicationDate, p.PublisherUrl)).ToArray());
-    }
-
-    private static SelectionEntrySpec ConvertSelectionEntry(SelectionEntryDef def)
-    {
-        return new SelectionEntrySpec(
-            Id: def.Id,
-            Name: def.Name,
-            Type: def.Type,
-            Hidden: def.Hidden,
-            Costs: def.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
-            Constraints: def.Constraints?.Select(c =>
-                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
-                    c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
-            Modifiers: def.Modifiers?.Select(ConvertModifier).ToArray(),
-            ModifierGroups: def.ModifierGroups?.Select(ConvertModifierGroup).ToArray(),
-            ChildEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray(),
-            SelectionEntryGroups: def.SelectionEntryGroups?.Select(ConvertSelectionEntryGroup).ToArray(),
-            CategoryLinks: def.CategoryLinks?.Select(cl =>
-                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
-            Collective: def.Collective,
-            Rules: def.Rules?.Select(ConvertRule).ToArray(),
-            Profiles: def.Profiles?.Select(ConvertProfile).ToArray(),
-            InfoGroups: def.InfoGroups?.Select(ConvertInfoGroup).ToArray(),
-            Page: def.Page,
-            EntryLinks: def.EntryLinks?.Select(ConvertEntryLink).ToArray(),
-            InfoLinks: def.InfoLinks?.Select(ConvertInfoLink).ToArray(),
-            Import: def.Import);
-    }
-
-    private static ForceEntrySpec ConvertForceEntry(ForceEntryDef fe) =>
-        new(fe.Id, fe.Name,
-            fe.CategoryLinks?.Select(cl =>
-                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
-            fe.ForceEntries?.Select(ConvertForceEntry).ToArray());
-
-    private static SelectionEntryGroupSpec ConvertSelectionEntryGroup(SelectionEntryGroupDef def)
-    {
-        return new SelectionEntryGroupSpec(
-            Id: def.Id,
-            Name: def.Name,
-            Hidden: def.Hidden,
-            DefaultSelectionEntryId: def.DefaultSelectionEntryId,
-            Constraints: def.Constraints?.Select(c =>
-                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
-                    c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
-            Modifiers: def.Modifiers?.Select(ConvertModifier).ToArray(),
-            SelectionEntries: def.SelectionEntries?.Select(ConvertSelectionEntry).ToArray(),
-            Import: def.Import);
-    }
-
-    private static ModifierSpec ConvertModifier(ModifierDef def)
-    {
-        return new ModifierSpec(
-            Type: def.Type,
-            Field: def.Field,
-            Value: def.Value,
-            Conditions: def.Conditions?.Select(ConvertCondition).ToArray(),
-            ConditionGroups: def.ConditionGroups?.Select(ConvertConditionGroup).ToArray(),
-            Repeats: def.Repeats?.Select(r =>
-                new RepeatSpec(r.Value, r.Repeats, r.Field, r.Scope, r.ChildId,
-                    r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray());
-    }
-
-    private static ConditionSpec ConvertCondition(ConditionDef def) =>
-        new(def.Type, def.Value, def.Field, def.Scope, def.ChildId, def.PercentValue,
-            def.Shared, def.IncludeChildSelections, def.IncludeChildForces);
-
-    private static ConditionGroupSpec ConvertConditionGroup(ConditionGroupDef def) =>
-        new(def.Type,
-            def.Conditions?.Select(ConvertCondition).ToArray(),
-            def.ConditionGroups?.Select(ConvertConditionGroup).ToArray());
-
-    private static ModifierGroupSpec ConvertModifierGroup(ModifierGroupDef def) =>
-        new(def.Conditions?.Select(ConvertCondition).ToArray(),
-            def.ConditionGroups?.Select(ConvertConditionGroup).ToArray(),
-            def.Repeats?.Select(r =>
-                new RepeatSpec(r.Value, r.Repeats, r.Field, r.Scope, r.ChildId,
-                    r.RoundUp, r.Shared, r.IncludeChildSelections, r.IncludeChildForces, r.PercentValue)).ToArray(),
-            def.Modifiers?.Select(ConvertModifier).ToArray(),
-            def.ModifierGroups?.Select(ConvertModifierGroup).ToArray());
-
-    private static RuleSpec ConvertRule(RuleDef def) =>
-        new(def.Id, def.Name, def.Description, def.Hidden, def.Page,
-            def.Modifiers?.Select(ConvertModifier).ToArray());
-
-    private static ProfileSpec ConvertProfile(ProfileDef def) =>
-        new(def.Id, def.Name, def.TypeId, def.TypeName, def.Hidden,
-            def.Characteristics?.Select(c => new CharacteristicSpec(c.Name, c.TypeId, c.Value)).ToArray(),
-            def.Modifiers?.Select(ConvertModifier).ToArray());
-
-    private static InfoGroupSpec ConvertInfoGroup(InfoGroupDef def) =>
-        new(def.Id, def.Name, def.Hidden,
-            def.Profiles?.Select(ConvertProfile).ToArray(),
-            def.Rules?.Select(ConvertRule).ToArray(),
-            def.Modifiers?.Select(ConvertModifier).ToArray(),
-            def.InfoLinks?.Select(ConvertInfoLink).ToArray());
-
-    private static EntryLinkSpec ConvertEntryLink(EntryLinkDef def) =>
-        new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
-            def.Costs?.Select(c => new CostSpec(c.Name, c.TypeId, c.Value)).ToArray(),
-            def.Constraints?.Select(c =>
-                new ConstraintSpec(c.Id, c.Type, c.Value, c.Field, c.Scope,
-                    c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue)).ToArray(),
-            def.Modifiers?.Select(ConvertModifier).ToArray(),
-            def.CategoryLinks?.Select(cl =>
-                new CategoryLinkSpec(cl.Id, cl.TargetId, cl.Name, cl.Primary)).ToArray(),
-            Import: def.Import);
-
-    private static InfoLinkSpec ConvertInfoLink(InfoLinkDef def) =>
-        new(def.Id, def.Name, def.TargetId, def.Type, def.Hidden,
-            def.Modifiers?.Select(ConvertModifier).ToArray());
 }

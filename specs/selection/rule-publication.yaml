@@ -1,0 +1,44 @@
+id: rule-publication
+category: selection
+description: Rule on a selection preserves its publicationId
+engines:
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      publications:
+        - id: pub-1
+          name: Core Rulebook
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          rules:
+            - id: rule-1
+              name: Steadfast
+              description: This unit never falls back
+              publicationId: pub-1
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine
+              rules:
+                - name: Steadfast
+                  description: This unit never falls back
+                  publicationId: pub-1

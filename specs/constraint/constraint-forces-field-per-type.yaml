@@ -1,0 +1,72 @@
+id: constraint-forces-field-per-type
+category: constraint
+engines:
+  newrecruit: fail
+description: >
+  Constraint with field=forces counts forces per entry type independently.
+  Each ForceEntry's constraint only counts forces created from that same entry.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        constraints:
+          - id: con-max-patrol
+            type: max
+            value: 2
+            field: forces
+            scope: roster
+      - id: fe-battalion
+        name: Battalion
+        constraints:
+          - id: con-max-battalion
+            type: max
+            value: 1
+            field: forces
+            scope: roster
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # 1 Patrol (max 2), 0 Battalion (max 1) → valid
+  - expectedState:
+      forceCount: 1
+      hasValidationErrors: false
+
+  - action: addForce
+    forceEntryIndex: 1
+
+  # 1 Patrol, 1 Battalion → valid
+  - expectedState:
+      forceCount: 2
+      hasValidationErrors: false
+
+  - action: addForce
+    forceEntryIndex: 0
+
+  # 2 Patrol (max 2), 1 Battalion (max 1) → valid
+  - expectedState:
+      forceCount: 3
+      hasValidationErrors: false
+
+  - action: addForce
+    forceEntryIndex: 1
+
+  # 2 Patrol (max 2), 2 Battalion (max 1) → error on Battalion
+  - expectedState:
+      forceCount: 4
+      hasValidationErrors: true
+

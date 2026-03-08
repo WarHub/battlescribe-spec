@@ -1,5 +1,7 @@
 id: modifier-category-unset-primary
 category: modifier
+engines:
+  newrecruit: fail
 description: Category unset-primary modifier removes primary status from a category on the selection
 tags: []
 

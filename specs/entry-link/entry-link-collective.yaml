@@ -1,0 +1,52 @@
+id: entry-link-collective
+category: entry-link
+description: >
+  EntryLink with collective=true causes its selection to be counted
+  collectively with its parent for constraint purposes.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: se-shared-weapon
+          name: Shared Weapon
+          type: upgrade
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          entryLinks:
+            - id: el-weapon
+              name: Shared Weapon
+              targetId: se-shared-weapon
+              type: selectionEntry
+              collective: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              children:
+                - name: Shared Weapon

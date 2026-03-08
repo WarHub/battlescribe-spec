@@ -28,18 +28,24 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # 1 selection — at max=1 limit
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 1
+  - expectedState:
+      forces:
+        - selectionCount: 1
 
+  # Engine allows selection beyond max — tracks count for validation
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 2
+  - expectedState:
+      forces:
+        - selectionCount: 2

@@ -4,7 +4,7 @@ WORKDIR /src
 # Copy project files for restore
 COPY BattleScribeSpec.slnx .
 COPY src/BattleScribeSpec.TestKit/BattleScribeSpec.TestKit.csproj src/BattleScribeSpec.TestKit/
-COPY src/BattleScribeSpec.csproj src/
+COPY src/BattleScribeSpec.Oracle/BattleScribeSpec.Oracle.csproj src/BattleScribeSpec.Oracle/
 COPY src/BattleScribeSpec.ReferenceAdapter/BattleScribeSpec.ReferenceAdapter.csproj src/BattleScribeSpec.ReferenceAdapter/
 
 # Copy IKVM JARs needed at restore/build time

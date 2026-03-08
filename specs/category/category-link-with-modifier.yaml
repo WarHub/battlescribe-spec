@@ -1,0 +1,52 @@
+id: category-link-with-modifier
+category: category
+description: >
+  CategoryLink with a modifier that sets the primary flag to true.
+  Modifiers on category links are processed by the engine during
+  roster evaluation.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-unit-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              categories:
+                - name: Troops
+                  primary: true

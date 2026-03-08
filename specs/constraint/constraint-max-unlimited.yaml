@@ -28,9 +28,9 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+  - expectedState:
+      forces:
+        - selectionCount: 0
 
   - action: selectEntry
     forceIndex: 0
@@ -40,4 +40,12 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  - assert: noValidationErrors
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # max=-1 means unlimited — 3 selections, no error
+  - expectedState:
+      forces:
+        - selectionCount: 3
+      hasValidationErrors: false

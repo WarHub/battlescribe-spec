@@ -1,72 +1,83 @@
+using System.Text.Json.Serialization;
+
 namespace BattleScribeSpec;
 
 /// <summary>
 /// Engine-agnostic state records for roster conformance testing.
 /// These types are used by both the spec runner and engine implementations.
+/// They serialize directly to the JSON wire format via System.Text.Json attributes.
 /// </summary>
 
 public record ValidationErrorState(
-    string Message,
-    string? OwnerType = null,
-    string? OwnerId = null,
-    string? OwnerEntryId = null,
-    string? EntryId = null,
-    string? ConstraintId = null);
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("ownerType"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OwnerType = null,
+    [property: JsonPropertyName("ownerId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OwnerId = null,
+    [property: JsonPropertyName("ownerEntryId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OwnerEntryId = null,
+    [property: JsonPropertyName("entryId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EntryId = null,
+    [property: JsonPropertyName("constraintId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ConstraintId = null);
 
 public record RosterState(
-    string Name,
-    string GameSystemId,
-    IReadOnlyList<ForceState> Forces,
-    IReadOnlyList<CostState> Costs,
-    IReadOnlyList<ValidationErrorState> ValidationErrors);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("gameSystemId")] string GameSystemId,
+    [property: JsonPropertyName("forces")] IReadOnlyList<ForceState> Forces,
+    [property: JsonPropertyName("costs")] IReadOnlyList<CostState> Costs,
+    [property: JsonPropertyName("validationErrors")] IReadOnlyList<ValidationErrorState> ValidationErrors);
 
 public record ForceState(
-    string Name,
-    string? CatalogueId,
-    IReadOnlyList<SelectionState> Selections,
-    int? AvailableEntryCount = null);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("catalogueId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CatalogueId,
+    [property: JsonPropertyName("selections")] IReadOnlyList<SelectionState> Selections,
+    [property: JsonPropertyName("availableEntryCount"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? AvailableEntryCount = null);
 
 public record SelectionState(
-    string Name,
-    string? EntryId,
-    string? Type,
-    int Number,
-    bool Hidden,
-    IReadOnlyList<CostState> Costs,
-    IReadOnlyList<SelectionState> Children,
-    IReadOnlyList<ProfileState> Profiles = default!,
-    IReadOnlyList<RuleState> Rules = default!,
-    IReadOnlyList<CategoryState> Categories = default!,
-    string? Page = null)
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("entryId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EntryId,
+    [property: JsonPropertyName("type"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Type,
+    [property: JsonPropertyName("number")] int Number,
+    [property: JsonPropertyName("hidden")] bool Hidden,
+    [property: JsonPropertyName("costs")] IReadOnlyList<CostState> Costs,
+    [property: JsonPropertyName("children")] IReadOnlyList<SelectionState> Children,
+    IReadOnlyList<ProfileState>? Profiles = null,
+    IReadOnlyList<RuleState>? Rules = null,
+    IReadOnlyList<CategoryState>? Categories = null,
+    [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null,
+    [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null)
 {
+    [JsonPropertyName("profiles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
+    [JsonPropertyName("rules"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<RuleState> Rules { get; init; } = Rules ?? [];
+    [JsonPropertyName("categories"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<CategoryState> Categories { get; init; } = Categories ?? [];
 }
 
 public record CostState(
-    string Name,
-    string TypeId,
-    double Value);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("typeId")] string TypeId,
+    [property: JsonPropertyName("value")] double Value);
 
 public record ProfileState(
-    string Name,
-    string? TypeId,
-    string? TypeName,
-    bool Hidden,
-    IReadOnlyList<CharacteristicState> Characteristics);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("typeId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TypeId,
+    [property: JsonPropertyName("typeName"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TypeName,
+    [property: JsonPropertyName("hidden")] bool Hidden,
+    [property: JsonPropertyName("characteristics")] IReadOnlyList<CharacteristicState> Characteristics,
+    [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null,
+    [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null);
 
 public record CharacteristicState(
-    string Name,
-    string? TypeId,
-    string Value);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("typeId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TypeId,
+    [property: JsonPropertyName("value")] string Value);
 
 public record RuleState(
-    string Name,
-    string Description,
-    bool Hidden);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("hidden")] bool Hidden,
+    [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null,
+    [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null);
 
 public record CategoryState(
-    string Name,
-    string? EntryId,
-    bool Primary);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("entryId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EntryId,
+    [property: JsonPropertyName("primary")] bool Primary);

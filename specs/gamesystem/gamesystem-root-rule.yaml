@@ -1,0 +1,47 @@
+id: gamesystem-root-rule
+category: gamesystem
+description: >
+  Rule defined at GameSystem level appears on selections that reference it
+  via infoLinks, or is available as a roster-level rule.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+    sharedRules:
+      - id: rule-gs
+        name: Core Rule
+        description: A game-wide rule
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          infoLinks:
+            - id: il-rule
+              name: Core Rule
+              targetId: rule-gs
+              type: rule
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              rules:
+                - name: Core Rule
+                  description: A game-wide rule

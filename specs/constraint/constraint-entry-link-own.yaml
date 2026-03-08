@@ -1,0 +1,65 @@
+id: constraint-entry-link-own
+category: constraint
+description: >
+  Constraint defined directly on an entry link (not on its shared target)
+  is enforced during validation. During catalogue expansion, the engine
+  merges the entry link's constraints into the expanded copy alongside
+  any constraints from the shared entry.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-unit
+          name: Strike Team
+          type: unit
+      entryLinks:
+        - id: link-1
+          name: Strike Team
+          targetId: shared-unit
+          type: selectionEntry
+          constraints:
+            - id: con-link-max
+              type: max
+              value: 2
+              field: selections
+              scope: force
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # At max=2 limit — no errors
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Strike Team
+            - name: Strike Team
+      hasValidationErrors: false
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Exceeds max=2 — entry link's constraint (scope=force) fires
+  - expectedState:
+      forces:
+        - selectionCount: 3
+      hasValidationErrors: true

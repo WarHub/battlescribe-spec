@@ -33,6 +33,7 @@ public static class AdapterHandler
                     response = command switch
                     {
                         SetupCommand setup => HandleSetup(setup, engineFactory, ref engine),
+                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, ref engine),
                         ActionCommand action => HandleAction(action, engine),
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
@@ -60,8 +61,17 @@ public static class AdapterHandler
     {
         engine?.Dispose();
         engine = factory();
-        var (gs, catalogues) = ProtocolConverter.FromSetupCommand(cmd);
-        var errors = engine.Setup(gs, catalogues);
+        var errors = engine.Setup(cmd.GameSystem, cmd.Catalogues.ToArray());
+        return new SetupResult { Errors = errors.ToList() };
+    }
+
+    private static ProtocolResponse HandleSetupFromFiles(
+        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine)
+    {
+        engine?.Dispose();
+        engine = factory();
+        var files = cmd.Files.Select(f => (f.FileName, f.Content)).ToList();
+        var errors = engine.SetupFromFiles(files);
         return new SetupResult { Errors = errors.ToList() };
     }
 
@@ -75,16 +85,25 @@ public static class AdapterHandler
             switch (cmd.Action)
             {
                 case "addForce":
-                    engine.AddForce(cmd.ForceEntryIndex ?? 0, cmd.CatalogueIndex ?? 0);
+                    if (cmd.ForceEntryName is { Length: > 0 })
+                        engine.AddForceByName(cmd.ForceEntryName, cmd.CatalogueName, cmd.CatalogueIndex ?? 0);
+                    else
+                        engine.AddForce(cmd.ForceEntryIndex ?? 0, cmd.CatalogueIndex ?? 0);
                     break;
                 case "removeForce":
                     engine.RemoveForce(cmd.ForceIndex ?? 0);
                     break;
                 case "selectEntry":
-                    engine.SelectEntry(cmd.ForceIndex ?? 0, cmd.EntryIndex ?? 0);
+                    if (cmd.EntryName is { Length: > 0 })
+                        engine.SelectEntryByName(cmd.ForceIndex ?? 0, cmd.EntryName);
+                    else
+                        engine.SelectEntry(cmd.ForceIndex ?? 0, cmd.EntryIndex ?? 0);
                     break;
                 case "selectChildEntry":
-                    engine.SelectChildEntry(cmd.ForceIndex ?? 0, cmd.SelectionIndex ?? 0, cmd.ChildEntryIndex ?? 0);
+                    if (cmd.ChildEntryName is { Length: > 0 })
+                        engine.SelectChildEntryByName(cmd.ForceIndex ?? 0, cmd.SelectionIndex ?? 0, cmd.ChildEntryName);
+                    else
+                        engine.SelectChildEntry(cmd.ForceIndex ?? 0, cmd.SelectionIndex ?? 0, cmd.ChildEntryIndex ?? 0);
                     break;
                 case "deselectSelection":
                     engine.DeselectSelection(cmd.ForceIndex ?? 0, cmd.SelectionIndex ?? 0);
@@ -116,7 +135,14 @@ public static class AdapterHandler
             return new ProtocolError { Message = "Engine not initialized" };
 
         var state = engine.GetRosterState();
-        return ProtocolConverter.ToStateResponse(state);
+        return new StateResponse
+        {
+            Name = state.Name,
+            GameSystemId = state.GameSystemId,
+            Forces = state.Forces.ToList(),
+            Costs = state.Costs.ToList(),
+            ValidationErrors = state.ValidationErrors.ToList(),
+        };
     }
 
     private static ProtocolResponse HandleGetErrors(IRosterEngine? engine)
@@ -126,15 +152,7 @@ public static class AdapterHandler
 
         return new ErrorsResponse
         {
-            Errors = engine.GetValidationErrors().Select(e => new ProtocolValidationError
-            {
-                Message = e.Message,
-                OwnerType = e.OwnerType,
-                OwnerId = e.OwnerId,
-                OwnerEntryId = e.OwnerEntryId,
-                EntryId = e.EntryId,
-                ConstraintId = e.ConstraintId,
-            }).ToList()
+            Errors = engine.GetValidationErrors().ToList()
         };
     }
 

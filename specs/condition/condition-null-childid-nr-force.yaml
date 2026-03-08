@@ -1,0 +1,61 @@
+id: condition-null-childid-nr-force
+category: condition
+engines:
+  battlescribe: fail
+description: >
+  NR-specific: condition without childId on force scope defaults to counting all selections.
+  NR's state.eval() hash uses childId || (isForce ? "any" : "self"), so on a force node,
+  missing childId counts ALL selections in the force.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Triggered
+              conditions:
+                # No childId — NR defaults to "any" on force scope
+                - type: atLeast
+                  value: 2
+                  field: selections
+                  scope: force
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # 1 selection in force, need atLeast 2 → false, name unchanged
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A
+
+  # Add second instance — now 2 selections in force, atLeast 2 → true
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Triggered
+            - name: Triggered

@@ -1,8 +1,6 @@
 # BattleScribe Engine Conformance Spec — Coverage Report
 
-Machine-readable coverage matrix: [`specs/coverage-matrix.yaml`](../specs/coverage-matrix.yaml).
-
-Current suite status: **217 YAML specs** across 9 categories, with **365 test cases** (**365 passed, 0 skipped, 0 failed**).
+Current suite status: **246 YAML specs** across 10 categories, with **427 test cases** (**427 passed, 0 skipped, 0 failed**).
 Known limitation tags: **0** (all previously synthetic specs now fully execute).
 Remaining model gaps: **0** (all data model features fully covered).
 
@@ -12,22 +10,23 @@ Remaining model gaps: **0** (all data model features fully covered).
 
 | Category | Specs |
 |----------|------:|
-| condition | 28 |
-| constraint | 20 |
+| condition | 31 |
+| constraint | 34 |
 | cost | 19 |
 | force | 11 |
 | modifier | 48 |
+| real-world | 2 |
 | refresh | 10 |
 | roster | 9 |
 | scope | 14 |
-| selection | 58 |
-| **Total** | **217** |
+| selection | 68 |
+| **Total** | **246** |
 
 | Test Cases | Passed | Skipped | Failed |
 |------------|-------:|--------:|-------:|
-| 365 | 365 | 0 | 0 |
+| 427 | 427 | 0 | 0 |
 
-Tests break down as: 217 spec conformance tests (1:1 with YAML specs) + 148 infrastructure/unit tests.
+Tests break down as: 246 spec conformance tests (1:1 with YAML specs) + 181 infrastructure/unit tests.
 
 ---
 
@@ -37,18 +36,20 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 
 | Method | Specs Using | Key Evidence |
 |--------|----------:|--------------|
-| `Setup` | 207 | Every spec (implicit setup path) |
-| `AddForce` | 214 | force-add-single, force-add-multiple, force-nested-basic, force-multi-catalogue-two-forces |
-| `RemoveForce` | 4 | force-remove, force-remove-second, force-add-and-remove-all, refresh-full-lifecycle |
-| `SelectEntry` | 193 | selection-add-unit, selection-with-cost, selection-multiple-entries, import-*-entry-* |
-| `SelectChildEntry` | 8 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
-| `DeselectSelection` | 15 | selection-remove, selection-deselect-last, refresh-after-deselect, refresh-full-lifecycle |
+| `Setup` | 244 | Every inline spec (implicit setup path) |
+| `SetupFromFiles` | 2 | DataSource specs: wh40k-10e-create-army, wh40k-10e-space-marines-army |
+| `AddForce` | 246 | force-add-single, force-add-multiple, force-nested-basic, force-multi-catalogue-two-forces |
+| `AddForceByName` | 2 | DataSource specs using name-based force addition |
+| `RemoveForce` | 5 | force-remove, force-remove-second, force-add-and-remove-all, refresh-full-lifecycle |
+| `SelectEntry` | 296 | selection-add-unit, selection-with-cost, selection-multiple-entries, import-*-entry-* |
+| `SelectEntryByName` | 3 | DataSource specs using name-based entry selection |
+| `SelectChildEntry` | 9 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
+| `DeselectSelection` | 23 | selection-remove, selection-deselect-last, refresh-after-deselect, refresh-full-lifecycle |
 | `SetSelectionCount` | 2 | selection-set-count, refresh-after-set-count |
-| `DuplicateSelection` | 4 | selection-duplicate, cost-duplicate-increases, refresh-after-duplicate |
+| `DuplicateSelection` | 5 | selection-duplicate, cost-duplicate-increases, refresh-after-duplicate |
 | `SetCostLimit` | 1 | cost-set-limit |
-| `GetRosterState` | 140 | Specs using `expectedState` assertions |
-| `GetValidationErrors` | 11 | constraint-min-violation, constraint-include-child-forces, cost-default-limit-positive |
-| `HasValidationErrors` | 1 | roster-create-empty |
+| `GetRosterState` | 201 | Specs using `rosterState` assertions |
+| `GetValidationErrors` | 20 | Specs using `errors` assertions: constraint-*, cost-default-limit-positive |
 
 ---
 
@@ -75,8 +76,8 @@ Full `INSTANCE_OF` target coverage: `SelectionEntry`, `SelectionEntry.Type`, `Ca
 
 | Type | Specs | Key Evidence |
 |------|------:|--------------|
-| `min` | 8 | constraint-min-violation, constraint-min-satisfied, constraint-min-and-max |
-| `max` | 17 | constraint-max-violation, constraint-max-satisfied, constraint-max-unlimited |
+| `min` | 16 | constraint-min-violation, constraint-min-satisfied, constraint-min-and-max, constraint-min-linked-* |
+| `max` | 31 | constraint-max-violation, constraint-max-satisfied, constraint-max-unlimited, constraint-hidden-enforcement |
 
 ### ModifierType — 8/8 (100%)
 
@@ -128,13 +129,14 @@ Full `INSTANCE_OF` target coverage: `SelectionEntry`, `SelectionEntry.Type`, `Ca
 
 | Assert Type | Specs | Description |
 |-------------|------:|-------------|
-| `expectedState` | 128 | Full roster state comparison (forces, selections, costs, names) |
-| `totalCost` | 26 | Sum of costs across roster |
-| `selectionName` | 15 | Name of specific selection after modifiers |
-| `selectionCount` | 13 | Count of selections in a force |
-| `forceCount` | 10 | Count of forces in roster |
-| `noValidationErrors` | 8 | Asserts zero validation errors |
-| `hasValidationErrors` | 1 | Asserts at least one validation error |
+| `rosterState` | 201 | Full roster state comparison (forces, selections, costs, names, profiles, rules) |
+| `totalCost` | 50 | Sum of costs across roster |
+| `selectionName` | 26 | Name of specific selection after modifiers |
+| `selectionCount` | 22 | Count of selections in a force |
+| `forceCount` | 13 | Count of forces in roster |
+| `errors` | 20 | Structured validation error assertions (on/from/message) |
+| `noValidationErrors` | 3 | Asserts zero validation errors |
+| `hasValidationErrors` | 2 | Asserts at least one validation error |
 
 ---
 
@@ -142,27 +144,27 @@ Full `INSTANCE_OF` target coverage: `SelectionEntry`, `SelectionEntry.Type`, `Ca
 
 | Feature | Specs | Evidence |
 |---------|------:|---------|
-| Profiles & Characteristics | 2 | modifier-on-profile, modifier-characteristic-value |
-| Rules | 1 | modifier-rule-description |
-| Entry Links | 6 | entry-link-basic, entry-link-with-modifier, entry-link-to-group, entry-link-with-cost, entry-link-with-constraint, entry-link-cascading-modifiers |
+| Profiles & Characteristics | 11 | modifier-on-profile, modifier-characteristic-value, profile-hidden, profile-inherited-from-link, profile-with-page, profile-publication, profile-with-multiple-characteristics, profile-multiple-on-entry |
+| Rules | 6 | modifier-rule-description, rule-hidden, rule-publication, rule-with-page, rule-multiple-on-entry |
+| Entry Links | 11 | entry-link-basic, entry-link-with-modifier, entry-link-to-group, entry-link-with-cost, entry-link-with-constraint, entry-link-cascading-modifiers, constraint-entry-link-* (4), shared-entry-via-entry-link |
 | Category Links | 6 | modifier-category-*, scope-primary-category, selection-category-link |
 | Selection Entry Groups | 4 | selection-entry-group-basic, -constraint, -default, entry-group-with-modifiers |
 | Nested Force Entries | 2 | force-nested-basic, scope-include-child-forces-nested |
 | Modifier Groups | 5 | modifier-group-basic, -false-condition, -nested, -with-repeat, modifier-multiple-groups |
 | Condition Groups | 5 | condition-group-and, -and-fails, -or, -nested, condition-group-triple-nested |
-| Repeat Modifiers | 7 | modifier-repeat-basic, -round-up, -round-down, -percent-value, -zero-threshold, -multiple-additive, -include-child-selections |
-| Cost Type Flags | 3 | cost-type-hidden, cost-type-limit, cost-limit-query-resolution |
+| Repeat Modifiers | 8 | modifier-repeat-basic, -round-up, -round-down, -percent-value, -zero-threshold, -multiple-additive, -include-child-selections, modifier-group-with-repeat |
+| Cost Type Flags | 6 | cost-type-hidden, cost-type-limit, cost-limit-query-resolution, roster-multi-cost-types, roster-no-cost-types, roster-with-cost-types |
 | Collective Entries | 4 | selection-collective-create, -deselect, constraint-collective, collective-with-constraint |
-| Shared Entries | 3 | constraint-shared, constraint-shared-deduplication, shared-entry-via-entry-link |
+| Shared Entries | 7 | constraint-shared, constraint-shared-deduplication, constraint-shared-linked, constraint-entry-link-shared-counting, constraint-entry-link-shared-target, catalogue-link-shared-entry, shared-entry-via-entry-link |
 | Percent Value | 3 | condition-percent-value, constraint-percent-value, modifier-repeat-percent-value |
-| Include Child Forces | 2 | scope-include-child-forces, -nested |
-| Include Child Selections | 1 | constraint-include-child-selections |
+| Include Child Forces | 3 | scope-include-child-forces, -nested, constraint-include-child-forces |
+| Include Child Selections | 2 | constraint-include-child-selections, modifier-repeat-include-child-selections |
 | Force-Level Entries | 1 | selection-force-level-entry |
-| Hidden Entries | 4 | selection-hidden-entry, constraint-hidden-enforcement, hidden-cascade-to-children |
+| Hidden Entries | 11 | selection-hidden-entry, constraint-hidden-enforcement, -violation-linked, hidden-cascade-to-children, modifier-field-hidden, modifier-set-hidden-true, profile-hidden, rule-hidden, infogroup-hidden, import-false-entry-hidden-via-link, cost-type-hidden |
 | InfoLinks | 4 | info-link-to-profile, info-link-to-rule, info-link-to-infogroup, info-link-with-modifiers |
-| InfoGroups | 4 | infogroup-basic, infogroup-hidden, infogroup-multiple-profiles, infogroup-with-modifiers |
+| InfoGroups | 5 | infogroup-basic, infogroup-hidden, infogroup-multiple-profiles, infogroup-with-modifiers, info-link-to-infogroup |
 | Catalogue Links | 2 | catalogue-link-import, catalogue-link-shared-entry |
-| Publications | 1 | publication-on-catalogue |
+| Publications | 8 | publication-on-catalogue, profile-publication, rule-publication, selection-publication, selection-publication-and-page, infolink-profile-publication, infolink-publication-not-inherited, infolink-publication-override |
 | Multi-catalogue Forces | 1 | force-multi-catalogue-two-forces |
 | Import Attribute | 3 | import-true-entry-visible-via-link, import-false-entry-hidden-via-link, import-false-entry-direct-use |
 
@@ -170,7 +172,7 @@ Full `INSTANCE_OF` target coverage: `SelectionEntry`, `SelectionEntry.Type`, `Ca
 
 ## 5. Known Limitations — None
 
-All 217 specs fully execute against the BattleScribe reference engine via IKVM with no skips, workarounds, or synthetic tags. Previously 47 specs carried a `known-limitation-synthetic` tag; all were resolved.
+All 246 specs fully execute against the BattleScribe reference engine via IKVM with no skips, workarounds, or synthetic tags. Previously 47 specs carried a `known-limitation-synthetic` tag; all were resolved.
 
 ---
 
@@ -243,6 +245,10 @@ All data model features from the BattleScribe XSD are now represented in the spe
 ## 8. Real-World Data Coverage
 
 The test suite includes **10 complex real-world roster tests** (`ComplexRealWorldRosterTests.cs`) using wh40k-9e catalogue data. These exercise multi-catalogue scenarios, linked catalogues, conditions, modifiers, constraints, and cost calculations with real game data. All 10 tests pass consistently.
+
+Additionally, **2 declarative DataSource specs** use `github:BSData/wh40k-10e@v10.6.0` to test against real wh40k 10th Edition data:
+- `wh40k-10e-create-army` — minimal smoke test: loads all 44 catalogues, creates an Army Roster force
+- `wh40k-10e-space-marines-army` — rich multi-step spec: verifies auto-selected mandatory entries (Detachment, Show/Hide Options, Battle Size), adds Captain and Intercessor Squad with progressive type, cost, and selection count assertions
 
 ---
 

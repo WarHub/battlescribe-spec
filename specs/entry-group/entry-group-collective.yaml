@@ -1,0 +1,68 @@
+id: entry-group-collective
+category: entry-group
+engines:
+  newrecruit: fail
+description: >
+  SelectionEntryGroup with collective=true causes its child selections to be
+  counted as a single collective for constraint purposes. When collective is true,
+  the number of the group is used for counting rather than individual children.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          selectionEntryGroups:
+            - id: seg-weapons
+              name: Weapons
+              collective: true
+              constraints:
+                - id: con-max
+                  type: max
+                  value: 2
+                  field: selections
+                  scope: parent
+              selectionEntries:
+                - id: se-sword
+                  name: Sword
+                  type: upgrade
+                - id: se-axe
+                  name: Axe
+                  type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 1
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+              children:
+                - name: Sword
+                - name: Axe

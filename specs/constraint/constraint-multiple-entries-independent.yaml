@@ -37,7 +37,11 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  # Select entries up to their limits
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # Select entries up to their independent limits (A max=2, B max=1)
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -57,3 +61,4 @@ steps:
             - name: Unit A
             - name: Unit A
             - name: Unit B
+      hasValidationErrors: false

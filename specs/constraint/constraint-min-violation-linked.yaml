@@ -44,7 +44,22 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
+  # Auto-select creates 1 Unit A (min=1), no errors
   - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Unit A
+      errors: []
+
+  # Remove auto-selected entry to trigger structured min violation error
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
       errors:
         - on: category cat-troops
           from: se-unit-a/con-min-1
