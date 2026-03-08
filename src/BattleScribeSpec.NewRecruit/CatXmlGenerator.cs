@@ -1,4 +1,5 @@
 using BattleScribeSpec;
+using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
 using static WarHub.ArmouryModel.Source.NodeFactory;
@@ -7,16 +8,28 @@ namespace BattleScribeSpec.NewRecruit;
 
 public static class CatXmlGenerator
 {
-    public static string GenerateGameSystemXml(GameSystemSpec gameSystem) =>
+    public static string GenerateGameSystemXml(ProtocolGameSystem gameSystem) =>
         SerializeNode(MapGameSystem(gameSystem));
 
-    public static string GenerateCatalogueXml(GameSystemSpec gameSystem, CatalogueSpec catalogue)
+    /// <summary>Backward-compatible overload accepting Spec types.</summary>
+    public static string GenerateGameSystemXml(GameSystemSpec gameSystem) =>
+        GenerateGameSystemXml(ProtocolConverter.ToProtocol(gameSystem));
+
+    public static string GenerateCatalogueXml(ProtocolGameSystem gameSystem, ProtocolCatalogue catalogue)
     {
         var gamesystem = MapGameSystem(gameSystem);
         return SerializeNode(MapCatalogue(gamesystem, catalogue));
     }
 
-    public static string GenerateCatalogueXml(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    /// <summary>Backward-compatible overload accepting Spec types.</summary>
+    public static string GenerateCatalogueXml(GameSystemSpec gameSystem, CatalogueSpec catalogue) =>
+        GenerateCatalogueXml(ProtocolConverter.ToProtocol(gameSystem), ProtocolConverter.ToProtocol(catalogue));
+
+    /// <summary>Backward-compatible overload accepting Spec types (array).</summary>
+    public static string GenerateCatalogueXml(GameSystemSpec gameSystem, CatalogueSpec[] catalogues) =>
+        GenerateCatalogueXml(ProtocolConverter.ToProtocol(gameSystem), catalogues.Select(ProtocolConverter.ToProtocol).ToArray());
+
+    public static string GenerateCatalogueXml(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         if (catalogues.Length == 0)
         {
@@ -29,7 +42,7 @@ public static class CatXmlGenerator
     /// <summary>
     /// Generate XML for all catalogues. Returns (filename, xml) pairs.
     /// </summary>
-    public static IReadOnlyList<(string FileName, string Xml)> GenerateAllCatalogueXml(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    public static IReadOnlyList<(string FileName, string Xml)> GenerateAllCatalogueXml(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         if (catalogues.Length == 0)
             throw new ArgumentException("At least one catalogue is required.", nameof(catalogues));
@@ -44,7 +57,7 @@ public static class CatXmlGenerator
         return result;
     }
 
-    private static GamesystemNode MapGameSystem(GameSystemSpec gameSystem)
+    private static GamesystemNode MapGameSystem(ProtocolGameSystem gameSystem)
     {
         var node = Gamesystem(name: gameSystem.Name, id: gameSystem.Id);
 
@@ -93,7 +106,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static CatalogueNode MapCatalogue(GamesystemNode gamesystem, CatalogueSpec catalogue)
+    private static CatalogueNode MapCatalogue(GamesystemNode gamesystem, ProtocolCatalogue catalogue)
     {
         var node = Catalogue(gamesystem: gamesystem, name: catalogue.Name, id: catalogue.Id);
 
@@ -156,7 +169,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static CostTypeNode MapCostType(CostTypeSpec spec) =>
+    private static CostTypeNode MapCostType(ProtocolCostType spec) =>
         CostType(
             comment: null,
             id: spec.Id,
@@ -164,7 +177,7 @@ public static class CatXmlGenerator
             defaultCostLimit: (decimal)spec.DefaultCostLimit,
             hidden: spec.Hidden);
 
-    private static ForceEntryNode MapForceEntry(ForceEntrySpec spec)
+    private static ForceEntryNode MapForceEntry(ProtocolForceEntry spec)
     {
         var node = ForceEntry(
             comment: null,
@@ -192,7 +205,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static CategoryEntryNode MapCategoryEntry(CategoryEntrySpec spec)
+    private static CategoryEntryNode MapCategoryEntry(ProtocolCategoryEntry spec)
     {
         var node = CategoryEntry(name: spec.Name, id: spec.Id);
 
@@ -205,7 +218,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static ProfileTypeNode MapProfileType(ProfileTypeSpec spec)
+    private static ProfileTypeNode MapProfileType(ProtocolProfileType spec)
     {
         var node = ProfileType(comment: null, id: spec.Id, name: spec.Name);
         foreach (var characteristicType in spec.CharacteristicTypes ?? [])
@@ -216,10 +229,10 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static CharacteristicTypeNode MapCharacteristicType(CharacteristicTypeSpec spec) =>
+    private static CharacteristicTypeNode MapCharacteristicType(ProtocolCharacteristicType spec) =>
         CharacteristicType(comment: null, id: spec.Id, name: spec.Name);
 
-    private static SelectionEntryNode MapSelectionEntry(SelectionEntrySpec spec)
+    private static SelectionEntryNode MapSelectionEntry(ProtocolSelectionEntry spec)
     {
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
@@ -254,7 +267,7 @@ public static class CatXmlGenerator
             node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
         }
 
-        foreach (var childEntry in spec.ChildEntries ?? [])
+        foreach (var childEntry in spec.SelectionEntries ?? [])
         {
             node = node.AddSelectionEntries(MapSelectionEntry(childEntry));
         }
@@ -297,7 +310,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static SelectionEntryGroupNode MapSelectionEntryGroup(SelectionEntryGroupSpec spec)
+    private static SelectionEntryGroupNode MapSelectionEntryGroup(ProtocolSelectionEntryGroup spec)
     {
         var defaultSelectionEntryId = string.IsNullOrWhiteSpace(spec.DefaultSelectionEntryId)
             ? null
@@ -351,7 +364,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static EntryLinkNode MapEntryLink(EntryLinkSpec spec)
+    private static EntryLinkNode MapEntryLink(ProtocolEntryLink spec)
     {
         var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
@@ -406,7 +419,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static ConstraintNode MapConstraint(ConstraintSpec spec) =>
+    private static ConstraintNode MapConstraint(ProtocolConstraint spec) =>
         Constraint(
             comment: null,
             field: spec.Field,
@@ -419,7 +432,7 @@ public static class CatXmlGenerator
             id: spec.Id,
             type: MapConstraintKind(spec.Type));
 
-    private static ModifierNode MapModifier(ModifierSpec spec)
+    private static ModifierNode MapModifier(ProtocolModifier spec)
     {
         var node = Modifier(comment: null, type: MapModifierKind(spec.Type), field: spec.Field, value: spec.Value);
 
@@ -441,7 +454,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static ModifierGroupNode MapModifierGroup(ModifierGroupSpec spec)
+    private static ModifierGroupNode MapModifierGroup(ProtocolModifierGroup spec)
     {
         var node = ModifierGroup();
 
@@ -473,7 +486,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static ConditionNode MapCondition(ConditionSpec spec)
+    private static ConditionNode MapCondition(ProtocolCondition spec)
     {
         var childId = string.IsNullOrWhiteSpace(spec.ChildId) ? null : spec.ChildId;
         return Condition(
@@ -489,7 +502,7 @@ public static class CatXmlGenerator
             type: MapConditionKind(spec.Type));
     }
 
-    private static ConditionGroupNode MapConditionGroup(ConditionGroupSpec spec)
+    private static ConditionGroupNode MapConditionGroup(ProtocolConditionGroup spec)
     {
         var node = ConditionGroup(type: MapConditionGroupKind(spec.Type));
 
@@ -506,7 +519,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static RepeatNode MapRepeat(RepeatSpec spec)
+    private static RepeatNode MapRepeat(ProtocolRepeat spec)
     {
         var childId = string.IsNullOrWhiteSpace(spec.ChildId) ? null : spec.ChildId;
         return Repeat(
@@ -523,7 +536,7 @@ public static class CatXmlGenerator
             roundUp: spec.RoundUp);
     }
 
-    private static CategoryLinkNode MapCategoryLink(CategoryLinkSpec spec)
+    private static CategoryLinkNode MapCategoryLink(ProtocolCategoryLink spec)
     {
         var node = CategoryLink(
             comment: null,
@@ -544,7 +557,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static RuleNode MapRule(RuleSpec spec)
+    private static RuleNode MapRule(ProtocolRule spec)
     {
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
@@ -565,7 +578,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static ProfileNode MapProfile(ProfileSpec spec)
+    private static ProfileNode MapProfile(ProtocolProfile spec)
     {
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
@@ -592,10 +605,10 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static CharacteristicNode MapCharacteristic(CharacteristicSpec spec) =>
+    private static CharacteristicNode MapCharacteristic(ProtocolCharacteristic spec) =>
         Characteristic(name: spec.Name, typeId: spec.TypeId, value: spec.Value);
 
-    private static InfoGroupNode MapInfoGroup(InfoGroupSpec spec)
+    private static InfoGroupNode MapInfoGroup(ProtocolInfoGroup spec)
     {
         var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
@@ -630,7 +643,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static CatalogueLinkNode MapCatalogueLink(CatalogueLinkSpec spec) =>
+    private static CatalogueLinkNode MapCatalogueLink(ProtocolCatalogueLink spec) =>
         CatalogueLink(
             comment: null,
             id: spec.Id,
@@ -639,7 +652,7 @@ public static class CatXmlGenerator
             type: CatalogueLinkKind.Catalogue,
             importRootEntries: spec.ImportRootEntries);
 
-    private static PublicationNode MapPublication(PublicationSpec spec)
+    private static PublicationNode MapPublication(ProtocolPublication spec)
     {
         var shortName = string.IsNullOrWhiteSpace(spec.ShortName) ? null : spec.ShortName;
         var publisher = string.IsNullOrWhiteSpace(spec.Publisher) ? null : spec.Publisher;
@@ -655,7 +668,7 @@ public static class CatXmlGenerator
             publisherUrl: publisherUrl);
     }
 
-    private static InfoLinkNode MapInfoLink(InfoLinkSpec spec)
+    private static InfoLinkNode MapInfoLink(ProtocolInfoLink spec)
     {
         var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
@@ -677,7 +690,7 @@ public static class CatXmlGenerator
         return node;
     }
 
-    private static CostNode MapCost(CostSpec spec) =>
+    private static CostNode MapCost(ProtocolCostValue spec) =>
         Cost(name: spec.Name, typeId: spec.TypeId, value: (decimal)spec.Value);
 
     private static ConstraintKind MapConstraintKind(string value) =>

@@ -15,9 +15,13 @@ public sealed class JsonProtocolEngine : IRosterEngine
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
     }
 
-    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
-        var cmd = ProtocolConverter.ToSetupCommand(gameSystem, catalogues);
+        var cmd = new SetupCommand
+        {
+            GameSystem = gameSystem,
+            Catalogues = catalogues.ToList(),
+        };
         var response = SendCommand(cmd);
         return response switch
         {

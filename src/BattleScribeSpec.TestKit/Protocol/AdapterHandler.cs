@@ -61,8 +61,7 @@ public static class AdapterHandler
     {
         engine?.Dispose();
         engine = factory();
-        var (gs, catalogues) = ProtocolConverter.FromSetupCommand(cmd);
-        var errors = engine.Setup(gs, catalogues);
+        var errors = engine.Setup(cmd.GameSystem, cmd.Catalogues.ToArray());
         return new SetupResult { Errors = errors.ToList() };
     }
 

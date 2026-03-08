@@ -142,7 +142,7 @@ public class RunnerAndProtocolRegressionTests
 
         public RosterState State { get; init; } = new("roster", "gs", [], [], []);
 
-        public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues) => SetupErrors;
+        public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues) => SetupErrors;
 
         public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
         {

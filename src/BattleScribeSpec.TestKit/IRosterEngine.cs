@@ -1,3 +1,5 @@
+using BattleScribeSpec.Protocol;
+
 namespace BattleScribeSpec;
 
 /// <summary>
@@ -12,11 +14,11 @@ public interface IRosterEngine : IDisposable
     /// Must be called before any roster operations.
     /// Returns initialization errors (empty list = success).
     /// </summary>
-    IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues);
+    IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues);
 
     /// <summary>
     /// Add a force to the roster using a force entry by index.
-    /// Index refers to the order in <see cref="GameSystemSpec.ForceEntries"/>.
+    /// Index refers to the order in <see cref="ProtocolGameSystem.ForceEntries"/>.
     /// CatalogueIndex specifies which catalogue's entries to use (default 0).
     /// </summary>
     void AddForce(int forceEntryIndex, int catalogueIndex = 0);
@@ -94,4 +96,16 @@ public interface IRosterEngine : IDisposable
     /// </summary>
     void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
         => throw new NotSupportedException("This engine does not support name-based child entry selection.");
+}
+
+/// <summary>
+/// Backward-compatible extension: allows calling Setup with Spec model types.
+/// Converts to Protocol types and delegates to the primary Setup method.
+/// </summary>
+public static class RosterEngineExtensions
+{
+    public static IReadOnlyList<string> Setup(this IRosterEngine engine, GameSystemSpec gameSystem, CatalogueSpec[] catalogues) =>
+        engine.Setup(
+            ProtocolConverter.ToProtocol(gameSystem),
+            catalogues.Select(ProtocolConverter.ToProtocol).ToArray());
 }

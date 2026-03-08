@@ -396,7 +396,7 @@ public sealed class ProtocolCost
 
 // ===== Protocol Setup Data (game system + catalogue) =====
 
-public sealed class ProtocolGameSystem
+public class ProtocolGameSystem
 {
     [JsonPropertyName("id")]
     public string Id { get; set; } = "";
@@ -461,7 +461,7 @@ public sealed class ProtocolGameSystem
     public List<ProtocolInfoGroup>? SharedInfoGroups { get; set; }
 }
 
-public sealed class ProtocolCatalogue
+public class ProtocolCatalogue
 {
     [JsonPropertyName("id")]
     public string Id { get; set; } = "";
@@ -1123,6 +1123,14 @@ public sealed class ProtocolInfoGroup
 
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
+
+    [JsonPropertyName("publicationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PublicationId { get; set; }
+
+    [JsonPropertyName("page")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Page { get; set; }
 
     [JsonPropertyName("profiles")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

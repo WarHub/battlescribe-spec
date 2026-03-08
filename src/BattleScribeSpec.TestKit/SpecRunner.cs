@@ -1,3 +1,5 @@
+using BattleScribeSpec.Protocol;
+
 namespace BattleScribeSpec;
 
 /// <summary>
@@ -8,8 +10,8 @@ public sealed class SpecRunner
     private readonly IRosterEngine _engine;
     private readonly DataSourceResolver? _dataSourceResolver;
     private readonly List<string> _errors = [];
-    private GameSystemSpec? _gameSystem;
-    private CatalogueSpec[]? _catalogues;
+    private ProtocolGameSystem? _gameSystem;
+    private ProtocolCatalogue[]? _catalogues;
     private bool _isDataSourceMode;
 
     public SpecRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null)
@@ -36,10 +38,10 @@ public sealed class SpecRunner
             }
             else
             {
-                var scenario = SpecLoader.ToSpecModels(spec.Setup);
-                _gameSystem = scenario.GameSystem;
-                _catalogues = scenario.Catalogues;
-                var setupErrors = _engine.Setup(scenario.GameSystem, scenario.Catalogues);
+                var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+                _gameSystem = gameSystem;
+                _catalogues = catalogues;
+                var setupErrors = _engine.Setup(gameSystem, catalogues);
                 if (setupErrors.Count > 0)
                 {
                     foreach (var setupError in setupErrors)
@@ -200,7 +202,7 @@ public sealed class SpecRunner
             return -1;
         }
 
-        var index = Array.FindIndex(forceEntries, fe => string.Equals(fe.Name, forceEntryName, StringComparison.OrdinalIgnoreCase));
+        var index = forceEntries.FindIndex(fe => string.Equals(fe.Name, forceEntryName, StringComparison.OrdinalIgnoreCase));
         if (index < 0)
             _errors.Add($"Step {stepIndex}: force entry name '{forceEntryName}' not found");
         return index;
@@ -215,7 +217,7 @@ public sealed class SpecRunner
             return -1;
         }
 
-        var index = Array.FindIndex(catalogue.SelectionEntries, se => string.Equals(se.Name, entryName, StringComparison.OrdinalIgnoreCase));
+        var index = catalogue.SelectionEntries.FindIndex(se => string.Equals(se.Name, entryName, StringComparison.OrdinalIgnoreCase));
         if (index < 0)
             _errors.Add($"Step {stepIndex}: entry name '{entryName}' not found in catalogue[{catalogueIndex}]");
         return index;
@@ -248,19 +250,19 @@ public sealed class SpecRunner
             return -1;
         }
 
-        if (parentEntry.ChildEntries is null)
+        if (parentEntry.SelectionEntries is null)
         {
             _errors.Add($"Step {stepIndex}: parent entry '{parentSelectionName}' has no child entries in catalogue[{catalogueIndex}]");
             return -1;
         }
 
-        var childIndex = Array.FindIndex(parentEntry.ChildEntries, se => string.Equals(se.Name, childEntryName, StringComparison.OrdinalIgnoreCase));
+        var childIndex = parentEntry.SelectionEntries.FindIndex(se => string.Equals(se.Name, childEntryName, StringComparison.OrdinalIgnoreCase));
         if (childIndex < 0)
             _errors.Add($"Step {stepIndex}: child entry name '{childEntryName}' not found under parent '{parentSelectionName}'");
         return childIndex;
     }
 
-    private CatalogueSpec? GetCatalogue(int catalogueIndex, int stepIndex)
+    private ProtocolCatalogue? GetCatalogue(int catalogueIndex, int stepIndex)
     {
         if (_catalogues is null)
         {

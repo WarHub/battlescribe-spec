@@ -1,3 +1,5 @@
+using BattleScribeSpec.Protocol;
+
 namespace BattleScribeSpec.NewRecruit;
 
 /// <summary>
@@ -20,8 +22,8 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// </summary>
     internal NewRecruitBrowser Browser => _browser;
     private bool _disposed;
-    private GameSystemSpec? _gameSystem;
-    private CatalogueSpec[]? _catalogues;
+    private ProtocolGameSystem? _gameSystem;
+    private ProtocolCatalogue[]? _catalogues;
     // Maps force index → catalogue index (tracked as forces are added)
     private readonly List<int> _forceCatalogueMap = [];
 
@@ -54,7 +56,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return new NewRecruitRosterEngine(browser);
     }
 
-    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         _gameSystem = gameSystem;
         _catalogues = catalogues;
@@ -62,7 +64,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
     }
 
-    private async Task<IReadOnlyList<string>> SetupAsync(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    private async Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         var errors = new List<string>();
 
@@ -341,7 +343,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         var forceId = forceEntry?.Id;
         if (forceId is null)
             throw new ArgumentOutOfRangeException(nameof(forceEntryIndex),
-                $"Force entry index {forceEntryIndex} out of range ({_gameSystem?.ForceEntries?.Length ?? 0} available)");
+                $"Force entry index {forceEntryIndex} out of range ({_gameSystem?.ForceEntries?.Count ?? 0} available)");
         NewRecruitActions.AddForceByIdAsync(_browser.Page, forceId, catalogueIndex)
             .GetAwaiter().GetResult();
         _forceCatalogueMap.Add(catalogueIndex);
@@ -395,7 +397,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             .GetAwaiter().GetResult();
     }
 
-    private SelectionEntrySpec? FindEntryById(string? id)
+    private ProtocolSelectionEntry? FindEntryById(string? id)
     {
         if (id is null) return null;
         // Search catalogues
@@ -418,13 +420,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return null;
     }
 
-    private static SelectionEntrySpec? FindEntryRecursive(SelectionEntrySpec[]? entries, string id)
+    private static ProtocolSelectionEntry? FindEntryRecursive(List<ProtocolSelectionEntry>? entries, string id)
     {
         if (entries is null) return null;
         foreach (var entry in entries)
         {
             if (entry.Id == id) return entry;
-            var found = FindEntryRecursive(entry.ChildEntries, id);
+            var found = FindEntryRecursive(entry.SelectionEntries, id);
             if (found is not null) return found;
         }
         return null;
@@ -485,12 +487,12 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// entries from SelectionEntryGroups (recursive), and resolved EntryLinks.
     /// Mirrors OracleRosterEngine.FlattenChildEntries behavior.
     /// </summary>
-    private IReadOnlyList<string> FlattenChildEntries(SelectionEntrySpec? entry)
+    private IReadOnlyList<string> FlattenChildEntries(ProtocolSelectionEntry? entry)
     {
         if (entry is null) return [];
         var result = new List<string>();
-        if (entry.ChildEntries is not null)
-            result.AddRange(entry.ChildEntries.Select(e => e.Id));
+        if (entry.SelectionEntries is not null)
+            result.AddRange(entry.SelectionEntries.Select(e => e.Id));
         if (entry.SelectionEntryGroups is not null)
         {
             foreach (var group in entry.SelectionEntryGroups)
@@ -504,7 +506,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return result;
     }
 
-    private void FlattenGroupEntries(SelectionEntryGroupSpec group, List<string> result)
+    private void FlattenGroupEntries(ProtocolSelectionEntryGroup group, List<string> result)
     {
         if (group.SelectionEntries is not null)
             result.AddRange(group.SelectionEntries.Select(e => e.Id));
@@ -524,13 +526,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// Recursively collect entry IDs from selection entries in catalogue-defined order.
     /// Used to preserve XML ordering for state reader sorting.
     /// </summary>
-    private static void CollectEntryIds(SelectionEntrySpec[]? entries, List<string> ids)
+    private static void CollectEntryIds(List<ProtocolSelectionEntry>? entries, List<string> ids)
     {
         if (entries is null) return;
         foreach (var entry in entries)
         {
             ids.Add(entry.Id);
-            CollectEntryIds(entry.ChildEntries, ids);
+            CollectEntryIds(entry.SelectionEntries, ids);
         }
     }
 }
