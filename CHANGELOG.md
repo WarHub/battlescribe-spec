@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Codebase reorganization** — every project now has its own subdirectory:
+  - Moved root `src/BattleScribeSpec.csproj` + 8 .cs files into `src/BattleScribeSpec.Oracle/`.
+  - Organized 32 flat test files into 6 subfolders: `Infrastructure/`, `Conformance/`, `Oracle/`,
+    `Features/`, `Integration/`, `Regression/`.
+  - Updated solution file, project references, Dockerfile paths.
+
+### Removed
+
+- **Dead code cleanup** (~800 lines of C# + 3,170 lines of debug JSON):
+  - 4 `Debug_Probe*` exploratory methods from `NrIntegrationTests.cs` (617 lines).
+  - 7 unused diagnostic methods from `BattleScribeOracle.cs` (185 lines).
+  - `docs/nr-store-dump.json` debug artifact (insights already in `nr-store-mapping.md`).
+
+### Changed
+
 - **DTO layer reduction** — eliminated 3 redundant model layers (~2,810 lines removed):
   - Deleted `SpecModels.cs` — all `*Spec` record types replaced by Protocol classes.
   - Deleted `ProtocolConverter.cs` — all conversion/mapping code eliminated.
@@ -41,7 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `IRosterEngine.AddForceByName` signature updated to accept optional `catalogueName` parameter.
 - `BattleScribeOracle` data loading switched from direct SimpleXML deserialization to DataUtils
   loader via reflection, with XML pre-processing for compatibility with modern data files.
-- `BattleScribeSpec.csproj`: `DataUtils` IKVM reference now includes `BattleScribeEngine.jar`
+- `BattleScribeSpec.Oracle.csproj`: `DataUtils` IKVM reference now includes `BattleScribeEngine.jar`
   dependency; added `CommonsIo` IKVM reference.
 
 ### Added

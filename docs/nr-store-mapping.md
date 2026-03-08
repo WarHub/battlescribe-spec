@@ -132,4 +132,3 @@ Top-level keys observed on `window.__NUXT__` (first 40):
 
 - Mapping is runtime-observed and limited to stores present for an unauthenticated session and the tested creation flow.
 - Some deeper roster operations may be triggered only after additional UI interactions and may not appear as top-level Pinia actions.
-- Raw extraction data is in `docs/nr-store-dump.json`.

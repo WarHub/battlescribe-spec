@@ -87,12 +87,18 @@ battlescribe-spec/
 ├── specs/                          # 246 YAML spec files
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
-│   ├── BattleScribeSpec.csproj     # Oracle engine (IKVM + BattleScribe JARs)
+│   ├── BattleScribeSpec.Oracle/    # Oracle engine (IKVM + BattleScribe JARs)
 │   ├── BattleScribeSpec.Runner/    # CLI runner (bs-spec-runner)
 │   ├── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps oracle)
 │   ├── BattleScribeSpec.NewRecruit/        # New Recruit adapter (Playwright)
 │   └── BattleScribeSpec.NewRecruit.HarTool/  # HAR recording console tool
-├── tests/                          # xUnit tests using oracle engine
+├── tests/
+│   ├── Infrastructure/             # Test fixtures and helpers
+│   ├── Conformance/                # YAML spec-driven conformance tests
+│   ├── Oracle/                     # Reference oracle engine tests
+│   ├── Features/                   # Domain feature tests
+│   ├── Integration/                # End-to-end and real-world data tests
+│   └── Regression/                 # Regression and protocol tests
 ├── docker/                         # Dockerfiles + compose
 ├── docs/                           # Protocol spec, guides, ADRs
 └── BattleScribeSpec.slnx           # Solution file
