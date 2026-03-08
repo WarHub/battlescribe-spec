@@ -15,16 +15,15 @@ jobs:
       - name: Checkout battlescribe-spec
         uses: actions/checkout@v4
 
-      - name: Checkout wham (sibling)
-        run: git clone https://github.com/WarHub/wham.git ../wham
-
-      - name: Checkout wh40k-9e (sibling)
-        run: git clone --depth 1 --branch v9.8.0 https://github.com/BSData/wh40k-9e.git ../wh40k-9e
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      - name: Setup dependencies
+        run: pwsh ./setup.ps1 -SkipPlaywright
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Restore dependencies
         run: dotnet restore
@@ -34,8 +33,6 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build --logger GitHubActions --filter "FullyQualifiedName!~NewRecruit&FullyQualifiedName!~FrozenNewRecruit"
-        env:
-          WH40K_DATA_DIR: ${{ github.workspace }}/../wh40k-9e
 
       - name: End-to-end spec runner test
         run: |

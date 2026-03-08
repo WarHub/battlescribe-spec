@@ -5,15 +5,15 @@
 .DESCRIPTION
     Clones sibling repositories required by battlescribe-spec:
     - wham (WarHub ArmouryModel) — build dependency, referenced via ProjectReference
-    - wh40k-9e (BSData) — real-world test data for integration tests
 
-    Downloads external test data artifacts pinned in testdata.json:
-    - newrecruit-har — frozen HAR snapshot from WarHub/newrecruit-har GitHub Releases
+    Downloads external test data into .testdata/:
+    - wh40k-9e (BSData) — real-world test data for integration tests (git clone)
+    - Artifacts pinned in testdata.json (e.g., newrecruit-har — frozen HAR snapshot)
 
     Installs Playwright browsers needed for New Recruit adapter tests.
 
-    Repositories are cloned as siblings to the battlescribe-spec repo root.
-    Test data is downloaded into .testdata/<key>/.
+    Sibling repos are cloned next to the battlescribe-spec repo root.
+    Test data is downloaded/cloned into .testdata/<key>/.
     Already-present items are skipped.
 
     Requires the GitHub CLI (gh) for test data downloads.
@@ -62,21 +62,26 @@ if (Test-Path $whamDir) {
     Write-Host "[OK] wham cloned to $whamDir" -ForegroundColor Green
 }
 
-# wh40k-9e — real-world test data
-$wh40kDir = Join-Path $parentDir "wh40k-9e"
-if (Test-Path $wh40kDir) {
-    Write-Host "[OK] wh40k-9e already exists at $wh40kDir" -ForegroundColor Green
-} else {
-    Write-Host "Cloning wh40k-9e (shallow, tag v9.8.0)..." -ForegroundColor Yellow
-    git clone --depth 1 --branch v9.8.0 https://github.com/BSData/wh40k-9e.git $wh40kDir
-    if ($LASTEXITCODE -ne 0) { throw "Failed to clone wh40k-9e" }
-    Write-Host "[OK] wh40k-9e cloned to $wh40kDir" -ForegroundColor Green
-}
-
-# --- Test data from testdata.json ---
+# --- Test data (.testdata/) ---
 
 $configPath = Join-Path $repoRoot 'testdata.json'
 $testdataDir = Join-Path $repoRoot '.testdata'
+
+# wh40k-9e — real-world test data (git clone)
+$wh40kTag = 'v9.8.0'
+$wh40kDir = Join-Path $testdataDir 'wh40k-9e'
+$wh40kTagMarker = Join-Path $wh40kDir '.tag'
+
+if (-not $Force -and (Test-Path $wh40kTagMarker) -and ((Get-Content $wh40kTagMarker -Raw).Trim() -eq $wh40kTag)) {
+    Write-Host "[OK] wh40k-9e already cloned ($wh40kTag)" -ForegroundColor Green
+} else {
+    if (Test-Path $wh40kDir) { Remove-Item $wh40kDir -Recurse -Force }
+    Write-Host "Cloning wh40k-9e (shallow, tag $wh40kTag)..." -ForegroundColor Yellow
+    git clone --depth 1 --branch $wh40kTag https://github.com/BSData/wh40k-9e.git $wh40kDir
+    if ($LASTEXITCODE -ne 0) { throw "Failed to clone wh40k-9e" }
+    $wh40kTag | Out-File -FilePath $wh40kTagMarker -NoNewline -Encoding utf8
+    Write-Host "[OK] wh40k-9e cloned to $wh40kDir" -ForegroundColor Green
+}
 
 if (Test-Path $configPath) {
     Write-Host ""

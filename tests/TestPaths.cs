@@ -1,8 +1,8 @@
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Resolves paths to external test data repositories.
-/// Default: sibling directories relative to the repo root.
+/// Resolves paths to external test data.
+/// Default: .testdata/ directory relative to the repo root.
 /// Override: set environment variables (e.g., WH40K_DATA_DIR).
 /// </summary>
 internal static class TestPaths
@@ -11,7 +11,7 @@ internal static class TestPaths
 
     /// <summary>
     /// Path to wh40k-9e data directory. Checks WH40K_DATA_DIR env var first,
-    /// then falls back to ../wh40k-9e relative to the repository root.
+    /// then falls back to .testdata/wh40k-9e relative to the repository root.
     /// Returns null if neither is available.
     /// </summary>
     public static string? Wh40kDataDir { get; } = ResolveWh40kDataDir();
@@ -34,7 +34,7 @@ internal static class TestPaths
         if (repoRoot is null)
             return null;
 
-        var candidate = Path.GetFullPath(Path.Combine(repoRoot, "..", "wh40k-9e"));
+        var candidate = Path.GetFullPath(Path.Combine(repoRoot, ".testdata", "wh40k-9e"));
         return Directory.Exists(candidate) ? candidate : null;
     }
 
