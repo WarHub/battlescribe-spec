@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
+using BattleScribeSpec.Protocol;
 using net.battlescribe.model.data;
 using net.battlescribe.model.roster;
 using JavaEngine = net.battlescribe.engine.a.f;
@@ -1267,44 +1268,44 @@ public sealed class BattleScribeOracle : IDisposable
         return sb.ToString();
     }
 
-    // ===== Spec-based API (accepts pure .NET spec records) =====
+    // ===== Protocol-based API (primary setup path) =====
 
     /// <summary>
-    /// Set up the oracle from a complete scenario spec. Returns initialization errors.
+    /// Set up the oracle from Protocol types. Returns initialization errors.
     /// </summary>
-    public List<string> SetupFromSpec(ScenarioSpec scenario)
+    public List<string> SetupFromProtocol(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
-        var costTypes = scenario.GameSystem.CostTypes?.Select(ct =>
+        var costTypes = gameSystem.CostTypes?.Select(ct =>
             JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray();
 
-        var forceEntries = scenario.GameSystem.ForceEntries?.Select(BuildForceEntry).ToArray();
+        var forceEntries = gameSystem.ForceEntries?.Select(BuildForceEntry).ToArray();
 
-        var categoryEntries = scenario.GameSystem.CategoryEntries?.Select(ce =>
+        var categoryEntries = gameSystem.CategoryEntries?.Select(ce =>
             JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name, ce.Hidden,
                 ce.Constraints?.Select(BuildConstraint).ToArray(),
                 ce.Modifiers?.Select(BuildModifier).ToArray())).ToArray();
 
-        var profileTypes = scenario.GameSystem.ProfileTypes?.Select(pt =>
+        var profileTypes = gameSystem.ProfileTypes?.Select(pt =>
             JavaModelFactory.CreateProfileType(pt.Id, pt.Name,
                 pt.CharacteristicTypes?.Select(ct =>
                     JavaModelFactory.CreateCharacteristicType(ct.Id, ct.Name)))).ToArray();
 
-        var gsPublications = scenario.GameSystem.Publications?.Select(p =>
+        var gsPublications = gameSystem.Publications?.Select(p =>
             JavaModelFactory.CreatePublication(p.Id, p.Name, p.ShortName, p.Publisher,
                 p.PublicationDate, p.PublisherUrl)).ToArray();
-        var gsSelectionEntries = scenario.GameSystem.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
-        var gsEntryLinks = scenario.GameSystem.EntryLinks?.Select(BuildEntryLink).ToArray();
-        var gsRules = scenario.GameSystem.Rules?.Select(BuildRule).ToArray();
-        var gsInfoLinks = scenario.GameSystem.InfoLinks?.Select(BuildInfoLink).ToArray();
-        var gsSharedSelectionEntries = scenario.GameSystem.SharedSelectionEntries?.Select(BuildSelectionEntry).ToArray();
-        var gsSharedSelectionEntryGroups = scenario.GameSystem.SharedSelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
-        var gsSharedRules = scenario.GameSystem.SharedRules?.Select(BuildRule).ToArray();
-        var gsSharedProfiles = scenario.GameSystem.SharedProfiles?.Select(BuildProfile).ToArray();
-        var gsSharedInfoGroups = scenario.GameSystem.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();
+        var gsSelectionEntries = gameSystem.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var gsEntryLinks = gameSystem.EntryLinks?.Select(BuildEntryLink).ToArray();
+        var gsRules = gameSystem.Rules?.Select(BuildRule).ToArray();
+        var gsInfoLinks = gameSystem.InfoLinks?.Select(BuildInfoLink).ToArray();
+        var gsSharedSelectionEntries = gameSystem.SharedSelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var gsSharedSelectionEntryGroups = gameSystem.SharedSelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var gsSharedRules = gameSystem.SharedRules?.Select(BuildRule).ToArray();
+        var gsSharedProfiles = gameSystem.SharedProfiles?.Select(BuildProfile).ToArray();
+        var gsSharedInfoGroups = gameSystem.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();
 
         var gs = JavaModelFactory.CreateGameSystem(
-            id: scenario.GameSystem.Id,
-            name: scenario.GameSystem.Name,
+            id: gameSystem.Id,
+            name: gameSystem.Name,
             costTypes: costTypes,
             forceEntries: forceEntries,
             categoryEntries: categoryEntries,
@@ -1328,7 +1329,7 @@ public sealed class BattleScribeOracle : IDisposable
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
 
-        foreach (var catSpec in scenario.Catalogues)
+        foreach (var catSpec in catalogues)
         {
             var selectionEntries = catSpec.SelectionEntries?
                 .Select(BuildSelectionEntry).ToArray();
@@ -1415,7 +1416,7 @@ public sealed class BattleScribeOracle : IDisposable
         return Initialize(gs, catalogueDict);
     }
 
-    private static ForceEntry BuildForceEntry(ForceEntrySpec feSpec)
+    private static ForceEntry BuildForceEntry(ProtocolForceEntry feSpec)
     {
         var categoryLinks = feSpec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
         var childForceEntries = feSpec.ForceEntries?.Select(BuildForceEntry).ToArray();
@@ -1428,12 +1429,12 @@ public sealed class BattleScribeOracle : IDisposable
             constraints: constraints, modifiers: modifiers, modifierGroups: modifierGroups);
     }
 
-    private static SelectionEntry BuildSelectionEntry(SelectionEntrySpec spec)
+    private static SelectionEntry BuildSelectionEntry(ProtocolSelectionEntry spec)
     {
         var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
         var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
-        var childEntries = spec.ChildEntries?.Select(BuildSelectionEntry).ToArray();
+        var childEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
         var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
 
         var entry = JavaModelFactory.CreateSelectionEntry(
@@ -1488,7 +1489,7 @@ public sealed class BattleScribeOracle : IDisposable
         return entry;
     }
 
-    private static SelectionEntryGroup BuildSelectionEntryGroup(SelectionEntryGroupSpec spec)
+    private static SelectionEntryGroup BuildSelectionEntryGroup(ProtocolSelectionEntryGroup spec)
     {
         var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
@@ -1525,7 +1526,7 @@ public sealed class BattleScribeOracle : IDisposable
             import: spec.Import);
     }
 
-    private static Rule BuildRule(RuleSpec spec)
+    private static Rule BuildRule(ProtocolRule spec)
     {
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         return JavaModelFactory.CreateRule(spec.Id, spec.Name, spec.Description,
@@ -1533,7 +1534,7 @@ public sealed class BattleScribeOracle : IDisposable
             string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
     }
 
-    private static Profile BuildProfile(ProfileSpec spec)
+    private static Profile BuildProfile(ProtocolProfile spec)
     {
         var chars = spec.Characteristics?.Select(c =>
             JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
@@ -1544,7 +1545,7 @@ public sealed class BattleScribeOracle : IDisposable
             spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers, page, pubId);
     }
 
-    private static InfoGroup BuildInfoGroup(InfoGroupSpec spec)
+    private static InfoGroup BuildInfoGroup(ProtocolInfoGroup spec)
     {
         var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
         var rules = spec.Rules?.Select(BuildRule).ToArray();
@@ -1558,7 +1559,7 @@ public sealed class BattleScribeOracle : IDisposable
         return ig;
     }
 
-    private static InfoLink BuildInfoLink(InfoLinkSpec spec)
+    private static InfoLink BuildInfoLink(ProtocolInfoLink spec)
     {
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         var pubId = string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId;
@@ -1567,7 +1568,7 @@ public sealed class BattleScribeOracle : IDisposable
             spec.Hidden, modifiers, pubId, page);
     }
 
-    private static EntryLink BuildEntryLink(EntryLinkSpec spec)
+    private static EntryLink BuildEntryLink(ProtocolEntryLink spec)
     {
         var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
         var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
@@ -1595,16 +1596,16 @@ public sealed class BattleScribeOracle : IDisposable
             page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
     }
 
-    private static CategoryLink BuildCategoryLink(CategoryLinkSpec cl) =>
+    private static CategoryLink BuildCategoryLink(ProtocolCategoryLink cl) =>
         JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary, cl.Hidden,
             cl.Constraints?.Select(BuildConstraint).ToArray(),
             cl.Modifiers?.Select(BuildModifier).ToArray());
 
-    private static Constraint BuildConstraint(ConstraintSpec c) =>
+    private static Constraint BuildConstraint(ProtocolConstraint c) =>
         JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
             c.Shared, c.IncludeChildSelections, c.IncludeChildForces);
 
-    private static Modifier BuildModifier(ModifierSpec spec)
+    private static Modifier BuildModifier(ProtocolModifier spec)
     {
         var conditions = spec.Conditions?.Select(c =>
             JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
@@ -1626,7 +1627,7 @@ public sealed class BattleScribeOracle : IDisposable
         return m;
     }
 
-    private static net.battlescribe.model.data.ConditionGroup BuildConditionGroup(ConditionGroupSpec spec)
+    private static net.battlescribe.model.data.ConditionGroup BuildConditionGroup(ProtocolConditionGroup spec)
     {
         var conditions = spec.Conditions?.Select(c =>
             JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,
@@ -1637,7 +1638,7 @@ public sealed class BattleScribeOracle : IDisposable
         return JavaModelFactory.CreateConditionGroup(spec.Type, conditions, childGroups);
     }
 
-    private static net.battlescribe.model.data.ModifierGroup BuildModifierGroup(ModifierGroupSpec spec)
+    private static net.battlescribe.model.data.ModifierGroup BuildModifierGroup(ProtocolModifierGroup spec)
     {
         var conditions = spec.Conditions?.Select(c =>
             JavaModelFactory.CreateCondition(c.Type, c.Value, c.Field, c.Scope, c.ChildId,

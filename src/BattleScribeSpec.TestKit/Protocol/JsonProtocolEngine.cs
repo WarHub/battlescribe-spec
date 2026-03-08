@@ -15,9 +15,13 @@ public sealed class JsonProtocolEngine : IRosterEngine
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
     }
 
-    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
-        var cmd = ProtocolConverter.ToSetupCommand(gameSystem, catalogues);
+        var cmd = new SetupCommand
+        {
+            GameSystem = gameSystem,
+            Catalogues = catalogues.ToList(),
+        };
         var response = SendCommand(cmd);
         return response switch
         {
@@ -135,7 +139,12 @@ public sealed class JsonProtocolEngine : IRosterEngine
         var response = SendCommand(new GetStateCommand());
         return response switch
         {
-            StateResponse sr => ProtocolConverter.ToRosterState(sr),
+            StateResponse sr => new RosterState(
+                sr.Name,
+                sr.GameSystemId,
+                sr.Forces,
+                sr.Costs,
+                sr.ValidationErrors),
             ProtocolError pe => throw new InvalidOperationException($"Adapter error: {pe.Message}"),
             _ => throw new InvalidOperationException($"Unexpected response type: {response.Type}"),
         };
@@ -146,8 +155,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
         var response = SendCommand(new GetErrorsCommand());
         return response switch
         {
-            ErrorsResponse er => er.Errors.Select(e => new ValidationErrorState(
-                e.Message, e.OwnerType, e.OwnerId, e.OwnerEntryId, e.EntryId, e.ConstraintId)).ToList(),
+            ErrorsResponse er => er.Errors,
             ProtocolError pe => [new ValidationErrorState(pe.Message)],
             _ => [new ValidationErrorState($"Unexpected response type: {response.Type}")],
         };

@@ -1,5 +1,6 @@
 using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.Protocol;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -28,38 +29,46 @@ public sealed class NewRecruitSmokeTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(
-            Id: "smoke-gs",
-            Name: "Smoke Test System",
-            CostTypes: [new CostTypeSpec(Id: "pts", Name: "Points")],
-            CategoryEntries: [new CategoryEntrySpec(Id: "cat-troops", Name: "Troops")],
-            ForceEntries:
+        var gs = new ProtocolGameSystem
+        {
+            Id = "smoke-gs",
+            Name = "Smoke Test System",
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "Points" }],
+            CategoryEntries = [new ProtocolCategoryEntry { Id = "cat-troops", Name = "Troops" }],
+            ForceEntries =
             [
-                new ForceEntrySpec(
-                    Id: "fe-main",
-                    Name: "Main Force",
-                    CategoryLinks:
+                new ProtocolForceEntry
+                {
+                    Id = "fe-main",
+                    Name = "Main Force",
+                    CategoryLinks =
                     [
-                        new CategoryLinkSpec(Id: "cl-1", TargetId: "cat-troops", Name: "Troops")
-                    ])
-            ]);
+                        new ProtocolCategoryLink { Id = "cl-1", TargetId = "cat-troops", Name = "Troops" }
+                    ],
+                },
+            ],
+        };
 
-        var cat = new CatalogueSpec(
-            Id: "smoke-cat",
-            Name: "Smoke Catalogue",
-            GameSystemId: "smoke-gs",
-            SelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "smoke-cat",
+            Name = "Smoke Catalogue",
+            GameSystemId = "smoke-gs",
+            SelectionEntries =
             [
-                new SelectionEntrySpec(
-                    Id: "se-warrior",
-                    Name: "Warrior",
-                    Type: "unit",
-                    Costs: [new CostSpec(Name: "Points", TypeId: "pts", Value: 50)],
-                    CategoryLinks:
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-warrior",
+                    Name = "Warrior",
+                    Type = "unit",
+                    Costs = [new ProtocolCostValue { Name = "Points", TypeId = "pts", Value = 50 }],
+                    CategoryLinks =
                     [
-                        new CategoryLinkSpec(Id: "cl-w", TargetId: "cat-troops", Name: "Troops", Primary: true)
-                    ])
-            ]);
+                        new ProtocolCategoryLink { Id = "cl-w", TargetId = "cat-troops", Name = "Troops", Primary = true }
+                    ],
+                },
+            ],
+        };
 
         _output.WriteLine("Calling Setup...");
         var errors = _fixture.Engine!.Setup(gs, [cat]);
@@ -76,34 +85,42 @@ public sealed class NewRecruitSmokeTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(
-            Id: "smoke-gs2",
-            Name: "Smoke System 2",
-            CostTypes: [new CostTypeSpec(Id: "pts", Name: "pts")],
-            CategoryEntries: [new CategoryEntrySpec(Id: "cat-1", Name: "Troops")],
-            ForceEntries:
+        var gs = new ProtocolGameSystem
+        {
+            Id = "smoke-gs2",
+            Name = "Smoke System 2",
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts" }],
+            CategoryEntries = [new ProtocolCategoryEntry { Id = "cat-1", Name = "Troops" }],
+            ForceEntries =
             [
-                new ForceEntrySpec(
-                    Id: "fe-1",
-                    Name: "Battalion",
-                    CategoryLinks:
+                new ProtocolForceEntry
+                {
+                    Id = "fe-1",
+                    Name = "Battalion",
+                    CategoryLinks =
                     [
-                        new CategoryLinkSpec(Id: "cl-1", TargetId: "cat-1", Name: "Troops")
-                    ])
-            ]);
+                        new ProtocolCategoryLink { Id = "cl-1", TargetId = "cat-1", Name = "Troops" }
+                    ],
+                },
+            ],
+        };
 
-        var cat = new CatalogueSpec(
-            Id: "smoke-cat2",
-            Name: "Cat",
-            GameSystemId: "smoke-gs2",
-            SelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "smoke-cat2",
+            Name = "Cat",
+            GameSystemId = "smoke-gs2",
+            SelectionEntries =
             [
-                new SelectionEntrySpec(
-                    Id: "se-1",
-                    Name: "Unit A",
-                    Type: "unit",
-                    Costs: [new CostSpec(Name: "pts", TypeId: "pts", Value: 100)])
-            ]);
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-1",
+                    Name = "Unit A",
+                    Type = "unit",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100 }],
+                },
+            ],
+        };
 
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
@@ -167,74 +184,88 @@ public sealed class NewRecruitSmokeTests
     {
         // This test doesn't need NR, but validates the XML generation pipeline
         // that feeds into the NR engine
-        var gs = new GameSystemSpec(
-            Id: "xml-test",
-            Name: "XML Test",
-            CostTypes:
+        var gs = new ProtocolGameSystem
+        {
+            Id = "xml-test",
+            Name = "XML Test",
+            CostTypes =
             [
-                new CostTypeSpec(Id: "pts", Name: "Points"),
-                new CostTypeSpec(Id: "pl", Name: "Power Level")
+                new ProtocolCostType { Id = "pts", Name = "Points" },
+                new ProtocolCostType { Id = "pl", Name = "Power Level" },
             ],
-            CategoryEntries:
+            CategoryEntries =
             [
-                new CategoryEntrySpec(Id: "cat-hq", Name: "HQ"),
-                new CategoryEntrySpec(Id: "cat-tr", Name: "Troops")
+                new ProtocolCategoryEntry { Id = "cat-hq", Name = "HQ" },
+                new ProtocolCategoryEntry { Id = "cat-tr", Name = "Troops" },
             ],
-            ForceEntries:
+            ForceEntries =
             [
-                new ForceEntrySpec(
-                    Id: "fe-1",
-                    Name: "Patrol",
-                    CategoryLinks:
+                new ProtocolForceEntry
+                {
+                    Id = "fe-1",
+                    Name = "Patrol",
+                    CategoryLinks =
                     [
-                        new CategoryLinkSpec(Id: "cl-1", TargetId: "cat-hq", Name: "HQ"),
-                        new CategoryLinkSpec(Id: "cl-2", TargetId: "cat-tr", Name: "Troops")
-                    ])
-            ]);
+                        new ProtocolCategoryLink { Id = "cl-1", TargetId = "cat-hq", Name = "HQ" },
+                        new ProtocolCategoryLink { Id = "cl-2", TargetId = "cat-tr", Name = "Troops" },
+                    ],
+                },
+            ],
+        };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-sm",
-            Name: "Space Marines",
-            GameSystemId: "xml-test",
-            SelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-sm",
+            Name = "Space Marines",
+            GameSystemId = "xml-test",
+            SelectionEntries =
             [
-                new SelectionEntrySpec(
-                    Id: "se-cap",
-                    Name: "Captain",
-                    Type: "model",
-                    Costs:
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-cap",
+                    Name = "Captain",
+                    Type = "model",
+                    Costs =
                     [
-                        new CostSpec(Name: "Points", TypeId: "pts", Value: 75),
-                        new CostSpec(Name: "Power Level", TypeId: "pl", Value: 5)
+                        new ProtocolCostValue { Name = "Points", TypeId = "pts", Value = 75 },
+                        new ProtocolCostValue { Name = "Power Level", TypeId = "pl", Value = 5 },
                     ],
-                    CategoryLinks:
+                    CategoryLinks =
                     [
-                        new CategoryLinkSpec(Id: "cl-cap", TargetId: "cat-hq", Name: "HQ", Primary: true)
+                        new ProtocolCategoryLink { Id = "cl-cap", TargetId = "cat-hq", Name = "HQ", Primary = true }
                     ],
-                    ChildEntries:
+                    SelectionEntries =
                     [
-                        new SelectionEntrySpec(
-                            Id: "se-sword",
-                            Name: "Power Sword",
-                            Type: "upgrade",
-                            Modifiers:
+                        new ProtocolSelectionEntry
+                        {
+                            Id = "se-sword",
+                            Name = "Power Sword",
+                            Type = "upgrade",
+                            Modifiers =
                             [
-                                new ModifierSpec(
-                                    Type: "set",
-                                    Field: "hidden",
-                                    Value: "true",
-                                    Conditions:
+                                new ProtocolModifier
+                                {
+                                    Type = "set",
+                                    Field = "hidden",
+                                    Value = "true",
+                                    Conditions =
                                     [
-                                        new ConditionSpec(
-                                            Type: "atLeast",
-                                            Value: 1,
-                                            Field: "selections",
-                                            Scope: "parent",
-                                            ChildId: "se-other")
-                                    ])
-                            ])
-                    ])
-            ]);
+                                        new ProtocolCondition
+                                        {
+                                            Type = "atLeast",
+                                            Value = 1,
+                                            Field = "selections",
+                                            Scope = "parent",
+                                            ChildId = "se-other",
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
 
         var gstXml = CatXmlGenerator.GenerateGameSystemXml(gs);
         var catXml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);

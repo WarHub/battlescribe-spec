@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
 
+using BattleScribeSpec.Protocol;
+
 namespace BattleScribeSpec;
 
 /// <summary>
@@ -10,10 +12,9 @@ public sealed class OracleRosterEngine : IRosterEngine
 {
     private readonly BattleScribeOracle _oracle = new();
 
-    public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues)
+    public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
-        var scenario = new ScenarioSpec(gameSystem, catalogues);
-        return _oracle.SetupFromSpec(scenario);
+        return _oracle.SetupFromProtocol(gameSystem, catalogues);
     }
 
     public void AddForce(int forceEntryIndex, int catalogueIndex = 0)

@@ -61,8 +61,7 @@ public static class AdapterHandler
     {
         engine?.Dispose();
         engine = factory();
-        var (gs, catalogues) = ProtocolConverter.FromSetupCommand(cmd);
-        var errors = engine.Setup(gs, catalogues);
+        var errors = engine.Setup(cmd.GameSystem, cmd.Catalogues.ToArray());
         return new SetupResult { Errors = errors.ToList() };
     }
 
@@ -136,7 +135,14 @@ public static class AdapterHandler
             return new ProtocolError { Message = "Engine not initialized" };
 
         var state = engine.GetRosterState();
-        return ProtocolConverter.ToStateResponse(state);
+        return new StateResponse
+        {
+            Name = state.Name,
+            GameSystemId = state.GameSystemId,
+            Forces = state.Forces.ToList(),
+            Costs = state.Costs.ToList(),
+            ValidationErrors = state.ValidationErrors.ToList(),
+        };
     }
 
     private static ProtocolResponse HandleGetErrors(IRosterEngine? engine)
@@ -146,15 +152,7 @@ public static class AdapterHandler
 
         return new ErrorsResponse
         {
-            Errors = engine.GetValidationErrors().Select(e => new ProtocolValidationError
-            {
-                Message = e.Message,
-                OwnerType = e.OwnerType,
-                OwnerId = e.OwnerId,
-                OwnerEntryId = e.OwnerEntryId,
-                EntryId = e.EntryId,
-                ConstraintId = e.ConstraintId,
-            }).ToList()
+            Errors = engine.GetValidationErrors().ToList()
         };
     }
 

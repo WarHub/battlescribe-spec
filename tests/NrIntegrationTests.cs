@@ -1,5 +1,6 @@
 using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.Protocol;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -28,8 +29,8 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(Name: "Age of Sigmar 4.0");
-        var cat = new CatalogueSpec(Name: "Beasts of Chaos [LEGENDS]");
+        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Age of Sigmar 4.0" };
+        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Beasts of Chaos [LEGENDS]", GameSystemId = "test-gs" };
         var errors = _fixture.Engine!.Setup(gs, [cat]);
 
         _output.WriteLine($"Setup errors: [{string.Join(", ", errors)}]");
@@ -52,8 +53,8 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(Name: "Age of Sigmar 4.0");
-        var cat = new CatalogueSpec(Name: "Beasts of Chaos [LEGENDS]");
+        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Age of Sigmar 4.0" };
+        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Beasts of Chaos [LEGENDS]", GameSystemId = "test-gs" };
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
@@ -89,8 +90,8 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(Name: "Age of Sigmar 4.0");
-        var cat = new CatalogueSpec(Name: "Beasts of Chaos [LEGENDS]");
+        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Age of Sigmar 4.0" };
+        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Beasts of Chaos [LEGENDS]", GameSystemId = "test-gs" };
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
@@ -119,8 +120,8 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(Name: "Age of Sigmar 4.0");
-        var cat = new CatalogueSpec(Name: "Beasts of Chaos [LEGENDS]");
+        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Age of Sigmar 4.0" };
+        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Beasts of Chaos [LEGENDS]", GameSystemId = "test-gs" };
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
@@ -142,40 +143,48 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(
-            Id: "probe-gs",
-            Name: "Probe GS",
-            CategoryEntries: [
-                new CategoryEntrySpec(Id: "cat-troops", Name: "Troops")
+        var gs = new ProtocolGameSystem
+        {
+            Id = "probe-gs",
+            Name = "Probe GS",
+            CategoryEntries = [
+                new ProtocolCategoryEntry { Id = "cat-troops", Name = "Troops" }
             ],
-            ForceEntries: [
-                new ForceEntrySpec(
-                    Id: "fe-1",
-                    Name: "Patrol",
-                    CategoryLinks: [
-                        new CategoryLinkSpec(Id: "cl-1", TargetId: "cat-troops", Name: "Troops")
-                    ])
+            ForceEntries = [
+                new ProtocolForceEntry
+                {
+                    Id = "fe-1",
+                    Name = "Patrol",
+                    CategoryLinks = [
+                        new ProtocolCategoryLink { Id = "cl-1", TargetId = "cat-troops", Name = "Troops" }
+                    ],
+                },
             ],
-            CostTypes: [
-                new CostTypeSpec(Id: "pts", Name: "pts", DefaultCostLimit: 100)
-            ]);
-        var cat = new CatalogueSpec(
-            Id: "probe-cat",
-            Name: "Probe Cat",
-            GameSystemId: "probe-gs",
-            SelectionEntries: [
-                new SelectionEntrySpec(
-                    Id: "se-unit",
-                    Name: "Expensive Unit",
-                    Type: "unit",
-                    CategoryLinks: [
-                        new CategoryLinkSpec(Id: "cl-unit", TargetId: "cat-troops", Name: "Troops", Primary: true)
+            CostTypes = [
+                new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 100 }
+            ],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "probe-cat",
+            Name = "Probe Cat",
+            GameSystemId = "probe-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-unit",
+                    Name = "Expensive Unit",
+                    Type = "unit",
+                    CategoryLinks = [
+                        new ProtocolCategoryLink { Id = "cl-unit", TargetId = "cat-troops", Name = "Troops", Primary = true }
                     ],
-                    Constraints: [
-                        new ConstraintSpec(Id: "con-min", Type: "min", Value: 5, Field: "selections", Scope: "parent")
+                    Constraints = [
+                        new ProtocolConstraint { Id = "con-min", Type = "min", Value = 5, Field = "selections", Scope = "parent" }
                     ],
-                    Costs: [new CostSpec(Name: "pts", TypeId: "pts", Value: 60)])
-            ]);
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 60 }],
+                },
+            ],
+        };
 
         var setupErrors = _fixture.Engine!.Setup(gs, [cat]);
         _output.WriteLine($"Setup errors: [{string.Join(", ", setupErrors)}]");
@@ -357,36 +366,44 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(
-            Id: "probe-gs2",
-            Name: "Probe GS2",
-            CategoryEntries: [
-                new CategoryEntrySpec(Id: "cat-troops", Name: "Troops")
+        var gs = new ProtocolGameSystem
+        {
+            Id = "probe-gs2",
+            Name = "Probe GS2",
+            CategoryEntries = [
+                new ProtocolCategoryEntry { Id = "cat-troops", Name = "Troops" }
             ],
-            ForceEntries: [
-                new ForceEntrySpec(
-                    Id: "fe-patrol",
-                    Name: "Patrol",
-                    CategoryLinks: [
-                        new CategoryLinkSpec(Id: "cl-fe-troops", TargetId: "cat-troops", Name: "Troops")
-                    ])
-            ]);
-        var cat = new CatalogueSpec(
-            Id: "probe-cat2",
-            Name: "Probe Cat2",
-            GameSystemId: "probe-gs2",
-            SelectionEntries: [
-                new SelectionEntrySpec(
-                    Id: "se-unit-a",
-                    Name: "Unit A",
-                    Type: "unit",
-                    CategoryLinks: [
-                        new CategoryLinkSpec(Id: "cl-unit", TargetId: "cat-troops", Name: "Troops", Primary: true)
+            ForceEntries = [
+                new ProtocolForceEntry
+                {
+                    Id = "fe-patrol",
+                    Name = "Patrol",
+                    CategoryLinks = [
+                        new ProtocolCategoryLink { Id = "cl-fe-troops", TargetId = "cat-troops", Name = "Troops" }
                     ],
-                    Constraints: [
-                        new ConstraintSpec(Id: "con-min-1", Type: "min", Value: 1, Field: "selections", Scope: "parent")
-                    ])
-            ]);
+                },
+            ],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "probe-cat2",
+            Name = "Probe Cat2",
+            GameSystemId = "probe-gs2",
+            SelectionEntries = [
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-unit-a",
+                    Name = "Unit A",
+                    Type = "unit",
+                    CategoryLinks = [
+                        new ProtocolCategoryLink { Id = "cl-unit", TargetId = "cat-troops", Name = "Troops", Primary = true }
+                    ],
+                    Constraints = [
+                        new ProtocolConstraint { Id = "con-min-1", Type = "min", Value = 1, Field = "selections", Scope = "parent" }
+                    ],
+                },
+            ],
+        };
 
         _fixture.Engine!.Setup(gs, [cat]);
         _fixture.Engine.AddForce(0);
@@ -499,36 +516,44 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(
-            Id: "probe-gs3",
-            Name: "Probe GS3",
-            CategoryEntries: [
-                new CategoryEntrySpec(Id: "cat-troops", Name: "Troops")
+        var gs = new ProtocolGameSystem
+        {
+            Id = "probe-gs3",
+            Name = "Probe GS3",
+            CategoryEntries = [
+                new ProtocolCategoryEntry { Id = "cat-troops", Name = "Troops" }
             ],
-            ForceEntries: [
-                new ForceEntrySpec(
-                    Id: "fe-patrol",
-                    Name: "Patrol",
-                    CategoryLinks: [
-                        new CategoryLinkSpec(Id: "cl-fe-troops", TargetId: "cat-troops", Name: "Troops")
-                    ])
-            ]);
-        var cat = new CatalogueSpec(
-            Id: "probe-cat3",
-            Name: "Probe Cat3",
-            GameSystemId: "probe-gs3",
-            SelectionEntries: [
-                new SelectionEntrySpec(
-                    Id: "se-unit-a",
-                    Name: "Unit A",
-                    Type: "unit",
-                    CategoryLinks: [
-                        new CategoryLinkSpec(Id: "cl-unit", TargetId: "cat-troops", Name: "Troops", Primary: true)
+            ForceEntries = [
+                new ProtocolForceEntry
+                {
+                    Id = "fe-patrol",
+                    Name = "Patrol",
+                    CategoryLinks = [
+                        new ProtocolCategoryLink { Id = "cl-fe-troops", TargetId = "cat-troops", Name = "Troops" }
                     ],
-                    Constraints: [
-                        new ConstraintSpec(Id: "con-min-1", Type: "min", Value: 1, Field: "selections", Scope: "parent")
-                    ])
-            ]);
+                },
+            ],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "probe-cat3",
+            Name = "Probe Cat3",
+            GameSystemId = "probe-gs3",
+            SelectionEntries = [
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-unit-a",
+                    Name = "Unit A",
+                    Type = "unit",
+                    CategoryLinks = [
+                        new ProtocolCategoryLink { Id = "cl-unit", TargetId = "cat-troops", Name = "Troops", Primary = true }
+                    ],
+                    Constraints = [
+                        new ProtocolConstraint { Id = "con-min-1", Type = "min", Value = 1, Field = "selections", Scope = "parent" }
+                    ],
+                },
+            ],
+        };
 
         _fixture.Engine!.Setup(gs, [cat]);
         _fixture.Engine.AddForce(0);
@@ -644,21 +669,25 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new GameSystemSpec(
-            Id: "probe-gs4",
-            Name: "Probe GS4",
-            ForceEntries: [
-                new ForceEntrySpec(Id: "fe-1", Name: "Detachment")
-            ]);
-        var cat = new CatalogueSpec(
-            Id: "probe-cat4",
-            Name: "Probe Cat4",
-            GameSystemId: "probe-gs4",
-            SelectionEntries: [
-                new SelectionEntrySpec(Id: "se-unit", Name: "Infantry Squad", Type: "unit"),
-                new SelectionEntrySpec(Id: "se-model", Name: "Sergeant", Type: "model"),
-                new SelectionEntrySpec(Id: "se-upgrade", Name: "Power Sword", Type: "upgrade")
-            ]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "probe-gs4",
+            Name = "Probe GS4",
+            ForceEntries = [
+                new ProtocolForceEntry { Id = "fe-1", Name = "Detachment" }
+            ],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "probe-cat4",
+            Name = "Probe Cat4",
+            GameSystemId = "probe-gs4",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-unit", Name = "Infantry Squad", Type = "unit" },
+                new ProtocolSelectionEntry { Id = "se-model", Name = "Sergeant", Type = "model" },
+                new ProtocolSelectionEntry { Id = "se-upgrade", Name = "Power Sword", Type = "upgrade" },
+            ],
+        };
 
         _fixture.Engine!.Setup(gs, [cat]);
         _fixture.Engine.AddForce(0);

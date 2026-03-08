@@ -1,7 +1,5 @@
 id: catalogue-link-import
 category: selection
-engines:
-  newrecruit: fail
 description: CatalogueLink imports entries from a linked catalogue
 
 setup:

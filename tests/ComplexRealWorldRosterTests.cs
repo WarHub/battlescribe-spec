@@ -130,13 +130,13 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     {
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
         output.WriteLine($"\n--- Roster State ---");
-        output.WriteLine($"Forces: {snapshot.Forces.Length}");
+        output.WriteLine($"Forces: {snapshot.Forces.Count}");
         foreach (var cost in snapshot.Costs)
             output.WriteLine($"  Cost: {cost.Name} = {cost.Value}");
-        for (int i = 0; i < snapshot.Forces.Length; i++)
+        for (int i = 0; i < snapshot.Forces.Count; i++)
         {
             var f = snapshot.Forces[i];
-            output.WriteLine($"  Force[{i}]: {f.Name} ({f.Selections.Length} selections)");
+            output.WriteLine($"  Force[{i}]: {f.Name} ({f.Selections.Count} selections)");
             foreach (var sel in f.Selections)
                 output.WriteLine($"    - {sel.Name} ({sel.Type}, x{sel.Number}) [{string.Join(", ", sel.Costs.Select(c => $"{c.Name}={c.Value}"))}]");
         }
@@ -180,8 +180,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         // Should have 1 force with 7+ selections (some units create sub-models)
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 7,
-            $"Expected at least 7 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 7,
+            $"Expected at least 7 selections, got {snapshot.Forces[0].Selections.Count}");
 
         // Costs should be positive (pts and PL at minimum)
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
@@ -227,8 +227,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 4,
-            $"Expected at least 4 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 4,
+            $"Expected at least 4 selections, got {snapshot.Forces[0].Selections.Count}");
 
         // Knights are expensive — total pts should be very high
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
@@ -272,8 +272,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 6,
-            $"Expected at least 6 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 6,
+            $"Expected at least 6 selections, got {snapshot.Forces[0].Selections.Count}");
 
         // Multi-god army should have positive costs
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
@@ -318,8 +318,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 7,
-            $"Expected at least 7 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 7,
+            $"Expected at least 7 selections, got {snapshot.Forces[0].Selections.Count}");
 
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
         Assert.NotNull(ptsCost);
@@ -364,8 +364,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 8,
-            $"Expected at least 8 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 8,
+            $"Expected at least 8 selections, got {snapshot.Forces[0].Selections.Count}");
 
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
         Assert.NotNull(ptsCost);
@@ -406,8 +406,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 8,
-            $"Expected at least 8 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 8,
+            $"Expected at least 8 selections, got {snapshot.Forces[0].Selections.Count}");
 
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
         Assert.NotNull(ptsCost);
@@ -453,8 +453,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 9,
-            $"Expected at least 9 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 9,
+            $"Expected at least 9 selections, got {snapshot.Forces[0].Selections.Count}");
 
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
         Assert.NotNull(ptsCost);
@@ -497,8 +497,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 6,
-            $"Expected at least 6 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 6,
+            $"Expected at least 6 selections, got {snapshot.Forces[0].Selections.Count}");
 
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
         Assert.NotNull(ptsCost);
@@ -539,8 +539,8 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         Assert.Single(snapshot.Forces);
-        Assert.True(snapshot.Forces[0].Selections.Length >= 5,
-            $"Expected at least 5 selections, got {snapshot.Forces[0].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 5,
+            $"Expected at least 5 selections, got {snapshot.Forces[0].Selections.Count}");
 
         // Custodes are expensive — even small armies cost a lot
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);
@@ -592,15 +592,15 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
 
         // Should have 2 forces
-        Assert.Equal(2, snapshot.Forces.Length);
-        output.WriteLine($"Force 0: {snapshot.Forces[0].Name} ({snapshot.Forces[0].Selections.Length} selections)");
-        output.WriteLine($"Force 1: {snapshot.Forces[1].Name} ({snapshot.Forces[1].Selections.Length} selections)");
+        Assert.Equal(2, snapshot.Forces.Count);
+        output.WriteLine($"Force 0: {snapshot.Forces[0].Name} ({snapshot.Forces[0].Selections.Count} selections)");
+        output.WriteLine($"Force 1: {snapshot.Forces[1].Name} ({snapshot.Forces[1].Selections.Count} selections)");
 
         // Both forces should have selections
-        Assert.True(snapshot.Forces[0].Selections.Length >= 3,
-            $"Expected at least 3 selections in Craftworlds force, got {snapshot.Forces[0].Selections.Length}");
-        Assert.True(snapshot.Forces[1].Selections.Length >= 2,
-            $"Expected at least 2 selections in Harlequins force, got {snapshot.Forces[1].Selections.Length}");
+        Assert.True(snapshot.Forces[0].Selections.Count >= 3,
+            $"Expected at least 3 selections in Craftworlds force, got {snapshot.Forces[0].Selections.Count}");
+        Assert.True(snapshot.Forces[1].Selections.Count >= 2,
+            $"Expected at least 2 selections in Harlequins force, got {snapshot.Forces[1].Selections.Count}");
 
         // Costs aggregated across both forces
         var ptsCost = snapshot.Costs.FirstOrDefault(c => c.Name?.Contains("pts") == true);

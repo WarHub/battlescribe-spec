@@ -1,3 +1,4 @@
+using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
@@ -101,10 +102,10 @@ public class RunnerAndProtocolRegressionTests
     }
 
     [Fact]
-    public void ProtocolConverter_ThrowsOnEmptyCatalogueArray()
+    public void CatXmlGenerator_ThrowsOnEmptyCatalogueArray()
     {
-        var gameSystem = new GameSystemSpec("gs", "GS");
-        Assert.Throws<ArgumentException>(() => ProtocolConverter.ToSetupCommand(gameSystem, []));
+        var gameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" };
+        Assert.Throws<ArgumentException>(() => CatXmlGenerator.GenerateCatalogueXml(gameSystem, Array.Empty<ProtocolCatalogue>()));
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public class RunnerAndProtocolRegressionTests
 
         public RosterState State { get; init; } = new("roster", "gs", [], [], []);
 
-        public IReadOnlyList<string> Setup(GameSystemSpec gameSystem, CatalogueSpec[] catalogues) => SetupErrors;
+        public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues) => SetupErrors;
 
         public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
         {

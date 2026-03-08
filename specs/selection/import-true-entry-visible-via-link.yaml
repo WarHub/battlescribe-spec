@@ -1,7 +1,5 @@
 id: import-true-entry-visible-via-link
 category: selection
-engines:
-  newrecruit: fail
 description: Entry with explicit import=true is selectable when its catalogue is imported via CatalogueLink
 
 setup:

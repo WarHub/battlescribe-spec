@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **DTO layer reduction** — eliminated 3 redundant model layers (~2,810 lines removed):
+  - Deleted `SpecModels.cs` — all `*Spec` record types replaced by Protocol classes.
+  - Deleted `ProtocolConverter.cs` — all conversion/mapping code eliminated.
+  - Protocol setup types (`ProtocolGameSystem`, `ProtocolCatalogue`, etc.) are now the canonical model
+    for YAML deserialization, JSON wire format, and engine input.
+  - `EngineTypes.cs` records (`RosterState`, `ForceState`, `SelectionState`, etc.) now serve as both
+    runtime state and JSON wire format (added `[JsonPropertyName]` attributes).
+  - Deleted 7 Protocol state classes (`ProtocolForce`, `ProtocolSelection`, `ProtocolCost`, etc.)
+    and 4 snapshot types (`RosterSnapshot`, `ForceSnapshot`, etc.).
+  - `IRosterEngine.Setup()` now takes `(ProtocolGameSystem, ProtocolCatalogue[])` directly.
+
 ### Added
 
 - **DataSource spec support** for the BattleScribe oracle engine:
@@ -34,7 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `ValidationErrorState` record with `Message`, `OwnerType`, `OwnerId`, `OwnerEntryId`, `EntryId`, and `ConstraintId` fields.
-- `ProtocolValidationError` structured type in the adapter protocol.
+- `ValidationErrorState` structured type in the adapter protocol state responses.
 - Compact `errors` assertion format in spec YAML using `on`/`from`/`message` syntax:
   ```yaml
   errors:

@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec;
@@ -156,13 +155,13 @@ public sealed class OracleTestFixture : IDisposable
     /// <summary>
     /// Capture the current Java engine state as a snapshot for comparison.
     /// </summary>
-    public ModelConverter.RosterSnapshot CaptureOracleSnapshot()
+    public RosterState CaptureOracleSnapshot()
         => ModelConverter.CaptureOracleSnapshot(Oracle);
 
     /// <summary>
     /// Capture the wham roster state as a snapshot for comparison.
     /// </summary>
-    public ModelConverter.RosterSnapshot CaptureWhamSnapshot(IReadOnlyList<string>? errors = null)
+    public RosterState CaptureWhamSnapshot(IReadOnlyList<string>? errors = null)
     {
         if (Roster is null) throw new InvalidOperationException("Roster not initialized.");
         return ModelConverter.CaptureWhamSnapshot(Roster, errors);
