@@ -1,4 +1,5 @@
 using BattleScribeSpec;
+using BattleScribeSpec.Protocol;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -13,27 +14,31 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Unit")]
 public class ModifierOracleTests(ITestOutputHelper output)
 {
-    private static ScenarioSpec MakeScenario(
-        SelectionEntrySpec[] entries,
-        CostTypeSpec[]? costTypes = null)
+    private static (ProtocolGameSystem gs, ProtocolCatalogue[] cats) MakeScenario(
+        ProtocolSelectionEntry[] entries,
+        List<ProtocolCostType>? costTypes = null)
     {
-        return new ScenarioSpec(
-            new GameSystemSpec(
-                ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
-                CostTypes: costTypes),
-            [new CatalogueSpec(SelectionEntries: entries)]);
+        return (
+            new ProtocolGameSystem
+            {
+                Id = "test-gs",
+                Name = "Test Game System",
+                ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+                CostTypes = costTypes,
+            },
+            [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs", SelectionEntries = [..entries] }]);
     }
 
     [Fact]
     public void Modifier_SetName_ChangesSelectionName()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = MakeScenario([
-            new SelectionEntrySpec("se-1", "Marine Squad",
-                Modifiers: [new ModifierSpec("set", "name", "Veterans")])
+        var (gs, cats) = MakeScenario([
+            new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                Modifiers = [new ProtocolModifier { Type = "set", Field = "name", Value = "Veterans" }] }
         ]);
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, cats);
         oracle.AddForceByIndex(0);
         oracle.SelectFirstAvailableEntry();
 
@@ -46,12 +51,12 @@ public class ModifierOracleTests(ITestOutputHelper output)
     public void Modifier_AppendName_AppendsToSelectionName()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = MakeScenario([
-            new SelectionEntrySpec("se-1", "Marine Squad",
-                Modifiers: [new ModifierSpec("append", "name", "(Elite)")])
+        var (gs, cats) = MakeScenario([
+            new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                Modifiers = [new ProtocolModifier { Type = "append", Field = "name", Value = "(Elite)" }] }
         ]);
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, cats);
         oracle.AddForceByIndex(0);
         oracle.SelectFirstAvailableEntry();
 
@@ -65,31 +70,31 @@ public class ModifierOracleTests(ITestOutputHelper output)
     public void Modifier_SetHidden_HidesEntry()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = MakeScenario([
-            new SelectionEntrySpec("se-1", "Marine Squad",
-                Modifiers: [new ModifierSpec("set", "hidden", "true")])
+        var (gs, cats) = MakeScenario([
+            new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                Modifiers = [new ProtocolModifier { Type = "set", Field = "hidden", Value = "true" }] }
         ]);
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, cats);
         oracle.AddForceByIndex(0);
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
-        output.WriteLine($"Force selections after hidden modifier: {snapshot.Forces[0].Selections.Length}");
+        output.WriteLine($"Force selections after hidden modifier: {snapshot.Forces[0].Selections.Count}");
     }
 
     [Fact]
     public void Modifier_IncrementCost_IncreasesCostValue()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = MakeScenario(
+        var (gs, cats) = MakeScenario(
             entries: [
-                new SelectionEntrySpec("se-1", "Marine Squad",
-                    Costs: [new CostSpec("pts", "pts", 50.0)],
-                    Modifiers: [new ModifierSpec("increment", "pts", "25")])
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 50.0 }],
+                    Modifiers = [new ProtocolModifier { Type = "increment", Field = "pts", Value = "25" }] }
             ],
-            costTypes: [new CostTypeSpec("pts", "pts", 2000)]);
+            costTypes: [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }]);
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, cats);
         oracle.AddForceByIndex(0);
         oracle.SelectFirstAvailableEntry();
 
@@ -107,15 +112,15 @@ public class ModifierOracleTests(ITestOutputHelper output)
     public void Modifier_DecrementCost_DecreasesCostValue()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = MakeScenario(
+        var (gs, cats) = MakeScenario(
             entries: [
-                new SelectionEntrySpec("se-1", "Marine Squad",
-                    Costs: [new CostSpec("pts", "pts", 100.0)],
-                    Modifiers: [new ModifierSpec("decrement", "pts", "30")])
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100.0 }],
+                    Modifiers = [new ProtocolModifier { Type = "decrement", Field = "pts", Value = "30" }] }
             ],
-            costTypes: [new CostTypeSpec("pts", "pts", 2000)]);
+            costTypes: [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }]);
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, cats);
         oracle.AddForceByIndex(0);
         oracle.SelectFirstAvailableEntry();
 
@@ -130,16 +135,26 @@ public class ModifierOracleTests(ITestOutputHelper output)
     public void Modifier_SetCharacteristicValue_ChangesProfileCharacteristic()
     {
         using var engine = new OracleRosterEngine();
-        var gs = new GameSystemSpec(
-            ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
-            ProfileTypes: [new ProfileTypeSpec("stat-type", "Unit Stats",
-                CharacteristicTypes: [new CharacteristicTypeSpec("char-wounds", "Wounds")])]);
-        var cat = new CatalogueSpec(SelectionEntries: [
-            new SelectionEntrySpec("se-1", "Marine",
-                Profiles: [new ProfileSpec("prof-1", "Marine Stats", "stat-type", "Unit Stats",
-                    Characteristics: [new CharacteristicSpec("Wounds", "char-wounds", "2")],
-                    Modifiers: [new ModifierSpec("set", "char-wounds", "3")])])
-        ]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+            ProfileTypes = [new ProtocolProfileType { Id = "stat-type", Name = "Unit Stats",
+                CharacteristicTypes = [new ProtocolCharacteristicType { Id = "char-wounds", Name = "Wounds" }] }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Marine",
+                    Profiles = [new ProtocolProfile { Id = "prof-1", Name = "Marine Stats", TypeId = "stat-type", TypeName = "Unit Stats",
+                        Characteristics = [new ProtocolCharacteristic { Name = "Wounds", TypeId = "char-wounds", Value = "2" }],
+                        Modifiers = [new ProtocolModifier { Type = "set", Field = "char-wounds", Value = "3" }] }] }
+            ],
+        };
         engine.Setup(gs, [cat]);
         engine.AddForce(0);
         engine.SelectEntry(0, 0);
@@ -156,12 +171,23 @@ public class ModifierOracleTests(ITestOutputHelper output)
     public void Modifier_RuleDescription_ChangesRuleOnSelection()
     {
         using var engine = new OracleRosterEngine();
-        var gs = new GameSystemSpec(ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")]);
-        var cat = new CatalogueSpec(SelectionEntries: [
-            new SelectionEntrySpec("se-1", "Marine",
-                Rules: [new RuleSpec("rule-1", "Combat Doctrine", "Original description",
-                    Modifiers: [new ModifierSpec("set", "description", "Modified description")])])
-        ]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Marine",
+                    Rules = [new ProtocolRule { Id = "rule-1", Name = "Combat Doctrine", Description = "Original description",
+                        Modifiers = [new ProtocolModifier { Type = "set", Field = "description", Value = "Modified description" }] }] }
+            ],
+        };
         engine.Setup(gs, [cat]);
         engine.AddForce(0);
         engine.SelectEntry(0, 0);
@@ -177,13 +203,13 @@ public class ModifierOracleTests(ITestOutputHelper output)
     public void Modifier_WithCondition_OnlyAppliesWhenConditionMet()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = MakeScenario([
-            new SelectionEntrySpec("se-1", "Marine Squad",
-                Modifiers: [new ModifierSpec("set", "name", "Veterans",
-                    Conditions: [new ConditionSpec("atLeast", 1, "selections", "self", "nonexistent-child")])])
+        var (gs, cats) = MakeScenario([
+            new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                Modifiers = [new ProtocolModifier { Type = "set", Field = "name", Value = "Veterans",
+                    Conditions = [new ProtocolCondition { Type = "atLeast", Value = 1, Field = "selections", Scope = "self", ChildId = "nonexistent-child" }] }] }
         ]);
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, cats);
         oracle.AddForceByIndex(0);
         oracle.SelectFirstAvailableEntry();
 

@@ -11,23 +11,11 @@ public static class CatXmlGenerator
     public static string GenerateGameSystemXml(ProtocolGameSystem gameSystem) =>
         SerializeNode(MapGameSystem(gameSystem));
 
-    /// <summary>Backward-compatible overload accepting Spec types.</summary>
-    public static string GenerateGameSystemXml(GameSystemSpec gameSystem) =>
-        GenerateGameSystemXml(ProtocolConverter.ToProtocol(gameSystem));
-
     public static string GenerateCatalogueXml(ProtocolGameSystem gameSystem, ProtocolCatalogue catalogue)
     {
         var gamesystem = MapGameSystem(gameSystem);
         return SerializeNode(MapCatalogue(gamesystem, catalogue));
     }
-
-    /// <summary>Backward-compatible overload accepting Spec types.</summary>
-    public static string GenerateCatalogueXml(GameSystemSpec gameSystem, CatalogueSpec catalogue) =>
-        GenerateCatalogueXml(ProtocolConverter.ToProtocol(gameSystem), ProtocolConverter.ToProtocol(catalogue));
-
-    /// <summary>Backward-compatible overload accepting Spec types (array).</summary>
-    public static string GenerateCatalogueXml(GameSystemSpec gameSystem, CatalogueSpec[] catalogues) =>
-        GenerateCatalogueXml(ProtocolConverter.ToProtocol(gameSystem), catalogues.Select(ProtocolConverter.ToProtocol).ToArray());
 
     public static string GenerateCatalogueXml(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {

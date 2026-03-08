@@ -23,7 +23,7 @@ public class OracleComparisonTests(ITestOutputHelper output)
         Assert.Equal("Oracle Roster", snapshot.Name);
         Assert.Equal("test-gs", snapshot.GameSystemId);
         Assert.Empty(snapshot.Forces);
-        output.WriteLine($"Empty roster: {snapshot.Forces.Length} forces, {snapshot.Costs.Length} costs, {snapshot.ValidationErrors.Length} errors");
+        output.WriteLine($"Empty roster: {snapshot.Forces.Count} forces, {snapshot.Costs.Count} costs, {snapshot.ValidationErrors.Count} errors");
     }
 
     [Fact]
@@ -130,10 +130,10 @@ public class OracleComparisonTests(ITestOutputHelper output)
         fixture.SelectEntry();
         var after2 = fixture.CaptureOracleSnapshot();
 
-        output.WriteLine($"After 1 selection: {after1.Forces[0].Selections.Length} selections");
-        output.WriteLine($"After 2 selections: {after2.Forces[0].Selections.Length} selections");
+        output.WriteLine($"After 1 selection: {after1.Forces[0].Selections.Count} selections");
+        output.WriteLine($"After 2 selections: {after2.Forces[0].Selections.Count} selections");
 
-        Assert.True(after2.Forces[0].Selections.Length >= after1.Forces[0].Selections.Length,
+        Assert.True(after2.Forces[0].Selections.Count >= after1.Forces[0].Selections.Count,
             "Expected at least as many selections after second SelectEntry");
     }
 
@@ -163,11 +163,11 @@ public class OracleComparisonTests(ITestOutputHelper output)
         // Capture again — should be identical (no mutations happened)
         var snapshot2 = fixture.CaptureOracleSnapshot();
 
-        Assert.Equal(snapshot1.Forces.Length, snapshot2.Forces.Length);
-        Assert.Equal(snapshot1.Forces[0].Selections.Length, snapshot2.Forces[0].Selections.Length);
-        Assert.Equal(snapshot1.Costs.Length, snapshot2.Costs.Length);
+        Assert.Equal(snapshot1.Forces.Count, snapshot2.Forces.Count);
+        Assert.Equal(snapshot1.Forces[0].Selections.Count, snapshot2.Forces[0].Selections.Count);
+        Assert.Equal(snapshot1.Costs.Count, snapshot2.Costs.Count);
 
-        output.WriteLine($"State consistent: {snapshot1.Forces[0].Selections.Length} selections");
+        output.WriteLine($"State consistent: {snapshot1.Forces[0].Selections.Count} selections");
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class OracleComparisonTests(ITestOutputHelper output)
 
         // Log full snapshot for debugging
         output.WriteLine($"Roster: name={snapshot.Name}, gs={snapshot.GameSystemId}");
-        output.WriteLine($"  Forces: {snapshot.Forces.Length}");
+        output.WriteLine($"  Forces: {snapshot.Forces.Count}");
         foreach (var force in snapshot.Forces)
         {
             output.WriteLine($"    Force: {force.Name} (cat={force.CatalogueId})");

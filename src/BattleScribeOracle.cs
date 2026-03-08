@@ -1268,18 +1268,6 @@ public sealed class BattleScribeOracle : IDisposable
         return sb.ToString();
     }
 
-    // ===== Spec-based API (backward compatibility) =====
-
-    /// <summary>
-    /// Set up the oracle from a ScenarioSpec. Converts to Protocol types and delegates.
-    /// </summary>
-    public List<string> SetupFromSpec(ScenarioSpec scenario)
-    {
-        var gs = ProtocolConverter.ToProtocol(scenario.GameSystem);
-        var cats = scenario.Catalogues.Select(ProtocolConverter.ToProtocol).ToArray();
-        return SetupFromProtocol(gs, cats);
-    }
-
     // ===== Protocol-based API (primary setup path) =====
 
     /// <summary>

@@ -1,5 +1,6 @@
 using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
 
@@ -15,32 +16,38 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateGameSystemXml_BasicStructure()
     {
-        var gameSystem = new GameSystemSpec(
-            Id: "gs-1",
-            Name: "Test System",
-            CostTypes: [new CostTypeSpec(Id: "pts", Name: "Points")],
-            CategoryEntries: [new CategoryEntrySpec(Id: "cat-hq", Name: "HQ")],
-            ForceEntries:
+        var gameSystem = new ProtocolGameSystem
+        {
+            Id = "gs-1",
+            Name = "Test System",
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "Points" }],
+            CategoryEntries = [new ProtocolCategoryEntry { Id = "cat-hq", Name = "HQ" }],
+            ForceEntries =
             [
-                new ForceEntrySpec(
-                    Id: "fe-1",
-                    Name: "Battalion",
-                    CategoryLinks:
+                new ProtocolForceEntry
+                {
+                    Id = "fe-1",
+                    Name = "Battalion",
+                    CategoryLinks =
                     [
-                        new CategoryLinkSpec(Id: "cl-1", TargetId: "cat-hq", Name: "HQ", Primary: false)
-                    ])
+                        new ProtocolCategoryLink { Id = "cl-1", TargetId = "cat-hq", Name = "HQ", Primary = false }
+                    ],
+                },
             ],
-            ProfileTypes:
+            ProfileTypes =
             [
-                new ProfileTypeSpec(
-                    Id: "pt-1",
-                    Name: "Unit Stats",
-                    CharacteristicTypes:
+                new ProtocolProfileType
+                {
+                    Id = "pt-1",
+                    Name = "Unit Stats",
+                    CharacteristicTypes =
                     [
-                        new CharacteristicTypeSpec(Id: "ct-m", Name: "M"),
-                        new CharacteristicTypeSpec(Id: "ct-ws", Name: "WS")
-                    ])
-            ]);
+                        new ProtocolCharacteristicType { Id = "ct-m", Name = "M" },
+                        new ProtocolCharacteristicType { Id = "ct-ws", Name = "WS" },
+                    ],
+                },
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
 
@@ -65,32 +72,39 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_BasicEntries()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS",
-            CostTypes: [new CostTypeSpec(Id: "pts", Name: "pts")],
-            CategoryEntries: [new CategoryEntrySpec(Id: "cat-1", Name: "Troops")]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "gs-1", Name = "GS",
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts" }],
+            CategoryEntries = [new ProtocolCategoryEntry { Id = "cat-1", Name = "Troops" }],
+        };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Space Marines",
-            GameSystemId: "gs-1",
-            SelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Space Marines",
+            GameSystemId = "gs-1",
+            SelectionEntries =
             [
-                new SelectionEntrySpec(
-                    Id: "se-1",
-                    Name: "Intercessors",
-                    Type: "unit",
-                    Costs: [new CostSpec(Name: "pts", TypeId: "pts", Value: 100)],
-                    Constraints:
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-1",
+                    Name = "Intercessors",
+                    Type = "unit",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100 }],
+                    Constraints =
                     [
-                        new ConstraintSpec(Id: "con-1", Type: "min", Value: 1,
-                            Field: "selections", Scope: "parent")
+                        new ProtocolConstraint { Id = "con-1", Type = "min", Value = 1,
+                            Field = "selections", Scope = "parent" }
                     ],
-                    CategoryLinks:
+                    CategoryLinks =
                     [
-                        new CategoryLinkSpec(Id: "cl-1", TargetId: "cat-1",
-                            Name: "Troops", Primary: true)
-                    ])
-            ]);
+                        new ProtocolCategoryLink { Id = "cl-1", TargetId = "cat-1",
+                            Name = "Troops", Primary = true }
+                    ],
+                },
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         Assert.NotEmpty(xml);
@@ -114,50 +128,65 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_ModifiersWithConditions()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS",
-            CostTypes: [new CostTypeSpec(Id: "pts", Name: "pts")]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "gs-1", Name = "GS",
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts" }],
+        };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Cat",
-            GameSystemId: "gs-1",
-            SelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "gs-1",
+            SelectionEntries =
             [
-                new SelectionEntrySpec(
-                    Id: "se-1",
-                    Name: "Entry",
-                    Type: "upgrade",
-                    Modifiers:
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-1",
+                    Name = "Entry",
+                    Type = "upgrade",
+                    Modifiers =
                     [
-                        new ModifierSpec(
-                            Type: "set",
-                            Field: "hidden",
-                            Value: "true",
-                            Conditions:
+                        new ProtocolModifier
+                        {
+                            Type = "set",
+                            Field = "hidden",
+                            Value = "true",
+                            Conditions =
                             [
-                                new ConditionSpec(
-                                    Type: "atLeast",
-                                    Value: 1,
-                                    Field: "selections",
-                                    Scope: "roster",
-                                    ChildId: "se-other")
+                                new ProtocolCondition
+                                {
+                                    Type = "atLeast",
+                                    Value = 1,
+                                    Field = "selections",
+                                    Scope = "roster",
+                                    ChildId = "se-other",
+                                },
                             ],
-                            ConditionGroups:
+                            ConditionGroups =
                             [
-                                new ConditionGroupSpec(
-                                    Type: "or",
-                                    Conditions:
+                                new ProtocolConditionGroup
+                                {
+                                    Type = "or",
+                                    Conditions =
                                     [
-                                        new ConditionSpec(
-                                            Type: "equalTo",
-                                            Value: 0,
-                                            Field: "selections",
-                                            Scope: "parent",
-                                            ChildId: "se-x")
-                                    ])
-                            ])
-                    ])
-            ]);
+                                        new ProtocolCondition
+                                        {
+                                            Type = "equalTo",
+                                            Value = 0,
+                                            Field = "selections",
+                                            Scope = "parent",
+                                            ChildId = "se-x",
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);
@@ -179,33 +208,35 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_SharedPools()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Cat",
-            GameSystemId: "gs-1",
-            SharedSelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "gs-1",
+            SharedSelectionEntries =
             [
-                new SelectionEntrySpec(Id: "sse-1", Name: "SharedEntry", Type: "upgrade")
+                new ProtocolSelectionEntry { Id = "sse-1", Name = "SharedEntry", Type = "upgrade" }
             ],
-            SharedSelectionEntryGroups:
+            SharedSelectionEntryGroups =
             [
-                new SelectionEntryGroupSpec(Id: "ssg-1", Name: "SharedGroup")
+                new ProtocolSelectionEntryGroup { Id = "ssg-1", Name = "SharedGroup" }
             ],
-            SharedRules:
+            SharedRules =
             [
-                new RuleSpec(Id: "sr-1", Name: "SharedRule", Description: "Desc")
+                new ProtocolRule { Id = "sr-1", Name = "SharedRule", Description = "Desc" }
             ],
-            SharedProfiles:
+            SharedProfiles =
             [
-                new ProfileSpec(Id: "sp-1", Name: "SharedProfile",
-                    TypeId: "pt-1", TypeName: "Stats")
+                new ProtocolProfile { Id = "sp-1", Name = "SharedProfile",
+                    TypeId = "pt-1", TypeName = "Stats" }
             ],
-            SharedInfoGroups:
+            SharedInfoGroups =
             [
-                new InfoGroupSpec(Id: "sig-1", Name: "SharedIG")
-            ]);
+                new ProtocolInfoGroup { Id = "sig-1", Name = "SharedIG" }
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);
@@ -225,21 +256,23 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_EntryLinks()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Cat",
-            GameSystemId: "gs-1",
-            SharedSelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "gs-1",
+            SharedSelectionEntries =
             [
-                new SelectionEntrySpec(Id: "sse-1", Name: "Target", Type: "upgrade")
+                new ProtocolSelectionEntry { Id = "sse-1", Name = "Target", Type = "upgrade" }
             ],
-            EntryLinks:
+            EntryLinks =
             [
-                new EntryLinkSpec(Id: "el-1", Name: "Link", TargetId: "sse-1",
-                    Type: "selectionEntry")
-            ]);
+                new ProtocolEntryLink { Id = "el-1", Name = "Link", TargetId = "sse-1",
+                    Type = "selectionEntry" }
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);
@@ -252,46 +285,58 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_NestedChildren()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Cat",
-            GameSystemId: "gs-1",
-            SelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "gs-1",
+            SelectionEntries =
             [
-                new SelectionEntrySpec(
-                    Id: "se-parent",
-                    Name: "Parent",
-                    Type: "unit",
-                    ChildEntries:
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-parent",
+                    Name = "Parent",
+                    Type = "unit",
+                    SelectionEntries =
                     [
-                        new SelectionEntrySpec(
-                            Id: "se-child",
-                            Name: "Child",
-                            Type: "upgrade",
-                            ChildEntries:
+                        new ProtocolSelectionEntry
+                        {
+                            Id = "se-child",
+                            Name = "Child",
+                            Type = "upgrade",
+                            SelectionEntries =
                             [
-                                new SelectionEntrySpec(
-                                    Id: "se-grandchild",
-                                    Name: "Grandchild",
-                                    Type: "upgrade")
-                            ])
+                                new ProtocolSelectionEntry
+                                {
+                                    Id = "se-grandchild",
+                                    Name = "Grandchild",
+                                    Type = "upgrade",
+                                },
+                            ],
+                        },
                     ],
-                    SelectionEntryGroups:
+                    SelectionEntryGroups =
                     [
-                        new SelectionEntryGroupSpec(
-                            Id: "seg-1",
-                            Name: "Options",
-                            SelectionEntries:
+                        new ProtocolSelectionEntryGroup
+                        {
+                            Id = "seg-1",
+                            Name = "Options",
+                            SelectionEntries =
                             [
-                                new SelectionEntrySpec(
-                                    Id: "se-opt",
-                                    Name: "Option A",
-                                    Type: "upgrade")
-                            ])
-                    ])
-            ]);
+                                new ProtocolSelectionEntry
+                                {
+                                    Id = "se-opt",
+                                    Name = "Option A",
+                                    Type = "upgrade",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);
@@ -310,44 +355,53 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_ProfilesAndRules()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS",
-            ProfileTypes:
+        var gs = new ProtocolGameSystem
+        {
+            Id = "gs-1", Name = "GS",
+            ProfileTypes =
             [
-                new ProfileTypeSpec(Id: "pt-1", Name: "Stats",
-                    CharacteristicTypes:
+                new ProtocolProfileType { Id = "pt-1", Name = "Stats",
+                    CharacteristicTypes =
                     [
-                        new CharacteristicTypeSpec(Id: "ct-1", Name: "M")
-                    ])
-            ]);
+                        new ProtocolCharacteristicType { Id = "ct-1", Name = "M" }
+                    ] },
+            ],
+        };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Cat",
-            GameSystemId: "gs-1",
-            SelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "gs-1",
+            SelectionEntries =
             [
-                new SelectionEntrySpec(
-                    Id: "se-1",
-                    Name: "Unit",
-                    Type: "unit",
-                    Profiles:
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-1",
+                    Name = "Unit",
+                    Type = "unit",
+                    Profiles =
                     [
-                        new ProfileSpec(
-                            Id: "prof-1",
-                            Name: "Unit Stats",
-                            TypeId: "pt-1",
-                            TypeName: "Stats",
-                            Characteristics:
+                        new ProtocolProfile
+                        {
+                            Id = "prof-1",
+                            Name = "Unit Stats",
+                            TypeId = "pt-1",
+                            TypeName = "Stats",
+                            Characteristics =
                             [
-                                new CharacteristicSpec(Name: "M", TypeId: "ct-1", Value: "6\"")
-                            ])
+                                new ProtocolCharacteristic { Name = "M", TypeId = "ct-1", Value = "6\"" }
+                            ],
+                        },
                     ],
-                    Rules:
+                    Rules =
                     [
-                        new RuleSpec(Id: "rule-1", Name: "Special Rule",
-                            Description: "This unit can fly.")
-                    ])
-            ]);
+                        new ProtocolRule { Id = "rule-1", Name = "Special Rule",
+                            Description = "This unit can fly." }
+                    ],
+                },
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);
@@ -364,21 +418,25 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_Publications()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Cat",
-            GameSystemId: "gs-1",
-            Publications:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "gs-1",
+            Publications =
             [
-                new PublicationSpec(
-                    Id: "pub-1",
-                    Name: "Core Rules",
-                    ShortName: "CR",
-                    Publisher: "GW",
-                    PublicationDate: "2024-01-01")
-            ]);
+                new ProtocolPublication
+                {
+                    Id = "pub-1",
+                    Name = "Core Rules",
+                    ShortName = "CR",
+                    Publisher = "GW",
+                    PublicationDate = "2024-01-01",
+                },
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);
@@ -392,24 +450,28 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_InfoGroupsAndInfoLinks()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Cat",
-            GameSystemId: "gs-1",
-            SharedInfoGroups:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "gs-1",
+            SharedInfoGroups =
             [
-                new InfoGroupSpec(
-                    Id: "ig-1",
-                    Name: "Weapon Stats",
-                    Rules: [new RuleSpec(Id: "r-1", Name: "Rule", Description: "D")])
+                new ProtocolInfoGroup
+                {
+                    Id = "ig-1",
+                    Name = "Weapon Stats",
+                    Rules = [new ProtocolRule { Id = "r-1", Name = "Rule", Description = "D" }],
+                },
             ],
-            InfoLinks:
+            InfoLinks =
             [
-                new InfoLinkSpec(Id: "il-1", Name: "Link", TargetId: "ig-1",
-                    Type: "infoGroup")
-            ]);
+                new ProtocolInfoLink { Id = "il-1", Name = "Link", TargetId = "ig-1",
+                    Type = "infoGroup" }
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);
@@ -423,32 +485,38 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_ConstraintProperties()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
 
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Cat",
-            GameSystemId: "gs-1",
-            SelectionEntries:
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "gs-1",
+            SelectionEntries =
             [
-                new SelectionEntrySpec(
-                    Id: "se-1",
-                    Name: "Entry",
-                    Type: "upgrade",
-                    Constraints:
+                new ProtocolSelectionEntry
+                {
+                    Id = "se-1",
+                    Name = "Entry",
+                    Type = "upgrade",
+                    Constraints =
                     [
-                        new ConstraintSpec(
-                            Id: "con-1",
-                            Type: "max",
-                            Value: 3,
-                            Field: "selections",
-                            Scope: "roster",
-                            Shared: true,
-                            IncludeChildSelections: true,
-                            IncludeChildForces: true,
-                            PercentValue: false)
-                    ])
-            ]);
+                        new ProtocolConstraint
+                        {
+                            Id = "con-1",
+                            Type = "max",
+                            Value = 3,
+                            Field = "selections",
+                            Scope = "roster",
+                            Shared = true,
+                            IncludeChildSelections = true,
+                            IncludeChildForces = true,
+                            PercentValue = false,
+                        },
+                    ],
+                },
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);
@@ -465,19 +533,23 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateGameSystemXml_NestedForceEntries()
     {
-        var gs = new GameSystemSpec(
-            Id: "gs-1",
-            Name: "GS",
-            ForceEntries:
+        var gs = new ProtocolGameSystem
+        {
+            Id = "gs-1",
+            Name = "GS",
+            ForceEntries =
             [
-                new ForceEntrySpec(
-                    Id: "fe-1",
-                    Name: "Primary",
-                    ForceEntries:
+                new ProtocolForceEntry
+                {
+                    Id = "fe-1",
+                    Name = "Primary",
+                    ForceEntries =
                     [
-                        new ForceEntrySpec(Id: "fe-2", Name: "Allied")
-                    ])
-            ]);
+                        new ProtocolForceEntry { Id = "fe-2", Name = "Allied" }
+                    ],
+                },
+            ],
+        };
 
         var xml = CatXmlGenerator.GenerateGameSystemXml(gs);
         var node = DeserializeGamesystem(xml);
@@ -504,15 +576,15 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_EmptyCatalogueArray_Throws()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
         Assert.Throws<ArgumentException>(() =>
-            CatXmlGenerator.GenerateCatalogueXml(gs, Array.Empty<CatalogueSpec>()));
+            CatXmlGenerator.GenerateCatalogueXml(gs, Array.Empty<ProtocolCatalogue>()));
     }
 
     [Fact]
     public void GenerateGameSystemXml_MinimalSpec_ProducesValidXml()
     {
-        var gs = new GameSystemSpec();
+        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Test Game System" };
         var xml = CatXmlGenerator.GenerateGameSystemXml(gs);
         Assert.NotNull(xml);
         Assert.Contains("<?xml", xml);
@@ -522,11 +594,13 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_SpecialXmlCharsInName_ProducesValidXml()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "Test & <System>");
-        var cat = new CatalogueSpec(
-            Id: "cat-1",
-            Name: "Catalogue with \"quotes\" & <angles>",
-            GameSystemId: "gs-1");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "Test & <System>" };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Catalogue with \"quotes\" & <angles>",
+            GameSystemId = "gs-1",
+        };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         // XML should be well-formed — deserialize to verify
@@ -538,8 +612,8 @@ public class CatXmlGeneratorTests
     [Fact]
     public void GenerateCatalogueXml_EmptyCatalogue_ProducesValidXml()
     {
-        var gs = new GameSystemSpec(Id: "gs-1", Name: "GS");
-        var cat = new CatalogueSpec(Id: "cat-1", Name: "Empty Cat", GameSystemId: "gs-1");
+        var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
+        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Empty Cat", GameSystemId = "gs-1" };
 
         var xml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
         var node = DeserializeCatalogue(xml);

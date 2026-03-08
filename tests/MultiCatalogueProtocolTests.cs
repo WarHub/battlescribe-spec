@@ -1,4 +1,5 @@
 using BattleScribeSpec;
+using BattleScribeSpec.Protocol;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -11,13 +12,18 @@ public class MultiCatalogueProtocolTests(ITestOutputHelper output)
     public void Direct_MultiCatalogue_Diagnose()
     {
         // Run the exact multi-catalogue scenario through OracleRosterEngine
-        var gs = new GameSystemSpec("test-gs", "Test Game System",
-            ForceEntries: [new ForceEntrySpec("fe-patrol", "Patrol")]);
-        var catalogues = new CatalogueSpec[] {
-            new("cat-a", "Faction A", "test-gs",
-                SelectionEntries: [new SelectionEntrySpec("se-a1", "Alpha Unit", "unit")]),
-            new("cat-b", "Faction B", "test-gs",
-                SelectionEntries: [new SelectionEntrySpec("se-b1", "Beta Unit", "unit")])
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-patrol", Name = "Patrol" }],
+        };
+        var catalogues = new ProtocolCatalogue[]
+        {
+            new() { Id = "cat-a", Name = "Faction A", GameSystemId = "test-gs",
+                SelectionEntries = [new ProtocolSelectionEntry { Id = "se-a1", Name = "Alpha Unit", Type = "unit" }] },
+            new() { Id = "cat-b", Name = "Faction B", GameSystemId = "test-gs",
+                SelectionEntries = [new ProtocolSelectionEntry { Id = "se-b1", Name = "Beta Unit", Type = "unit" }] },
         };
 
         using var engine = new OracleRosterEngine();

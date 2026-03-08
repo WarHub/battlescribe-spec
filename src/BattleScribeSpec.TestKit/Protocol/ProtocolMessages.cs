@@ -191,13 +191,13 @@ public sealed class StateResponse : ProtocolResponse
     public string GameSystemId { get; set; } = "";
 
     [JsonPropertyName("forces")]
-    public List<ProtocolForce> Forces { get; set; } = [];
+    public List<ForceState> Forces { get; set; } = [];
 
     [JsonPropertyName("costs")]
-    public List<ProtocolCost> Costs { get; set; } = [];
+    public List<CostState> Costs { get; set; } = [];
 
     [JsonPropertyName("validationErrors")]
-    public List<ProtocolValidationError> ValidationErrors { get; set; } = [];
+    public List<ValidationErrorState> ValidationErrors { get; set; } = [];
 }
 
 public sealed class ErrorsResponse : ProtocolResponse
@@ -206,42 +206,13 @@ public sealed class ErrorsResponse : ProtocolResponse
     public override string Type => "errors";
 
     [JsonPropertyName("errors")]
-    public List<ProtocolValidationError> Errors { get; set; } = [];
+    public List<ValidationErrorState> Errors { get; set; } = [];
 }
 
 public sealed class TeardownResult : ProtocolResponse
 {
     [JsonPropertyName("type")]
     public override string Type => "teardownResult";
-}
-
-/// <summary>
-/// Structured validation error with entry-link data.
-/// </summary>
-public sealed class ProtocolValidationError
-{
-    [JsonPropertyName("message")]
-    public string Message { get; set; } = "";
-
-    [JsonPropertyName("ownerType")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? OwnerType { get; set; }
-
-    [JsonPropertyName("ownerId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? OwnerId { get; set; }
-
-    [JsonPropertyName("ownerEntryId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? OwnerEntryId { get; set; }
-
-    [JsonPropertyName("entryId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? EntryId { get; set; }
-
-    [JsonPropertyName("constraintId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ConstraintId { get; set; }
 }
 
 /// <summary>
@@ -254,144 +225,6 @@ public sealed class ProtocolError : ProtocolResponse
 
     [JsonPropertyName("message")]
     public string Message { get; set; } = "";
-}
-
-// ===== Protocol Data Types (state representation) =====
-
-public sealed class ProtocolForce
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    [JsonPropertyName("catalogueId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? CatalogueId { get; set; }
-
-    [JsonPropertyName("availableEntryCount")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? AvailableEntryCount { get; set; }
-
-    [JsonPropertyName("selections")]
-    public List<ProtocolSelection> Selections { get; set; } = [];
-}
-
-public sealed class ProtocolSelection
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    [JsonPropertyName("entryId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? EntryId { get; set; }
-
-    [JsonPropertyName("type")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Type { get; set; }
-
-    [JsonPropertyName("number")]
-    public int Number { get; set; }
-
-    [JsonPropertyName("hidden")]
-    public bool Hidden { get; set; }
-
-    [JsonPropertyName("costs")]
-    public List<ProtocolCost> Costs { get; set; } = [];
-
-    [JsonPropertyName("children")]
-    public List<ProtocolSelection> Children { get; set; } = [];
-
-    [JsonPropertyName("profiles")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<ProtocolSelectionProfile>? Profiles { get; set; }
-
-    [JsonPropertyName("rules")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<ProtocolSelectionRule>? Rules { get; set; }
-
-    [JsonPropertyName("categories")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<ProtocolSelectionCategory>? Categories { get; set; }
-
-    [JsonPropertyName("page")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Page { get; set; }
-
-    [JsonPropertyName("publicationId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? PublicationId { get; set; }
-}
-
-public sealed class ProtocolSelectionProfile
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    [JsonPropertyName("typeId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? TypeId { get; set; }
-
-    [JsonPropertyName("typeName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? TypeName { get; set; }
-
-    [JsonPropertyName("hidden")]
-    public bool Hidden { get; set; }
-
-    [JsonPropertyName("page")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Page { get; set; }
-
-    [JsonPropertyName("publicationId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? PublicationId { get; set; }
-
-    [JsonPropertyName("characteristics")]
-    public List<ProtocolCharacteristic> Characteristics { get; set; } = [];
-}
-
-public sealed class ProtocolSelectionRule
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    [JsonPropertyName("description")]
-    public string Description { get; set; } = "";
-
-    [JsonPropertyName("hidden")]
-    public bool Hidden { get; set; }
-
-    [JsonPropertyName("page")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Page { get; set; }
-
-    [JsonPropertyName("publicationId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? PublicationId { get; set; }
-}
-
-public sealed class ProtocolSelectionCategory
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    [JsonPropertyName("entryId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? EntryId { get; set; }
-
-    [JsonPropertyName("primary")]
-    public bool Primary { get; set; }
-}
-
-public sealed class ProtocolCost
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    [JsonPropertyName("typeId")]
-    public string TypeId { get; set; } = "";
-
-    [JsonPropertyName("value")]
-    public double Value { get; set; }
 }
 
 // ===== Protocol Setup Data (game system + catalogue) =====

@@ -81,7 +81,7 @@ public class RealWorldOracleTests(ITestOutputHelper output)
         output.WriteLine($"Force errors: {forceErrors.Count}");
 
         var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
-        output.WriteLine($"Forces: {snapshot.Forces.Length}");
+        output.WriteLine($"Forces: {snapshot.Forces.Count}");
         Assert.Single(snapshot.Forces);
         output.WriteLine($"Force name: {snapshot.Forces[0].Name}");
 

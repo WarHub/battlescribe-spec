@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec;
@@ -10,42 +9,9 @@ namespace BattleScribeSpec;
 public static class ModelConverter
 {
     /// <summary>
-    /// Represents a simplified selection for cross-engine comparison.
-    /// </summary>
-    public record SelectionSnapshot(
-        string? Name,
-        string? Type,
-        int Number,
-        ImmutableArray<CostSnapshot> Costs,
-        ImmutableArray<SelectionSnapshot> Children);
-
-    /// <summary>
-    /// Represents a simplified cost entry for comparison.
-    /// </summary>
-    public record CostSnapshot(string? Name, string? TypeId, double Value);
-
-    /// <summary>
-    /// Represents a simplified force for comparison.
-    /// </summary>
-    public record ForceSnapshot(
-        string? Name,
-        string? CatalogueId,
-        ImmutableArray<SelectionSnapshot> Selections);
-
-    /// <summary>
-    /// Represents a simplified roster state for comparison.
-    /// </summary>
-    public record RosterSnapshot(
-        string? Name,
-        string? GameSystemId,
-        ImmutableArray<ForceSnapshot> Forces,
-        ImmutableArray<CostSnapshot> Costs,
-        ImmutableArray<string> ValidationErrors);
-
-    /// <summary>
     /// Capture the current state of the oracle's roster as a snapshot for comparison.
     /// </summary>
-    public static RosterSnapshot CaptureOracleSnapshot(BattleScribeOracle oracle)
+    public static RosterState CaptureOracleSnapshot(BattleScribeOracle oracle)
     {
         var roster = oracle.GetRoster();
         var forces = oracle.GetForces();
@@ -54,67 +20,74 @@ public static class ModelConverter
         var forceSnapshots = forces.Select(f =>
         {
             var selections = JavaListToList<net.battlescribe.model.roster.Selection>(f.getSelections());
-            return new ForceSnapshot(
+            return new ForceState(
                 f.getName(),
                 f.getCatalogueId(),
-                selections.Select(CaptureSelection).ToImmutableArray());
-        }).ToImmutableArray();
+                selections.Select(CaptureSelection).ToList());
+        }).ToList();
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
-        var costSnapshots = costs.Select(c =>
-            new CostSnapshot(c.getName(), c.getTypeId(), c.getValue())).ToImmutableArray();
+        var costStates = costs.Select(c =>
+            new CostState(c.getName(), c.getTypeId(), c.getValue())).ToList();
 
-        return new RosterSnapshot(
+        return new RosterState(
             roster.getName(),
             roster.getGameSystemId(),
             forceSnapshots,
-            costSnapshots,
-            [.. errors.Select(e => e.Message)]);
+            costStates,
+            errors);
     }
 
-    private static SelectionSnapshot CaptureSelection(net.battlescribe.model.roster.Selection sel)
+    private static SelectionState CaptureSelection(net.battlescribe.model.roster.Selection sel)
     {
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
-        return new SelectionSnapshot(
+        return new SelectionState(
             sel.getName(),
+            EntryId: null,
             sel.getType(),
             sel.getNumber(),
-            costs.Select(c => new CostSnapshot(c.getName(), c.getTypeId(), c.getValue())).ToImmutableArray(),
-            children.Select(CaptureSelection).ToImmutableArray());
+            Hidden: false,
+            costs.Select(c => new CostState(c.getName(), c.getTypeId(), c.getValue())).ToList(),
+            children.Select(CaptureSelection).ToList());
     }
 
     /// <summary>
-    /// Create a roster snapshot from wham RosterNode for comparison.
+    /// Create a roster state from wham RosterNode for comparison.
     /// </summary>
-    public static RosterSnapshot CaptureWhamSnapshot(RosterNode roster, IReadOnlyList<string>? validationErrors = null)
+    public static RosterState CaptureWhamSnapshot(RosterNode roster, IReadOnlyList<string>? validationErrors = null)
     {
         var forces = roster.Forces.Select(f =>
-            new ForceSnapshot(
+            new ForceState(
                 f.Name,
                 f.CatalogueId,
-                f.Selections.Select(CaptureWhamSelection).ToImmutableArray())).ToImmutableArray();
+                f.Selections.Select(CaptureWhamSelection).ToList())).ToList();
 
         var costs = roster.Costs.Select(c =>
-            new CostSnapshot(c.Name, c.TypeId, (double)c.Value)).ToImmutableArray();
+            new CostState(c.Name, c.TypeId, (double)c.Value)).ToList();
 
-        return new RosterSnapshot(
+        var errors = validationErrors?.Select(e => new ValidationErrorState(e)).ToList()
+            ?? new List<ValidationErrorState>();
+
+        return new RosterState(
             roster.Name,
             roster.GameSystemId,
             forces,
             costs,
-            validationErrors?.ToImmutableArray() ?? []);
+            errors);
     }
 
-    private static SelectionSnapshot CaptureWhamSelection(SelectionNode sel)
+    private static SelectionState CaptureWhamSelection(SelectionNode sel)
     {
         var costs = sel.Costs.Select(c =>
-            new CostSnapshot(c.Name, c.TypeId, (double)c.Value)).ToImmutableArray();
-        var children = sel.Selections.Select(CaptureWhamSelection).ToImmutableArray();
-        return new SelectionSnapshot(
+            new CostState(c.Name, c.TypeId, (double)c.Value)).ToList();
+        var children = sel.Selections.Select(CaptureWhamSelection).ToList();
+        return new SelectionState(
             sel.Name,
+            EntryId: null,
             sel.Type.ToString(),
             sel.Number,
+            Hidden: false,
             costs,
             children);
     }

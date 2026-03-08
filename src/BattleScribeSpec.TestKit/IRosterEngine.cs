@@ -30,7 +30,7 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Select (add) an entry in the specified force, creating a new selection.
-    /// Entry index refers to order in <see cref="CatalogueSpec.SelectionEntries"/>.
+    /// Entry index refers to order in <see cref="ProtocolCatalogue.SelectionEntries"/>.
     /// </summary>
     void SelectEntry(int forceIndex, int entryIndex);
 
@@ -96,16 +96,4 @@ public interface IRosterEngine : IDisposable
     /// </summary>
     void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
         => throw new NotSupportedException("This engine does not support name-based child entry selection.");
-}
-
-/// <summary>
-/// Backward-compatible extension: allows calling Setup with Spec model types.
-/// Converts to Protocol types and delegates to the primary Setup method.
-/// </summary>
-public static class RosterEngineExtensions
-{
-    public static IReadOnlyList<string> Setup(this IRosterEngine engine, GameSystemSpec gameSystem, CatalogueSpec[] catalogues) =>
-        engine.Setup(
-            ProtocolConverter.ToProtocol(gameSystem),
-            catalogues.Select(ProtocolConverter.ToProtocol).ToArray());
 }

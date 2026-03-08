@@ -1,4 +1,5 @@
 using BattleScribeSpec;
+using BattleScribeSpec.Protocol;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -17,28 +18,35 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
     public void FullCycle_AddForce_SelectUnit_VerifyCost()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = new ScenarioSpec(
-            new GameSystemSpec(
-                ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
-                CostTypes: [new CostTypeSpec("pts", "pts", 2000)]),
-            [new CatalogueSpec(SelectionEntries: [
-                new SelectionEntrySpec("se-1", "Tactical Squad",
-                    Costs: [new CostSpec("pts", "pts", 65.0)])
-            ])]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Tactical Squad",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 65.0 }] }
+            ],
+        };
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, [cat]);
 
         // Step 1: Add force
         oracle.AddForceByIndex(0);
         var snap1 = ModelConverter.CaptureOracleSnapshot(oracle);
-        output.WriteLine($"After AddForce: forces={snap1.Forces.Length}, selections=0");
+        output.WriteLine($"After AddForce: forces={snap1.Forces.Count}, selections=0");
         Assert.Single(snap1.Forces);
         Assert.Empty(snap1.Forces[0].Selections);
 
         // Step 2: Select unit
         oracle.SelectFirstAvailableEntry();
         var snap2 = ModelConverter.CaptureOracleSnapshot(oracle);
-        output.WriteLine($"After SelectEntry: selections={snap2.Forces[0].Selections.Length}");
+        output.WriteLine($"After SelectEntry: selections={snap2.Forces[0].Selections.Count}");
         Assert.Single(snap2.Forces[0].Selections);
         Assert.Equal("Tactical Squad", snap2.Forces[0].Selections[0].Name);
 
@@ -53,13 +61,21 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
     public void FullCycle_SelectAndDeselect_RestoredToEmpty()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = new ScenarioSpec(
-            new GameSystemSpec(ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")]),
-            [new CatalogueSpec(SelectionEntries: [
-                new SelectionEntrySpec("se-1", "Marine Squad")
-            ])]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad" }
+            ],
+        };
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, [cat]);
         oracle.AddForceByIndex(0);
 
         // Select
@@ -76,16 +92,23 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
     public void FullCycle_MultipleSelectionsAccumulateCost()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = new ScenarioSpec(
-            new GameSystemSpec(
-                ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
-                CostTypes: [new CostTypeSpec("pts", "pts", 2000)]),
-            [new CatalogueSpec(SelectionEntries: [
-                new SelectionEntrySpec("se-1", "Marine Squad",
-                    Costs: [new CostSpec("pts", "pts", 100.0)])
-            ])]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100.0 }] }
+            ],
+        };
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, [cat]);
         oracle.AddForceByIndex(0);
 
         // Select 3 times
@@ -93,8 +116,8 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             oracle.SelectFirstAvailableEntry();
 
         var snap = ModelConverter.CaptureOracleSnapshot(oracle);
-        output.WriteLine($"Selections: {snap.Forces[0].Selections.Length}");
-        Assert.Equal(3, snap.Forces[0].Selections.Length);
+        output.WriteLine($"Selections: {snap.Forces[0].Selections.Count}");
+        Assert.Equal(3, snap.Forces[0].Selections.Count);
 
         // Check roster total cost
         var rosterPts = snap.Costs.FirstOrDefault(c => c.TypeId == "pts");
@@ -107,13 +130,21 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
     public void FullCycle_RemoveForce_ClearsEverything()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = new ScenarioSpec(
-            new GameSystemSpec(ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")]),
-            [new CatalogueSpec(SelectionEntries: [
-                new SelectionEntrySpec("se-1", "Marine Squad")
-            ])]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad" }
+            ],
+        };
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, [cat]);
         oracle.AddForceByIndex(0);
         oracle.SelectFirstAvailableEntry();
 
@@ -131,21 +162,28 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
     public void FullCycle_ModifierAndConstraint_Together()
     {
         using var oracle = new BattleScribeOracle();
-        var scenario = new ScenarioSpec(
-            new GameSystemSpec(
-                ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
-                CostTypes: [new CostTypeSpec("pts", "pts", 2000)]),
-            [new CatalogueSpec(SelectionEntries: [
-                new SelectionEntrySpec("se-1", "Marine Squad",
-                    Costs: [new CostSpec("pts", "pts", 50.0)],
-                    Modifiers: [new ModifierSpec("increment", "pts", "10")],
-                    Constraints: [
-                        new ConstraintSpec("c-min", "min", 1, "selections", "parent"),
-                        new ConstraintSpec("c-max", "max", 3, "selections", "parent")
-                    ])
-            ])]);
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 50.0 }],
+                    Modifiers = [new ProtocolModifier { Type = "increment", Field = "pts", Value = "10" }],
+                    Constraints = [
+                        new ProtocolConstraint { Id = "c-min", Type = "min", Value = 1, Field = "selections", Scope = "parent" },
+                        new ProtocolConstraint { Id = "c-max", Type = "max", Value = 3, Field = "selections", Scope = "parent" },
+                    ] }
+            ],
+        };
 
-        oracle.SetupFromSpec(scenario);
+        oracle.SetupFromProtocol(gs, [cat]);
         oracle.AddForceByIndex(0);
 
         // Before selecting: min constraint should report something
@@ -171,22 +209,30 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
         using var oracle = new BattleScribeOracle();
 
         // Use SetupFromSpec with a custom scenario that has two entries
-        var gs = new GameSystemSpec(
-            ForceEntries: [new ForceEntrySpec("fe-1", "Patrol")],
-            CostTypes: [new CostTypeSpec("pts", "pts", 2000)]);
-        var cat = new CatalogueSpec(SelectionEntries: [
-            new SelectionEntrySpec("se-1", "Tactical Squad",
-                Costs: [new CostSpec("pts", "pts", 65.0)]),
-            new SelectionEntrySpec("se-2", "Assault Squad",
-                Costs: [new CostSpec("pts", "pts", 80.0)])
-        ]);
-        oracle.SetupFromSpec(new ScenarioSpec(gs, [cat]));
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test Game System",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            SelectionEntries = [
+                new ProtocolSelectionEntry { Id = "se-1", Name = "Tactical Squad",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 65.0 }] },
+                new ProtocolSelectionEntry { Id = "se-2", Name = "Assault Squad",
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 80.0 }] },
+            ],
+        };
+        oracle.SetupFromProtocol(gs, [cat]);
         oracle.AddForceByIndex(0);
 
         // Select the first entry (index 0)
         oracle.SelectFirstAvailableEntry();
         var snap = ModelConverter.CaptureOracleSnapshot(oracle);
-        output.WriteLine($"After first entry: {snap.Forces[0].Selections.Length} selection(s)");
+        output.WriteLine($"After first entry: {snap.Forces[0].Selections.Count} selection(s)");
         Assert.Single(snap.Forces[0].Selections);
         Assert.Equal("Tactical Squad", snap.Forces[0].Selections[0].Name);
 
