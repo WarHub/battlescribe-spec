@@ -202,7 +202,7 @@ Define engine protocol in Protobuf, communicate via gRPC.
 ## Implementation Roadmap
 
 1. **Extract NuGet package** — Move `IRosterEngine`, `SpecRunner`, `SpecLoader`, `EngineTypes`,
-   `SpecFileModels`, `SpecModels` to a `BattleScribeSpec.TestKit` project. Embed YAML specs as
+   `SpecFileModels` to a `BattleScribeSpec.TestKit` project. Embed YAML specs as
    assembly resources. Publish to NuGet.
 
 2. **Define JSON wire protocol** — Formalize command/response types as JSON Schema. Document in
