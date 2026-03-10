@@ -1,0 +1,55 @@
+id: auto-select-field-forces-skipped
+category: auto-select
+# NR auto-selects entries with field=forces constraints too,
+# but BattleScribe only auto-selects when field=selections.
+engines:
+  newrecruit: fail
+description: >
+  Entry with min=1 field=forces is NOT auto-selected by BattleScribe.
+  Auto-selection only triggers for field=selections constraints.
+tags: [auto-select, constraint, min, field-forces]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-forces-min
+          name: Forces Min Unit
+          type: unit
+          constraints:
+            - id: con-min-forces
+              type: min
+              value: 1
+              field: forces
+              scope: roster
+        - id: se-selections-min
+          name: Selections Min Unit
+          type: unit
+          constraints:
+            - id: con-min-sel
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Only Selections Min Unit is auto-selected.
+  # Forces Min Unit is NOT auto-selected because its constraint uses field=forces.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Selections Min Unit
+              type: unit
+              number: 1
