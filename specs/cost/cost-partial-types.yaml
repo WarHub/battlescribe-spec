@@ -1,0 +1,45 @@
+id: cost-partial-types
+category: cost
+description: Entry specifying only some cost types — unspecified types are not tracked in roster totals
+tags: [cost, default, multi-type]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+      - id: pl
+        name: PL
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Unit A
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+            # PL cost type not specified — should default to 0
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # pts cost is 50; PL cost type is not tracked because no entry uses it
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 50

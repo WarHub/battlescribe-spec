@@ -1,0 +1,59 @@
+id: cost-entry-no-costs
+category: cost
+description: Entry with no costs defined contributes zero to roster cost totals
+tags: [cost, default]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-costed
+          name: Costed Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+        - id: se-free
+          name: Free Unit
+          type: unit
+          # No costs element at all
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Select the costed entry first to establish cost baseline
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 50
+
+  # Select the free entry — total cost should remain 50
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 50
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Costed Unit
+            - name: Free Unit

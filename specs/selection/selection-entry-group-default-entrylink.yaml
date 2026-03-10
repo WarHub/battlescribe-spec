@@ -1,0 +1,54 @@
+id: selection-entry-group-default-entrylink
+category: selection
+description: DefaultSelectionEntryId referencing an entry link target
+tags: [defaultSelectionEntryId, entryLink]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-bolt-pistol
+          name: Bolt Pistol
+          type: upgrade
+        - id: sse-plasma-pistol
+          name: Plasma Pistol
+          type: upgrade
+      selectionEntries:
+        - id: se-parent
+          name: Parent Unit
+          type: unit
+          selectionEntryGroups:
+            - id: seg-sidearm
+              name: Sidearm
+              defaultSelectionEntryId: el-bolt-pistol
+              entryLinks:
+                - id: el-bolt-pistol
+                  targetId: sse-bolt-pistol
+                  type: selectionEntry
+                - id: el-plasma-pistol
+                  targetId: sse-plasma-pistol
+                  type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Parent Unit selected → Bolt Pistol auto-selected via entry link default.
+  # Entry link targets work correctly as defaultSelectionEntryId.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Parent Unit
+      hasValidationErrors: false

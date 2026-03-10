@@ -1,0 +1,41 @@
+id: cost-default-limit-negative-one
+category: cost
+description: DefaultCostLimit of -1 means no limit — any cost is valid
+tags: [cost, defaultCostLimit]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Expensive Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 9999
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Cost 9999 with defaultCostLimit=-1 (no limit) → no cost limit error
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 9999
