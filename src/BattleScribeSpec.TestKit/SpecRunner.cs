@@ -395,6 +395,9 @@ public sealed class SpecRunner
         if (expected.ValidationErrorCount is { } vec)
             AssertEqual(stepIndex, "validationErrorCount", vec, _engine.GetValidationErrors().Count);
 
+        if (expected.CostCount is { } cc)
+            AssertEqual(stepIndex, "costCount", cc, state.Costs.Count);
+
         if (expected.Costs is { } expectedCosts)
         {
             foreach (var ec in expectedCosts)
