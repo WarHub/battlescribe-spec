@@ -36,8 +36,8 @@ jobs:
 
       - name: End-to-end spec runner test
         run: |
-          dotnet src/BattleScribeSpec.Runner/bin/Debug/net10.0/bs-spec-runner.dll \
-            --adapter "dotnet:src/BattleScribeSpec.ReferenceAdapter/bin/Debug/net10.0/bs-reference-adapter.dll" \
+          dotnet artifacts/bin/BattleScribeSpec.Runner/debug/bs-spec-runner.dll \
+            --adapter "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
             --specs specs \
             --engine battlescribe \
             --expected-failures battlescribe \
@@ -101,8 +101,8 @@ jobs:
 
       - name: Generate conformance report
         run: |
-          dotnet src/BattleScribeSpec.Runner/bin/Debug/net10.0/bs-spec-runner.dll \
-            --adapter "dotnet:src/BattleScribeSpec.ReferenceAdapter/bin/Debug/net10.0/bs-reference-adapter.dll" \
+          dotnet artifacts/bin/BattleScribeSpec.Runner/debug/bs-spec-runner.dll \
+            --adapter "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
             --specs specs \
             --engine newrecruit \
             --output github-actions \

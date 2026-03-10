@@ -28,7 +28,7 @@ jobs:
         run: dotnet build src/BattleScribeSpec.NewRecruit.HarTool
 
       - name: Install Playwright browsers
-        run: pwsh src/BattleScribeSpec.NewRecruit/bin/Debug/net10.0/playwright.ps1 install chromium
+        run: pwsh artifacts/bin/BattleScribeSpec.NewRecruit/debug/playwright.ps1 install chromium
 
       - name: Record new HAR snapshot
         id: record

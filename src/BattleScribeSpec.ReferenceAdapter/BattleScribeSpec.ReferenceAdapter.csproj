@@ -2,9 +2,6 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <RootNamespace>BattleScribeSpec.ReferenceAdapter</RootNamespace>
     <AssemblyName>bs-reference-adapter</AssemblyName>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -19,8 +16,11 @@
   </ItemGroup>
 
   <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
+    <PropertyGroup>
+      <_OracleBinPath>$(ArtifactsPath)\bin\BattleScribeSpec.Oracle\$(ArtifactsPivots)\</_OracleBinPath>
+    </PropertyGroup>
     <ItemGroup>
-      <IkvmDlls Include="..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\DataUtils.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\CommonsIo.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\KotlinStdlib.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\KotlinStdlibCommon.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\Stax.dll;..\BattleScribeSpec.Oracle\bin\$(Configuration)\$(TargetFramework)\StaxApi.dll" />
+      <IkvmDlls Include="$(_OracleBinPath)DataUtils.dll;$(_OracleBinPath)CommonsIo.dll;$(_OracleBinPath)KotlinStdlib.dll;$(_OracleBinPath)KotlinStdlibCommon.dll;$(_OracleBinPath)Stax.dll;$(_OracleBinPath)StaxApi.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
