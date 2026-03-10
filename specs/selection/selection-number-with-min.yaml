@@ -1,5 +1,7 @@
 id: selection-number-with-min
 category: selection
+engines:
+  newrecruit: fail
 description: Entry with min=3 constraint — verify initial selection number respects min
 tags: [selection, number, constraint, min]
 
