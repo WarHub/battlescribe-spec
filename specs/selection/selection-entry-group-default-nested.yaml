@@ -56,4 +56,4 @@ steps:
         - selectionCount: 1
           selections:
             - name: Parent Unit
-      hasValidationErrors: false
+      errors: []
