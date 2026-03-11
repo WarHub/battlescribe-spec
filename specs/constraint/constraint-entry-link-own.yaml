@@ -52,7 +52,6 @@ steps:
           selections:
             - name: Strike Team
             - name: Strike Team
-      hasValidationErrors: false
 
   - action: selectEntry
     forceIndex: 0

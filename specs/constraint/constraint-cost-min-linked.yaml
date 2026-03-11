@@ -55,6 +55,9 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 0
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-cost-min
 
   # Unit A costs 10 pts, below min cost constraint of 50
   - action: selectEntry

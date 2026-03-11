@@ -42,7 +42,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 0
-      errors: []
 
   # Selecting a hidden entry — engine allows it but produces validation error
   - action: selectEntry

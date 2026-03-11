@@ -51,7 +51,6 @@ steps:
           selections:
             - name: Unit A
             - name: Unit A
-      errors: []
 
   # Remove one auto-selected entry (need 2, have 1 → violation)
   - action: deselectSelection

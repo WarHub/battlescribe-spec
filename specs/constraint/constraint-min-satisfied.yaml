@@ -47,4 +47,3 @@ steps:
         - selectionCount: 1
           selections:
             - name: Unit A
-      errors: []

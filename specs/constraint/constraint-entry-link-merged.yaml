@@ -59,7 +59,6 @@ steps:
           selections:
             - name: Heavy Support
             - name: Heavy Support
-      hasValidationErrors: false
 
   - action: selectEntry
     forceIndex: 0

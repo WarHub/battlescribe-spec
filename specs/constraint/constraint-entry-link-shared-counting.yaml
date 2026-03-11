@@ -63,7 +63,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 2
-      hasValidationErrors: false
 
   # Select 1 from second entry link (link-beta = entryIndex 1)
   - action: selectEntry
@@ -74,7 +73,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
-      hasValidationErrors: false
 
   # Select 1 more from second entry link
   - action: selectEntry

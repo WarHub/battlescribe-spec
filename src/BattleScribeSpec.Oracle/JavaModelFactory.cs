@@ -104,14 +104,15 @@ public static class JavaModelFactory
     public static CostType CreateCostType(
         string id,
         string name,
-        double defaultCostLimit = -1.0,
+        double? defaultCostLimit = null,
         bool hidden = false,
         bool limit = false)
     {
         var ct = new CostType();
         ct.setId(id);
         ct.setName(name);
-        ct.setDefaultCostLimit(defaultCostLimit);
+        // When no limit specified, use -1.0 (BattleScribe convention for "no limit")
+        ct.setDefaultCostLimit(defaultCostLimit ?? -1.0);
         ct.setHidden(hidden);
         var setLimit = ct.GetType().GetMethod("setLimit")
             ?? throw new MissingMethodException(ct.GetType().FullName, "setLimit");

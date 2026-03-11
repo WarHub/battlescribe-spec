@@ -46,4 +46,3 @@ steps:
   # 2 Patrol forces, min 2 → constraint satisfied
   - expectedState:
       forceCount: 2
-      hasValidationErrors: false

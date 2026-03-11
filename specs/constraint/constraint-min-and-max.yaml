@@ -55,7 +55,6 @@ steps:
         - selectionCount: 1
           selections:
             - name: Unit A
-      errors: []
 
   # 2 total (at max=2 limit), both constraints satisfied
   - action: selectEntry
@@ -65,7 +64,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 2
-      errors: []
 
   # 3 total (exceeds max=2), max constraint violated
   - action: selectEntry

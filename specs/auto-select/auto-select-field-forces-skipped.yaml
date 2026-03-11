@@ -53,3 +53,5 @@ steps:
             - name: Selections Min Unit
               type: unit
               number: 1
+      errors:
+        - on: roster

@@ -99,12 +99,16 @@ public sealed class BattleScribeOracle : IDisposable
         while (ctIter.hasNext())
         {
             var ct = (CostType)ctIter.next();
-            // Cost limit
-            var limit = new net.battlescribe.model.data.Cost();
-            limit.setName(ct.getName());
-            limit.setTypeId(ct.getId());
-            limit.setValue(ct.getDefaultCostLimit());
-            roster.getCostLimits().add(limit);
+            var dcl = ct.getDefaultCostLimit();
+            // Negative values (e.g. -1) mean "no cost limit" in BattleScribe convention
+            if (dcl >= 0)
+            {
+                var limit = new net.battlescribe.model.data.Cost();
+                limit.setName(ct.getName());
+                limit.setTypeId(ct.getId());
+                limit.setValue(dcl);
+                roster.getCostLimits().add(limit);
+            }
             // Roster cost (starts at zero, engine calculates)
             var cost = new net.battlescribe.model.data.Cost();
             cost.setName(ct.getName());
@@ -1292,7 +1296,8 @@ public sealed class BattleScribeOracle : IDisposable
         if (costTypes != null)
             _setupCostTypes.AddRange(costTypes);
 
-        return Initialize(gs, catalogueDict);
+        var initErrors = Initialize(gs, catalogueDict);
+        return initErrors;
     }
 
     private static ForceEntry BuildForceEntry(ProtocolForceEntry feSpec)

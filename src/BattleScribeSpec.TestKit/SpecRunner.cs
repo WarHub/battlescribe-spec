@@ -295,27 +295,6 @@ public sealed class SpecRunner
                         _engine.GetRosterState().Forces.Count);
                     break;
 
-                case "hasValidationErrors":
-                    AssertEqual(stepIndex, "hasValidationErrors",
-                        Convert.ToBoolean(step.Expected),
-                        _engine.GetValidationErrors().Count > 0);
-                    break;
-
-                case "validationErrorCount":
-                    AssertEqual(stepIndex, "validationErrorCount",
-                        Convert.ToInt32(step.Expected),
-                        _engine.GetValidationErrors().Count);
-                    break;
-
-                case "noValidationErrors":
-                    var errors = _engine.GetValidationErrors();
-                    if (errors.Count > 0)
-                    {
-                        _errors.Add($"Step {stepIndex}: expected no validation errors but got {errors.Count}: " +
-                            string.Join("; ", errors.Select(e => e.Message)));
-                    }
-                    break;
-
                 case "selectionCount":
                 {
                     var state = _engine.GetRosterState();
@@ -388,9 +367,6 @@ public sealed class SpecRunner
 
         if (expected.ForceCount is { } fc)
             AssertEqual(stepIndex, "forceCount", fc, state.Forces.Count);
-
-        if (expected.HasValidationErrors is { } hve)
-            AssertEqual(stepIndex, "hasValidationErrors", hve, _engine.GetValidationErrors().Count > 0);
 
         if (expected.ValidationErrorCount is { } vec)
             AssertEqual(stepIndex, "validationErrorCount", vec, _engine.GetValidationErrors().Count);
@@ -523,6 +499,18 @@ public sealed class SpecRunner
                     _errors.Add($"Step {stepIndex}: expected {errorsAssertions.Count} error(s) but got {actualErrors.Count}: " +
                         $"[{string.Join("; ", actualErrors.Select(FormatError))}]");
                 }
+            }
+        }
+
+        // Default: if no error assertion was specified, assert zero errors
+        // (skip for dataSource specs which inherently have many constraint violations)
+        if (!_isDataSourceMode && expected.Errors is null && expected.ValidationErrors is null && expected.ValidationErrorCount is null)
+        {
+            var actualErrors = _engine.GetValidationErrors();
+            if (actualErrors.Count > 0)
+            {
+                _errors.Add($"Step {stepIndex}: expected no errors (default) but got {actualErrors.Count}: " +
+                    string.Join("; ", actualErrors.Select(FormatError)));
             }
         }
     }

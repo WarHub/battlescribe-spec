@@ -48,4 +48,3 @@ steps:
   # This spec verifies that modifiers on force entries are processed
   - expectedState:
       forceCount: 1
-      hasValidationErrors: false

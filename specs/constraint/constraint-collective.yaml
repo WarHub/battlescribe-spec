@@ -68,4 +68,3 @@ steps:
             - name: Unit A
             - name: Unit B
             - name: Unit B
-      hasValidationErrors: false

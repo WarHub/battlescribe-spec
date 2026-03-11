@@ -44,7 +44,6 @@ steps:
   # 1 Patrol (max 2), 0 Battalion (max 1) → valid
   - expectedState:
       forceCount: 1
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 1
@@ -52,7 +51,6 @@ steps:
   # 1 Patrol, 1 Battalion → valid
   - expectedState:
       forceCount: 2
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 0
@@ -60,7 +58,6 @@ steps:
   # 2 Patrol (max 2), 1 Battalion (max 1) → valid
   - expectedState:
       forceCount: 3
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 1

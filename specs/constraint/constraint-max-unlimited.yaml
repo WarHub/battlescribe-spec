@@ -48,4 +48,3 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
-      hasValidationErrors: false

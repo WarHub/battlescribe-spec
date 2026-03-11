@@ -32,4 +32,3 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 0
-      hasValidationErrors: false

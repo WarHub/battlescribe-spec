@@ -56,7 +56,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 1
-      errors: []
 
   # 2 selections — exceeds max=1, structured error
   - action: selectEntry

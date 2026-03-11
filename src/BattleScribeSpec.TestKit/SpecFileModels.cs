@@ -184,9 +184,6 @@ public sealed class ExpectedStateDef
     [YamlMember(Alias = "validationErrorCount")]
     public int? ValidationErrorCount { get; set; }
 
-    [YamlMember(Alias = "hasValidationErrors")]
-    public bool? HasValidationErrors { get; set; }
-
     [YamlMember(Alias = "forces")]
     public List<ExpectedForceDef>? Forces { get; set; }
 

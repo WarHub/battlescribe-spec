@@ -50,7 +50,6 @@ steps:
         - selectionCount: 1
           selections:
             - name: Unit A
-      errors: []
 
   # Remove auto-selected entry to trigger structured min violation error
   - action: deselectSelection

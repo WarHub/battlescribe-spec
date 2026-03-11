@@ -36,7 +36,6 @@ steps:
   # 1 Patrol force added, max 2 → valid
   - expectedState:
       forceCount: 1
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 0
@@ -44,7 +43,6 @@ steps:
   # 2 Patrol forces, max 2 → still valid
   - expectedState:
       forceCount: 2
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 0

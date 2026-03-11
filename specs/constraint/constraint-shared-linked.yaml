@@ -67,7 +67,6 @@ steps:
           selections:
             - name: Unit A
             - name: Unit B
-      errors: []
 
   # Remove both auto-selected entries to trigger shared constraint violation
   - action: deselectSelection

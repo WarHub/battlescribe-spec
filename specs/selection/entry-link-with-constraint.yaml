@@ -43,4 +43,4 @@ steps:
   - assert: selectionCount
     forceIndex: 0
     expected: 2
-  - assert: noValidationErrors
+  - expectedState: {}
