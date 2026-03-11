@@ -154,4 +154,45 @@ public class ConstraintOracleTests
         Assert.Empty(errors);
     }
 
+    [Fact]
+    public void MaxConstraint_TripleViolation_ErrorMultiplicity()
+    {
+        // Diagnostic: 3 selections of max=1 — verify exact error count and placement
+        using var oracle = new BattleScribeOracle();
+        var (gs, cats) = MakeCategorisedScenario([
+            new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
+                Constraints = [new ProtocolConstraint { Id = "c-max", Type = "max", Value = 1, Field = "selections", Scope = "parent" }] }
+        ]);
+
+        oracle.SetupFromProtocol(gs, cats);
+        oracle.AddForceByIndex(0);
+
+        // 1st selection — at limit
+        oracle.SelectFirstAvailableEntry();
+        var errorsAt1 = oracle.GetValidationErrors();
+
+        // 2nd selection — 1 over limit
+        oracle.SelectFirstAvailableEntry();
+        var errorsAt2 = oracle.GetValidationErrors();
+
+        // 3rd selection — 2 over limit
+        oracle.SelectFirstAvailableEntry();
+        var errorsAt3 = oracle.GetValidationErrors();
+
+        Assert.Empty(errorsAt1);
+        Assert.NotEmpty(errorsAt2);
+        Assert.NotEmpty(errorsAt3);
+
+        // BS produces exactly 1 error regardless of how many selections exceed max.
+        // The error message changes ("1 too many" → "2 too many") but count stays 1.
+        Assert.Single(errorsAt2);
+        Assert.Single(errorsAt3);
+
+        // Verify placement: all errors are on category (BS behavior)
+        foreach (var e in errorsAt3)
+        {
+            Assert.Equal("category", e.OwnerType);
+        }
+    }
+
 }
