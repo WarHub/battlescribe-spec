@@ -516,6 +516,13 @@ public sealed class SpecRunner
                         _errors.Add($"Step {stepIndex}: expected error [{desc}] not found in: [{string.Join("; ", actualErrors.Select(FormatError))}]");
                     }
                 }
+
+                // Exact count check: no unexpected extra errors allowed
+                if (actualErrors.Count != errorsAssertions.Count)
+                {
+                    _errors.Add($"Step {stepIndex}: expected {errorsAssertions.Count} error(s) but got {actualErrors.Count}: " +
+                        $"[{string.Join("; ", actualErrors.Select(FormatError))}]");
+                }
             }
         }
     }

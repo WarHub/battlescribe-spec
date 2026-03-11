@@ -12,7 +12,7 @@ setup:
     costTypes:
       - id: ct-pts
         name: pts
-        defaultCostLimit: -1
+        defaultCostLimit: 9999
     categoryEntries:
       - id: cat-troops
         name: Troops

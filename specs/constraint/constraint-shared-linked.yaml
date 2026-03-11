@@ -84,3 +84,5 @@ steps:
       errors:
         - on: category cat-troops
           from: se-unit-a/con-min-shared
+        - on: category cat-troops
+          from: se-unit-b/con-min-shared
