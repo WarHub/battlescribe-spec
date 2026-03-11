@@ -150,6 +150,18 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Wait for Pinia stores to be available in the Vue/Nuxt app.
+    /// The page's load event may fire before Vue has fully initialized.
+    /// </summary>
+    public async Task WaitForPiniaAsync(int timeoutMs = 15_000)
+    {
+        await Page.WaitForFunctionAsync(
+            "() => !!document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia",
+            null,
+            new() { Timeout = timeoutMs });
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (Page is not null)
