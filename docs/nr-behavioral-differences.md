@@ -9,9 +9,9 @@
 
 | Metric | BattleScribe | New Recruit |
 |--------|-------------|-------------|
-| Total specs | 246 | 246 |
-| Expected to pass | 244 | 220 |
-| Expected to fail | 2 | 26 |
+| Total specs | 278 | 278 |
+| Expected to pass | 276 | 253 |
+| Expected to fail | 2 | 25 |
 
 **BattleScribe expected failures** (2): NR-specific condition specs where BS
 returns NaN for null childId (`condition-null-childid-nr-force`,
@@ -29,45 +29,15 @@ engines:
 
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
-| [Error placement](#1-error-placement) | 4 | Medium | NR places constraint errors on selection, not category |
-| [Import ordering](#2-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#3-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
-| [Scope/condition evaluation](#4-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
-| [Entry group behavior](#5-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
-| [Other behavioral differences](#6-other-behavioral-differences) | 3 | Medium | Auto-select root entries, hidden selection filtering, real-world data |
+| [Import ordering](#1-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
+| [Missing features](#2-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
+| [Scope/condition evaluation](#3-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
+| [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
+| [Other behavioral differences](#5-other-behavioral-differences) | 6 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
 
 ---
 
-## 1. Error Placement
-
-**4 specs** — NR places max/cost constraint errors on the **selection** node,
-while BattleScribe places them on the **category** node.
-
-All 4 specs expect error assertions like:
-```yaml
-error:
-  on: "category cat-troops"    # BattleScribe puts error here
-  from: "se-unit-a/con-max-1"
-```
-
-NR fires the same validation error but attaches it to the selection that violated
-the constraint, not the category the selection belongs to.
-
-| Spec | Expected `on` | NR `on` |
-|------|--------------|---------|
-| `constraint/constraint-cost-max-linked` | `category cat-troops` | `selection se-unit-a` |
-| `constraint/constraint-hidden-violation-linked` | `category cat-troops` | `selection se-unit-a` |
-| `constraint/constraint-max-violation-linked` | `category cat-troops` | `selection se-unit-a` |
-| `constraint/constraint-min-and-max` | `category cat-troops` | `selection se-unit-a` |
-
-**Root cause**: NR's `checkConstraints()` method reports errors on the node
-being checked. For max constraints with `scope=parent`, NR reports on the
-selection. BattleScribe's engine collects errors per-category during force
-validation and attributes them to the category node.
-
----
-
-## 2. Import Ordering
+## 1. Import Ordering
 
 **3 specs** — NR orders imported entries from CatalogueLinks BEFORE
 faction-specific entries. BattleScribe puts faction entries first.
@@ -82,7 +52,7 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ---
 
-## 3. Missing Features
+## 2. Missing Features
 
 **11 specs** — NR doesn't implement or expose certain BattleScribe features.
 
@@ -121,7 +91,7 @@ publication during link resolution.
 
 ---
 
-## 4. Scope/Condition Evaluation
+## 3. Scope/Condition Evaluation
 
 **3 specs** — NR evaluates certain condition types differently, causing
 modifiers to trigger when they shouldn't (or vice versa).
@@ -147,7 +117,7 @@ expected to fail on BS (`engines: {battlescribe: fail}`).
 
 ---
 
-## 5. Entry Group Behavior
+## 4. Entry Group Behavior
 
 **2 specs** — NR handles entry groups differently from BattleScribe.
 
@@ -171,9 +141,9 @@ on entry groups, so child selections don't appear under the expected categories.
 
 ---
 
-## 6. Other Behavioral Differences
+## 5. Other Behavioral Differences
 
-**3 specs** with distinct NR behavioral differences:
+**6 specs** with distinct NR behavioral differences:
 
 ### Auto-Select with `field=forces` Constraint
 | Spec | Issue |
@@ -201,12 +171,27 @@ of 1 for a hidden auto-selected entry.
 ### Real-World Data Source
 | Spec | Issue |
 |------|-------|
+| `real-world/wh40k-10e-create-army` | NR forceEntries lookup fails intermittently for dataSource-loaded game systems |
 | `real-world/wh40k-10e-space-marines-army` | NR produces different auto-selections and cost calculations for complex multi-catalogue armies |
 
 This real-world spec builds a Space Marines army and verifies auto-selections,
 unit types, and points costs. NR's results differ from BattleScribe when
 dealing with multi-catalogue data interactions and complex entry resolution
 chains in production game systems.
+
+### Auto-Select with `field=forces` Skipped
+| Spec | Issue |
+|------|-------|
+| `auto-select/auto-select-field-forces-skipped` | NR auto-selects entries with `field=forces` constraints; BS skips them |
+
+BattleScribe's auto-select only triggers for `field=selections` constraints.
+An entry with `min=1, field=forces` is NOT auto-selected. NR auto-selects
+based on any `min>=1` regardless of field type.
+
+### Selection Number with Min
+| Spec | Issue |
+|------|-------|
+| `selection/selection-number-with-min` | NR returns different number/amount for min-constrained selections |
 
 ---
 
@@ -285,7 +270,7 @@ roster node, then reading the node's error arrays. Key findings:
 - Error structure: `{message, constraintId?, ownerType, ownerEntryId}`
 - ConstraintId format: NR now maps cost limit errors to the `costLimits/`
   pseudo-entry convention (matching BattleScribe's format)
-- Max constraint errors go on the selection, not the category (unlike BS)
+- Max constraint errors go on the selection (both BS Oracle adapter and NR now agree)
 
 ### Catalogue Expansion and Entry Links
 
@@ -408,6 +393,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 
 | Issue | Fix | Specs Fixed |
 |-------|-----|-------------|
+| Error placement mismatch | BS Oracle adapter remaps category-level max/cost/hidden errors to selection-level (matching NR) | 4 |
 | Selection ordering | Insertion-order tracking via `__bsspec_seq` tags | ~15 |
 | Action/state index mismatch | `getSortedSelections()` helper for all action methods | 3 |
 | Child cost aggregation | `incrementAmount()` instead of `addInstance()` | 8 |
