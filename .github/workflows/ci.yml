@@ -44,8 +44,6 @@ jobs:
             --output github-actions
 
   nr-frozen:
-    # HAR file may become stale when NR deploys; don't block PRs
-    continue-on-error: true
     runs-on: ubuntu-latest
 
     steps:
