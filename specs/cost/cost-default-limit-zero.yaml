@@ -39,7 +39,6 @@ steps:
       costs:
         - typeId: pts
           value: 10
-      hasValidationErrors: true
       errors:
         - on: roster
           from: costLimits/pts

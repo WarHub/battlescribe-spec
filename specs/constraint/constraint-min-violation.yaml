@@ -57,4 +57,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 0
-      hasValidationErrors: true
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-min-1

@@ -71,4 +71,5 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
-      hasValidationErrors: true
+      errors:
+        - on: roster

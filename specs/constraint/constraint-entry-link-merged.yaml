@@ -70,4 +70,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
-      hasValidationErrors: true
+      errors:
+        - on: force fe-1
+          from: shared-unit/con-shared-max

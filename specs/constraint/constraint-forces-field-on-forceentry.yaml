@@ -50,6 +50,10 @@ steps:
     forceEntryIndex: 0
 
   # 3 Patrol forces, max 2 → validation error
+  # Each Patrol force instance evaluates the constraint independently
   - expectedState:
       forceCount: 3
-      hasValidationErrors: true
+      errors:
+        - on: roster
+        - on: roster
+        - on: roster

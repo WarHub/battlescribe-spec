@@ -62,4 +62,5 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
-      hasValidationErrors: true
+      errors:
+        - on: force fe-1
