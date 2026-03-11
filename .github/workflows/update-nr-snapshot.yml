@@ -86,10 +86,20 @@ jobs:
           echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
           echo "Release tag: $NEW_TAG"
 
+      - name: Generate GitHub App token
+        if: steps.check.outputs.changed == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.WARHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
+          owner: WarHub
+          repositories: newrecruit-har,battlescribe-spec
+
       - name: Publish release to WarHub/newrecruit-har
         if: steps.check.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           TAG="${{ steps.tag.outputs.new_tag }}"
           VERSION="${{ steps.record.outputs.client_version }}"
@@ -103,7 +113,7 @@ jobs:
       - name: Open PR to update testdata.json
         if: steps.check.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           TAG="${{ steps.tag.outputs.new_tag }}"
           VERSION="${{ steps.record.outputs.client_version }}"
