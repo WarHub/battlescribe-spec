@@ -66,18 +66,18 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
                 NotFound = HarNotFound.Abort,
             });
         }
-        var waitUntil = NavigationWaitStrategy;
+        // Use 'Load' for all modes — NetworkIdle can hang on persistent
+        // connections (analytics, ads, WebSockets) in the live site.
         await Page.GotoAsync(BaseUrl, new PageGotoOptions
         {
-            WaitUntil = waitUntil,
+            WaitUntil = WaitUntilState.Load,
             Timeout = 60_000,
         });
+        if (!_isFrozen)
+            await WaitForNetworkSettledAsync();
         // Dismiss cookie/consent dialogs if present
         await DismissDialogsAsync();
     }
-
-    private WaitUntilState NavigationWaitStrategy =>
-        _isFrozen ? WaitUntilState.Load : WaitUntilState.NetworkIdle;
 
     /// <summary>
     /// Navigate to the NR app page where systems can be selected/loaded.
@@ -86,9 +86,11 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     {
         await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
         {
-            WaitUntil = NavigationWaitStrategy,
+            WaitUntil = WaitUntilState.Load,
             Timeout = 30_000,
         });
+        if (!_isFrozen)
+            await WaitForNetworkSettledAsync();
         await DismissDialogsAsync();
     }
 
@@ -97,22 +99,14 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// </summary>
     public async Task NavigateToEditorAsync(string? listId = null)
     {
-        if (listId != null)
+        var url = listId != null ? $"{BaseUrl}/app/Lists/{listId}" : $"{BaseUrl}/app";
+        await Page.GotoAsync(url, new PageGotoOptions
         {
-            await Page.GotoAsync($"{BaseUrl}/app/Lists/{listId}", new PageGotoOptions
-            {
-                WaitUntil = NavigationWaitStrategy,
-                Timeout = 30_000,
-            });
-        }
-        else
-        {
-            await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
-            {
-                WaitUntil = NavigationWaitStrategy,
-                Timeout = 30_000,
-            });
-        }
+            WaitUntil = WaitUntilState.Load,
+            Timeout = 30_000,
+        });
+        if (!_isFrozen)
+            await WaitForNetworkSettledAsync();
         await DismissDialogsAsync();
     }
 
@@ -147,6 +141,22 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         catch
         {
             // Consent dialog may not be present — that's fine
+        }
+    }
+
+    /// <summary>
+    /// Best-effort wait for network to settle. Catches timeout so persistent
+    /// connections (analytics, WebSockets) don't cause hard failures.
+    /// </summary>
+    private async Task WaitForNetworkSettledAsync(int timeoutMs = 15_000)
+    {
+        try
+        {
+            await Page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = timeoutMs });
+        }
+        catch (TimeoutException)
+        {
+            // Expected when the site has persistent connections.
         }
     }
 
