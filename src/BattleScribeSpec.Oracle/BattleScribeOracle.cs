@@ -283,6 +283,10 @@ public sealed class BattleScribeOracle : IDisposable
                 CollectSelectionErrors(selection, result);
             }
         }
+        // Remap category-level max/hidden constraint errors to selection-level.
+        // BattleScribe places these on the category, but the canonical spec form
+        // uses selection-level placement (matching NR behavior).
+        RemapCategoryErrorsToSelection(result);
         return result;
     }
 
@@ -292,6 +296,31 @@ public sealed class BattleScribeOracle : IDisposable
         foreach (var child in JavaListToList<Selection>(selection.getSelections()))
         {
             CollectSelectionErrors(child, result);
+        }
+    }
+
+    /// <summary>
+    /// Remap category-level max/hidden/cost-over-limit constraint errors to selection-level.
+    /// BattleScribe's Java engine places these on the category node, but both NR and the
+    /// canonical spec form report them on the selection that violated the constraint.
+    /// Min constraint errors stay on category (both engines agree on that placement).
+    /// </summary>
+    private static void RemapCategoryErrorsToSelection(List<ValidationErrorState> errors)
+    {
+        for (int i = 0; i < errors.Count; i++)
+        {
+            var e = errors[i];
+            if (e.OwnerType != "category" || e.EntryId is null)
+                continue;
+
+            // Only remap over-limit and hidden errors (max constraints, cost-max, hidden entries).
+            // Min constraints ("must have", "must spend") stay on category.
+            if (e.ConstraintId == "hidden" ||
+                e.Message.Contains("too many") ||
+                e.Message.Contains("too much"))
+            {
+                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId };
+            }
         }
     }
 

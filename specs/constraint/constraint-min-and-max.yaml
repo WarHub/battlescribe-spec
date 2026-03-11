@@ -1,7 +1,5 @@
 id: constraint-min-and-max
 category: constraint
-engines:
-  newrecruit: fail
 description: Both min and max constraints on the same entry are evaluated
 tags:
   - validation-errors
@@ -78,5 +76,5 @@ steps:
       forces:
         - selectionCount: 3
       errors:
-        - on: category cat-troops
+        - on: selection se-unit-a
           from: se-unit-a/con-max-2

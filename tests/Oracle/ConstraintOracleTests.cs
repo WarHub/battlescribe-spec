@@ -188,10 +188,10 @@ public class ConstraintOracleTests
         Assert.Single(errorsAt2);
         Assert.Single(errorsAt3);
 
-        // Verify placement: all errors are on category (BS behavior)
+        // Verify placement: errors are remapped from category to selection
         foreach (var e in errorsAt3)
         {
-            Assert.Equal("category", e.OwnerType);
+            Assert.Equal("selection", e.OwnerType);
         }
     }
 

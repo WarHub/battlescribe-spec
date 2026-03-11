@@ -1,7 +1,5 @@
 id: constraint-cost-max-linked
 category: constraint
-engines:
-  newrecruit: fail
 description: Max cost constraint produces structured error with entry and constraint links
 tags:
   - validation-errors
@@ -69,5 +67,5 @@ steps:
           selections:
             - name: Unit A
       errors:
-        - on: category cat-troops
+        - on: selection se-unit-a
           from: se-unit-a/con-cost-max
