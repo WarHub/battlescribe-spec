@@ -50,12 +50,15 @@ public static class HarRecorder
 
         var page = await context.NewPageAsync();
 
-        // Navigate to landing page — captures HTML + JS/CSS bundles
+        // Navigate to landing page — captures HTML + JS/CSS bundles.
+        // Use 'Load' instead of 'NetworkIdle' because NR's analytics/ad
+        // scripts may keep connections open indefinitely, causing timeouts.
         await page.GotoAsync(baseUrl, new PageGotoOptions
         {
-            WaitUntil = WaitUntilState.NetworkIdle,
+            WaitUntil = WaitUntilState.Load,
             Timeout = 60_000,
         });
+        await WaitForNetworkSettledAsync(page);
 
         // Dismiss consent dialog if present
         try
@@ -72,12 +75,20 @@ public static class HarRecorder
         // Navigate to /app — captures app-specific assets
         await page.GotoAsync($"{baseUrl.TrimEnd('/')}/app", new PageGotoOptions
         {
-            WaitUntil = WaitUntilState.NetworkIdle,
+            WaitUntil = WaitUntilState.Load,
             Timeout = 60_000,
         });
+        await WaitForNetworkSettledAsync(page);
 
-        // Wait for NR to fully initialize
-        await page.WaitForTimeoutAsync(3000);
+        // Wait for NR's Vue/Nuxt app to fully initialize (Pinia stores available)
+        try
+        {
+            await page.WaitForFunctionAsync(
+                "() => !!document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia",
+                null,
+                new() { Timeout = 15_000 });
+        }
+        catch (TimeoutException) { /* app may have changed structure; continue */ }
 
         // Close context to finalize the HAR file
         await context.CloseAsync();
@@ -143,6 +154,24 @@ public static class HarRecorder
 
         var options = new JsonSerializerOptions { WriteIndented = false };
         await File.WriteAllTextAsync(harFilePath, doc!.ToJsonString(options));
+    }
+
+    /// <summary>
+    /// Best-effort wait for network to settle. Uses NetworkIdle with a short
+    /// timeout so we capture most traffic without hard-failing when persistent
+    /// connections (analytics, WebSockets) keep the network busy.
+    /// </summary>
+    private static async Task WaitForNetworkSettledAsync(IPage page, int timeoutMs = 15_000)
+    {
+        try
+        {
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = timeoutMs });
+        }
+        catch (TimeoutException)
+        {
+            // Expected when the site has persistent connections (ads, analytics, SSE).
+            // Traffic recorded up to this point is sufficient.
+        }
     }
 
     private static bool IsAllowedUrl(string url)
