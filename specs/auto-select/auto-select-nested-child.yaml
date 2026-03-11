@@ -1,0 +1,53 @@
+id: auto-select-nested-child
+category: auto-select
+description: Auto-selected parent entry also triggers auto-selection of its children with min constraints
+tags: [auto-select, constraint, min, nested]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Parent Unit
+          type: unit
+          constraints:
+            - id: con-parent-min
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+          selectionEntries:
+            - id: se-child
+              name: Mandatory Upgrade
+              type: upgrade
+              constraints:
+                - id: con-child-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Parent Unit is auto-selected (min=1). Its child Mandatory Upgrade
+  # is also auto-selected because it has min=1.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Parent Unit
+              type: unit
+              children:
+                - name: Mandatory Upgrade
+                  type: upgrade
+                  number: 1

@@ -1,0 +1,59 @@
+id: selection-entry-group-default-nested
+category: selection
+description: Nested groups with defaultSelectionEntryId — each level auto-selects its default
+tags: [defaultSelectionEntryId, nested]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Parent Unit
+          type: unit
+          selectionEntryGroups:
+            - id: seg-outer
+              name: Equipment
+              defaultSelectionEntryId: se-armor
+              selectionEntries:
+                - id: se-armor
+                  name: Armor
+                  type: upgrade
+                  selectionEntryGroups:
+                    - id: seg-inner
+                      name: Armor Type
+                      defaultSelectionEntryId: se-light
+                      selectionEntries:
+                        - id: se-light
+                          name: Light Armor
+                          type: upgrade
+                        - id: se-heavy
+                          name: Heavy Armor
+                          type: upgrade
+                - id: se-shield
+                  name: Shield
+                  type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Parent Unit selected → Armor auto-selected (outer default) →
+  # Light Armor auto-selected (inner default).
+  # Both levels of defaults are applied without errors.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Parent Unit
+      errors: []

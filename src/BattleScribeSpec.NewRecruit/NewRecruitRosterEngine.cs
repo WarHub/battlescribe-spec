@@ -72,7 +72,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         {
             // Navigate to /app and wait for NR to initialize
             await _browser.NavigateToAppAsync();
-            await _browser.Page.WaitForTimeoutAsync(2000);
+            await _browser.WaitForPiniaAsync();
 
             // Generate BattleScribe XML from spec data
             var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
@@ -214,7 +214,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         try
         {
             await _browser.NavigateToAppAsync();
-            await _browser.Page.WaitForTimeoutAsync(2000);
+            await _browser.WaitForPiniaAsync();
 
             // Build files array for loadSystemFromFs
             var fileData = files.Select(f => new { name = f.FileName, path = $"/spec/{f.FileName}", data = f.Content }).ToArray();

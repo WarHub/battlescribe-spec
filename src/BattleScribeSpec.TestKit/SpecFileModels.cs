@@ -190,6 +190,9 @@ public sealed class ExpectedStateDef
     [YamlMember(Alias = "forces")]
     public List<ExpectedForceDef>? Forces { get; set; }
 
+    [YamlMember(Alias = "costCount")]
+    public int? CostCount { get; set; }
+
     [YamlMember(Alias = "costs")]
     public List<ExpectedCostDef>? Costs { get; set; }
 

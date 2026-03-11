@@ -175,14 +175,19 @@ on entry groups, so child selections don't appear under the expected categories.
 
 **3 specs** with distinct NR behavioral differences:
 
-### Auto-Select Root Entries
+### Auto-Select with `field=forces` Constraint
 | Spec | Issue |
 |------|-------|
-| `constraint/constraint-forces-field` | NR auto-selects root entry with `min>=1` when adding force; BS doesn't |
+| `constraint/constraint-forces-field` | NR auto-selects entry whose only min constraint has `field=forces`; BS doesn't |
 
 After `addForce`, spec expects 0 selections but NR has 1 (auto-selected entry
-with `type=model, min=1`). BattleScribe only auto-selects child entries, not
-root entries in the forces field.
+with `type=model, min=1, field=forces`). BattleScribe's auto-select mechanism
+(`getDefaultAmount`) only considers `field=selections` constraints. A `field=forces`
+constraint counts forces, not selections, so it doesn't trigger auto-selection.
+NR doesn't distinguish `field` types and auto-selects based on any `min>=1`.
+
+Note: BattleScribe _does_ auto-select root entries that have `min>=1` with
+`field=selections` — see `constraint-hidden-enforcement` and real-world specs.
 
 ### Hidden Selection Filtering
 | Spec | Issue |

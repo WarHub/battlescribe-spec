@@ -1,0 +1,59 @@
+id: selection-number-with-min
+category: selection
+# NR fails: creates 1 Trooper with number=1 instead of number=3.
+# Verified NR doesn't create 3 separate selections either — it simply
+# doesn't apply the min constraint to set the initial child number.
+engines:
+  newrecruit: fail
+description: Entry with min=3 constraint — verify initial selection number respects min
+tags: [selection, number, constraint, min]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Parent Unit
+          type: unit
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              constraints:
+                - id: con-min
+                  type: min
+                  value: 3
+                  field: selections
+                  scope: parent
+                - id: con-max
+                  type: max
+                  value: 10
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # When Parent Unit is selected, Trooper (child with min=3) should be
+  # auto-selected with number=3 to satisfy the min constraint.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Parent Unit
+              children:
+                - name: Trooper
+                  type: model
+                  number: 3

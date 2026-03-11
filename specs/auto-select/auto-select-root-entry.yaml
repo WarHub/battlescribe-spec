@@ -1,0 +1,43 @@
+id: auto-select-root-entry
+category: auto-select
+description: Root entry with min=1 (field=selections) is auto-selected after addForce
+tags: [auto-select, constraint, min]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-mandatory
+          name: Mandatory Unit
+          type: unit
+          constraints:
+            - id: con-min
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+        - id: se-optional
+          name: Optional Unit
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Mandatory Unit (min=1, field=selections) is auto-selected;
+  # Optional Unit (no min constraint) is not.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Mandatory Unit
+              type: unit
+              number: 1

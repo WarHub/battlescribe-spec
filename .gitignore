@@ -1,4 +1,5 @@
 artifacts/
+obj/
 *.user
 *.suo
 .vs/
