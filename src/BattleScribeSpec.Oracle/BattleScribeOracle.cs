@@ -537,6 +537,18 @@ public sealed class BattleScribeOracle : IDisposable
                     return (id, c.getId());
                 }
             }
+            // Entry has no matching constraint — check entry links targeting this entry
+            if (_linkConstraintLookup.TryGetValue(id, out var linkConstraints))
+            {
+                foreach (var (linkId, constraintId, constraintType) in linkConstraints)
+                {
+                    if ((constraintType == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
+                        (constraintType == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                    {
+                        return (linkId, constraintId);
+                    }
+                }
+            }
         }
         return (null, null);
     }
@@ -601,6 +613,8 @@ public sealed class BattleScribeOracle : IDisposable
     private readonly List<SelectionEntry> _setupSelectionEntries = [];
     private readonly List<CostType> _setupCostTypes = [];
     private readonly Dictionary<string, SelectionEntry> _entryLookup = new();
+    // Entry link constraints indexed by target entry ID: targetId → [(linkId, constraintId, constraintType)]
+    private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType)>> _linkConstraintLookup = new();
     // Per-catalogue entry lists for multi-catalogue support
     private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
     // Maps force object identity to catalogue index (avoids positional corruption on removal)
@@ -1283,6 +1297,7 @@ public sealed class BattleScribeOracle : IDisposable
         _forceCatalogueMap.Clear();
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
+        _linkConstraintLookup.Clear();
 
         foreach (var catSpec in catalogues)
         {
@@ -1356,6 +1371,26 @@ public sealed class BattleScribeOracle : IDisposable
             if (sharedSelectionEntries != null)
                 foreach (var se in sharedSelectionEntries)
                     IndexEntries(se);
+
+            // Index entry link constraints by target entry ID for error resolution.
+            if (catSpec.EntryLinks != null)
+            {
+                foreach (var elSpec in catSpec.EntryLinks)
+                {
+                    if (elSpec.Constraints is { Count: > 0 } && elSpec.TargetId is not null)
+                    {
+                        if (!_linkConstraintLookup.TryGetValue(elSpec.TargetId, out var list))
+                        {
+                            list = [];
+                            _linkConstraintLookup[elSpec.TargetId] = list;
+                        }
+                        foreach (var cSpec in elSpec.Constraints)
+                        {
+                            list.Add((elSpec.Id, cSpec.Id, cSpec.Type ?? "max"));
+                        }
+                    }
+                }
+            }
         }
 
         // Default active catalogue is the first loaded catalogue.
@@ -1694,6 +1729,7 @@ public sealed class BattleScribeOracle : IDisposable
         _setupForceEntries.Clear();
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
+        _linkConstraintLookup.Clear();
         GC.SuppressFinalize(this);
     }
 

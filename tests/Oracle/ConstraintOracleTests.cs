@@ -318,4 +318,49 @@ public class ConstraintOracleTests
             Assert.Equal("con-force-field", e.ConstraintId);
         }
     }
+
+    [Fact]
+    public void EntryLinkOwnConstraint_ResolvesFromLinkConstraint()
+    {
+        var engine = new OracleRosterEngine();
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test GS",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
+            SharedSelectionEntries = [new ProtocolSelectionEntry
+            {
+                Id = "shared-unit",
+                Name = "Strike Team",
+                Type = "unit",
+            }],
+            EntryLinks = [new ProtocolEntryLink
+            {
+                Id = "link-1",
+                Name = "Strike Team",
+                TargetId = "shared-unit",
+                Type = "selectionEntry",
+                Constraints = [new ProtocolConstraint { Id = "con-link-max", Type = "max", Value = 2, Field = "selections", Scope = "force" }],
+            }],
+        };
+        engine.Setup(gs, [cat]);
+        engine.AddForce(0);
+        engine.SelectEntry(0, 0);
+        engine.SelectEntry(0, 0);
+        engine.SelectEntry(0, 0);
+
+        var errors = engine.GetValidationErrors();
+        Assert.Single(errors);
+        var e = errors[0];
+        Assert.Equal("force", e.OwnerType);
+        Assert.Equal("fe-1", e.OwnerEntryId);
+        Assert.Equal("link-1", e.EntryId);
+        Assert.Equal("con-link-max", e.ConstraintId);
+    }
 }

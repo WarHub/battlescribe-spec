@@ -63,3 +63,4 @@ steps:
         - selectionCount: 3
       errors:
         - on: force fe-1
+          from: link-1/con-link-max
