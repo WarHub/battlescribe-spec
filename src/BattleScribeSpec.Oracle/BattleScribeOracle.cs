@@ -291,6 +291,11 @@ public sealed class BattleScribeOracle : IDisposable
         // BattleScribe places these on the category, but the canonical spec form
         // uses selection-level placement (matching NR behavior).
         RemapCategoryErrorsToSelection(result);
+        // Remap roster/force-level entry constraint errors to selection-level.
+        // BattleScribe places scope=roster errors on the roster and scope=force
+        // errors on the force, but NR attributes them to the selection.
+        RemapRosterErrorsToSelection(result);
+        RemapForceErrorsToSelection(result);
         return result;
     }
 
@@ -324,6 +329,53 @@ public sealed class BattleScribeOracle : IDisposable
                 e.Message.Contains("too much"))
             {
                 errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId };
+            }
+        }
+    }
+
+    /// <summary>
+    /// Remap roster-level max constraint errors to selection-level.
+    /// BattleScribe's Java engine places scope=roster shared constraint violations
+    /// on the Roster node, but NR attributes them to the selection entry.
+    /// </summary>
+    private static void RemapRosterErrorsToSelection(List<ValidationErrorState> errors)
+    {
+        for (int i = 0; i < errors.Count; i++)
+        {
+            var e = errors[i];
+            if (e.OwnerType != "roster" || e.EntryId is null || e.EntryId == "costLimits")
+                continue;
+
+            if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
+                && !e.Message.Contains("forces"))
+            {
+                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId };
+            }
+        }
+    }
+
+    /// <summary>
+    /// Remap force-level max constraint errors to selection-level.
+    /// BattleScribe's Java engine places scope=force constraint violations on the
+    /// Force node, but NR attributes them to the selection entry. For entry-link
+    /// constraints, resolve the link target to get the selection entry ID.
+    /// </summary>
+    private void RemapForceErrorsToSelection(List<ValidationErrorState> errors)
+    {
+        for (int i = 0; i < errors.Count; i++)
+        {
+            var e = errors[i];
+            if (e.OwnerType != "force" || e.EntryId is null)
+                continue;
+
+            if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
+                && !e.Message.Contains("forces"))
+            {
+                // Resolve entry link → target, or use entryId directly for shared entries
+                var selectionEntryId = _linkTargetMap.TryGetValue(e.EntryId, out var targetId)
+                    ? targetId
+                    : e.EntryId;
+                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = selectionEntryId };
             }
         }
     }
@@ -615,6 +667,8 @@ public sealed class BattleScribeOracle : IDisposable
     private readonly Dictionary<string, SelectionEntry> _entryLookup = new();
     // Entry link constraints indexed by target entry ID: targetId → [(linkId, constraintId, constraintType)]
     private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType)>> _linkConstraintLookup = new();
+    // Entry link target resolution: linkId → targetId
+    private readonly Dictionary<string, string> _linkTargetMap = new();
     // Per-catalogue entry lists for multi-catalogue support
     private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
     // Maps force object identity to catalogue index (avoids positional corruption on removal)
@@ -1298,6 +1352,7 @@ public sealed class BattleScribeOracle : IDisposable
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
         _linkConstraintLookup.Clear();
+        _linkTargetMap.Clear();
 
         foreach (var catSpec in catalogues)
         {
@@ -1372,11 +1427,13 @@ public sealed class BattleScribeOracle : IDisposable
                 foreach (var se in sharedSelectionEntries)
                     IndexEntries(se);
 
-            // Index entry link constraints by target entry ID for error resolution.
+            // Index entry link constraints and targets for error resolution.
             if (catSpec.EntryLinks != null)
             {
                 foreach (var elSpec in catSpec.EntryLinks)
                 {
+                    if (elSpec.TargetId is not null)
+                        _linkTargetMap[elSpec.Id] = elSpec.TargetId;
                     if (elSpec.Constraints is { Count: > 0 } && elSpec.TargetId is not null)
                     {
                         if (!_linkConstraintLookup.TryGetValue(elSpec.TargetId, out var list))
@@ -1730,6 +1787,7 @@ public sealed class BattleScribeOracle : IDisposable
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
         _linkConstraintLookup.Clear();
+        _linkTargetMap.Clear();
         GC.SuppressFinalize(this);
     }
 

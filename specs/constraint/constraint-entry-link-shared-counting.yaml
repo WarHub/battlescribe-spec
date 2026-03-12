@@ -84,10 +84,5 @@ steps:
       forces:
         - selectionCount: 4
       errors:
-        - on: roster
+        - on: selection shared-unit
           from: shared-unit/con-max-shared
-      engines:
-        newrecruit:
-          errors:
-            - on: selection shared-unit
-              from: shared-unit/con-max-shared

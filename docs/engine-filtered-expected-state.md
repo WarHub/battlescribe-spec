@@ -226,10 +226,7 @@ differences:
 
 | Category | Spec | What differs |
 |----------|------|-------------|
-| constraint | `constraint-entry-link-merged` | Error placement: force vs selection |
-| constraint | `constraint-entry-link-own` | Error placement: force vs selection |
-| constraint | `constraint-entry-link-shared-counting` | Error placement: roster vs selection |
-| constraint | `constraint-entry-link-shared-target` | Error placement: roster vs selection |
+| constraint | `constraint-entry-link-merged` | Error `from` resolution: shared entry vs link |
 | constraint | `constraint-shared-linked` | Error count and entryId |
 | constraint | `constraint-min-on-force-linked` | NR reports extra error on selection |
 | constraint | `constraint-max-violation` | NR fires at intermediate step |

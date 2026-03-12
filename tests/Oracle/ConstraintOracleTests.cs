@@ -358,8 +358,8 @@ public class ConstraintOracleTests
         var errors = engine.GetValidationErrors();
         Assert.Single(errors);
         var e = errors[0];
-        Assert.Equal("force", e.OwnerType);
-        Assert.Equal("fe-1", e.OwnerEntryId);
+        Assert.Equal("selection", e.OwnerType);
+        Assert.Equal("shared-unit", e.OwnerEntryId);
         Assert.Equal("link-1", e.EntryId);
         Assert.Equal("con-link-max", e.ConstraintId);
     }

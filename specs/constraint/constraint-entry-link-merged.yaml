@@ -70,7 +70,7 @@ steps:
       forces:
         - selectionCount: 3
       errors:
-        - on: force fe-1
+        - on: selection shared-unit
           from: shared-unit/con-shared-max
       engines:
         newrecruit:

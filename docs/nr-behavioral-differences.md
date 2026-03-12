@@ -217,10 +217,7 @@ the entry link).
 
 | Spec | BS error placement | NR error placement |
 |------|-------------------|-------------------|
-| `constraint/constraint-entry-link-merged` | force | selection |
-| `constraint/constraint-entry-link-own` | force | selection |
-| `constraint/constraint-entry-link-shared-counting` | roster | selection |
-| `constraint/constraint-entry-link-shared-target` | roster | selection |
+| `constraint/constraint-entry-link-merged` | selection (same) | selection (same, different `from`) |
 | `constraint/constraint-shared-linked` | force | selection (different entryId) |
 
 ### Hidden Constraint (1 spec) ✅ Resolved
