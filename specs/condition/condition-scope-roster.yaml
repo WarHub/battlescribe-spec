@@ -43,17 +43,17 @@ steps:
     forceIndex: 1
     entryIndex: 1
 
-  - assert: selectionName
-    forceIndex: 1
-    selectionIndex: 0
-    expected: Target
-
-  # Select trigger in force 0 — roster scope sees it
+  - expectedState:
+      forces:
+        - {}
+        - selections:
+            - name: Target
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 1
-    selectionIndex: 0
-    expected: Roster Triggered
+  - expectedState:
+      forces:
+        - {}
+        - selections:
+            - name: Roster Triggered

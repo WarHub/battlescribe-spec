@@ -58,10 +58,10 @@ public sealed class SpecRunner
                 {
                     if (step.Action is not null)
                         ExecuteAction(step, i);
-                    else if (step.Assert is not null || step.ExpectedState is not null)
+                    else if (step.ExpectedState is not null)
                         ExecuteAssertion(step, i);
                     else
-                        _errors.Add($"Step {i}: neither 'action' nor 'assert'/'expectedState' defined");
+                        _errors.Add($"Step {i}: neither 'action' nor 'expectedState' defined");
                 }
                 catch (Exception ex)
                 {
@@ -281,79 +281,7 @@ public sealed class SpecRunner
 
     private void ExecuteAssertion(StepDef step, int stepIndex)
     {
-        if (step.Assert is not null)
-        {
-            switch (step.Assert)
-            {
-                case "rosterState":
-                    AssertExpectedState(step.ExpectedState, stepIndex);
-                    break;
-
-                case "forceCount":
-                    AssertEqual(stepIndex, "forceCount",
-                        Convert.ToInt32(step.Expected),
-                        _engine.GetRosterState().Forces.Count);
-                    break;
-
-                case "selectionCount":
-                {
-                    var state = _engine.GetRosterState();
-                    var forceIdx = step.ForceIndex ?? 0;
-                    if (forceIdx < state.Forces.Count)
-                    {
-                        AssertEqual(stepIndex, "selectionCount",
-                            Convert.ToInt32(step.Expected),
-                            state.Forces[forceIdx].Selections.Count);
-                    }
-                    else
-                    {
-                        _errors.Add($"Step {stepIndex}: force index {forceIdx} out of range (have {state.Forces.Count})");
-                    }
-                    break;
-                }
-
-                case "selectionName":
-                {
-                    var state = _engine.GetRosterState();
-                    var forceIdx = step.ForceIndex ?? 0;
-                    var selIdx = step.SelectionIndex ?? 0;
-                    var expectedName = step.Expected?.ToString();
-                    if (forceIdx < state.Forces.Count && selIdx < state.Forces[forceIdx].Selections.Count)
-                    {
-                        AssertEqual(stepIndex, "selectionName",
-                            expectedName ?? "",
-                            state.Forces[forceIdx].Selections[selIdx].Name);
-                    }
-                    else
-                    {
-                        _errors.Add($"Step {stepIndex}: force[{forceIdx}].selection[{selIdx}] out of range");
-                    }
-                    break;
-                }
-
-                case "totalCost":
-                {
-                    var state = _engine.GetRosterState();
-                    var typeId = step.CostTypeId;
-                    var expectedVal = Convert.ToDouble(step.Expected);
-                    var cost = state.Costs.FirstOrDefault(c => c.TypeId == typeId);
-                    if (cost is null)
-                    {
-                        _errors.Add($"Step {stepIndex}: cost type '{typeId}' not found");
-                    }
-                    else
-                    {
-                        AssertEqual(stepIndex, $"totalCost[{typeId}]", expectedVal, cost.Value);
-                    }
-                    break;
-                }
-
-                default:
-                    _errors.Add($"Step {stepIndex}: unknown assert type '{step.Assert}'");
-                    break;
-            }
-        }
-        else if (step.ExpectedState is not null)
+        if (step.ExpectedState is not null)
         {
             AssertExpectedState(step.ExpectedState, stepIndex);
         }

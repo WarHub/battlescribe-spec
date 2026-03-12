@@ -34,19 +34,19 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 100
-
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 0
 
   # After deselect: cost should be recalculated to 0
-  - assert: totalCost
-    costTypeId: pts
-    expected: 0
-
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 0
   - expectedState:
       forces:
         - selectionCount: 0

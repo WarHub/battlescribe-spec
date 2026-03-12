@@ -35,49 +35,45 @@ setup:
 
 steps:
   # Start empty
-  - assert: forceCount
-    expected: 0
-  # Add force
+  - expectedState:
+      forceCount: 0
   - action: addForce
     forceEntryIndex: 0
-  - assert: forceCount
-    expected: 1
-  # Select first unit
+  - expectedState:
+      forceCount: 1
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  - assert: totalCost
-    costTypeId: pts
-    expected: 30
-  # Select second unit
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 30
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1
-  - assert: totalCost
-    costTypeId: pts
-    expected: 120
-  # Duplicate first
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 120
   - action: duplicateSelection
     forceIndex: 0
     selectionIndex: 0
-  - assert: totalCost
-    costTypeId: pts
-    expected: 150
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 3
-  # Deselect the heavy
+  - expectedState:
+      forces:
+        - selectionCount: 3
+      costs:
+        - typeId: pts
+          value: 150
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 1
-  - assert: totalCost
-    costTypeId: pts
-    expected: 60
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 2
-  # Remove force
+  - expectedState:
+      forces:
+        - selectionCount: 2
+      costs:
+        - typeId: pts
+          value: 60
   - action: removeForce
     forceIndex: 0
-  - assert: forceCount
-    expected: 0
+  - expectedState:
+      forceCount: 0

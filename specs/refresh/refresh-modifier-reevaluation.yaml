@@ -40,27 +40,23 @@ steps:
     forceIndex: 0
     entryIndex: 1
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Original
-
-  # Add trigger → modifier condition now true → refresh re-evaluates
+  - expectedState:
+      forces:
+        - selections:
+            - name: Original
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Modified
-
-  # Remove trigger → modifier condition now false → original name
+  - expectedState:
+      forces:
+        - selections:
+            - name: Modified
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 1
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Original
+  - expectedState:
+      forces:
+        - selections:
+            - name: Original

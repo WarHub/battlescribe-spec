@@ -43,17 +43,15 @@ steps:
     forceIndex: 0
     entryIndex: 1
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Target
-
-  # Trigger in force 1 → roster scope picks it up
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
   - action: selectEntry
     forceIndex: 1
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Cross Force Activated
+  - expectedState:
+      forces:
+        - selections:
+            - name: Cross Force Activated

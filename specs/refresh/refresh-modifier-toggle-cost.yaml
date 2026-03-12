@@ -52,24 +52,23 @@ steps:
     forceIndex: 0
     entryIndex: 1
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 100
-
-  # Add trigger → modifier sets cost to 50
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 50
-
-  # Remove trigger → back to base cost 100
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 50
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 1
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 100
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100

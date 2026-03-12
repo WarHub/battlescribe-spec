@@ -53,7 +53,7 @@ steps:
     entryIndex: 0
 
   # 1 trigger / 2 total → threshold = 2/100*50 = 1.0 → 1 >= 1.0 → true
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Percent Met
+  - expectedState:
+      forces:
+        - selections:
+            - name: Percent Met

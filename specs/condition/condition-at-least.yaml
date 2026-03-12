@@ -51,7 +51,7 @@ steps:
     entryIndex: 0
 
   # After trigger: condition met, modifier applied
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Activated
+  - expectedState:
+      forces:
+        - selections:
+            - name: Activated

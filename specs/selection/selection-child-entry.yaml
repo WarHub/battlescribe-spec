@@ -31,9 +31,9 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 1
+  - expectedState:
+      forces:
+        - selectionCount: 1
   - action: selectChildEntry
     forceIndex: 0
     selectionIndex: 0

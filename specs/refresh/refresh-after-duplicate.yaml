@@ -32,15 +32,17 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  - assert: totalCost
-    costTypeId: pts
-    expected: 25
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 25
   - action: duplicateSelection
     forceIndex: 0
     selectionIndex: 0
-  - assert: totalCost
-    costTypeId: pts
-    expected: 50
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 50
   - expectedState:
       forces:
         - selectionCount: 2

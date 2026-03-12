@@ -41,15 +41,14 @@ steps:
     entryIndex: 0
 
   # 3 selections at max scope
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 3
-
+  - expectedState:
+      forces:
+        - selectionCount: 3
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   # 4 selections - engine allows it
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 4
+  - expectedState:
+      forces:
+        - selectionCount: 4

@@ -33,11 +33,10 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  - assert: totalCost
-    costTypeId: pts
-    expected: 10
-  # setSelectionCount is a no-op for root/force-level entries in the BattleScribe engine.
-  # Root entries always create new selections via selectEntry, not via count.
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 10
   - action: setSelectionCount
     forceIndex: 0
     entryIndex: 0

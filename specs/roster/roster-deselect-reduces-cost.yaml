@@ -34,10 +34,10 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 100
-
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 0

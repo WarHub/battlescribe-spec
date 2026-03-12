@@ -37,7 +37,7 @@ steps:
     entryIndex: 0
 
   # With exactly 1 selection, equalTo(1) is true
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Exactly One
+  - expectedState:
+      forces:
+        - selections:
+            - name: Exactly One

@@ -50,6 +50,7 @@ steps:
       forces:
         - selectionCount: 2
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 200
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 200

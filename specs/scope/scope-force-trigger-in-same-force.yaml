@@ -44,7 +44,7 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Same Force Trigger
+  - expectedState:
+      forces:
+        - selections:
+            - name: Same Force Trigger

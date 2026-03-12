@@ -37,7 +37,7 @@ steps:
     entryIndex: 0
 
   # With 1 selection, lessThan(2) is true
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Few Present
+  - expectedState:
+      forces:
+        - selections:
+            - name: Few Present

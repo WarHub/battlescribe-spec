@@ -40,17 +40,16 @@ steps:
     entryIndex: 1
 
   # No trigger yet
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Target
-
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   # Trigger added to force → condition met
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Force Has Trigger
+  - expectedState:
+      forces:
+        - selections:
+            - name: Force Has Trigger

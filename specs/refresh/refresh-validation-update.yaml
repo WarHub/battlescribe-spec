@@ -34,42 +34,38 @@ steps:
     forceEntryIndex: 0
 
   # Auto-selected 1 (min=1)
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 1
-
+  - expectedState:
+      forces:
+        - selectionCount: 1
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   # 2 selections (1 auto + 1 manual)
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 2
-
+  - expectedState:
+      forces:
+        - selectionCount: 2
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   # 3 selections
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 3
-
+  - expectedState:
+      forces:
+        - selectionCount: 3
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   # 4 selections
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 4
-
+  - expectedState:
+      forces:
+        - selectionCount: 4
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 3
 
   # Back to 3
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 3
+  - expectedState:
+      forces:
+        - selectionCount: 3

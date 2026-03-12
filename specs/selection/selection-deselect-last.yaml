@@ -32,15 +32,15 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 1
-  - assert: totalCost
-    costTypeId: pts
-    expected: 50
+  - expectedState:
+      forces:
+        - selectionCount: 1
+      costs:
+        - typeId: pts
+          value: 50
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 0
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 0
+  - expectedState:
+      forces:
+        - selectionCount: 0

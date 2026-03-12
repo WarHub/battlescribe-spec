@@ -25,8 +25,8 @@ steps:
     forceEntryIndex: 0
   - action: addForce
     forceEntryIndex: 1
-  - assert: forceCount
-    expected: 2
+  - expectedState:
+      forceCount: 2
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

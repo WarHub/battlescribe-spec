@@ -24,8 +24,8 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
-  - assert: forceCount
-    expected: 1
+  - expectedState:
+      forceCount: 1
   - expectedState:
       forceCount: 1
       forces:

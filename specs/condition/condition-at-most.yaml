@@ -37,7 +37,7 @@ steps:
     entryIndex: 0
 
   # With 1 selection, atMost(1) is true → modifier applied
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Few Units
+  - expectedState:
+      forces:
+        - selections:
+            - name: Few Units

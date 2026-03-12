@@ -51,9 +51,9 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1
-  - assert: totalCost
-    costTypeId: pts
-    expected: 300
-  - assert: totalCost
-    costTypeId: pl
-    expected: 15
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 300
+        - typeId: pl
+          value: 15

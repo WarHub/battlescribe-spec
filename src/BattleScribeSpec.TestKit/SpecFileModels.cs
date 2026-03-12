@@ -154,14 +154,6 @@ public sealed class StepDef
     [YamlMember(Alias = "value")]
     public double? Value { get; set; }
 
-    // ===== Assertion fields =====
-
-    [YamlMember(Alias = "assert")]
-    public string? Assert { get; set; }
-
-    [YamlMember(Alias = "expected")]
-    public object? Expected { get; set; }
-
     [YamlMember(Alias = "path")]
     public string? Path { get; set; }
 

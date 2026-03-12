@@ -37,7 +37,7 @@ steps:
     entryIndex: 0
 
   # Condition requires 99 selections — false, so modifier not applied
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Original Name
+  - expectedState:
+      forces:
+        - selections:
+            - name: Original Name
