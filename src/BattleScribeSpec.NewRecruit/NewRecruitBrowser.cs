@@ -66,9 +66,12 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
                 NotFound = HarNotFound.Abort,
             });
         }
+        // In frozen mode, go directly to /app since HAR replay has issues
+        // re-serving JS resources across full page navigations to different URLs.
+        var initialUrl = _isFrozen ? $"{BaseUrl}/app" : BaseUrl;
         // Use 'Load' for all modes — NetworkIdle can hang on persistent
         // connections (analytics, ads, WebSockets) in the live site.
-        await Page.GotoAsync(BaseUrl, new PageGotoOptions
+        await Page.GotoAsync(initialUrl, new PageGotoOptions
         {
             WaitUntil = WaitUntilState.Load,
             Timeout = 60_000,
@@ -84,13 +87,29 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// </summary>
     public async Task NavigateToAppAsync()
     {
-        await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
+        if (_isFrozen)
         {
-            WaitUntil = WaitUntilState.Load,
-            Timeout = 30_000,
-        });
-        if (!_isFrozen)
+            // In frozen (HAR replay) mode, use Vue Router to navigate back to /app.
+            // A full GotoAsync to a different URL breaks HAR replay (Playwright
+            // fails to re-serve JS resources with correct MIME types).
+            // Since initial load goes to /app, client-side nav keeps state clean.
+            await Page.EvaluateAsync("""
+                () => {
+                    const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
+                    if (router) router.push('/app');
+                }
+                """);
+            await Task.Delay(300);
+        }
+        else
+        {
+            await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.Load,
+                Timeout = 30_000,
+            });
             await WaitForNetworkSettledAsync();
+        }
         await DismissDialogsAsync();
     }
 

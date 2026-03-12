@@ -1,7 +1,5 @@
 id: constraint-shared-linked
 category: constraint
-engines:
-  newrecruit: fail
 description: Shared constraint violation produces structured error with entry link
 tags:
   - validation-errors
@@ -87,3 +85,8 @@ steps:
           from: se-unit-a/con-min-shared
         - on: category cat-troops
           from: se-unit-b/con-min-shared
+      engines:
+        newrecruit:
+          errors:
+            - on: category cat-troops
+              from: se-unit-a/con-min-shared

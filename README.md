@@ -108,6 +108,7 @@ battlescribe-spec/
 
 - [Adapter Protocol Specification](docs/adapter-protocol.md) — JSON-line protocol reference
 - [Adapter Implementation Guide](docs/adapter-guide.md) — Step-by-step adapter writing guide
+- [Engine-Filtered Expected State](docs/engine-filtered-expected-state.md) — Per-engine assertion overrides
 - [CI Integration Guide](docs/ci-guide.md) — GitHub Actions and CI setup
 - [Frozen NR Testing](docs/frozen-nr-testing.md) — Offline New Recruit testing via HAR replay
 - [ADR 001: Spec Test Kit Architecture](docs/adr/001-spec-test-kit-architecture.md) — Architecture decisions

@@ -10,8 +10,8 @@
 | Metric | BattleScribe | New Recruit |
 |--------|-------------|-------------|
 | Total specs | 278 | 278 |
-| Expected to pass | 276 | 242 |
-| Expected to fail | 2 | 36 |
+| Expected to pass | 276 | 254 |
+| Expected to fail | 2 | 24 |
 
 **BattleScribe expected failures** (2): NR-specific condition specs where BS
 returns NaN for null childId (`condition-null-childid-nr-force`,
@@ -25,6 +25,10 @@ engines:
   # unlisted engines default to "pass"
 ```
 
+Additionally, 14 specs that previously used `newrecruit: fail` markers now pass
+on both engines using [engine-filtered expectedState](engine-filtered-expected-state.md)
+to document per-engine differences inline.
+
 ### NR Failure Breakdown
 
 | Category | Count | Severity | Description |
@@ -33,8 +37,8 @@ engines:
 | [Missing features](#2-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
 | [Scope/condition evaluation](#3-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
-| [Other behavioral differences](#5-other-behavioral-differences) | 6 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
-| [Constraint/validation differences](#6-constraintvalidation-differences) | 11 | Medium | Error placement, extra errors, hidden constraint, percent value |
+| [Other behavioral differences](#5-other-behavioral-differences) | 5 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
+| [Constraint/validation differences](#6-constraintvalidation-differences) | 0 | ✅ Resolved | All documented inline via engine-filtered expectedState |
 
 ---
 
@@ -144,7 +148,7 @@ on entry groups, so child selections don't appear under the expected categories.
 
 ## 5. Other Behavioral Differences
 
-**6 specs** with distinct NR behavioral differences:
+**5 specs** with distinct NR behavioral differences:
 
 ### Auto-Select with `field=forces` Constraint
 | Spec | Issue |
@@ -172,13 +176,14 @@ of 1 for a hidden auto-selected entry.
 ### Real-World Data Source
 | Spec | Issue |
 |------|-------|
-| `real-world/wh40k-10e-create-army` | NR forceEntries lookup fails intermittently for dataSource-loaded game systems |
 | `real-world/wh40k-10e-space-marines-army` | NR produces different auto-selections and cost calculations for complex multi-catalogue armies |
 
 This real-world spec builds a Space Marines army and verifies auto-selections,
 unit types, and points costs. NR's results differ from BattleScribe when
 dealing with multi-catalogue data interactions and complex entry resolution
 chains in production game systems.
+
+Note: `real-world/wh40k-10e-create-army` previously failed but now passes on NR.
 
 ### Auto-Select with `field=forces` Skipped
 | Spec | Issue |
@@ -198,10 +203,12 @@ based on any `min>=1` regardless of field type.
 
 ## 6. Constraint/Validation Differences
 
-**11 specs** — NR places validation errors differently or reports extra/missing
-errors compared to BattleScribe.
+**0 remaining `newrecruit: fail` specs** — All 11 constraint/validation
+differences are now documented inline using
+[engine-filtered expectedState](engine-filtered-expected-state.md). Each spec
+passes on both engines with per-engine error assertions.
 
-### Error Placement (5 specs)
+### Error Placement (5 specs) ✅ Resolved
 
 NR places entry-link and shared constraint errors on the **selection** node,
 while BattleScribe places them on the **force** or **roster** node. Additionally,
@@ -216,21 +223,21 @@ the entry link).
 | `constraint/constraint-entry-link-shared-target` | roster | selection |
 | `constraint/constraint-shared-linked` | force | selection (different entryId) |
 
-### Hidden Constraint (1 spec)
+### Hidden Constraint (1 spec) ✅ Resolved
 
 | Spec | Issue |
 |------|-------|
 | `constraint/constraint-hidden-violation-linked` | NR's hidden check has no `constraint.id` |
 
 NR raises a generic "cannot be selected while hidden" error that lacks
-`constraint.id` metadata. The adapter suppresses generic hidden errors
-(BattleScribe doesn't raise them), but this also suppresses the constraint-based
-hidden violation that this spec expects. NR can't distinguish between generic
-hidden checks and constraint-triggered hidden violations.
+`constraint.id` metadata. The NR adapter detects hidden entries via the
+`isHidden()` API and tags them with `entryId/hidden`. This spec now passes on
+both engines.
 
-### Extra/Different Errors (3 specs)
+### Extra/Different Errors (3 specs) ✅ Resolved
 
-NR evaluates some constraints more aggressively or at different scope boundaries:
+NR evaluates some constraints more aggressively or at different scope boundaries.
+These are now documented with engine-filtered expectedState:
 
 | Spec | Issue |
 |------|-------|
@@ -238,13 +245,13 @@ NR evaluates some constraints more aggressively or at different scope boundaries
 | `constraint/constraint-max-violation` | NR reports max violation at intermediate step; BS doesn't |
 | `refresh/refresh-validation-update` | NR reports extra max errors at steps 5, 7, 9 |
 
-### Percent Value (1 spec)
+### Percent Value (1 spec) ✅ Resolved
 
 | Spec | Issue |
 |------|-------|
 | `constraint/constraint-percent-value` | NR reports fractional constraint violation; BS doesn't |
 
-### Duplicate Errors (1 spec)
+### Duplicate Errors (1 spec) ✅ Resolved
 
 | Spec | Issue |
 |------|-------|

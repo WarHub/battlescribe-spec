@@ -1,7 +1,5 @@
 id: constraint-percent-value
 category: constraint
-engines:
-  newrecruit: fail
 description: Constraint with percentValue calculates threshold as percentage
 
 setup:
@@ -53,3 +51,8 @@ steps:
         - selectionCount: 1
           selections:
             - name: Elite
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-1
+              from: se-1/c1

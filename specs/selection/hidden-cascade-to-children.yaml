@@ -35,3 +35,8 @@ steps:
           selections:
             - name: Hidden Squad
               hidden: true
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-squad
+              from: se-squad/hidden

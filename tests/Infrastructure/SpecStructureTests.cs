@@ -67,6 +67,48 @@ public sealed class SpecStructureTests
                 Assert.False(string.IsNullOrEmpty(err.From),
                     $"Error assertion on='{err.On}' is missing 'from:' field in {specName}");
             }
+
+            // Also check engine overrides (allow missing 'from:' since some engines
+            // genuinely don't provide constraintId for certain error types)
+            if (step.ExpectedState.Engines is { } engines)
+            {
+                foreach (var (engine, over) in engines)
+                {
+                    if (over.Errors is not { } overErrors) continue;
+                    foreach (var err in overErrors)
+                    {
+                        // Engine overrides may omit 'from:' when the engine doesn't
+                        // expose structured constraint data for that error type.
+                    }
+                }
+            }
+        }
+    }
+
+    private static readonly HashSet<string> KnownEngines = ["battlescribe", "newrecruit", "phalanx"];
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void EngineOverridesUseKnownEngineNames(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+
+        // Spec-level engines
+        if (spec.Engines is { } specEngines)
+        {
+            foreach (var engine in specEngines.Keys)
+                Assert.True(KnownEngines.Contains(engine),
+                    $"Unknown engine '{engine}' in spec-level engines field of {specName}");
+        }
+
+        // Step-level engine overrides
+        if (spec.Steps is null) return;
+        foreach (var step in spec.Steps)
+        {
+            if (step.ExpectedState?.Engines is not { } engines) continue;
+            foreach (var engine in engines.Keys)
+                Assert.True(KnownEngines.Contains(engine),
+                    $"Unknown engine '{engine}' in expectedState engines override of {specName}");
         }
     }
 

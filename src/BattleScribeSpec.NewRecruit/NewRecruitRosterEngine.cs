@@ -91,6 +91,25 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return 'Required stores not found';
 
+                        // Clean up previous test state
+                        if (window.__bsspec?.row?.list_key) {
+                            try {
+                                const currentList = listsStore.getCurrentList?.();
+                                if (currentList?.army) {
+                                    const forces = currentList.army.getForces?.() || [];
+                                    for (const f of [...forces]) {
+                                        if (typeof f.delete === 'function') f.delete();
+                                    }
+                                }
+                                await listsStore.deleteList?.(window.__bsspec.row.list_key);
+                            } catch(e) { /* ignore cleanup errors */ }
+                        }
+                        // Clear previous localLibrary entries
+                        for (const key of Object.keys(sysStore.localLibrary || {})) {
+                            delete sysStore.localLibrary[key];
+                        }
+                        window.__bsspec = undefined;
+
                         // Load synthetic data into NR's local library
                         const files = [
                             { name: 'system.gst', path: '/spec/system.gst', data: gstXml },
@@ -240,6 +259,24 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const sysStore = pinia._s.get('systemsStore');
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return 'Required stores not found';
+
+                        // Clean up previous test state
+                        if (window.__bsspec?.row?.list_key) {
+                            try {
+                                const currentList = listsStore.getCurrentList?.();
+                                if (currentList?.army) {
+                                    const forces = currentList.army.getForces?.() || [];
+                                    for (const f of [...forces]) {
+                                        if (typeof f.delete === 'function') f.delete();
+                                    }
+                                }
+                                await listsStore.deleteList?.(window.__bsspec.row.list_key);
+                            } catch(e) { /* ignore cleanup errors */ }
+                        }
+                        for (const key of Object.keys(sysStore.localLibrary || {})) {
+                            delete sysStore.localLibrary[key];
+                        }
+                        window.__bsspec = undefined;
 
                         // Load real data files into NR's local library
                         const files = fileData.map(f => ({ name: f.name, path: f.path, data: f.data }));

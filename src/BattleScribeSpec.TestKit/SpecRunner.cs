@@ -9,15 +9,17 @@ public sealed class SpecRunner
 {
     private readonly IRosterEngine _engine;
     private readonly DataSourceResolver? _dataSourceResolver;
+    private readonly string? _engineName;
     private readonly List<string> _errors = [];
     private ProtocolGameSystem? _gameSystem;
     private ProtocolCatalogue[]? _catalogues;
     private bool _isDataSourceMode;
 
-    public SpecRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null)
+    public SpecRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null, string? engineName = null)
     {
         _engine = engine;
         _dataSourceResolver = dataSourceResolver;
+        _engineName = engineName;
     }
 
     /// <summary>
@@ -283,7 +285,8 @@ public sealed class SpecRunner
     {
         if (step.ExpectedState is not null)
         {
-            AssertExpectedState(step.ExpectedState, stepIndex);
+            var effective = step.ExpectedState.ForEngine(_engineName);
+            AssertExpectedState(effective, stepIndex);
         }
     }
 

@@ -30,3 +30,8 @@ steps:
         - selectionCount: 1
           selections:
             - name: Hidden Unit
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-1
+              from: se-1/hidden

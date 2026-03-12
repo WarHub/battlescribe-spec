@@ -1,0 +1,242 @@
+# Engine-Filtered Expected State
+
+Engine-filtered `expectedState` allows a single spec to document per-engine
+behavioral differences inline, replacing opaque `engines: newrecruit: fail`
+markers with precise, structured expectations for each engine.
+
+## Problem
+
+Different BattleScribe engine implementations sometimes produce slightly
+different — but equally valid — behavior. For example, BattleScribe Desktop
+places a constraint error on the **force** node while New Recruit places it on
+the **selection** node. Both engines correctly detect the violation; they just
+report it at a different level.
+
+Previously, these differences were handled with blanket `engines: newrecruit: fail`
+at the spec level, which provided no insight into _what_ was different. The spec
+simply didn't run assertions for that engine at all.
+
+## Solution
+
+The `expectedState` block now supports an `engines` map. Each key is an engine
+name (`"battlescribe"`, `"newrecruit"`, `"phalanx"`), and each value is a
+partial `expectedState` whose non-null fields **replace** the corresponding base
+fields for that engine. Fields not specified in the override fall through to the
+base assertion.
+
+## YAML Syntax
+
+### Basic: override errors only
+
+```yaml
+- expectedState:
+    forces:
+      - selectionCount: 3
+    errors:
+      - on: force fe-1
+        from: shared-unit/con-shared-max
+    engines:
+      newrecruit:
+        errors:
+          - on: selection shared-unit
+            from: link-1/con-link-max
+```
+
+When running on **BattleScribe**: asserts `selectionCount: 3` and expects one
+error on `force fe-1`.
+
+When running on **New Recruit**: asserts `selectionCount: 3` (inherited from
+base) and expects one error on `selection shared-unit` (overridden).
+
+### Engine adds errors where base has none
+
+```yaml
+- expectedState:
+    forces:
+      - selectionCount: 3
+    engines:
+      newrecruit:
+        errors:
+          - on: selection se-unit-a
+            from: se-unit-a/con-max-2
+```
+
+The base `expectedState` has no `errors` field, so the default behavior applies:
+no errors expected. The NR override adds an error expectation just for that
+engine.
+
+### Override any expectedState field
+
+Any field in `expectedState` can be overridden per engine — not just `errors`:
+
+```yaml
+- expectedState:
+    forces:
+      - selectionCount: 3
+    engines:
+      newrecruit:
+        forces:
+          - selectionCount: 2
+```
+
+### Multiple engines
+
+```yaml
+- expectedState:
+    errors:
+      - on: force fe-1
+        from: se-unit/con-max
+    engines:
+      newrecruit:
+        errors:
+          - on: selection se-unit
+            from: se-unit/con-max
+      phalanx:
+        errors: []
+```
+
+## Merge Semantics
+
+The `ForEngine()` method creates a new `ExpectedStateDef` by merging the
+engine-specific override with the base:
+
+| Override field | Result |
+|---------------|--------|
+| Non-null | Override replaces base |
+| Null / absent | Base value used |
+
+The merge is **field-level**, not deep. If an engine override specifies `errors`,
+the _entire_ error list replaces the base error list — individual errors are not
+merged.
+
+The `engines` map itself is **not** propagated into the merged result.
+
+## Relationship to Spec-Level `engines`
+
+Spec files have _two_ different `engines` fields that serve different purposes:
+
+### Spec-level `engines` (pass/fail/skip)
+
+```yaml
+id: my-spec
+engines:
+  newrecruit: fail    # expected to fail on NR
+  battlescribe: skip  # don't run on BS
+```
+
+This controls whether the spec is **run at all** and whether failure is expected.
+Unlisted engines default to `"pass"`.
+
+### Step-level `engines` (expectedState override)
+
+```yaml
+- expectedState:
+    errors:
+      - on: force fe-1
+        from: se-unit/con-max
+    engines:
+      newrecruit:
+        errors:
+          - on: selection se-unit
+            from: se-unit/con-max
+```
+
+This provides **per-engine assertion overrides** within a spec that runs on all
+engines. The spec passes on all engines — each just asserts the correct behavior
+for that engine.
+
+**Prefer step-level overrides** over spec-level `fail` markers whenever
+possible. Step-level overrides document exactly what differs, while `fail`
+markers hide the details.
+
+## Error Assertion Format
+
+Error assertions use the compact `on`/`from` format:
+
+```yaml
+errors:
+  - on: force fe-1              # roster element owning the error
+    from: se-unit-a/con-max-2   # entryId/constraintId that caused it
+```
+
+### `on` field (required)
+
+Identifies the roster element that owns the error:
+
+| Format | Example | Matches |
+|--------|---------|---------|
+| `{ownerType}` | `roster` | Any error on a roster node |
+| `{ownerType} {entryId}` | `force fe-1` | Error on force with entryId `fe-1` |
+| `{ownerType} {entryId}` | `selection se-unit-a` | Error on selection `se-unit-a` |
+| `{ownerType} {entryId}` | `category cat-troops` | Error on category `cat-troops` |
+
+### `from` field (optional)
+
+Identifies the source entry and constraint:
+
+| Format | Example | Meaning |
+|--------|---------|---------|
+| `{entryId}/{constraintId}` | `se-unit-a/con-max-2` | Constraint `con-max-2` on entry `se-unit-a` |
+| `costLimits/{costTypeId}` | `costLimits/ct-pts` | Cost limit violation for cost type `ct-pts` |
+| `{entryId}/hidden` | `se-unit-a/hidden` | Hidden entry error (pseudo-constraint) |
+| `{entryId}` | `se-unit-a` | Any constraint on entry `se-unit-a` |
+
+When `from` is omitted, the assertion matches any error on the specified roster
+element regardless of source.
+
+### Default behavior
+
+- `errors: []` — assert that zero validation errors exist.
+- `errors` omitted — **also asserts zero errors** (implicit default). Specs do
+  not need to write `errors: []` explicitly.
+- One or more errors listed — assert exactly those errors exist (count must
+  match, each assertion must find a match).
+
+## Implementation
+
+### SpecRunner
+
+`SpecRunner` accepts an optional `engineName` parameter. At each assertion step,
+it calls `step.ExpectedState.ForEngine(engineName)` to get the effective
+expectations before running assertions.
+
+```csharp
+var runner = new SpecRunner(engine, dataSourceResolver, engineName: "newrecruit");
+```
+
+### ConformanceTestBase
+
+The `ConformanceTestBase` xUnit fixture has an abstract `EngineName` property
+that subclasses override. It passes this to `SpecRunner` automatically.
+
+### Structural Tests
+
+Two structural tests enforce quality:
+
+- **`AllErrorAssertionsHaveFrom`** — Ensures all base-level error assertions
+  include the `from:` field for precise matching. Engine overrides are exempt
+  since some engines don't expose constraint metadata for all error types.
+- **`EngineOverridesUseKnownEngineNames`** — Validates that engine override keys
+  are one of the known engine names (`battlescribe`, `newrecruit`, `phalanx`).
+
+## Examples in the Spec Suite
+
+14 specs currently use engine-filtered `expectedState` to document NR behavioral
+differences:
+
+| Category | Spec | What differs |
+|----------|------|-------------|
+| constraint | `constraint-entry-link-merged` | Error placement: force vs selection |
+| constraint | `constraint-entry-link-own` | Error placement: force vs selection |
+| constraint | `constraint-entry-link-shared-counting` | Error placement: roster vs selection |
+| constraint | `constraint-entry-link-shared-target` | Error placement: roster vs selection |
+| constraint | `constraint-shared-linked` | Error count and entryId |
+| constraint | `constraint-min-on-force-linked` | NR reports extra error on selection |
+| constraint | `constraint-max-violation` | NR fires at intermediate step |
+| constraint | `constraint-percent-value` | NR fires fractional violation |
+| scope | `scope-parent` | NR evaluates scope=parent more aggressively |
+| refresh | `refresh-validation-update` | NR fires max errors at 3 intermediate steps |
+| selection | `selection-hidden-entry` | Hidden error tagging |
+| selection | `hidden-cascade-to-children` | Hidden error tagging |
+| modifier | `modifier-set-boolean` | Hidden error tagging |
+| modifier | `modifier-field-hidden` | Hidden error tagging |

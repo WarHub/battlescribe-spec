@@ -1,7 +1,5 @@
 id: constraint-entry-link-merged
 category: constraint
-engines:
-  newrecruit: fail
 description: >
   Both the shared selection entry and the entry link define constraints.
   During catalogue expansion, constraints from both sources are merged
@@ -74,3 +72,8 @@ steps:
       errors:
         - on: force fe-1
           from: shared-unit/con-shared-max
+      engines:
+        newrecruit:
+          errors:
+            - on: selection shared-unit
+              from: link-1/con-link-max

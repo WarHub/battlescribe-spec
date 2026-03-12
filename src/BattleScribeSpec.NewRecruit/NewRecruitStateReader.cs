@@ -310,37 +310,24 @@ public static class NewRecruitStateReader
                             }
                         }
 
-                        // Detect cost limit errors on roster: if the error
-                        // message mentions a cost type name, tag as costLimits/.
-                        // NR always defaults maxCosts to 0 and ignores defaultCostLimit
-                        // from game system XML. Parse the "over by" amount from the
-                        // message to compute actual cost and compare vs configured limit.
-                        if (ownerType === 'roster' && !entryId && cleanMsg) {
-                            for (const ct of costTypeLookup) {
-                                if (ct.name && cleanMsg.includes(ct.name)) {
-                                    const configuredLimit = costLimitConfig[ct.name];
-                                    // No limit configured: suppress NR's default "max 0"
-                                    if (configuredLimit === undefined || configuredLimit === null || configuredLimit < 0) return;
-                                    // Parse "has X <name> too many (max Y)" from message
-                                    const overMatch = cleanMsg.match(/has\s+(\d+(?:\.\d+)?)\s+/);
-                                    const maxMatch = cleanMsg.match(/\(max\s+(-?\d+(?:\.\d+)?)\)/);
-                                    const overAmount = overMatch ? parseFloat(overMatch[1]) : 0;
-                                    const nrMax = maxMatch ? parseFloat(maxMatch[1]) : 0;
-                                    const actualCost = overAmount + Math.max(nrMax, 0);
-                                    // Suppress if actual cost is within the configured limit
-                                    if (actualCost <= configuredLimit) return;
-                                    entryId = 'costLimits';
-                                    constraintId = ct.typeId;
-                                    break;
-                                }
-                            }
+                        // Suppress ALL roster-level errors. NR only reports cost
+                        // limit violations at this level (always against max=0
+                        // default). Some have constraintId (cost type ID), some
+                        // don't. We compute real cost limit violations
+                        // proactively after the tree walk.
+                        if (ownerType === 'roster') {
+                            return;
                         }
 
-                        // NR's generic "cannot be selected while hidden" check:
-                        // BS doesn't raise these, so suppress. Constraint-based hidden
-                        // errors (with e.constraint?.id) are kept as both engines raise them.
-                        if (cleanMsg.includes('cannot be selected while hidden') && !e.constraint?.id) {
-                            return;
+                        // NR raises "cannot be selected while hidden" on hidden
+                        // selections. Detect via isHidden() API (no message parsing).
+                        // Tag with entryId/hidden for engine-filtered expectedState.
+                        if (ownerType === 'selection' && !constraintId) {
+                            const raw = ownerNode?.__v_raw || ownerNode;
+                            if (raw?.isHidden?.()) {
+                                entryId = ownerEntryId || null;
+                                constraintId = 'hidden';
+                            }
                         }
 
                         result.push({
@@ -371,6 +358,26 @@ public static class NewRecruitStateReader
                         }
                         for (const sel of (f.getSelections?.() || []))
                             walkSel(sel);
+                    }
+
+                    // Proactive cost limit computation: compare actual total
+                    // costs against configured limits from the spec YAML.
+                    // This replaces message-based cost limit detection.
+                    const totalCosts = extractTotalCosts(army);
+                    for (const ct of costTypeLookup) {
+                        const configuredLimit = costLimitConfig[ct.name];
+                        if (configuredLimit === undefined || configuredLimit === null || configuredLimit < 0) continue;
+                        const actual = totalCosts.find(c => c.typeId === ct.typeId);
+                        const totalValue = actual?.value || 0;
+                        if (totalValue > configuredLimit) {
+                            result.push({
+                                message: '',
+                                ownerType: 'roster',
+                                ownerEntryId: null,
+                                entryId: 'costLimits',
+                                constraintId: ct.typeId
+                            });
+                        }
                     }
 
                     // If tree walk found nothing, try getErrors() as fallback

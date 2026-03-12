@@ -1,7 +1,5 @@
 id: constraint-max-violation
 category: constraint
-engines:
-  newrecruit: fail
 description: Selecting more than max constraint still creates selections (engine tracks count)
 
 setup:
@@ -51,3 +49,8 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 2
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-unit-a
+              from: se-unit-a/con-max-1

@@ -187,6 +187,34 @@ public sealed class ExpectedStateDef
     /// </summary>
     [YamlMember(Alias = "errors")]
     public List<ErrorAssertionDef>? Errors { get; set; }
+
+    /// <summary>
+    /// Per-engine overrides. Each key is an engine name (e.g. "newrecruit"),
+    /// each value is a partial ExpectedStateDef whose non-null fields replace
+    /// the corresponding base fields for that engine.
+    /// </summary>
+    [YamlMember(Alias = "engines")]
+    public Dictionary<string, ExpectedStateDef>? Engines { get; set; }
+
+    /// <summary>
+    /// Returns an effective ExpectedStateDef for the given engine: if the engine
+    /// has an override, non-null fields replace the base. Unset fields fall through.
+    /// </summary>
+    public ExpectedStateDef ForEngine(string? engineName)
+    {
+        if (engineName is null || Engines is null || !Engines.TryGetValue(engineName, out var over))
+            return this;
+        return new ExpectedStateDef
+        {
+            ForceCount = over.ForceCount ?? ForceCount,
+            SelectionCount = over.SelectionCount ?? SelectionCount,
+            Forces = over.Forces ?? Forces,
+            CostCount = over.CostCount ?? CostCount,
+            Costs = over.Costs ?? Costs,
+            Errors = over.Errors ?? Errors,
+            // Don't propagate Engines into the merged result
+        };
+    }
 }
 
 /// <summary>

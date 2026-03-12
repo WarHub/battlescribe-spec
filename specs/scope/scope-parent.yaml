@@ -1,7 +1,5 @@
 id: scope-parent
 category: scope
-engines:
-  newrecruit: fail
 description: Condition with scope=parent evaluates on the parent element
 
 setup:
@@ -54,3 +52,8 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 4
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-unit-a
+              from: se-unit-a/con-max-3
