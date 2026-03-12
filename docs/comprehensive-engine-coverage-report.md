@@ -40,13 +40,13 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 | `SetupFromFiles` | 2 | DataSource specs: wh40k-10e-create-army, wh40k-10e-space-marines-army |
 | `AddForce` | 246 | force-add-single, force-add-multiple, force-nested-basic, force-multi-catalogue-two-forces |
 | `AddForceByName` | 2 | DataSource specs using name-based force addition |
-| `RemoveForce` | 5 | force-remove, force-remove-second, force-add-and-remove-all, refresh-full-lifecycle |
+| `RemoveForce` | 5 | force-remove, force-remove-second, force-add-and-remove-all, roster-full-lifecycle |
 | `SelectEntry` | 296 | selection-add-unit, selection-with-cost, selection-multiple-entries, import-*-entry-* |
 | `SelectEntryByName` | 3 | DataSource specs using name-based entry selection |
 | `SelectChildEntry` | 9 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
-| `DeselectSelection` | 23 | selection-remove, selection-deselect-last, refresh-after-deselect, refresh-full-lifecycle |
-| `SetSelectionCount` | 2 | selection-set-count, refresh-after-set-count |
-| `DuplicateSelection` | 5 | selection-duplicate, cost-duplicate-increases, refresh-after-duplicate |
+| `DeselectSelection` | 23 | selection-remove, selection-deselect-last, roster-full-lifecycle |
+| `SetSelectionCount` | 2 | selection-set-count |
+| `DuplicateSelection` | 5 | selection-duplicate, cost-duplicate-increases |
 | `SetCostLimit` | 1 | cost-set-limit |
 | `GetRosterState` | 201 | Specs using `rosterState` assertions |
 | `GetValidationErrors` | 20 | Specs using `errors` assertions: constraint-*, cost-default-limit-positive |

@@ -1,5 +1,5 @@
-id: refresh-full-lifecycle
-category: refresh
+id: roster-full-lifecycle
+category: roster
 description: Full roster lifecycle - add, select, modify, deselect, remove verifying state at each step
 
 setup:

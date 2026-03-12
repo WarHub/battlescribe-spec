@@ -243,7 +243,6 @@ These are now documented with engine-filtered expectedState:
 |------|-------|
 | `scope/scope-parent` | NR reports extra max constraint error not raised by BS |
 | `constraint/constraint-max-violation` | NR reports max violation at intermediate step; BS doesn't |
-| `refresh/refresh-validation-update` | NR reports extra max errors at steps 5, 7, 9 |
 
 ### Percent Value (1 spec) ✅ Resolved
 

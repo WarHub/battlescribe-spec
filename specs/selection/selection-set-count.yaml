@@ -39,6 +39,9 @@ steps:
           selections:
             - name: Trooper
               number: 1
+      costs:
+        - typeId: pts
+          value: 10
   # setSelectionCount is a no-op for root/force-level entries in the BattleScribe engine.
   # Root entries always create new selections via selectEntry, not via count.
   # This verifies the engine correctly handles the no-op case.

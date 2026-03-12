@@ -235,7 +235,6 @@ differences:
 | constraint | `constraint-max-violation` | NR fires at intermediate step |
 | constraint | `constraint-percent-value` | NR fires fractional violation |
 | scope | `scope-parent` | NR evaluates scope=parent more aggressively |
-| refresh | `refresh-validation-update` | NR fires max errors at 3 intermediate steps |
 | selection | `selection-hidden-entry` | Hidden error tagging |
 | selection | `hidden-cascade-to-children` | Hidden error tagging |
 | modifier | `modifier-set-boolean` | Hidden error tagging |
