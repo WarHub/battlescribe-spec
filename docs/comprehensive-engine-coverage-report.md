@@ -127,16 +127,14 @@ Full `INSTANCE_OF` target coverage: `SelectionEntry`, `SelectionEntry.Type`, `Ca
 
 ### Assertion Mechanisms
 
-| Assert Type | Specs | Description |
-|-------------|------:|-------------|
-| `rosterState` | 201 | Full roster state comparison (forces, selections, costs, names, profiles, rules) |
-| `totalCost` | 50 | Sum of costs across roster |
-| `selectionName` | 26 | Name of specific selection after modifiers |
-| `selectionCount` | 22 | Count of selections in a force |
+All specs use unified `expectedState:` blocks. Available assertion fields:
+
+| Field | Usage | Description |
+|-------|------:|-------------|
+| `forces` / `selections` | 201 | Roster state: forces, selections, costs, names, profiles, rules |
+| `costs` | 50 | Roster-level cost totals by type |
 | `forceCount` | 13 | Count of forces in roster |
-| `errors` | 20 | Structured validation error assertions (on/from/message) |
-| `noValidationErrors` | 3 | Asserts zero validation errors |
-| `hasValidationErrors` | 2 | Asserts at least one validation error |
+| `errors` | 20 | Structured validation error assertions (on/from) |
 
 ---
 
@@ -296,4 +294,4 @@ This is documented here as an architectural limitation of the current oracle bri
 - **EntryLink costs**: EntryLink costs do not override the target entry's costs. The target's base cost applies when selected through a link.
 - **EntryLink enumeration**: When both a direct SelectionEntry and an EntryLink point to the same target, only 1 entry appears in the available list (not 2).
 - **Import attribute**: Only affects entries when their catalogue is loaded as an import via CatalogueLink. When a catalogue is used directly as a force's primary catalogue, all entries are visible regardless of `import` value.
-- **Uncategorised parent-scope constraints**: Parent-scope `field: selections` constraints attached to entries with no primary category resolve to `(No Category)`, and that category is skipped during force/category validation traversal. In this shape, `hasValidationErrors` may remain `false` even when a min/max threshold appears violated. Use explicit category wiring to exercise native validation paths.
+- **Uncategorised parent-scope constraints**: Parent-scope `field: selections` constraints attached to entries with no primary category resolve to `(No Category)`, and that category is skipped during force/category validation traversal. In this shape, no validation errors are raised even when a min/max threshold appears violated. Use explicit category wiring to exercise native validation paths.
