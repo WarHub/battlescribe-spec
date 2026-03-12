@@ -85,3 +85,4 @@ steps:
         - selectionCount: 4
       errors:
         - on: roster
+          from: shared-unit/con-max-shared

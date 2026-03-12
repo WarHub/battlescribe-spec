@@ -195,4 +195,127 @@ public class ConstraintOracleTests
         }
     }
 
+    [Fact]
+    public void ForceEntryMaxConstraint_ResolvesEntryAndConstraintIds()
+    {
+        // Dump actual errors for force-field constraints on ForceEntry (max=2, 3 forces)
+        using var oracle = new BattleScribeOracle();
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test GS",
+            ForceEntries = [new ProtocolForceEntry
+            {
+                Id = "fe-patrol",
+                Name = "Patrol",
+                Constraints = [new ProtocolConstraint { Id = "con-max-forces", Type = "max", Value = 2, Field = "forces", Scope = "roster" }]
+            }],
+        };
+        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs" };
+        oracle.SetupFromProtocol(gs, [cat]);
+        oracle.AddForceByIndex(0);
+        oracle.AddForceByIndex(0);
+        oracle.AddForceByIndex(0); // 3 forces, max=2
+
+        var errors = oracle.GetValidationErrors();
+        // Each error should have entryId=fe-patrol, constraintId=con-max-forces
+        Assert.NotEmpty(errors);
+        foreach (var e in errors)
+        {
+            Assert.Equal("roster", e.OwnerType);
+            Assert.Equal("fe-patrol", e.EntryId);
+            Assert.Equal("con-max-forces", e.ConstraintId);
+        }
+    }
+
+    [Fact]
+    public void SharedEntryConstraint_ResolvesEntryAndConstraintIds()
+    {
+        // Dump actual errors for shared entry with scope=roster, shared=true
+        using var oracle = new BattleScribeOracle();
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test GS",
+            CategoryEntries = [new ProtocolCategoryEntry { Id = "cat-troops", Name = "Troops" }],
+            ForceEntries = [new ProtocolForceEntry
+            {
+                Id = "fe-1",
+                Name = "Patrol",
+                CategoryLinks = [new ProtocolCategoryLink { Id = "cl-troops", TargetId = "cat-troops" }]
+            }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
+            SharedSelectionEntries = [new ProtocolSelectionEntry
+            {
+                Id = "shared-unit",
+                Name = "Elite Guard",
+                Type = "unit",
+                CategoryLinks = [new ProtocolCategoryLink { Id = "cl-eg", TargetId = "cat-troops", Primary = true }],
+                Constraints = [new ProtocolConstraint { Id = "con-max", Type = "max", Value = 2, Field = "selections", Scope = "roster", Shared = true }],
+            }],
+            EntryLinks = [new ProtocolEntryLink
+            {
+                Id = "link-1",
+                Name = "Elite Guard",
+                TargetId = "shared-unit",
+                Type = "selectionEntry",
+            }],
+        };
+        oracle.SetupFromProtocol(gs, [cat]);
+        oracle.AddForceByIndex(0);
+        oracle.SelectFirstAvailableEntry();
+        oracle.SelectFirstAvailableEntry();
+        oracle.SelectFirstAvailableEntry(); // 3 selections, max=2
+
+        var errors = oracle.GetValidationErrors();
+        Assert.NotEmpty(errors);
+        // Check that error has resolved entry/constraint IDs
+        foreach (var e in errors)
+        {
+            Assert.NotNull(e.EntryId);
+            Assert.NotNull(e.ConstraintId);
+        }
+    }
+
+    [Fact]
+    public void SelectionEntryFieldForces_ResolvesEntryAndConstraintIds()
+    {
+        // field=forces on a SelectionEntry — always violated (force count is always 0)
+        using var oracle = new BattleScribeOracle();
+        var gs = new ProtocolGameSystem
+        {
+            Id = "test-gs",
+            Name = "Test GS",
+            ForceEntries = [new ProtocolForceEntry { Id = "fe-patrol", Name = "Patrol" }],
+        };
+        var cat = new ProtocolCatalogue
+        {
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
+            SelectionEntries = [new ProtocolSelectionEntry
+            {
+                Id = "se-unit",
+                Name = "Unit A",
+                Type = "unit",
+                Constraints = [new ProtocolConstraint { Id = "con-force-field", Type = "min", Value = 1, Field = "forces", Scope = "roster" }],
+            }],
+        };
+        oracle.SetupFromProtocol(gs, [cat]);
+        oracle.AddForceByIndex(0);
+
+        var errors = oracle.GetValidationErrors();
+        Assert.NotEmpty(errors);
+        foreach (var e in errors)
+        {
+            Assert.Equal("roster", e.OwnerType);
+            Assert.Equal("se-unit", e.EntryId);
+            Assert.Equal("con-force-field", e.ConstraintId);
+        }
+    }
 }

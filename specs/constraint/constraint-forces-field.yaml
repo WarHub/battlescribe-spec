@@ -41,6 +41,7 @@ steps:
       # force count is always 0 → validation error.
       errors:
         - on: roster
+          from: se-unit/con-force-field
 
   - action: selectEntry
     forceIndex: 0
@@ -55,3 +56,4 @@ steps:
             - name: Unit A
       errors:
         - on: roster
+          from: se-unit/con-force-field

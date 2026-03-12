@@ -53,5 +53,8 @@ steps:
       forceCount: 3
       errors:
         - on: roster
+          from: fe-patrol/con-max-forces
         - on: roster
+          from: fe-patrol/con-max-forces
         - on: roster
+          from: fe-patrol/con-max-forces

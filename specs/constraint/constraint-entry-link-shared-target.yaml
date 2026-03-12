@@ -72,3 +72,4 @@ steps:
         - selectionCount: 3
       errors:
         - on: roster
+          from: shared-unit/con-max

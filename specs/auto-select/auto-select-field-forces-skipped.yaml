@@ -55,3 +55,4 @@ steps:
               number: 1
       errors:
         - on: roster
+          from: se-forces-min/con-min-forces

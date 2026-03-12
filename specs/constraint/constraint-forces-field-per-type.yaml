@@ -68,5 +68,7 @@ steps:
       forceCount: 4
       errors:
         - on: roster
+          from: fe-battalion/con-max-battalion
         - on: roster
+          from: fe-battalion/con-max-battalion
 

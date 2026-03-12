@@ -336,6 +336,24 @@ public sealed class BattleScribeOracle : IDisposable
         // Build cost limit lookup for resolving cost type IDs
         var costLimits = JavaListToList<Cost>(roster.getCostLimits());
 
+        // Build error ID map from roster's validation error IDs (shared entries)
+        var errorIdMap = new Dictionary<string, (string entryId, string constraintId)>();
+        var errorIds = ((BaseRosterElement)roster).getValidationErrorIds();
+        if (errorIds is not null)
+        {
+            var idIter = errorIds.iterator();
+            while (idIter.hasNext())
+            {
+                var errorId = idIter.next()?.ToString();
+                if (errorId is null) continue;
+                var parts = errorId.Split("::");
+                if (parts.Length >= 3)
+                {
+                    errorIdMap[parts[1]] = (parts[1], parts[2]);
+                }
+            }
+        }
+
         var iter = errors.iterator();
         while (iter.hasNext())
         {
@@ -348,22 +366,76 @@ public sealed class BattleScribeOracle : IDisposable
             dynamic error = item;
             var message = (string?)error.b() ?? "(null error)";
 
-            // Resolve cost type from message (cost limit errors mention the cost name)
-            string? costTypeId = null;
+            string? entryId = null;
+            string? constraintId = null;
+
+            // 1. Try cost limit resolution (cost limit errors mention the cost name)
             foreach (var limit in costLimits)
             {
                 var costName = limit.getName();
                 if (costName is not null && message.Contains(costName))
                 {
-                    costTypeId = limit.getTypeId();
+                    entryId = "costLimits";
+                    constraintId = limit.getTypeId();
                     break;
                 }
             }
 
+            // 2. Try shared entry error IDs (roster-scoped shared constraints)
+            if (entryId is null)
+            {
+                foreach (var kvp in errorIdMap)
+                {
+                    var entry = GetEntryById(kvp.Value.entryId);
+                    if (entry is not null && message.Contains(entry.getName()))
+                    {
+                        entryId = kvp.Value.entryId;
+                        constraintId = kvp.Value.constraintId;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Try ForceEntry constraint resolution (field=forces constraints)
+            if (entryId is null)
+            {
+                (entryId, constraintId) = ResolveForceEntryFromMessage(message);
+            }
+
+            // 4. Fall back to SelectionEntry constraint resolution
+            if (entryId is null)
+            {
+                (entryId, constraintId) = ResolveEntryFromMessage(message);
+            }
+
             result.Add(new ValidationErrorState(message, "roster", roster.getId(), null,
-                EntryId: costTypeId is not null ? "costLimits" : null,
-                ConstraintId: costTypeId));
+                entryId, constraintId));
         }
+    }
+
+    /// <summary>
+    /// Resolve entryId and constraintId for roster-level errors by matching
+    /// ForceEntry names in the message and looking up their constraints.
+    /// Handles field=forces constraints on ForceEntry definitions.
+    /// </summary>
+    private (string? entryId, string? constraintId) ResolveForceEntryFromMessage(string message)
+    {
+        foreach (var fe in _setupForceEntries)
+        {
+            var feName = fe.getName();
+            if (feName is null || !message.Contains(feName)) continue;
+            var constraints = JavaListToList<Constraint>(fe.getConstraints());
+            foreach (var c in constraints)
+            {
+                var type = c.getType();
+                if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
+                    (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                {
+                    return (fe.getId(), c.getId());
+                }
+            }
+        }
+        return (null, null);
     }
 
     private void CollectElementErrors(

@@ -39,6 +39,7 @@ steps:
       forceCount: 1
       errors:
         - on: roster
+          from: fe-patrol/con-min-forces
 
   - action: addForce
     forceEntryIndex: 0
