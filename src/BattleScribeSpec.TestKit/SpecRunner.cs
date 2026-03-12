@@ -368,9 +368,6 @@ public sealed class SpecRunner
         if (expected.ForceCount is { } fc)
             AssertEqual(stepIndex, "forceCount", fc, state.Forces.Count);
 
-        if (expected.ValidationErrorCount is { } vec)
-            AssertEqual(stepIndex, "validationErrorCount", vec, _engine.GetValidationErrors().Count);
-
         if (expected.CostCount is { } cc)
             AssertEqual(stepIndex, "costCount", cc, state.Costs.Count);
 
@@ -435,32 +432,6 @@ public sealed class SpecRunner
             AssertEqual(stepIndex, "totalSelectionCount", totalSelCount, actualTotal);
         }
 
-        if (expected.ValidationErrors is { } expectedErrors)
-        {
-            var actualErrors = _engine.GetValidationErrors();
-            foreach (var ee in expectedErrors)
-            {
-                var match = actualErrors.FirstOrDefault(ae =>
-                    (ee.Message is null || ae.Message.Contains(ee.Message)) &&
-                    (ee.OwnerType is null || ae.OwnerType == ee.OwnerType) &&
-                    (ee.OwnerEntryId is null || ae.OwnerEntryId == ee.OwnerEntryId) &&
-                    (ee.EntryId is null || ae.EntryId == ee.EntryId) &&
-                    (ee.ConstraintId is null || ae.ConstraintId == ee.ConstraintId));
-                if (match is null)
-                {
-                    var desc = string.Join(", ",
-                        new[] {
-                            ee.Message is not null ? $"message~'{ee.Message}'" : null,
-                            ee.OwnerType is not null ? $"ownerType='{ee.OwnerType}'" : null,
-                            ee.OwnerEntryId is not null ? $"ownerEntryId='{ee.OwnerEntryId}'" : null,
-                            ee.EntryId is not null ? $"entryId='{ee.EntryId}'" : null,
-                            ee.ConstraintId is not null ? $"constraintId='{ee.ConstraintId}'" : null,
-                        }.Where(s => s is not null));
-                    _errors.Add($"Step {stepIndex}: expected validation error matching [{desc}] not found in: [{string.Join("; ", actualErrors.Select(e => e.Message))}]");
-                }
-            }
-        }
-
         if (expected.Errors is { } errorsAssertions)
         {
             var actualErrors = _engine.GetValidationErrors();
@@ -482,13 +453,11 @@ public sealed class SpecRunner
                         ae.OwnerType == expectedOwnerType &&
                         (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
                         (expectedEntryId is null || ae.EntryId == expectedEntryId) &&
-                        (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId) &&
-                        (ea.Message is null || ae.Message.Contains(ea.Message)));
+                        (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId));
                     if (match is null)
                     {
                         var desc = $"on='{ea.On}'";
                         if (ea.From is not null) desc += $", from='{ea.From}'";
-                        if (ea.Message is not null) desc += $", message~'{ea.Message}'";
                         _errors.Add($"Step {stepIndex}: expected error [{desc}] not found in: [{string.Join("; ", actualErrors.Select(FormatError))}]");
                     }
                 }
@@ -504,7 +473,7 @@ public sealed class SpecRunner
 
         // Default: if no error assertion was specified, assert zero errors
         // (skip for dataSource specs which inherently have many constraint violations)
-        if (!_isDataSourceMode && expected.Errors is null && expected.ValidationErrors is null && expected.ValidationErrorCount is null)
+        if (!_isDataSourceMode && expected.Errors is null)
         {
             var actualErrors = _engine.GetValidationErrors();
             if (actualErrors.Count > 0)

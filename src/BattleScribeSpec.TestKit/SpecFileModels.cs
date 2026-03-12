@@ -181,9 +181,6 @@ public sealed class ExpectedStateDef
     [YamlMember(Alias = "selectionCount")]
     public int? SelectionCount { get; set; }
 
-    [YamlMember(Alias = "validationErrorCount")]
-    public int? ValidationErrorCount { get; set; }
-
     [YamlMember(Alias = "forces")]
     public List<ExpectedForceDef>? Forces { get; set; }
 
@@ -193,37 +190,11 @@ public sealed class ExpectedStateDef
     [YamlMember(Alias = "costs")]
     public List<ExpectedCostDef>? Costs { get; set; }
 
-    [YamlMember(Alias = "validationErrors")]
-    public List<ExpectedValidationErrorDef>? ValidationErrors { get; set; }
-
     /// <summary>
-    /// New structured error assertions using "on"/"from"/"message" format.
-    /// Replaces validationErrors with a more readable syntax.
+    /// Structured error assertions using "on"/"from" format.
     /// </summary>
     [YamlMember(Alias = "errors")]
     public List<ErrorAssertionDef>? Errors { get; set; }
-}
-
-/// <summary>
-/// Expected structured validation error for assertion (legacy format).
-/// All fields are optional — only specified fields are checked.
-/// </summary>
-public sealed class ExpectedValidationErrorDef
-{
-    [YamlMember(Alias = "message")]
-    public string? Message { get; set; }
-
-    [YamlMember(Alias = "ownerType")]
-    public string? OwnerType { get; set; }
-
-    [YamlMember(Alias = "ownerEntryId")]
-    public string? OwnerEntryId { get; set; }
-
-    [YamlMember(Alias = "entryId")]
-    public string? EntryId { get; set; }
-
-    [YamlMember(Alias = "constraintId")]
-    public string? ConstraintId { get; set; }
 }
 
 /// <summary>
@@ -232,7 +203,6 @@ public sealed class ExpectedValidationErrorDef
 /// <para>"from" identifies the source as "{entryId}/{constraintId}" with reserved pseudo-values:</para>
 /// <para>  - "costLimits/{costTypeId}" for cost limit errors (pseudo-entry)</para>
 /// <para>  - "{entryId}/hidden" for hidden entry errors (pseudo-constraint)</para>
-/// <para>"message" is an optional substring check on the error message.</para>
 /// </summary>
 public sealed class ErrorAssertionDef
 {
@@ -253,12 +223,6 @@ public sealed class ErrorAssertionDef
     /// </summary>
     [YamlMember(Alias = "from")]
     public string? From { get; set; }
-
-    /// <summary>
-    /// Optional substring match on the error message.
-    /// </summary>
-    [YamlMember(Alias = "message")]
-    public string? Message { get; set; }
 }
 
 public sealed class ExpectedForceDef
