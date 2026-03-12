@@ -1,5 +1,7 @@
 id: constraint-shared-linked
 category: constraint
+engines:
+  newrecruit: fail
 description: Shared constraint violation produces structured error with entry link
 tags:
   - validation-errors

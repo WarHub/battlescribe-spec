@@ -1,5 +1,7 @@
 id: constraint-entry-link-own
 category: constraint
+engines:
+  newrecruit: fail
 description: >
   Constraint defined directly on an entry link (not on its shared target)
   is enforced during validation. During catalogue expansion, the engine

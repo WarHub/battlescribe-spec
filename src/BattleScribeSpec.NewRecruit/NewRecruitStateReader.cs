@@ -231,11 +231,13 @@ public static class NewRecruitStateReader
                     }
 
                     // Build cost limit lookup for detecting cost limit errors.
-                    // Cost types come from the game system; maxCosts from the army.
-                    const maxCosts = army.getMaxCosts?.() || [];
+                    // Cost types come from the game system.
+                    // costLimitConfig is injected by C# adapter from spec YAML to
+                    // distinguish "no limit (NR defaults to 0)" from "limit set to 0".
                     const costTypeLookup = [];
                     const spec = window.__bsspec;
                     const costTypes = spec?.book?.catalogue?.gameSystem?.costTypes || [];
+                    const costLimitConfig = spec?.costLimitConfig || {};
                     for (const ct of costTypes) {
                         costTypeLookup.push({ name: ct.name, typeId: ct.id });
                     }
@@ -310,14 +312,35 @@ public static class NewRecruitStateReader
 
                         // Detect cost limit errors on roster: if the error
                         // message mentions a cost type name, tag as costLimits/.
+                        // NR always defaults maxCosts to 0 and ignores defaultCostLimit
+                        // from game system XML. Parse the "over by" amount from the
+                        // message to compute actual cost and compare vs configured limit.
                         if (ownerType === 'roster' && !entryId && cleanMsg) {
                             for (const ct of costTypeLookup) {
                                 if (ct.name && cleanMsg.includes(ct.name)) {
+                                    const configuredLimit = costLimitConfig[ct.name];
+                                    // No limit configured: suppress NR's default "max 0"
+                                    if (configuredLimit === undefined || configuredLimit === null || configuredLimit < 0) return;
+                                    // Parse "has X <name> too many (max Y)" from message
+                                    const overMatch = cleanMsg.match(/has\s+(\d+(?:\.\d+)?)\s+/);
+                                    const maxMatch = cleanMsg.match(/\(max\s+(-?\d+(?:\.\d+)?)\)/);
+                                    const overAmount = overMatch ? parseFloat(overMatch[1]) : 0;
+                                    const nrMax = maxMatch ? parseFloat(maxMatch[1]) : 0;
+                                    const actualCost = overAmount + Math.max(nrMax, 0);
+                                    // Suppress if actual cost is within the configured limit
+                                    if (actualCost <= configuredLimit) return;
                                     entryId = 'costLimits';
                                     constraintId = ct.typeId;
                                     break;
                                 }
                             }
+                        }
+
+                        // NR's generic "cannot be selected while hidden" check:
+                        // BS doesn't raise these, so suppress. Constraint-based hidden
+                        // errors (with e.constraint?.id) are kept as both engines raise them.
+                        if (cleanMsg.includes('cannot be selected while hidden') && !e.constraint?.id) {
+                            return;
                         }
 
                         result.push({

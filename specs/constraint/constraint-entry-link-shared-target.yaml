@@ -1,5 +1,7 @@
 id: constraint-entry-link-shared-target
 category: constraint
+engines:
+  newrecruit: fail
 description: >
   Constraint on a shared selection entry is enforced on selections created
   via entry link. During catalogue expansion, the engine copies the shared

@@ -1,5 +1,7 @@
 id: refresh-validation-update
 category: refresh
+engines:
+  newrecruit: fail
 description: Validation errors are updated after each mutation
 
 setup:

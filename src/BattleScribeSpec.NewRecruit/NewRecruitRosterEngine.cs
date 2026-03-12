@@ -191,6 +191,18 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                     "entryOrder => { if (window.__bsspec) window.__bsspec.entryOrder = entryOrder; }",
                     entryOrder.ToArray());
             }
+
+            // Inject cost limit configuration so the state reader can distinguish
+            // "no limit configured (NR defaults to 0)" from "limit explicitly set to 0".
+            if (setupResult == null && gameSystem.CostTypes is { Count: > 0 })
+            {
+                var costLimitConfig = new Dictionary<string, double?>();
+                foreach (var ct in gameSystem.CostTypes)
+                    costLimitConfig[ct.Name] = ct.DefaultCostLimit;
+                await _browser.Page.EvaluateAsync(
+                    "config => { if (window.__bsspec) window.__bsspec.costLimitConfig = config; }",
+                    costLimitConfig);
+            }
         }
         catch (Exception ex)
         {

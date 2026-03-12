@@ -1,5 +1,7 @@
 id: constraint-max-violation
 category: constraint
+engines:
+  newrecruit: fail
 description: Selecting more than max constraint still creates selections (engine tracks count)
 
 setup:

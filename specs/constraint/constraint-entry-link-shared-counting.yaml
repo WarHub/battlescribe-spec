@@ -1,5 +1,7 @@
 id: constraint-entry-link-shared-counting
 category: constraint
+engines:
+  newrecruit: fail
 description: >
   Two entry links reference the same shared selection entry which has a
   shared max constraint. The shared=true flag causes the engine to count
