@@ -221,8 +221,7 @@ Two structural tests enforce quality:
 
 ## Examples in the Spec Suite
 
-14 specs currently use engine-filtered `expectedState` to document NR behavioral
-differences:
+Specs using engine-filtered `expectedState` to document NR behavioral differences:
 
 | Category | Spec | What differs |
 |----------|------|-------------|
@@ -236,3 +235,43 @@ differences:
 | selection | `hidden-cascade-to-children` | Hidden error tagging |
 | modifier | `modifier-set-boolean` | Hidden error tagging |
 | modifier | `modifier-field-hidden` | Hidden error tagging |
+
+## Error Location Differences
+
+BattleScribe's Java engine distributes validation errors across the roster tree
+based on the constraint's scope (roster/force/category/selection). NewRecruit
+consistently attributes errors to the selection that violates the constraint.
+
+The BS Oracle adapter includes remapping logic (`RemapRosterErrorsToSelection`,
+`RemapForceErrorsToSelection`, `RemapCategoryErrorsToSelection`) that moves
+higher-level errors down to selection level where possible, aligning with NR.
+After remapping, the following differences remain.
+
+### Missing Errors (NR reports, BS does not)
+
+BS doesn't report these errors at all — fundamental engine behavioral
+differences. No adapter can create errors from nothing.
+
+| Spec | NR Error | Why BS doesn't report |
+|------|----------|----------------------|
+| `constraint-max-violation` | `on: selection se-unit-a` | BS doesn't error at intermediate step |
+| `constraint-percent-value` | `on: selection se-1` | BS handles percent constraints differently |
+| `scope-parent` | `on: selection se-unit-a` | BS scope resolution differs |
+| `modifier-field-hidden` | `on: selection se-1` (hidden) | BS doesn't report hidden as constraint violation |
+| `modifier-set-boolean` | `on: selection se-1` (hidden) | BS doesn't report hidden as constraint violation |
+| `selection-hidden-entry` | `on: selection se-1` (hidden) | BS doesn't report hidden as constraint violation |
+| `hidden-cascade-to-children` | `on: selection se-squad` (hidden) | BS doesn't report hidden as constraint violation |
+
+### Error Count/Attribution Differences
+
+| Spec | BS | NR | Notes |
+|------|----|----|-------|
+| `constraint-min-on-force-linked` | 1 error on force | 2 errors: force + selection | NR duplicates on both levels |
+| `constraint-shared-linked` | 2 errors on category | 1 error on category | NR deduplicates shared min |
+
+### Remaining `from` Difference
+
+`constraint-entry-link-merged`: Both engines report the error `on: selection shared-unit`,
+but NR attributes it to the entry link's constraint (`from: link-1/con-link-max`)
+while BS attributes it to the shared entry's constraint (`from: shared-unit/con-shared-max`).
+This reflects how each engine resolves merged constraint ownership.

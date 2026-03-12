@@ -1,36 +1,6 @@
 # BattleScribe Engine Conformance Spec — Coverage Report
 
-Current suite status: **246 YAML specs** across 10 categories, with **427 test cases** (**427 passed, 0 skipped, 0 failed**).
-Known limitation tags: **0** (all previously synthetic specs now fully execute).
-Remaining model gaps: **0** (all data model features fully covered).
-
----
-
-## 1. Test Suite Summary
-
-| Category | Specs |
-|----------|------:|
-| condition | 31 |
-| constraint | 34 |
-| cost | 19 |
-| force | 11 |
-| modifier | 48 |
-| real-world | 2 |
-| refresh | 10 |
-| roster | 9 |
-| scope | 14 |
-| selection | 68 |
-| **Total** | **246** |
-
-| Test Cases | Passed | Skipped | Failed |
-|------------|-------:|--------:|-------:|
-| 427 | 427 | 0 | 0 |
-
-Tests break down as: 246 spec conformance tests (1:1 with YAML specs) + 181 infrastructure/unit tests.
-
----
-
-## 2. Engine API Coverage
+## 1. Engine API Coverage
 
 All `IRosterEngine` methods are exercised by the conformance suite.
 
@@ -53,7 +23,7 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 
 ---
 
-## 3. Enum & Feature Coverage
+## 2. Enum & Feature Coverage
 
 ### ConditionType — 8/8 (100%)
 
@@ -138,7 +108,7 @@ All specs use unified `expectedState:` blocks. Available assertion fields:
 
 ---
 
-## 4. Infrastructure Coverage
+## 3. Infrastructure Coverage
 
 | Feature | Specs | Evidence |
 |---------|------:|---------|
@@ -168,13 +138,7 @@ All specs use unified `expectedState:` blocks. Available assertion fields:
 
 ---
 
-## 5. Known Limitations — None
-
-All 246 specs fully execute against the BattleScribe reference engine via IKVM with no skips, workarounds, or synthetic tags. Previously 47 specs carried a `known-limitation-synthetic` tag; all were resolved.
-
----
-
-## 6. Explicitly Out-of-Scope
+## 4. Explicitly Out-of-Scope
 
 The following are intentionally outside this conformance suite scope:
 
@@ -188,59 +152,7 @@ The following are intentionally outside this conformance suite scope:
 
 ---
 
-## 7. Completed Coverage Gaps
-
-All gaps identified in earlier iterations of this report have been resolved. This section documents the final status.
-
-### Previously CRITICAL — Data model features (all resolved)
-
-| Feature | Specs | Description |
-|---------|------:|-------------|
-| **InfoLinks** | 4 | `info-link-to-profile`, `info-link-to-rule`, `info-link-to-infogroup`, `info-link-with-modifiers`. Shared profile/rule/infoGroup link resolution with modifier support. |
-| **InfoGroups** | 4 | `infogroup-basic`, `infogroup-hidden`, `infogroup-multiple-profiles`, `infogroup-with-modifiers`. Resolution, hidden filtering, modifier application. |
-| **Catalogue Links** | 2 | `catalogue-link-import`, `catalogue-link-shared-entry`. Cross-catalogue entry import and shared entry resolution. |
-| **Publications** | 1 | `publication-on-catalogue`. Catalogue publication metadata. |
-| **Import Attribute** | 3 | `import-true-entry-visible-via-link`, `import-false-entry-hidden-via-link`, `import-false-entry-direct-use`. Entry visibility control. |
-
-### Previously HIGH — Feature expansion (all resolved)
-
-| Feature | Specs | Evidence |
-|---------|------:|----------|
-| **Profile/Rule in selection state** | 8 | Hidden filtering, inherited profiles, multiple characteristics. |
-| **Entry Link edge cases** | 6 | Costs, constraints, cascading modifiers, group links. |
-| **Shared entry pools** | 3+ | CatalogueSpec supports sharedSelectionEntries/Rules/Profiles/InfoGroups. |
-| **Nested child selections** | 14+ | Deep nesting, cost aggregation, child entry selection. |
-| **Forces query field** | 5 | Cross-force constraints, scope resolution, nested forces. |
-
-### Previously MEDIUM/LOW — Completeness (all resolved)
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Selection Entry Groups | ✅ 4 specs | Basic, constraint, default, with modifiers |
-| Collective entries | ✅ 4 specs | Create, deselect, constraints |
-| Hidden entry cascading | ✅ 4 specs | Entry, children, profiles, rules |
-| Condition group nesting | ✅ 5 specs | AND, OR, nested, triple-nested |
-| Cost type variety | ✅ 4 specs | Multi-type, aggregation, three types |
-| Modifier application order | ✅ | set+append ordering |
-| Import attribute | ✅ 3 specs | True/false/direct-use patterns |
-| Multi-catalogue | ✅ | Two-force multi-catalogue |
-
-### Data Model Completeness
-
-All data model features from the BattleScribe XSD are now represented in the spec model:
-
-| Feature | Status |
-|---------|--------|
-| InfoLinkSpec | ✅ Implemented |
-| CatalogueLinkSpec | ✅ Implemented |
-| Shared pools (entries/rules/profiles/infoGroups) | ✅ Implemented |
-| PublicationSpec | ✅ Implemented |
-| Multi-catalogue support | ✅ Implemented |
-| `import` attribute (SelectionEntry/Group/EntryLink) | ✅ Implemented |
-
----
-
-## 8. Real-World Data Coverage
+## 5. Real-World Data Coverage
 
 The test suite includes **10 complex real-world roster tests** (`ComplexRealWorldRosterTests.cs`) using wh40k-9e catalogue data. These exercise multi-catalogue scenarios, linked catalogues, conditions, modifiers, constraints, and cost calculations with real game data. All 10 tests pass consistently.
 
@@ -250,7 +162,7 @@ Additionally, **2 declarative DataSource specs** use `github:BSData/wh40k-10e@v1
 
 ---
 
-## 9. CatalogueManager Import Filtering — Architecture Note
+## 6. CatalogueManager Import Filtering — Architecture Note
 
 The `import` attribute on entries (SelectionEntry, SelectionEntryGroup, EntryLink) controls whether entries are visible when their catalogue is imported via CatalogueLink. In the BattleScribe Java engine, this filtering is performed by the **CatalogueManager** during the catalogue loading/merging phase — not at the runtime engine level.
 
@@ -287,7 +199,7 @@ This is documented here as an architectural limitation of the current oracle bri
 
 ---
 
-## 10. Key Behavioral Findings (Documented in Specs)
+## 7. Key Behavioral Findings (Documented in Specs)
 
 - **Hidden profiles/rules/infoGroups**: BattleScribe filters hidden items from selection state output. Specs correctly assert absence of hidden items.
 - **Append modifier**: BattleScribe's `append` modifier auto-prepends a space before the appended value (e.g., "Alpha" + append "Beta" → "Alpha Beta").

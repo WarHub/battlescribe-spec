@@ -2,34 +2,7 @@
 
 > Based on conformance testing against [newrecruit.eu](https://newrecruit.eu)
 > using the battlescribe-spec test suite.
->
-> Last validated: 2026-03-12
 
-## Summary
-
-| Metric | BattleScribe | New Recruit |
-|--------|-------------|-------------|
-| Total specs | 278 | 278 |
-| Expected to pass | 276 | 254 |
-| Expected to fail | 2 | 24 |
-
-**BattleScribe expected failures** (2): NR-specific condition specs where BS
-returns NaN for null childId (`condition-null-childid-nr-force`,
-`condition-null-childid-nr-self`).
-
-Expected failures are encoded in each spec's `engines` YAML field:
-```yaml
-engines:
-  newrecruit: fail    # expected to fail on NR
-  battlescribe: fail  # expected to fail on BS
-  # unlisted engines default to "pass"
-```
-
-Additionally, 14 specs that previously used `newrecruit: fail` markers now pass
-on both engines using [engine-filtered expectedState](engine-filtered-expected-state.md)
-to document per-engine differences inline.
-
-### NR Failure Breakdown
 
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
@@ -38,7 +11,6 @@ to document per-engine differences inline.
 | [Scope/condition evaluation](#3-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
 | [Other behavioral differences](#5-other-behavioral-differences) | 5 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
-| [Constraint/validation differences](#6-constraintvalidation-differences) | 0 | ✅ Resolved | All documented inline via engine-filtered expectedState |
 
 ---
 
@@ -198,60 +170,6 @@ based on any `min>=1` regardless of field type.
 | Spec | Issue |
 |------|-------|
 | `selection/selection-number-with-min` | NR returns different number/amount for min-constrained selections |
-
----
-
-## 6. Constraint/Validation Differences
-
-**0 remaining `newrecruit: fail` specs** — All 11 constraint/validation
-differences are now documented inline using
-[engine-filtered expectedState](engine-filtered-expected-state.md). Each spec
-passes on both engines with per-engine error assertions.
-
-### Error Placement (5 specs) ✅ Resolved
-
-NR places entry-link and shared constraint errors on the **selection** node,
-while BattleScribe places them on the **force** or **roster** node. Additionally,
-the `from:` field may resolve to a different entry (e.g., the shared entry vs
-the entry link).
-
-| Spec | BS error placement | NR error placement |
-|------|-------------------|-------------------|
-| `constraint/constraint-entry-link-merged` | selection (same) | selection (same, different `from`) |
-| `constraint/constraint-shared-linked` | force | selection (different entryId) |
-
-### Hidden Constraint (1 spec) ✅ Resolved
-
-| Spec | Issue |
-|------|-------|
-| `constraint/constraint-hidden-violation-linked` | NR's hidden check has no `constraint.id` |
-
-NR raises a generic "cannot be selected while hidden" error that lacks
-`constraint.id` metadata. The NR adapter detects hidden entries via the
-`isHidden()` API and tags them with `entryId/hidden`. This spec now passes on
-both engines.
-
-### Extra/Different Errors (3 specs) ✅ Resolved
-
-NR evaluates some constraints more aggressively or at different scope boundaries.
-These are now documented with engine-filtered expectedState:
-
-| Spec | Issue |
-|------|-------|
-| `scope/scope-parent` | NR reports extra max constraint error not raised by BS |
-| `constraint/constraint-max-violation` | NR reports max violation at intermediate step; BS doesn't |
-
-### Percent Value (1 spec) ✅ Resolved
-
-| Spec | Issue |
-|------|-------|
-| `constraint/constraint-percent-value` | NR reports fractional constraint violation; BS doesn't |
-
-### Duplicate Errors (1 spec) ✅ Resolved
-
-| Spec | Issue |
-|------|-------|
-| `constraint/constraint-min-on-force-linked` | NR reports 2 errors (force + selection); BS reports 1 |
 
 ---
 
@@ -445,9 +363,9 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   failure suddenly passes, the test FAILS (detecting behavior changes).
   Previously tracked in separate JSON files (`specs/expected-failures/*.json`)
   which have been removed in favor of this single-source-of-truth approach.
-- **Oracle (BattleScribe)**: 276 specs expected to pass, 2 expected to fail
-  (NR-specific null-childId condition behavior). DataSource specs (2 real-world
-  wh40k-10e) are fully supported via IKVM engine with DataUtils XML loading.
+- **Oracle (BattleScribe)**: All specs expected to pass except 2 NR-specific
+  null-childId condition behavior specs. DataSource specs (real-world wh40k-10e)
+  are fully supported via IKVM engine with DataUtils XML loading.
 
 ### Resolved Issues
 
