@@ -90,3 +90,4 @@ steps:
         newrecruit:
           errors:
             - on: selection shared-unit
+              from: shared-unit/con-max-shared

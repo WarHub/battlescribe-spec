@@ -308,6 +308,27 @@ public static class NewRecruitStateReader
                                     if (entryId) break;
                                 }
                             }
+                            // Check owner node's own source constraints (shared constraints
+                            // are defined on the entry itself, not on a child selector)
+                            if (!entryId) {
+                                const ownerSrc = rawOwner.selector?.source || rawOwner.source;
+                                if (ownerSrc?.constraints) {
+                                    for (const c of ownerSrc.constraints) {
+                                        if (c.id === constraintId) {
+                                            entryId = ownerSrc.id || null;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            // For entry-link selections: source.id is the link ID but
+                            // source.targetId is the shared entry that owns the constraint.
+                            // NR doesn't copy shared entry constraints into source.constraints[],
+                            // so use targetId as the defining entry.
+                            if (!entryId) {
+                                const ownerSrc = rawOwner.selector?.source || rawOwner.source;
+                                entryId = ownerSrc?.targetId || null;
+                            }
                         }
 
                         // Suppress ALL roster-level errors. NR only reports cost
