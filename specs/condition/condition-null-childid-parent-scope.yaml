@@ -1,4 +1,4 @@
-id: condition-null-childid-nr-self
+id: condition-null-childid-parent-scope
 category: condition
 description: >
   Condition without childId on parent scope — BattleScribe: condition false (NaN).

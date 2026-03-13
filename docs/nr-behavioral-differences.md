@@ -89,9 +89,10 @@ NR defaults missing childId based on node type: forces/groups use `"any"` (count
 everything), other nodes use `"self"` (count self). See [NR Condition Engine](#nr-condition-engine-internals)
 discovery section for the decompiled code analysis.
 
-Two companion specs (`condition-null-childid-nr-force`, `condition-null-childid-nr-self`)
-assert NR's alternative defaults for missing childId. These pass on NR but are
-expected to fail on BS (`engines: {battlescribe: fail}`).
+Two companion specs (`condition-null-childid-parent-scope`, `condition-null-childid-force-threshold`)
+test NR's alternative defaults for missing childId on different scopes (parent → "self",
+force with threshold → "any"). All three null-childid specs use per-engine `expectedState`
+overrides to describe both engines' behavior.
 
 ---
 

@@ -1,4 +1,4 @@
-id: condition-null-childid-nr-force
+id: condition-null-childid-force-threshold
 category: condition
 description: >
   Condition without childId on force scope — BattleScribe: condition always false (NaN).
