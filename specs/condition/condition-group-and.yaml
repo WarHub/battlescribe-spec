@@ -1,6 +1,7 @@
 id: condition-group-and
 category: condition
 description: Condition group with AND logic on modifier (tests structure)
+
 setup:
   gameSystem:
     id: test-gs

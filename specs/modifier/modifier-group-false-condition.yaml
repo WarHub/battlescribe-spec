@@ -1,6 +1,7 @@
 id: modifier-group-false-condition
 category: modifier
 description: Modifier group with unsatisfied condition does not apply its modifiers
+
 setup:
   gameSystem:
     id: test-gs

@@ -1,6 +1,7 @@
 id: condition-childid-force-entry
 category: condition
 description: childId filter can reference a ForceEntry ID to count forces of that type
+
 setup:
   gameSystem:
     id: test-gs

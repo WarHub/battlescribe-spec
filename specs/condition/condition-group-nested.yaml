@@ -1,6 +1,7 @@
 id: condition-group-nested
 category: condition
 description: Nested condition groups form complex boolean logic trees (AND containing OR)
+
 setup:
   gameSystem:
     id: test-gs

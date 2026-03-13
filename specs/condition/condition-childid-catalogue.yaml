@@ -2,6 +2,7 @@ id: condition-childid-catalogue
 category: condition
 description: childId filter can reference a Catalogue ID for scoping queries to a specific catalogue
 tags: []
+
 setup:
   gameSystem:
     id: test-gs

@@ -1,6 +1,7 @@
 id: modifier-repeat-percent-value
 category: modifier
 description: Repeat with percentValue=true uses percentage-based threshold calculation
+
 setup:
   gameSystem:
     id: test-gs

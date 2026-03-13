@@ -7,6 +7,7 @@ tags: [wh40k-10e, real-world, space-marines, cost, profile]
 # Per-engine expectedState overrides can't fix action-level incompatibilities.
 engines:
   newrecruit: fail
+
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
 

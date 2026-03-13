@@ -1,6 +1,7 @@
 id: modifier-group-basic
 category: modifier
 description: Modifier group with condition applies when condition is met (tests modifierGroup structure)
+
 setup:
   gameSystem:
     id: test-gs

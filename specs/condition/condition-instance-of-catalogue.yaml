@@ -2,6 +2,7 @@ id: condition-instance-of-catalogue
 category: condition
 description: instanceOf condition can match against Catalogue IDs for catalogue-scoped checks
 tags: []
+
 setup:
   gameSystem:
     id: test-gs

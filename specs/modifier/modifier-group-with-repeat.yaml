@@ -1,6 +1,7 @@
 id: modifier-group-with-repeat
 category: modifier
 description: ModifierGroup with its own repeat multiplier applies contained modifiers multiple times
+
 setup:
   gameSystem:
     id: test-gs

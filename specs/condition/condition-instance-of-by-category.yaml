@@ -1,6 +1,7 @@
 id: condition-instance-of-by-category
 category: condition
 description: instanceOf condition can match by CategoryEntry ID on selections with matching category links
+
 setup:
   gameSystem:
     id: test-gs
