@@ -470,6 +470,9 @@ public sealed class SpecRunner
             if (es.PublicationId is not null)
                 AssertEqual(stepIndex, $"{selPrefix}.publicationId", es.PublicationId, a.PublicationId ?? "");
 
+            if (es.PublicationName is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.publicationName", es.PublicationName, a.PublicationName ?? "");
+
             if (es.Costs is { } eCosts)
             {
                 foreach (var ec in eCosts)

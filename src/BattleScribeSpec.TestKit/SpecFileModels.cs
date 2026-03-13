@@ -294,6 +294,9 @@ public sealed class ExpectedSelectionDef
 
     [YamlMember(Alias = "publicationId")]
     public string? PublicationId { get; set; }
+
+    [YamlMember(Alias = "publicationName")]
+    public string? PublicationName { get; set; }
 }
 
 public sealed class ExpectedCostDef

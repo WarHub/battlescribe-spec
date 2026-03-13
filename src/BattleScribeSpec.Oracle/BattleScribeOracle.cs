@@ -1765,6 +1765,32 @@ public sealed class BattleScribeOracle : IDisposable
 
     internal GameSystem? GetGameSystem() => _gameSystem;
 
+    internal string? GetPublicationName(string? publicationId)
+    {
+        if (string.IsNullOrEmpty(publicationId) || _gameSystem is null)
+            return null;
+        // Search game system publications
+        var iter = _gameSystem.getPublications().iterator();
+        while (iter.hasNext())
+        {
+            var pub = (Publication)iter.next();
+            if (pub.getId() == publicationId)
+                return pub.getName();
+        }
+        // Search catalogue publications
+        foreach (var cat in _catalogues.Values)
+        {
+            var catIter = cat.getPublications().iterator();
+            while (catIter.hasNext())
+            {
+                var pub = (Publication)catIter.next();
+                if (pub.getId() == publicationId)
+                    return pub.getName();
+            }
+        }
+        return null;
+    }
+
     /// <summary>
     /// Get name of first selection in first force (for modifier testing).
     /// </summary>

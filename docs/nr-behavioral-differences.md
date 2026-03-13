@@ -50,7 +50,7 @@ faction-specific entries. BattleScribe puts faction entries first.
 | `selection/profile-publication` | Profile publicationId | Profile on a selection should preserve its publicationId |
 | `selection/infolink-profile-publication` | InfoLink profile publicationId | Profile linked via InfoLink should preserve target's publicationId |
 | `selection/infolink-publication-override` | InfoLink publication non-override | InfoLink publicationId should NOT override linked target's own publicationId |
-| `gamesystem/gamesystem-publication` | GameSystem publication | Publication defined at GameSystem level should be referenceable by entries |
+| `gamesystem/gamesystem-publication` | GameSystem publication | Publication defined at GameSystem level should be resolved — asserts publicationName on selection |
 | `selection/infolink-page-override` | InfoLink page non-override | InfoLink page should NOT override linked rule's own page |
 
 **Root cause**: NR's data model doesn't fully wire publication resolution

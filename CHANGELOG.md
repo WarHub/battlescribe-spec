@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`publicationName` assertion field** on selections — engines now resolve publication
+  references and expose the publication's `name`, proving the link was actually resolved
+  (not just echoing back the `publicationId` from XML input).
+
 ### Changed
 
 - **Codebase reorganization** — every project now has its own subdirectory:
