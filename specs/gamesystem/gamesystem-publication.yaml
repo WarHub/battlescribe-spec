@@ -1,7 +1,5 @@
 id: gamesystem-publication
 category: gamesystem
-engines:
-  newrecruit: fail
 description: >
   Publication defined at GameSystem level can be referenced by entries
   in catalogues via publicationId. The publication metadata flows to
@@ -48,3 +46,8 @@ steps:
               publicationId: pub-core
               publicationName: Core Rulebook
               page: "42"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Unit A

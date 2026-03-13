@@ -1,7 +1,5 @@
 id: selection-publication-and-page
 category: selection
-engines:
-  newrecruit: fail
 description: Selection entry with both publicationId and page preserves both fields
 
 setup:
@@ -37,3 +35,8 @@ steps:
             - name: Marine
               publicationId: pub-1
               page: "42"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine

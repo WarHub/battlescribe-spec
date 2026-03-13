@@ -1,8 +1,6 @@
 id: infolink-publication-override
 category: selection
 description: InfoLink publicationId does NOT override linked target - target's own publicationId is preserved
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:
@@ -50,3 +48,11 @@ steps:
                 - name: Fearless
                   description: Immune to morale
                   publicationId: pub-core
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine
+                  rules:
+                    - name: Fearless
+                      description: Immune to morale

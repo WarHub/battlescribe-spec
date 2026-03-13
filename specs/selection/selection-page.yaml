@@ -1,7 +1,5 @@
 id: selection-page
 category: selection
-engines:
-  newrecruit: fail
 description: Selection entry preserves its page field from the catalogue definition
 
 setup:
@@ -32,3 +30,8 @@ steps:
         - selections:
             - name: Veteran
               page: "42"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Veteran

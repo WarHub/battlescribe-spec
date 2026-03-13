@@ -1,7 +1,5 @@
 id: selection-publication
 category: selection
-engines:
-  newrecruit: fail
 description: Selection entry preserves its publicationId from the catalogue definition
 
 setup:
@@ -35,3 +33,8 @@ steps:
         - selections:
             - name: Marine
               publicationId: pub-1
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine
