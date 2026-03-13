@@ -38,6 +38,7 @@ steps:
       costs:
         - typeId: pts
           value: 100
+
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 0

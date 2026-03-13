@@ -29,18 +29,23 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1
+
   - action: duplicateSelection
     forceIndex: 0
     selectionIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 2
+
   - expectedState:
       forces:
         - selectionCount: 2

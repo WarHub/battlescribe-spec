@@ -29,23 +29,29 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       costs:
         - typeId: pts
           value: 75
+
   - action: duplicateSelection
     forceIndex: 0
     selectionIndex: 0
+
   - expectedState:
       costs:
         - typeId: pts
           value: 150
+
   - action: duplicateSelection
     forceIndex: 0
     selectionIndex: 0
+
   - expectedState:
       costs:
         - typeId: pts

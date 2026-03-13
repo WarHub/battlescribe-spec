@@ -35,6 +35,7 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1
@@ -44,6 +45,7 @@ steps:
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 0

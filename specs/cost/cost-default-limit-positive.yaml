@@ -29,6 +29,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

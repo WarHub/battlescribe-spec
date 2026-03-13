@@ -33,9 +33,11 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -43,4 +45,5 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 2
+
   - expectedState: {}

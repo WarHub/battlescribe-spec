@@ -48,6 +48,7 @@ steps:
         - {}
         - selections:
             - name: Target
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

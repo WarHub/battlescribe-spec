@@ -37,43 +37,55 @@ steps:
   # Start empty
   - expectedState:
       forceCount: 0
+
   - action: addForce
     forceEntryIndex: 0
+
   - expectedState:
       forceCount: 1
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       costs:
         - typeId: pts
           value: 30
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1
+
   - expectedState:
       costs:
         - typeId: pts
           value: 120
+
   - action: duplicateSelection
     forceIndex: 0
     selectionIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 3
       costs:
         - typeId: pts
           value: 150
+
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 1
+
   - expectedState:
       forces:
         - selectionCount: 2
       costs:
         - typeId: pts
           value: 60
+
   - action: removeForce
     forceIndex: 0
+
   - expectedState:
       forceCount: 0

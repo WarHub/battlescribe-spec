@@ -20,6 +20,7 @@ steps:
 
   - expectedState:
       forceCount: 1
+
   - action: removeForce
     forceIndex: 0
 

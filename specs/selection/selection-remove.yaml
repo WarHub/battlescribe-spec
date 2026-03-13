@@ -29,6 +29,7 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 1
+
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 0

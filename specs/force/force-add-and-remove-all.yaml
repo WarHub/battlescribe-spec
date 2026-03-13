@@ -19,15 +19,21 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: addForce
     forceEntryIndex: 1
+
   - expectedState:
       forceCount: 2
+
   - action: removeForce
     forceIndex: 1
+
   - expectedState:
       forceCount: 1
+
   - action: removeForce
     forceIndex: 0
+
   - expectedState:
       forceCount: 0

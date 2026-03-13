@@ -29,25 +29,32 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1
+
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 0
+
   - expectedState:
       costs:
         - typeId: pts
           value: 0.0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1

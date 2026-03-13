@@ -41,6 +41,7 @@ steps:
       costs:
         - typeId: pts
           value: 100
+
   - action: selectEntry
     forceIndex: 1
     entryIndex: 0

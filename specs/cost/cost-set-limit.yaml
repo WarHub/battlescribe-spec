@@ -29,16 +29,20 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       costs:
         - typeId: pts
           value: 100
+
   - action: setCostLimit
     costTypeId: pts
     value: 500
+
   - expectedState:
       costs:
         - typeId: pts

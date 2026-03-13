@@ -33,13 +33,16 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - action: selectChildEntry
     forceIndex: 0
     selectionIndex: 0
     childEntryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1

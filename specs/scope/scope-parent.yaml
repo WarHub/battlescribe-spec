@@ -45,6 +45,7 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
