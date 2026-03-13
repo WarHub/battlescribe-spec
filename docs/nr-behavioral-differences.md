@@ -8,7 +8,7 @@
 |----------|-------|----------|-------------|
 | [Import ordering](#1-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
 | [Missing features](#2-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
-| [Scope/condition evaluation](#3-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
+| [Scope/condition evaluation](#3-scopecondition-evaluation) | 4 | Medium | NR evaluates child-force scope, ancestor scope, and null-childId conditions differently |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
 | [Other behavioral differences](#5-other-behavioral-differences) | 5 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
 
@@ -77,6 +77,7 @@ modifiers to trigger when they shouldn't (or vice versa).
 |------|-------|
 | `scope/scope-include-child-forces` | Condition with `scope=force, childForces=true` triggers when it shouldn't |
 | `scope/scope-include-child-forces-nested` | Same issue in nested force scenario |
+| `scope/scope-ancestor` | Ancestor scope modifier fires in NR but not in BattleScribe |
 | `condition/condition-null-childid` | Missing childId: NR counts all selections (condition fires), BS returns NaN (condition false) |
 
 These specs test complex condition evaluation where NR's implementation
@@ -361,8 +362,10 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   field (map of engine name → expectation: `pass`, `fail`, or `skip`).
   If a spec is expected to fail and does fail, the test passes. If an expected
   failure suddenly passes, the test FAILS (detecting behavior changes).
-  Previously tracked in separate JSON files (`specs/expected-failures/*.json`)
-  which have been removed in favor of this single-source-of-truth approach.
+  Most specs now use **per-engine `expectedState` overrides** instead of
+  `engines: {engineName: fail}` — the override describes the actual engine
+  behavior, keeping both engines passing. Only 1 real-world spec still uses
+  `newrecruit: fail` due to fundamental data incompatibilities.
 - **Oracle (BattleScribe)**: All specs expected to pass except 2 NR-specific
   null-childId condition behavior specs. DataSource specs (real-world wh40k-10e)
   are fully supported via IKVM engine with DataUtils XML loading.

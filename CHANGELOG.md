@@ -14,6 +14,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Per-engine `expectedState` overrides** replace blunt `engines: {engineName: fail}`
+  markers on 25 specs. Each spec now describes the *actual* per-engine behavior via
+  `expectedState.engines.{engineName}` blocks, keeping all engines passing while
+  documenting behavioral differences precisely. Only 1 real-world spec retains
+  `newrecruit: fail` (wh40k-10e-space-marines-army) due to fundamental data
+  incompatibilities that can't be expressed as state overrides.
+- **Before/after coverage** added to 13 condition, modifier, and scope specs that
+  previously only tested one side of their conditional behavior. Specs now assert
+  both the triggered and non-triggered states, verifying the condition truly controls
+  the modifier application.
+
+### Changed
+
 - **Codebase reorganization** — every project now has its own subdirectory:
   - Moved root `src/BattleScribeSpec.csproj` + 8 .cs files into `src/BattleScribeSpec.Oracle/`.
   - Organized 32 flat test files into 6 subfolders: `Infrastructure/`, `Conformance/`, `Oracle/`,
