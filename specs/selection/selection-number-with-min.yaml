@@ -1,7 +1,7 @@
 id: selection-number-with-min
 category: selection
 description: Entry with min=3 constraint — verify initial selection number respects min
-tags: [selection, number, constraint, min]
+tags: [selection, number, constraint, min, newrecruit-bug]
 
 setup:
   gameSystem:

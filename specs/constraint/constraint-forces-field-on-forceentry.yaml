@@ -3,6 +3,7 @@ category: constraint
 description: >
   Constraint with field=forces on a ForceEntry limits how many forces of that type
   can be added to the roster. This is the intended use case for field=forces.
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:

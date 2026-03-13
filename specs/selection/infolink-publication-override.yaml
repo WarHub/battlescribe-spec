@@ -1,6 +1,7 @@
 id: infolink-publication-override
 category: selection
 description: InfoLink publicationId does NOT override linked target - target's own publicationId is preserved
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:

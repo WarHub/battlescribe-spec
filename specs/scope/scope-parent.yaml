@@ -1,6 +1,7 @@
 id: scope-parent
 category: scope
 description: Condition with scope=parent evaluates on the parent element
+tags: [design-difference]
 
 setup:
   gameSystem:

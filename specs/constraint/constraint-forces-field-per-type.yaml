@@ -3,6 +3,7 @@ category: constraint
 description: >
   Constraint with field=forces counts forces per entry type independently.
   Each ForceEntry's constraint only counts forces created from that same entry.
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:

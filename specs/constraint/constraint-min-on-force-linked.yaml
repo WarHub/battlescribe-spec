@@ -4,6 +4,7 @@ description: Min selection constraint scoped to force produces structured error
 tags:
   - validation-errors
   - structured-errors
+  - design-difference
 
 setup:
   gameSystem:

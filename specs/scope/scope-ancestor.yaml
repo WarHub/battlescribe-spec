@@ -1,6 +1,7 @@
 id: scope-ancestor
 category: scope
 description: Ancestor scope condition evaluates upward in the selection hierarchy
+tags: [battlescribe-bug]
 
 setup:
   gameSystem:

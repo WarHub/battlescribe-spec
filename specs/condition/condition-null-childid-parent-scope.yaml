@@ -3,6 +3,7 @@ category: condition
 description: >
   Condition without childId on parent scope — BattleScribe: condition false (NaN).
   NR: defaults to counting "self", so atLeast 1 fires when entry is selected.
+tags: [undefined-behavior]
 
 setup:
   gameSystem:

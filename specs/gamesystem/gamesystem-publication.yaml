@@ -4,6 +4,7 @@ description: >
   Publication defined at GameSystem level can be referenced by entries
   in catalogues via publicationId. The publication metadata flows to
   selections.
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:

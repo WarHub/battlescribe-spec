@@ -3,6 +3,7 @@ category: condition
 description: >
   Condition without childId on force scope — BattleScribe: condition always false (NaN).
   NR: defaults to counting all selections ("any"), so atLeast 2 fires at 2+ selections.
+tags: [undefined-behavior]
 
 setup:
   gameSystem:

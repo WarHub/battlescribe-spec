@@ -4,6 +4,7 @@ description: >
   Constraint with field=forces on a SelectionEntry always counts 0 forces
   because the child filter resolves to the owning SelectionEntry (not a ForceEntry),
   so force matching fails. An atLeast 1 constraint is therefore always violated.
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:

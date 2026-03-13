@@ -1,6 +1,7 @@
 id: selection-publication
 category: selection
 description: Selection entry preserves its publicationId from the catalogue definition
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:

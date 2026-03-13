@@ -4,6 +4,7 @@ description: >
   SelectionEntryGroup with collective=true causes its child selections to be
   counted as a single collective for constraint purposes. When collective is true,
   the number of the group is used for counting rather than individual children.
+tags: [design-difference]
 
 setup:
   gameSystem:

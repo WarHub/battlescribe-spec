@@ -4,6 +4,7 @@ description: Shared constraint violation produces structured error with entry li
 tags:
   - validation-errors
   - structured-errors
+  - design-difference
 
 setup:
   gameSystem:

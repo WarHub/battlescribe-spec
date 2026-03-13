@@ -1,6 +1,7 @@
 id: selection-hidden-entry
 category: selection
 description: Hidden selection entries can still be selected
+tags: [design-difference]
 
 setup:
   gameSystem:

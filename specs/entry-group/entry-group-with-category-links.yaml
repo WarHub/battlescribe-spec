@@ -3,6 +3,7 @@ category: entry-group
 description: >
   SelectionEntryGroup with categoryLinks causes selections within the group
   to inherit those categories.
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:

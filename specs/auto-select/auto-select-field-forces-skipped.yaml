@@ -3,7 +3,7 @@ category: auto-select
 description: >
   Entry with min=1 field=forces is NOT auto-selected by BattleScribe.
   Auto-selection only triggers for field=selections constraints.
-tags: [auto-select, constraint, min, field-forces]
+tags: [auto-select, constraint, min, field-forces, newrecruit-bug]
 
 setup:
   gameSystem:

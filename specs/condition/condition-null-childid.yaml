@@ -3,6 +3,7 @@ category: condition
 description: >
   Condition with no childId — BattleScribe: query cannot resolve target, returns NaN, condition
   is false. NR: on force scope, defaults to counting all selections ("any").
+tags: [undefined-behavior]
 
 setup:
   gameSystem:

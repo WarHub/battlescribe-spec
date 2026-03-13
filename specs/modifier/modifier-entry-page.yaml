@@ -1,7 +1,7 @@
 id: modifier-entry-page
 category: modifier
 description: Modifier can set an entry's page field (STRING modifier on BaseBookData.page)
-tags: []
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:

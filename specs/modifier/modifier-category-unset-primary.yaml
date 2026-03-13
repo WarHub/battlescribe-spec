@@ -1,7 +1,7 @@
 id: modifier-category-unset-primary
 category: modifier
 description: Category unset-primary modifier removes primary status from a category on the selection
-tags: []
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:

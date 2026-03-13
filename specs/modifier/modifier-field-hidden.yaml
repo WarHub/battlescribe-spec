@@ -1,6 +1,7 @@
 id: modifier-field-hidden
 category: modifier
 description: Modifier targeting 'hidden' field changes entry visibility (boolean set)
+tags: [design-difference]
 
 setup:
   gameSystem:

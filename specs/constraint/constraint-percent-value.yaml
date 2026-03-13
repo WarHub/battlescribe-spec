@@ -1,6 +1,7 @@
 id: constraint-percent-value
 category: constraint
 description: Constraint with percentValue calculates threshold as percentage
+tags: [battlescribe-bug]
 
 setup:
   gameSystem:

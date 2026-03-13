@@ -1,6 +1,7 @@
 id: infolink-page-override
 category: selection
 description: InfoLink page does NOT override linked rule's page - target's own page is preserved
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:

@@ -1,6 +1,7 @@
 id: selection-page
 category: selection
 description: Selection entry preserves its page field from the catalogue definition
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:

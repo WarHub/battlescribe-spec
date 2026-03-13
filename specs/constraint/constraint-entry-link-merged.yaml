@@ -5,6 +5,7 @@ description: >
   During catalogue expansion, constraints from both sources are merged
   into the expanded copy. Both constraints are evaluated independently —
   the more restrictive one effectively limits selection count.
+tags: [design-difference]
 
 setup:
   gameSystem:

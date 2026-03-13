@@ -1,6 +1,7 @@
 id: constraint-max-violation
 category: constraint
 description: Selecting more than max constraint still creates selections (engine tracks count)
+tags: [battlescribe-bug]
 
 setup:
   gameSystem:
