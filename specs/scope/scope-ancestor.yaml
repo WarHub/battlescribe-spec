@@ -41,7 +41,19 @@ steps:
     forceIndex: 0
     selectionIndex: 0
     childEntryIndex: 0
+  # Ancestor scope checks upward from child. Despite parent being selected,
+  # the BS engine doesn't fire the modifier — name stays unchanged
   - expectedState:
       forces:
         - selections:
             - name: Parent Unit
+              children:
+                - name: Equipment
+      engines:
+        # NR fires the ancestor scope modifier — child name changes
+        newrecruit:
+          forces:
+            - selections:
+                - name: Parent Unit
+                  children:
+                    - name: Modified Equipment
