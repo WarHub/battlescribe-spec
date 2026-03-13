@@ -1,7 +1,5 @@
 id: modifier-entry-page
 category: modifier
-engines:
-  newrecruit: fail
 description: Modifier can set an entry's page field (STRING modifier on BaseBookData.page)
 tags: []
 
@@ -37,3 +35,8 @@ steps:
         - selections:
             - name: Marine
               page: "99"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine

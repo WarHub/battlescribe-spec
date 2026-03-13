@@ -1,12 +1,8 @@
 id: condition-null-childid-nr-self
 category: condition
-engines:
-  battlescribe: fail
 description: >
-  NR-specific: condition without childId on parent scope defaults to counting "self".
-  NR's hash uses childId || (isForce ? "any" : "self"), so on a non-force node,
-  missing childId counts the node itself. An atLeast 1 condition on parent scope
-  with missing childId fires when the entry is selected (it counts itself).
+  Condition without childId on parent scope — BattleScribe: condition false (NaN).
+  NR: defaults to counting "self", so atLeast 1 fires when entry is selected.
 
 setup:
   gameSystem:
@@ -42,9 +38,16 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # Selection counts itself (self=1), atLeast 1 → true → modifier fires
+  # BattleScribe: missing childId → condition false → modifier doesn't fire → name unchanged
+  # NR: missing childId on parent scope → counts "self" → atLeast 1 → true → modifier fires
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
-            - name: Self Counted
+            - name: Unit
+      engines:
+        newrecruit:
+          forces:
+            - selectionCount: 1
+              selections:
+                - name: Self Counted
