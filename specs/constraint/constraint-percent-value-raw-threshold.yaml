@@ -1,0 +1,77 @@
+id: constraint-percent-value-raw-threshold
+category: constraint
+description: >
+  Proves BS ignores percentValue and uses the raw value as flat limit.
+  With value=1 and percentValue=true, BS treats it as "max 1 selection" (flat).
+  NR correctly treats it as "max 1% of parent selections" — so even 1 selection
+  (which is 100% of total) exceeds the 1% threshold and triggers an error.
+  Both engines produce an error when 2 selections exist, but for different
+  reasons: BS because 2 > 1 (flat), NR because 2 > 0.02 (1% of 2).
+tags: [battlescribe-bug]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-se1-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: c1
+              type: max
+              value: 1
+              field: selections
+              scope: parent
+              percentValue: true
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # 1 selection. BS: 1 <= 1 (raw flat), no error. NR: 1% of 1 = 0.01, 1 > 0.01, error.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-1
+              from: se-1/c1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # 2 selections. BS: 2 > 1 (raw flat), error. NR: 1% of 2 = 0.02, 2 > 0.02, error.
+  # Both engines agree on error here — but for entirely different reasons.
+  - expectedState:
+      forces:
+        - selectionCount: 2
+      errors:
+        - on: selection se-1
+          from: se-1/c1

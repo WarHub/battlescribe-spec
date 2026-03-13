@@ -1,6 +1,12 @@
 id: constraint-max-violation
 category: constraint
-description: Selecting more than max constraint still creates selections (engine tracks count)
+description: >
+  Selecting more than max constraint on an uncategorised entry doesn't produce
+  validation errors in BS. The constraint validation filter at f.java:493 skips
+  parent-scope constraints when the entry has no category links.
+  Compare with constraint-max-violation-linked which has category links and
+  works correctly on both engines — proving the bug is specifically about
+  uncategorised entries.
 tags: [battlescribe-bug]
 
 setup:
@@ -42,7 +48,10 @@ steps:
       forces:
         - selectionCount: 1
 
-  # Engine allows selection beyond max — tracks count for validation
+  # BS bug: selecting beyond max=1 produces no error because the constraint
+  # validation filter (f.java:493) skips uncategorised parent-scope entries.
+  # The same constraint WITH categories works correctly — see
+  # constraint-max-violation-linked which passes on both engines.
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

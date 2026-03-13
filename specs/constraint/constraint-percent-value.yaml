@@ -1,6 +1,12 @@
 id: constraint-percent-value
 category: constraint
-description: Constraint with percentValue calculates threshold as percentage
+description: >
+  Constraint with percentValue is ignored by BS — uses raw value as flat limit.
+  The threshold calculation code exists (c.java:1372 → h.java:260) and computes
+  (parentCount / 100) * value, but BS never applies it. Instead, the raw value
+  (50) is used as a flat max. So "max 50% of parent selections" is treated as
+  "max 50 selections" in BS. NR correctly computes the percentage.
+  See constraint-percent-value-raw-threshold for proof that BS uses the raw value.
 tags: [battlescribe-bug]
 
 setup:
@@ -46,7 +52,11 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # percentValue=true: max 50% of selections (relative to other constraints/context)
+  # percentValue=true: max = 50% of parent selections.
+  # With 1 total selection: threshold should be 1/100*50 = 0.5.
+  # 1 selection > 0.5 → should produce an error.
+  # BS bug: ignores percentValue, treats raw value (50) as flat max.
+  # 1 <= 50 → no error in BS.
   - expectedState:
       forces:
         - selectionCount: 1

@@ -21,7 +21,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$specsDir = Join-Path $PSScriptRoot 'specs'
+$repoRoot = Split-Path $PSScriptRoot -Parent
+$specsDir = Join-Path $repoRoot 'specs'
 
 if (-not (Test-Path $specsDir)) {
     Write-Error "specs/ directory not found at $specsDir"
