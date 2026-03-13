@@ -54,3 +54,15 @@ steps:
       forces:
         - selections:
             - name: Elite Soldier
+
+  # Add 2nd selection: OR(2>5=false, 2<2=false) = false → AND = false → modifier reverts
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Soldier
+            - name: Soldier

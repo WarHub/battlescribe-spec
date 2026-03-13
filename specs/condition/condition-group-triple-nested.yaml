@@ -51,3 +51,27 @@ steps:
       forces:
         - selections:
             - name: Elite Trooper
+
+  # Add 4 more to reach 5: lessThan 5 = false → inner AND=false → OR=false → outer AND=false
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 5
+          selections:
+            - name: Trooper
+            - name: Trooper
+            - name: Trooper
+            - name: Trooper
+            - name: Trooper

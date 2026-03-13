@@ -41,3 +41,14 @@ steps:
       forces:
         - selections:
             - name: Exactly One
+
+  # Add second selection → equalTo(1) is now false → modifier not applied
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+            - name: Unit A

@@ -36,6 +36,7 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
+  # instanceOf(se-unit-a) with scope=force — engine returns false, modifier not applied
   - expectedState:
       forces:
         - selectionCount: 1

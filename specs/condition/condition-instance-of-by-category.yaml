@@ -51,9 +51,21 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # Only detector selected, no HQ-category selection yet → false
+  # Only detector selected, no HQ-category selection yet → instanceOf false
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Detector
+
+  # Select Commander (has HQ category link) — instanceOf by category still returns false in engine
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Detector
+            - name: Commander

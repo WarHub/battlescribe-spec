@@ -41,3 +41,27 @@ steps:
       forces:
         - selections:
             - name: Not Five
+
+  # Add 4 more selections to reach exactly 5 → notEqualTo(5) is now false
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 5
+          selections:
+            - name: Unit A
+            - name: Unit A
+            - name: Unit A
+            - name: Unit A
+            - name: Unit A
