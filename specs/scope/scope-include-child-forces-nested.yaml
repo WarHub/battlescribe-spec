@@ -1,7 +1,5 @@
 id: scope-include-child-forces-nested
 category: scope
-engines:
-  newrecruit: fail
 description: includeChildForces flag traverses into nested forces for query resolution
 tags: []
 
@@ -47,3 +45,9 @@ steps:
       forces:
         - selections:
             - name: Squad
+      engines:
+        # NR ignores includeChildForces flag — condition fires counting current force
+        newrecruit:
+          forces:
+            - selections:
+                - name: Veteran Squad

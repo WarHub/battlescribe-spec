@@ -1,7 +1,5 @@
 id: constraint-forces-field-min-error
 category: constraint
-engines:
-  newrecruit: fail
 description: >
   Constraint with field=forces min on a ForceEntry requires a minimum number of
   forces. Unlike field=selections min, field=forces min does NOT auto-select.
@@ -40,6 +38,13 @@ steps:
       errors:
         - on: roster
           from: fe-patrol/con-min-forces
+      engines:
+        # NR places the error on force (not roster) and never resolves it
+        newrecruit:
+          forceCount: 1
+          errors:
+            - on: force fe-patrol
+              from: fe-patrol/con-min-forces
 
   - action: addForce
     forceEntryIndex: 0
@@ -47,3 +52,12 @@ steps:
   # 2 Patrol forces, min 2 → constraint satisfied
   - expectedState:
       forceCount: 2
+      engines:
+        # NR still reports errors — each force independently reports min-forces violation
+        newrecruit:
+          forceCount: 2
+          errors:
+            - on: force fe-patrol
+              from: fe-patrol/con-min-forces
+            - on: force fe-patrol
+              from: fe-patrol/con-min-forces

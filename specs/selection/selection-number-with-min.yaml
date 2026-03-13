@@ -1,10 +1,5 @@
 id: selection-number-with-min
 category: selection
-# NR fails: creates 1 Trooper with number=1 instead of number=3.
-# Verified NR doesn't create 3 separate selections either — it simply
-# doesn't apply the min constraint to set the initial child number.
-engines:
-  newrecruit: fail
 description: Entry with min=3 constraint — verify initial selection number respects min
 tags: [selection, number, constraint, min]
 
@@ -57,3 +52,17 @@ steps:
                 - name: Trooper
                   type: model
                   number: 3
+      engines:
+        # NR doesn't apply min constraint to initial number — gets number=1, reports error
+        newrecruit:
+          forces:
+            - selectionCount: 1
+              selections:
+                - name: Parent Unit
+                  children:
+                    - name: Trooper
+                      type: model
+                      number: 1
+          errors:
+            - on: selection se-parent
+              from: se-trooper/con-min

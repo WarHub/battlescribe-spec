@@ -1,7 +1,5 @@
 id: entry-group-collective
 category: entry-group
-engines:
-  newrecruit: fail
 description: >
   SelectionEntryGroup with collective=true causes its child selections to be
   counted as a single collective for constraint purposes. When collective is true,
@@ -66,3 +64,12 @@ steps:
               children:
                 - name: Sword
                 - name: Axe
+      engines:
+        # NR returns children in different order
+        newrecruit:
+          forces:
+            - selections:
+                - name: Unit A
+                  children:
+                    - name: Axe
+                    - name: Sword

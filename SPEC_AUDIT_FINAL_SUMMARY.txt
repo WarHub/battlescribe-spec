@@ -1,0 +1,89 @@
+╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                    SPEC AUDIT RESULTS - FINAL SUMMARY                                        ║
+╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+OVERALL COVERAGE: 36.9% (48 of 130 specs test before AND after state)
+
+Category        Total   Both Sides   Flagged    %Coverage   Status
+────────────────────────────────────────────────────────────────────────────────
+Constraint        37        34          3        91.9%     ✓ GOOD
+Modifier          48         2         46         4.2%     ⚠️ CRITICAL
+Condition         31         8         23        25.8%     ⚠️ POOR  
+Scope             14         4         10        28.6%     ⚠️ POOR
+────────────────────────────────────────────────────────────────────────────────
+TOTAL            130        48         82        36.9%     ⚠️ NEEDS WORK
+
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+1. CONSTRAINT SPECS (91.9%) ✓ GOOD
+   • 34/37 specs properly test both before and after state
+   • Flagged (3): constraint-min-satisfied, constraint-min-uncategorised-skipped, constraint-min-zero-no-error
+   • Assessment: Good coverage. Flagged specs test edge cases with implicit before state.
+   • Effort: OPTIONAL (3 specs × 3 min = ~10 min if improving)
+
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+2. MODIFIER SPECS (4.2%) ⚠️ CRITICAL GAP
+   • Only 2/48 specs test both before and after state
+   • Flagged (46): 96% of modifier specs missing before/after coverage!
+   
+   Well-tested (2):
+   • modifier-conditional-increment-cost
+   • modifier-conditional-toggle
+   
+   Critical issues with flagged 46 specs:
+   ✗ Only test final state after modifier applied
+   ✗ Don't verify modifiers apply when they should
+   ✗ Don't verify modifiers don't apply when they shouldn't
+   ✗ Missing conditional modifier toggle tests
+   
+   Recommended pattern (from modifier-conditional-toggle):
+   - Select entry → expectedState (unmodified) → trigger condition → expectedState (modified)
+   
+   Effort: 4 hours (46 specs × 5 min)
+   Impact: HIGHEST PRIORITY
+
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+3. CONDITION SPECS (25.8%) ⚠️ POOR
+   • 8/31 specs properly test both before and after state
+   • Flagged (23): 74% only test condition when TRUE, missing FALSE path tests
+   
+   Well-tested (8):
+   • condition-at-least, condition-null-childid-nr-force, condition-not-instance-of
+   • condition-multiple-and, condition-instance-of-by-type, condition-percent-value
+   • condition-greater-than, condition-scope-roster
+   
+   Recommended pattern:
+   - Select without condition met (no modifier) → Select with condition met (modifier applies)
+   
+   Effort: 2 hours (23 specs × 5 min)
+   Impact: HIGH
+
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+4. SCOPE SPECS (28.6%) ⚠️ POOR
+   • 4/14 specs properly test both before and after state
+   • Flagged (10): 71% only test when scope matches, missing non-match tests
+   
+   Well-tested (4):
+   • scope-force, scope-parent, scope-roster-cross-force, scope-roster
+   
+   Recommended pattern:
+   - Element outside scope → Element inside scope (modifier behavior changes)
+   
+   Effort: 50 min (10 specs × 5 min)
+   Impact: MEDIUM
+
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+PRIORITY ROADMAP:
+
+Priority 1 (CRITICAL):  Modifier specs (46 specs, 4 hours) → Coverage: 4% → 100%
+Priority 2 (HIGH):      Condition specs (23 specs, 2 hours) → Coverage: 26% → ~75%
+Priority 3 (MEDIUM):    Scope specs (10 specs, 50 min) → Coverage: 29% → ~71%
+Priority 4 (OPTIONAL):  Constraint specs (3 specs, 10 min) → Coverage: 92% → ~95%
+
+Total effort to reach ~85% coverage: ~6.5 hours
+
+════════════════════════════════════════════════════════════════════════════════════════════════════

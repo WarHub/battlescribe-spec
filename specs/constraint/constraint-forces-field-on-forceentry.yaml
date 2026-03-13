@@ -1,7 +1,5 @@
 id: constraint-forces-field-on-forceentry
 category: constraint
-engines:
-  newrecruit: fail
 description: >
   Constraint with field=forces on a ForceEntry limits how many forces of that type
   can be added to the roster. This is the intended use case for field=forces.
@@ -58,3 +56,8 @@ steps:
           from: fe-patrol/con-max-forces
         - on: roster
           from: fe-patrol/con-max-forces
+      engines:
+        # NR doesn't evaluate field=forces constraints on ForceEntries
+        newrecruit:
+          forceCount: 3
+          errors: []

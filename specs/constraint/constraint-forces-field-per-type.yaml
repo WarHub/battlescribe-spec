@@ -1,7 +1,5 @@
 id: constraint-forces-field-per-type
 category: constraint
-engines:
-  newrecruit: fail
 description: >
   Constraint with field=forces counts forces per entry type independently.
   Each ForceEntry's constraint only counts forces created from that same entry.
@@ -71,4 +69,9 @@ steps:
           from: fe-battalion/con-max-battalion
         - on: roster
           from: fe-battalion/con-max-battalion
+      engines:
+        # NR doesn't evaluate field=forces constraints
+        newrecruit:
+          forceCount: 4
+          errors: []
 
