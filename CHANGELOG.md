@@ -19,6 +19,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Engine difference tags** on 36 specs classifying behavioral divergences:
   `battlescribe-bug`, `newrecruit-bug`, `newrecruit-missing-feature`,
   `design-difference`, `undefined-behavior`.
+- **Positive `instanceOf` specs** demonstrating working scope+childId combinations:
+  - `condition-instance-of-self` — scope=self, childId=entry ID
+  - `condition-instance-of-self-type` — scope=self, childId=type name
+  - `condition-instance-of-self-category` — scope=self, childId=category ID
+- **`instanceOf` scope × childId compatibility table** in coverage report and behavioral
+  differences docs. Key finding: instanceOf works with self/parent/ancestor scope but NOT
+  force (resolves to Force, not Selection) or roster (hardcoded false in c.java:1196-1197).
+- **`modifier-field-constraint-value` enhanced** — now selects 3 times to verify the
+  constraint value change from max=2 to max=5 is actually observable (no error at 3).
 
 ### Fixed
 
@@ -26,6 +35,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the `percentValue` parameter, causing BS engine to treat all percent-based constraints
   as flat limits. Conditions and repeats were unaffected (they already passed it).
   The `constraint-percent-value` spec now correctly passes on both engines.
+- **`condition-instance-of-ancestor`** — added `selectChildEntry` step so the child
+  entry is actually selected and its ancestor condition evaluates. Was previously
+  an untested stub.
+- **Removed incorrect "synthetic data" comments** from 6 specs. Investigation of the
+  decompiled BS Java engine revealed the real causes: instanceOf scope limitations
+  (force/roster), not NR synthetic data loading.
 
 ### Changed
 

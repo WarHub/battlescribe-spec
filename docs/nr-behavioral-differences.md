@@ -9,6 +9,7 @@
 | [Import ordering](#1-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
 | [Missing features](#2-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
 | [Scope/condition evaluation](#3-scopecondition-evaluation) | 4 | Medium | NR evaluates child-force scope, ancestor scope, and null-childId conditions differently |
+| [instanceOf scope limits](#instanceof-scope-limitations-both-engines) | 12 | Info | instanceOf only works with self/parent/ancestor scope — both engines agree |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
 | [Other behavioral differences](#5-other-behavioral-differences) | 5 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
 
@@ -93,6 +94,33 @@ Two companion specs (`condition-null-childid-parent-scope`, `condition-null-chil
 test NR's alternative defaults for missing childId on different scopes (parent → "self",
 force with threshold → "any"). All three null-childid specs use per-engine `expectedState`
 overrides to describe both engines' behavior.
+
+### instanceOf Scope Limitations (both engines)
+
+**12 specs** — `instanceOf`/`notInstanceOf` condition evaluation is limited to
+specific scope values. This is a BattleScribe engine design limitation that
+both engines share (NOT an NR-specific or synthetic data issue).
+
+| Scope | Works? | Reason |
+|-------|:------:|--------|
+| `self` | ✅ | Resolves to current Selection |
+| `parent` | ✅ | Resolves to parent Selection |
+| `ancestor` | ✅ | Walks parent chain (all Selections) |
+| `force` | ❌ | Resolves to Force (not a Selection) — c.java:1206-1210 |
+| `roster` | ❌ | Hardcoded `return false` — c.java:1196-1197 |
+
+Working childId types for instanceOf (with self/parent/ancestor scope):
+
+| childId type | Works? | Example spec |
+|--------------|:------:|--------------|
+| SelectionEntry ID | ✅ | condition-instance-of-self |
+| Type name (unit/model) | ✅ | condition-instance-of-self-type |
+| CategoryEntry ID | ✅ | condition-instance-of-self-category |
+| ForceEntry ID | ❌ | condition-instance-of-force-entry |
+| Catalogue ID | ❌ | condition-instance-of-catalogue |
+
+Specs tagged `undefined-behavior` document scope+childId combinations that
+don't work on either engine. Each references its working counterpart.
 
 ---
 

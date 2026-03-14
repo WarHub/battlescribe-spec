@@ -35,8 +35,46 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 | `LT` | 2 | condition-less-than, condition-group-nested |
 | `AT_LEAST` | 38 | Dominant condition type across condition/modifier/scope specs |
 | `AT_MOST` | 2 | condition-at-most, condition-group-and |
-| `INSTANCE_OF` | 9 | All 8 target types + scope-primary-category |
+| `INSTANCE_OF` | 12 | 3 working (scope=self/parent/ancestor) + 9 negative (scope=force/roster) |
 | `NOT_INSTANCE_OF` | 1 | condition-not-instance-of |
+
+#### `instanceOf` Scope × childId Compatibility
+
+`instanceOf` only works when the scope resolves to a `BaseSelectable` (a Selection).
+`scope=force` resolves to a Force object (not a Selection) and `scope=roster` is
+hardcoded to return `false` in the BS engine (c.java:1196-1197).
+
+| Scope | Works? | Reason |
+|-------|:------:|--------|
+| `self` | ✅ | Resolves to current Selection |
+| `parent` | ✅ | Resolves to parent Selection |
+| `ancestor` | ✅ | Walks parent chain (all Selections) |
+| `force` | ❌ | Resolves to Force (not a Selection) |
+| `roster` | ❌ | Hardcoded `return false` (c.java:1196-1197) |
+
+| childId type | Works? | Example spec |
+|--------------|:------:|--------------|
+| SelectionEntry ID | ✅ | condition-instance-of-self |
+| SelectionEntry.Type name | ✅ | condition-instance-of-self-type |
+| CategoryEntry ID | ✅ | condition-instance-of-self-category |
+| ForceEntry ID | ❌ | condition-instance-of-force-entry (undefined-behavior) |
+| Catalogue ID | ❌ | condition-instance-of-catalogue (undefined-behavior) |
+| SelectionEntryGroup ID | ❌ | condition-instance-of-group (no group in data) |
+
+Positive specs (condition fires):
+- `condition-instance-of-self` — scope=self, childId=entry ID
+- `condition-instance-of-self-type` — scope=self, childId=type name
+- `condition-instance-of-self-category` — scope=self, childId=category ID
+- `condition-instance-of-ancestor` — scope=ancestor, childId=entry ID (child selected)
+
+Negative/undefined specs (condition doesn't fire):
+- `condition-instance-of` — scope=force (undefined)
+- `condition-instance-of-by-type` — scope=force (undefined)
+- `condition-instance-of-by-category` — scope=force (undefined)
+- `condition-instance-of-group` — scope=force, non-existent group
+- `condition-instance-of-force-entry` — scope=roster (undefined)
+- `condition-instance-of-catalogue` — scope=roster (undefined)
+- `condition-instance-of-roster-scope` — scope=roster (edge-case)
 
 Full `INSTANCE_OF` target coverage: `SelectionEntry`, `SelectionEntry.Type`, `CategoryEntry`, `Ancestor`, `Roster`, `SelectionEntryGroup`, `ForceEntry`, `Catalogue`.
 
@@ -80,11 +118,11 @@ Full `INSTANCE_OF` target coverage: `SelectionEntry`, `SelectionEntry.Type`, `Ca
 
 | Scope | Specs | Key Evidence |
 |-------|------:|--------------|
-| `self` | 8 | scope-self, modifier-set-boolean |
+| `self` | 11 | scope-self, modifier-set-boolean, condition-instance-of-self, -self-type, -self-category |
 | `parent` | 34 | scope-parent — dominant scope for childId-based conditions |
-| `force` | 26 | scope-force, scope-force-vs-roster, scope-force-trigger-in-same-force |
-| `roster` | 12 | scope-roster, scope-roster-cross-force, condition-scope-roster |
-| `ancestor` | 2 | scope-ancestor, condition-instance-of-ancestor |
+| `force` | 26 | scope-force, scope-force-vs-roster (note: instanceOf doesn't work with force scope) |
+| `roster` | 12 | scope-roster, scope-roster-cross-force (note: instanceOf doesn't work with roster scope) |
+| `ancestor` | 3 | scope-ancestor, condition-instance-of-ancestor (with child selected) |
 | `primary-category` | 1 | scope-primary-category |
 | `primary-catalogue` | 1 | scope-primary-catalogue |
 | direct child-id | 4 | scope-child-id-filter, condition-childid-* |
