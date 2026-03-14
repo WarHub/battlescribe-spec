@@ -1,0 +1,62 @@
+id: condition-instance-of-self-category
+category: condition
+description: >
+  instanceOf with scope=self and childId set to a CategoryEntry ID checks
+  if the current selection has a category link matching that ID. This is
+  the working counterpart to condition-instance-of-by-category which uses
+  scope=force (undefined behavior — force scope doesn't work for instanceOf).
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-hq
+        name: HQ
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-commander
+          name: Commander
+          type: unit
+          categoryLinks:
+            - id: cl-cmd-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
+          modifiers:
+            - type: set
+              field: name
+              value: HQ Confirmed
+              conditions:
+                - type: instanceOf
+                  value: 1
+                  field: selections
+                  scope: self
+                  childId: cat-hq
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # scope=self resolves to the current selection. Commander has a category
+  # link to cat-hq → instanceOf matches → modifier fires.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: HQ Confirmed

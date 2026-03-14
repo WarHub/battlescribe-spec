@@ -1,6 +1,9 @@
 id: condition-instance-of-catalogue
 category: condition
-description: instanceOf condition can match against Catalogue IDs for catalogue-scoped checks
+description: >
+  instanceOf with scope=roster and childId=Catalogue ID. scope=roster is
+  hardcoded to return false for instanceOf in BS (c.java:1196-1197).
+  See condition-instance-of-self for the working version using scope=self.
 tags: [undefined-behavior]
 
 setup:

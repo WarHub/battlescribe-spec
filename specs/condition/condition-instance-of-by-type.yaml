@@ -1,6 +1,9 @@
 id: condition-instance-of-by-type
 category: condition
-description: instanceOf condition can match by SelectionEntry.Type (e.g. unit, model, upgrade)
+description: >
+  instanceOf with scope=force and childId=type name. scope=force resolves
+  to the Force element which is not a Selection — instanceOf returns false.
+  See condition-instance-of-self-type for the working version using scope=self.
 tags: [undefined-behavior]
 
 setup:

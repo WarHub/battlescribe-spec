@@ -1,6 +1,10 @@
 id: condition-instance-of
 category: condition
-description: instanceOf condition checks if a child element of matching type exists
+description: >
+  instanceOf with scope=force and childId=selectionEntry ID. scope=force
+  resolves to the Force element which is not a Selection — instanceOf
+  returns false. See condition-instance-of-self for the working version
+  using scope=self.
 
 setup:
   gameSystem:

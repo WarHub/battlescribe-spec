@@ -1,6 +1,10 @@
 id: condition-instance-of-by-category
 category: condition
-description: instanceOf condition can match by CategoryEntry ID on selections with matching category links
+description: >
+  instanceOf with scope=force and childId=CategoryEntry ID. scope=force
+  resolves to the Force element which is not a Selection — instanceOf
+  returns false. See condition-instance-of-self-category for the working
+  version using scope=self.
 
 setup:
   gameSystem:

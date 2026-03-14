@@ -1,9 +1,10 @@
-id: condition-instance-of-group
+id: condition-instance-of-self-type
 category: condition
 description: >
-  instanceOf with scope=force and childId=SelectionEntryGroup ID. scope=force
-  resolves to the Force element, and the group seg-weapons doesn't exist in the
-  data — condition returns false.
+  instanceOf with scope=self and childId set to a type name (e.g. "unit")
+  checks if the current selection's type matches. This is the working
+  counterpart to condition-instance-of-by-type which uses scope=force
+  (undefined behavior — force scope doesn't work for instanceOf).
 
 setup:
   gameSystem:
@@ -17,22 +18,19 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-detector
+        - id: se-unit
           name: Detector
           type: unit
           modifiers:
             - type: set
               field: name
-              value: Group Instance Found
+              value: Type Matched
               conditions:
                 - type: instanceOf
                   value: 1
                   field: selections
-                  scope: force
-                  childId: seg-weapons
-        - id: se-unit
-          name: Unit
-          type: unit
+                  scope: self
+                  childId: unit
 
 steps:
   - action: addForce
@@ -41,10 +39,11 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # instanceOf childId=seg-weapons: no SelectionEntryGroup with that ID
-  # exists, so condition is false → name stays "Detector".
+
+  # scope=self resolves to the current selection. Its type is "unit",
+  # matching childId="unit" → instanceOf fires → name set.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
-            - name: Detector
+            - name: Type Matched

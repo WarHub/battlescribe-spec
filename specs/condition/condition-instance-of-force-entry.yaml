@@ -1,6 +1,9 @@
 id: condition-instance-of-force-entry
 category: condition
-description: instanceOf condition can match against ForceEntry types
+description: >
+  instanceOf with scope=roster and childId=ForceEntry ID. scope=roster is
+  hardcoded to return false for instanceOf in BS (c.java:1196-1197).
+  See condition-instance-of-self for the working version using scope=self.
 tags: [undefined-behavior]
 
 setup:

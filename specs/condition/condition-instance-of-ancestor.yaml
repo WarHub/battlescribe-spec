@@ -1,6 +1,9 @@
 id: condition-instance-of-ancestor
 category: condition
-description: instanceOf condition with ancestor scope checks parent hierarchy for matching entries
+description: >
+  instanceOf with scope=ancestor walks up the parent chain and checks if
+  any ancestor matches the childId entry. The child must be selected for
+  its modifier condition to evaluate.
 
 setup:
   gameSystem:
@@ -40,9 +43,17 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # Child should detect parent as ancestor via instanceOf
+  # Select the child entry so its modifier condition evaluates.
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  # scope=ancestor walks the parent chain from the child. The parent
+  # selection was created from se-parent → instanceOf matches → name set.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
+              children:
+                - name: Has Ancestor
