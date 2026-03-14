@@ -58,19 +58,21 @@ steps:
     selectionIndex: 0
     childEntryIndex: 0
 
+  # Ancestor scope should resolve upward — parent IS selected, so the
+  # condition "atLeast 1 selection in ancestor" should be true, and the
+  # modifier should fire, renaming Equipment to Modified Equipment.
   # BS bug: ancestor scope returns null in scope resolution (c.java:738),
   # condition evaluates to false, modifier never fires — name unchanged.
-  # NR correctly resolves ancestor scope and fires the modifier.
   - expectedState:
       forces:
         - selections:
             - name: Parent Unit
               children:
-                - name: Equipment
+                - name: Modified Equipment
       engines:
-        newrecruit:
+        battlescribe:
           forces:
             - selections:
                 - name: Parent Unit
                   children:
-                    - name: Modified Equipment
+                    - name: Equipment

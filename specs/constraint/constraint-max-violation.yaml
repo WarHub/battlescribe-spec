@@ -48,8 +48,9 @@ steps:
       forces:
         - selectionCount: 1
 
-  # BS bug: selecting beyond max=1 produces no error because the constraint
-  # validation filter (f.java:493) skips uncategorised parent-scope entries.
+  # Exceeding max=1 should produce a validation error.
+  # BS bug: the constraint validation filter (f.java:493) skips uncategorised
+  # parent-scope entries, so no error is generated.
   # The same constraint WITH categories works correctly — see
   # constraint-max-violation-linked which passes on both engines.
   - action: selectEntry
@@ -59,8 +60,9 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 2
+      errors:
+        - on: selection se-unit-a
+          from: se-unit-a/con-max-1
       engines:
-        newrecruit:
-          errors:
-            - on: selection se-unit-a
-              from: se-unit-a/con-max-1
+        battlescribe:
+          errors: []
