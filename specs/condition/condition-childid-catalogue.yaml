@@ -1,7 +1,7 @@
 id: condition-childid-catalogue
 category: condition
 description: childId filter can reference a Catalogue ID for scoping queries to a specific catalogue
-tags: []
+tags: [undefined-behavior]
 
 setup:
   gameSystem:
@@ -36,10 +36,9 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # childId references Catalogue ID cat-1. With scope=roster, the engine
-  # should count selections from that catalogue. This requires catalogue-level
-  # childId resolution in the engine's condition evaluator which isn't
-  # operational with synthetic data.
+  # childId=cat-1 references a Catalogue ID used as a count filter for atLeast.
+  # Neither engine resolves catalogue IDs as childId filters — the condition
+  # returns false on both BS Oracle and NR.
   - expectedState:
       forces:
         - selectionCount: 1
