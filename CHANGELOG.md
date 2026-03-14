@@ -11,6 +11,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`publicationName` assertion field** on selections — engines now resolve publication
   references and expose the publication's `name`, proving the link was actually resolved
   (not just echoing back the `publicationId` from XML input).
+- **`constraint-percent-value-at-limit` spec** — demonstrates percentValue constraint
+  at the exact 50% boundary, showing error when over and no error when at limit.
+- **`format-specs.ps1` formatting script** in `tools/` — auto-fixes spec YAML
+  formatting (blank lines, trailing whitespace, newlines). Run with `-Check` to verify.
+- **SpecLintTests** — 11 lint rules enforcing spec YAML formatting conventions.
+- **Engine difference tags** on 36 specs classifying behavioral divergences:
+  `battlescribe-bug`, `newrecruit-bug`, `newrecruit-missing-feature`,
+  `design-difference`, `undefined-behavior`.
+
+### Fixed
+
+- **Oracle `percentValue` wiring** — `JavaModelFactory.CreateConstraint` was missing
+  the `percentValue` parameter, causing BS engine to treat all percent-based constraints
+  as flat limits. Conditions and repeats were unaffected (they already passed it).
+  The `constraint-percent-value` spec now correctly passes on both engines.
 
 ### Changed
 

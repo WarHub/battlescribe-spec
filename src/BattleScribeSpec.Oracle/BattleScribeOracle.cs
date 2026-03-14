@@ -1651,7 +1651,7 @@ public sealed class BattleScribeOracle : IDisposable
 
     private static Constraint BuildConstraint(ProtocolConstraint c) =>
         JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
-            c.Shared, c.IncludeChildSelections, c.IncludeChildForces);
+            c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue);
 
     private static Modifier BuildModifier(ProtocolModifier spec)
     {

@@ -530,7 +530,8 @@ public static class JavaModelFactory
         string scope,
         bool shared = false,
         bool includeChildSelections = false,
-        bool includeChildForces = false)
+        bool includeChildForces = false,
+        bool percentValue = false)
     {
         var c = new Constraint();
         c.setId(id);
@@ -541,6 +542,7 @@ public static class JavaModelFactory
         c.setShared(shared);
         c.setIncludeChildSelections(includeChildSelections);
         c.setIncludeChildForces(includeChildForces);
+        c.setPercentValue(percentValue);
         return c;
     }
 

@@ -1,13 +1,8 @@
-id: constraint-percent-value-raw-threshold
+id: constraint-percent-value-at-limit
 category: constraint
 description: >
-  Proves BS ignores percentValue and uses the raw value as flat limit.
-  With value=1 and percentValue=true, BS treats it as "max 1 selection" (flat).
-  NR correctly treats it as "max 1% of parent selections" — so even 1 selection
-  (which is 100% of total) exceeds the 1% threshold and triggers an error.
-  Both engines produce an error when 2 selections exist, but for different
-  reasons: BS because 2 > 1 (flat), NR because 2 > 0.02 (1% of 2).
-tags: [battlescribe-bug]
+  percentValue constraint at the exact limit — adding a second entry type
+  brings the first entry to exactly 50%, which is at limit (no error).
 
 setup:
   gameSystem:
@@ -16,6 +11,10 @@ setup:
     categoryEntries:
       - id: cat-troops
         name: Troops
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: 2000
     forceEntries:
       - id: fe-1
         name: Detachment
@@ -30,20 +29,36 @@ setup:
       gameSystemId: test-gs
       selectionEntries:
         - id: se-1
-          name: Unit A
+          name: Elite
           type: unit
           categoryLinks:
             - id: cl-se1-troops
               targetId: cat-troops
               name: Troops
               primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 300
           constraints:
             - id: c1
               type: max
-              value: 1
+              value: 50
               field: selections
               scope: parent
               percentValue: true
+        - id: se-2
+          name: Troops
+          type: unit
+          categoryLinks:
+            - id: cl-se2-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 100
 
 steps:
   - action: addForce
@@ -53,25 +68,19 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # 1 selection. BS: 1 <= 1 (raw flat), no error. NR: 1% of 1 = 0.01, 1 > 0.01, error.
+  # 1 Elite of 1 total = 100% > 50% → error
   - expectedState:
       forces:
         - selectionCount: 1
-      engines:
-        newrecruit:
-          errors:
-            - on: selection se-1
-              from: se-1/c1
-
-  - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
-
-  # 2 selections. BS: 2 > 1 (raw flat), error. NR: 1% of 2 = 0.02, 2 > 0.02, error.
-  # Both engines agree on error here — but for entirely different reasons.
-  - expectedState:
-      forces:
-        - selectionCount: 2
       errors:
         - on: selection se-1
           from: se-1/c1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  # 1 Elite of 2 total = 50%. Threshold = 50% of 2 = 1.0. Count = 1 ≤ 1.0 → no error
+  - expectedState:
+      forces:
+        - selectionCount: 2
