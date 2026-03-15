@@ -101,11 +101,19 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forceStates = forces.Select((f, i) =>
         {
             var selections = JavaListToList<net.battlescribe.model.roster.Selection>(f.getSelections());
+            var forceProfiles = JavaListToList<net.battlescribe.model.data.Profile>(f.getProfiles());
+            var forceRules = JavaListToList<net.battlescribe.model.data.Rule>(f.getRules());
+            var pubId = f.getPublicationId();
             return new ForceState(
                 f.getName() ?? "",
                 f.getCatalogueId(),
                 selections.Select(CaptureSelection).ToList(),
-                _oracle.GetAvailableEntryCountForForce(i));
+                _oracle.GetAvailableEntryCountForForce(i),
+                Profiles: forceProfiles.Select(CaptureProfile).ToList(),
+                Rules: forceRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
+                    string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
+                PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
+                Page: f.getPage());
         }).ToList();
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
@@ -267,7 +275,19 @@ public sealed class OracleRosterEngine : IRosterEngine
             Profiles: profiles.Select(CaptureProfile).ToList(),
             Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
                 string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
-            Categories: categories.Select(c => new CategoryState(c.getName() ?? "", c.getEntryId(), c.isPrimary())).ToList(),
+            Categories: categories.Select(c =>
+            {
+                var catProfiles = JavaListToList<net.battlescribe.model.data.Profile>(c.getProfiles());
+                var catRules = JavaListToList<net.battlescribe.model.data.Rule>(c.getRules());
+                var catPubId = c.getPublicationId();
+                return new CategoryState(
+                    c.getName() ?? "", c.getEntryId(), c.isPrimary(),
+                    Profiles: catProfiles.Select(CaptureProfile).ToList(),
+                    Rules: catRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
+                        string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
+                    PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
+                    Page: c.getPage());
+            }).ToList(),
             Page: sel.getPage(),
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
             PublicationName: _oracle.GetPublicationName(pubId));

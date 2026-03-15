@@ -1,0 +1,49 @@
+id: catalogue-cost-types
+category: catalogue
+tags: [catalogue, costType]
+description: Catalogue defines its own costTypes that are used for cost resolution
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: -1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      costTypes:
+        - id: cat-pts
+          name: cat pts
+          defaultCostLimit: -1
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          costs:
+            - name: cat pts
+              typeId: cat-pts
+              value: 50
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine
+              costs:
+                - name: cat pts
+                  typeId: cat-pts
+                  value: 50

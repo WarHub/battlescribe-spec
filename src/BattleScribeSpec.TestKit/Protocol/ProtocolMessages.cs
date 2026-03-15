@@ -352,6 +352,22 @@ public class ProtocolCatalogue
     [JsonPropertyName("publications")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolPublication>? Publications { get; set; }
+
+    [JsonPropertyName("costTypes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolCostType>? CostTypes { get; set; }
+
+    [JsonPropertyName("profileTypes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolProfileType>? ProfileTypes { get; set; }
+
+    [JsonPropertyName("categoryEntries")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolCategoryEntry>? CategoryEntries { get; set; }
+
+    [JsonPropertyName("forceEntries")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolForceEntry>? ForceEntries { get; set; }
 }
 
 public sealed class ProtocolCostType
@@ -405,6 +421,14 @@ public sealed class ProtocolForceEntry
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
 
+    [JsonPropertyName("page")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Page { get; set; }
+
+    [JsonPropertyName("publicationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PublicationId { get; set; }
+
     [JsonPropertyName("constraints")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolConstraint>? Constraints { get; set; }
@@ -424,6 +448,22 @@ public sealed class ProtocolForceEntry
     [JsonPropertyName("forceEntries")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolForceEntry>? ForceEntries { get; set; }
+
+    [JsonPropertyName("profiles")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolProfile>? Profiles { get; set; }
+
+    [JsonPropertyName("rules")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolRule>? Rules { get; set; }
+
+    [JsonPropertyName("infoGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoGroup>? InfoGroups { get; set; }
+
+    [JsonPropertyName("infoLinks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoLink>? InfoLinks { get; set; }
 }
 
 public sealed class ProtocolCategoryEntry
@@ -437,6 +477,14 @@ public sealed class ProtocolCategoryEntry
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
 
+    [JsonPropertyName("page")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Page { get; set; }
+
+    [JsonPropertyName("publicationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PublicationId { get; set; }
+
     [JsonPropertyName("constraints")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolConstraint>? Constraints { get; set; }
@@ -444,6 +492,26 @@ public sealed class ProtocolCategoryEntry
     [JsonPropertyName("modifiers")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolModifier>? Modifiers { get; set; }
+
+    [JsonPropertyName("modifierGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolModifierGroup>? ModifierGroups { get; set; }
+
+    [JsonPropertyName("profiles")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolProfile>? Profiles { get; set; }
+
+    [JsonPropertyName("rules")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolRule>? Rules { get; set; }
+
+    [JsonPropertyName("infoGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoGroup>? InfoGroups { get; set; }
+
+    [JsonPropertyName("infoLinks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoLink>? InfoLinks { get; set; }
 }
 
 public sealed class ProtocolSelectionEntry
@@ -698,6 +766,14 @@ public sealed class ProtocolCategoryLink
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }
 
+    [JsonPropertyName("page")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Page { get; set; }
+
+    [JsonPropertyName("publicationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PublicationId { get; set; }
+
     [JsonPropertyName("constraints")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolConstraint>? Constraints { get; set; }
@@ -705,6 +781,26 @@ public sealed class ProtocolCategoryLink
     [JsonPropertyName("modifiers")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolModifier>? Modifiers { get; set; }
+
+    [JsonPropertyName("modifierGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolModifierGroup>? ModifierGroups { get; set; }
+
+    [JsonPropertyName("profiles")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolProfile>? Profiles { get; set; }
+
+    [JsonPropertyName("rules")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolRule>? Rules { get; set; }
+
+    [JsonPropertyName("infoGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoGroup>? InfoGroups { get; set; }
+
+    [JsonPropertyName("infoLinks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoLink>? InfoLinks { get; set; }
 }
 
 public sealed class ProtocolCostValue
@@ -898,6 +994,10 @@ public sealed class ProtocolRule
     [JsonPropertyName("modifiers")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolModifier>? Modifiers { get; set; }
+
+    [JsonPropertyName("modifierGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolModifierGroup>? ModifierGroups { get; set; }
 }
 
 public sealed class ProtocolProfile
@@ -932,6 +1032,10 @@ public sealed class ProtocolProfile
     [JsonPropertyName("modifiers")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolModifier>? Modifiers { get; set; }
+
+    [JsonPropertyName("modifierGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolModifierGroup>? ModifierGroups { get; set; }
 }
 
 public sealed class ProtocolCharacteristic
@@ -977,9 +1081,17 @@ public sealed class ProtocolInfoGroup
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolModifier>? Modifiers { get; set; }
 
+    [JsonPropertyName("modifierGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolModifierGroup>? ModifierGroups { get; set; }
+
     [JsonPropertyName("infoLinks")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolInfoLink>? InfoLinks { get; set; }
+
+    [JsonPropertyName("infoGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolInfoGroup>? InfoGroups { get; set; }
 }
 
 public sealed class ProtocolInfoLink
@@ -1010,6 +1122,10 @@ public sealed class ProtocolInfoLink
     [JsonPropertyName("modifiers")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolModifier>? Modifiers { get; set; }
+
+    [JsonPropertyName("modifierGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolModifierGroup>? ModifierGroups { get; set; }
 }
 
 public sealed class ProtocolCatalogueLink

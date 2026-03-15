@@ -1,0 +1,48 @@
+id: category-entry-with-rule
+category: selection
+tags: [categoryEntry, rule, engine-limitation]
+description: >
+  CategoryEntry carrying a rule is accepted in XML.
+  Engine limitation: category roster elements do not expose rules
+  from the entry definition.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+        rules:
+          - id: rule-cat
+            name: Troop Doctrine
+            description: Troops gain objective control
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine

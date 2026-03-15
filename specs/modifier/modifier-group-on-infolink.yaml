@@ -1,0 +1,63 @@
+id: modifier-group-on-infolink
+category: modifier
+tags: [modifierGroup, infoLink]
+description: ModifierGroup on an infoLink modifies the linked profile
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-stats
+        name: Stats
+        characteristicTypes:
+          - id: ct-ws
+            name: WS
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedProfiles:
+        - id: prof-shared
+          name: Base Stats
+          typeId: pt-stats
+          typeName: Stats
+          characteristics:
+            - name: WS
+              typeId: ct-ws
+              value: "4+"
+      selectionEntries:
+        - id: se-1
+          name: Soldier
+          type: unit
+          infoLinks:
+            - id: il-1
+              name: Base Stats
+              targetId: prof-shared
+              type: profile
+              modifierGroups:
+                - modifiers:
+                    - type: set
+                      field: ct-ws
+                      value: "2+"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Soldier
+              profiles:
+                - name: Base Stats
+                  characteristics:
+                    - name: WS
+                      value: "2+"

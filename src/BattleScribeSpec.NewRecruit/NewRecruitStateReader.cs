@@ -60,7 +60,11 @@ public static class NewRecruitStateReader
                     return forces.map(f => ({
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
-                        selections: extractSelections(f, false)
+                        selections: extractSelections(f, false),
+                        profiles: extractProfiles(f),
+                        rules: extractRules(f),
+                        publicationId: f.publicationId || null,
+                        page: f.page != null ? String(f.page) : null
                     }));
                 }
 
@@ -155,10 +159,42 @@ public static class NewRecruitStateReader
                         categories: cats.map(cat => ({
                             name: cat.name || cat.getName?.() || '',
                             entryId: cat.entryId || cat.getId?.() || null,
-                            primary: cat.primary || false
+                            primary: cat.primary || false,
+                            profiles: extractProfiles(cat),
+                            rules: extractRules(cat),
+                            publicationId: cat.publicationId || null,
+                            page: cat.page != null ? String(cat.page) : null
                         })),
                         page: null
                     };
+                }
+
+                function extractProfiles(node) {
+                    const profiles = node.getModifiedProfiles?.() || node.getProfiles?.() || [];
+                    return profiles.map(p => ({
+                        name: p.name || p.getName?.() || '',
+                        typeId: p.typeId || null,
+                        typeName: p.typeName || null,
+                        hidden: p.hidden || false,
+                        page: p.page != null ? String(p.page) : null,
+                        publicationId: p.publicationId || null,
+                        characteristics: (p.characteristics || []).map(ch => ({
+                            name: ch.name || '',
+                            typeId: ch.typeId || '',
+                            value: (ch.value ?? '').toString()
+                        }))
+                    }));
+                }
+
+                function extractRules(node) {
+                    const rules = node.getModifiedRules?.() || node.getRules?.() || [];
+                    return rules.map(r => ({
+                        name: r.name || r.getName?.() || '',
+                        description: r.description || '',
+                        hidden: r.hidden || false,
+                        page: r.page != null ? String(r.page) : null,
+                        publicationId: r.publicationId || null
+                    }));
                 }
 
                 function extractTotalCosts(army) {
@@ -452,7 +488,14 @@ public static class NewRecruitStateReader
         var forces = snapshot.Forces.Select(f => new ForceState(
             f.Name,
             f.CatalogueId,
-            f.Selections.Select(MapSelection).ToList()
+            f.Selections.Select(MapSelection).ToList(),
+            Profiles: f.Profiles.Select(p => new ProfileState(
+                p.Name, p.TypeId, p.TypeName, p.Hidden,
+                p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
+                p.Page, p.PublicationId)).ToList(),
+            Rules: f.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
+            PublicationId: f.PublicationId,
+            Page: f.Page
         )).ToList();
 
         var costs = snapshot.Costs.Select(c =>
@@ -491,7 +534,15 @@ public static class NewRecruitStateReader
                 p.PublicationId
             )).ToList(),
             Rules: sel.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
-            Categories: sel.Categories.Select(c => new CategoryState(c.Name, c.EntryId, c.Primary)).ToList(),
+            Categories: sel.Categories.Select(c => new CategoryState(
+                c.Name, c.EntryId, c.Primary,
+                Profiles: c.Profiles.Select(p => new ProfileState(
+                    p.Name, p.TypeId, p.TypeName, p.Hidden,
+                    p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
+                    p.Page, p.PublicationId)).ToList(),
+                Rules: c.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
+                PublicationId: c.PublicationId,
+                Page: c.Page)).ToList(),
             Page: sel.Page);
     }
 
@@ -519,6 +570,10 @@ public static class NewRecruitStateReader
         public string Name { get; init; } = "";
         public string? CatalogueId { get; init; }
         public List<NrSelectionSnapshot> Selections { get; init; } = [];
+        public List<NrProfileSnapshot> Profiles { get; init; } = [];
+        public List<NrRuleSnapshot> Rules { get; init; } = [];
+        public string? PublicationId { get; init; }
+        public string? Page { get; init; }
     }
 
     internal record NrSelectionSnapshot
@@ -575,5 +630,9 @@ public static class NewRecruitStateReader
         public string Name { get; init; } = "";
         public string? EntryId { get; init; }
         public bool Primary { get; init; }
+        public List<NrProfileSnapshot> Profiles { get; init; } = [];
+        public List<NrRuleSnapshot> Rules { get; init; } = [];
+        public string? PublicationId { get; init; }
+        public string? Page { get; init; }
     }
 }

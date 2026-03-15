@@ -419,11 +419,19 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
     {
-        var forceEntry = _gameSystem?.ForceEntries?.ElementAtOrDefault(forceEntryIndex);
+        // Build combined list: GS force entries + catalogue force entries
+        var allForceEntries = new List<ProtocolForceEntry>();
+        if (_gameSystem?.ForceEntries != null)
+            allForceEntries.AddRange(_gameSystem.ForceEntries);
+        if (_catalogues != null)
+            foreach (var cat in _catalogues)
+                if (cat.ForceEntries != null)
+                    allForceEntries.AddRange(cat.ForceEntries);
+        var forceEntry = allForceEntries.ElementAtOrDefault(forceEntryIndex);
         var forceId = forceEntry?.Id;
         if (forceId is null)
             throw new ArgumentOutOfRangeException(nameof(forceEntryIndex),
-                $"Force entry index {forceEntryIndex} out of range ({_gameSystem?.ForceEntries?.Count ?? 0} available)");
+                $"Force entry index {forceEntryIndex} out of range ({allForceEntries.Count} available)");
         NewRecruitActions.AddForceByIdAsync(_browser.Page, forceId, catalogueIndex)
             .GetAwaiter().GetResult();
         _forceCatalogueMap.Add(catalogueIndex);

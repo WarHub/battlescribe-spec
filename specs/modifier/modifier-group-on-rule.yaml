@@ -1,0 +1,45 @@
+id: modifier-group-on-rule
+category: modifier
+tags: [modifierGroup, rule]
+description: ModifierGroup on a rule appends to description
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Warrior
+          type: unit
+          rules:
+            - id: rule-1
+              name: Fearless
+              description: This unit is fearless
+              modifierGroups:
+                - modifiers:
+                    - type: append
+                      field: description
+                      value: "(enhanced)"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Warrior
+              rules:
+                - name: Fearless
+                  description: "This unit is fearless (enhanced)"
