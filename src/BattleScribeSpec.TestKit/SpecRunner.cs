@@ -375,17 +375,35 @@ public sealed class SpecRunner
             }
             else
             {
+                // Track which actual errors have been consumed so each can
+                // only satisfy one expected error (prevents false positives
+                // when multiple expected errors have the same signature).
+                var consumed = new HashSet<int>();
                 foreach (var ea in errorsAssertions)
                 {
                     var (expectedOwnerType, expectedOwnerEntryId) = ParseOn(ea.On);
                     var (expectedEntryId, expectedConstraintId) = ParseFrom(ea.From);
 
-                    var match = actualErrors.FirstOrDefault(ae =>
-                        ae.OwnerType == expectedOwnerType &&
-                        (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
-                        (expectedEntryId is null || ae.EntryId == expectedEntryId) &&
-                        (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId));
-                    if (match is null)
+                    int matchIndex = -1;
+                    for (int i = 0; i < actualErrors.Count; i++)
+                    {
+                        if (consumed.Contains(i))
+                            continue;
+                        var ae = actualErrors[i];
+                        if (ae.OwnerType == expectedOwnerType &&
+                            (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
+                            (expectedEntryId is null || ae.EntryId == expectedEntryId) &&
+                            (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId))
+                        {
+                            matchIndex = i;
+                            break;
+                        }
+                    }
+                    if (matchIndex >= 0)
+                    {
+                        consumed.Add(matchIndex);
+                    }
+                    else
                     {
                         var desc = $"on='{ea.On}'";
                         if (ea.From is not null) desc += $", from='{ea.From}'";

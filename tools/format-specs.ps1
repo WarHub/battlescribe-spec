@@ -75,6 +75,8 @@ foreach ($file in $files) {
         }
 
         # Fix: blank line between steps
+        # NOTE: hardcodes 2-space indent — safe because SpecLintTests enforce
+        # exactly 2-space YAML indentation across all spec files.
         if ($inSteps -and $line -match '^  - (action|expectedState):') {
             if ($result.Count -gt 0) {
                 $prev = $result[$result.Count - 1].Trim()

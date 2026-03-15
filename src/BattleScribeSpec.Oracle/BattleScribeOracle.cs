@@ -324,6 +324,8 @@ public sealed class BattleScribeOracle : IDisposable
 
             // Only remap over-limit and hidden errors (max constraints, cost-max, hidden entries).
             // Min constraints ("must have", "must spend") stay on category.
+            // NOTE: relies on English error message strings from the BS Java engine.
+            // Accepted because the BS engine is EOL (v2.3.21) and messages are stable.
             if (e.ConstraintId == "hidden" ||
                 e.Message.Contains("too many") ||
                 e.Message.Contains("too much"))

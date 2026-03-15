@@ -336,6 +336,11 @@ public static class NewRecruitStateReader
                         // default). Some have constraintId (cost type ID), some
                         // don't. We compute real cost limit violations
                         // proactively after the tree walk.
+                        //
+                        // ACCEPTED RISK: if NR starts reporting non-cost-limit
+                        // roster errors in the future, they'll be silently
+                        // dropped here. Revisit if NR adds new roster-level
+                        // validation (e.g. custom constraints on roster node).
                         if (ownerType === 'roster') {
                             return;
                         }

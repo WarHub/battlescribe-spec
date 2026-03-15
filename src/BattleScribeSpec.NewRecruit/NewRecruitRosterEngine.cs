@@ -349,6 +349,37 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             row
                         };
 
+                        // Populate entryOrder from catalogues so the state
+                        // reader can sort selections to match BS ordering.
+                        const entryOrder = [];
+                        function collectEntryIds(entries) {
+                            if (!entries) return;
+                            for (const e of entries) {
+                                if (e.id) entryOrder.push(e.id);
+                                collectEntryIds(e.selectionEntries);
+                                collectEntryIds(e.selectionEntryGroups);
+                            }
+                        }
+                        for (const b of allBooks) {
+                            const cat = b.bookData?.catalogue;
+                            if (cat) {
+                                collectEntryIds(cat.selectionEntries);
+                                collectEntryIds(cat.sharedSelectionEntries);
+                            }
+                        }
+                        window.__bsspec.entryOrder = entryOrder;
+
+                        // Populate costLimitConfig from game system cost types
+                        // so the reader can distinguish "no limit" from "limit=0".
+                        const costLimitConfig = {};
+                        const gs = primaryBook?.catalogue?.gameSystem;
+                        if (gs?.costTypes) {
+                            for (const ct of gs.costTypes) {
+                                costLimitConfig[ct.name] = ct.defaultCostLimit ?? -1;
+                            }
+                        }
+                        window.__bsspec.costLimitConfig = costLimitConfig;
+
                         return null; // success
                     } catch(e) {
                         return 'Setup error: ' + e.message + '\n' + e.stack;
