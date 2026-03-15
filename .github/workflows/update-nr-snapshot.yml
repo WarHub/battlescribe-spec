@@ -96,6 +96,34 @@ jobs:
           owner: WarHub
           repositories: newrecruit-har,battlescribe-spec
 
+      - name: Download current HAR for diff
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.current.outputs.current_tag }}"
+          if [ -n "$TAG" ]; then
+            mkdir -p .har-old
+            gh release download "$TAG" \
+              -R WarHub/newrecruit-har \
+              -p 'newrecruit.har' -p 'metadata.json' \
+              -D .har-old || echo "Could not download previous HAR — skipping diff"
+          fi
+
+      - name: Generate change summary
+        if: steps.check.outputs.changed == 'true'
+        id: summary
+        run: |
+          OLD_VERSION=""
+          DIFF_ARGS="--new .har-staging/newrecruit.har --new-version ${{ steps.record.outputs.client_version }}"
+          if [ -f .har-old/newrecruit.har ]; then
+            OLD_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('.har-old/metadata.json','utf8')).ClientVersion||'')}catch{console.log('')}")
+            DIFF_ARGS="--old .har-old/newrecruit.har --old-version $OLD_VERSION $DIFF_ARGS"
+          fi
+          node scripts/har-diff.mjs $DIFF_ARGS > .har-staging/summary.md 2>/dev/null || echo "_(change summary unavailable)_" > .har-staging/summary.md
+          echo "--- Change Summary ---"
+          cat .har-staging/summary.md
+
       - name: Publish release to WarHub/newrecruit-har
         if: steps.check.outputs.changed == 'true'
         env:
@@ -103,18 +131,22 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.new_tag }}"
           VERSION="${{ steps.record.outputs.client_version }}"
+          {
+            echo "Automated snapshot of newrecruit.eu client version ${VERSION}."
+            echo ""
+            cat .har-staging/summary.md
+          } > .har-staging/release-notes.md
           gh release create "$TAG" \
             .har-staging/newrecruit.har \
             .har-staging/metadata.json \
             -R WarHub/newrecruit-har \
             --title "NR snapshot $TAG" \
-            --notes "Automated snapshot of newrecruit.eu client version ${VERSION}."
+            --notes-file .har-staging/release-notes.md
 
       - name: Update testdata.json
         if: steps.check.outputs.changed == 'true'
         run: |
           TAG="${{ steps.tag.outputs.new_tag }}"
-          # Update testdata.json with new tag
           python3 -c "
           import json, pathlib
           p = pathlib.Path('testdata.json')
@@ -135,9 +167,4 @@ jobs:
             New Recruit client version: ${{ steps.record.outputs.client_version }}
             Release: https://github.com/WarHub/newrecruit-har/releases/tag/${{ steps.tag.outputs.new_tag }}
           title: "Update NR snapshot to ${{ steps.tag.outputs.new_tag }}"
-          body: |
-            Automated update from the daily snapshot workflow.
-
-            **NR client version:** ${{ steps.record.outputs.client_version }}
-            **Release:** https://github.com/WarHub/newrecruit-har/releases/tag/${{ steps.tag.outputs.new_tag }}
-            **HAR SHA256:** ${{ steps.record.outputs.har_sha256 }}
+          body-path: .har-staging/summary.md
