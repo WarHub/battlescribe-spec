@@ -1,7 +1,11 @@
 id: condition-instance-of-force-entry
 category: condition
-description: instanceOf condition can match against ForceEntry types
-tags: []
+description: >
+  instanceOf with scope=roster and childId=ForceEntry ID. scope=roster is
+  hardcoded to return false for instanceOf in BS (c.java:1196-1197).
+  See condition-instance-of-self for the working version using scope=self.
+tags: [undefined-behavior]
+
 setup:
   gameSystem:
     id: test-gs
@@ -36,12 +40,13 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  # instanceOf checks if forces in roster are instances of fe-patrol.
-  # We added a force from fe-patrol (index 0) → condition should be true.
-  # With synthetic data, instanceOf force entry matching is not operational.
+  # instanceOf with scope=roster always returns false in BS engine
+  # (c.java:1196-1197 hardcodes return false for roster scope on instanceOf).
+  # Both engines agree — condition never fires.
   - expectedState:
       forces:
         - selectionCount: 1

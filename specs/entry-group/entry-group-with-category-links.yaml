@@ -1,10 +1,9 @@
 id: entry-group-with-category-links
 category: entry-group
-engines:
-  newrecruit: fail
 description: >
   SelectionEntryGroup with categoryLinks causes selections within the group
   to inherit those categories.
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:
@@ -70,3 +69,12 @@ steps:
                 - name: Sword
                   categories:
                     - name: Elites
+      engines:
+        # NR doesn't propagate group-level categoryLinks to child selections
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Sword
+                      categories: []

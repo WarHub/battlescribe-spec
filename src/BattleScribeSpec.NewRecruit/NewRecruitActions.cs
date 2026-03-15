@@ -606,6 +606,10 @@ public static class NewRecruitActions
                         if (cost) {
                             cost.value = value;
                             army.setMaxCosts(maxCosts);
+                            // Update costLimitConfig so the state reader uses the new limit
+                            if (window.__bsspec?.costLimitConfig && cost.name) {
+                                window.__bsspec.costLimitConfig[cost.name] = value;
+                            }
                             return null;
                         }
                     }

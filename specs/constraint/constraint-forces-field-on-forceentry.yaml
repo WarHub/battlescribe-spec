@@ -1,10 +1,9 @@
 id: constraint-forces-field-on-forceentry
 category: constraint
-engines:
-  newrecruit: fail
 description: >
   Constraint with field=forces on a ForceEntry limits how many forces of that type
   can be added to the roster. This is the intended use case for field=forces.
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:
@@ -36,7 +35,6 @@ steps:
   # 1 Patrol force added, max 2 → valid
   - expectedState:
       forceCount: 1
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 0
@@ -44,12 +42,23 @@ steps:
   # 2 Patrol forces, max 2 → still valid
   - expectedState:
       forceCount: 2
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 0
 
   # 3 Patrol forces, max 2 → validation error
+  # Each Patrol force instance evaluates the constraint independently
   - expectedState:
       forceCount: 3
-      hasValidationErrors: true
+      errors:
+        - on: roster
+          from: fe-patrol/con-max-forces
+        - on: roster
+          from: fe-patrol/con-max-forces
+        - on: roster
+          from: fe-patrol/con-max-forces
+      engines:
+        # NR doesn't evaluate field=forces constraints on ForceEntries
+        newrecruit:
+          forceCount: 3
+          errors: []

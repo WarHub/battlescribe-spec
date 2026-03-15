@@ -52,7 +52,6 @@ steps:
           selections:
             - name: Strike Team
             - name: Strike Team
-      hasValidationErrors: false
 
   - action: selectEntry
     forceIndex: 0
@@ -62,4 +61,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
-      hasValidationErrors: true
+      errors:
+        - on: selection shared-unit
+          from: link-1/con-link-max

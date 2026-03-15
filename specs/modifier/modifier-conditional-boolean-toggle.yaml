@@ -39,8 +39,21 @@ steps:
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Trigger Unit
+
+  # Now select target — it was hidden but trigger's modifier set hidden=false
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Trigger Unit
+            - name: Target Unit

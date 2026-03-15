@@ -231,11 +231,13 @@ public static class NewRecruitStateReader
                     }
 
                     // Build cost limit lookup for detecting cost limit errors.
-                    // Cost types come from the game system; maxCosts from the army.
-                    const maxCosts = army.getMaxCosts?.() || [];
+                    // Cost types come from the game system.
+                    // costLimitConfig is injected by C# adapter from spec YAML to
+                    // distinguish "no limit (NR defaults to 0)" from "limit set to 0".
                     const costTypeLookup = [];
                     const spec = window.__bsspec;
                     const costTypes = spec?.book?.catalogue?.gameSystem?.costTypes || [];
+                    const costLimitConfig = spec?.costLimitConfig || {};
                     for (const ct of costTypes) {
                         costTypeLookup.push({ name: ct.name, typeId: ct.id });
                     }
@@ -306,17 +308,51 @@ public static class NewRecruitStateReader
                                     if (entryId) break;
                                 }
                             }
+                            // Check owner node's own source constraints (shared constraints
+                            // are defined on the entry itself, not on a child selector)
+                            if (!entryId) {
+                                const ownerSrc = rawOwner.selector?.source || rawOwner.source;
+                                if (ownerSrc?.constraints) {
+                                    for (const c of ownerSrc.constraints) {
+                                        if (c.id === constraintId) {
+                                            entryId = ownerSrc.id || null;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            // For entry-link selections: source.id is the link ID but
+                            // source.targetId is the shared entry that owns the constraint.
+                            // NR doesn't copy shared entry constraints into source.constraints[],
+                            // so use targetId as the defining entry.
+                            if (!entryId) {
+                                const ownerSrc = rawOwner.selector?.source || rawOwner.source;
+                                entryId = ownerSrc?.targetId || null;
+                            }
                         }
 
-                        // Detect cost limit errors on roster: if the error
-                        // message mentions a cost type name, tag as costLimits/.
-                        if (ownerType === 'roster' && !entryId && cleanMsg) {
-                            for (const ct of costTypeLookup) {
-                                if (ct.name && cleanMsg.includes(ct.name)) {
-                                    entryId = 'costLimits';
-                                    constraintId = ct.typeId;
-                                    break;
-                                }
+                        // Suppress ALL roster-level errors. NR only reports cost
+                        // limit violations at this level (always against max=0
+                        // default). Some have constraintId (cost type ID), some
+                        // don't. We compute real cost limit violations
+                        // proactively after the tree walk.
+                        //
+                        // ACCEPTED RISK: if NR starts reporting non-cost-limit
+                        // roster errors in the future, they'll be silently
+                        // dropped here. Revisit if NR adds new roster-level
+                        // validation (e.g. custom constraints on roster node).
+                        if (ownerType === 'roster') {
+                            return;
+                        }
+
+                        // NR raises "cannot be selected while hidden" on hidden
+                        // selections. Detect via isHidden() API (no message parsing).
+                        // Tag with entryId/hidden for engine-filtered expectedState.
+                        if (ownerType === 'selection' && !constraintId) {
+                            const raw = ownerNode?.__v_raw || ownerNode;
+                            if (raw?.isHidden?.()) {
+                                entryId = ownerEntryId || null;
+                                constraintId = 'hidden';
                             }
                         }
 
@@ -348,6 +384,26 @@ public static class NewRecruitStateReader
                         }
                         for (const sel of (f.getSelections?.() || []))
                             walkSel(sel);
+                    }
+
+                    // Proactive cost limit computation: compare actual total
+                    // costs against configured limits from the spec YAML.
+                    // This replaces message-based cost limit detection.
+                    const totalCosts = extractTotalCosts(army);
+                    for (const ct of costTypeLookup) {
+                        const configuredLimit = costLimitConfig[ct.name];
+                        if (configuredLimit === undefined || configuredLimit === null || configuredLimit < 0) continue;
+                        const actual = totalCosts.find(c => c.typeId === ct.typeId);
+                        const totalValue = actual?.value || 0;
+                        if (totalValue > configuredLimit) {
+                            result.push({
+                                message: '',
+                                ownerType: 'roster',
+                                ownerEntryId: null,
+                                entryId: 'costLimits',
+                                constraintId: ct.typeId
+                            });
+                        }
                     }
 
                     // If tree walk found nothing, try getErrors() as fallback

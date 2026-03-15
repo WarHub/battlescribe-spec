@@ -363,7 +363,7 @@ public sealed class ProtocolCostType
     public string Name { get; set; } = "";
 
     [JsonPropertyName("defaultCostLimit")]
-    public double DefaultCostLimit { get; set; } = -1.0;
+    public double? DefaultCostLimit { get; set; }
 
     [JsonPropertyName("hidden")]
     public bool Hidden { get; set; }

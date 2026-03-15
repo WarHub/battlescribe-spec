@@ -1,8 +1,7 @@
 id: selection-page
 category: selection
-engines:
-  newrecruit: fail
 description: Selection entry preserves its page field from the catalogue definition
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:
@@ -24,11 +23,18 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selections:
             - name: Veteran
               page: "42"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Veteran

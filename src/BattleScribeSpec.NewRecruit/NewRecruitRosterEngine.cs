@@ -91,6 +91,25 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return 'Required stores not found';
 
+                        // Clean up previous test state
+                        if (window.__bsspec?.row?.list_key) {
+                            try {
+                                const currentList = listsStore.getCurrentList?.();
+                                if (currentList?.army) {
+                                    const forces = currentList.army.getForces?.() || [];
+                                    for (const f of [...forces]) {
+                                        if (typeof f.delete === 'function') f.delete();
+                                    }
+                                }
+                                await listsStore.deleteList?.(window.__bsspec.row.list_key);
+                            } catch(e) { /* ignore cleanup errors */ }
+                        }
+                        // Clear previous localLibrary entries
+                        for (const key of Object.keys(sysStore.localLibrary || {})) {
+                            delete sysStore.localLibrary[key];
+                        }
+                        window.__bsspec = undefined;
+
                         // Load synthetic data into NR's local library
                         const files = [
                             { name: 'system.gst', path: '/spec/system.gst', data: gstXml },
@@ -191,6 +210,18 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                     "entryOrder => { if (window.__bsspec) window.__bsspec.entryOrder = entryOrder; }",
                     entryOrder.ToArray());
             }
+
+            // Inject cost limit configuration so the state reader can distinguish
+            // "no limit configured (NR defaults to 0)" from "limit explicitly set to 0".
+            if (setupResult == null && gameSystem.CostTypes is { Count: > 0 })
+            {
+                var costLimitConfig = new Dictionary<string, double?>();
+                foreach (var ct in gameSystem.CostTypes)
+                    costLimitConfig[ct.Name] = ct.DefaultCostLimit;
+                await _browser.Page.EvaluateAsync(
+                    "config => { if (window.__bsspec) window.__bsspec.costLimitConfig = config; }",
+                    costLimitConfig);
+            }
         }
         catch (Exception ex)
         {
@@ -228,6 +259,24 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const sysStore = pinia._s.get('systemsStore');
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return 'Required stores not found';
+
+                        // Clean up previous test state
+                        if (window.__bsspec?.row?.list_key) {
+                            try {
+                                const currentList = listsStore.getCurrentList?.();
+                                if (currentList?.army) {
+                                    const forces = currentList.army.getForces?.() || [];
+                                    for (const f of [...forces]) {
+                                        if (typeof f.delete === 'function') f.delete();
+                                    }
+                                }
+                                await listsStore.deleteList?.(window.__bsspec.row.list_key);
+                            } catch(e) { /* ignore cleanup errors */ }
+                        }
+                        for (const key of Object.keys(sysStore.localLibrary || {})) {
+                            delete sysStore.localLibrary[key];
+                        }
+                        window.__bsspec = undefined;
 
                         // Load real data files into NR's local library
                         const files = fileData.map(f => ({ name: f.name, path: f.path, data: f.data }));
@@ -299,6 +348,37 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             books: allBooks.map(b => b.bookData),
                             row
                         };
+
+                        // Populate entryOrder from catalogues so the state
+                        // reader can sort selections to match BS ordering.
+                        const entryOrder = [];
+                        function collectEntryIds(entries) {
+                            if (!entries) return;
+                            for (const e of entries) {
+                                if (e.id) entryOrder.push(e.id);
+                                collectEntryIds(e.selectionEntries);
+                                collectEntryIds(e.selectionEntryGroups);
+                            }
+                        }
+                        for (const b of allBooks) {
+                            const cat = b.bookData?.catalogue;
+                            if (cat) {
+                                collectEntryIds(cat.selectionEntries);
+                                collectEntryIds(cat.sharedSelectionEntries);
+                            }
+                        }
+                        window.__bsspec.entryOrder = entryOrder;
+
+                        // Populate costLimitConfig from game system cost types
+                        // so the reader can distinguish "no limit" from "limit=0".
+                        const costLimitConfig = {};
+                        const gs = primaryBook?.catalogue?.gameSystem;
+                        if (gs?.costTypes) {
+                            for (const ct of gs.costTypes) {
+                                costLimitConfig[ct.name] = ct.defaultCostLimit ?? -1;
+                            }
+                        }
+                        window.__bsspec.costLimitConfig = costLimitConfig;
 
                         return null; // success
                     } catch(e) {

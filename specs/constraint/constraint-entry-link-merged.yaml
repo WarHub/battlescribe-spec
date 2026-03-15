@@ -5,6 +5,7 @@ description: >
   During catalogue expansion, constraints from both sources are merged
   into the expanded copy. Both constraints are evaluated independently —
   the more restrictive one effectively limits selection count.
+tags: [design-difference]
 
 setup:
   gameSystem:
@@ -59,7 +60,6 @@ steps:
           selections:
             - name: Heavy Support
             - name: Heavy Support
-      hasValidationErrors: false
 
   - action: selectEntry
     forceIndex: 0
@@ -70,4 +70,11 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
-      hasValidationErrors: true
+      errors:
+        - on: selection shared-unit
+          from: shared-unit/con-shared-max
+      engines:
+        newrecruit:
+          errors:
+            - on: selection shared-unit
+              from: link-1/con-link-max

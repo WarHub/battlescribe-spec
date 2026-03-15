@@ -1,0 +1,86 @@
+id: constraint-percent-value-at-limit
+category: constraint
+description: >
+  percentValue constraint at the exact limit — adding a second entry type
+  brings the first entry to exactly 50%, which is at limit (no error).
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: 2000
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Elite
+          type: unit
+          categoryLinks:
+            - id: cl-se1-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 300
+          constraints:
+            - id: c1
+              type: max
+              value: 50
+              field: selections
+              scope: parent
+              percentValue: true
+        - id: se-2
+          name: Troops
+          type: unit
+          categoryLinks:
+            - id: cl-se2-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 100
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # 1 Elite of 1 total = 100% > 50% → error
+  - expectedState:
+      forces:
+        - selectionCount: 1
+      errors:
+        - on: selection se-1
+          from: se-1/c1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  # 1 Elite of 2 total = 50%. Threshold = 50% of 2 = 1.0. Count = 1 ≤ 1.0 → no error
+  - expectedState:
+      forces:
+        - selectionCount: 2

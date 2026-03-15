@@ -71,7 +71,6 @@ steps:
           selections:
             - name: Unit A
             - name: HQ Leader
-      errors: []
 
   # Remove both auto-selected entries to trigger both min violations
   - action: deselectSelection

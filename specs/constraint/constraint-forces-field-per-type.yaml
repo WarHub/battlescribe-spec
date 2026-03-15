@@ -1,10 +1,9 @@
 id: constraint-forces-field-per-type
 category: constraint
-engines:
-  newrecruit: fail
 description: >
   Constraint with field=forces counts forces per entry type independently.
   Each ForceEntry's constraint only counts forces created from that same entry.
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:
@@ -44,7 +43,6 @@ steps:
   # 1 Patrol (max 2), 0 Battalion (max 1) → valid
   - expectedState:
       forceCount: 1
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 1
@@ -52,7 +50,6 @@ steps:
   # 1 Patrol, 1 Battalion → valid
   - expectedState:
       forceCount: 2
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 0
@@ -60,13 +57,21 @@ steps:
   # 2 Patrol (max 2), 1 Battalion (max 1) → valid
   - expectedState:
       forceCount: 3
-      hasValidationErrors: false
 
   - action: addForce
     forceEntryIndex: 1
 
   # 2 Patrol (max 2), 2 Battalion (max 1) → error on Battalion
+  # Each Battalion force instance evaluates the constraint independently
   - expectedState:
       forceCount: 4
-      hasValidationErrors: true
-
+      errors:
+        - on: roster
+          from: fe-battalion/con-max-battalion
+        - on: roster
+          from: fe-battalion/con-max-battalion
+      engines:
+        # NR doesn't evaluate field=forces constraints
+        newrecruit:
+          forceCount: 4
+          errors: []

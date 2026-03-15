@@ -56,7 +56,7 @@ public abstract class ConformanceTestBase
         if (engine is null)
             return;
 
-        var runner = new SpecRunner(engine, new DataSourceResolver());
+        var runner = new SpecRunner(engine, new DataSourceResolver(), EngineName);
         var result = runner.Run(spec);
 
         if (result.Passed && expectedToFail)
@@ -67,7 +67,9 @@ public abstract class ConformanceTestBase
 
         if (!result.Passed && expectedToFail)
         {
-            _output.WriteLine($"{LogPrefix}[EXPECTED FAILURE] Spec '{specName}' failed as expected on {EngineName}.");
+            _output.WriteLine($"{LogPrefix}[EXPECTED FAILURE] Spec '{specName}' failed as expected on {EngineName}:");
+            foreach (var (f, i) in result.Failures.Select((f, i) => (f, i)))
+                _output.WriteLine($"  [{i + 1}] {f}");
             return;
         }
 

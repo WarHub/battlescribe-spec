@@ -41,15 +41,16 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
-  - assert: totalCost
-    costTypeId: pts
-    expected: 100
-  - assert: totalCost
-    costTypeId: pl
-    expected: 5
-  - assert: totalCost
-    costTypeId: cp
-    expected: -1
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
+        - typeId: pl
+          value: 5
+        - typeId: cp
+          value: -1

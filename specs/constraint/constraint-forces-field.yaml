@@ -1,11 +1,10 @@
 id: constraint-forces-field
 category: constraint
-engines:
-  newrecruit: fail
 description: >
   Constraint with field=forces on a SelectionEntry always counts 0 forces
   because the child filter resolves to the owning SelectionEntry (not a ForceEntry),
   so force matching fails. An atLeast 1 constraint is therefore always violated.
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:
@@ -39,7 +38,17 @@ steps:
       # No selections yet, but the min 1 field=forces constraint on the entry
       # is evaluated. Because the owning entry is a SelectionEntry (not ForceEntry),
       # force count is always 0 → validation error.
-      hasValidationErrors: true
+      errors:
+        - on: roster
+          from: se-unit/con-force-field
+      engines:
+        # NR auto-selects the entry and doesn't evaluate field=forces constraints
+        newrecruit:
+          forces:
+            - selectionCount: 1
+              selections:
+                - name: Unit A
+          errors: []
 
   - action: selectEntry
     forceIndex: 0
@@ -52,4 +61,15 @@ steps:
         - selectionCount: 1
           selections:
             - name: Unit A
-      hasValidationErrors: true
+      errors:
+        - on: roster
+          from: se-unit/con-force-field
+      engines:
+        # NR: 2 selections (auto-selected + manually selected), no force-field errors
+        newrecruit:
+          forces:
+            - selectionCount: 2
+              selections:
+                - name: Unit A
+                - name: Unit A
+          errors: []

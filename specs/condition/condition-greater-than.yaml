@@ -40,27 +40,25 @@ steps:
     entryIndex: 1
 
   # With 0 triggers, greaterThan(1) is false
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Target
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
 
-  # Add first trigger (count=1, greaterThan(1) still false)
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Target
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
 
-  # Add second trigger (count=2, greaterThan(1) now true)
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: More Than One Trigger
+  - expectedState:
+      forces:
+        - selections:
+            - name: More Than One Trigger

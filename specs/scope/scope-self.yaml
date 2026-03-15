@@ -36,7 +36,10 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # Self scope checks the element itself
+  # Self scope evaluates on the element itself — childId=se-unit-a with scope=self
+  # returns 0 (doesn't count self), so modifier doesn't fire
   - expectedState:
       forces:
         - selectionCount: 1
+          selections:
+            - name: Self Check

@@ -154,14 +154,6 @@ public sealed class StepDef
     [YamlMember(Alias = "value")]
     public double? Value { get; set; }
 
-    // ===== Assertion fields =====
-
-    [YamlMember(Alias = "assert")]
-    public string? Assert { get; set; }
-
-    [YamlMember(Alias = "expected")]
-    public object? Expected { get; set; }
-
     [YamlMember(Alias = "path")]
     public string? Path { get; set; }
 
@@ -181,12 +173,6 @@ public sealed class ExpectedStateDef
     [YamlMember(Alias = "selectionCount")]
     public int? SelectionCount { get; set; }
 
-    [YamlMember(Alias = "validationErrorCount")]
-    public int? ValidationErrorCount { get; set; }
-
-    [YamlMember(Alias = "hasValidationErrors")]
-    public bool? HasValidationErrors { get; set; }
-
     [YamlMember(Alias = "forces")]
     public List<ExpectedForceDef>? Forces { get; set; }
 
@@ -196,37 +182,39 @@ public sealed class ExpectedStateDef
     [YamlMember(Alias = "costs")]
     public List<ExpectedCostDef>? Costs { get; set; }
 
-    [YamlMember(Alias = "validationErrors")]
-    public List<ExpectedValidationErrorDef>? ValidationErrors { get; set; }
-
     /// <summary>
-    /// New structured error assertions using "on"/"from"/"message" format.
-    /// Replaces validationErrors with a more readable syntax.
+    /// Structured error assertions using "on"/"from" format.
     /// </summary>
     [YamlMember(Alias = "errors")]
     public List<ErrorAssertionDef>? Errors { get; set; }
-}
 
-/// <summary>
-/// Expected structured validation error for assertion (legacy format).
-/// All fields are optional — only specified fields are checked.
-/// </summary>
-public sealed class ExpectedValidationErrorDef
-{
-    [YamlMember(Alias = "message")]
-    public string? Message { get; set; }
+    /// <summary>
+    /// Per-engine overrides. Each key is an engine name (e.g. "newrecruit"),
+    /// each value is a partial ExpectedStateDef whose non-null fields replace
+    /// the corresponding base fields for that engine.
+    /// </summary>
+    [YamlMember(Alias = "engines")]
+    public Dictionary<string, ExpectedStateDef>? Engines { get; set; }
 
-    [YamlMember(Alias = "ownerType")]
-    public string? OwnerType { get; set; }
-
-    [YamlMember(Alias = "ownerEntryId")]
-    public string? OwnerEntryId { get; set; }
-
-    [YamlMember(Alias = "entryId")]
-    public string? EntryId { get; set; }
-
-    [YamlMember(Alias = "constraintId")]
-    public string? ConstraintId { get; set; }
+    /// <summary>
+    /// Returns an effective ExpectedStateDef for the given engine: if the engine
+    /// has an override, non-null fields replace the base. Unset fields fall through.
+    /// </summary>
+    public ExpectedStateDef ForEngine(string? engineName)
+    {
+        if (engineName is null || Engines is null || !Engines.TryGetValue(engineName, out var over))
+            return this;
+        return new ExpectedStateDef
+        {
+            ForceCount = over.ForceCount ?? ForceCount,
+            SelectionCount = over.SelectionCount ?? SelectionCount,
+            Forces = over.Forces ?? Forces,
+            CostCount = over.CostCount ?? CostCount,
+            Costs = over.Costs ?? Costs,
+            Errors = over.Errors ?? Errors,
+            // Don't propagate Engines into the merged result
+        };
+    }
 }
 
 /// <summary>
@@ -235,7 +223,6 @@ public sealed class ExpectedValidationErrorDef
 /// <para>"from" identifies the source as "{entryId}/{constraintId}" with reserved pseudo-values:</para>
 /// <para>  - "costLimits/{costTypeId}" for cost limit errors (pseudo-entry)</para>
 /// <para>  - "{entryId}/hidden" for hidden entry errors (pseudo-constraint)</para>
-/// <para>"message" is an optional substring check on the error message.</para>
 /// </summary>
 public sealed class ErrorAssertionDef
 {
@@ -256,12 +243,6 @@ public sealed class ErrorAssertionDef
     /// </summary>
     [YamlMember(Alias = "from")]
     public string? From { get; set; }
-
-    /// <summary>
-    /// Optional substring match on the error message.
-    /// </summary>
-    [YamlMember(Alias = "message")]
-    public string? Message { get; set; }
 }
 
 public sealed class ExpectedForceDef
@@ -313,6 +294,9 @@ public sealed class ExpectedSelectionDef
 
     [YamlMember(Alias = "publicationId")]
     public string? PublicationId { get; set; }
+
+    [YamlMember(Alias = "publicationName")]
+    public string? PublicationName { get; set; }
 }
 
 public sealed class ExpectedCostDef

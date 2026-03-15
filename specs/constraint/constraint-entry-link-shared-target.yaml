@@ -61,7 +61,6 @@ steps:
           selections:
             - name: Elite Guard
             - name: Elite Guard
-      hasValidationErrors: false
 
   - action: selectEntry
     forceIndex: 0
@@ -71,4 +70,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 3
-      hasValidationErrors: true
+      errors:
+        - on: selection shared-unit
+          from: shared-unit/con-max

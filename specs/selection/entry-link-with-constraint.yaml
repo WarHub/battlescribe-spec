@@ -33,14 +33,17 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
   # Two selections of the linked entry — exactly at the max constraint.
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 2
-  - assert: noValidationErrors
+  - expectedState:
+      forces:
+        - selectionCount: 2
+
+  - expectedState: {}

@@ -1,11 +1,18 @@
 id: constraint-percent-value
 category: constraint
-description: Constraint with percentValue calculates threshold as percentage
+description: >
+  Constraint with percentValue=true calculates threshold as a percentage
+  of the total count in the given scope. For max=50 and field=selections,
+  the threshold is 50% of total parent selections.
+  Both engines handle this correctly.
 
 setup:
   gameSystem:
     id: test-gs
     name: Test GS
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
     costTypes:
       - id: pts
         name: pts
@@ -13,6 +20,11 @@ setup:
     forceEntries:
       - id: fe-1
         name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
   catalogues:
     - id: cat-1
       name: Cat
@@ -21,6 +33,11 @@ setup:
         - id: se-1
           name: Elite
           type: unit
+          categoryLinks:
+            - id: cl-se1-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
           costs:
             - name: pts
               typeId: pts
@@ -45,9 +62,14 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # percentValue=true: max 50% of selections (relative to other constraints/context)
+  # percentValue=true: max = 50% of parent selections.
+  # With 1 total selection: threshold = 1/100*50 = 0.5.
+  # 1 selection > 0.5 → both engines produce an error.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Elite
+      errors:
+        - on: selection se-1
+          from: se-1/c1

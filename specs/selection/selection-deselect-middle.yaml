@@ -40,11 +40,10 @@ steps:
     forceIndex: 0
     entryIndex: 2
 
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 3
+  - expectedState:
+      forces:
+        - selectionCount: 3
 
-  # Deselect Beta (index 1)
   - action: deselectSelection
     forceIndex: 0
     selectionIndex: 1

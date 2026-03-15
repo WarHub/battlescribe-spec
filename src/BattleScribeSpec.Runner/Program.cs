@@ -193,7 +193,7 @@ foreach (var (_, id, category, loader) in specSources)
     // Run spec via protocol engine — use longer timeout for DataSource specs
     var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
     using var engine = new JsonProtocolEngine(adapterProcess, timeout);
-    var runner = new SpecRunner(engine, new DataSourceResolver());
+    var runner = new SpecRunner(engine, new DataSourceResolver(), engineFilter);
     var result = runner.Run(spec);
     results.Add(result);
     specsByResult[result] = spec;

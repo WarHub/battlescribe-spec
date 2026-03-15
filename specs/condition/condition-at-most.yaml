@@ -37,7 +37,18 @@ steps:
     entryIndex: 0
 
   # With 1 selection, atMost(1) is true → modifier applied
-  - assert: selectionName
+  - expectedState:
+      forces:
+        - selections:
+            - name: Few Units
+
+  # Add second selection → atMost(1) is now false → modifier not applied
+  - action: selectEntry
     forceIndex: 0
-    selectionIndex: 0
-    expected: Few Units
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+            - name: Unit A

@@ -99,12 +99,16 @@ public sealed class BattleScribeOracle : IDisposable
         while (ctIter.hasNext())
         {
             var ct = (CostType)ctIter.next();
-            // Cost limit
-            var limit = new net.battlescribe.model.data.Cost();
-            limit.setName(ct.getName());
-            limit.setTypeId(ct.getId());
-            limit.setValue(ct.getDefaultCostLimit());
-            roster.getCostLimits().add(limit);
+            var dcl = ct.getDefaultCostLimit();
+            // Negative values (e.g. -1) mean "no cost limit" in BattleScribe convention
+            if (dcl >= 0)
+            {
+                var limit = new net.battlescribe.model.data.Cost();
+                limit.setName(ct.getName());
+                limit.setTypeId(ct.getId());
+                limit.setValue(dcl);
+                roster.getCostLimits().add(limit);
+            }
             // Roster cost (starts at zero, engine calculates)
             var cost = new net.battlescribe.model.data.Cost();
             cost.setName(ct.getName());
@@ -283,6 +287,15 @@ public sealed class BattleScribeOracle : IDisposable
                 CollectSelectionErrors(selection, result);
             }
         }
+        // Remap category-level max/hidden constraint errors to selection-level.
+        // BattleScribe places these on the category, but the canonical spec form
+        // uses selection-level placement (matching NR behavior).
+        RemapCategoryErrorsToSelection(result);
+        // Remap roster/force-level entry constraint errors to selection-level.
+        // BattleScribe places scope=roster errors on the roster and scope=force
+        // errors on the force, but NR attributes them to the selection.
+        RemapRosterErrorsToSelection(result);
+        RemapForceErrorsToSelection(result);
         return result;
     }
 
@@ -295,6 +308,80 @@ public sealed class BattleScribeOracle : IDisposable
         }
     }
 
+    /// <summary>
+    /// Remap category-level max/hidden/cost-over-limit constraint errors to selection-level.
+    /// BattleScribe's Java engine places these on the category node, but both NR and the
+    /// canonical spec form report them on the selection that violated the constraint.
+    /// Min constraint errors stay on category (both engines agree on that placement).
+    /// </summary>
+    private static void RemapCategoryErrorsToSelection(List<ValidationErrorState> errors)
+    {
+        for (int i = 0; i < errors.Count; i++)
+        {
+            var e = errors[i];
+            if (e.OwnerType != "category" || e.EntryId is null)
+                continue;
+
+            // Only remap over-limit and hidden errors (max constraints, cost-max, hidden entries).
+            // Min constraints ("must have", "must spend") stay on category.
+            // NOTE: relies on English error message strings from the BS Java engine.
+            // Accepted because the BS engine is EOL (v2.3.21) and messages are stable.
+            if (e.ConstraintId == "hidden" ||
+                e.Message.Contains("too many") ||
+                e.Message.Contains("too much"))
+            {
+                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId };
+            }
+        }
+    }
+
+    /// <summary>
+    /// Remap roster-level max constraint errors to selection-level.
+    /// BattleScribe's Java engine places scope=roster shared constraint violations
+    /// on the Roster node, but NR attributes them to the selection entry.
+    /// </summary>
+    private static void RemapRosterErrorsToSelection(List<ValidationErrorState> errors)
+    {
+        for (int i = 0; i < errors.Count; i++)
+        {
+            var e = errors[i];
+            if (e.OwnerType != "roster" || e.EntryId is null || e.EntryId == "costLimits")
+                continue;
+
+            if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
+                && !e.Message.Contains("forces"))
+            {
+                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId };
+            }
+        }
+    }
+
+    /// <summary>
+    /// Remap force-level max constraint errors to selection-level.
+    /// BattleScribe's Java engine places scope=force constraint violations on the
+    /// Force node, but NR attributes them to the selection entry. For entry-link
+    /// constraints, resolve the link target to get the selection entry ID.
+    /// </summary>
+    private void RemapForceErrorsToSelection(List<ValidationErrorState> errors)
+    {
+        for (int i = 0; i < errors.Count; i++)
+        {
+            var e = errors[i];
+            if (e.OwnerType != "force" || e.EntryId is null)
+                continue;
+
+            if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
+                && !e.Message.Contains("forces"))
+            {
+                // Resolve entry link → target, or use entryId directly for shared entries
+                var selectionEntryId = _linkTargetMap.TryGetValue(e.EntryId, out var targetId)
+                    ? targetId
+                    : e.EntryId;
+                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = selectionEntryId };
+            }
+        }
+    }
+
     private void CollectRosterErrors(Roster roster, List<ValidationErrorState> result)
     {
         var errors = roster.getValidationErrors();
@@ -302,6 +389,24 @@ public sealed class BattleScribeOracle : IDisposable
 
         // Build cost limit lookup for resolving cost type IDs
         var costLimits = JavaListToList<Cost>(roster.getCostLimits());
+
+        // Build error ID map from roster's validation error IDs (shared entries)
+        var errorIdMap = new Dictionary<string, (string entryId, string constraintId)>();
+        var errorIds = ((BaseRosterElement)roster).getValidationErrorIds();
+        if (errorIds is not null)
+        {
+            var idIter = errorIds.iterator();
+            while (idIter.hasNext())
+            {
+                var errorId = idIter.next()?.ToString();
+                if (errorId is null) continue;
+                var parts = errorId.Split("::");
+                if (parts.Length >= 3)
+                {
+                    errorIdMap[parts[1]] = (parts[1], parts[2]);
+                }
+            }
+        }
 
         var iter = errors.iterator();
         while (iter.hasNext())
@@ -315,22 +420,76 @@ public sealed class BattleScribeOracle : IDisposable
             dynamic error = item;
             var message = (string?)error.b() ?? "(null error)";
 
-            // Resolve cost type from message (cost limit errors mention the cost name)
-            string? costTypeId = null;
+            string? entryId = null;
+            string? constraintId = null;
+
+            // 1. Try cost limit resolution (cost limit errors mention the cost name)
             foreach (var limit in costLimits)
             {
                 var costName = limit.getName();
                 if (costName is not null && message.Contains(costName))
                 {
-                    costTypeId = limit.getTypeId();
+                    entryId = "costLimits";
+                    constraintId = limit.getTypeId();
                     break;
                 }
             }
 
+            // 2. Try shared entry error IDs (roster-scoped shared constraints)
+            if (entryId is null)
+            {
+                foreach (var kvp in errorIdMap)
+                {
+                    var entry = GetEntryById(kvp.Value.entryId);
+                    if (entry is not null && message.Contains(entry.getName()))
+                    {
+                        entryId = kvp.Value.entryId;
+                        constraintId = kvp.Value.constraintId;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Try ForceEntry constraint resolution (field=forces constraints)
+            if (entryId is null)
+            {
+                (entryId, constraintId) = ResolveForceEntryFromMessage(message);
+            }
+
+            // 4. Fall back to SelectionEntry constraint resolution
+            if (entryId is null)
+            {
+                (entryId, constraintId) = ResolveEntryFromMessage(message);
+            }
+
             result.Add(new ValidationErrorState(message, "roster", roster.getId(), null,
-                EntryId: costTypeId is not null ? "costLimits" : null,
-                ConstraintId: costTypeId));
+                entryId, constraintId));
         }
+    }
+
+    /// <summary>
+    /// Resolve entryId and constraintId for roster-level errors by matching
+    /// ForceEntry names in the message and looking up their constraints.
+    /// Handles field=forces constraints on ForceEntry definitions.
+    /// </summary>
+    private (string? entryId, string? constraintId) ResolveForceEntryFromMessage(string message)
+    {
+        foreach (var fe in _setupForceEntries)
+        {
+            var feName = fe.getName();
+            if (feName is null || !message.Contains(feName)) continue;
+            var constraints = JavaListToList<Constraint>(fe.getConstraints());
+            foreach (var c in constraints)
+            {
+                var type = c.getType();
+                if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
+                    (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                {
+                    return (fe.getId(), c.getId());
+                }
+            }
+        }
+        return (null, null);
     }
 
     private void CollectElementErrors(
@@ -432,6 +591,18 @@ public sealed class BattleScribeOracle : IDisposable
                     return (id, c.getId());
                 }
             }
+            // Entry has no matching constraint — check entry links targeting this entry
+            if (_linkConstraintLookup.TryGetValue(id, out var linkConstraints))
+            {
+                foreach (var (linkId, constraintId, constraintType) in linkConstraints)
+                {
+                    if ((constraintType == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
+                        (constraintType == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                    {
+                        return (linkId, constraintId);
+                    }
+                }
+            }
         }
         return (null, null);
     }
@@ -496,6 +667,10 @@ public sealed class BattleScribeOracle : IDisposable
     private readonly List<SelectionEntry> _setupSelectionEntries = [];
     private readonly List<CostType> _setupCostTypes = [];
     private readonly Dictionary<string, SelectionEntry> _entryLookup = new();
+    // Entry link constraints indexed by target entry ID: targetId → [(linkId, constraintId, constraintType)]
+    private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType)>> _linkConstraintLookup = new();
+    // Entry link target resolution: linkId → targetId
+    private readonly Dictionary<string, string> _linkTargetMap = new();
     // Per-catalogue entry lists for multi-catalogue support
     private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
     // Maps force object identity to catalogue index (avoids positional corruption on removal)
@@ -1178,6 +1353,8 @@ public sealed class BattleScribeOracle : IDisposable
         _forceCatalogueMap.Clear();
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
+        _linkConstraintLookup.Clear();
+        _linkTargetMap.Clear();
 
         foreach (var catSpec in catalogues)
         {
@@ -1251,6 +1428,28 @@ public sealed class BattleScribeOracle : IDisposable
             if (sharedSelectionEntries != null)
                 foreach (var se in sharedSelectionEntries)
                     IndexEntries(se);
+
+            // Index entry link constraints and targets for error resolution.
+            if (catSpec.EntryLinks != null)
+            {
+                foreach (var elSpec in catSpec.EntryLinks)
+                {
+                    if (elSpec.TargetId is not null)
+                        _linkTargetMap[elSpec.Id] = elSpec.TargetId;
+                    if (elSpec.Constraints is { Count: > 0 } && elSpec.TargetId is not null)
+                    {
+                        if (!_linkConstraintLookup.TryGetValue(elSpec.TargetId, out var list))
+                        {
+                            list = [];
+                            _linkConstraintLookup[elSpec.TargetId] = list;
+                        }
+                        foreach (var cSpec in elSpec.Constraints)
+                        {
+                            list.Add((elSpec.Id, cSpec.Id, cSpec.Type ?? "max"));
+                        }
+                    }
+                }
+            }
         }
 
         // Default active catalogue is the first loaded catalogue.
@@ -1263,7 +1462,8 @@ public sealed class BattleScribeOracle : IDisposable
         if (costTypes != null)
             _setupCostTypes.AddRange(costTypes);
 
-        return Initialize(gs, catalogueDict);
+        var initErrors = Initialize(gs, catalogueDict);
+        return initErrors;
     }
 
     private static ForceEntry BuildForceEntry(ProtocolForceEntry feSpec)
@@ -1453,7 +1653,7 @@ public sealed class BattleScribeOracle : IDisposable
 
     private static Constraint BuildConstraint(ProtocolConstraint c) =>
         JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,
-            c.Shared, c.IncludeChildSelections, c.IncludeChildForces);
+            c.Shared, c.IncludeChildSelections, c.IncludeChildForces, c.PercentValue);
 
     private static Modifier BuildModifier(ProtocolModifier spec)
     {
@@ -1567,6 +1767,32 @@ public sealed class BattleScribeOracle : IDisposable
 
     internal GameSystem? GetGameSystem() => _gameSystem;
 
+    internal string? GetPublicationName(string? publicationId)
+    {
+        if (string.IsNullOrEmpty(publicationId) || _gameSystem is null)
+            return null;
+        // Search game system publications
+        var iter = _gameSystem.getPublications().iterator();
+        while (iter.hasNext())
+        {
+            var pub = (Publication)iter.next();
+            if (pub.getId() == publicationId)
+                return pub.getName();
+        }
+        // Search catalogue publications
+        foreach (var cat in _catalogues.Values)
+        {
+            var catIter = cat.getPublications().iterator();
+            while (catIter.hasNext())
+            {
+                var pub = (Publication)catIter.next();
+                if (pub.getId() == publicationId)
+                    return pub.getName();
+            }
+        }
+        return null;
+    }
+
     /// <summary>
     /// Get name of first selection in first force (for modifier testing).
     /// </summary>
@@ -1588,6 +1814,8 @@ public sealed class BattleScribeOracle : IDisposable
         _setupForceEntries.Clear();
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
+        _linkConstraintLookup.Clear();
+        _linkTargetMap.Clear();
         GC.SuppressFinalize(this);
     }
 

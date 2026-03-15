@@ -1,8 +1,7 @@
 id: infolink-page-override
 category: selection
 description: InfoLink page does NOT override linked rule's page - target's own page is preserved
-engines:
-  newrecruit: fail
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:
@@ -34,9 +33,11 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selections:
@@ -45,3 +46,11 @@ steps:
                 - name: Fearless
                   description: Immune to morale
                   page: "10"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine
+                  rules:
+                    - name: Fearless
+                      description: Immune to morale

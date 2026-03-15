@@ -1,6 +1,7 @@
 id: hidden-cascade-to-children
 category: selection
 description: Hidden parent entry with visible children can still be selected
+tags: [design-difference]
 
 setup:
   gameSystem:
@@ -26,12 +27,19 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Hidden Squad
               hidden: true
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-squad
+              from: se-squad/hidden

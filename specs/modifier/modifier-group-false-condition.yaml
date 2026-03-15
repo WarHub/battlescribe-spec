@@ -1,6 +1,7 @@
 id: modifier-group-false-condition
 category: modifier
 description: Modifier group with unsatisfied condition does not apply its modifiers
+
 setup:
   gameSystem:
     id: test-gs
@@ -31,6 +32,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

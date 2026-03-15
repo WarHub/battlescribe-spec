@@ -1,0 +1,250 @@
+using BattleScribeSpec;
+using System.Text.RegularExpressions;
+using Xunit;
+
+namespace BattleScribeSpec.Tests;
+
+/// <summary>
+/// Lint tests for spec YAML files — validates formatting, required fields,
+/// and conventions across the entire spec suite.
+/// </summary>
+[Trait("Category", "Unit")]
+public sealed class SpecLintTests
+{
+    private static readonly string? SpecsDir = SpecLoader.FindSpecsDirectory();
+
+    private static IEnumerable<(string path, string relPath, SpecFile spec)> AllSpecFiles()
+    {
+        if (SpecsDir is null || !Directory.Exists(SpecsDir))
+            yield break;
+        foreach (var (path, id, category) in SpecLoader.DiscoverSpecs(SpecsDir))
+        {
+            var spec = SpecLoader.Load(path);
+            var relPath = Path.GetRelativePath(SpecsDir, path).Replace('\\', '/');
+            yield return (path, relPath, spec);
+        }
+    }
+
+    public static IEnumerable<object[]> AllSpecs() =>
+        AllSpecFiles().Select(x => new object[] { x.path, x.relPath });
+
+    // ── Required fields ──────────────────────────────────────────────
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void HasRequiredFields(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        Assert.False(string.IsNullOrWhiteSpace(spec.Id), $"{specName}: missing 'id'");
+        Assert.False(string.IsNullOrWhiteSpace(spec.Category), $"{specName}: missing 'category'");
+        Assert.False(string.IsNullOrWhiteSpace(spec.Description), $"{specName}: missing 'description'");
+    }
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void IdMatchesFilename(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        var filename = Path.GetFileNameWithoutExtension(specPath);
+        Assert.Equal(filename, spec.Id);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void CategoryMatchesDirectory(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        var dirName = Path.GetFileName(Path.GetDirectoryName(specPath));
+        Assert.Equal(dirName, spec.Category);
+    }
+
+    // ── No duplicate IDs ─────────────────────────────────────────────
+
+    [Fact]
+    public void NoDuplicateSpecIds()
+    {
+        var allFiles = AllSpecFiles().ToList();
+        var duplicates = allFiles
+            .GroupBy(x => x.spec.Id)
+            .Where(g => g.Count() > 1)
+            .Select(g => $"'{g.Key}' in: {string.Join(", ", g.Select(x => x.relPath))}")
+            .ToList();
+        Assert.True(duplicates.Count == 0,
+            $"Duplicate spec IDs found:\n  {string.Join("\n  ", duplicates)}");
+    }
+
+    // ── Formatting: blank lines between steps ────────────────────────
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void BlankLineBetweenSteps(string specPath, string specName)
+    {
+        var lines = File.ReadAllLines(specPath);
+        var inSteps = false;
+        var violations = new List<string>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var stripped = lines[i].Trim();
+            if (stripped == "steps:")
+            {
+                inSteps = true;
+                continue;
+            }
+            if (!inSteps) continue;
+
+            // Top-level step item (2-space indent + "- ")
+            if (Regex.IsMatch(lines[i], @"^  - (action|expectedState):"))
+            {
+                if (i > 0)
+                {
+                    var prev = lines[i - 1].Trim();
+                    if (prev != "" && prev != "steps:" && !prev.StartsWith('#'))
+                    {
+                        violations.Add($"line {i + 1}: missing blank line before '{stripped[..Math.Min(40, stripped.Length)]}'");
+                    }
+                }
+            }
+        }
+        Assert.True(violations.Count == 0,
+            $"{specName}: missing blank lines between steps:\n  {string.Join("\n  ", violations)}");
+    }
+
+    // ── Formatting: blank line between header and setup ──────────────
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void BlankLineBeforeSetup(string specPath, string specName)
+    {
+        var lines = File.ReadAllLines(specPath);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].TrimEnd() == "setup:")
+            {
+                Assert.True(i > 0 && lines[i - 1].Trim() == "",
+                    $"{specName}: line {i + 1}: expected blank line before 'setup:'");
+                break;
+            }
+        }
+    }
+
+    // ── Valid actions ─────────────────────────────────────────────────
+
+    private static readonly HashSet<string> KnownActions =
+    [
+        "addForce", "removeForce",
+        "selectEntry", "selectChildEntry",
+        "deselectSelection", "setSelectionCount",
+        "duplicateSelection", "setCostLimit"
+    ];
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void ActionsAreKnown(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        if (spec.Steps is null) return;
+        foreach (var step in spec.Steps)
+        {
+            if (step.Action is null) continue;
+            Assert.True(KnownActions.Contains(step.Action),
+                $"{specName}: unknown action '{step.Action}'");
+        }
+    }
+
+    // ── Valid tags ────────────────────────────────────────────────────
+
+    private static readonly HashSet<string> KnownTags =
+    [
+        // Engine difference classification
+        "battlescribe-bug", "newrecruit-bug",
+        "newrecruit-missing-feature", "design-difference",
+        "undefined-behavior",
+        // Feature tags
+        "auto-select", "constraint", "min", "max",
+        "field-forces", "nested", "cost",
+        "defaultCostLimit", "multi-type", "default",
+        "wh40k-10e", "real-world", "space-marines",
+        "profile", "selection", "number",
+        "defaultSelectionEntryId", "entryLink",
+        "edge-case",
+        "validation-errors", "structured-errors",
+    ];
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void TagsAreKnown(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        if (spec.Tags is null) return;
+        var unknown = spec.Tags.Where(t => !KnownTags.Contains(t)).ToList();
+        Assert.True(unknown.Count == 0,
+            $"{specName}: unknown tag(s): {string.Join(", ", unknown.Select(t => $"'{t}'"))}. " +
+            $"Add to KnownTags in SpecLintTests if intentional.");
+    }
+
+    // ── Valid engine expectation values ───────────────────────────────
+
+    private static readonly HashSet<string> KnownExpectations = ["pass", "fail", "skip"];
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void EngineExpectationsAreValid(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        if (spec.Engines is null) return;
+        foreach (var (engine, expectation) in spec.Engines)
+        {
+            Assert.True(KnownExpectations.Contains(expectation),
+                $"{specName}: engine '{engine}' has invalid expectation '{expectation}' " +
+                $"(expected: {string.Join(", ", KnownExpectations)})");
+        }
+    }
+
+    // ── Steps have either action or expectedState (not both, not neither) ──
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void StepsAreActionOrExpectedState(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        if (spec.Steps is null) return;
+        for (var i = 0; i < spec.Steps.Count; i++)
+        {
+            var step = spec.Steps[i];
+            var hasAction = step.Action is not null;
+            var hasExpected = step.ExpectedState is not null;
+            Assert.True(hasAction || hasExpected,
+                $"{specName}: step {i + 1} has neither 'action' nor 'expectedState'");
+            Assert.False(hasAction && hasExpected,
+                $"{specName}: step {i + 1} has both 'action' and 'expectedState'");
+        }
+    }
+
+    // ── No trailing whitespace ───────────────────────────────────────
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void NoTrailingWhitespace(string specPath, string specName)
+    {
+        var lines = File.ReadAllLines(specPath);
+        var violations = new List<string>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Length > 0 && lines[i] != lines[i].TrimEnd())
+                violations.Add($"line {i + 1}");
+        }
+        Assert.True(violations.Count == 0,
+            $"{specName}: trailing whitespace on {string.Join(", ", violations)}");
+    }
+
+    // ── File ends with newline ───────────────────────────────────────
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void FileEndsWithNewline(string specPath, string specName)
+    {
+        var text = File.ReadAllText(specPath);
+        Assert.True(text.EndsWith('\n'),
+            $"{specName}: file does not end with a newline");
+    }
+}

@@ -36,7 +36,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 0
-      errors: []
 
   # Unit A costs 150 pts, exceeding 100 pts roster cost limit
   - action: selectEntry

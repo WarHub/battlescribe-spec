@@ -1,0 +1,48 @@
+id: condition-instance-of-self
+category: condition
+description: >
+  instanceOf with scope=self checks if the current selection is an instance
+  of the given childId entry. The scope resolves to the selection itself,
+  which matches its own entry definition.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Self Matched
+              conditions:
+                - type: instanceOf
+                  value: 1
+                  field: selections
+                  scope: self
+                  childId: se-unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # scope=self resolves to the current selection. The selection was created
+  # from se-unit, so instanceOf matches → modifier fires.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Self Matched

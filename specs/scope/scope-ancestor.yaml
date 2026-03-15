@@ -1,6 +1,16 @@
 id: scope-ancestor
 category: scope
-description: Ancestor scope condition evaluates upward in the selection hierarchy
+description: >
+  Ancestor scope condition should evaluate upward in the selection hierarchy.
+  BS bug: the scope resolution method (c.java:738) handles SELF, PARENT, FORCE,
+  ROSTER, PRIMARY_CATEGORY, PRIMARY_CATALOGUE — but has no ANCESTOR handler for
+  count-based conditions (atLeast, atMost, etc.). It falls through to null,
+  causing the condition to return false and the modifier to never fire.
+  Note: INSTANCE_OF conditions have a separate code path that DOES handle
+  ancestor (c.java:1203), but count conditions do not.
+  Additionally, modifier conditions on nested entries appear broadly broken
+  in BS — even scope=force and scope=roster fail to fire on child entries.
+tags: [battlescribe-bug]
 
 setup:
   gameSystem:
@@ -26,6 +36,10 @@ setup:
                   field: name
                   value: Modified Equipment
                   conditions:
+                    # scope=ancestor: walk up the parent chain and check
+                    # if at least 1 selection exists anywhere above.
+                    # The parent (Parent Unit) IS selected, so condition
+                    # should be true.
                     - type: atLeast
                       value: 1
                       field: selections
@@ -34,14 +48,31 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - action: selectChildEntry
     forceIndex: 0
     selectionIndex: 0
     childEntryIndex: 0
+
+  # Ancestor scope should resolve upward — parent IS selected, so the
+  # condition "atLeast 1 selection in ancestor" should be true, and the
+  # modifier should fire, renaming Equipment to Modified Equipment.
+  # BS bug: ancestor scope returns null in scope resolution (c.java:738),
+  # condition evaluates to false, modifier never fires — name unchanged.
   - expectedState:
       forces:
         - selections:
             - name: Parent Unit
+              children:
+                - name: Modified Equipment
+      engines:
+        battlescribe:
+          forces:
+            - selections:
+                - name: Parent Unit
+                  children:
+                    - name: Equipment

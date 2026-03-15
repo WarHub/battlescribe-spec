@@ -29,4 +29,4 @@ steps:
   # After adding force, the entry should be hidden via modifier
   # The engine applies modifiers during refresh
   # We verify the entry's hidden status affects the model
-  - assert: noValidationErrors
+  - expectedState: {}
