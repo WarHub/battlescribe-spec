@@ -9,15 +9,17 @@ public sealed class SpecRunner
 {
     private readonly IRosterEngine _engine;
     private readonly DataSourceResolver? _dataSourceResolver;
+    private readonly string? _engineName;
     private readonly List<string> _errors = [];
     private ProtocolGameSystem? _gameSystem;
     private ProtocolCatalogue[]? _catalogues;
     private bool _isDataSourceMode;
 
-    public SpecRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null)
+    public SpecRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null, string? engineName = null)
     {
         _engine = engine;
         _dataSourceResolver = dataSourceResolver;
+        _engineName = engineName;
     }
 
     /// <summary>
@@ -58,10 +60,10 @@ public sealed class SpecRunner
                 {
                     if (step.Action is not null)
                         ExecuteAction(step, i);
-                    else if (step.Assert is not null || step.ExpectedState is not null)
+                    else if (step.ExpectedState is not null)
                         ExecuteAssertion(step, i);
                     else
-                        _errors.Add($"Step {i}: neither 'action' nor 'assert'/'expectedState' defined");
+                        _errors.Add($"Step {i}: neither 'action' nor 'expectedState' defined");
                 }
                 catch (Exception ex)
                 {
@@ -281,102 +283,10 @@ public sealed class SpecRunner
 
     private void ExecuteAssertion(StepDef step, int stepIndex)
     {
-        if (step.Assert is not null)
+        if (step.ExpectedState is not null)
         {
-            switch (step.Assert)
-            {
-                case "rosterState":
-                    AssertExpectedState(step.ExpectedState, stepIndex);
-                    break;
-
-                case "forceCount":
-                    AssertEqual(stepIndex, "forceCount",
-                        Convert.ToInt32(step.Expected),
-                        _engine.GetRosterState().Forces.Count);
-                    break;
-
-                case "hasValidationErrors":
-                    AssertEqual(stepIndex, "hasValidationErrors",
-                        Convert.ToBoolean(step.Expected),
-                        _engine.GetValidationErrors().Count > 0);
-                    break;
-
-                case "validationErrorCount":
-                    AssertEqual(stepIndex, "validationErrorCount",
-                        Convert.ToInt32(step.Expected),
-                        _engine.GetValidationErrors().Count);
-                    break;
-
-                case "noValidationErrors":
-                    var errors = _engine.GetValidationErrors();
-                    if (errors.Count > 0)
-                    {
-                        _errors.Add($"Step {stepIndex}: expected no validation errors but got {errors.Count}: " +
-                            string.Join("; ", errors.Select(e => e.Message)));
-                    }
-                    break;
-
-                case "selectionCount":
-                {
-                    var state = _engine.GetRosterState();
-                    var forceIdx = step.ForceIndex ?? 0;
-                    if (forceIdx < state.Forces.Count)
-                    {
-                        AssertEqual(stepIndex, "selectionCount",
-                            Convert.ToInt32(step.Expected),
-                            state.Forces[forceIdx].Selections.Count);
-                    }
-                    else
-                    {
-                        _errors.Add($"Step {stepIndex}: force index {forceIdx} out of range (have {state.Forces.Count})");
-                    }
-                    break;
-                }
-
-                case "selectionName":
-                {
-                    var state = _engine.GetRosterState();
-                    var forceIdx = step.ForceIndex ?? 0;
-                    var selIdx = step.SelectionIndex ?? 0;
-                    var expectedName = step.Expected?.ToString();
-                    if (forceIdx < state.Forces.Count && selIdx < state.Forces[forceIdx].Selections.Count)
-                    {
-                        AssertEqual(stepIndex, "selectionName",
-                            expectedName ?? "",
-                            state.Forces[forceIdx].Selections[selIdx].Name);
-                    }
-                    else
-                    {
-                        _errors.Add($"Step {stepIndex}: force[{forceIdx}].selection[{selIdx}] out of range");
-                    }
-                    break;
-                }
-
-                case "totalCost":
-                {
-                    var state = _engine.GetRosterState();
-                    var typeId = step.CostTypeId;
-                    var expectedVal = Convert.ToDouble(step.Expected);
-                    var cost = state.Costs.FirstOrDefault(c => c.TypeId == typeId);
-                    if (cost is null)
-                    {
-                        _errors.Add($"Step {stepIndex}: cost type '{typeId}' not found");
-                    }
-                    else
-                    {
-                        AssertEqual(stepIndex, $"totalCost[{typeId}]", expectedVal, cost.Value);
-                    }
-                    break;
-                }
-
-                default:
-                    _errors.Add($"Step {stepIndex}: unknown assert type '{step.Assert}'");
-                    break;
-            }
-        }
-        else if (step.ExpectedState is not null)
-        {
-            AssertExpectedState(step.ExpectedState, stepIndex);
+            var effective = step.ExpectedState.ForEngine(_engineName);
+            AssertExpectedState(effective, stepIndex);
         }
     }
 
@@ -388,12 +298,6 @@ public sealed class SpecRunner
 
         if (expected.ForceCount is { } fc)
             AssertEqual(stepIndex, "forceCount", fc, state.Forces.Count);
-
-        if (expected.HasValidationErrors is { } hve)
-            AssertEqual(stepIndex, "hasValidationErrors", hve, _engine.GetValidationErrors().Count > 0);
-
-        if (expected.ValidationErrorCount is { } vec)
-            AssertEqual(stepIndex, "validationErrorCount", vec, _engine.GetValidationErrors().Count);
 
         if (expected.CostCount is { } cc)
             AssertEqual(stepIndex, "costCount", cc, state.Costs.Count);
@@ -459,32 +363,6 @@ public sealed class SpecRunner
             AssertEqual(stepIndex, "totalSelectionCount", totalSelCount, actualTotal);
         }
 
-        if (expected.ValidationErrors is { } expectedErrors)
-        {
-            var actualErrors = _engine.GetValidationErrors();
-            foreach (var ee in expectedErrors)
-            {
-                var match = actualErrors.FirstOrDefault(ae =>
-                    (ee.Message is null || ae.Message.Contains(ee.Message)) &&
-                    (ee.OwnerType is null || ae.OwnerType == ee.OwnerType) &&
-                    (ee.OwnerEntryId is null || ae.OwnerEntryId == ee.OwnerEntryId) &&
-                    (ee.EntryId is null || ae.EntryId == ee.EntryId) &&
-                    (ee.ConstraintId is null || ae.ConstraintId == ee.ConstraintId));
-                if (match is null)
-                {
-                    var desc = string.Join(", ",
-                        new[] {
-                            ee.Message is not null ? $"message~'{ee.Message}'" : null,
-                            ee.OwnerType is not null ? $"ownerType='{ee.OwnerType}'" : null,
-                            ee.OwnerEntryId is not null ? $"ownerEntryId='{ee.OwnerEntryId}'" : null,
-                            ee.EntryId is not null ? $"entryId='{ee.EntryId}'" : null,
-                            ee.ConstraintId is not null ? $"constraintId='{ee.ConstraintId}'" : null,
-                        }.Where(s => s is not null));
-                    _errors.Add($"Step {stepIndex}: expected validation error matching [{desc}] not found in: [{string.Join("; ", actualErrors.Select(e => e.Message))}]");
-                }
-            }
-        }
-
         if (expected.Errors is { } errorsAssertions)
         {
             var actualErrors = _engine.GetValidationErrors();
@@ -497,25 +375,60 @@ public sealed class SpecRunner
             }
             else
             {
+                // Track which actual errors have been consumed so each can
+                // only satisfy one expected error (prevents false positives
+                // when multiple expected errors have the same signature).
+                var consumed = new HashSet<int>();
                 foreach (var ea in errorsAssertions)
                 {
                     var (expectedOwnerType, expectedOwnerEntryId) = ParseOn(ea.On);
                     var (expectedEntryId, expectedConstraintId) = ParseFrom(ea.From);
 
-                    var match = actualErrors.FirstOrDefault(ae =>
-                        ae.OwnerType == expectedOwnerType &&
-                        (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
-                        (expectedEntryId is null || ae.EntryId == expectedEntryId) &&
-                        (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId) &&
-                        (ea.Message is null || ae.Message.Contains(ea.Message)));
-                    if (match is null)
+                    int matchIndex = -1;
+                    for (int i = 0; i < actualErrors.Count; i++)
+                    {
+                        if (consumed.Contains(i))
+                            continue;
+                        var ae = actualErrors[i];
+                        if (ae.OwnerType == expectedOwnerType &&
+                            (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
+                            (expectedEntryId is null || ae.EntryId == expectedEntryId) &&
+                            (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId))
+                        {
+                            matchIndex = i;
+                            break;
+                        }
+                    }
+                    if (matchIndex >= 0)
+                    {
+                        consumed.Add(matchIndex);
+                    }
+                    else
                     {
                         var desc = $"on='{ea.On}'";
                         if (ea.From is not null) desc += $", from='{ea.From}'";
-                        if (ea.Message is not null) desc += $", message~'{ea.Message}'";
                         _errors.Add($"Step {stepIndex}: expected error [{desc}] not found in: [{string.Join("; ", actualErrors.Select(FormatError))}]");
                     }
                 }
+
+                // Exact count check: no unexpected extra errors allowed
+                if (actualErrors.Count != errorsAssertions.Count)
+                {
+                    _errors.Add($"Step {stepIndex}: expected {errorsAssertions.Count} error(s) but got {actualErrors.Count}: " +
+                        $"[{string.Join("; ", actualErrors.Select(FormatError))}]");
+                }
+            }
+        }
+
+        // Default: if no error assertion was specified, assert zero errors
+        // (skip for dataSource specs which inherently have many constraint violations)
+        if (!_isDataSourceMode && expected.Errors is null)
+        {
+            var actualErrors = _engine.GetValidationErrors();
+            if (actualErrors.Count > 0)
+            {
+                _errors.Add($"Step {stepIndex}: expected no errors (default) but got {actualErrors.Count}: " +
+                    string.Join("; ", actualErrors.Select(FormatError)));
             }
         }
     }
@@ -574,6 +487,9 @@ public sealed class SpecRunner
 
             if (es.PublicationId is not null)
                 AssertEqual(stepIndex, $"{selPrefix}.publicationId", es.PublicationId, a.PublicationId ?? "");
+
+            if (es.PublicationName is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.publicationName", es.PublicationName, a.PublicationName ?? "");
 
             if (es.Costs is { } eCosts)
             {

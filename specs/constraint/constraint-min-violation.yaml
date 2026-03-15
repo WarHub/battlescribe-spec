@@ -47,7 +47,6 @@ steps:
         - selectionCount: 1
           selections:
             - name: Unit A
-      hasValidationErrors: false
 
   # Remove auto-selected entry to trigger min violation
   - action: deselectSelection
@@ -57,4 +56,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 0
-      hasValidationErrors: true
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-min-1

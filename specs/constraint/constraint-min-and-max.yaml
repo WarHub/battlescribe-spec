@@ -1,7 +1,5 @@
 id: constraint-min-and-max
 category: constraint
-engines:
-  newrecruit: fail
 description: Both min and max constraints on the same entry are evaluated
 tags:
   - validation-errors
@@ -57,7 +55,6 @@ steps:
         - selectionCount: 1
           selections:
             - name: Unit A
-      errors: []
 
   # 2 total (at max=2 limit), both constraints satisfied
   - action: selectEntry
@@ -67,7 +64,6 @@ steps:
   - expectedState:
       forces:
         - selectionCount: 2
-      errors: []
 
   # 3 total (exceeds max=2), max constraint violated
   - action: selectEntry
@@ -78,5 +74,5 @@ steps:
       forces:
         - selectionCount: 3
       errors:
-        - on: category cat-troops
+        - on: selection se-unit-a
           from: se-unit-a/con-max-2

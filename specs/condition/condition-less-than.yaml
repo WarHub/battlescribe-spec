@@ -37,7 +37,18 @@ steps:
     entryIndex: 0
 
   # With 1 selection, lessThan(2) is true
-  - assert: selectionName
+  - expectedState:
+      forces:
+        - selections:
+            - name: Few Present
+
+  # Add second selection → lessThan(2) is now false (2 is not < 2)
+  - action: selectEntry
     forceIndex: 0
-    selectionIndex: 0
-    expected: Few Present
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+            - name: Unit A

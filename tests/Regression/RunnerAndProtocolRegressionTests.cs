@@ -43,7 +43,7 @@ public class RunnerAndProtocolRegressionTests
             Steps =
             [
                 new StepDef { Action = "addForce", ForceEntryIndex = 0 },
-                new StepDef { Assert = "forceCount", Expected = 1 }
+                new StepDef { ExpectedState = new ExpectedStateDef { ForceCount = 1 } }
             ]
         };
 

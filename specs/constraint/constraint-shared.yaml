@@ -58,4 +58,3 @@ steps:
           selections:
             - name: Unit A
             - name: Unit B
-      hasValidationErrors: false

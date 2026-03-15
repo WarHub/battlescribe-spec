@@ -1,8 +1,7 @@
 id: infolink-profile-publication
 category: selection
 description: Profile linked via InfoLink preserves target profile's publicationId
-engines:
-  newrecruit: fail
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:
@@ -47,9 +46,11 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selections:
@@ -61,3 +62,14 @@ steps:
                   characteristics:
                     - name: M
                       value: "6"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine
+                  profiles:
+                    - name: Marine Stats
+                      typeName: Unit Stats
+                      characteristics:
+                        - name: M
+                          value: "6"

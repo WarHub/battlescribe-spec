@@ -46,8 +46,10 @@ steps:
           selections:
             - name: No B Exists
 
-  # Now select Unit B - with synthetic data, Unit A's modifiers are not
-  # re-evaluated so name stays as "No B Exists"
+  # Select Unit B. The notInstanceOf condition checks the Force element itself
+  # (scope=force resolves to the Force), not its child selections. Since a Force
+  # is never an instance of se-unit-b, the condition remains true regardless of
+  # what selections exist — name stays "No B Exists".
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1

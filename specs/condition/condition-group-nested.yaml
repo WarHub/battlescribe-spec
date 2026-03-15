@@ -1,6 +1,7 @@
 id: condition-group-nested
 category: condition
 description: Nested condition groups form complex boolean logic trees (AND containing OR)
+
 setup:
   gameSystem:
     id: test-gs
@@ -45,6 +46,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -54,3 +56,15 @@ steps:
       forces:
         - selections:
             - name: Elite Soldier
+
+  # Add 2nd selection: OR(2>5=false, 2<2=false) = false → AND = false → modifier reverts
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Soldier
+            - name: Soldier

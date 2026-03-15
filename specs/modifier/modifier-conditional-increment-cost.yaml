@@ -48,15 +48,16 @@ steps:
     forceIndex: 0
     entryIndex: 1
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 100
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
 
-  # Add trigger → conditional modifier applies → cost +50
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 150
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 150

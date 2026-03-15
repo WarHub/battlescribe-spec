@@ -30,9 +30,9 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 2
+  - expectedState:
+      forces:
+        - selectionCount: 2
 
   - action: deselectSelection
     forceIndex: 0
@@ -42,6 +42,6 @@ steps:
     forceIndex: 0
     selectionIndex: 0
 
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 0
+  - expectedState:
+      forces:
+        - selectionCount: 0

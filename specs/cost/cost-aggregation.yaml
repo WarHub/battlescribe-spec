@@ -41,14 +41,16 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 100
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
 
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 175
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 175

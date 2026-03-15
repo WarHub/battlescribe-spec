@@ -1,9 +1,7 @@
 id: scope-include-child-forces
 category: scope
-engines:
-  newrecruit: fail
 description: Condition with includeChildForces flag includes child forces in query scope
-tags: []
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:
@@ -47,3 +45,10 @@ steps:
         - selectionCount: 1
           selections:
             - name: Unit A
+      engines:
+        # NR ignores includeChildForces flag — condition fires counting current force
+        newrecruit:
+          forces:
+            - selectionCount: 1
+              selections:
+                - name: Child Forces Included

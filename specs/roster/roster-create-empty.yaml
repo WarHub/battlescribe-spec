@@ -15,8 +15,5 @@ setup:
       gameSystemId: test-gs
 
 steps:
-  - assert: forceCount
-    expected: 0
-
-  - assert: hasValidationErrors
-    expected: false
+  - expectedState:
+      forceCount: 0

@@ -48,27 +48,25 @@ steps:
     entryIndex: 2
 
   # Only target, neither trigger → no change
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Target
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
 
-  # Add trigger A only → still not both
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Target
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
 
-  # Add trigger B → both present → modifier applied
   - action: selectEntry
     forceIndex: 0
     entryIndex: 1
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Both Present
+  - expectedState:
+      forces:
+        - selections:
+            - name: Both Present

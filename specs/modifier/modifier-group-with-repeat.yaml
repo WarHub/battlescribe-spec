@@ -1,6 +1,7 @@
 id: modifier-group-with-repeat
 category: modifier
 description: ModifierGroup with its own repeat multiplier applies contained modifiers multiple times
+
 setup:
   gameSystem:
     id: test-gs
@@ -39,6 +40,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

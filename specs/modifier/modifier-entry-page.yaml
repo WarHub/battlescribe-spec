@@ -1,9 +1,7 @@
 id: modifier-entry-page
 category: modifier
-engines:
-  newrecruit: fail
 description: Modifier can set an entry's page field (STRING modifier on BaseBookData.page)
-tags: []
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:
@@ -29,11 +27,18 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selections:
             - name: Marine
               page: "99"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine

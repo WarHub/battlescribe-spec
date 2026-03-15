@@ -1,0 +1,49 @@
+id: condition-instance-of-self-type
+category: condition
+description: >
+  instanceOf with scope=self and childId set to a type name (e.g. "unit")
+  checks if the current selection's type matches. This is the working
+  counterpart to condition-instance-of-by-type which uses scope=force
+  (undefined behavior — force scope doesn't work for instanceOf).
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Detector
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Type Matched
+              conditions:
+                - type: instanceOf
+                  value: 1
+                  field: selections
+                  scope: self
+                  childId: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # scope=self resolves to the current selection. Its type is "unit",
+  # matching childId="unit" → instanceOf fires → name set.
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Type Matched

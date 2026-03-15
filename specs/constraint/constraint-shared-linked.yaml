@@ -4,6 +4,7 @@ description: Shared constraint violation produces structured error with entry li
 tags:
   - validation-errors
   - structured-errors
+  - design-difference
 
 setup:
   gameSystem:
@@ -67,7 +68,6 @@ steps:
           selections:
             - name: Unit A
             - name: Unit B
-      errors: []
 
   # Remove both auto-selected entries to trigger shared constraint violation
   - action: deselectSelection
@@ -84,3 +84,10 @@ steps:
       errors:
         - on: category cat-troops
           from: se-unit-a/con-min-shared
+        - on: category cat-troops
+          from: se-unit-b/con-min-shared
+      engines:
+        newrecruit:
+          errors:
+            - on: category cat-troops
+              from: se-unit-a/con-min-shared

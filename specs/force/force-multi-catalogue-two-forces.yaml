@@ -1,6 +1,7 @@
 id: force-multi-catalogue-two-forces
 category: force
 description: Forces from different catalogues get entries from their respective catalogue
+
 setup:
   gameSystem:
     id: test-gs

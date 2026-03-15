@@ -1,6 +1,7 @@
 id: scope-parent
 category: scope
 description: Condition with scope=parent evaluates on the parent element
+tags: [design-difference]
 
 setup:
   gameSystem:
@@ -41,15 +42,20 @@ steps:
     entryIndex: 0
 
   # 3 selections at max scope
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 3
+  - expectedState:
+      forces:
+        - selectionCount: 3
 
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
   # 4 selections - engine allows it
-  - assert: selectionCount
-    forceIndex: 0
-    expected: 4
+  - expectedState:
+      forces:
+        - selectionCount: 4
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-unit-a
+              from: se-unit-a/con-max-3

@@ -37,7 +37,18 @@ steps:
     entryIndex: 0
 
   # With exactly 1 selection, equalTo(1) is true
-  - assert: selectionName
+  - expectedState:
+      forces:
+        - selections:
+            - name: Exactly One
+
+  # Add second selection → equalTo(1) is now false → modifier not applied
+  - action: selectEntry
     forceIndex: 0
-    selectionIndex: 0
-    expected: Exactly One
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit A
+            - name: Unit A

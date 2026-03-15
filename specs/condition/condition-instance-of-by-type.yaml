@@ -1,7 +1,11 @@
 id: condition-instance-of-by-type
 category: condition
-description: instanceOf condition can match by SelectionEntry.Type (e.g. unit, model, upgrade)
-tags: []
+description: >
+  instanceOf with scope=force and childId=type name. scope=force resolves
+  to the Force element which is not a Selection — instanceOf returns false.
+  See condition-instance-of-self-type for the working version using scope=self.
+tags: [undefined-behavior]
+
 setup:
   gameSystem:
     id: test-gs
@@ -51,9 +55,9 @@ steps:
     forceIndex: 0
     entryIndex: 1
 
-  # With model selected, instanceOf childId=model should match
-  # Basic Model (type=model) → condition true → name="Model Found".
-  # With synthetic data, instanceOf type matching is not operational.
+  # instanceOf with scope=force resolves to the Force element itself, not its
+  # child selections (c.java:1206-1210). The Force object is not a Selection
+  # of type "model", so the condition returns false. Both engines agree.
   - expectedState:
       forces:
         - selectionCount: 2

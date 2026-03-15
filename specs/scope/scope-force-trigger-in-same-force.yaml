@@ -40,11 +40,18 @@ steps:
     forceIndex: 0
     entryIndex: 1
 
+  # Target selected without trigger → condition false, name unchanged
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Same Force Trigger
+  # Trigger now in same force → condition true, name changes
+  - expectedState:
+      forces:
+        - selections:
+            - name: Same Force Trigger

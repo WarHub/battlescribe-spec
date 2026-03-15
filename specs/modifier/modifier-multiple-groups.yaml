@@ -1,6 +1,7 @@
 id: modifier-multiple-groups
 category: modifier
 description: Multiple modifier groups are structured independently on an entry
+
 setup:
   gameSystem:
     id: test-gs
@@ -49,6 +50,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

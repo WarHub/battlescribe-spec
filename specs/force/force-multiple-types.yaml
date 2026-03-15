@@ -1,4 +1,4 @@
-id: force-multiple-catalogues
+id: force-multiple-types
 category: force
 description: Multiple forces can be created from the same force entry independently
 
@@ -23,16 +23,21 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: addForce
     forceEntryIndex: 1
-  - assert: forceCount
-    expected: 2
+
+  - expectedState:
+      forceCount: 2
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - action: selectEntry
     forceIndex: 1
     entryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1

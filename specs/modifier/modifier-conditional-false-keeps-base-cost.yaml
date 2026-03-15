@@ -48,6 +48,7 @@ steps:
     entryIndex: 1
 
   # Condition requires 99 triggers — false, base cost preserved
-  - assert: totalCost
-    costTypeId: pts
-    expected: 100
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100

@@ -38,6 +38,7 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  - assert: totalCost
-    costTypeId: pts
-    expected: 50
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 50

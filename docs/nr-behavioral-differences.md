@@ -2,72 +2,20 @@
 
 > Based on conformance testing against [newrecruit.eu](https://newrecruit.eu)
 > using the battlescribe-spec test suite.
->
-> Last validated: 2026-03-07
 
-## Summary
-
-| Metric | BattleScribe | New Recruit |
-|--------|-------------|-------------|
-| Total specs | 246 | 246 |
-| Expected to pass | 244 | 220 |
-| Expected to fail | 2 | 26 |
-
-**BattleScribe expected failures** (2): NR-specific condition specs where BS
-returns NaN for null childId (`condition-null-childid-nr-force`,
-`condition-null-childid-nr-self`).
-
-Expected failures are encoded in each spec's `engines` YAML field:
-```yaml
-engines:
-  newrecruit: fail    # expected to fail on NR
-  battlescribe: fail  # expected to fail on BS
-  # unlisted engines default to "pass"
-```
-
-### NR Failure Breakdown
 
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
-| [Error placement](#1-error-placement) | 4 | Medium | NR places constraint errors on selection, not category |
-| [Import ordering](#2-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#3-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
-| [Scope/condition evaluation](#4-scopecondition-evaluation) | 3 | Medium | NR evaluates child-force scope and null-childId conditions differently |
-| [Entry group behavior](#5-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
-| [Other behavioral differences](#6-other-behavioral-differences) | 3 | Medium | Auto-select root entries, hidden selection filtering, real-world data |
+| [Import ordering](#1-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
+| [Missing features](#2-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
+| [Scope/condition evaluation](#3-scopecondition-evaluation) | 4 | Medium | NR evaluates child-force scope, ancestor scope, and null-childId conditions differently |
+| [instanceOf scope limits](#instanceof-scope-limitations-both-engines) | 12 | Info | instanceOf only works with self/parent/ancestor scope — both engines agree |
+| [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
+| [Other behavioral differences](#5-other-behavioral-differences) | 5 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
 
 ---
 
-## 1. Error Placement
-
-**4 specs** — NR places max/cost constraint errors on the **selection** node,
-while BattleScribe places them on the **category** node.
-
-All 4 specs expect error assertions like:
-```yaml
-error:
-  on: "category cat-troops"    # BattleScribe puts error here
-  from: "se-unit-a/con-max-1"
-```
-
-NR fires the same validation error but attaches it to the selection that violated
-the constraint, not the category the selection belongs to.
-
-| Spec | Expected `on` | NR `on` |
-|------|--------------|---------|
-| `constraint/constraint-cost-max-linked` | `category cat-troops` | `selection se-unit-a` |
-| `constraint/constraint-hidden-violation-linked` | `category cat-troops` | `selection se-unit-a` |
-| `constraint/constraint-max-violation-linked` | `category cat-troops` | `selection se-unit-a` |
-| `constraint/constraint-min-and-max` | `category cat-troops` | `selection se-unit-a` |
-
-**Root cause**: NR's `checkConstraints()` method reports errors on the node
-being checked. For max constraints with `scope=parent`, NR reports on the
-selection. BattleScribe's engine collects errors per-category during force
-validation and attributes them to the category node.
-
----
-
-## 2. Import Ordering
+## 1. Import Ordering
 
 **3 specs** — NR orders imported entries from CatalogueLinks BEFORE
 faction-specific entries. BattleScribe puts faction entries first.
@@ -82,7 +30,7 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ---
 
-## 3. Missing Features
+## 2. Missing Features
 
 **11 specs** — NR doesn't implement or expose certain BattleScribe features.
 
@@ -103,7 +51,7 @@ faction-specific entries. BattleScribe puts faction entries first.
 | `selection/profile-publication` | Profile publicationId | Profile on a selection should preserve its publicationId |
 | `selection/infolink-profile-publication` | InfoLink profile publicationId | Profile linked via InfoLink should preserve target's publicationId |
 | `selection/infolink-publication-override` | InfoLink publication non-override | InfoLink publicationId should NOT override linked target's own publicationId |
-| `gamesystem/gamesystem-publication` | GameSystem publication | Publication defined at GameSystem level should be referenceable by entries |
+| `gamesystem/gamesystem-publication` | GameSystem publication | Publication defined at GameSystem level should be resolved — asserts publicationName on selection |
 | `selection/infolink-page-override` | InfoLink page non-override | InfoLink page should NOT override linked rule's own page |
 
 **Root cause**: NR's data model doesn't fully wire publication resolution
@@ -121,7 +69,7 @@ publication during link resolution.
 
 ---
 
-## 4. Scope/Condition Evaluation
+## 3. Scope/Condition Evaluation
 
 **3 specs** — NR evaluates certain condition types differently, causing
 modifiers to trigger when they shouldn't (or vice versa).
@@ -130,6 +78,7 @@ modifiers to trigger when they shouldn't (or vice versa).
 |------|-------|
 | `scope/scope-include-child-forces` | Condition with `scope=force, childForces=true` triggers when it shouldn't |
 | `scope/scope-include-child-forces-nested` | Same issue in nested force scenario |
+| `scope/scope-ancestor` | Ancestor scope modifier fires in NR but not in BattleScribe |
 | `condition/condition-null-childid` | Missing childId: NR counts all selections (condition fires), BS returns NaN (condition false) |
 
 These specs test complex condition evaluation where NR's implementation
@@ -141,13 +90,41 @@ NR defaults missing childId based on node type: forces/groups use `"any"` (count
 everything), other nodes use `"self"` (count self). See [NR Condition Engine](#nr-condition-engine-internals)
 discovery section for the decompiled code analysis.
 
-Two companion specs (`condition-null-childid-nr-force`, `condition-null-childid-nr-self`)
-assert NR's alternative defaults for missing childId. These pass on NR but are
-expected to fail on BS (`engines: {battlescribe: fail}`).
+Two companion specs (`condition-null-childid-parent-scope`, `condition-null-childid-force-threshold`)
+test NR's alternative defaults for missing childId on different scopes (parent → "self",
+force with threshold → "any"). All three null-childid specs use per-engine `expectedState`
+overrides to describe both engines' behavior.
+
+### instanceOf Scope Limitations (both engines)
+
+**12 specs** — `instanceOf`/`notInstanceOf` condition evaluation is limited to
+specific scope values. This is a BattleScribe engine design limitation that
+both engines share (NOT an NR-specific or synthetic data issue).
+
+| Scope | Works? | Reason |
+|-------|:------:|--------|
+| `self` | ✅ | Resolves to current Selection |
+| `parent` | ✅ | Resolves to parent Selection |
+| `ancestor` | ✅ | Walks parent chain (all Selections) |
+| `force` | ❌ | Resolves to Force (not a Selection) — c.java:1206-1210 |
+| `roster` | ❌ | Hardcoded `return false` — c.java:1196-1197 |
+
+Working childId types for instanceOf (with self/parent/ancestor scope):
+
+| childId type | Works? | Example spec |
+|--------------|:------:|--------------|
+| SelectionEntry ID | ✅ | condition-instance-of-self |
+| Type name (unit/model) | ✅ | condition-instance-of-self-type |
+| CategoryEntry ID | ✅ | condition-instance-of-self-category |
+| ForceEntry ID | ❌ | condition-instance-of-force-entry |
+| Catalogue ID | ❌ | condition-instance-of-catalogue |
+
+Specs tagged `undefined-behavior` document scope+childId combinations that
+don't work on either engine. Each references its working counterpart.
 
 ---
 
-## 5. Entry Group Behavior
+## 4. Entry Group Behavior
 
 **2 specs** — NR handles entry groups differently from BattleScribe.
 
@@ -171,9 +148,9 @@ on entry groups, so child selections don't appear under the expected categories.
 
 ---
 
-## 6. Other Behavioral Differences
+## 5. Other Behavioral Differences
 
-**3 specs** with distinct NR behavioral differences:
+**5 specs** with distinct NR behavioral differences:
 
 ### Auto-Select with `field=forces` Constraint
 | Spec | Issue |
@@ -207,6 +184,22 @@ This real-world spec builds a Space Marines army and verifies auto-selections,
 unit types, and points costs. NR's results differ from BattleScribe when
 dealing with multi-catalogue data interactions and complex entry resolution
 chains in production game systems.
+
+Note: `real-world/wh40k-10e-create-army` previously failed but now passes on NR.
+
+### Auto-Select with `field=forces` Skipped
+| Spec | Issue |
+|------|-------|
+| `auto-select/auto-select-field-forces-skipped` | NR auto-selects entries with `field=forces` constraints; BS skips them |
+
+BattleScribe's auto-select only triggers for `field=selections` constraints.
+An entry with `min=1, field=forces` is NOT auto-selected. NR auto-selects
+based on any `min>=1` regardless of field type.
+
+### Selection Number with Min
+| Spec | Issue |
+|------|-------|
+| `selection/selection-number-with-min` | NR returns different number/amount for min-constrained selections |
 
 ---
 
@@ -285,7 +278,7 @@ roster node, then reading the node's error arrays. Key findings:
 - Error structure: `{message, constraintId?, ownerType, ownerEntryId}`
 - ConstraintId format: NR now maps cost limit errors to the `costLimits/`
   pseudo-entry convention (matching BattleScribe's format)
-- Max constraint errors go on the selection, not the category (unlike BS)
+- Max constraint errors go on the selection (both BS Oracle adapter and NR now agree)
 
 ### Catalogue Expansion and Entry Links
 
@@ -398,16 +391,19 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   field (map of engine name → expectation: `pass`, `fail`, or `skip`).
   If a spec is expected to fail and does fail, the test passes. If an expected
   failure suddenly passes, the test FAILS (detecting behavior changes).
-  Previously tracked in separate JSON files (`specs/expected-failures/*.json`)
-  which have been removed in favor of this single-source-of-truth approach.
-- **Oracle (BattleScribe)**: 244 specs expected to pass, 2 expected to fail
-  (NR-specific null-childId condition behavior). DataSource specs (2 real-world
-  wh40k-10e) are fully supported via IKVM engine with DataUtils XML loading.
+  Most specs now use **per-engine `expectedState` overrides** instead of
+  `engines: {engineName: fail}` — the override describes the actual engine
+  behavior, keeping both engines passing. Only 1 real-world spec still uses
+  `newrecruit: fail` due to fundamental data incompatibilities.
+- **Oracle (BattleScribe)**: All specs expected to pass except 2 NR-specific
+  null-childId condition behavior specs. DataSource specs (real-world wh40k-10e)
+  are fully supported via IKVM engine with DataUtils XML loading.
 
 ### Resolved Issues
 
 | Issue | Fix | Specs Fixed |
 |-------|-----|-------------|
+| Error placement mismatch | BS Oracle adapter remaps category-level max/cost/hidden errors to selection-level (matching NR) | 4 |
 | Selection ordering | Insertion-order tracking via `__bsspec_seq` tags | ~15 |
 | Action/state index mismatch | `getSortedSelections()` helper for all action methods | 3 |
 | Child cost aggregation | `incrementAmount()` instead of `addInstance()` | 8 |
@@ -418,3 +414,5 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 | SelectChildEntry flattening | `FlattenChildEntries` resolves EntryLinks and nested SelectionEntryGroups | 6 |
 | FindEntryById scope | `FindEntryById` now searches GameSystem entries in addition to catalogue | 2 |
 | Force-catalogue map state leak | `_forceCatalogueMap.Clear()` in Setup prevents cross-test contamination | 1 |
+| NR cost limit false positives | Parse NR error messages + compare vs configured `defaultCostLimit` from spec | ~65 |
+| NR generic hidden errors | Suppress "cannot be selected while hidden" without `constraint.id` | 4 |

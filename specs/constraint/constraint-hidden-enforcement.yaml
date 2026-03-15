@@ -1,9 +1,7 @@
 id: constraint-hidden-enforcement
 category: constraint
-engines:
-  newrecruit: fail
 description: Hidden entries are not shown to users but constraints still apply to them
-tags: []
+tags: [design-difference]
 
 setup:
   gameSystem:
@@ -41,6 +39,11 @@ steps:
         - selectionCount: 1
           selections:
             - name: Hidden Unit
+      engines:
+        # NR doesn't auto-select hidden entries
+        newrecruit:
+          forces:
+            - selectionCount: 0
 
   # Manually add Visible Unit
   - action: selectEntry
@@ -53,3 +56,10 @@ steps:
           selections:
             - name: Hidden Unit
             - name: Visible Unit
+      engines:
+        # NR only has the manually-selected Visible Unit
+        newrecruit:
+          forces:
+            - selectionCount: 1
+              selections:
+                - name: Visible Unit

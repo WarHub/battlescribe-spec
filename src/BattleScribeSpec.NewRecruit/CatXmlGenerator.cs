@@ -162,7 +162,7 @@ public static class CatXmlGenerator
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            defaultCostLimit: (decimal)spec.DefaultCostLimit,
+            defaultCostLimit: spec.DefaultCostLimit is { } dcl ? (decimal)dcl : -1m,
             hidden: spec.Hidden);
 
     private static ForceEntryNode MapForceEntry(ProtocolForceEntry spec)

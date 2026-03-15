@@ -1,8 +1,7 @@
 id: selection-publication-and-page
 category: selection
-engines:
-  newrecruit: fail
 description: Selection entry with both publicationId and page preserves both fields
+tags: [newrecruit-missing-feature]
 
 setup:
   gameSystem:
@@ -28,12 +27,19 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selections:
             - name: Marine
               publicationId: pub-1
               page: "42"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine

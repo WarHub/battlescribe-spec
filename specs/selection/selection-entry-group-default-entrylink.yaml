@@ -40,6 +40,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
@@ -51,4 +52,3 @@ steps:
         - selectionCount: 1
           selections:
             - name: Parent Unit
-      errors: []

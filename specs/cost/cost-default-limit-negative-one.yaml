@@ -1,6 +1,6 @@
 id: cost-default-limit-negative-one
 category: cost
-description: DefaultCostLimit of -1 means no limit — any cost is valid
+description: DefaultCostLimit of -1 means "no cost limit" — costs are not validated against it
 tags: [cost, defaultCostLimit]
 
 setup:
@@ -30,11 +30,12 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  # Cost 9999 with defaultCostLimit=-1 (no limit) → no cost limit error
+  # defaultCostLimit=-1 means "no limit", so no errors even with high cost
   - expectedState:
       costs:
         - typeId: pts

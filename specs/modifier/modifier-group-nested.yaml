@@ -1,6 +1,7 @@
 id: modifier-group-nested
 category: modifier
 description: Nested modifier groups (ModifierGroup containing ModifierGroups) form hierarchical modifier structures
+
 setup:
   gameSystem:
     id: test-gs
@@ -40,6 +41,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

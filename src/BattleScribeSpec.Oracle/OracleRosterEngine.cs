@@ -269,7 +269,8 @@ public sealed class OracleRosterEngine : IRosterEngine
                 string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
             Categories: categories.Select(c => new CategoryState(c.getName() ?? "", c.getEntryId(), c.isPrimary())).ToList(),
             Page: sel.getPage(),
-            PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId);
+            PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
+            PublicationName: _oracle.GetPublicationName(pubId));
     }
 
     private static ProfileState CaptureProfile(net.battlescribe.model.data.Profile prof)

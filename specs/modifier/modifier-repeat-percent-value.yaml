@@ -1,6 +1,7 @@
 id: modifier-repeat-percent-value
 category: modifier
 description: Repeat with percentValue=true uses percentage-based threshold calculation
+
 setup:
   gameSystem:
     id: test-gs
@@ -39,6 +40,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

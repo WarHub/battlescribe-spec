@@ -17,8 +17,10 @@ setup:
 steps:
   - expectedState:
       forceCount: 0
+
   - action: addForce
     forceEntryIndex: 0
+
   - expectedState:
       forceCount: 1
       forces:

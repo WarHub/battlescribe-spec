@@ -41,7 +41,8 @@ public record SelectionState(
     IReadOnlyList<RuleState>? Rules = null,
     IReadOnlyList<CategoryState>? Categories = null,
     [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null,
-    [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null)
+    [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null,
+    [property: JsonPropertyName("publicationName"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationName = null)
 {
     [JsonPropertyName("profiles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];

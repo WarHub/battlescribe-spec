@@ -31,4 +31,3 @@ steps:
 
   - expectedState:
       forceCount: 1
-      hasValidationErrors: false

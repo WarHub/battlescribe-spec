@@ -1,6 +1,10 @@
 id: condition-instance-of-group
 category: condition
-description: instanceOf condition can match by SelectionEntryGroup type
+description: >
+  instanceOf with scope=force and childId=SelectionEntryGroup ID. scope=force
+  resolves to the Force element, and the group seg-weapons doesn't exist in the
+  data — condition returns false.
+
 setup:
   gameSystem:
     id: test-gs
@@ -33,6 +37,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

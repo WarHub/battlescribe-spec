@@ -1,6 +1,7 @@
 id: modifier-set-boolean
 category: modifier
 description: Set modifier changes a boolean field (hidden flag)
+tags: [design-difference]
 
 setup:
   gameSystem:
@@ -30,11 +31,18 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
+
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Secret Agent
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-1
+              from: se-1/hidden

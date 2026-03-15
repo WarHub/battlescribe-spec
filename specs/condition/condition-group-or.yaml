@@ -1,6 +1,7 @@
 id: condition-group-or
 category: condition
 description: Condition group with OR logic on modifier (tests structure)
+
 setup:
   gameSystem:
     id: test-gs
@@ -37,6 +38,7 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
+
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0

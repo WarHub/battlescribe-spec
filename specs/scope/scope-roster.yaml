@@ -39,16 +39,16 @@ steps:
     forceIndex: 0
     entryIndex: 1
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Target
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
 
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
-  - assert: selectionName
-    forceIndex: 0
-    selectionIndex: 0
-    expected: Roster Has Trigger
+  - expectedState:
+      forces:
+        - selections:
+            - name: Roster Has Trigger

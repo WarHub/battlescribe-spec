@@ -1,11 +1,9 @@
-id: condition-null-childid-nr-force
+id: condition-null-childid-force-threshold
 category: condition
-engines:
-  battlescribe: fail
 description: >
-  NR-specific: condition without childId on force scope defaults to counting all selections.
-  NR's state.eval() hash uses childId || (isForce ? "any" : "self"), so on a force node,
-  missing childId counts ALL selections in the force.
+  Condition without childId on force scope — BattleScribe: condition always false (NaN).
+  NR: defaults to counting all selections ("any"), so atLeast 2 fires at 2+ selections.
+tags: [undefined-behavior]
 
 setup:
   gameSystem:
@@ -41,21 +39,30 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # 1 selection in force, need atLeast 2 → false, name unchanged
+  # 1 selection in force, atLeast 2 → false on both engines
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Unit A
 
-  # Add second instance — now 2 selections in force, atLeast 2 → true
+  # Add second instance — now 2 selections in force
   - action: selectEntry
     forceIndex: 0
     entryIndex: 0
 
+  # BattleScribe: null childId → condition always false → name stays "Unit A"
+  # NR: null childId on force scope → counts all → atLeast 2 → true → "Triggered"
   - expectedState:
       forces:
         - selectionCount: 2
           selections:
-            - name: Triggered
-            - name: Triggered
+            - name: Unit A
+            - name: Unit A
+      engines:
+        newrecruit:
+          forces:
+            - selectionCount: 2
+              selections:
+                - name: Triggered
+                - name: Triggered
