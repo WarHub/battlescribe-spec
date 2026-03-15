@@ -1,0 +1,57 @@
+id: category-link-publication
+category: selection
+tags: [categoryLink, publication, engine-limitation]
+description: >
+  CategoryLink with publicationId and page is accepted in XML.
+  Engine limitation: category roster elements do not expose publicationId/page
+  from the link definition.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-elites
+        name: Elites
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-elites
+            targetId: cat-elites
+            name: Elites
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      publications:
+        - id: pub-1
+          name: Core Rulebook
+      selectionEntries:
+        - id: se-1
+          name: Veteran
+          type: unit
+          categoryLinks:
+            - id: cl-sel-elites
+              targetId: cat-elites
+              name: Elites
+              primary: true
+              publicationId: pub-1
+              page: "15"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Veteran
+              categories:
+                - name: Elites
+                  primary: true

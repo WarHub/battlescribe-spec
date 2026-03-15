@@ -154,6 +154,18 @@ public static class CatXmlGenerator
             node = node.AddPublications(MapPublication(publication));
         }
 
+        foreach (var costType in catalogue.CostTypes ?? [])
+            node = node.AddCostTypes(MapCostType(costType));
+
+        foreach (var profileType in catalogue.ProfileTypes ?? [])
+            node = node.AddProfileTypes(MapProfileType(profileType));
+
+        foreach (var categoryEntry in catalogue.CategoryEntries ?? [])
+            node = node.AddCategoryEntries(MapCategoryEntry(categoryEntry));
+
+        foreach (var forceEntry in catalogue.ForceEntries ?? [])
+            node = node.AddForceEntries(MapForceEntry(forceEntry));
+
         return node;
     }
 
@@ -167,12 +179,14 @@ public static class CatXmlGenerator
 
     private static ForceEntryNode MapForceEntry(ProtocolForceEntry spec)
     {
+        var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var node = ForceEntry(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
-            page: null,
+            publicationId: pubId,
+            page: page,
             hidden: spec.Hidden);
 
         foreach (var constraint in spec.Constraints ?? [])
@@ -190,18 +204,53 @@ public static class CatXmlGenerator
         foreach (var forceEntry in spec.ForceEntries ?? [])
             node = node.AddForceEntries(MapForceEntry(forceEntry));
 
+        foreach (var rule in spec.Rules ?? [])
+            node = node.AddRules(MapRule(rule));
+
+        foreach (var profile in spec.Profiles ?? [])
+            node = node.AddProfiles(MapProfile(profile));
+
+        foreach (var infoGroup in spec.InfoGroups ?? [])
+            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+
+        foreach (var infoLink in spec.InfoLinks ?? [])
+            node = node.AddInfoLinks(MapInfoLink(infoLink));
+
         return node;
     }
 
     private static CategoryEntryNode MapCategoryEntry(ProtocolCategoryEntry spec)
     {
-        var node = CategoryEntry(name: spec.Name, id: spec.Id);
+        var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
+        var node = CategoryEntry(
+            comment: null,
+            id: spec.Id,
+            name: spec.Name,
+            publicationId: pubId,
+            page: page,
+            hidden: spec.Hidden);
 
         foreach (var constraint in spec.Constraints ?? [])
             node = node.AddConstraints(MapConstraint(constraint));
 
         foreach (var modifier in spec.Modifiers ?? [])
             node = node.AddModifiers(MapModifier(modifier));
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+
+        foreach (var rule in spec.Rules ?? [])
+            node = node.AddRules(MapRule(rule));
+
+        foreach (var profile in spec.Profiles ?? [])
+            node = node.AddProfiles(MapProfile(profile));
+
+        foreach (var infoGroup in spec.InfoGroups ?? [])
+            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+
+        foreach (var infoLink in spec.InfoLinks ?? [])
+            node = node.AddInfoLinks(MapInfoLink(infoLink));
 
         return node;
     }
@@ -526,12 +575,14 @@ public static class CatXmlGenerator
 
     private static CategoryLinkNode MapCategoryLink(ProtocolCategoryLink spec)
     {
+        var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
+        var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var node = CategoryLink(
             comment: null,
             id: spec.Id,
             name: spec.Name,
-            publicationId: null,
-            page: null,
+            publicationId: pubId,
+            page: page,
             hidden: spec.Hidden,
             targetId: spec.TargetId,
             primary: spec.Primary);
@@ -541,6 +592,21 @@ public static class CatXmlGenerator
 
         foreach (var modifier in spec.Modifiers ?? [])
             node = node.AddModifiers(MapModifier(modifier));
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+
+        foreach (var rule in spec.Rules ?? [])
+            node = node.AddRules(MapRule(rule));
+
+        foreach (var profile in spec.Profiles ?? [])
+            node = node.AddProfiles(MapProfile(profile));
+
+        foreach (var infoGroup in spec.InfoGroups ?? [])
+            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+
+        foreach (var infoLink in spec.InfoLinks ?? [])
+            node = node.AddInfoLinks(MapInfoLink(infoLink));
 
         return node;
     }
@@ -559,9 +625,10 @@ public static class CatXmlGenerator
             description: spec.Description);
 
         foreach (var modifier in spec.Modifiers ?? [])
-        {
             node = node.AddModifiers(MapModifier(modifier));
-        }
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
 
         return node;
     }
@@ -581,14 +648,13 @@ public static class CatXmlGenerator
             typeName: spec.TypeName);
 
         foreach (var characteristic in spec.Characteristics ?? [])
-        {
             node = node.AddCharacteristics(MapCharacteristic(characteristic));
-        }
 
         foreach (var modifier in spec.Modifiers ?? [])
-        {
             node = node.AddModifiers(MapModifier(modifier));
-        }
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
 
         return node;
     }
@@ -609,24 +675,22 @@ public static class CatXmlGenerator
             hidden: spec.Hidden);
 
         foreach (var profile in spec.Profiles ?? [])
-        {
             node = node.AddProfiles(MapProfile(profile));
-        }
 
         foreach (var rule in spec.Rules ?? [])
-        {
             node = node.AddRules(MapRule(rule));
-        }
 
         foreach (var modifier in spec.Modifiers ?? [])
-        {
             node = node.AddModifiers(MapModifier(modifier));
-        }
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
 
         foreach (var infoLink in spec.InfoLinks ?? [])
-        {
             node = node.AddInfoLinks(MapInfoLink(infoLink));
-        }
+
+        foreach (var infoGroup in spec.InfoGroups ?? [])
+            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
 
         return node;
     }
@@ -671,9 +735,10 @@ public static class CatXmlGenerator
             type: MapInfoLinkKind(spec.Type));
 
         foreach (var modifier in spec.Modifiers ?? [])
-        {
             node = node.AddModifiers(MapModifier(modifier));
-        }
+
+        foreach (var modifierGroup in spec.ModifierGroups ?? [])
+            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
 
         return node;
     }

@@ -158,7 +158,7 @@ public sealed class SpecLintTests
         // Engine difference classification
         "battlescribe-bug", "newrecruit-bug",
         "newrecruit-missing-feature", "design-difference",
-        "undefined-behavior",
+        "undefined-behavior", "engine-limitation",
         // Feature tags
         "auto-select", "constraint", "min", "max",
         "field-forces", "nested", "cost",
@@ -168,6 +168,10 @@ public sealed class SpecLintTests
         "defaultSelectionEntryId", "entryLink",
         "edge-case",
         "validation-errors", "structured-errors",
+        "modifierGroup", "infoGroup", "infoLink",
+        "forceEntry", "categoryEntry", "categoryLink",
+        "publication", "rule", "catalogue",
+        "costType", "profileType",
     ];
 
     [Theory]

@@ -1379,7 +1379,29 @@ public sealed class BattleScribeOracle : IDisposable
                 sharedRules: sharedRules,
                 sharedProfiles: sharedProfiles,
                 sharedInfoGroups: sharedInfoGroups,
-                rules: catRules);
+                rules: catRules,
+                costTypes: catSpec.CostTypes?.Select(ct => JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit ?? -1)).ToArray(),
+                profileTypes: catSpec.ProfileTypes?.Select(pt =>
+                {
+                    var charTypes = pt.CharacteristicTypes?.Select(ct => JavaModelFactory.CreateCharacteristicType(ct.Id, ct.Name)).ToArray();
+                    return JavaModelFactory.CreateProfileType(pt.Id, pt.Name, charTypes);
+                }).ToArray(),
+                categoryEntries: catSpec.CategoryEntries?.Select(ce =>
+                {
+                    var ceConstraints = ce.Constraints?.Select(BuildConstraint).ToArray();
+                    var ceModifiers = ce.Modifiers?.Select(BuildModifier).ToArray();
+                    var ceModifierGroups = ce.ModifierGroups?.Select(BuildModifierGroup).ToArray();
+                    var ceProfiles = ce.Profiles?.Select(BuildProfile).ToArray();
+                    var ceRules = ce.Rules?.Select(BuildRule).ToArray();
+                    var ceInfoGroups = ce.InfoGroups?.Select(BuildInfoGroup).ToArray();
+                    var ceInfoLinks = ce.InfoLinks?.Select(BuildInfoLink).ToArray();
+                    var cePubId = string.IsNullOrEmpty(ce.PublicationId) ? null : ce.PublicationId;
+                    var cePage = string.IsNullOrEmpty(ce.Page) ? null : ce.Page;
+                    return JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name, ce.Hidden,
+                        ceConstraints, ceModifiers, ceModifierGroups, ceProfiles, ceRules,
+                        ceInfoGroups, ceInfoLinks, cePubId, cePage);
+                }).ToArray(),
+                forceEntries: catSpec.ForceEntries?.Select(BuildForceEntry).ToArray());
 
             if (catSpec.InfoLinks != null)
                 foreach (var il in catSpec.InfoLinks)
@@ -1458,6 +1480,12 @@ public sealed class BattleScribeOracle : IDisposable
         _setupForceEntries.Clear();
         if (forceEntries != null)
             _setupForceEntries.AddRange(forceEntries);
+        // Include force entries defined in catalogues
+        foreach (var catSpec in catalogues)
+        {
+            if (catSpec.ForceEntries is { Count: > 0 })
+                _setupForceEntries.AddRange(catSpec.ForceEntries.Select(BuildForceEntry));
+        }
         _setupCostTypes.Clear();
         if (costTypes != null)
             _setupCostTypes.AddRange(costTypes);
@@ -1473,10 +1501,18 @@ public sealed class BattleScribeOracle : IDisposable
         var constraints = feSpec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = feSpec.Modifiers?.Select(BuildModifier).ToArray();
         var modifierGroups = feSpec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
+        var profiles = feSpec.Profiles?.Select(BuildProfile).ToArray();
+        var rules = feSpec.Rules?.Select(BuildRule).ToArray();
+        var infoGroups = feSpec.InfoGroups?.Select(BuildInfoGroup).ToArray();
+        var infoLinks = feSpec.InfoLinks?.Select(BuildInfoLink).ToArray();
+        var pubId = string.IsNullOrEmpty(feSpec.PublicationId) ? null : feSpec.PublicationId;
+        var page = string.IsNullOrEmpty(feSpec.Page) ? null : feSpec.Page;
         return JavaModelFactory.CreateForceEntry(feSpec.Id, feSpec.Name,
             hidden: feSpec.Hidden,
             categoryLinks: categoryLinks, forceEntries: childForceEntries,
-            constraints: constraints, modifiers: modifiers, modifierGroups: modifierGroups);
+            constraints: constraints, modifiers: modifiers, modifierGroups: modifierGroups,
+            profiles: profiles, rules: rules, infoGroups: infoGroups, infoLinks: infoLinks,
+            publicationId: pubId, page: page);
     }
 
     private static SelectionEntry BuildSelectionEntry(ProtocolSelectionEntry spec)
@@ -1509,13 +1545,7 @@ public sealed class BattleScribeOracle : IDisposable
 
         if (spec.Rules != null)
             foreach (var ruleSpec in spec.Rules)
-            {
-                var ruleModifiers = ruleSpec.Modifiers?.Select(BuildModifier).ToArray();
-                var rule = JavaModelFactory.CreateRule(ruleSpec.Id, ruleSpec.Name, ruleSpec.Description,
-                    ruleSpec.Hidden, ruleSpec.Page ?? "", ruleModifiers,
-                    string.IsNullOrEmpty(ruleSpec.PublicationId) ? null : ruleSpec.PublicationId);
-                entry.getRules().add(rule);
-            }
+                entry.getRules().add(BuildRule(ruleSpec));
 
         if (spec.Profiles != null)
             foreach (var profileSpec in spec.Profiles)
@@ -1579,9 +1609,11 @@ public sealed class BattleScribeOracle : IDisposable
     private static Rule BuildRule(ProtocolRule spec)
     {
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
         return JavaModelFactory.CreateRule(spec.Id, spec.Name, spec.Description,
             spec.Hidden, spec.Page ?? "", modifiers,
-            string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
+            string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            modifierGroups);
     }
 
     private static Profile BuildProfile(ProtocolProfile spec)
@@ -1589,10 +1621,12 @@ public sealed class BattleScribeOracle : IDisposable
         var chars = spec.Characteristics?.Select(c =>
             JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value)).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
         var page = string.IsNullOrEmpty(spec.Page) ? null : spec.Page;
         var pubId = string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId;
         return JavaModelFactory.CreateProfile(spec.Id, spec.Name,
-            spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers, page, pubId);
+            spec.TypeId, spec.TypeName, spec.Hidden, chars, modifiers, page, pubId,
+            modifierGroups);
     }
 
     private static InfoGroup BuildInfoGroup(ProtocolInfoGroup spec)
@@ -1600,9 +1634,12 @@ public sealed class BattleScribeOracle : IDisposable
         var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
         var rules = spec.Rules?.Select(BuildRule).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
+        var childInfoGroups = spec.InfoGroups?.Select(BuildInfoGroup).ToArray();
         var pubId = string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId;
         var page = string.IsNullOrEmpty(spec.Page) ? null : spec.Page;
-        var ig = JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers, pubId, page);
+        var ig = JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers, pubId, page,
+            modifierGroups, childInfoGroups);
         if (spec.InfoLinks != null)
             foreach (var il in spec.InfoLinks)
                 ig.getInfoLinks().add(BuildInfoLink(il));
@@ -1612,10 +1649,11 @@ public sealed class BattleScribeOracle : IDisposable
     private static InfoLink BuildInfoLink(ProtocolInfoLink spec)
     {
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
         var pubId = string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId;
         var page = string.IsNullOrEmpty(spec.Page) ? null : spec.Page;
         return JavaModelFactory.CreateInfoLink(spec.Id, spec.Name, spec.TargetId, spec.Type,
-            spec.Hidden, modifiers, pubId, page);
+            spec.Hidden, modifiers, pubId, page, modifierGroups);
     }
 
     private static EntryLink BuildEntryLink(ProtocolEntryLink spec)
@@ -1646,10 +1684,20 @@ public sealed class BattleScribeOracle : IDisposable
             page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
     }
 
-    private static CategoryLink BuildCategoryLink(ProtocolCategoryLink cl) =>
-        JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary, cl.Hidden,
-            cl.Constraints?.Select(BuildConstraint).ToArray(),
-            cl.Modifiers?.Select(BuildModifier).ToArray());
+    private static CategoryLink BuildCategoryLink(ProtocolCategoryLink cl)
+    {
+        var constraints = cl.Constraints?.Select(BuildConstraint).ToArray();
+        var modifiers = cl.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = cl.ModifierGroups?.Select(BuildModifierGroup).ToArray();
+        var profiles = cl.Profiles?.Select(BuildProfile).ToArray();
+        var rules = cl.Rules?.Select(BuildRule).ToArray();
+        var infoGroups = cl.InfoGroups?.Select(BuildInfoGroup).ToArray();
+        var infoLinks = cl.InfoLinks?.Select(BuildInfoLink).ToArray();
+        var pubId = string.IsNullOrEmpty(cl.PublicationId) ? null : cl.PublicationId;
+        var page = string.IsNullOrEmpty(cl.Page) ? null : cl.Page;
+        return JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary, cl.Hidden,
+            constraints, modifiers, modifierGroups, profiles, rules, infoGroups, infoLinks, pubId, page);
+    }
 
     private static Constraint BuildConstraint(ProtocolConstraint c) =>
         JavaModelFactory.CreateConstraint(c.Id, c.Type, c.Value, c.Field, c.Scope,

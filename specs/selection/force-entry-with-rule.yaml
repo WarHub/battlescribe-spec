@@ -1,0 +1,41 @@
+id: force-entry-with-rule
+category: selection
+tags: [forceEntry, rule]
+description: ForceEntry carrying a rule (info content on force entry)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Battalion
+        rules:
+          - id: rule-fe
+            name: Tactical Doctrine
+            description: All units gain tactical bonus
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Battalion
+          rules:
+            - name: Tactical Doctrine
+              description: All units gain tactical bonus
+          selections:
+            - name: Marine

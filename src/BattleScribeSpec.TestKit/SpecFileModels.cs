@@ -258,6 +258,18 @@ public sealed class ExpectedForceDef
 
     [YamlMember(Alias = "selections")]
     public List<ExpectedSelectionDef>? Selections { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ExpectedProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<ExpectedRuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "publicationId")]
+    public string? PublicationId { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string? Page { get; set; }
 }
 
 public sealed class ExpectedSelectionDef
@@ -375,6 +387,18 @@ public sealed class ExpectedCategoryDef
 
     [YamlMember(Alias = "primary")]
     public bool? Primary { get; set; }
+
+    [YamlMember(Alias = "profiles")]
+    public List<ExpectedProfileDef>? Profiles { get; set; }
+
+    [YamlMember(Alias = "rules")]
+    public List<ExpectedRuleDef>? Rules { get; set; }
+
+    [YamlMember(Alias = "publicationId")]
+    public string? PublicationId { get; set; }
+
+    [YamlMember(Alias = "page")]
+    public string? Page { get; set; }
 }
 
 

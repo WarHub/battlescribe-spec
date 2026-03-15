@@ -687,27 +687,26 @@ engine (BattleScribeEngine 2.3.21).
 Comparison of the BattleScribe XSD/Java model against our
 `Protocol*` types in `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs`.
 
-### Missing fields (engine-relevant)
+### Engine-relevant field coverage
 
-These fields exist in the XSD schema and Java engine model but are absent from
-our protocol types. They can affect engine behaviour (modifier targets,
-constraint evaluation, info display).
+These fields exist in the XSD schema and Java engine model. They are present
+in protocol types, XML generators, Java model factory, and Oracle build methods,
+with conformance specs.
 
-| Protocol Type | Missing Fields | Impact |
-|---------------|---------------|--------|
-| `ProtocolForceEntry` | `publicationId`, `page` | Cannot test publication-ref modifiers on forces |
-| `ProtocolForceEntry` | `profiles`, `rules`, `infoGroups`, `infoLinks` | Cannot attach info content directly to forces |
-| `ProtocolCategoryEntry` | `publicationId`, `page` | Same as above |
-| `ProtocolCategoryEntry` | `modifierGroups` | Cannot group modifiers on categories |
-| `ProtocolCategoryEntry` | `profiles`, `rules`, `infoGroups`, `infoLinks` | Cannot attach info content to categories |
-| `ProtocolCategoryLink` | `publicationId`, `page` | Same as above |
-| `ProtocolCategoryLink` | `modifierGroups`, `profiles`, `rules`, `infoGroups`, `infoLinks` | Same pattern |
-| `ProtocolProfile` | `modifierGroups` | Cannot group modifiers on profiles |
-| `ProtocolRule` | `modifierGroups` | Cannot group modifiers on rules |
-| `ProtocolInfoGroup` | `modifierGroups` | Cannot group modifiers on info groups |
-| `ProtocolInfoGroup` | `infoGroups` (nested) | Cannot nest info groups |
-| `ProtocolInfoLink` | `modifierGroups` | Cannot group modifiers on info links |
-| `ProtocolCatalogue` | `costTypes`, `profileTypes`, `categoryEntries`, `forceEntries` | Cannot override type definitions in catalogues |
+| Protocol Type | Fields | Notes |
+|---------------|-------------|-------|
+| `ProtocolForceEntry` | `publicationId`, `page`, `profiles`, `rules`, `infoGroups`, `infoLinks` | Full entry-level content |
+| `ProtocolCategoryEntry` | `publicationId`, `page`, `modifierGroups`, `profiles`, `rules`, `infoGroups`, `infoLinks` | Full entry-level content |
+| `ProtocolCategoryLink` | `publicationId`, `page`, `modifierGroups`, `profiles`, `rules`, `infoGroups`, `infoLinks` | Full entry-level content |
+| `ProtocolProfile` | `modifierGroups` | |
+| `ProtocolRule` | `modifierGroups` | |
+| `ProtocolInfoGroup` | `modifierGroups`, `infoGroups` (nested) | Nested infoGroups are self-referential |
+| `ProtocolInfoLink` | `modifierGroups` | |
+| `ProtocolCatalogue` | `costTypes`, `profileTypes`, `categoryEntries`, `forceEntries` | Catalogue-level type overrides |
+
+> **Engine limitation:** `modifierGroups` on `InfoGroup` and `CategoryLink` are
+> accepted in XML but not processed by either BattleScribe or NewRecruit engines.
+> Conformance specs for these two cases are marked as expected failures.
 
 ### Missing fields (metadata only — not engine-relevant)
 
@@ -740,10 +739,11 @@ calculations, validation, or roster state.
 | Modifier / ModifierGroup | ✅ Complete |
 | CostType / Cost / Publication | ✅ Complete |
 | ProfileType / CharacteristicType | ✅ Complete |
-| `modifierGroups` on content types | ❌ Missing on Profile, Rule, InfoGroup, InfoLink |
-| `publicationId` / `page` on all entries | ❌ Missing on ForceEntry, CategoryEntry, CategoryLink |
-| Info content on entry types | ❌ Missing profiles/rules/infoGroups/infoLinks on ForceEntry, CategoryEntry, CategoryLink |
-| Catalogue type overrides | ❌ Missing costTypes/profileTypes/categoryEntries/forceEntries on Catalogue |
+| `modifierGroups` on content types | ✅ Complete |
+| `publicationId` / `page` on all entries | ✅ Complete |
+| Info content on entry types | ✅ Complete |
+| Nested infoGroups | ✅ Complete |
+| Catalogue type overrides | ✅ Complete |
 
 ## Sources
 

@@ -1,0 +1,59 @@
+id: category-entry-with-profile
+category: selection
+tags: [categoryEntry, profile, engine-limitation]
+description: >
+  CategoryEntry carrying a profile is accepted in XML.
+  Engine limitation: category roster elements do not expose profiles
+  from the entry definition.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    profileTypes:
+      - id: pt-info
+        name: Category Info
+        characteristicTypes:
+          - id: ct-desc
+            name: Description
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+        profiles:
+          - id: prof-cat
+            name: Troops Info
+            typeId: pt-info
+            typeName: Category Info
+            characteristics:
+              - name: Description
+                typeId: ct-desc
+                value: Core units
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine

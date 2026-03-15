@@ -1,0 +1,72 @@
+id: infogroup-nested
+category: selection
+tags: [infoGroup]
+description: InfoGroup containing child infoGroups with profiles
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    profileTypes:
+      - id: pt-stats
+        name: Stats
+        characteristicTypes:
+          - id: ct-val
+            name: Value
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Champion
+          type: unit
+          infoGroups:
+            - id: ig-outer
+              name: Outer Group
+              profiles:
+                - id: prof-outer
+                  name: Outer Profile
+                  typeId: pt-stats
+                  typeName: Stats
+                  characteristics:
+                    - name: Value
+                      typeId: ct-val
+                      value: "1"
+              infoGroups:
+                - id: ig-inner
+                  name: Inner Group
+                  profiles:
+                    - id: prof-inner
+                      name: Inner Profile
+                      typeId: pt-stats
+                      typeName: Stats
+                      characteristics:
+                        - name: Value
+                          typeId: ct-val
+                          value: "2"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Champion
+              profiles:
+                - name: Outer Profile
+                  characteristics:
+                    - name: Value
+                      value: "1"
+                - name: Inner Profile
+                  characteristics:
+                    - name: Value
+                      value: "2"

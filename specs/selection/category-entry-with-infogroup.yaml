@@ -1,0 +1,66 @@
+id: category-entry-with-infogroup
+category: selection
+tags: [categoryEntry, infoGroup, engine-limitation]
+description: >
+  CategoryEntry with infoGroup containing a profile and rule is accepted in XML.
+  Engine limitation: category roster elements do not expose profiles/rules
+  from the entry definition.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    profileTypes:
+      - id: pt-info
+        name: Category Info
+        characteristicTypes:
+          - id: ct-desc
+            name: Description
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+        infoGroups:
+          - id: ig-cat
+            name: Troop Details
+            profiles:
+              - id: prof-cat
+                name: Troop Stats
+                typeId: pt-info
+                typeName: Category Info
+                characteristics:
+                  - name: Description
+                    typeId: ct-desc
+                    value: Core units
+            rules:
+              - id: rule-cat
+                name: Troop Bonus
+                description: Objective secured
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine

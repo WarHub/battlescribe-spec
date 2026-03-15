@@ -1,0 +1,57 @@
+id: modifier-group-on-category-link
+category: modifier
+tags: [modifierGroup, categoryLink, undefined-behavior]
+description: ModifierGroup on categoryLink sets primary
+engines:
+  battlescribe: fail
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-elites
+        name: Elites
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-elites
+            targetId: cat-elites
+            name: Elites
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Veteran
+          type: unit
+          categoryLinks:
+            - id: cl-sel-elites
+              targetId: cat-elites
+              name: Elites
+              primary: false
+              modifierGroups:
+                - modifiers:
+                    - type: set
+                      field: primary
+                      value: "true"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Veteran
+              categories:
+                - name: Elites
+                  primary: true

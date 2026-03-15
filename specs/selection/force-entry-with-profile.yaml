@@ -1,0 +1,55 @@
+id: force-entry-with-profile
+category: selection
+tags: [forceEntry, profile]
+description: ForceEntry carrying a profile (info content on force entry)
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    profileTypes:
+      - id: pt-stats
+        name: Force Stats
+        characteristicTypes:
+          - id: ct-cmd
+            name: Command
+    forceEntries:
+      - id: fe-1
+        name: Battalion
+        profiles:
+          - id: prof-fe
+            name: Battalion Info
+            typeId: pt-stats
+            typeName: Force Stats
+            characteristics:
+              - name: Command
+                typeId: ct-cmd
+                value: "3"
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Battalion
+          profiles:
+            - name: Battalion Info
+              typeName: Force Stats
+              characteristics:
+                - name: Command
+                  value: "3"
+          selections:
+            - name: Marine

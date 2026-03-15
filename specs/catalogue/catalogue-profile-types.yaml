@@ -1,0 +1,54 @@
+id: catalogue-profile-types
+category: catalogue
+tags: [catalogue, profileType]
+description: Catalogue defines profileTypes used by its profiles
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      profileTypes:
+        - id: pt-cat
+          name: Custom Stats
+          characteristicTypes:
+            - id: ct-val
+              name: Value
+      selectionEntries:
+        - id: se-1
+          name: Marine
+          type: unit
+          profiles:
+            - id: prof-1
+              name: Marine Stats
+              typeId: pt-cat
+              typeName: Custom Stats
+              characteristics:
+                - name: Value
+                  typeId: ct-val
+                  value: "5"
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Marine
+              profiles:
+                - name: Marine Stats
+                  typeName: Custom Stats
+                  characteristics:
+                    - name: Value
+                      value: "5"

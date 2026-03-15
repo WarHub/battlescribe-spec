@@ -197,14 +197,20 @@ public sealed class SpecRunner
 
     private int ResolveForceEntryIndex(string forceEntryName, int stepIndex)
     {
-        var forceEntries = _gameSystem?.ForceEntries;
-        if (forceEntries is null)
+        var allForceEntries = new List<ProtocolForceEntry>();
+        if (_gameSystem?.ForceEntries != null)
+            allForceEntries.AddRange(_gameSystem.ForceEntries);
+        if (_catalogues != null)
+            foreach (var cat in _catalogues)
+                if (cat.ForceEntries != null)
+                    allForceEntries.AddRange(cat.ForceEntries);
+        if (allForceEntries.Count == 0)
         {
-            _errors.Add($"Step {stepIndex}: game system force entries not available for force entry '{forceEntryName}'");
+            _errors.Add($"Step {stepIndex}: no force entries available for force entry '{forceEntryName}'");
             return -1;
         }
 
-        var index = forceEntries.FindIndex(fe => string.Equals(fe.Name, forceEntryName, StringComparison.OrdinalIgnoreCase));
+        var index = allForceEntries.FindIndex(fe => string.Equals(fe.Name, forceEntryName, StringComparison.OrdinalIgnoreCase));
         if (index < 0)
             _errors.Add($"Step {stepIndex}: force entry name '{forceEntryName}' not found");
         return index;
@@ -354,6 +360,18 @@ public sealed class SpecRunner
 
                 if (ef.Selections is { } expectedSels)
                     AssertSelections(stepIndex, $"force[{fi}]", expectedSels, af.Selections);
+
+                if (ef.Profiles is { } forceProfs)
+                    AssertProfiles(stepIndex, $"force[{fi}]", forceProfs, af.Profiles);
+
+                if (ef.Rules is { } forceRules)
+                    AssertRules(stepIndex, $"force[{fi}]", forceRules, af.Rules);
+
+                if (ef.PublicationId is not null)
+                    AssertEqual(stepIndex, $"force[{fi}].publicationId", ef.PublicationId, af.PublicationId ?? "");
+
+                if (ef.Page is not null)
+                    AssertEqual(stepIndex, $"force[{fi}].page", ef.Page, af.Page ?? "");
             }
         }
 
@@ -618,6 +636,18 @@ public sealed class SpecRunner
 
             if (ec.Primary is { } p)
                 AssertEqual(stepIndex, $"{catPrefix}.primary", p, ac.Primary);
+
+            if (ec.Profiles is { } catProfs)
+                AssertProfiles(stepIndex, catPrefix, catProfs, ac.Profiles);
+
+            if (ec.Rules is { } catRules)
+                AssertRules(stepIndex, catPrefix, catRules, ac.Rules);
+
+            if (ec.PublicationId is not null)
+                AssertEqual(stepIndex, $"{catPrefix}.publicationId", ec.PublicationId, ac.PublicationId ?? "");
+
+            if (ec.Page is not null)
+                AssertEqual(stepIndex, $"{catPrefix}.page", ec.Page, ac.Page ?? "");
         }
     }
 
