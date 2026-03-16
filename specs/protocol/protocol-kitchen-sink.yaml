@@ -1,0 +1,567 @@
+id: protocol-kitchen-sink
+category: protocol
+description: >
+  Comprehensive smoke test exercising all Protocol types, all action types,
+  and all state assertion fields for adapter protocol adherence.
+tags: []
+engines:
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: ks-gs
+    name: Kitchen Sink GS
+    costTypes:
+      - id: ct-pts
+        name: pts
+        defaultCostLimit: -1
+        hidden: false
+        limit: true
+      - id: ct-power
+        name: power
+        defaultCostLimit: -1
+        hidden: true
+        limit: false
+    profileTypes:
+      - id: pt-unit
+        name: Unit Stats
+        characteristicTypes:
+          - id: char-ws
+            name: WS
+          - id: char-bs
+            name: BS
+          - id: char-s
+            name: S
+          - id: char-t
+            name: T
+          - id: char-w
+            name: W
+      - id: pt-weapon
+        name: Weapon
+        characteristicTypes:
+          - id: char-range
+            name: Range
+          - id: char-str
+            name: Str
+          - id: char-ap
+            name: AP
+          - id: char-d
+            name: D
+    publications:
+      - id: pub-core
+        name: Core Rulebook
+        shortName: CR
+        publisher: Test Publisher
+        publicationDate: "2024"
+        publisherUrl: https://example.com
+    forceEntries:
+      - id: fe-battalion
+        name: Battalion
+        page: "10"
+        publicationId: pub-core
+        categoryLinks:
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+            primary: false
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+          - id: cl-fe-elites
+            targetId: cat-elites
+            name: Elites
+            primary: false
+        constraints:
+          - id: con-fe-max-3
+            type: max
+            value: 3
+            field: forces
+            scope: roster
+    categoryEntries:
+      - id: cat-hq
+        name: HQ
+      - id: cat-troops
+        name: Troops
+      - id: cat-elites
+        name: Elites
+    sharedSelectionEntries:
+      - id: se-shared-relic
+        name: Ancient Relic
+        type: upgrade
+        costs:
+          - name: pts
+            typeId: ct-pts
+            value: 25
+    sharedRules:
+      - id: rule-shared-fearless
+        name: Fearless
+        description: This unit automatically passes morale tests
+    sharedProfiles:
+      - id: prof-shared-armor
+        name: Power Armor
+        typeId: pt-unit
+        typeName: Unit Stats
+        characteristics:
+          - name: WS
+            typeId: char-ws
+            value: "3+"
+          - name: BS
+            typeId: char-bs
+            value: "3+"
+          - name: S
+            typeId: char-s
+            value: "4"
+          - name: T
+            typeId: char-t
+            value: "4"
+          - name: W
+            typeId: char-w
+            value: "2"
+    sharedInfoGroups:
+      - id: ig-shared-wargear
+        name: Standard Wargear
+        profiles:
+          - id: prof-ig-bolter
+            name: Boltgun
+            typeId: pt-weapon
+            typeName: Weapon
+            characteristics:
+              - name: Range
+                typeId: char-range
+                value: "24"
+              - name: Str
+                typeId: char-str
+                value: "4"
+              - name: AP
+                typeId: char-ap
+                value: "0"
+              - name: D
+                typeId: char-d
+                value: "1"
+        rules:
+          - id: rule-ig-rapidfire
+            name: Rapid Fire
+            description: Double shots at half range
+    rules:
+      - id: rule-gs-battleforged
+        name: Battle-forged
+        description: This army is battle-forged
+        page: "5"
+        publicationId: pub-core
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: ks-gs
+      publications:
+        - id: pub-supplement
+          name: Supplement
+          shortName: SUP
+      rules:
+        - id: rule-cat-doctrine
+          name: Combat Doctrine
+          description: Re-roll hit rolls of 1
+      sharedSelectionEntries:
+        - id: se-cat-shared-veteran
+          name: Veteran Upgrade
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 15
+      selectionEntries:
+        - id: se-infantry
+          name: Infantry Squad
+          type: unit
+          page: "42"
+          publicationId: pub-core
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 100
+            - name: power
+              typeId: ct-power
+              value: 5
+          categoryLinks:
+            - id: cl-inf-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          profiles:
+            - id: prof-inf-stats
+              name: Infantry
+              typeId: pt-unit
+              typeName: Unit Stats
+              characteristics:
+                - name: WS
+                  typeId: char-ws
+                  value: "4+"
+                - name: BS
+                  typeId: char-bs
+                  value: "4+"
+                - name: S
+                  typeId: char-s
+                  value: "3"
+                - name: T
+                  typeId: char-t
+                  value: "3"
+                - name: W
+                  typeId: char-w
+                  value: "1"
+          rules:
+            - id: rule-inf-orders
+              name: Orders
+              description: Can receive orders from officers
+              page: "43"
+              publicationId: pub-core
+          selectionEntries:
+            - id: se-inf-trooper
+              name: Trooper
+              type: model
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+            - id: se-inf-vox
+              name: Vox-caster
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 5
+          selectionEntryGroups:
+            - id: seg-inf-weapons
+              name: Weapon Options
+              defaultSelectionEntryId: se-inf-lasgun
+              constraints:
+                - id: con-seg-max-1
+                  type: max
+                  value: 1
+                  field: selections
+                  scope: parent
+              selectionEntries:
+                - id: se-inf-lasgun
+                  name: Lasgun
+                  type: upgrade
+                - id: se-inf-flamer
+                  name: Flamer
+                  type: upgrade
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 5
+        - id: se-commander
+          name: Commander
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 75
+            - name: power
+              typeId: ct-power
+              value: 4
+          categoryLinks:
+            - id: cl-cmd-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
+          infoGroups:
+            - id: ig-cmd-wargear
+              name: Commander Wargear
+              profiles:
+                - id: prof-cmd-sword
+                  name: Power Sword
+                  typeId: pt-weapon
+                  typeName: Weapon
+                  characteristics:
+                    - name: Range
+                      typeId: char-range
+                      value: Melee
+                    - name: Str
+                      typeId: char-str
+                      value: "5"
+                    - name: AP
+                      typeId: char-ap
+                      value: "-3"
+                    - name: D
+                      typeId: char-d
+                      value: "1"
+              rules:
+                - id: rule-cmd-inspire
+                  name: Inspiring Leader
+                  description: Friendly units within 6 inches re-roll morale
+          infoLinks:
+            - id: il-cmd-fearless
+              name: Fearless
+              targetId: rule-shared-fearless
+              type: rule
+            - id: il-cmd-armor
+              name: Power Armor
+              targetId: prof-shared-armor
+              type: profile
+          modifiers:
+            - type: increment
+              field: ct-pts
+              value: "25"
+              conditions:
+                - type: atLeast
+                  value: 2
+                  field: selections
+                  scope: force
+                  childId: se-infantry
+        - id: se-required
+          name: Required Unit
+          type: unit
+          categoryLinks:
+            - id: cl-req-elites
+              targetId: cat-elites
+              name: Elites
+              primary: true
+          infoLinks:
+            - id: il-req-wargear
+              name: Standard Wargear
+              targetId: ig-shared-wargear
+              type: infoGroup
+          constraints:
+            - id: con-req-min-1
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+      entryLinks:
+        - id: el-relic
+          name: Ancient Relic
+          targetId: se-shared-relic
+          type: selectionEntry
+
+steps:
+  # Step 1: addForce — auto-selects Required Unit (min=1)
+  - action: addForce
+    forceEntryIndex: 0
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Battalion
+          catalogueId: cat-1
+          selectionCount: 1
+          selections:
+            - name: Required Unit
+              type: unit
+              number: 1
+              hidden: false
+              categories:
+                - name: Elites
+                  entryId: cat-elites
+                  primary: true
+
+  # Step 2: selectEntry Infantry Squad — assert ALL selection fields
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Required Unit
+            - name: Infantry Squad
+              entryId: se-infantry
+              type: unit
+              number: 1
+              hidden: false
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 100
+                - name: power
+                  typeId: ct-power
+                  value: 5
+              profiles:
+                - name: Infantry
+                  typeId: pt-unit
+                  typeName: Unit Stats
+                  hidden: false
+                  characteristics:
+                    - name: WS
+                      typeId: char-ws
+                      value: "4+"
+                    - name: BS
+                      typeId: char-bs
+                      value: "4+"
+                    - name: S
+                      typeId: char-s
+                      value: "3"
+                    - name: T
+                      typeId: char-t
+                      value: "3"
+                    - name: W
+                      typeId: char-w
+                      value: "1"
+              rules:
+                - name: Orders
+                  description: Can receive orders from officers
+                  hidden: false
+                  page: "43"
+                  publicationId: pub-core
+              categories:
+                - name: Troops
+                  entryId: cat-troops
+                  primary: true
+              page: "42"
+              publicationId: pub-core
+              publicationName: Core Rulebook
+
+  # Step 3: selectChildEntry — add Trooper model to Infantry Squad
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 1
+    childEntryName: Trooper
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Required Unit
+            - name: Infantry Squad
+              children:
+                - name: Trooper
+                  type: model
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 10
+
+  # Step 4: selectEntry Commander — assert infoGroup profiles/rules, infoLink data
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 3
+          selections:
+            - name: Required Unit
+            - name: Infantry Squad
+            - name: Commander
+              entryId: se-commander
+              type: unit
+              number: 1
+              hidden: false
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 75
+                - name: power
+                  typeId: ct-power
+                  value: 4
+              profiles:
+                - name: Power Sword
+                  typeName: Weapon
+                  hidden: false
+                  characteristics:
+                    - name: Range
+                      value: Melee
+                    - name: Str
+                      value: "5"
+                    - name: AP
+                      value: "-3"
+                    - name: D
+                      value: "1"
+                - name: Power Armor
+                  typeName: Unit Stats
+                  hidden: false
+                  characteristics:
+                    - name: WS
+                      value: "3+"
+                    - name: BS
+                      value: "3+"
+                    - name: S
+                      value: "4"
+                    - name: T
+                      value: "4"
+                    - name: W
+                      value: "2"
+              rules:
+                - name: Inspiring Leader
+                  description: Friendly units within 6 inches re-roll morale
+                  hidden: false
+                - name: Fearless
+                  description: This unit automatically passes morale tests
+                  hidden: false
+              categories:
+                - name: HQ
+                  entryId: cat-hq
+                  primary: true
+
+  # Step 5: setSelectionCount — exercise the action (no-op for root entries)
+  - action: setSelectionCount
+    forceIndex: 0
+    entryIndex: 0
+    count: 3
+
+  - expectedState:
+      forces:
+        - selectionCount: 3
+
+  # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
+  #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 4
+          selections:
+            - name: Required Unit
+            - name: Infantry Squad
+            - name: Commander
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 100
+                - name: power
+                  typeId: ct-power
+                  value: 4
+            - name: Infantry Squad
+
+  # Step 7: duplicateSelection — duplicate Infantry Squad #2
+  - action: duplicateSelection
+    forceIndex: 0
+    selectionIndex: 3
+
+  - expectedState:
+      forces:
+        - selectionCount: 5
+
+  # Step 8: deselectSelection — remove duplicated copy
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 4
+
+  - expectedState:
+      forces:
+        - selectionCount: 4
+
+  # Step 9: setCostLimit — set pts limit low to generate cost limit error
+  - action: setCostLimit
+    costTypeId: ct-pts
+    value: 200
+
+  # Step 10: final assertion — roster costs, cost limit error
+  - expectedState:
+      forces:
+        - name: Battalion
+          selections:
+            - name: Required Unit
+            - name: Infantry Squad
+            - name: Commander
+            - name: Infantry Squad
+      costs:
+        - typeId: ct-pts
+        - typeId: ct-power
+      errorsContain:
+        - on: roster
+          from: costLimits/ct-pts
