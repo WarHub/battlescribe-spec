@@ -184,9 +184,27 @@ public sealed class ExpectedStateDef
 
     /// <summary>
     /// Structured error assertions using "on"/"from" format.
+    /// Requires an exact-set match: every assertion must match an actual error,
+    /// and no extra actual errors are allowed.
+    /// Mutually exclusive with <see cref="ErrorsContain"/> and <see cref="ErrorCount"/>.
     /// </summary>
     [YamlMember(Alias = "errors")]
     public List<ErrorAssertionDef>? Errors { get; set; }
+
+    /// <summary>
+    /// Subset/superset error assertions: each listed error must match at least one
+    /// actual error, but additional actual errors are allowed (not flagged).
+    /// Mutually exclusive with <see cref="Errors"/>.
+    /// </summary>
+    [YamlMember(Alias = "errorsContain")]
+    public List<ErrorAssertionDef>? ErrorsContain { get; set; }
+
+    /// <summary>
+    /// Assert only the total count of validation errors without matching specifics.
+    /// Mutually exclusive with <see cref="Errors"/>.
+    /// </summary>
+    [YamlMember(Alias = "errorCount")]
+    public int? ErrorCount { get; set; }
 
     /// <summary>
     /// Per-engine overrides. Each key is an engine name (e.g. "newrecruit"),
@@ -212,6 +230,8 @@ public sealed class ExpectedStateDef
             CostCount = over.CostCount ?? CostCount,
             Costs = over.Costs ?? Costs,
             Errors = over.Errors ?? Errors,
+            ErrorsContain = over.ErrorsContain ?? ErrorsContain,
+            ErrorCount = over.ErrorCount ?? ErrorCount,
             // Don't propagate Engines into the merged result
         };
     }
@@ -236,13 +256,20 @@ public sealed class ErrorAssertionDef
 
     /// <summary>
     /// The source entry and constraint that caused the error.
-    /// Format: "{entryId}/{constraintId}" with reserved pseudo-values:
+    /// Required. Format: "{entryId}/{constraintId}" with reserved pseudo-values:
     ///   "costLimits/{costTypeId}" for cost limit errors,
     ///   "{entryId}/hidden" for hidden entry errors.
     /// Examples: "se-unit-a/con-min-1", "costLimits/ct-pts", "se-unit-a/hidden".
     /// </summary>
     [YamlMember(Alias = "from")]
-    public string? From { get; set; }
+    public string From { get; set; } = "";
+
+    /// <summary>
+    /// Optional substring to match against the error message text.
+    /// When set, the actual error's message must contain this value (case-insensitive).
+    /// </summary>
+    [YamlMember(Alias = "messageContains")]
+    public string? MessageContains { get; set; }
 }
 
 public sealed class ExpectedForceDef
