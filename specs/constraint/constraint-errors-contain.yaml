@@ -1,0 +1,79 @@
+id: constraint-errors-contain
+category: constraint
+description: errorsContain asserts subset of errors without requiring exact match
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+      - id: cat-hq
+        name: HQ
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: con-min-troops
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+        - id: se-hq
+          name: HQ Unit
+          type: unit
+          categoryLinks:
+            - id: cl-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
+          constraints:
+            - id: con-min-hq
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Auto-select satisfies min constraints. Remove all to trigger violations.
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
+  # errorsContain: assert only one of the two errors, ignoring the other
+  - expectedState:
+      forces:
+        - selectionCount: 0
+      errorsContain:
+        - on: category cat-troops
+          from: se-unit-a/con-min-troops

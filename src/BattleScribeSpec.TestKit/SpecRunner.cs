@@ -381,6 +381,12 @@ public sealed class SpecRunner
             AssertEqual(stepIndex, "totalSelectionCount", totalSelCount, actualTotal);
         }
 
+        if (expected.Errors is not null && expected.ErrorsContain is not null)
+        {
+            _errors.Add($"Step {stepIndex}: 'errors' and 'errorsContain' are mutually exclusive");
+            return;
+        }
+
         if (expected.Errors is { } errorsAssertions)
         {
             var actualErrors = _engine.GetValidationErrors();
@@ -393,54 +399,29 @@ public sealed class SpecRunner
             }
             else
             {
-                // Track which actual errors have been consumed so each can
-                // only satisfy one expected error (prevents false positives
-                // when multiple expected errors have the same signature).
-                var consumed = new HashSet<int>();
-                foreach (var ea in errorsAssertions)
-                {
-                    var (expectedOwnerType, expectedOwnerEntryId) = ParseOn(ea.On);
-                    var (expectedEntryId, expectedConstraintId) = ParseFrom(ea.From);
+                MatchErrors(stepIndex, errorsAssertions, actualErrors, exactSet: true);
+            }
+        }
 
-                    int matchIndex = -1;
-                    for (int i = 0; i < actualErrors.Count; i++)
-                    {
-                        if (consumed.Contains(i))
-                            continue;
-                        var ae = actualErrors[i];
-                        if (ae.OwnerType == expectedOwnerType &&
-                            (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
-                            (expectedEntryId is null || ae.EntryId == expectedEntryId) &&
-                            (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId))
-                        {
-                            matchIndex = i;
-                            break;
-                        }
-                    }
-                    if (matchIndex >= 0)
-                    {
-                        consumed.Add(matchIndex);
-                    }
-                    else
-                    {
-                        var desc = $"on='{ea.On}'";
-                        if (ea.From is not null) desc += $", from='{ea.From}'";
-                        _errors.Add($"Step {stepIndex}: expected error [{desc}] not found in: [{string.Join("; ", actualErrors.Select(FormatError))}]");
-                    }
-                }
+        if (expected.ErrorsContain is { } errorsContainAssertions)
+        {
+            var actualErrors = _engine.GetValidationErrors();
+            MatchErrors(stepIndex, errorsContainAssertions, actualErrors, exactSet: false);
+        }
 
-                // Exact count check: no unexpected extra errors allowed
-                if (actualErrors.Count != errorsAssertions.Count)
-                {
-                    _errors.Add($"Step {stepIndex}: expected {errorsAssertions.Count} error(s) but got {actualErrors.Count}: " +
-                        $"[{string.Join("; ", actualErrors.Select(FormatError))}]");
-                }
+        if (expected.ErrorCount is { } expectedErrorCount)
+        {
+            var actualErrors = _engine.GetValidationErrors();
+            if (actualErrors.Count != expectedErrorCount)
+            {
+                _errors.Add($"Step {stepIndex}: expected {expectedErrorCount} error(s) but got {actualErrors.Count}: " +
+                    $"[{string.Join("; ", actualErrors.Select(FormatError))}]");
             }
         }
 
         // Default: if no error assertion was specified, assert zero errors
         // (skip for dataSource specs which inherently have many constraint violations)
-        if (!_isDataSourceMode && expected.Errors is null)
+        if (!_isDataSourceMode && expected.Errors is null && expected.ErrorsContain is null && expected.ErrorCount is null)
         {
             var actualErrors = _engine.GetValidationErrors();
             if (actualErrors.Count > 0)
@@ -448,6 +429,57 @@ public sealed class SpecRunner
                 _errors.Add($"Step {stepIndex}: expected no errors (default) but got {actualErrors.Count}: " +
                     string.Join("; ", actualErrors.Select(FormatError)));
             }
+        }
+    }
+
+    /// <summary>
+    /// Matches expected error assertions against actual errors.
+    /// With 'from' required on every assertion, patterns are non-overlapping
+    /// and matching is fully order-independent.
+    /// When <paramref name="exactSet"/> is true, also asserts that no extra unmatched errors remain.
+    /// </summary>
+    private void MatchErrors(int stepIndex, List<ErrorAssertionDef> assertions,
+        IReadOnlyList<ValidationErrorState> actualErrors, bool exactSet)
+    {
+        var consumed = new HashSet<int>();
+        foreach (var ea in assertions)
+        {
+            var (expectedOwnerType, expectedOwnerEntryId) = ParseOn(ea.On);
+            var (expectedEntryId, expectedConstraintId) = ParseFrom(ea.From);
+
+            int matchIndex = -1;
+            for (int i = 0; i < actualErrors.Count; i++)
+            {
+                if (consumed.Contains(i))
+                    continue;
+                var ae = actualErrors[i];
+                if (ae.OwnerType == expectedOwnerType &&
+                    (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
+                    ae.EntryId == expectedEntryId &&
+                    ae.ConstraintId == expectedConstraintId &&
+                    (ea.MessageContains is null || (ae.Message?.Contains(ea.MessageContains, StringComparison.OrdinalIgnoreCase) ?? false)))
+                {
+                    matchIndex = i;
+                    break;
+                }
+            }
+            if (matchIndex >= 0)
+            {
+                consumed.Add(matchIndex);
+            }
+            else
+            {
+                var desc = $"on='{ea.On}', from='{ea.From}'";
+                if (ea.MessageContains is not null) desc += $", messageContains='{ea.MessageContains}'";
+                _errors.Add($"Step {stepIndex}: expected error [{desc}] not found in: [{string.Join("; ", actualErrors.Select(FormatError))}]");
+            }
+        }
+
+        // Exact-set mode: no extra unmatched errors allowed
+        if (exactSet && actualErrors.Count != assertions.Count)
+        {
+            _errors.Add($"Step {stepIndex}: expected {assertions.Count} error(s) but got {actualErrors.Count}: " +
+                $"[{string.Join("; ", actualErrors.Select(FormatError))}]");
         }
     }
 
@@ -466,11 +498,10 @@ public sealed class SpecRunner
         return (on[..spaceIdx], on[(spaceIdx + 1)..]);
     }
 
-    private static (string? entryId, string? constraintId) ParseFrom(string? from)
+    private static (string entryId, string constraintId) ParseFrom(string from)
     {
-        if (from is null) return (null, null);
         var slashIdx = from.IndexOf('/');
-        if (slashIdx < 0) return (from, null);
+        if (slashIdx < 0) return (from, "");
         return (from[..slashIdx], from[(slashIdx + 1)..]);
     }
 

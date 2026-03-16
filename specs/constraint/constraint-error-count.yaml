@@ -1,0 +1,56 @@
+id: constraint-error-count
+category: constraint
+description: errorCount asserts total number of errors without matching specifics
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+            primary: false
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: con-min-1
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  # Auto-select creates 1 Unit A, constraint satisfied
+  - expectedState:
+      errorCount: 0
+
+  # Remove to trigger min violation
+  - action: deselectSelection
+    forceIndex: 0
+    selectionIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
+      errorCount: 1
