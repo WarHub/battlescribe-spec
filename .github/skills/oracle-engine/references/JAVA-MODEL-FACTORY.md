@@ -6,9 +6,9 @@ All factory methods in `JavaModelFactory.cs` follow this pattern:
 
 ```csharp
 public static JavaType CreateThing(
-    string id = "default-id",
-    string name = "Default Name",
-    IReadOnlyList<ChildType>? children = null)
+    string id,
+    string name,
+    IEnumerable<ChildType>? children = null)
 {
     var obj = new JavaType();
     obj.setId(id);
@@ -21,7 +21,9 @@ public static JavaType CreateThing(
 ```
 
 **Key patterns:**
-- All parameters are optional with sensible defaults
+- `id`/`name` are typically required (no default) on most methods; some like
+  `CreateGameSystem` provide defaults for convenience
+- Collections use `IEnumerable<T>?` (not `IReadOnlyList`)
 - Collections use `getXxx().add()` (Java mutable list pattern)
 - Null collections are skipped (no empty list created)
 - String properties use `setXxx()` Java setter convention
@@ -33,26 +35,58 @@ public static JavaType CreateThing(
 ```csharp
 CreateGameSystem(
     string id = "test-gs",
-    string name = "Test",
+    string name = "Test Game System",
     int revision = 1,
-    IReadOnlyList<CostType>? costTypes = null,
-    IReadOnlyList<ForceEntry>? forceEntries = null,
-    IReadOnlyList<CategoryEntry>? categoryEntries = null,
-    IReadOnlyList<SelectionEntry>? selectionEntries = null,
-    IReadOnlyList<EntryLink>? entryLinks = null,
-    IReadOnlyList<SelectionEntry>? sharedSelectionEntries = null,
-    IReadOnlyList<SelectionEntryGroup>? sharedSelectionEntryGroups = null,
-    IReadOnlyList<Rule>? sharedRules = null,
-    IReadOnlyList<Profile>? sharedProfiles = null,
-    IReadOnlyList<InfoGroup>? sharedInfoGroups = null,
-    IReadOnlyList<ProfileType>? profileTypes = null,
-    IReadOnlyList<Publication>? publications = null,
-    IReadOnlyList<Rule>? rules = null,
-    IReadOnlyList<InfoLink>? infoLinks = null)
+    string bsVersion = "2.03",
+    IEnumerable<CostType>? costTypes = null,
+    IEnumerable<ForceEntry>? forceEntries = null,
+    IEnumerable<CategoryEntry>? categoryEntries = null,
+    IEnumerable<ProfileType>? profileTypes = null,
+    IEnumerable<Publication>? publications = null,
+    IEnumerable<SelectionEntry>? selectionEntries = null,
+    IEnumerable<EntryLink>? entryLinks = null,
+    IEnumerable<Rule>? rules = null,
+    IEnumerable<InfoLink>? infoLinks = null,
+    IEnumerable<SelectionEntry>? sharedSelectionEntries = null,
+    IEnumerable<SelectionEntryGroup>? sharedSelectionEntryGroups = null,
+    IEnumerable<Rule>? sharedRules = null,
+    IEnumerable<Profile>? sharedProfiles = null,
+    IEnumerable<InfoGroup>? sharedInfoGroups = null)
 ```
 
 **Note:** GameSystem does NOT have root-level `selectionEntryGroups`.
 Only `sharedSelectionEntryGroups`.
+
+### CreateCostType
+
+```csharp
+CreateCostType(
+    string id,            // required, no default
+    string name,          // required, no default
+    double? defaultCostLimit = null,  // null → -1.0 (no limit)
+    bool hidden = false,
+    bool limit = false)
+```
+
+`defaultCostLimit: null` maps to `-1.0` internally (BattleScribe convention for "no limit").
+
+### CreateCategoryEntry
+
+```csharp
+CreateCategoryEntry(
+    string id,            // required, no default
+    string name,          // required, no default
+    bool hidden = false,
+    IEnumerable<Constraint>? constraints = null,
+    IEnumerable<Modifier>? modifiers = null,
+    IEnumerable<ModifierGroup>? modifierGroups = null,
+    IEnumerable<Profile>? profiles = null,
+    IEnumerable<Rule>? rules = null,
+    IEnumerable<InfoGroup>? infoGroups = null,
+    IEnumerable<InfoLink>? infoLinks = null,
+    string? publicationId = null,
+    string? page = null)
+```
 
 ### CreateConstraint
 
@@ -73,19 +107,6 @@ CreateConstraint(
 was added later), ALL callers must be checked. `CreateConstraint` is called from
 `CreateConstraintFromProtocol` which maps Protocol fields → factory params.
 
-### CreateCostType
-
-```csharp
-CreateCostType(
-    string id,
-    string name,
-    double? defaultCostLimit = null,  // null → -1.0 (no limit)
-    bool hidden = false,
-    bool limit = false)
-```
-
-`defaultCostLimit: null` maps to `-1.0` internally (BattleScribe convention for "no limit").
-
 ## Adding a new field to a factory method
 
 1. Add optional parameter at end of parameter list (with default)
@@ -96,7 +117,6 @@ CreateCostType(
 ## Common pitfalls
 
 - **GameSystem has no root selectionEntryGroups** — only shared. Don't add them.
-- **CategoryEntry factory takes (name, id) only** — no `hidden` parameter currently.
-- **Collection parameters must be IReadOnlyList** — not List or array.
+- **Collection parameters use `IEnumerable<T>?`** — not `IReadOnlyList` or array.
 - **Null vs empty list** — null = don't touch the Java collection; empty list = no items
   but Java still has its default empty list.

@@ -142,6 +142,8 @@ All located in `lib/` and configured in the .csproj as IKVM references:
 | DataUtils.jar | XML serialization |
 | simple-xml-2.7.1.jar | XML marshalling |
 | kotlin-stdlib-1.3.71.jar | Kotlin runtime |
+| kotlin-stdlib-common-1.3.71.jar | Kotlin common library |
+| annotations-13.0.jar | JetBrains nullability annotations |
 | commons-io-2.4.jar | IO utilities |
 | stax-1.2.0.jar + stax-api-1.0.1.jar | StAX XML parser |
 | xpp3-1.1.3.3.jar | XML pull parser |

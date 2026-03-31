@@ -30,20 +30,20 @@ const row = bsspec.row;
 
 ## Selection state mapping
 
-| NR property | SelectionState field | Notes |
+| NR accessor | SelectionState field | Notes |
 |------------|---------------------|-------|
-| `sel.name` | Name | Direct |
-| `sel.entryId` or composite | EntryId | May include link prefix |
-| `source.type` | Type | "unit", "model", "upgrade" |
-| `sel.amount` | Number | Integer count |
-| `sel.hidden` | Hidden | Boolean |
-| `sel.costs` | Costs[] | Mapped via costIndex |
-| `sel.children` | Children[] | Recursive |
-| `sel.profiles` | Profiles[] | Via profileTypes |
-| `sel.rules` | Rules[] | Direct |
-| `sel.categories` | Categories[] | Via categoryLinks |
+| `sel.getName?.()` | Name | Optional chaining throughout |
+| `sel.getId?.()` | EntryId | May include link prefix |
+| `sel.getType?.()` | Type | "unit", "model", "upgrade" |
+| `sel.getAmount?.()` | Number | Integer count, fallback 1 |
+| `sel.isHidden?.()` | Hidden | Boolean, fallback false |
+| `sel.getCosts?.()` | Costs[] | Mapped via costIndex |
+| `sel.getSelections?.()` | Children[] | Recursive |
+| `sel.getModifiedProfiles?.()` | Profiles[] | Includes modifier effects |
+| `sel.getModifiedRules?.()` | Rules[] | Includes modifier effects |
+| `sel.getSelectionCategories?.()` | Categories[] | Via category links |
 | *(not available)* | Page | Always null |
-| `source.publicationId` | PublicationId | From entry definition |
+| source entry definition | PublicationId | From entry definition |
 
 ## Selection sorting
 
@@ -83,13 +83,18 @@ Total costs are calculated by summing selection costs recursively.
 
 ## Validation errors
 
-NR validation errors are read from the army's validation state:
+NR validation errors are derived by running constraint checks and then walking
+the roster hierarchy:
 
-```javascript
-const errors = army.getValidationErrors();
-```
+- Invoke `checkConstraints()` on the current army/roster to populate
+  constraint state.
+- Traverse `roster → forces → categories → selections`, calling
+  `checkConstraints()` on each element recursively (including child selections).
+- Collect constraint violations attached to each element after checking.
+- Inject additional cost-limit validation during this traversal (e.g. total
+  roster or force cost exceeding configured limits).
 
-Each error is mapped to `ValidationErrorState` with:
+Each detected violation is mapped to `ValidationErrorState` with:
 - `Message` — error text
 - `OwnerType` — roster/force/category/selection
 - `OwnerId` — ID of the owning roster element

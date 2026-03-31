@@ -131,8 +131,10 @@ Step 0: force[0].selection[3] expected but only 2 selections
 **Cause:** Expected state lists more selections than actually exist. Common when
 forgetting that auto-select adds entries, or when an action failed silently.
 
-**Fix:** Run the spec with only the `expectedState` step (no specific assertions)
-to see what the actual roster state looks like. Then adjust expectations.
+**Fix:** Temporarily remove `expectedState` and add targeted assertions for the
+specific selection paths you care about so mismatches print the actual values.
+Use that mismatch output (or engine adapter/state reader debugging) to see the
+real roster state, then adjust `expectedState` accordingly.
 
 ### 5. Engine-specific differences
 
@@ -154,8 +156,10 @@ to see what the actual roster state looks like. Then adjust expectations.
               # page omitted — NR doesn't expose page on selections
 ```
 
-Non-null fields in the engine override **replace** the base fields for that engine.
-Null/omitted fields inherit from the base.
+Engine overrides are applied as a **shallow, top-level** merge: non-null top-level
+fields (e.g. `forces`, `costs`, `errors`) in the engine override **replace** the
+corresponding base fields entirely (including whole lists). Only omitted top-level
+fields inherit the value from the base definition.
 
 Mark known engine differences in the `engines` top-level field:
 
