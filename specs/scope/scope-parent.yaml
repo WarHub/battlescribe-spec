@@ -59,3 +59,7 @@ steps:
           errors:
             - on: selection se-unit-a
               from: se-unit-a/con-max-3
+        wham:
+          errors:
+            - on: selection se-unit-a
+              from: se-unit-a/con-max-3
