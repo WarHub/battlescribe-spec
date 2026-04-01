@@ -85,7 +85,7 @@ public sealed class SpecStructureTests
         }
     }
 
-    private static readonly HashSet<string> KnownEngines = ["battlescribe", "newrecruit", "phalanx"];
+    private static readonly HashSet<string> KnownEngines = ["battlescribe", "newrecruit", "phalanx", "wham"];
 
     [Theory]
     [MemberData(nameof(AllSpecs))]

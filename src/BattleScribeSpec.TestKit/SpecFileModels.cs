@@ -28,7 +28,7 @@ public sealed class SpecFile
     /// <summary>
     /// Per-engine expectations. Null means all engines expected to pass.
     /// Map of engine name to expectation: "pass" (default), "fail", or "skip".
-    /// Canonical engine names: "battlescribe", "newrecruit", "phalanx".
+    /// Canonical engine names: "battlescribe", "newrecruit", "phalanx", "wham".
     /// Unlisted engines are expected to pass.
     /// </summary>
     [YamlMember(Alias = "engines")]
