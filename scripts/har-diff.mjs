@@ -16,46 +16,11 @@ import { readFileSync } from "node:fs";
 import { get as httpsGet } from "node:https";
 import { get as httpGet } from "node:http";
 
-// --- CLI parsing ---
+// --- CLI state (populated only when run as main) ---
 
-const args = process.argv.slice(2);
 let oldPath, newPath, oldVersion, newVersion;
 let newsUrl = "https://www.newrecruit.eu/news";
 let skipNews = false;
-
-for (let i = 0; i < args.length; i++) {
-  switch (args[i]) {
-    case "--old":
-      oldPath = args[++i];
-      break;
-    case "--new":
-      newPath = args[++i];
-      break;
-    case "--old-version":
-      oldVersion = args[++i];
-      break;
-    case "--new-version":
-      newVersion = args[++i];
-      break;
-    case "--news-url":
-      newsUrl = args[++i];
-      break;
-    case "--no-news":
-      skipNews = true;
-      break;
-    case "-h":
-    case "--help":
-      console.log(
-        `Usage: node scripts/har-diff.mjs --old <old.har> --new <new.har> [--old-version X] [--new-version Y] [--news-url URL] [--no-news]`
-      );
-      process.exit(0);
-  }
-}
-
-if (!newPath) {
-  console.error("Error: --new <path> is required");
-  process.exit(1);
-}
 
 // --- HAR parsing helpers ---
 
@@ -678,7 +643,66 @@ async function main() {
   console.log(lines.join("\n"));
 }
 
-main().catch((err) => {
-  console.error("har-diff error:", err.message);
-  process.exit(1);
-});
+// --- Exports for testing ---
+
+export {
+  classifyUrl,
+  extractComponentName,
+  extractBundleFingerprint,
+  parseHar,
+  formatSize,
+  formatDelta,
+  bundleLabel,
+  jaccard,
+  matchJsBundles,
+  computeCssDiff,
+  renderChangesTable,
+  renderOtherCategories,
+};
+
+// Run main() only when executed directly (not imported).
+const isMain =
+  process.argv[1] &&
+  import.meta.url ===
+    new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`)
+      .href;
+if (isMain) {
+  // --- CLI parsing ---
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case "--old":
+        oldPath = args[++i];
+        break;
+      case "--new":
+        newPath = args[++i];
+        break;
+      case "--old-version":
+        oldVersion = args[++i];
+        break;
+      case "--new-version":
+        newVersion = args[++i];
+        break;
+      case "--news-url":
+        newsUrl = args[++i];
+        break;
+      case "--no-news":
+        skipNews = true;
+        break;
+      case "-h":
+      case "--help":
+        console.log(
+          `Usage: node scripts/har-diff.mjs --old <old.har> --new <new.har> [--old-version X] [--new-version Y] [--news-url URL] [--no-news]`
+        );
+        process.exit(0);
+    }
+  }
+  if (!newPath) {
+    console.error("Error: --new <path> is required");
+    process.exit(1);
+  }
+  main().catch((err) => {
+    console.error("har-diff error:", err.message);
+    process.exit(1);
+  });
+}
