@@ -13,6 +13,7 @@
 //   -h, --help            Show help
 
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { get as httpsGet } from "node:https";
 import { get as httpGet } from "node:http";
 
@@ -457,7 +458,19 @@ function renderChangesTable(items, label) {
     return order[a.type] - order[b.type];
   });
 
-  const lines = [`### ${label}`, "", "| Change | File | Size |", "|--------|------|------|"];
+  const added = items.filter((i) => i.type === "added").length;
+  const changed = items.filter((i) => i.type === "changed").length;
+  const removed = items.filter((i) => i.type === "removed").length;
+  const countParts = [];
+  if (changed) countParts.push(`~${changed} changed`);
+  if (added) countParts.push(`+${added} added`);
+  if (removed) countParts.push(`-${removed} removed`);
+  const countLine = countParts.join(", ");
+
+  const tableLines = [
+    "| Change | File | Size |",
+    "|--------|------|------|",
+  ];
   for (const item of items) {
     const marker =
       item.type === "added"
@@ -470,9 +483,19 @@ function renderChangesTable(items, label) {
     else if (item.type === "removed") sizeStr = formatSize(item.oldSize);
     else
       sizeStr = `${formatSize(item.oldSize)} \u2192 ${formatSize(item.newSize)}`;
-    lines.push(`| ${marker} | \`${item.name}\` | ${sizeStr} |`);
+    tableLines.push(`| ${marker} | \`${item.name}\` | ${sizeStr} |`);
   }
-  lines.push("");
+
+  const lines = [
+    `### ${label} (${countLine})`,
+    "",
+    `<details><summary>${countLine}</summary>`,
+    "",
+    ...tableLines,
+    "",
+    "</details>",
+    "",
+  ];
   return lines;
 }
 
@@ -625,13 +648,14 @@ async function main() {
       const posts = parseNewsPosts(html);
       const relevant = filterRelevantPosts(posts, oldVersion, newVersion);
       if (relevant.length > 0) {
-        lines.push("### NR News", "");
+        lines.push(`### [NR News](${newsUrl})`, "");
         for (const post of relevant.slice(0, 5)) {
           const dateStr = post.date ? ` (${post.date})` : "";
-          lines.push(`> **${post.title}**${dateStr}`);
+          lines.push(`> **${post.title}**${dateStr}  `);
           lines.push(
             `> ${post.body.slice(0, 300)}${post.body.length > 300 ? "\u2026" : ""}`
           );
+          lines.push(`> [Read more\u2026](${newsUrl})`);
           lines.push("");
         }
       }
@@ -663,9 +687,7 @@ export {
 // Run main() only when executed directly (not imported).
 const isMain =
   process.argv[1] &&
-  import.meta.url ===
-    new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`)
-      .href;
+  import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   // --- CLI parsing ---
   const args = process.argv.slice(2);
