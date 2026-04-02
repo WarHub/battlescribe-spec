@@ -16,46 +16,11 @@ import { readFileSync } from "node:fs";
 import { get as httpsGet } from "node:https";
 import { get as httpGet } from "node:http";
 
-// --- CLI parsing ---
+// --- CLI state (populated only when run as main) ---
 
-const args = process.argv.slice(2);
 let oldPath, newPath, oldVersion, newVersion;
 let newsUrl = "https://www.newrecruit.eu/news";
 let skipNews = false;
-
-for (let i = 0; i < args.length; i++) {
-  switch (args[i]) {
-    case "--old":
-      oldPath = args[++i];
-      break;
-    case "--new":
-      newPath = args[++i];
-      break;
-    case "--old-version":
-      oldVersion = args[++i];
-      break;
-    case "--new-version":
-      newVersion = args[++i];
-      break;
-    case "--news-url":
-      newsUrl = args[++i];
-      break;
-    case "--no-news":
-      skipNews = true;
-      break;
-    case "-h":
-    case "--help":
-      console.log(
-        `Usage: node scripts/har-diff.mjs --old <old.har> --new <new.har> [--old-version X] [--new-version Y] [--news-url URL] [--no-news]`
-      );
-      process.exit(0);
-  }
-}
-
-if (!newPath) {
-  console.error("Error: --new <path> is required");
-  process.exit(1);
-}
 
 // --- HAR parsing helpers ---
 
@@ -111,6 +76,23 @@ function extractComponentName(url) {
   }
 }
 
+/**
+ * Extract Vue component __name values and static import references from JS content.
+ * These form a stable fingerprint for matching bundles across hash changes.
+ */
+function extractBundleFingerprint(text) {
+  const names = new Set();
+  for (const m of text.matchAll(/__name:\s*"([^"]+)"/g)) {
+    names.add(m[1]);
+  }
+  const imports = new Set();
+  for (const m of text.matchAll(/from\s*"\.\/([^"]+\.js)"/g)) {
+    imports.add(m[1]);
+  }
+  const isEntry = text.includes("__vite__mapDeps");
+  return { names, imports, isEntry };
+}
+
 function parseHar(path) {
   const raw = JSON.parse(readFileSync(path, "utf8"));
   const entries = raw?.log?.entries || [];
@@ -118,20 +100,27 @@ function parseHar(path) {
   for (const entry of entries) {
     const url = entry.request?.url;
     if (!url) continue;
-    const contentSize = (entry.response?.content?.text || "").length;
+    const text = entry.response?.content?.text || "";
+    const contentSize = text.length;
     const transferSize =
       entry.response?.content?.size ??
       entry.response?.bodySize ??
       contentSize;
-    map.set(url, {
+    const category = classifyUrl(url);
+    const info = {
       url,
       method: entry.request.method,
       status: entry.response?.status,
       contentSize,
       transferSize: Math.max(0, transferSize),
-      category: classifyUrl(url),
+      category,
       component: extractComponentName(url),
-    });
+      fingerprint: null,
+    };
+    if (category === "js") {
+      info.fingerprint = extractBundleFingerprint(text);
+    }
+    map.set(url, info);
   }
   return map;
 }
@@ -155,6 +144,40 @@ function shortUrl(url) {
   } catch {
     return url;
   }
+}
+
+function filenameOf(url) {
+  try {
+    return new URL(url).pathname.split("/").pop();
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Build a human-readable label for a JS bundle from its fingerprint.
+ * Prefers __name values; falls back to "entry (core)" or null.
+ */
+function bundleLabel(info) {
+  const fp = info.fingerprint;
+  if (!fp) return shortUrl(info.url);
+  if (fp.isEntry) return "entry (core)";
+  if (fp.names.size === 0) return null;
+  const sorted = [...fp.names].sort();
+  if (sorted.length <= 3) return sorted.join(", ");
+  return `${sorted.slice(0, 3).join(", ")} +${sorted.length - 3} more`;
+}
+
+/**
+ * Compute Jaccard similarity between two sets.
+ */
+function jaccard(a, b) {
+  if (a.size === 0 && b.size === 0) return 0;
+  let intersection = 0;
+  for (const v of a) {
+    if (b.has(v)) intersection++;
+  }
+  return intersection / (a.size + b.size - intersection);
 }
 
 // --- News scraping ---
@@ -217,101 +240,211 @@ function filterRelevantPosts(posts, oldVer, newVer) {
   return posts.filter((p) => p.versionRefs.some((v) => v > lo && v <= hi));
 }
 
-// --- Diff logic ---
+// --- JS bundle matching ---
 
-function computeDiff(oldMap, newMap) {
-  const changes = { js: [], css: [] };
+/**
+ * Match JS bundles between old and new HAR snapshots using content fingerprints.
+ *
+ * Matching phases:
+ *  1. Exact URL match (hash unchanged)
+ *  2. __name fingerprint — exact set match
+ *  3. __name fingerprint — best Jaccard overlap (>0.5 threshold)
+ *  4. Import-signature match for nameless utility chunks
+ *  5. Remaining bundles are unmatched (added/removed)
+ */
+function matchJsBundles(oldMap, newMap) {
+  const oldJs = [...oldMap.values()].filter((e) => e.category === "js");
+  const newJs = [...newMap.values()].filter((e) => e.category === "js");
+
+  const matched = [];
   const oldMatched = new Set();
   const newMatched = new Set();
 
-  // Group named components by (category, componentName)
-  const oldByComponent = new Map();
-  const newByComponent = new Map();
-
-  for (const [url, info] of oldMap) {
-    if (
-      info.component !== null &&
-      (info.category === "js" || info.category === "css")
-    ) {
-      const key = `${info.category}:${info.component}`;
-      if (!oldByComponent.has(key)) oldByComponent.set(key, []);
-      oldByComponent.get(key).push({ url, ...info });
-    }
+  function markMatch(oldInfo, newInfo) {
+    oldMatched.add(oldInfo.url);
+    newMatched.add(newInfo.url);
+    matched.push({ old: oldInfo, new: newInfo });
   }
-  for (const [url, info] of newMap) {
-    if (
-      info.component !== null &&
-      (info.category === "js" || info.category === "css")
-    ) {
-      const key = `${info.category}:${info.component}`;
-      if (!newByComponent.has(key)) newByComponent.set(key, []);
-      newByComponent.get(key).push({ url, ...info });
+
+  // Phase 1: Exact URL match (same hash — unchanged bundle)
+  for (const oldInfo of oldJs) {
+    const newInfo = newMap.get(oldInfo.url);
+    if (newInfo && newInfo.category === "js") {
+      markMatch(oldInfo, newInfo);
     }
   }
 
-  const allComponentKeys = new Set([
-    ...oldByComponent.keys(),
-    ...newByComponent.keys(),
-  ]);
+  // Phase 2: Exact __name set match
+  const unmatchedNew = () => newJs.filter((e) => !newMatched.has(e.url));
+  const unmatchedOld = () => oldJs.filter((e) => !oldMatched.has(e.url));
 
-  for (const key of allComponentKeys) {
-    const [cat] = key.split(":");
-    const component = key.split(":").slice(1).join(":");
-    const oldEntries = oldByComponent.get(key) || [];
-    const newEntries = newByComponent.get(key) || [];
+  const newByNameKey = new Map();
+  for (const info of unmatchedNew()) {
+    const fp = info.fingerprint;
+    if (!fp || fp.names.size === 0) continue;
+    const key = [...fp.names].sort().join("\0");
+    if (!newByNameKey.has(key)) newByNameKey.set(key, []);
+    newByNameKey.get(key).push(info);
+  }
 
-    for (const e of oldEntries) oldMatched.add(e.url);
-    for (const e of newEntries) newMatched.add(e.url);
+  for (const oldInfo of unmatchedOld()) {
+    if (oldMatched.has(oldInfo.url)) continue;
+    const fp = oldInfo.fingerprint;
+    if (!fp || fp.names.size === 0) continue;
+    const key = [...fp.names].sort().join("\0");
+    const candidates = newByNameKey.get(key);
+    if (candidates) {
+      const pick = candidates.find((c) => !newMatched.has(c.url));
+      if (pick) markMatch(oldInfo, pick);
+    }
+  }
+
+  // Phase 3: Best Jaccard overlap for remaining named bundles
+  const stillUnmatchedOld = unmatchedOld().filter(
+    (e) => e.fingerprint?.names.size > 0
+  );
+  const stillUnmatchedNew = unmatchedNew().filter(
+    (e) => e.fingerprint?.names.size > 0
+  );
+
+  const pairs = [];
+  for (const o of stillUnmatchedOld) {
+    for (const n of stillUnmatchedNew) {
+      const sim = jaccard(o.fingerprint.names, n.fingerprint.names);
+      if (sim > 0.5) pairs.push({ old: o, new: n, sim });
+    }
+  }
+  pairs.sort((a, b) => b.sim - a.sim);
+  for (const pair of pairs) {
+    if (oldMatched.has(pair.old.url) || newMatched.has(pair.new.url)) continue;
+    markMatch(pair.old, pair.new);
+  }
+
+  // Phase 4: Import-signature match for nameless bundles.
+  // Signature = set of labels of matched bundles that import this chunk.
+  const oldFilenameToLabel = new Map();
+  const newFilenameToLabel = new Map();
+  for (const m of matched) {
+    const label = bundleLabel(m.new) || bundleLabel(m.old) || "?";
+    oldFilenameToLabel.set(filenameOf(m.old.url), label);
+    newFilenameToLabel.set(filenameOf(m.new.url), label);
+  }
+
+  function importSignature(info, allJs, filenameToLabel) {
+    const myFilename = filenameOf(info.url);
+    const labels = new Set();
+    for (const other of allJs) {
+      if (!other.fingerprint) continue;
+      if (other.fingerprint.imports.has(myFilename)) {
+        const otherFilename = filenameOf(other.url);
+        const label = filenameToLabel.get(otherFilename);
+        if (label) labels.add(label);
+      }
+    }
+    return labels.size > 0 ? [...labels].sort().join("\0") : null;
+  }
+
+  const namelessOld = unmatchedOld().filter(
+    (e) => e.fingerprint && e.fingerprint.names.size === 0
+  );
+  const namelessNew = unmatchedNew().filter(
+    (e) => e.fingerprint && e.fingerprint.names.size === 0
+  );
+
+  const newBySig = new Map();
+  for (const info of namelessNew) {
+    const sig = importSignature(info, newJs, newFilenameToLabel);
+    if (!sig) continue;
+    if (!newBySig.has(sig)) newBySig.set(sig, []);
+    newBySig.get(sig).push(info);
+  }
+
+  for (const oldInfo of namelessOld) {
+    if (oldMatched.has(oldInfo.url)) continue;
+    const sig = importSignature(oldInfo, oldJs, oldFilenameToLabel);
+    if (!sig) continue;
+    const candidates = newBySig.get(sig);
+    if (!candidates) continue;
+    const available = candidates.filter((c) => !newMatched.has(c.url));
+    if (available.length === 0) continue;
+    // Pick closest by size among same-signature candidates
+    available.sort(
+      (a, b) =>
+        Math.abs(a.contentSize - oldInfo.contentSize) -
+        Math.abs(b.contentSize - oldInfo.contentSize)
+    );
+    markMatch(oldInfo, available[0]);
+  }
+
+  return {
+    matched,
+    unmatchedOld: unmatchedOld(),
+    unmatchedNew: unmatchedNew(),
+  };
+}
+
+// --- CSS diff (filename-based matching) ---
+
+function computeCssDiff(oldMap, newMap) {
+  const changes = [];
+  const oldCss = [...oldMap.values()].filter((e) => e.category === "css");
+  const newCss = [...newMap.values()].filter((e) => e.category === "css");
+  const oldCssMatched = new Set();
+  const newCssMatched = new Set();
+
+  const oldByComp = new Map();
+  const newByComp = new Map();
+  for (const info of oldCss) {
+    if (info.component !== null) {
+      if (!oldByComp.has(info.component)) oldByComp.set(info.component, []);
+      oldByComp.get(info.component).push(info);
+    }
+  }
+  for (const info of newCss) {
+    if (info.component !== null) {
+      if (!newByComp.has(info.component)) newByComp.set(info.component, []);
+      newByComp.get(info.component).push(info);
+    }
+  }
+
+  for (const component of new Set([...oldByComp.keys(), ...newByComp.keys()])) {
+    const oldEntries = oldByComp.get(component) || [];
+    const newEntries = newByComp.get(component) || [];
+    for (const e of oldEntries) oldCssMatched.add(e.url);
+    for (const e of newEntries) newCssMatched.add(e.url);
 
     if (oldEntries.length > 0 && newEntries.length > 0) {
       const oldUrls = new Set(oldEntries.map((e) => e.url));
-      const newUrls = new Set(newEntries.map((e) => e.url));
-      const same = [...oldUrls].every((u) => newUrls.has(u));
+      const same = [...oldUrls].every((u) => newEntries.some((n) => n.url === u));
       if (!same) {
         const oldSize = oldEntries.reduce((s, e) => s + e.contentSize, 0);
         const newSize = newEntries.reduce((s, e) => s + e.contentSize, 0);
-        changes[cat].push({
-          type: "changed",
-          name: component,
-          oldSize,
-          newSize,
-        });
+        changes.push({ type: "changed", name: component, oldSize, newSize });
       }
     } else if (newEntries.length > 0) {
       const size = newEntries.reduce((s, e) => s + e.contentSize, 0);
-      changes[cat].push({ type: "added", name: component, newSize: size });
+      changes.push({ type: "added", name: component, newSize: size });
     } else {
       const size = oldEntries.reduce((s, e) => s + e.contentSize, 0);
-      changes[cat].push({ type: "removed", name: component, oldSize: size });
+      changes.push({ type: "removed", name: component, oldSize: size });
     }
   }
 
-  // Anonymous chunks — match by exact URL
-  for (const [url, info] of oldMap) {
-    if (oldMatched.has(url)) continue;
-    if (info.category !== "js" && info.category !== "css") continue;
-    oldMatched.add(url);
-    if (newMap.has(url)) {
-      newMatched.add(url);
-    } else {
-      changes[info.category].push({
-        type: "removed",
-        name: shortUrl(url),
-        oldSize: info.contentSize,
-      });
+  // Anonymous CSS — match by exact URL
+  for (const info of oldCss) {
+    if (oldCssMatched.has(info.url)) continue;
+    oldCssMatched.add(info.url);
+    if (!newMap.has(info.url)) {
+      changes.push({ type: "removed", name: shortUrl(info.url), oldSize: info.contentSize });
     }
   }
-  for (const [url, info] of newMap) {
-    if (newMatched.has(url)) continue;
-    if (info.category !== "js" && info.category !== "css") continue;
-    newMatched.add(url);
-    changes[info.category].push({
-      type: "added",
-      name: shortUrl(url),
-      newSize: info.contentSize,
-    });
+  for (const info of newCss) {
+    if (newCssMatched.has(info.url)) continue;
+    newCssMatched.add(info.url);
+    if (!oldMap.has(info.url)) {
+      changes.push({ type: "added", name: shortUrl(info.url), newSize: info.contentSize });
+    }
   }
-
   return changes;
 }
 
@@ -328,15 +461,15 @@ function renderChangesTable(items, label) {
   for (const item of items) {
     const marker =
       item.type === "added"
-        ? "✚ added"
+        ? "\u271a added"
         : item.type === "removed"
-          ? "✕ removed"
-          : "△ changed";
+          ? "\u2715 removed"
+          : "\u25b3 changed";
     let sizeStr;
     if (item.type === "added") sizeStr = formatSize(item.newSize);
     else if (item.type === "removed") sizeStr = formatSize(item.oldSize);
     else
-      sizeStr = `${formatSize(item.oldSize)} → ${formatSize(item.newSize)}`;
+      sizeStr = `${formatSize(item.oldSize)} \u2192 ${formatSize(item.newSize)}`;
     lines.push(`| ${marker} | \`${item.name}\` | ${sizeStr} |`);
   }
   lines.push("");
@@ -386,8 +519,8 @@ async function main() {
 
   // Header
   if (hasOld && oldVersion && newVersion && oldVersion !== newVersion) {
-    lines.push(`## NR Snapshot: v${oldVersion} → v${newVersion}`, "");
-    lines.push(`**Client version:** ${oldVersion} → ${newVersion}`);
+    lines.push(`## NR Snapshot: v${oldVersion} \u2192 v${newVersion}`, "");
+    lines.push(`**Client version:** ${oldVersion} \u2192 ${newVersion}`);
   } else if (newVersion) {
     lines.push(`## NR Snapshot: v${newVersion}`, "");
     lines.push(`**Client version:** ${newVersion}`);
@@ -407,10 +540,10 @@ async function main() {
     );
     const entryDelta = newMap.size - oldMap.size;
     lines.push(
-      `**HAR entries:** ${oldMap.size} → ${newMap.size} (${entryDelta >= 0 ? "+" : ""}${entryDelta})`
+      `**HAR entries:** ${oldMap.size} \u2192 ${newMap.size} (${entryDelta >= 0 ? "+" : ""}${entryDelta})`
     );
     lines.push(
-      `**Total size:** ${formatSize(oldTotal)} → ${formatSize(newTotal)} (${formatDelta(newTotal - oldTotal)})`
+      `**Total size:** ${formatSize(oldTotal)} \u2192 ${formatSize(newTotal)} (${formatDelta(newTotal - oldTotal)})`
     );
   } else {
     lines.push(`**HAR entries:** ${newMap.size}`);
@@ -421,9 +554,67 @@ async function main() {
   if (!hasOld) {
     lines.push("_No previous snapshot available for comparison._");
   } else {
-    const changes = computeDiff(oldMap, newMap);
-    lines.push(...renderChangesTable(changes.js, "JS bundles"));
-    lines.push(...renderChangesTable(changes.css, "CSS"));
+    // JS diff with fingerprint matching
+    const { matched, unmatchedOld, unmatchedNew } = matchJsBundles(oldMap, newMap);
+
+    const jsChanges = [];
+    let unchangedNamedCount = 0;
+    let unchangedNamedSize = 0;
+    let unchangedUtilCount = 0;
+    let unchangedUtilSize = 0;
+
+    for (const m of matched) {
+      const urlSame = m.old.url === m.new.url;
+      const sizeSame = m.old.contentSize === m.new.contentSize;
+      const label = bundleLabel(m.new) || bundleLabel(m.old);
+
+      if (urlSame && sizeSame) {
+        if (label) {
+          unchangedNamedCount++;
+          unchangedNamedSize += m.new.contentSize;
+        } else {
+          unchangedUtilCount++;
+          unchangedUtilSize += m.new.contentSize;
+        }
+        continue;
+      }
+
+      const displayName = label || `shared utility (${shortUrl(m.old.url)})`;
+      jsChanges.push({
+        type: "changed",
+        name: displayName,
+        oldSize: m.old.contentSize,
+        newSize: m.new.contentSize,
+      });
+    }
+
+    for (const info of unmatchedNew) {
+      const label = bundleLabel(info) || shortUrl(info.url);
+      jsChanges.push({ type: "added", name: label, newSize: info.contentSize });
+    }
+
+    for (const info of unmatchedOld) {
+      const label = bundleLabel(info) || shortUrl(info.url);
+      jsChanges.push({ type: "removed", name: label, oldSize: info.contentSize });
+    }
+
+    lines.push(...renderChangesTable(jsChanges, "JS bundles"));
+
+    // Summary of unchanged bundles
+    const unchangedParts = [];
+    if (unchangedNamedCount > 0)
+      unchangedParts.push(`${unchangedNamedCount} named bundles (${formatSize(unchangedNamedSize)})`);
+    if (unchangedUtilCount > 0)
+      unchangedParts.push(`${unchangedUtilCount} shared utilities (${formatSize(unchangedUtilSize)})`);
+    if (unchangedParts.length > 0) {
+      lines.push(`_Unchanged JS: ${unchangedParts.join(", ")}_`, "");
+    }
+
+    // CSS diff
+    const cssChanges = computeCssDiff(oldMap, newMap);
+    lines.push(...renderChangesTable(cssChanges, "CSS"));
+
+    // Other categories
     lines.push(...renderOtherCategories(oldMap, newMap));
   }
 
@@ -452,7 +643,66 @@ async function main() {
   console.log(lines.join("\n"));
 }
 
-main().catch((err) => {
-  console.error("har-diff error:", err.message);
-  process.exit(1);
-});
+// --- Exports for testing ---
+
+export {
+  classifyUrl,
+  extractComponentName,
+  extractBundleFingerprint,
+  parseHar,
+  formatSize,
+  formatDelta,
+  bundleLabel,
+  jaccard,
+  matchJsBundles,
+  computeCssDiff,
+  renderChangesTable,
+  renderOtherCategories,
+};
+
+// Run main() only when executed directly (not imported).
+const isMain =
+  process.argv[1] &&
+  import.meta.url ===
+    new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`)
+      .href;
+if (isMain) {
+  // --- CLI parsing ---
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case "--old":
+        oldPath = args[++i];
+        break;
+      case "--new":
+        newPath = args[++i];
+        break;
+      case "--old-version":
+        oldVersion = args[++i];
+        break;
+      case "--new-version":
+        newVersion = args[++i];
+        break;
+      case "--news-url":
+        newsUrl = args[++i];
+        break;
+      case "--no-news":
+        skipNews = true;
+        break;
+      case "-h":
+      case "--help":
+        console.log(
+          `Usage: node scripts/har-diff.mjs --old <old.har> --new <new.har> [--old-version X] [--new-version Y] [--news-url URL] [--no-news]`
+        );
+        process.exit(0);
+    }
+  }
+  if (!newPath) {
+    console.error("Error: --new <path> is required");
+    process.exit(1);
+  }
+  main().catch((err) => {
+    console.error("har-diff error:", err.message);
+    process.exit(1);
+  });
+}
