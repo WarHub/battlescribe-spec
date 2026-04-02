@@ -383,15 +383,38 @@ describe("renderChangesTable", () => {
       { type: "removed", name: "Baz", oldSize: 256 },
     ];
     const lines = renderChangesTable(items, "JS bundles");
-    assert.ok(lines.some((l) => l.includes("JS bundles")));
-    assert.ok(lines.some((l) => l.includes("Foo")));
-    assert.ok(lines.some((l) => l.includes("Bar")));
-    assert.ok(lines.some((l) => l.includes("Baz")));
+    const text = lines.join("\n");
+
+    // Heading includes counts
+    assert.ok(text.includes("JS bundles (~1 changed, +1 added, -1 removed)"));
+
+    // Wrapped in details/summary
+    assert.ok(text.includes("<details><summary>"));
+    assert.ok(text.includes("</details>"));
+
+    // Summary line has compact counts
+    assert.ok(text.includes("<summary>~1 changed, +1 added, -1 removed</summary>"));
+
+    // Table content present
+    assert.ok(text.includes("Foo"));
+    assert.ok(text.includes("Bar"));
+    assert.ok(text.includes("Baz"));
+
     // Added should come first in sorted output
     const barLine = lines.findIndex((l) => l.includes("Bar"));
     const fooLine = lines.findIndex((l) => l.includes("Foo"));
     const bazLine = lines.findIndex((l) => l.includes("Baz"));
     assert.ok(barLine < fooLine, "added before changed");
     assert.ok(fooLine < bazLine, "changed before removed");
+  });
+
+  it("renders counts correctly for single type", () => {
+    const items = [
+      { type: "changed", name: "A", oldSize: 100, newSize: 200 },
+      { type: "changed", name: "B", oldSize: 300, newSize: 400 },
+    ];
+    const text = renderChangesTable(items, "CSS").join("\n");
+    assert.ok(text.includes("CSS (~2 changed)"));
+    assert.ok(text.includes("<summary>~2 changed</summary>"));
   });
 });

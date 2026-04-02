@@ -64,6 +64,11 @@ jobs:
           if [ "$NEW" = "$OLD" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No changes detected — snapshot is identical."
+            {
+              echo "## NR Snapshot Update"
+              echo ""
+              echo "No changes detected — snapshot is identical to the current release (\`${{ steps.current.outputs.current_tag }}\`)."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Changes detected — new snapshot needed."
@@ -157,6 +162,7 @@ jobs:
 
       - name: Open or update PR
         if: steps.check.outputs.changed == 'true'
+        id: pr
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ steps.app-token.outputs.token }}
@@ -168,3 +174,24 @@ jobs:
             Release: https://github.com/WarHub/newrecruit-har/releases/tag/${{ steps.tag.outputs.new_tag }}
           title: "Update NR snapshot to ${{ steps.tag.outputs.new_tag }}"
           body-path: .har-staging/summary.md
+
+      - name: Write job summary
+        if: steps.check.outputs.changed == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.new_tag }}
+          VERSION: ${{ steps.record.outputs.client_version }}
+          OLD_TAG: ${{ steps.current.outputs.current_tag }}
+          PR_URL: ${{ steps.pr.outputs.pull-request-url }}
+        run: |
+          {
+            echo "## NR Snapshot Updated: $TAG"
+            echo ""
+            echo "**Client version:** $VERSION"
+            echo "**Previous release:** [\`$OLD_TAG\`](https://github.com/WarHub/newrecruit-har/releases/tag/$OLD_TAG)"
+            echo "**New release:** [\`$TAG\`](https://github.com/WarHub/newrecruit-har/releases/tag/$TAG)"
+            if [ -n "$PR_URL" ]; then
+              echo "**Pull request:** $PR_URL"
+            fi
+            echo ""
+            cat .har-staging/summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
