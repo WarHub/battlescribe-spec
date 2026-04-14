@@ -20,10 +20,19 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.WARHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
+          owner: WarHub
+          repositories: newrecruit-har
+
       - name: Setup dependencies
         run: pwsh ./setup.ps1 -SkipPlaywright
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Restore dependencies
         run: dotnet restore
@@ -63,10 +72,19 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.WARHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
+          owner: WarHub
+          repositories: newrecruit-har
+
       - name: Setup dependencies
         run: pwsh ./setup.ps1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Build
         run: dotnet build
@@ -88,10 +106,19 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.WARHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
+          owner: WarHub
+          repositories: newrecruit-har
+
       - name: Setup dependencies
         run: pwsh ./setup.ps1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Build
         run: dotnet build
