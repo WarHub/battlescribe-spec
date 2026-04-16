@@ -17,7 +17,6 @@ setup:
         - id: se-base-1
           name: Shared Unit
           type: unit
-          import: true
         - id: se-base-2
           name: Internal Unit
           type: unit
@@ -29,7 +28,6 @@ setup:
         - id: cl-1
           name: Base Catalogue
           targetId: cat-base
-          importRootEntries: true
       selectionEntries:
         - id: se-faction-1
           name: Faction Unit

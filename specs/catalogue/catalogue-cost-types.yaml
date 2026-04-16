@@ -10,7 +10,6 @@ setup:
     costTypes:
       - id: pts
         name: pts
-        defaultCostLimit: -1
     forceEntries:
       - id: fe-1
         name: Detachment
@@ -21,7 +20,6 @@ setup:
       costTypes:
         - id: cat-pts
           name: cat pts
-          defaultCostLimit: -1
       selectionEntries:
         - id: se-1
           name: Marine

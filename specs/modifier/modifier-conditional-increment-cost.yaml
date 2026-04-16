@@ -9,7 +9,6 @@ setup:
     costTypes:
       - id: pts
         name: Points
-        defaultCostLimit: -1.0
     forceEntries:
       - id: fe-patrol
         name: Patrol

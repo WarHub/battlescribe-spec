@@ -19,7 +19,6 @@ setup:
           - id: cl-troops
             targetId: cat-troops
             name: Troops
-            primary: false
 
   catalogues:
     - id: cat-1

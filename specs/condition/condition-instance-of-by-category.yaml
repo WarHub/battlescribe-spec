@@ -20,7 +20,6 @@ setup:
           - id: cl-fe-hq
             targetId: cat-hq
             name: HQ
-            primary: false
   catalogues:
     - id: cat-1
       name: Test Catalogue

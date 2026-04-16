@@ -10,10 +10,8 @@ setup:
     costTypes:
       - id: pts
         name: pts
-        defaultCostLimit: -1
       - id: cp
         name: CP
-        defaultCostLimit: -1
         hidden: true
     forceEntries:
       - id: fe-1

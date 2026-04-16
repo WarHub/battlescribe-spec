@@ -9,13 +9,10 @@ setup:
     costTypes:
       - id: pts
         name: Points
-        defaultCostLimit: -1
       - id: pl
         name: Power Level
-        defaultCostLimit: -1
       - id: cp
         name: Command Points
-        defaultCostLimit: -1
     forceEntries:
       - id: fe-1
         name: Detachment

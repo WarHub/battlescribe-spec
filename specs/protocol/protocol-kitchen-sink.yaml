@@ -14,12 +14,9 @@ setup:
     costTypes:
       - id: ct-pts
         name: pts
-        defaultCostLimit: -1
-        hidden: false
         limit: true
       - id: ct-power
         name: power
-        defaultCostLimit: -1
         hidden: true
         limit: false
     profileTypes:
@@ -63,15 +60,12 @@ setup:
           - id: cl-fe-hq
             targetId: cat-hq
             name: HQ
-            primary: false
           - id: cl-fe-troops
             targetId: cat-troops
             name: Troops
-            primary: false
           - id: cl-fe-elites
             targetId: cat-elites
             name: Elites
-            primary: false
         constraints:
           - id: con-fe-max-3
             type: max
