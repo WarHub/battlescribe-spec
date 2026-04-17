@@ -77,6 +77,17 @@ public sealed class SpecRunner
         {
             _errors.Add($"Setup failed: {ex.GetType().Name}: {ex.Message}");
         }
+        finally
+        {
+            try
+            {
+                _engine.Cleanup();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[SpecRunner] Cleanup error after spec '{spec.Id}': {ex.Message}");
+            }
+        }
 
         return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
     }

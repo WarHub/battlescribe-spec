@@ -69,6 +69,16 @@ public interface IRosterEngine : IDisposable
     /// </summary>
     IReadOnlyList<ValidationErrorState> GetValidationErrors();
 
+    // ===== Lifecycle =====
+
+    /// <summary>
+    /// Clean up engine state after a spec run completes.
+    /// Called by the SpecRunner in a finally block after each spec.
+    /// Engines that maintain state across Setup() calls (e.g. browser-based)
+    /// should override this to release resources like rosters.
+    /// </summary>
+    void Cleanup() { }
+
     // ===== DataSource support (file-based setup + name-based actions) =====
 
     /// <summary>
