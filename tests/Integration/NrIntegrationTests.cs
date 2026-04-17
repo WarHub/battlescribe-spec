@@ -153,7 +153,7 @@ public sealed class NrIntegrationTests
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
-        var validationErrors= _fixture.Engine.GetValidationErrors();
+        var validationErrors = _fixture.Engine.GetValidationErrors();
         _output.WriteLine($"Validation errors: {validationErrors.Count}");
         foreach (var err in validationErrors)
             _output.WriteLine($"  - {err}");
