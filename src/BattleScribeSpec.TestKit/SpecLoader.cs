@@ -15,6 +15,11 @@ public static class SpecLoader
         .Build();
 
     /// <summary>
+    /// Tag that opts a spec out of setup ID uniqueness validation.
+    /// </summary>
+    public const string DuplicateIdsTag = "duplicate-ids";
+
+    /// <summary>
     /// Load a single spec file.
     /// </summary>
     public static SpecFile Load(string yamlPath)
@@ -23,6 +28,7 @@ public static class SpecLoader
         var spec = Deserializer.Deserialize<SpecFile>(yaml);
         if (string.IsNullOrEmpty(spec.Id))
             spec.Id = Path.GetFileNameWithoutExtension(yamlPath);
+        ValidateIdUniqueness(spec);
         return spec;
     }
 
@@ -54,6 +60,7 @@ public static class SpecLoader
         var spec = Deserializer.Deserialize<SpecFile>(yaml);
         if (string.IsNullOrEmpty(spec.Id) && defaultId is not null)
             spec.Id = defaultId;
+        ValidateIdUniqueness(spec);
         return spec;
     }
 
@@ -124,5 +131,12 @@ public static class SpecLoader
             throw new InvalidOperationException("Setup requires 'catalogues' with at least one catalogue.");
 
         return (setup.GameSystem, catalogues.ToArray());
+    }
+
+    private static void ValidateIdUniqueness(SpecFile spec)
+    {
+        if (spec.Tags?.Contains(DuplicateIdsTag) == true)
+            return;
+        SetupIdValidator.Validate(spec.Setup, spec.Id);
     }
 }
