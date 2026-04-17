@@ -26,15 +26,9 @@ description: >
 | **Task** | A concrete, implementable piece of work. |
 | **Bug** | Something broken that needs fixing. |
 
-Issue types are set via GraphQL (no `gh issue` flag exists):
-```powershell
-# Set type (get issue node ID first via: repository(owner,name) { issue(number) { id } })
-gh api graphql -f query='mutation { updateIssue(input: {
-  id: "ISSUE_NODE_ID", issueTypeId: "IT_xxx"
-}) { issue { title issueType { name } } } }'
-```
+Set via `updateIssue` GraphQL mutation (see **gh-cli** skill for syntax).
 
-Type IDs (WarHub org):
+WarHub org Type IDs:
 | Type | ID |
 |------|------|
 | Task | `IT_kwDOAGQzxM4ACWa6` |
@@ -84,39 +78,32 @@ Remove-Item $tempFile
 
 ## Sub-issue management
 
-Add a sub-issue to an epic (get both node IDs first via `repository { issue(number) { id } }`):
-```powershell
-gh api graphql -f query='mutation { addSubIssue(input: {
-  issueId: "EPIC_NODE_ID", subIssueId: "CHILD_NODE_ID"
-}) { issue { number } subIssue { number } } }'
-```
+Use `addSubIssue` / `removeSubIssue` GraphQL mutations or the REST sub-issues
+API — see **gh-cli** skill (`issue-relationships.md`) for full syntax.
 
 After linking, **update the parent's body** to list the new sub-issue.
 
-### Checking parent completion
-
-After closing an issue that has a parent, check if all sibling sub-issues are
-also closed. If so, close the parent too:
-```powershell
-gh api graphql -f query='query { repository(owner: "WarHub", name: "battlescribe-spec") {
-  issue(number: PARENT_NUM) { subIssues(first: 100) { nodes { number state } } }
-} }'
-```
+After closing an issue with a parent, check if all siblings are closed too →
+close the parent if so. See [QUERYING-ISSUES.md](references/QUERYING-ISSUES.md)
+for the query.
 
 ## Triage workflow
 
 When grooming a batch of issues:
 
-1. **List open issues**: `gh issue list --repo WarHub/battlescribe-spec --state open --limit 100`
-2. **Check each issue's current labels and type** (see hierarchy reference)
-3. **Assess priority** using label criteria (see taxonomy above and [LABEL-TAXONOMY.md](references/LABEL-TAXONOMY.md))
-4. **Apply labels** via REST API
-5. **Set/verify issue type** via GraphQL
-6. **Link to parent epic** if applicable
-7. **Close completed issues** — check if all acceptance criteria are met
-8. **Check parent completion** — if a closed issue has a parent, check if all siblings are done too
+1. **Inventory**: `gh issue list --repo WarHub/battlescribe-spec --state open --limit 100` — cross-check labels, types, and parent links via GraphQL (see [QUERYING-ISSUES.md](references/QUERYING-ISSUES.md))
+2. **Classify**: Apply priority + area labels (REST API — see colon gotcha above), set issue type (GraphQL), link to parent epic
+3. **Close completed**: Verify acceptance criteria met; check if parent epic can be closed too
 
-## Reference files
+## Cross-references
 
-- [QUERYING-ISSUES.md](references/QUERYING-ISSUES.md) — GraphQL queries to discover epics, sub-issues, and current backlog state
+- **gh-cli** skill — GraphQL mutation syntax for issue types, sub-issues, blocking, and fields
+- [QUERYING-ISSUES.md](references/QUERYING-ISSUES.md) — GraphQL queries for discovering epics, sub-issues, and backlog state
 - [LABEL-TAXONOMY.md](references/LABEL-TAXONOMY.md) — Detailed label definitions and decision guide
+
+## Self-Enhancement Triggers
+
+After completing a triage or issue-management task, check:
+1. Did I encounter an issue type or label not covered here? → Propose an update
+2. Did a GraphQL query fail or return unexpected results? → Note in QUERYING-ISSUES.md
+3. Did the user override my priority assessment? → Refine criteria in LABEL-TAXONOMY.md
