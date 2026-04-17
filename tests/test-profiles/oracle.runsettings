@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run Oracle engine conformance tests. -->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>FullyQualifiedName~SpecConformanceTests</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

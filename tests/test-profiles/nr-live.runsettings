@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run live New Recruit conformance + integration tests against https://newrecruit.eu -->
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <NR_ENGINE_URL>https://newrecruit.eu</NR_ENGINE_URL>
+    </EnvironmentVariables>
+    <TestCaseFilter>FullyQualifiedName~NewRecruitConformanceTests|FullyQualifiedName~NrIntegrationTests|FullyQualifiedName~NewRecruitSmokeTests</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

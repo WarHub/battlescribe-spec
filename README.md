@@ -137,6 +137,19 @@ dotnet test
 
 ### Running Specific Test Suites
 
+Use test profiles for one-command test runs:
+
+```bash
+dotnet test -p:TestProfile=nr-live          # live NR conformance + integration (sets NR_ENGINE_URL automatically)
+dotnet test -p:TestProfile=nr-live-visible   # same, with visible browser window
+dotnet test -p:TestProfile=nr-frozen         # frozen NR conformance (offline, needs ./setup.ps1)
+dotnet test -p:TestProfile=oracle            # Oracle engine conformance
+dotnet test -p:TestProfile=lint              # spec lint and structure checks
+```
+
+Profiles are `.runsettings` files in `tests/test-profiles/` — they set environment variables and test
+filters automatically. You can also run suites manually with `--filter`:
+
 | Suite | Command | Notes |
 |-------|---------|-------|
 | Oracle conformance | `dotnet test --filter "SpecConformanceTests"` | Always available |
