@@ -24,17 +24,41 @@ public sealed class NrIntegrationTests
         _fixture = fixture;
     }
 
+    private static ProtocolGameSystem CreateTestGameSystem() => new()
+    {
+        Id = "test-gs",
+        Name = "Age of Sigmar 4.0",
+        ForceEntries =
+        [
+            new ProtocolForceEntry { Id = "force-1", Name = "Test Force" }
+        ]
+    };
+
+    private static ProtocolCatalogue CreateTestCatalogue() => new()
+    {
+        Id = "cat-1",
+        Name = "Beasts of Chaos [LEGENDS]",
+        GameSystemId = "test-gs",
+        SelectionEntries =
+        [
+            new ProtocolSelectionEntry { Id = "entry-1", Name = "Test Unit", Type = "unit" }
+        ]
+    };
+
     [SkippableFact]
     public void Setup_CreatesRosterWithForce()
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Age of Sigmar 4.0" };
-        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Beasts of Chaos [LEGENDS]", GameSystemId = "test-gs" };
+        var gs = CreateTestGameSystem();
+        var cat = CreateTestCatalogue();
         var errors = _fixture.Engine!.Setup(gs, [cat]);
 
         _output.WriteLine($"Setup errors: [{string.Join(", ", errors)}]");
         Assert.Empty(errors);
+
+        // Setup creates a roster but removes auto-forces; add one explicitly
+        _fixture.Engine.AddForce(0);
 
         // Allow Pinia store to settle after setup — polling the state reader
         // will capture the latest snapshot once stable.
@@ -53,10 +77,12 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Age of Sigmar 4.0" };
-        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Beasts of Chaos [LEGENDS]", GameSystemId = "test-gs" };
+        var gs = CreateTestGameSystem();
+        var cat = CreateTestCatalogue();
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
+
+        _fixture.Engine.AddForce(0);
 
         var stateBefore = _fixture.Engine.GetRosterState();
         var selsBefore = stateBefore.Forces[0].Selections.Count;
@@ -90,10 +116,12 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Age of Sigmar 4.0" };
-        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Beasts of Chaos [LEGENDS]", GameSystemId = "test-gs" };
+        var gs = CreateTestGameSystem();
+        var cat = CreateTestCatalogue();
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
+
+        _fixture.Engine.AddForce(0);
 
         // Select an entry to have a non-default selection
         _fixture.Engine.SelectEntry(0, 0);
@@ -120,12 +148,12 @@ public sealed class NrIntegrationTests
     {
         Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
 
-        var gs = new ProtocolGameSystem { Id = "test-gs", Name = "Age of Sigmar 4.0" };
-        var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Beasts of Chaos [LEGENDS]", GameSystemId = "test-gs" };
+        var gs = CreateTestGameSystem();
+        var cat = CreateTestCatalogue();
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
-        var validationErrors = _fixture.Engine.GetValidationErrors();
+        var validationErrors= _fixture.Engine.GetValidationErrors();
         _output.WriteLine($"Validation errors: {validationErrors.Count}");
         foreach (var err in validationErrors)
             _output.WriteLine($"  - {err}");
