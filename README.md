@@ -154,7 +154,7 @@ filters automatically. You can also run suites manually with `--filter`:
 |-------|---------|-------|
 | Oracle conformance | `dotnet test --filter "SpecConformanceTests"` | Always available |
 | Frozen NR conformance | `dotnet test --filter "FrozenNewRecruitConformanceTests"` | Requires `./setup.ps1` (downloads HAR snapshot) |
-| Live NR conformance | `dotnet test --filter "NewRecruitConformanceTests"` | Requires `NR_ENGINE_URL` env var (see below) |
+| Live NR conformance | `dotnet test --filter "NewRecruitConformanceTests"` | Requires `NR_ENGINE_URL` env var + `./setup.ps1` (installs Playwright) |
 | Lint/formatting | `dotnet test --filter "SpecLintTests"` | Always available |
 | Real-world data | `dotnet test --filter "RealWorldData"` | Requires `./setup.ps1` (downloads wh40k-9e) |
 
