@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '0 8 * * 1'
+      timezone: Europe/Warsaw
 
 jobs:
   build-and-test:
@@ -95,7 +98,7 @@ jobs:
           NR_HEADLESS: true
 
   nr-conformance:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[nr-test]')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[nr-test]')
     runs-on: ubuntu-latest
 
     steps:
@@ -149,3 +152,79 @@ jobs:
         with:
           name: nr-conformance-report
           path: artifacts/nr-conformance-report.json
+
+  notify-failure:
+    if: >-
+      always()
+      && github.event_name == 'schedule'
+      && (
+        needs.build-and-test.result == 'failure'
+        || needs.script-tests.result == 'failure'
+        || needs.nr-frozen.result == 'failure'
+        || needs.nr-conformance.result == 'failure'
+      )
+    needs: [build-and-test, script-tests, nr-frozen, nr-conformance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Check for existing open issue
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh label create scheduled-ci-failure --color D93F0B --description "Auto-created by scheduled CI on failure" --force
+          $count = (gh issue list --label scheduled-ci-failure --state open --json number | ConvertFrom-Json).Count
+          "count=$count" >> $env:GITHUB_OUTPUT
+
+      - name: Find last non-bot committer
+        if: steps.existing.outputs.count == '0'
+        id: assignee
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $commits = gh api "repos/${{ github.repository }}/commits?per_page=20" | ConvertFrom-Json
+          $username = $commits |
+            Where-Object { $_.author -and $_.author.login -and $_.author.type -ne 'Bot' } |
+            Select-Object -First 1 -ExpandProperty author |
+            Select-Object -ExpandProperty login
+          "username=$username" >> $env:GITHUB_OUTPUT
+          Write-Host "Found assignee: $username"
+
+      - name: Create issue
+        if: steps.existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: pwsh
+        run: |
+          $failed = @()
+          if ('${{ needs.build-and-test.result }}' -eq 'failure') { $failed += 'build-and-test' }
+          if ('${{ needs.script-tests.result }}' -eq 'failure') { $failed += 'script-tests' }
+          if ('${{ needs.nr-frozen.result }}' -eq 'failure') { $failed += 'nr-frozen' }
+          if ('${{ needs.nr-conformance.result }}' -eq 'failure') { $failed += 'nr-conformance' }
+          $failedList = ($failed | ForEach-Object { "- $_" }) -join "`n"
+          $body = @"
+          ## Scheduled CI failure
+
+          The weekly scheduled CI run had failures.
+
+          **Failed jobs:**
+          $failedList
+
+          **Workflow run:** $env:RUN_URL
+
+          ---
+          _This issue was auto-created by the scheduled CI workflow.
+          Close it once the failures are resolved._
+          "@
+          $body = ($body -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
+          $title = "Scheduled CI failure — $(Get-Date -Format 'yyyy-MM-dd')"
+          $assignee = '${{ steps.assignee.outputs.username }}'
+          $ghArgs = @('issue', 'create', '--title', $title, '--body', $body, '--label', 'scheduled-ci-failure')
+          if ($assignee) { $ghArgs += '--assignee'; $ghArgs += $assignee }
+          & gh @ghArgs
