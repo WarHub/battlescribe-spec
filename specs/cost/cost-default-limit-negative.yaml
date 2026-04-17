@@ -1,0 +1,58 @@
+id: cost-default-limit-negative
+category: cost
+description: Any negative defaultCostLimit means "no cost limit" — not just -1
+tags: [cost, defaultCostLimit]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: ct-neg1
+        name: neg1
+      - id: ct-neg2
+        name: neg2
+        defaultCostLimit: -2
+      - id: ct-neg9999
+        name: neg9999
+        defaultCostLimit: -9999
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Expensive Unit
+          type: unit
+          costs:
+            - name: neg1
+              typeId: ct-neg1
+              value: 9999
+            - name: neg2
+              typeId: ct-neg2
+              value: 9999
+            - name: neg9999
+              typeId: ct-neg9999
+              value: 9999
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # All three cost types have negative defaultCostLimit (omitted=-1, -2, -9999).
+  # Any negative value means "no limit" — no validation errors despite high cost.
+  - expectedState:
+      costs:
+        - typeId: ct-neg1
+          value: 9999
+        - typeId: ct-neg2
+          value: 9999
+        - typeId: ct-neg9999
+          value: 9999
