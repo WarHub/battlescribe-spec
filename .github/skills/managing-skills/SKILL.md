@@ -165,6 +165,7 @@ are for deep dives, not prerequisites.
 | `oracle-engine` | IKVM Java interop engine | JAVA-MODEL-FACTORY.md |
 | `newrecruit-adapter` | Playwright browser adapter | STATE-EXTRACTION.md |
 | `managing-skills` | This skill — creating/updating skills | SKILL-TEMPLATE.md |
+| `managing-backlog` | Issue triage, labels, hierarchy, grooming | ISSUE-HIERARCHY.md, LABEL-TAXONOMY.md |
 
 ## Reference files
 
