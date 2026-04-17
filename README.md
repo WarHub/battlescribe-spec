@@ -135,6 +135,45 @@ dotnet build
 dotnet test
 ```
 
+### Running Specific Test Suites
+
+Use test profiles for one-command test runs:
+
+```bash
+dotnet test -p:TestProfile=nr-live          # live NR conformance + integration (sets NR_ENGINE_URL automatically)
+dotnet test -p:TestProfile=nr-live-visible   # same, with visible browser window
+dotnet test -p:TestProfile=nr-frozen         # frozen NR conformance (offline, needs ./setup.ps1)
+dotnet test -p:TestProfile=oracle            # Oracle engine conformance
+dotnet test -p:TestProfile=lint              # spec lint and structure checks
+```
+
+Profiles are `.runsettings` files in `tests/test-profiles/` — they set environment variables and test
+filters automatically. You can also run suites manually with `--filter`:
+
+| Suite | Command | Notes |
+|-------|---------|-------|
+| Oracle conformance | `dotnet test --filter "SpecConformanceTests"` | Always available |
+| Frozen NR conformance | `dotnet test --filter "FrozenNewRecruitConformanceTests"` | Requires `./setup.ps1` (downloads HAR snapshot) |
+| Live NR conformance | `dotnet test --filter "NewRecruitConformanceTests"` | Requires `NR_ENGINE_URL` env var + `./setup.ps1` (installs Playwright) |
+| Lint/formatting | `dotnet test --filter "SpecLintTests"` | Always available |
+| Real-world data | `dotnet test --filter "RealWorldData"` | Requires `./setup.ps1` (downloads wh40k-9e) |
+
+### Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NR_ENGINE_URL` | Base URL for live New Recruit tests | `https://newrecruit.eu` |
+| `NR_HEADLESS` | Set to `false` to show the browser window | `false` |
+| `NR_FROZEN_SKIP` | Set to `true` to skip frozen NR tests | `true` |
+
+Example — run live NR conformance tests with visible browser:
+
+```powershell
+$env:NR_ENGINE_URL = "https://newrecruit.eu"
+$env:NR_HEADLESS = "false"
+dotnet test tests/BattleScribeSpec.Tests.csproj --filter "NewRecruitConformanceTests"
+```
+
 ### End-to-End Test
 
 ```bash
@@ -151,9 +190,9 @@ The project includes a [New Recruit](https://newrecruit.eu) adapter that tests N
 via Playwright browser automation. Two testing modes are available:
 
 - **Live** (`nr-conformance` CI job) — Tests against the live NR website. Triggered manually
-  or with `[nr-test]` in commit message. Requires `NR_ENGINE_URL` env var.
+  or with `[nr-test]` in commit message. Set `NR_ENGINE_URL=https://newrecruit.eu` to run locally.
 - **Frozen** (`nr-frozen` CI job) — Tests against a pre-recorded HAR snapshot, fully offline.
-  Runs automatically on every push. Snapshots stored in
+  Runs automatically on every push. Run `./setup.ps1` to download the snapshot. Snapshots stored in
   [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har).
 
 See [Frozen NR Testing](docs/frozen-nr-testing.md) for details on recording, publishing,

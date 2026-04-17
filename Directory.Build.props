@@ -5,4 +5,14 @@
     <Nullable>enable</Nullable>
     <UseArtifactsOutput>true</UseArtifactsOutput>
   </PropertyGroup>
+
+  <!-- Test profiles: dotnet test -p:TestProfile=nr-live -->
+  <PropertyGroup Condition="'$(TestProfile)' != ''">
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)tests\test-profiles\$(TestProfile).runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+
+  <Target Name="_ValidateTestProfile" BeforeTargets="VSTest" Condition="'$(TestProfile)' != '' AND '$(IsTestProject)' == 'true'">
+    <Error Text="Unknown test profile '$(TestProfile)'. Available profiles: $(MSBuildThisFileDirectory)tests\test-profiles\*.runsettings"
+           Condition="!Exists('$(RunSettingsFilePath)')" />
+  </Target>
 </Project>
