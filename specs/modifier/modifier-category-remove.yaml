@@ -17,7 +17,6 @@ setup:
           - id: cl-fe-elite
             targetId: cat-elite
             name: Elites
-            primary: false
   catalogues:
     - id: cat-1
       name: Cat
@@ -30,7 +29,6 @@ setup:
             - id: cl-1
               targetId: cat-elite
               name: Elites
-              primary: false
           modifiers:
             - type: remove
               field: category

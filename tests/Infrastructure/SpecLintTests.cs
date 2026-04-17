@@ -251,4 +251,43 @@ public sealed class SpecLintTests
         Assert.True(text.EndsWith('\n'),
             $"{specName}: file does not end with a newline");
     }
+
+    // ── No explicit defaults in setup ────────────────────────────────
+
+    private static readonly (string Pattern, string Description)[] DefaultValuePatterns =
+    [
+        ("primary: false", "primary defaults to false"),
+        ("defaultCostLimit: -1", "defaultCostLimit defaults to -1"),
+        ("hidden: false", "hidden defaults to false"),
+        ("import: true", "import defaults to true"),
+        ("importRootEntries: true", "importRootEntries defaults to true"),
+    ];
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void NoExplicitDefaultsInSetup(string specPath, string specName)
+    {
+        var lines = File.ReadAllLines(specPath);
+        var inExpectedState = false;
+        var violations = new List<string>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var stripped = lines[i].Trim();
+            if (stripped.StartsWith("- expectedState:"))
+                inExpectedState = true;
+            else if (stripped.StartsWith("- action:"))
+                inExpectedState = false;
+
+            if (inExpectedState)
+                continue;
+
+            foreach (var (pattern, description) in DefaultValuePatterns)
+            {
+                if (stripped == pattern)
+                    violations.Add($"line {i + 1}: '{pattern}' ({description})");
+            }
+        }
+        Assert.True(violations.Count == 0,
+            $"{specName}: explicit default values in setup (omit them):\n  {string.Join("\n  ", violations)}");
+    }
 }

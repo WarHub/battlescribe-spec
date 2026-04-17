@@ -10,7 +10,6 @@ setup:
     costTypes:
       - id: pts
         name: pts
-        defaultCostLimit: -1
     forceEntries:
       - id: fe-1
         name: Detachment

@@ -18,7 +18,6 @@ setup:
         - id: se-1
           name: Stealth Unit
           type: unit
-          hidden: false
           modifiers:
             - type: set
               field: hidden

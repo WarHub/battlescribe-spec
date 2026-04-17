@@ -20,7 +20,6 @@ setup:
           - id: cl-fe-troops
             targetId: cat-troops
             name: Troops
-            primary: false
   catalogues:
     - id: cat-1
       name: Test Catalogue

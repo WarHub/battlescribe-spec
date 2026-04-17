@@ -22,11 +22,9 @@ setup:
           - id: cl-troops
             targetId: cat-troops
             name: Troops
-            primary: false
           - id: cl-hidden
             targetId: cat-hidden
             name: Hidden Category
-            primary: false
 
   catalogues:
     - id: cat-1

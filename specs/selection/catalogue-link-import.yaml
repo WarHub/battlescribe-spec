@@ -24,7 +24,6 @@ setup:
         - id: cl-1
           name: Base Catalogue
           targetId: cat-base
-          importRootEntries: true
       selectionEntries:
         - id: se-faction-1
           name: Faction Unit

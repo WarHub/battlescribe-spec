@@ -21,11 +21,9 @@ setup:
           - id: cl-infantry
             targetId: cat-infantry
             name: Infantry
-            primary: false
           - id: cl-elites
             targetId: cat-elites
             name: Elites
-            primary: false
 
   catalogues:
     - id: cat-1
@@ -42,7 +40,6 @@ setup:
                 - id: cl-seg-elites
                   targetId: cat-elites
                   name: Elites
-                  primary: false
               selectionEntries:
                 - id: se-sword
                   name: Sword

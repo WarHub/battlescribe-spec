@@ -19,11 +19,9 @@ setup:
           - id: cl-fe-hq
             targetId: cat-hq
             name: HQ
-            primary: false
           - id: cl-fe-elite
             targetId: cat-elite
             name: Elites
-            primary: false
   catalogues:
     - id: cat-1
       name: Cat
