@@ -2,6 +2,7 @@ id: constraint-shared-linked
 category: constraint
 description: Shared constraint violation produces structured error with entry link
 tags:
+  - duplicate-ids
   - validation-errors
   - structured-errors
   - design-difference

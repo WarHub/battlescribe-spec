@@ -1,7 +1,7 @@
 id: constraint-collective
 category: constraint
 description: Collective constraint divides the limit by the number of sibling entries sharing the constraint
-tags: []
+tags: [duplicate-ids]
 
 setup:
   gameSystem:

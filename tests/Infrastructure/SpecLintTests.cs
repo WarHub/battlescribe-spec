@@ -167,6 +167,7 @@ public sealed class SpecLintTests
         "profile", "selection", "number",
         "defaultSelectionEntryId", "entryLink",
         "edge-case",
+        "duplicate-ids",
         "validation-errors", "structured-errors",
         "modifierGroup", "infoGroup", "infoLink",
         "forceEntry", "categoryEntry", "categoryLink",
