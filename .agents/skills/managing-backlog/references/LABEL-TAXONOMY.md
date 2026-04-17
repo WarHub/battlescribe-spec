@@ -11,16 +11,12 @@ Mutually exclusive — every open issue should have exactly one.
 - Fills a zero-coverage gap in an important area
 - Small scope, clear requirements, immediately actionable
 
-**Examples**: Remove noisy YAML defaults, add missing spec coverage for child forces, fix roster accumulation bug.
-
 ### `priority: medium` 🟠
 **Criteria** (any of):
 - Good value but requires moderate effort or investigation
 - Clear scope but not urgent
 - Depends on another issue being done first
 - Improves quality of life but doesn't prevent problems
-
-**Examples**: Tag-based test filtering, JSON Schema for YAML, NR performance investigation.
 
 ### `priority: low` 🟡
 **Criteria** (any of):
@@ -29,8 +25,6 @@ Mutually exclusive — every open issue should have exactly one.
 - Nice-to-have optimization
 - Not blocking any other work
 
-**Examples**: Source generators for DTO, evaluate ID-based APIs, performance profiling (general).
-
 ### `priority: backlog` ⚪
 **Criteria** (any of):
 - Scope not yet decided (needs design decision first)
@@ -38,38 +32,21 @@ Mutually exclusive — every open issue should have exactly one.
 - Far-future feature area
 - All sub-issues are also backlog
 
-**Examples**: Preloaded roster lifecycle (needs scope decision), data editor conformance (needs API surface design).
-
 ## Area labels
 
 Not mutually exclusive — an issue can have multiple areas.
 
 ### `area: spec-coverage` 🟢
-Issues about writing new or expanding existing YAML conformance specs.
-- Adding specs for untested features (child forces, nested links)
-- Expanding negative/error path coverage
-- Epic-level spec coverage goals
+Writing new or expanding existing YAML conformance specs.
 
 ### `area: framework` 🔵
-Issues about the spec runner, loader, protocol, tooling, or infrastructure.
-- SpecRunner assertion improvements
-- YAML loading/validation enhancements
-- Protocol type changes
-- Test filtering, step outputs, JSON Schema
+Spec runner, loader, protocol, tooling, or infrastructure improvements.
 
 ### `area: devex` 🟣
-Issues about developer experience, refactoring, and code quality.
-- Removing YAML noise (default values)
-- Source generators, DTO reduction
-- Directory restructuring
-- Performance evaluation
+Developer experience, refactoring, and code quality improvements.
 
 ### `area: newrecruit` 🩷
-Issues specific to the NewRecruit Playwright-based engine adapter.
-- Browser automation quirks
-- HAR recording/replay
-- Roster naming, cleanup, visual debugging
-- NR-specific performance work
+NewRecruit Playwright-based engine adapter — automation, HAR, NR-specific perf.
 
 ## Status labels
 

@@ -28,12 +28,7 @@ description: >
 
 Issue types are set via GraphQL (no `gh issue` flag exists):
 ```powershell
-# Get type IDs
-gh api graphql -f query='query { organization(login: "WarHub") {
-  issueTypes(first: 20) { nodes { id name } }
-} }'
-
-# Set type on an issue (get node ID first)
+# Set type (get issue node ID first via: repository(owner,name) { issue(number) { id } })
 gh api graphql -f query='mutation { updateIssue(input: {
   id: "ISSUE_NODE_ID", issueTypeId: "IT_xxx"
 }) { issue { title issueType { name } } } }'
@@ -89,23 +84,24 @@ Remove-Item $tempFile
 
 ## Sub-issue management
 
-Add a sub-issue to an epic via GraphQL:
+Add a sub-issue to an epic (get both node IDs first via `repository { issue(number) { id } }`):
 ```powershell
-# Get node IDs
-gh api graphql -f query='query { repository(owner: "WarHub", name: "battlescribe-spec") {
-  issue(number: EPIC_NUM) { id }
-} }'
-gh api graphql -f query='query { repository(owner: "WarHub", name: "battlescribe-spec") {
-  issue(number: CHILD_NUM) { id }
-} }'
-
-# Link
 gh api graphql -f query='mutation { addSubIssue(input: {
   issueId: "EPIC_NODE_ID", subIssueId: "CHILD_NODE_ID"
 }) { issue { number } subIssue { number } } }'
 ```
 
-After linking, **update the epic's body** to include the new sub-issue in its list.
+After linking, **update the parent's body** to list the new sub-issue.
+
+### Checking parent completion
+
+After closing an issue that has a parent, check if all sibling sub-issues are
+also closed. If so, close the parent too:
+```powershell
+gh api graphql -f query='query { repository(owner: "WarHub", name: "battlescribe-spec") {
+  issue(number: PARENT_NUM) { subIssues(first: 100) { nodes { number state } } }
+} }'
+```
 
 ## Triage workflow
 
@@ -113,17 +109,14 @@ When grooming a batch of issues:
 
 1. **List open issues**: `gh issue list --repo WarHub/battlescribe-spec --state open --limit 100`
 2. **Check each issue's current labels and type** (see hierarchy reference)
-3. **Assess priority** using these criteria:
-   - HIGH: Quick wins, coverage gaps, prevents accumulating problems
-   - MEDIUM: Good value, clear scope, moderate effort
-   - LOW: Large investment, needs research, not blocking
-   - BACKLOG: Scope undecided, blocked on design, far-future
+3. **Assess priority** using label criteria (see taxonomy above and [LABEL-TAXONOMY.md](references/LABEL-TAXONOMY.md))
 4. **Apply labels** via REST API
 5. **Set/verify issue type** via GraphQL
 6. **Link to parent epic** if applicable
 7. **Close completed issues** — check if all acceptance criteria are met
+8. **Check parent completion** — if a closed issue has a parent, check if all siblings are done too
 
 ## Reference files
 
-- [ISSUE-HIERARCHY.md](references/ISSUE-HIERARCHY.md) — Full epic/sub-issue tree with status
+- [QUERYING-ISSUES.md](references/QUERYING-ISSUES.md) — GraphQL queries to discover epics, sub-issues, and current backlog state
 - [LABEL-TAXONOMY.md](references/LABEL-TAXONOMY.md) — Detailed label definitions and decision guide
