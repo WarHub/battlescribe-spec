@@ -1,6 +1,6 @@
 # Skill Template
 
-Copy this template to `.github/skills/{skill-name}/SKILL.md` and fill in the sections.
+Copy this template to `.agents/skills/{skill-name}/SKILL.md` and fill in the sections.
 
 ---
 
@@ -81,7 +81,7 @@ public void Example() { }
 
 Before committing a new skill:
 
-- [ ] Directory: `.github/skills/{name}/SKILL.md` exists
+- [ ] Directory: `.agents/skills/{name}/SKILL.md` exists
 - [ ] Frontmatter: `name` matches directory name
 - [ ] Frontmatter: `description` starts with verb, includes "Use when", under 1024 chars
 - [ ] Body: Under 500 lines

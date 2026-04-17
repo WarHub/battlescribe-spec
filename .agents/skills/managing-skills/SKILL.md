@@ -11,10 +11,10 @@ description: >
 
 ## Skill location
 
-All skills live in `.github/skills/{skill-name}/`. Each is a self-contained directory:
+All skills live in `.agents/skills/{skill-name}/`. Each is a self-contained directory:
 
 ```
-.github/skills/{skill-name}/
+.agents/skills/{skill-name}/
 ├── SKILL.md              # Required: frontmatter + instructions
 └── references/           # Optional: detailed reference docs
     ├── TOPIC-A.md
@@ -95,15 +95,15 @@ Reference files have no frontmatter — just markdown with a `# Title` heading.
 
 ```bash
 # Check structure
-ls .github/skills/{skill-name}/SKILL.md          # must exist
-ls .github/skills/{skill-name}/references/        # optional
+ls .agents/skills/{skill-name}/SKILL.md          # must exist
+ls .agents/skills/{skill-name}/references/        # optional
 
 # Check frontmatter
-head -10 .github/skills/{skill-name}/SKILL.md     # starts with ---
-grep "^name:" .github/skills/{skill-name}/SKILL.md # matches dir name
+head -10 .agents/skills/{skill-name}/SKILL.md     # starts with ---
+grep "^name:" .agents/skills/{skill-name}/SKILL.md # matches dir name
 
 # Check line counts (all files under 500 lines)
-wc -l .github/skills/{skill-name}/**/*.md
+wc -l .agents/skills/{skill-name}/**/*.md
 ```
 
 No CI validation exists for skills — manual checks only.
