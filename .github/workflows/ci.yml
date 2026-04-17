@@ -44,7 +44,7 @@ jobs:
         run: dotnet build --no-restore
 
       - name: Test
-        run: dotnet test --no-build --logger "GitHubActions;summary.includePassedTests=false" --filter "FullyQualifiedName!~NewRecruit&FullyQualifiedName!~FrozenNewRecruit"
+        run: dotnet test --no-build --logger "GitHubActions;summary-include-passed=false" --filter "FullyQualifiedName!~NewRecruit&FullyQualifiedName!~FrozenNewRecruit"
 
       - name: End-to-end spec runner test
         run: |
@@ -93,7 +93,7 @@ jobs:
         run: dotnet build
 
       - name: Run frozen NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FrozenNewRecruitConformanceTests" --no-build --logger "GitHubActions;summary.includePassedTests=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FrozenNewRecruitConformanceTests" --no-build --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
 
