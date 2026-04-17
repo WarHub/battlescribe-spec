@@ -1,10 +1,14 @@
+using System.Collections;
+using System.Reflection;
 using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec;
 
 /// <summary>
 /// Validates that all IDs within a spec setup tree are unique.
-/// Only checks <c>Id</c> properties (not reference fields like targetId, typeId, childId).
+/// Uses reflection to automatically walk all protocol types — no manual updates
+/// needed when types are added/changed. Only collects properties named exactly
+/// "Id" (not reference fields like TargetId, TypeId, ChildId, GameSystemId).
 /// </summary>
 public static class SetupIdValidator
 {
@@ -17,12 +21,12 @@ public static class SetupIdValidator
     public static void Validate(SetupDef setup, string specId)
     {
         var idLocations = new Dictionary<string, List<string>>();
-        CollectGameSystem(setup.GameSystem, "gameSystem", idLocations);
+        CollectIds(setup.GameSystem, "gameSystem", idLocations);
         if (setup.Catalogues is not null)
         {
             for (var i = 0; i < setup.Catalogues.Count; i++)
             {
-                CollectCatalogue(setup.Catalogues[i], $"catalogues[{i}]", idLocations);
+                CollectIds(setup.Catalogues[i], $"catalogues[{i}]", idLocations);
             }
         }
         var duplicates = idLocations
@@ -36,242 +40,80 @@ public static class SetupIdValidator
         }
     }
 
-    private static void AddId(string id, string path, Dictionary<string, List<string>> idLocations)
+    /// <summary>
+    /// Cache of reflected type metadata to avoid repeated reflection per type.
+    /// </summary>
+    private static readonly Dictionary<Type, TypeInfo> TypeInfoCache = [];
+
+    private sealed record TypeInfo(PropertyInfo? IdProperty, (PropertyInfo Property, string Name)[] ListProperties);
+
+    private static TypeInfo GetTypeInfo(Type type)
     {
-        if (string.IsNullOrEmpty(id))
-            return;
-        if (!idLocations.TryGetValue(id, out var locations))
+        if (TypeInfoCache.TryGetValue(type, out var cached))
+            return cached;
+
+        var idProp = type.GetProperty("Id", BindingFlags.Public | BindingFlags.Instance);
+        // Only collect "Id" properties that are string type
+        if (idProp is not null && idProp.PropertyType != typeof(string))
+            idProp = null;
+
+        var listProps = new List<(PropertyInfo, string)>();
+        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            locations = [];
-            idLocations[id] = locations;
+            var propType = prop.PropertyType;
+            if (!propType.IsGenericType || propType.GetGenericTypeDefinition() != typeof(List<>))
+                continue;
+            var elementType = propType.GetGenericArguments()[0];
+            // Recurse into List<T> where T is a protocol/setup type (has at least one property with Id or List<>)
+            if (IsWalkableType(elementType))
+                listProps.Add((prop, ToCamelCase(prop.Name)));
         }
-        locations.Add(path);
+
+        var info = new TypeInfo(idProp, listProps.ToArray());
+        TypeInfoCache[type] = info;
+        return info;
     }
 
-    private static void CollectGameSystem(ProtocolGameSystem gs, string path, Dictionary<string, List<string>> ids)
+    private static bool IsWalkableType(Type type)
     {
-        AddId(gs.Id, path, ids);
-        CollectList(gs.CostTypes, path, ids);
-        CollectList(gs.ProfileTypes, path, ids);
-        CollectList(gs.ForceEntries, path, ids);
-        CollectList(gs.CategoryEntries, path, ids);
-        CollectList(gs.Publications, path, ids);
-        CollectList(gs.SelectionEntries, path, ids);
-        CollectList(gs.EntryLinks, path, ids);
-        CollectList(gs.Rules, path, ids);
-        CollectList(gs.InfoLinks, path, ids);
-        CollectList(gs.SharedSelectionEntries, path, ids);
-        CollectList(gs.SharedSelectionEntryGroups, path, ids);
-        CollectList(gs.SharedRules, path, ids);
-        CollectList(gs.SharedProfiles, path, ids);
-        CollectList(gs.SharedInfoGroups, path, ids);
+        // Walk into types in the Protocol namespace, or SetupDef-related types
+        return type.Namespace == typeof(ProtocolGameSystem).Namespace
+            || type == typeof(SetupDef);
     }
 
-    private static void CollectCatalogue(ProtocolCatalogue cat, string path, Dictionary<string, List<string>> ids)
+    private static void CollectIds(object obj, string path, Dictionary<string, List<string>> idLocations)
     {
-        AddId(cat.Id, path, ids);
-        CollectList(cat.SelectionEntries, path, ids);
-        CollectList(cat.SelectionEntryGroups, path, ids);
-        CollectList(cat.EntryLinks, path, ids);
-        CollectList(cat.SharedSelectionEntries, path, ids);
-        CollectList(cat.SharedSelectionEntryGroups, path, ids);
-        CollectList(cat.SharedRules, path, ids);
-        CollectList(cat.SharedProfiles, path, ids);
-        CollectList(cat.SharedInfoGroups, path, ids);
-        CollectList(cat.Rules, path, ids);
-        CollectList(cat.InfoLinks, path, ids);
-        CollectList(cat.CatalogueLinks, path, ids);
-        CollectList(cat.Publications, path, ids);
-        CollectList(cat.CostTypes, path, ids);
-        CollectList(cat.ProfileTypes, path, ids);
-        CollectList(cat.CategoryEntries, path, ids);
-        CollectList(cat.ForceEntries, path, ids);
-    }
+        var typeInfo = GetTypeInfo(obj.GetType());
 
-    // Per-type collection methods
-
-    private static void CollectList(List<ProtocolCostType>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-            AddId(items[i].Id, $"{parent}/costTypes[{i}]", ids);
-    }
-
-    private static void CollectList(List<ProtocolProfileType>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
+        // Collect this object's Id
+        if (typeInfo.IdProperty is not null)
         {
-            var path = $"{parent}/profileTypes[{i}]";
-            AddId(items[i].Id, path, ids);
-            CollectList(items[i].CharacteristicTypes, path, ids);
+            var id = (string?)typeInfo.IdProperty.GetValue(obj);
+            if (!string.IsNullOrEmpty(id))
+            {
+                if (!idLocations.TryGetValue(id, out var locations))
+                {
+                    locations = [];
+                    idLocations[id] = locations;
+                }
+                locations.Add(path);
+            }
         }
-    }
 
-    private static void CollectList(List<ProtocolCharacteristicType>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-            AddId(items[i].Id, $"{parent}/characteristicTypes[{i}]", ids);
-    }
-
-    private static void CollectList(List<ProtocolForceEntry>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
+        // Recurse into child lists
+        foreach (var (prop, name) in typeInfo.ListProperties)
         {
-            var path = $"{parent}/forceEntries[{i}]";
-            AddId(items[i].Id, path, ids);
-            CollectList(items[i].Constraints, path, ids);
-            CollectList(items[i].CategoryLinks, path, ids);
-            CollectList(items[i].ForceEntries, path, ids);
-            CollectList(items[i].Profiles, path, ids);
-            CollectList(items[i].Rules, path, ids);
-            CollectList(items[i].InfoGroups, path, ids);
-            CollectList(items[i].InfoLinks, path, ids);
+            if (prop.GetValue(obj) is not IList list)
+                continue;
+            for (var i = 0; i < list.Count; i++)
+            {
+                var item = list[i];
+                if (item is not null)
+                    CollectIds(item, $"{path}/{name}[{i}]", idLocations);
+            }
         }
     }
 
-    private static void CollectList(List<ProtocolCategoryEntry>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-        {
-            var path = $"{parent}/categoryEntries[{i}]";
-            AddId(items[i].Id, path, ids);
-            CollectList(items[i].Constraints, path, ids);
-            CollectList(items[i].Profiles, path, ids);
-            CollectList(items[i].Rules, path, ids);
-            CollectList(items[i].InfoGroups, path, ids);
-            CollectList(items[i].InfoLinks, path, ids);
-        }
-    }
-
-    private static void CollectList(List<ProtocolSelectionEntry>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-        {
-            var path = $"{parent}/selectionEntries[{i}]";
-            AddId(items[i].Id, path, ids);
-            CollectList(items[i].Constraints, path, ids);
-            CollectList(items[i].SelectionEntries, path, ids);
-            CollectList(items[i].SelectionEntryGroups, path, ids);
-            CollectList(items[i].EntryLinks, path, ids);
-            CollectList(items[i].CategoryLinks, path, ids);
-            CollectList(items[i].Profiles, path, ids);
-            CollectList(items[i].Rules, path, ids);
-            CollectList(items[i].InfoGroups, path, ids);
-            CollectList(items[i].InfoLinks, path, ids);
-        }
-    }
-
-    private static void CollectList(List<ProtocolSelectionEntryGroup>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-        {
-            var path = $"{parent}/selectionEntryGroups[{i}]";
-            AddId(items[i].Id, path, ids);
-            CollectList(items[i].Constraints, path, ids);
-            CollectList(items[i].SelectionEntries, path, ids);
-            CollectList(items[i].SelectionEntryGroups, path, ids);
-            CollectList(items[i].EntryLinks, path, ids);
-            CollectList(items[i].CategoryLinks, path, ids);
-            CollectList(items[i].Profiles, path, ids);
-            CollectList(items[i].Rules, path, ids);
-            CollectList(items[i].InfoGroups, path, ids);
-            CollectList(items[i].InfoLinks, path, ids);
-        }
-    }
-
-    private static void CollectList(List<ProtocolEntryLink>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-        {
-            var path = $"{parent}/entryLinks[{i}]";
-            AddId(items[i].Id, path, ids);
-            CollectList(items[i].Constraints, path, ids);
-            CollectList(items[i].CategoryLinks, path, ids);
-            CollectList(items[i].SelectionEntries, path, ids);
-            CollectList(items[i].SelectionEntryGroups, path, ids);
-            CollectList(items[i].EntryLinks, path, ids);
-            CollectList(items[i].Profiles, path, ids);
-            CollectList(items[i].Rules, path, ids);
-            CollectList(items[i].InfoGroups, path, ids);
-            CollectList(items[i].InfoLinks, path, ids);
-        }
-    }
-
-    private static void CollectList(List<ProtocolCategoryLink>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-        {
-            var path = $"{parent}/categoryLinks[{i}]";
-            AddId(items[i].Id, path, ids);
-            CollectList(items[i].Constraints, path, ids);
-            CollectList(items[i].Profiles, path, ids);
-            CollectList(items[i].Rules, path, ids);
-            CollectList(items[i].InfoGroups, path, ids);
-            CollectList(items[i].InfoLinks, path, ids);
-        }
-    }
-
-    private static void CollectList(List<ProtocolConstraint>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-            AddId(items[i].Id, $"{parent}/constraints[{i}]", ids);
-    }
-
-    private static void CollectList(List<ProtocolRule>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-            AddId(items[i].Id, $"{parent}/rules[{i}]", ids);
-    }
-
-    private static void CollectList(List<ProtocolProfile>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-            AddId(items[i].Id, $"{parent}/profiles[{i}]", ids);
-    }
-
-    private static void CollectList(List<ProtocolInfoGroup>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-        {
-            var path = $"{parent}/infoGroups[{i}]";
-            AddId(items[i].Id, path, ids);
-            CollectList(items[i].Profiles, path, ids);
-            CollectList(items[i].Rules, path, ids);
-            CollectList(items[i].InfoLinks, path, ids);
-            CollectList(items[i].InfoGroups, path, ids);
-        }
-    }
-
-    private static void CollectList(List<ProtocolInfoLink>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-            AddId(items[i].Id, $"{parent}/infoLinks[{i}]", ids);
-    }
-
-    private static void CollectList(List<ProtocolCatalogueLink>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-            AddId(items[i].Id, $"{parent}/catalogueLinks[{i}]", ids);
-    }
-
-    private static void CollectList(List<ProtocolPublication>? items, string parent, Dictionary<string, List<string>> ids)
-    {
-        if (items is null) return;
-        for (var i = 0; i < items.Count; i++)
-            AddId(items[i].Id, $"{parent}/publications[{i}]", ids);
-    }
+    private static string ToCamelCase(string name) =>
+        string.IsNullOrEmpty(name) ? name : char.ToLowerInvariant(name[0]) + name[1..];
 }
