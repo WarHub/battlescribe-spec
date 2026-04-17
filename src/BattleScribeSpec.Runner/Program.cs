@@ -391,7 +391,8 @@ void OutputConformanceReport(string path, List<SpecResultSummary> results)
         reportFailed,
         reportSkipped,
         passRate,
-        results);
+        results,
+        assertionEngine != null && assertionEngine != engineFilter ? assertionEngine : null);
 
     var directory = Path.GetDirectoryName(path);
     if (!string.IsNullOrEmpty(directory))
@@ -404,7 +405,10 @@ void OutputConformanceReport(string path, List<SpecResultSummary> results)
     Console.WriteLine($"Summary: total={report.TotalSpecs}, passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}, passRate={report.PassRate:F1}%");
 
     if (engineFilter is not null)
-        Console.WriteLine($"Engine breakdown: {engineFilter} => passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}");
+    {
+        var assertionLabel = report.AssertionEngine is not null ? $", assertions={report.AssertionEngine}" : "";
+        Console.WriteLine($"Engine breakdown: {engineFilter} => passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}{assertionLabel}");
+    }
 
     var failedSpecs = results.Where(r => r.Status == "failed").ToList();
     if (failedSpecs.Count > 0)
