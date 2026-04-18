@@ -14,6 +14,7 @@ string? reportPath = null;
 string? matrixDir = null;
 string? expectedFailuresEngine = null;
 string? assertionEngine = null;
+var workers = 1;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -48,6 +49,13 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--assertion-engine" when i + 1 < args.Length:
             assertionEngine = args[++i];
+            break;
+        case "--workers" when i + 1 < args.Length:
+            if (!int.TryParse(args[++i], out workers) || workers < 1)
+            {
+                Console.Error.WriteLine("Error: --workers must be a positive integer.");
+                return 1;
+            }
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -134,7 +142,7 @@ else
     adapterArgs = "";
 }
 
-using var adapterProcess = AdapterProcess.Start(adapterExe, adapterArgs);
+using var adapterProcess = workers <= 1 ? AdapterProcess.Start(adapterExe, adapterArgs) : null;
 
 // ===== Run specs =====
 var results = new List<SpecResult>();
@@ -153,11 +161,12 @@ else
     specSources = embeddedSpecs!.Select(s => (s.ResourceName, s.Id, s.Category, (Func<SpecFile>)(() => SpecLoader.LoadEmbedded(s.ResourceName))));
 }
 
+// Pre-filter specs (filtering doesn't need the adapter)
+var filteredSpecs = new List<(string Id, string Category, SpecFile Spec)>();
 foreach (var (_, id, category, loader) in specSources)
 {
     var specName = $"{category}/{id}";
 
-    // Apply filter
     if (filter is not null && !specName.Contains(filter, StringComparison.OrdinalIgnoreCase))
     {
         skipped++;
@@ -178,7 +187,6 @@ foreach (var (_, id, category, loader) in specSources)
         continue;
     }
 
-    // Apply tag filter
     if (tag is not null && !(spec.Tags?.Contains(tag, StringComparer.OrdinalIgnoreCase) ?? false))
     {
         skipped++;
@@ -186,7 +194,6 @@ foreach (var (_, id, category, loader) in specSources)
         continue;
     }
 
-    // Apply engine filter — null engines means "all engines"
     if (engineFilter is not null && !spec.IsApplicableTo(engineFilter))
     {
         skipped++;
@@ -194,31 +201,89 @@ foreach (var (_, id, category, loader) in specSources)
         continue;
     }
 
-    // Run spec via protocol engine — use longer timeout for DataSource specs
-    var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
-    using var engine = new JsonProtocolEngine(adapterProcess, timeout);
-    var runner = new SpecRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
-    var result = runner.Run(spec);
-    results.Add(result);
-    specsByResult[result] = spec;
+    filteredSpecs.Add((id, category, spec));
+}
 
-    // Determine status considering engine expectations
-    var status = result.Passed ? "passed" : "failed";
-    if (expectedFailuresEngine is not null)
+if (workers > 1)
+{
+    // Parallel execution with N adapter processes
+    Console.Error.WriteLine($"Running {filteredSpecs.Count} specs with {workers} workers...");
+
+    var adapterProcesses = new List<AdapterProcess>();
+    for (int w = 0; w < workers; w++)
+        adapterProcesses.Add(AdapterProcess.Start(adapterExe, adapterArgs));
+
+    // Channel-based process pool
+    var processPool = System.Threading.Channels.Channel.CreateBounded<AdapterProcess>(workers);
+    foreach (var proc in adapterProcesses)
+        processPool.Writer.TryWrite(proc);
+
+    var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFile Spec, string Status)>();
+
+    await Parallel.ForEachAsync(
+        filteredSpecs,
+        new ParallelOptions { MaxDegreeOfParallelism = workers },
+        async (item, ct) =>
+        {
+            var (id, category, spec) = item;
+            var proc = await processPool.Reader.ReadAsync(ct);
+            try
+            {
+                var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
+                using var engine = new JsonProtocolEngine(proc, timeout);
+                var runner = new SpecRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
+                var result = runner.Run(spec);
+
+                var status = result.Passed ? "passed" : "failed";
+                if (expectedFailuresEngine is not null)
+                {
+                    var isExpectedFail = spec.IsExpectedToFail(expectedFailuresEngine);
+                    if (!result.Passed && isExpectedFail) status = "expected-failure";
+                    else if (result.Passed && isExpectedFail) status = "unexpected-pass";
+                }
+
+                concurrentResults.Add((result, spec, status));
+            }
+            finally
+            {
+                processPool.Writer.TryWrite(proc);
+            }
+        });
+
+    // Collect results in order
+    foreach (var (result, spec, status) in concurrentResults)
     {
-        var isExpectedFail = spec.IsExpectedToFail(expectedFailuresEngine);
-        if (!result.Passed && isExpectedFail)
-            status = "expected-failure";
-        else if (result.Passed && isExpectedFail)
-            status = "unexpected-pass";
+        results.Add(result);
+        specsByResult[result] = spec;
+        reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures]));
     }
 
-    reportResults.Add(new SpecResultSummary(
-        result.SpecId,
-        result.Category,
-        result.Description,
-        status,
-        [.. result.Failures]));
+    // Dispose adapter processes
+    foreach (var proc in adapterProcesses)
+        proc.Dispose();
+}
+else
+{
+    // Sequential execution with single adapter process
+    foreach (var (id, category, spec) in filteredSpecs)
+    {
+        var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
+        using var engine = new JsonProtocolEngine(adapterProcess!, timeout);
+        var runner = new SpecRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
+        var result = runner.Run(spec);
+        results.Add(result);
+        specsByResult[result] = spec;
+
+        var status = result.Passed ? "passed" : "failed";
+        if (expectedFailuresEngine is not null)
+        {
+            var isExpectedFail = spec.IsExpectedToFail(expectedFailuresEngine);
+            if (!result.Passed && isExpectedFail) status = "expected-failure";
+            else if (result.Passed && isExpectedFail) status = "unexpected-pass";
+        }
+
+        reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures]));
+    }
 }
 
 sw.Stop();
@@ -371,6 +436,7 @@ void PrintUsage()
           --assertion-engine <engine>
                               Engine name for step-level assertion overrides (defaults to --engine)
                               Use when the adapter engine differs from the spec engine filter
+          --workers <N>       Run specs in parallel with N adapter processes (default: 1)
           -h, --help          Show this help
         """);
 }
