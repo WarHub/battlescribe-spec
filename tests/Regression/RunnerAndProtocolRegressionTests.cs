@@ -159,6 +159,27 @@ public class RunnerAndProtocolRegressionTests
     }
 
     [Fact]
+    public void SpecRunner_CallsCleanup_AfterSetupException()
+    {
+        var engine = new FakeEngine { ThrowOnSetup = true };
+        var runner = new SpecRunner(engine);
+        var spec = new SpecFile
+        {
+            Id = "cleanup-setup-exception",
+            Category = "runner",
+            Description = "cleanup should be called even after setup throws",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps = [new StepDef { ExpectedState = new ExpectedStateDef { ForceCount = 0 } }]
+        };
+
+        var result = runner.Run(spec);
+
+        Assert.Equal(1, engine.CleanupCalls);
+        Assert.False(result.Passed);
+        Assert.Contains(result.Failures, f => f.Contains("Setup failed"));
+    }
+
+    [Fact]
     public void CatXmlGenerator_ThrowsOnEmptyCatalogueArray()
     {
         var gameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" };
@@ -194,6 +215,7 @@ public class RunnerAndProtocolRegressionTests
     private sealed class FakeEngine : IRosterEngine
     {
         public IReadOnlyList<string> SetupErrors { get; init; } = [];
+        public bool ThrowOnSetup { get; init; }
         public bool ThrowOnAddForce { get; init; }
         public int ActionCalls { get; private set; }
         public int GetStateCalls { get; private set; }
@@ -201,7 +223,12 @@ public class RunnerAndProtocolRegressionTests
 
         public RosterState State { get; init; } = new("roster", "gs", [], [], []);
 
-        public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues) => SetupErrors;
+        public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
+        {
+            if (ThrowOnSetup)
+                throw new InvalidOperationException("setup boom");
+            return SetupErrors;
+        }
 
         public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
         {
