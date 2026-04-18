@@ -11,14 +11,14 @@ namespace BattleScribeSpec.Tests;
 /// These exercise the full adapter against the live NR site.
 /// Skipped unless NR_ENGINE_URL is set.
 /// </summary>
-[Collection("NewRecruit")]
+[Collection("SequentialLiveNewRecruit")]
 [Trait("Category", "Integration")]
 public sealed class NrIntegrationTests
 {
     private readonly ITestOutputHelper _output;
-    private readonly NewRecruitFixture _fixture;
+    private readonly SequentialLiveNewRecruitFixture _fixture;
 
-    public NrIntegrationTests(ITestOutputHelper output, NewRecruitFixture fixture)
+    public NrIntegrationTests(ITestOutputHelper output, SequentialLiveNewRecruitFixture fixture)
     {
         _output = output;
         _fixture = fixture;

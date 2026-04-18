@@ -27,6 +27,12 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     // Maps force index → catalogue index (tracked as forces are added)
     private readonly List<int> _forceCatalogueMap = [];
 
+    /// <summary>
+    /// Performance timing collector. Populated during test execution.
+    /// Access after tests to get a timing report.
+    /// </summary>
+    public NrPerfTimings Timings { get; } = new();
+
     private NewRecruitRosterEngine(NewRecruitBrowser browser)
     {
         _browser = browser;
@@ -56,6 +62,15 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return new NewRecruitRosterEngine(browser);
     }
 
+    /// <summary>
+    /// Create a NewRecruitRosterEngine wrapping an existing browser context.
+    /// Used by <see cref="NewRecruitEnginePool"/> for pooled engines.
+    /// </summary>
+    internal static NewRecruitRosterEngine CreateFromBrowser(NewRecruitBrowser browser)
+    {
+        return new NewRecruitRosterEngine(browser);
+    }
+
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         _gameSystem = gameSystem;
@@ -70,19 +85,57 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
         try
         {
-            // Navigate to /app and wait for NR to initialize
-            await _browser.NavigateToAppAsync();
-            await _browser.WaitForPiniaAsync();
+            // In frozen mode after the first setup, the page is already at /app
+            // with Pinia initialized. The JS cleanup block handles state reset,
+            // so we can skip the expensive navigation + Pinia polling.
+            if (_browser.FrozenReady)
+            {
+                Timings.RecordSkip("NavigateToApp");
+                Timings.RecordSkip("WaitForPinia");
+            }
+            else
+            {
+                await Timings.TimeAsync("NavigateToApp", () => _browser.NavigateToAppAsync());
+                await Timings.TimeAsync("WaitForPinia", () => _browser.WaitForPiniaAsync());
+            }
+
+            // Pre-inject JS helpers and state reader (once per page lifetime)
+            await Timings.TimeAsync("InjectHelpers", () => _browser.InjectHelpersAsync());
 
             // Generate BattleScribe XML from spec data
-            var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-            var allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+            string gstXml = null!;
+            IReadOnlyList<(string FileName, string Xml)> allCatXml = null!;
+            Timings.Time("XmlGeneration", () =>
+            {
+                gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
+                allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+            });
+
+            // Build entry order from catalogue-defined selection entries
+            List<string>? entryOrder = null;
+            if (catalogues.Length > 0)
+            {
+                entryOrder = new List<string>();
+                foreach (var cat in catalogues)
+                    CollectEntryIds(cat.SelectionEntries, entryOrder);
+            }
+
+            // Build cost limit config from game system cost types
+            Dictionary<string, double?>? costLimitConfig = null;
+            if (gameSystem.CostTypes is { Count: > 0 })
+            {
+                costLimitConfig = new Dictionary<string, double?>();
+                foreach (var ct in gameSystem.CostTypes)
+                    costLimitConfig[ct.Name] = ct.DefaultCostLimit;
+            }
 
             // Build files array and catalogue name list for multi-catalogue support
             var catFiles = allCatXml.Select(c => new { name = c.FileName, path = $"/spec/{c.FileName}", data = c.Xml }).ToArray();
             var catNames = catalogues.Select(c => c.Name).ToArray();
-            var setupResult = await _browser.Page.EvaluateAsync<string?>("""
-                async ([gstXml, catFiles, systemId, catNames]) => {
+
+            // Single consolidated EvaluateAsync: setup + entryOrder + costLimitConfig
+            var setupResult = await Timings.TimeAsync("SetupJsEval", () => _browser.Page.EvaluateAsync<string?>("""
+                async ([gstXml, catFiles, systemId, catNames, entryOrder, costLimitConfig]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
@@ -163,11 +216,14 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         await listsStore.addList({row, army: roster, book: primaryBook});
 
                         // Save references globally — books array for multi-catalogue AddForce
+                        // Also inject entryOrder and costLimitConfig inline
                         window.__bsspec = {
                             army: roster,
                             book: primaryBook,
                             books: allBooks.map(b => b.bookData),
-                            row
+                            row,
+                            entryOrder: entryOrder || null,
+                            costLimitConfig: costLimitConfig || null
                         };
 
                         return null; // success
@@ -175,34 +231,16 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         return 'Setup error: ' + e.message + '\n' + e.stack;
                     }
                 }
-                """, new object[] { gstXml, catFiles, gameSystem.Id, catNames });
+                """, new object[] { gstXml, catFiles, gameSystem.Id, catNames,
+                    entryOrder?.ToArray() ?? (object)Array.Empty<string>(),
+                    costLimitConfig ?? (object)new Dictionary<string, double?>() }));
 
             if (setupResult != null)
                 errors.Add(setupResult);
 
-            // Save catalogue-defined entry order to window.__bsspec.entryOrder
-            // so the state reader can sort selections to match BS ordering.
-            if (setupResult == null && catalogues.Length > 0)
-            {
-                var entryOrder = new List<string>();
-                foreach (var cat in catalogues)
-                    CollectEntryIds(cat.SelectionEntries, entryOrder);
-                await _browser.Page.EvaluateAsync(
-                    "entryOrder => { if (window.__bsspec) window.__bsspec.entryOrder = entryOrder; }",
-                    entryOrder.ToArray());
-            }
-
-            // Inject cost limit configuration so the state reader can distinguish
-            // "no limit configured (NR defaults to 0)" from "limit explicitly set to 0".
-            if (setupResult == null && gameSystem.CostTypes is { Count: > 0 })
-            {
-                var costLimitConfig = new Dictionary<string, double?>();
-                foreach (var ct in gameSystem.CostTypes)
-                    costLimitConfig[ct.Name] = ct.DefaultCostLimit;
-                await _browser.Page.EvaluateAsync(
-                    "config => { if (window.__bsspec) window.__bsspec.costLimitConfig = config; }",
-                    costLimitConfig);
-            }
+            // Mark frozen mode as ready to skip navigation on subsequent setups
+            if (setupResult == null && _browser.IsFrozen)
+                _browser.FrozenReady = true;
         }
         catch (Exception ex)
         {
@@ -227,6 +265,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         {
             await _browser.NavigateToAppAsync();
             await _browser.WaitForPiniaAsync();
+            await _browser.InjectHelpersAsync();
 
             // Build files array for loadSystemFromFs
             var fileData = files.Select(f => new { name = f.FileName, path = $"/spec/{f.FileName}", data = f.Content }).ToArray();
@@ -509,8 +548,16 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public RosterState GetRosterState()
     {
-        return NewRecruitStateReader.ReadRosterStateAsync(_browser.Page)
-            .GetAwaiter().GetResult();
+        Timings.StartPhase("GetRosterState");
+        try
+        {
+            return NewRecruitStateReader.ReadRosterStateAsync(_browser.Page)
+                .GetAwaiter().GetResult();
+        }
+        finally
+        {
+            Timings.EndPhase();
+        }
     }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()

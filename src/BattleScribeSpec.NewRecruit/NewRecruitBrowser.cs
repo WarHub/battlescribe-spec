@@ -12,9 +12,24 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     private IPlaywright? _playwright;
     private IBrowser? _browser;
     private bool _isFrozen;
+    private bool _frozenReady;
+    private bool _helpersInjected;
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
+    public bool IsFrozen => _isFrozen;
+
+    /// <summary>
+    /// True after the first successful frozen-mode setup. When set,
+    /// <see cref="NavigateToAppAsync"/> and <see cref="WaitForPiniaAsync"/>
+    /// can be skipped because we're already at /app with Pinia initialized
+    /// and the setup JS blob handles cleanup of previous state.
+    /// </summary>
+    public bool FrozenReady
+    {
+        get => _frozenReady;
+        set => _frozenReady = value;
+    }
 
     private NewRecruitBrowser(string baseUrl)
     {
@@ -46,6 +61,25 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             throw new FileNotFoundException($"HAR file not found: {harFilePath}", harFilePath);
         var browser = new NewRecruitBrowser(baseUrl);
         await browser.InitializeAsync(headless, harFilePath);
+        return browser;
+    }
+
+    /// <summary>
+    /// Create a browser wrapper from an existing context and page.
+    /// Used by <see cref="NewRecruitEnginePool"/> to create multiple engines
+    /// from a shared browser instance with individual contexts.
+    /// The caller retains ownership of the context — disposing this browser
+    /// only closes the page, not the context or playwright instance.
+    /// </summary>
+    internal static NewRecruitBrowser CreateFromContext(
+        IPage page, string baseUrl, bool isFrozen)
+    {
+        var browser = new NewRecruitBrowser(baseUrl)
+        {
+            Page = page,
+            _isFrozen = isFrozen,
+            // No _playwright or _browser — lifecycle owned by the pool
+        };
         return browser;
     }
 
@@ -108,6 +142,8 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
                 WaitUntil = WaitUntilState.Load,
                 Timeout = 30_000,
             });
+            // Full page navigation destroys all JS state — must re-inject helpers
+            _helpersInjected = false;
             await WaitForNetworkSettledAsync();
         }
         await DismissDialogsAsync();
@@ -197,6 +233,26 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             // Let the caller's JS check produce the diagnostic error
         }
     }
+
+    /// <summary>
+    /// Pre-inject shared JS helper functions and the state reader into the page.
+    /// Called once after navigation; avoids re-parsing large JS blobs on every
+    /// EvaluateAsync call. In frozen mode, injected once and persisted across
+    /// tests (no page reloads). In live mode, must be called after each GotoAsync.
+    /// </summary>
+    public async Task InjectHelpersAsync()
+    {
+        if (_helpersInjected) return;
+
+        await Page.EvaluateAsync(JsHelpers.InjectionScript);
+        _helpersInjected = true;
+    }
+
+    /// <summary>
+    /// Reset the helpers-injected flag. Call after a page navigation that
+    /// destroys JS state (live mode GotoAsync).
+    /// </summary>
+    internal void ResetHelpersInjected() => _helpersInjected = false;
 
     public async ValueTask DisposeAsync()
     {

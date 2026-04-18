@@ -6,6 +6,7 @@ namespace BattleScribeSpec;
 public sealed class DataSourceResolver
 {
     private static readonly Regex ShaRegex = new("^[0-9a-fA-F]{40}$", RegexOptions.Compiled);
+    private static readonly object GitLock = new();
     private readonly string _cacheDir;
 
     public DataSourceResolver(string? cacheDir = null)
@@ -35,6 +36,21 @@ public sealed class DataSourceResolver
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".battlescribe-spec",
             "datasource-cache");
+    }
+
+    /// <summary>
+    /// Pre-resolve all datasources used by the given specs. Call this once
+    /// before parallel execution so that git clones happen sequentially
+    /// and parallel threads only hit cache hits.
+    /// </summary>
+    public void WarmCache(IEnumerable<SpecFile> specs)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var spec in specs)
+        {
+            if (spec.Setup.DataSource is { Length: > 0 } uri && seen.Add(uri))
+                Resolve(uri);
+        }
     }
 
     public string Resolve(string dataSourceUri) => Resolve(DataSourceUri.Parse(dataSourceUri));
@@ -68,43 +84,60 @@ public sealed class DataSourceResolver
         var cachePath = Path.Combine(
             [_cacheDir, .. uri.CacheKey.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)]);
 
-        if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
+        if (IsPopulatedCache(cachePath))
             return cachePath;
 
-        // Clean up empty/corrupt cache directories — wrapped in try-catch for concurrent access
-        try
+        // Serialize git clones to prevent races when parallel threads
+        // resolve the same datasource (safety net — primary mechanism
+        // is WarmCache called before parallel execution)
+        lock (GitLock)
         {
-            if (Directory.Exists(cachePath))
-                Directory.Delete(cachePath, recursive: true);
-        }
-        catch (IOException)
-        {
-            // Another process may be writing; if it now has content, use it
-            if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
+            if (IsPopulatedCache(cachePath))
                 return cachePath;
-        }
 
-        var parent = Path.GetDirectoryName(cachePath);
-        if (!string.IsNullOrWhiteSpace(parent))
-            Directory.CreateDirectory(parent);
+            // Clean up partial/corrupt directories before cloning
+            try
+            {
+                if (Directory.Exists(cachePath))
+                    Directory.Delete(cachePath, recursive: true);
+            }
+            catch (IOException)
+            {
+                if (IsPopulatedCache(cachePath))
+                    return cachePath;
+            }
 
-        var repoUrl = $"https://github.com/{uri.Org}/{uri.Repo}.git";
-        if (uri.Ref is not null && ShaRegex.IsMatch(uri.Ref))
-        {
-            RunGit(["clone", repoUrl, cachePath]);
-            RunGit(["-C", cachePath, "checkout", uri.Ref]);
-        }
-        else if (!string.IsNullOrWhiteSpace(uri.Ref))
-        {
-            RunGit(["clone", "--depth", "1", "--branch", uri.Ref, repoUrl, cachePath]);
-        }
-        else
-        {
-            RunGit(["clone", "--depth", "1", repoUrl, cachePath]);
-        }
+            var parent = Path.GetDirectoryName(cachePath);
+            if (!string.IsNullOrWhiteSpace(parent))
+                Directory.CreateDirectory(parent);
 
-        return cachePath;
+            var repoUrl = $"https://github.com/{uri.Org}/{uri.Repo}.git";
+            if (uri.Ref is not null && ShaRegex.IsMatch(uri.Ref))
+            {
+                RunGit(["clone", repoUrl, cachePath]);
+                RunGit(["-C", cachePath, "checkout", uri.Ref]);
+            }
+            else if (!string.IsNullOrWhiteSpace(uri.Ref))
+            {
+                RunGit(["clone", "--depth", "1", "--branch", uri.Ref, repoUrl, cachePath]);
+            }
+            else
+            {
+                RunGit(["clone", "--depth", "1", repoUrl, cachePath]);
+            }
+
+            return cachePath;
+        }
     }
+
+    /// <summary>
+    /// A cache directory is "populated" if it exists and has content beyond
+    /// just the .git directory (which indicates a partial/interrupted clone).
+    /// </summary>
+    private static bool IsPopulatedCache(string path) =>
+        Directory.Exists(path) &&
+        Directory.EnumerateFileSystemEntries(path)
+            .Any(e => !Path.GetFileName(e).Equals(".git", StringComparison.OrdinalIgnoreCase));
 
     private static string? FindByName(string resolvedDir, string pattern, string name)
     {
@@ -132,7 +165,6 @@ public sealed class DataSourceResolver
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start git process.");
 
-        // Read stdout and stderr in parallel to avoid deadlock when buffers fill
         var stdOutTask = process.StandardOutput.ReadToEndAsync();
         var stdErrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();

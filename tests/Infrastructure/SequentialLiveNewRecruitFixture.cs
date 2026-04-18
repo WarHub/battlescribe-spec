@@ -4,10 +4,12 @@ using Xunit;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Shared fixture that creates a single NewRecruitRosterEngine browser session
-/// for all tests in the "NewRecruit" collection. Avoids launching 280+ browsers.
+/// Single-engine fixture for sequential live NR tests and smoke tests.
+/// Gated by NR_ENGINE_URL env var (same as before).
+/// Shared by <see cref="SequentialLiveNewRecruitConformanceTests"/> and
+/// <see cref="LiveNewRecruitSmokeTests"/>.
 /// </summary>
-public sealed class NewRecruitFixture : IAsyncLifetime
+public sealed class SequentialLiveNewRecruitFixture : IAsyncLifetime
 {
     public NewRecruitRosterEngine? Engine { get; private set; }
     public bool Available => Engine is not null;
@@ -30,7 +32,7 @@ public sealed class NewRecruitFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition("NewRecruit")]
-public class NewRecruitCollection : ICollectionFixture<NewRecruitFixture>
+[CollectionDefinition("SequentialLiveNewRecruit")]
+public class SequentialLiveNewRecruitCollection : ICollectionFixture<SequentialLiveNewRecruitFixture>
 {
 }

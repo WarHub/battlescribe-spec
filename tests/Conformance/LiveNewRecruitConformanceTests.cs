@@ -6,21 +6,21 @@ using Xunit.Abstractions;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Runs declarative YAML spec files against a frozen New Recruit snapshot (HAR replay).
-/// Fully offline and deterministic. Uses parallel execution with a browser context pool.
-/// Skipped when the HAR file doesn't exist or NR_FROZEN_SKIP=true.
+/// Runs declarative YAML spec files against the live New Recruit web engine via Playwright.
+/// Uses parallel execution with a browser context pool.
+/// Skipped when NR_ENGINE_URL is not set.
 /// </summary>
-[Collection("FrozenNewRecruit")]
+[Collection("LiveNewRecruit")]
 [Trait("Category", "Conformance")]
-[Trait("Engine", "FrozenNewRecruit")]
-public sealed class FrozenNewRecruitConformanceTests
+[Trait("Engine", "LiveNewRecruit")]
+public sealed class LiveNewRecruitConformanceTests
 {
     private readonly ITestOutputHelper _output;
-    private readonly FrozenNewRecruitFixture _fixture;
+    private readonly LiveNewRecruitFixture _fixture;
     private const string EngineName = "newrecruit";
-    private const string LogPrefix = "[FROZEN] ";
+    private const string LogPrefix = "[LIVE] ";
 
-    public FrozenNewRecruitConformanceTests(ITestOutputHelper output, FrozenNewRecruitFixture fixture)
+    public LiveNewRecruitConformanceTests(ITestOutputHelper output, LiveNewRecruitFixture fixture)
     {
         _output = output;
         _fixture = fixture;
@@ -30,7 +30,7 @@ public sealed class FrozenNewRecruitConformanceTests
     public async Task AllSpecs()
     {
         Skip.If(!_fixture.Available,
-            "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
+            "NR_ENGINE_URL not set — skipping live NR conformance tests");
 
         var allSpecs = ConformanceTestBase.AllSpecs().ToList();
         var pool = _fixture.EnginePool!;

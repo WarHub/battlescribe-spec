@@ -53,7 +53,8 @@ jobs:
             --specs specs \
             --engine battlescribe \
             --expected-failures battlescribe \
-            --output github-actions
+            --output github-actions \
+            --workers 2
 
   script-tests:
     runs-on: ubuntu-latest
@@ -93,9 +94,10 @@ jobs:
         run: dotnet build
 
       - name: Run frozen NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FrozenNewRecruitConformanceTests" --no-build --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FullyQualifiedName~FrozenNewRecruitConformanceTests&FullyQualifiedName!~Sequential" --no-build --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
+          NR_PARALLEL: 4
 
   nr-conformance:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[nr-test]')
@@ -127,16 +129,17 @@ jobs:
         run: dotnet build
 
       - name: Run NR smoke tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "NewRecruitSmokeTests" --logger GitHubActions
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitSmokeTests" --logger GitHubActions
         env:
           NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true
 
       - name: Run NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "NewRecruitConformanceTests" --logger GitHubActions
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests" --logger GitHubActions
         env:
           NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true
+          NR_PARALLEL: 2
 
       - name: Generate conformance report
         run: |

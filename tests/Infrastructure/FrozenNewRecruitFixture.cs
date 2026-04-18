@@ -4,34 +4,38 @@ using Xunit;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Shared fixture that creates a NewRecruitRosterEngine in frozen (HAR replay) mode.
-/// Uses a pre-recorded HAR snapshot downloaded from WarHub/newrecruit-har GitHub Releases.
-/// No live NR website or env var needed. Skipped when the HAR file doesn't exist or NR_FROZEN_SKIP=true.
+/// Shared fixture that creates a pool of NewRecruitRosterEngines in frozen (HAR replay) mode.
+/// Each engine has its own browser context, enabling parallel execution.
+/// This is the default fixture for frozen NR conformance tests.
 /// </summary>
 public sealed class FrozenNewRecruitFixture : IAsyncLifetime
 {
-    public NewRecruitRosterEngine? Engine { get; private set; }
-    public bool Available => Engine is not null;
-    public string? HarFilePath { get; private set; }
+    public NewRecruitEnginePool? EnginePool { get; private set; }
+    public bool Available => EnginePool is not null;
 
     public async Task InitializeAsync()
     {
         if (Environment.GetEnvironmentVariable("NR_FROZEN_SKIP") == "true")
             return;
 
-        HarFilePath = HarRecorder.FindFrozenHarFile();
-        if (HarFilePath is null)
+        var harFile = HarRecorder.FindFrozenHarFile();
+        if (harFile is null)
             return;
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
-        Engine = await NewRecruitRosterEngine.CreateFrozenAsync(HarFilePath, headless: headless);
+
+        var concurrency = 5;
+        if (int.TryParse(Environment.GetEnvironmentVariable("NR_PARALLEL"), out var envConcurrency) && envConcurrency > 0)
+            concurrency = envConcurrency;
+
+        EnginePool = await NewRecruitEnginePool.CreateFrozenAsync(harFile, concurrency, headless: headless);
     }
 
-    public Task DisposeAsync()
+    public async Task DisposeAsync()
     {
-        Engine?.Dispose();
-        Engine = null;
-        return Task.CompletedTask;
+        if (EnginePool is not null)
+            await EnginePool.DisposeAsync();
+        EnginePool = null;
     }
 }
 
