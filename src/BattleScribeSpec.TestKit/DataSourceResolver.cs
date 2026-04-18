@@ -70,7 +70,7 @@ public sealed class DataSourceResolver
             [_cacheDir, .. uri.CacheKey.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)]);
 
         // Fast path: if cache is already populated, return immediately (no lock)
-        if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
+        if (IsPopulatedCache(cachePath))
             return cachePath;
 
         // Serialize git clones to prevent TOCTOU races when parallel engines
@@ -78,10 +78,10 @@ public sealed class DataSourceResolver
         lock (GitLock)
         {
             // Re-check inside lock — another thread may have populated it
-            if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
+            if (IsPopulatedCache(cachePath))
                 return cachePath;
 
-            // Clean up empty/corrupt cache directories
+            // Clean up empty/corrupt/partial cache directories
             try
             {
                 if (Directory.Exists(cachePath))
@@ -89,7 +89,7 @@ public sealed class DataSourceResolver
             }
             catch (IOException)
             {
-                if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
+                if (IsPopulatedCache(cachePath))
                     return cachePath;
             }
 
@@ -115,6 +115,18 @@ public sealed class DataSourceResolver
             return cachePath;
         }
     }
+
+    /// <summary>
+    /// A cache directory is "populated" if it exists and has content beyond just
+    /// the .git directory. A directory containing only .git is a partial/interrupted
+    /// clone and should be re-cloned. Note: git clean -ffdx during CI checkout
+    /// won't remove directories that have their own .git, so stale partial clones
+    /// can persist across CI runs.
+    /// </summary>
+    private static bool IsPopulatedCache(string path) =>
+        Directory.Exists(path) &&
+        Directory.EnumerateFileSystemEntries(path)
+            .Any(e => !Path.GetFileName(e).Equals(".git", StringComparison.OrdinalIgnoreCase));
 
     private static string? FindByName(string resolvedDir, string pattern, string name)
     {
