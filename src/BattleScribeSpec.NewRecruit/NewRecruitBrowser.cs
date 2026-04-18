@@ -64,6 +64,25 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         return browser;
     }
 
+    /// <summary>
+    /// Create a browser wrapper from an existing context and page.
+    /// Used by <see cref="NewRecruitEnginePool"/> to create multiple engines
+    /// from a shared browser instance with individual contexts.
+    /// The caller retains ownership of the context — disposing this browser
+    /// only closes the page, not the context or playwright instance.
+    /// </summary>
+    internal static NewRecruitBrowser CreateFromContext(
+        IPage page, string baseUrl, bool isFrozen)
+    {
+        var browser = new NewRecruitBrowser(baseUrl)
+        {
+            Page = page,
+            _isFrozen = isFrozen,
+            // No _playwright or _browser — lifecycle owned by the pool
+        };
+        return browser;
+    }
+
     private async Task InitializeAsync(bool headless, string? harFilePath)
     {
         _isFrozen = harFilePath is not null;

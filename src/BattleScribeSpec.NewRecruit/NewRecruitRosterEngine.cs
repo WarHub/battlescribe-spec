@@ -62,6 +62,15 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return new NewRecruitRosterEngine(browser);
     }
 
+    /// <summary>
+    /// Create a NewRecruitRosterEngine wrapping an existing browser context.
+    /// Used by <see cref="NewRecruitEnginePool"/> for pooled engines.
+    /// </summary>
+    internal static NewRecruitRosterEngine CreateFromBrowser(NewRecruitBrowser browser)
+    {
+        return new NewRecruitRosterEngine(browser);
+    }
+
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         _gameSystem = gameSystem;
