@@ -6,6 +6,7 @@ namespace BattleScribeSpec;
 public sealed class DataSourceResolver
 {
     private static readonly Regex ShaRegex = new("^[0-9a-fA-F]{40}$", RegexOptions.Compiled);
+    private static readonly object GitLock = new();
     private readonly string _cacheDir;
 
     public DataSourceResolver(string? cacheDir = null)
@@ -68,42 +69,51 @@ public sealed class DataSourceResolver
         var cachePath = Path.Combine(
             [_cacheDir, .. uri.CacheKey.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)]);
 
+        // Fast path: if cache is already populated, return immediately (no lock)
         if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
             return cachePath;
 
-        // Clean up empty/corrupt cache directories — wrapped in try-catch for concurrent access
-        try
+        // Serialize git clones to prevent TOCTOU races when parallel engines
+        // resolve the same datasource simultaneously
+        lock (GitLock)
         {
-            if (Directory.Exists(cachePath))
-                Directory.Delete(cachePath, recursive: true);
-        }
-        catch (IOException)
-        {
-            // Another process may be writing; if it now has content, use it
+            // Re-check inside lock — another thread may have populated it
             if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
                 return cachePath;
-        }
 
-        var parent = Path.GetDirectoryName(cachePath);
-        if (!string.IsNullOrWhiteSpace(parent))
-            Directory.CreateDirectory(parent);
+            // Clean up empty/corrupt cache directories
+            try
+            {
+                if (Directory.Exists(cachePath))
+                    Directory.Delete(cachePath, recursive: true);
+            }
+            catch (IOException)
+            {
+                if (Directory.Exists(cachePath) && Directory.EnumerateFileSystemEntries(cachePath).Any())
+                    return cachePath;
+            }
 
-        var repoUrl = $"https://github.com/{uri.Org}/{uri.Repo}.git";
-        if (uri.Ref is not null && ShaRegex.IsMatch(uri.Ref))
-        {
-            RunGit(["clone", repoUrl, cachePath]);
-            RunGit(["-C", cachePath, "checkout", uri.Ref]);
-        }
-        else if (!string.IsNullOrWhiteSpace(uri.Ref))
-        {
-            RunGit(["clone", "--depth", "1", "--branch", uri.Ref, repoUrl, cachePath]);
-        }
-        else
-        {
-            RunGit(["clone", "--depth", "1", repoUrl, cachePath]);
-        }
+            var parent = Path.GetDirectoryName(cachePath);
+            if (!string.IsNullOrWhiteSpace(parent))
+                Directory.CreateDirectory(parent);
 
-        return cachePath;
+            var repoUrl = $"https://github.com/{uri.Org}/{uri.Repo}.git";
+            if (uri.Ref is not null && ShaRegex.IsMatch(uri.Ref))
+            {
+                RunGit(["clone", repoUrl, cachePath]);
+                RunGit(["-C", cachePath, "checkout", uri.Ref]);
+            }
+            else if (!string.IsNullOrWhiteSpace(uri.Ref))
+            {
+                RunGit(["clone", "--depth", "1", "--branch", uri.Ref, repoUrl, cachePath]);
+            }
+            else
+            {
+                RunGit(["clone", "--depth", "1", repoUrl, cachePath]);
+            }
+
+            return cachePath;
+        }
     }
 
     private static string? FindByName(string resolvedDir, string pattern, string name)
