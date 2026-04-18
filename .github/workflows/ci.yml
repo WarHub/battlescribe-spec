@@ -144,6 +144,8 @@ jobs:
             --adapter "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
             --specs specs \
             --engine newrecruit \
+            --assertion-engine battlescribe \
+            --expected-failures battlescribe \
             --output github-actions \
             --report artifacts/nr-conformance-report.json
 

@@ -13,6 +13,7 @@ string? engineFilter = null;
 string? reportPath = null;
 string? matrixDir = null;
 string? expectedFailuresEngine = null;
+string? assertionEngine = null;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -44,6 +45,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--expected-failures" when i + 1 < args.Length:
             expectedFailuresEngine = args[++i];
+            break;
+        case "--assertion-engine" when i + 1 < args.Length:
+            assertionEngine = args[++i];
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -193,7 +197,7 @@ foreach (var (_, id, category, loader) in specSources)
     // Run spec via protocol engine — use longer timeout for DataSource specs
     var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
     using var engine = new JsonProtocolEngine(adapterProcess, timeout);
-    var runner = new SpecRunner(engine, new DataSourceResolver(), engineFilter);
+    var runner = new SpecRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
     var result = runner.Run(spec);
     results.Add(result);
     specsByResult[result] = spec;
@@ -364,6 +368,9 @@ void PrintUsage()
           --expected-failures <engine>
                               Engine name for spec-level expected failures (from engines YAML field)
                               Expected failures don't count toward exit code; unexpected passes do
+          --assertion-engine <engine>
+                              Engine name for step-level assertion overrides (defaults to --engine)
+                              Use when the adapter engine differs from the spec engine filter
           -h, --help          Show this help
         """);
 }
@@ -384,7 +391,8 @@ void OutputConformanceReport(string path, List<SpecResultSummary> results)
         reportFailed,
         reportSkipped,
         passRate,
-        results);
+        results,
+        assertionEngine != null && assertionEngine != engineFilter ? assertionEngine : null);
 
     var directory = Path.GetDirectoryName(path);
     if (!string.IsNullOrEmpty(directory))
@@ -397,7 +405,10 @@ void OutputConformanceReport(string path, List<SpecResultSummary> results)
     Console.WriteLine($"Summary: total={report.TotalSpecs}, passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}, passRate={report.PassRate:F1}%");
 
     if (engineFilter is not null)
-        Console.WriteLine($"Engine breakdown: {engineFilter} => passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}");
+    {
+        var assertionLabel = report.AssertionEngine is not null ? $", assertions={report.AssertionEngine}" : "";
+        Console.WriteLine($"Engine breakdown: {engineFilter} => passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}{assertionLabel}");
+    }
 
     var failedSpecs = results.Where(r => r.Status == "failed").ToList();
     if (failedSpecs.Count > 0)

@@ -8,7 +8,8 @@ public record ConformanceReport(
     int Failed,
     int Skipped,
     double PassRate,
-    List<SpecResultSummary> Results);
+    List<SpecResultSummary> Results,
+    string? AssertionEngine = null);
 
 public record SpecResultSummary(
     string SpecId,
