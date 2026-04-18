@@ -13,6 +13,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     private IBrowser? _browser;
     private bool _isFrozen;
     private bool _frozenReady;
+    private bool _helpersInjected;
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
@@ -211,6 +212,26 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             // Let the caller's JS check produce the diagnostic error
         }
     }
+
+    /// <summary>
+    /// Pre-inject shared JS helper functions and the state reader into the page.
+    /// Called once after navigation; avoids re-parsing large JS blobs on every
+    /// EvaluateAsync call. In frozen mode, injected once and persisted across
+    /// tests (no page reloads). In live mode, must be called after each GotoAsync.
+    /// </summary>
+    public async Task InjectHelpersAsync()
+    {
+        if (_helpersInjected) return;
+
+        await Page.EvaluateAsync(JsHelpers.InjectionScript);
+        _helpersInjected = true;
+    }
+
+    /// <summary>
+    /// Reset the helpers-injected flag. Call after a page navigation that
+    /// destroys JS state (live mode GotoAsync).
+    /// </summary>
+    internal void ResetHelpersInjected() => _helpersInjected = false;
 
     public async ValueTask DisposeAsync()
     {

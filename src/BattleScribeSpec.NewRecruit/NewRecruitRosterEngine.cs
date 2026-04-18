@@ -90,6 +90,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 await Timings.TimeAsync("WaitForPinia", () => _browser.WaitForPiniaAsync());
             }
 
+            // Pre-inject JS helpers and state reader (once per page lifetime)
+            await Timings.TimeAsync("InjectHelpers", () => _browser.InjectHelpersAsync());
+
             // Generate BattleScribe XML from spec data
             string gstXml = null!;
             IReadOnlyList<(string FileName, string Xml)> allCatXml = null!;
@@ -253,6 +256,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         {
             await _browser.NavigateToAppAsync();
             await _browser.WaitForPiniaAsync();
+            await _browser.InjectHelpersAsync();
 
             // Build files array for loadSystemFromFs
             var fileData = files.Select(f => new { name = f.FileName, path = $"/spec/{f.FileName}", data = f.Content }).ToArray();

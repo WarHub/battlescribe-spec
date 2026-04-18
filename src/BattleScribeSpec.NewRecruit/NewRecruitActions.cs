@@ -19,115 +19,10 @@ namespace BattleScribeSpec.NewRecruit;
 /// </summary>
 public static class NewRecruitActions
 {
-    /// <summary>
-    /// JS helper: get forces array from army, preferring getForces() over getChildren().
-    /// </summary>
-    private const string JsGetForces = """
-        function getForces(army) {
-            const f = army.getForces?.();
-            if (f?.length) return f;
-            const c = army.getChildren?.();
-            if (c?.length) return c;
-            return [];
-        }
-        """;
-
-    /// <summary>
-    /// JS helper: get selections from a force.
-    /// </summary>
-    private const string JsGetSelections = """
-        function getSelections(force) {
-            const s = force.getSelections?.();
-            if (s?.length) return s;
-            const c = force.getChildren?.();
-            if (c?.length) return c;
-            return [];
-        }
-        """;
-
-    /// <summary>
-    /// JS helper: get selections sorted by insertion order (matching state reader).
-    /// Untagged selections (auto-selected by NR) sort first in catalogue order.
-    /// User-selected entries sort by the sequence number tagged during SelectEntry.
-    /// </summary>
-    private const string JsGetSortedSelections = """
-        function getSortedSelections(force) {
-            const sels = getSelections(force);
-            const entryOrder = window.__bsspec?.entryOrder || [];
-            const orderMap = {};
-            entryOrder.forEach((id, i) => { orderMap[id] = i; });
-            return [...sels].sort((a, b) => {
-                const ra = a?.__v_raw || a;
-                const rb = b?.__v_raw || b;
-                const seqA = ra?.__bsspec_seq ?? -1;
-                const seqB = rb?.__bsspec_seq ?? -1;
-                if (seqA !== seqB) return seqA - seqB;
-                const idA = ra?.selector?.source?.id || ra?.source?.id;
-                const idB = rb?.selector?.source?.id || rb?.source?.id;
-                return (orderMap[idA] ?? 999) - (orderMap[idB] ?? 999);
-            });
-        }
-        """;
-
-    /// <summary>
-    /// JS helper: recursively find a selector by ID in the selector tree.
-    /// NR's tree: node.selectors[].first().selectors[] — entries are leaf selectors.
-    /// </summary>
-    private const string JsFindSelectorById = """
-        function findSelectorById(node, targetId) {
-            if (!node) return null;
-            // Check if this node's ids include the target
-            if (node.ids?.includes(targetId)) return node;
-            // Check selectors array
-            const sels = node.selectors || [];
-            for (const s of sels) {
-                if (s.ids?.includes(targetId)) return s;
-                // Go deeper via first() (gets the instance node with sub-selectors)
-                if (typeof s.first === 'function') {
-                    const inst = s.first();
-                    if (inst?.selectors) {
-                        const found = findSelectorById(inst, targetId);
-                        if (found) return found;
-                    }
-                }
-                // Also check nested selectors directly
-                if (s.selectors) {
-                    const found = findSelectorById(s, targetId);
-                    if (found) return found;
-                }
-            }
-            return null;
-        }
-        """;
-
-    /// <summary>
-    /// JS helper: recursively find a selector by name in the selector tree.
-    /// </summary>
-    private const string JsFindSelectorByName = """
-        function findSelectorByName(node, targetName) {
-            if (!node) return null;
-            // Check this node's name
-            if (node.getName?.() === targetName || node.name === targetName) return node;
-            // Check selectors array
-            const sels = node.selectors || [];
-            for (const s of sels) {
-                if (s.getName?.() === targetName || s.name === targetName) return s;
-                // Go deeper via first()
-                if (typeof s.first === 'function') {
-                    const inst = s.first();
-                    if (inst?.selectors) {
-                        const found = findSelectorByName(inst, targetName);
-                        if (found) return found;
-                    }
-                }
-                if (s.selectors) {
-                    const found = findSelectorByName(s, targetName);
-                    if (found) return found;
-                }
-            }
-            return null;
-        }
-        """;
+    // JS helper functions (getForces, getSelections, getSortedSelections,
+    // findSelectorById, findSelectorByName) are pre-injected as window
+    // globals by JsHelpers.InjectionScript via NewRecruitBrowser.InjectHelpersAsync().
+    // Action methods reference them by name — no inline definitions needed.
 
     /// <summary>
     /// Add a force to the roster by force entry name.
@@ -176,19 +71,17 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task SelectEntryByNameAsync(IPage page, int forceIndex, string entryName)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, entryName}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
 
                     const force = forces[forceIndex];
 
-                    {{JsFindSelectorByName}}
                     const selector = findSelectorByName(force, entryName);
                     if (!selector) return `Entry '${entryName}' not found in force selector tree`;
 
@@ -213,14 +106,12 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task SelectChildEntryByNameAsync(IPage page, int forceIndex, int selectionIndex, string childEntryName)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, selectionIndex, childEntryName}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
-                    {{JsGetSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
@@ -229,7 +120,6 @@ public static class NewRecruitActions
 
                     const sel = selections[selectionIndex];
 
-                    {{JsFindSelectorByName}}
                     const found = sel.selector ? findSelectorByName(sel.selector, childEntryName) : null;
                     const result = found || findSelectorByName(sel, childEntryName);
                     if (!result) return `Child entry '${childEntryName}' not found under selection`;
@@ -280,13 +170,12 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task RemoveForceAsync(IPage page, int forceIndex)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             (forceIndex) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
 
@@ -306,25 +195,22 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task SelectEntryByIdAsync(IPage page, int forceIndex, string entryId)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, entryId}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
 
                     const force = forces[forceIndex];
 
                     // Record existing selections before adding
-                    {{JsGetSelections}}
                     const before = new Set(
                         getSelections(force).map(s => (s?.__v_raw || s)?.uid || '')
                     );
 
-                    {{JsFindSelectorById}}
                     const selector = findSelectorById(force, entryId);
                     if (!selector) return `Entry '${entryId}' not found in force selector tree`;
 
@@ -365,13 +251,12 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task SelectEntryByIndexAsync(IPage page, int forceIndex, int entryIndex)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, entryIndex}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range (${forces.length} forces)`;
 
@@ -417,15 +302,12 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task SelectChildEntryByIdAsync(IPage page, int forceIndex, int selectionIndex, string childEntryId)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, selectionIndex, childEntryId}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
-                    {{JsGetSelections}}
-                    {{JsGetSortedSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
@@ -450,7 +332,6 @@ public static class NewRecruitActions
                     }
 
                     // Fallback: search the selector tree (for entries not yet instantiated)
-                    {{JsFindSelectorById}}
                     const selector = sel.selector ? findSelectorById(sel.selector, childEntryId) : null;
                     const found = selector || findSelectorById(sel, childEntryId);
                     if (!found) return `Child entry '${childEntryId}' not found under selection`;
@@ -476,15 +357,12 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task DeselectSelectionAsync(IPage page, int forceIndex, int selectionIndex)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, selectionIndex}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
-                    {{JsGetSelections}}
-                    {{JsGetSortedSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
@@ -511,15 +389,12 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task SetSelectionCountAsync(IPage page, int forceIndex, int entryIndex, int count)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, entryIndex, count}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
-                    {{JsGetSelections}}
-                    {{JsGetSortedSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
@@ -541,15 +416,12 @@ public static class NewRecruitActions
     /// </summary>
     public static async Task DuplicateSelectionAsync(IPage page, int forceIndex, int selectionIndex)
     {
-        var error = await page.EvaluateAsync<string?>($$"""
+        var error = await page.EvaluateAsync<string?>("""
             ({forceIndex, selectionIndex}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    {{JsGetForces}}
-                    {{JsGetSelections}}
-                    {{JsGetSortedSelections}}
                     const forces = getForces(army);
                     if (forceIndex >= forces.length) return `Force index ${forceIndex} out of range`;
 
