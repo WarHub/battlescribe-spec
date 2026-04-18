@@ -142,6 +142,8 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
                 WaitUntil = WaitUntilState.Load,
                 Timeout = 30_000,
             });
+            // Full page navigation destroys all JS state — must re-inject helpers
+            _helpersInjected = false;
             await WaitForNetworkSettledAsync();
         }
         await DismissDialogsAsync();
