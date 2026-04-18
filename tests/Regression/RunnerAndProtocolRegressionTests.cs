@@ -102,6 +102,84 @@ public class RunnerAndProtocolRegressionTests
     }
 
     [Fact]
+    public void SpecRunner_CallsCleanup_AfterSuccessfulRun()
+    {
+        var engine = new FakeEngine();
+        var runner = new SpecRunner(engine);
+        var spec = new SpecFile
+        {
+            Id = "cleanup-success",
+            Category = "runner",
+            Description = "cleanup should be called after successful spec",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps = [new StepDef { ExpectedState = new ExpectedStateDef { ForceCount = 0 } }]
+        };
+
+        runner.Run(spec);
+
+        Assert.Equal(1, engine.CleanupCalls);
+    }
+
+    [Fact]
+    public void SpecRunner_CallsCleanup_AfterFailedAction()
+    {
+        var engine = new FakeEngine { ThrowOnAddForce = true };
+        var runner = new SpecRunner(engine);
+        var spec = new SpecFile
+        {
+            Id = "cleanup-failure",
+            Category = "runner",
+            Description = "cleanup should be called even after action failure",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps = [new StepDef { Action = "addForce", ForceEntryIndex = 0 }]
+        };
+
+        runner.Run(spec);
+
+        Assert.Equal(1, engine.CleanupCalls);
+    }
+
+    [Fact]
+    public void SpecRunner_CallsCleanup_AfterSetupErrors()
+    {
+        var engine = new FakeEngine { SetupErrors = ["bad setup"] };
+        var runner = new SpecRunner(engine);
+        var spec = new SpecFile
+        {
+            Id = "cleanup-setup-error",
+            Category = "runner",
+            Description = "cleanup should be called even after setup errors",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps = [new StepDef { Action = "addForce", ForceEntryIndex = 0 }]
+        };
+
+        runner.Run(spec);
+
+        Assert.Equal(1, engine.CleanupCalls);
+    }
+
+    [Fact]
+    public void SpecRunner_CallsCleanup_AfterSetupException()
+    {
+        var engine = new FakeEngine { ThrowOnSetup = true };
+        var runner = new SpecRunner(engine);
+        var spec = new SpecFile
+        {
+            Id = "cleanup-setup-exception",
+            Category = "runner",
+            Description = "cleanup should be called even after setup throws",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps = [new StepDef { ExpectedState = new ExpectedStateDef { ForceCount = 0 } }]
+        };
+
+        var result = runner.Run(spec);
+
+        Assert.Equal(1, engine.CleanupCalls);
+        Assert.False(result.Passed);
+        Assert.Contains(result.Failures, f => f.Contains("Setup failed"));
+    }
+
+    [Fact]
     public void CatXmlGenerator_ThrowsOnEmptyCatalogueArray()
     {
         var gameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" };
@@ -137,13 +215,20 @@ public class RunnerAndProtocolRegressionTests
     private sealed class FakeEngine : IRosterEngine
     {
         public IReadOnlyList<string> SetupErrors { get; init; } = [];
+        public bool ThrowOnSetup { get; init; }
         public bool ThrowOnAddForce { get; init; }
         public int ActionCalls { get; private set; }
         public int GetStateCalls { get; private set; }
+        public int CleanupCalls { get; private set; }
 
         public RosterState State { get; init; } = new("roster", "gs", [], [], []);
 
-        public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues) => SetupErrors;
+        public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
+        {
+            if (ThrowOnSetup)
+                throw new InvalidOperationException("setup boom");
+            return SetupErrors;
+        }
 
         public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
         {
@@ -173,6 +258,8 @@ public class RunnerAndProtocolRegressionTests
         }
 
         public IReadOnlyList<ValidationErrorState> GetValidationErrors() => State.ValidationErrors;
+
+        public void Cleanup() => CleanupCalls++;
 
         public void Dispose()
         {

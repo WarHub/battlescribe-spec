@@ -91,25 +91,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return 'Required stores not found';
 
-                        // Clean up previous test state
-                        if (window.__bsspec?.row?.list_key) {
-                            try {
-                                const currentList = listsStore.getCurrentList?.();
-                                if (currentList?.army) {
-                                    const forces = currentList.army.getForces?.() || [];
-                                    for (const f of [...forces]) {
-                                        if (typeof f.delete === 'function') f.delete();
-                                    }
-                                }
-                                await listsStore.deleteList?.(window.__bsspec.row.list_key);
-                            } catch(e) { /* ignore cleanup errors */ }
-                        }
-                        // Clear previous localLibrary entries
-                        for (const key of Object.keys(sysStore.localLibrary || {})) {
-                            delete sysStore.localLibrary[key];
-                        }
-                        window.__bsspec = undefined;
-
                         // Load synthetic data into NR's local library
                         const files = [
                             { name: 'system.gst', path: '/spec/system.gst', data: gstXml },
@@ -259,24 +240,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const sysStore = pinia._s.get('systemsStore');
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return 'Required stores not found';
-
-                        // Clean up previous test state
-                        if (window.__bsspec?.row?.list_key) {
-                            try {
-                                const currentList = listsStore.getCurrentList?.();
-                                if (currentList?.army) {
-                                    const forces = currentList.army.getForces?.() || [];
-                                    for (const f of [...forces]) {
-                                        if (typeof f.delete === 'function') f.delete();
-                                    }
-                                }
-                                await listsStore.deleteList?.(window.__bsspec.row.list_key);
-                            } catch(e) { /* ignore cleanup errors */ }
-                        }
-                        for (const key of Object.keys(sysStore.localLibrary || {})) {
-                            delete sysStore.localLibrary[key];
-                        }
-                        window.__bsspec = undefined;
 
                         // Load real data files into NR's local library
                         const files = fileData.map(f => ({ name: f.name, path: f.path, data: f.data }));
@@ -553,6 +516,58 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
     {
         return GetRosterState().ValidationErrors;
+    }
+
+    public void Cleanup()
+    {
+        CleanupAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task CleanupAsync()
+    {
+        try
+        {
+            await _browser.WaitForPiniaAsync();
+
+            var cleanupError = await _browser.Page.EvaluateAsync<string?>("""
+                async () => {
+                    try {
+                        const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                        if (!pinia) return null; // no stores — nothing to clean
+
+                        const sysStore = pinia._s.get('systemsStore');
+                        const listsStore = pinia._s.get('lists');
+                        if (!sysStore || !listsStore) return null;
+
+                        if (window.__bsspec?.row?.list_key) {
+                            const currentList = listsStore.getCurrentList?.();
+                            if (currentList?.army) {
+                                const forces = currentList.army.getForces?.() || [];
+                                for (const f of [...forces]) {
+                                    if (typeof f.delete === 'function') f.delete();
+                                }
+                            }
+                            await listsStore.deleteList?.(window.__bsspec.row.list_key);
+                        }
+                        for (const key of Object.keys(sysStore.localLibrary || {})) {
+                            delete sysStore.localLibrary[key];
+                        }
+                        window.__bsspec = undefined;
+                        return null;
+                    } catch(e) {
+                        const errorText = e?.stack ?? e?.message ?? String(e);
+                        return 'Cleanup error: ' + errorText;
+                    }
+                }
+                """);
+
+            if (cleanupError != null)
+                Console.Error.WriteLine($"[NewRecruitRosterEngine] {cleanupError}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[NewRecruitRosterEngine] Cleanup failed: {ex.Message}");
+        }
     }
 
     public void Dispose()
