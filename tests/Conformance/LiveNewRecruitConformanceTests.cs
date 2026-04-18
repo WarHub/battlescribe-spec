@@ -39,15 +39,21 @@ public sealed class LiveNewRecruitConformanceTests
         var skipped = 0;
         var expectedFailures = 0;
 
-        await Parallel.ForEachAsync(
-            allSpecs,
-            new ParallelOptions { MaxDegreeOfParallelism = pool.Size },
-            async (specArgs, ct) =>
-            {
-                var specPath = (string)specArgs[0];
-                var specName = (string)specArgs[1];
+        // Load all specs upfront and pre-resolve datasources before parallel execution
+        var resolver = new DataSourceResolver();
+        var loadedSpecs = allSpecs.Select(args => (
+            specPath: (string)args[0],
+            specName: (string)args[1],
+            spec: SpecLoader.Load((string)args[0])
+        )).ToList();
+        resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
-                var spec = SpecLoader.Load(specPath);
+        await Parallel.ForEachAsync(
+            loadedSpecs,
+            new ParallelOptions { MaxDegreeOfParallelism = pool.Size },
+            async (item, ct) =>
+            {
+                var (specPath, specName, spec) = item;
 
                 if (!spec.IsApplicableTo(EngineName))
                 {
@@ -60,7 +66,7 @@ public sealed class LiveNewRecruitConformanceTests
                 using var pooled = await pool.AcquireAsync(ct);
                 var engine = pooled.Engine;
 
-                var runner = new SpecRunner(engine, new DataSourceResolver(), EngineName);
+                var runner = new SpecRunner(engine, resolver, EngineName);
                 var result = runner.Run(spec);
 
                 if (result.Passed && expectedToFail)

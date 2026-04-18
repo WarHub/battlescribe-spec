@@ -38,6 +38,21 @@ public sealed class DataSourceResolver
             "datasource-cache");
     }
 
+    /// <summary>
+    /// Pre-resolve all datasources used by the given specs. Call this once
+    /// before parallel execution so that git clones happen sequentially
+    /// and parallel threads only hit cache hits.
+    /// </summary>
+    public void WarmCache(IEnumerable<SpecFile> specs)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var spec in specs)
+        {
+            if (spec.Setup.DataSource is { Length: > 0 } uri && seen.Add(uri))
+                Resolve(uri);
+        }
+    }
+
     public string Resolve(string dataSourceUri) => Resolve(DataSourceUri.Parse(dataSourceUri));
 
     public string Resolve(DataSourceUri uri) => uri.Provider switch
@@ -69,19 +84,18 @@ public sealed class DataSourceResolver
         var cachePath = Path.Combine(
             [_cacheDir, .. uri.CacheKey.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)]);
 
-        // Fast path: if cache is already populated, return immediately (no lock)
         if (IsPopulatedCache(cachePath))
             return cachePath;
 
-        // Serialize git clones to prevent TOCTOU races when parallel engines
-        // resolve the same datasource simultaneously
+        // Serialize git clones to prevent races when parallel threads
+        // resolve the same datasource (safety net — primary mechanism
+        // is WarmCache called before parallel execution)
         lock (GitLock)
         {
-            // Re-check inside lock — another thread may have populated it
             if (IsPopulatedCache(cachePath))
                 return cachePath;
 
-            // Clean up empty/corrupt/partial cache directories
+            // Clean up partial/corrupt directories before cloning
             try
             {
                 if (Directory.Exists(cachePath))
@@ -117,11 +131,8 @@ public sealed class DataSourceResolver
     }
 
     /// <summary>
-    /// A cache directory is "populated" if it exists and has content beyond just
-    /// the .git directory. A directory containing only .git is a partial/interrupted
-    /// clone and should be re-cloned. Note: git clean -ffdx during CI checkout
-    /// won't remove directories that have their own .git, so stale partial clones
-    /// can persist across CI runs.
+    /// A cache directory is "populated" if it exists and has content beyond
+    /// just the .git directory (which indicates a partial/interrupted clone).
     /// </summary>
     private static bool IsPopulatedCache(string path) =>
         Directory.Exists(path) &&
@@ -154,7 +165,6 @@ public sealed class DataSourceResolver
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start git process.");
 
-        // Read stdout and stderr in parallel to avoid deadlock when buffers fill
         var stdOutTask = process.StandardOutput.ReadToEndAsync();
         var stdErrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
