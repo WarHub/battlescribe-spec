@@ -106,7 +106,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
     /// Create a live engine pool pointed at the real NR website.
     /// </summary>
     public static async Task<NewRecruitEnginePool> CreateLiveAsync(
-        int concurrency = 2,
+        int concurrency = 10,
         string baseUrl = "https://newrecruit.eu",
         bool headless = true)
     {

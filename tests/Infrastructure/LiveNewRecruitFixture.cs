@@ -5,7 +5,7 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared fixture that creates a pool of NewRecruitRosterEngines pointed at a live NR site.
-/// Gated by NR_ENGINE_URL env var. Lower default concurrency (2) to avoid rate limiting.
+/// Gated by NR_ENGINE_URL env var. Override concurrency via NR_PARALLEL.
 /// This is the default fixture for live NR conformance tests.
 /// </summary>
 public sealed class LiveNewRecruitFixture : IAsyncLifetime
@@ -21,8 +21,7 @@ public sealed class LiveNewRecruitFixture : IAsyncLifetime
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
 
-        // Lower default concurrency for live mode to avoid rate limiting
-        var concurrency = 2;
+        var concurrency = 10;
         if (int.TryParse(Environment.GetEnvironmentVariable("NR_PARALLEL"), out var envConcurrency) && envConcurrency > 0)
             concurrency = envConcurrency;
 

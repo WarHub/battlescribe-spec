@@ -24,7 +24,6 @@ public sealed class FrozenNewRecruitFixture : IAsyncLifetime
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
 
-        // Default to 5 parallel contexts; override with NR_PARALLEL env var
         var concurrency = 5;
         if (int.TryParse(Environment.GetEnvironmentVariable("NR_PARALLEL"), out var envConcurrency) && envConcurrency > 0)
             concurrency = envConcurrency;
