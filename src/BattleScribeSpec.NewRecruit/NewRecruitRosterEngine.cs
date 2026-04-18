@@ -555,7 +555,8 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         window.__bsspec = undefined;
                         return null;
                     } catch(e) {
-                        return 'Cleanup error: ' + e.message;
+                        const errorText = e?.stack ?? e?.message ?? String(e);
+                        return 'Cleanup error: ' + errorText;
                     }
                 }
                 """);

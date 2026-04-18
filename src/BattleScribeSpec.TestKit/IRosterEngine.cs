@@ -73,9 +73,15 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Clean up engine state after a spec run completes.
-    /// Called by the SpecRunner in a finally block after each spec.
+    /// Called by the SpecRunner in a finally block after each spec, including
+    /// when <see cref="Setup(ProtocolGameSystem, ProtocolCatalogue[])"/> fails,
+    /// throws, or the spec aborts before setup fully completes.
+    /// Implementations must therefore be safe to call when the engine is only
+    /// partially initialized and should be written to be idempotent/best-effort.
     /// Engines that maintain state across Setup() calls (e.g. browser-based)
     /// should override this to release resources like rosters.
+    /// Cleanup should not throw; implementations should swallow or internally
+    /// handle cleanup failures where possible.
     /// </summary>
     void Cleanup() { }
 

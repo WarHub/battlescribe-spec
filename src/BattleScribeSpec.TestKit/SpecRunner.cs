@@ -85,7 +85,7 @@ public sealed class SpecRunner
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[SpecRunner] Cleanup error after spec '{spec.Id}': {ex.Message}");
+                Console.Error.WriteLine($"[SpecRunner] Cleanup error after spec '{spec.Id}': {ex}");
             }
         }
 
