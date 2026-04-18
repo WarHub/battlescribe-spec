@@ -6,8 +6,9 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// Shared fixture that creates a pool of NewRecruitRosterEngines pointed at a live NR site.
 /// Gated by NR_ENGINE_URL env var. Lower default concurrency (2) to avoid rate limiting.
+/// This is the default fixture for live NR conformance tests.
 /// </summary>
-public sealed class ParallelNewRecruitFixture : IAsyncLifetime
+public sealed class LiveNewRecruitFixture : IAsyncLifetime
 {
     public NewRecruitEnginePool? EnginePool { get; private set; }
     public bool Available => EnginePool is not null;
@@ -36,7 +37,7 @@ public sealed class ParallelNewRecruitFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition("ParallelNewRecruit")]
-public class ParallelNewRecruitCollection : ICollectionFixture<ParallelNewRecruitFixture>
+[CollectionDefinition("LiveNewRecruit")]
+public class LiveNewRecruitCollection : ICollectionFixture<LiveNewRecruitFixture>
 {
 }

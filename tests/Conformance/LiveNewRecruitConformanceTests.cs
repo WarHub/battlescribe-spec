@@ -6,30 +6,31 @@ using Xunit.Abstractions;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Parallel version of live NR conformance tests.
-/// Gated by NR_ENGINE_URL env var. Lower concurrency (2) vs frozen (5).
+/// Runs declarative YAML spec files against the live New Recruit web engine via Playwright.
+/// Uses parallel execution with a browser context pool.
+/// Skipped when NR_ENGINE_URL is not set.
 /// </summary>
-[Collection("ParallelNewRecruit")]
+[Collection("LiveNewRecruit")]
 [Trait("Category", "Conformance")]
-[Trait("Engine", "ParallelNewRecruit")]
-public sealed class ParallelNewRecruitConformanceTests
+[Trait("Engine", "LiveNewRecruit")]
+public sealed class LiveNewRecruitConformanceTests
 {
     private readonly ITestOutputHelper _output;
-    private readonly ParallelNewRecruitFixture _fixture;
+    private readonly LiveNewRecruitFixture _fixture;
     private const string EngineName = "newrecruit";
-    private const string LogPrefix = "[PARALLEL-LIVE] ";
+    private const string LogPrefix = "[LIVE] ";
 
-    public ParallelNewRecruitConformanceTests(ITestOutputHelper output, ParallelNewRecruitFixture fixture)
+    public LiveNewRecruitConformanceTests(ITestOutputHelper output, LiveNewRecruitFixture fixture)
     {
         _output = output;
         _fixture = fixture;
     }
 
     [SkippableFact]
-    public async Task AllSpecsInParallel()
+    public async Task AllSpecs()
     {
         Skip.If(!_fixture.Available,
-            "NR_ENGINE_URL not set — skipping parallel live NR tests");
+            "NR_ENGINE_URL not set — skipping live NR conformance tests");
 
         var allSpecs = ConformanceTestBase.AllSpecs().ToList();
         var pool = _fixture.EnginePool!;

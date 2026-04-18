@@ -120,7 +120,7 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FrozenNewRecruitConfor
 The `nr-frozen` job in `.github/workflows/ci.yml` handles this automatically:
 1. Runs `setup.ps1` to download the pinned HAR snapshot
 2. Installs Playwright Chromium
-3. Runs `FrozenNewRecruitConformanceTests`
+3. Runs `FrozenNewRecruitConformanceTests` (parallel by default)
 
 ### Skipping
 
@@ -165,8 +165,8 @@ The `update-nr-snapshot.yml` workflow runs daily and on manual dispatch:
 | `setup.ps1` | Clones dependencies and downloads pinned test data |
 | `src/BattleScribeSpec.NewRecruit/HarRecorder.cs` | Recording, post-processing, version extraction |
 | `src/BattleScribeSpec.NewRecruit.HarTool/` | Console app for recording HAR snapshots |
-| `tests/FrozenNewRecruitFixture.cs` | xUnit fixture (HAR discovery, engine setup) |
-| `tests/FrozenNewRecruitConformanceTests.cs` | Conformance tests against frozen snapshot |
+| `tests/Infrastructure/FrozenNewRecruitFixture.cs` | xUnit fixture (browser context pool for parallel execution) |
+| `tests/Conformance/FrozenNewRecruitConformanceTests.cs` | Parallel conformance tests against frozen snapshot |
 | `.github/workflows/ci.yml` | `nr-frozen` CI job |
 | `.github/workflows/update-nr-snapshot.yml` | Daily snapshot update workflow |
 | `.testdata/newrecruit-har/` | Downloaded HAR files (gitignored) |

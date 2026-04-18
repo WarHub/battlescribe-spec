@@ -94,7 +94,7 @@ jobs:
         run: dotnet build
 
       - name: Run frozen NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "ParallelFrozenNewRecruitConformanceTests" --no-build --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FullyQualifiedName~FrozenNewRecruitConformanceTests&FullyQualifiedName!~Sequential" --no-build --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
           NR_PARALLEL: 4
@@ -129,13 +129,13 @@ jobs:
         run: dotnet build
 
       - name: Run NR smoke tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "NewRecruitSmokeTests" --logger GitHubActions
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitSmokeTests" --logger GitHubActions
         env:
           NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true
 
       - name: Run NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "ParallelNewRecruitConformanceTests" --logger GitHubActions
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests" --logger GitHubActions
         env:
           NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true

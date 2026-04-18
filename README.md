@@ -154,7 +154,7 @@ filters automatically. You can also run suites manually with `--filter`:
 |-------|---------|-------|
 | Oracle conformance | `dotnet test --filter "SpecConformanceTests"` | Always available |
 | Frozen NR conformance | `dotnet test --filter "FrozenNewRecruitConformanceTests"` | Requires `./setup.ps1` (downloads HAR snapshot) |
-| Live NR conformance | `dotnet test --filter "NewRecruitConformanceTests"` | Requires `NR_ENGINE_URL` env var + `./setup.ps1` (installs Playwright) |
+| Live NR conformance | `dotnet test --filter "LiveNewRecruitConformanceTests"` | Requires `NR_ENGINE_URL` env var + `./setup.ps1` (installs Playwright) |
 | Lint/formatting | `dotnet test --filter "SpecLintTests"` | Always available |
 | Real-world data | `dotnet test --filter "RealWorldData"` | Requires `./setup.ps1` (downloads wh40k-9e) |
 
@@ -165,13 +165,15 @@ filters automatically. You can also run suites manually with `--filter`:
 | `NR_ENGINE_URL` | Base URL for live New Recruit tests | `https://newrecruit.eu` |
 | `NR_HEADLESS` | Set to `false` to show the browser window | `false` |
 | `NR_FROZEN_SKIP` | Set to `true` to skip frozen NR tests | `true` |
+| `NR_PARALLEL` | Number of parallel browser contexts | `5` |
+| `NR_SEQUENTIAL` | Set to `true` to run sequential (per-spec) NR tests | `true` |
 
 Example — run live NR conformance tests with visible browser:
 
 ```powershell
 $env:NR_ENGINE_URL = "https://newrecruit.eu"
 $env:NR_HEADLESS = "false"
-dotnet test tests/BattleScribeSpec.Tests.csproj --filter "NewRecruitConformanceTests"
+dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests"
 ```
 
 ### End-to-End Test
