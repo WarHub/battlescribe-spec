@@ -70,6 +70,19 @@ public sealed class NrPerfTimings
     }
 
     /// <summary>
+    /// Record that a phase was skipped (e.g., frozen-mode optimization).
+    /// Shows up in the report as count=0 to distinguish from "never called".
+    /// </summary>
+    public void RecordSkip(string phase)
+    {
+        var list = _timings.GetOrAdd(phase + " [skipped]", _ => new List<double>());
+        lock (list)
+        {
+            list.Add(0);
+        }
+    }
+
+    /// <summary>
     /// Get a summary report of all recorded timings.
     /// </summary>
     public string GetReport()

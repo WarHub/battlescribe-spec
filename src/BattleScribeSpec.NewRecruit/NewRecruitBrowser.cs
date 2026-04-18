@@ -12,10 +12,23 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     private IPlaywright? _playwright;
     private IBrowser? _browser;
     private bool _isFrozen;
+    private bool _frozenReady;
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
     public bool IsFrozen => _isFrozen;
+
+    /// <summary>
+    /// True after the first successful frozen-mode setup. When set,
+    /// <see cref="NavigateToAppAsync"/> and <see cref="WaitForPiniaAsync"/>
+    /// can be skipped because we're already at /app with Pinia initialized
+    /// and the setup JS blob handles cleanup of previous state.
+    /// </summary>
+    public bool FrozenReady
+    {
+        get => _frozenReady;
+        set => _frozenReady = value;
+    }
 
     private NewRecruitBrowser(string baseUrl)
     {
