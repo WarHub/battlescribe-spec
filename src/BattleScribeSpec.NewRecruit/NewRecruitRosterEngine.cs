@@ -27,6 +27,12 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     // Maps force index → catalogue index (tracked as forces are added)
     private readonly List<int> _forceCatalogueMap = [];
 
+    /// <summary>
+    /// Performance timing collector. Populated during test execution.
+    /// Access after tests to get a timing report.
+    /// </summary>
+    public NrPerfTimings Timings { get; } = new();
+
     private NewRecruitRosterEngine(NewRecruitBrowser browser)
     {
         _browser = browser;
@@ -71,17 +77,22 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         try
         {
             // Navigate to /app and wait for NR to initialize
-            await _browser.NavigateToAppAsync();
-            await _browser.WaitForPiniaAsync();
+            await Timings.TimeAsync("NavigateToApp", () => _browser.NavigateToAppAsync());
+            await Timings.TimeAsync("WaitForPinia", () => _browser.WaitForPiniaAsync());
 
             // Generate BattleScribe XML from spec data
-            var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-            var allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+            string gstXml = null!;
+            IReadOnlyList<(string FileName, string Xml)> allCatXml = null!;
+            Timings.Time("XmlGeneration", () =>
+            {
+                gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
+                allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+            });
 
             // Build files array and catalogue name list for multi-catalogue support
             var catFiles = allCatXml.Select(c => new { name = c.FileName, path = $"/spec/{c.FileName}", data = c.Xml }).ToArray();
             var catNames = catalogues.Select(c => c.Name).ToArray();
-            var setupResult = await _browser.Page.EvaluateAsync<string?>("""
+            var setupResult = await Timings.TimeAsync("SetupJsEval", () => _browser.Page.EvaluateAsync<string?>("""
                 async ([gstXml, catFiles, systemId, catNames]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
@@ -175,7 +186,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         return 'Setup error: ' + e.message + '\n' + e.stack;
                     }
                 }
-                """, new object[] { gstXml, catFiles, gameSystem.Id, catNames });
+                """, new object[] { gstXml, catFiles, gameSystem.Id, catNames }));
 
             if (setupResult != null)
                 errors.Add(setupResult);
@@ -187,9 +198,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 var entryOrder = new List<string>();
                 foreach (var cat in catalogues)
                     CollectEntryIds(cat.SelectionEntries, entryOrder);
-                await _browser.Page.EvaluateAsync(
+                await Timings.TimeAsync("EntryOrderInjection", () => _browser.Page.EvaluateAsync(
                     "entryOrder => { if (window.__bsspec) window.__bsspec.entryOrder = entryOrder; }",
-                    entryOrder.ToArray());
+                    entryOrder.ToArray()));
             }
 
             // Inject cost limit configuration so the state reader can distinguish
@@ -199,9 +210,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 var costLimitConfig = new Dictionary<string, double?>();
                 foreach (var ct in gameSystem.CostTypes)
                     costLimitConfig[ct.Name] = ct.DefaultCostLimit;
-                await _browser.Page.EvaluateAsync(
+                await Timings.TimeAsync("CostLimitInjection", () => _browser.Page.EvaluateAsync(
                     "config => { if (window.__bsspec) window.__bsspec.costLimitConfig = config; }",
-                    costLimitConfig);
+                    costLimitConfig));
             }
         }
         catch (Exception ex)
@@ -509,8 +520,16 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public RosterState GetRosterState()
     {
-        return NewRecruitStateReader.ReadRosterStateAsync(_browser.Page)
-            .GetAwaiter().GetResult();
+        Timings.StartPhase("GetRosterState");
+        try
+        {
+            return NewRecruitStateReader.ReadRosterStateAsync(_browser.Page)
+                .GetAwaiter().GetResult();
+        }
+        finally
+        {
+            Timings.EndPhase();
+        }
     }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()

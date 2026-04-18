@@ -29,6 +29,11 @@ public sealed class FrozenNewRecruitFixture : IAsyncLifetime
 
     public Task DisposeAsync()
     {
+        if (Engine is not null)
+        {
+            // Dump timing report to console for performance analysis
+            Console.Error.WriteLine(Engine.Timings.GetReport());
+        }
         Engine?.Dispose();
         Engine = null;
         return Task.CompletedTask;

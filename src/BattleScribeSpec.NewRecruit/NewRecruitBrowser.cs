@@ -15,6 +15,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
+    public bool IsFrozen => _isFrozen;
 
     private NewRecruitBrowser(string baseUrl)
     {
