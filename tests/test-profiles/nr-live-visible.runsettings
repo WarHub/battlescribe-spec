@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Same as nr-live but with a visible browser window for debugging. -->
+<!-- Same as nr-live but with a visible browser window and visual editor navigation for debugging. -->
 <RunSettings>
   <RunConfiguration>
     <EnvironmentVariables>
       <NR_ENGINE_URL>https://newrecruit.eu</NR_ENGINE_URL>
       <NR_HEADLESS>false</NR_HEADLESS>
+      <NR_VISUAL>true</NR_VISUAL>
     </EnvironmentVariables>
     <TestCaseFilter>FullyQualifiedName~NewRecruitConformanceTests|FullyQualifiedName~NrIntegrationTests|FullyQualifiedName~NewRecruitSmokeTests</TestCaseFilter>
   </RunConfiguration>

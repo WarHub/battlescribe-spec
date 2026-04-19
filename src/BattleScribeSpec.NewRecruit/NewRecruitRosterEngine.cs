@@ -33,6 +33,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// </summary>
     public NrPerfTimings Timings { get; } = new();
 
+    /// <summary>
+    /// When true, navigates to the roster editor UI after setup so the browser
+    /// visually reflects the roster state. Useful with <c>NR_HEADLESS=false</c>
+    /// for debugging and demos. State reading is unaffected (reads from JS memory).
+    /// </summary>
+    public bool Visual { get; set; }
+
     private NewRecruitRosterEngine(NewRecruitBrowser browser)
     {
         _browser = browser;
@@ -43,9 +50,10 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// </summary>
     public static async Task<NewRecruitRosterEngine> CreateAsync(
         string baseUrl = "https://newrecruit.eu",
-        bool headless = true)
+        bool headless = true,
+        float? slowMo = null)
     {
-        var browser = await NewRecruitBrowser.CreateAsync(baseUrl, headless);
+        var browser = await NewRecruitBrowser.CreateAsync(baseUrl, headless, slowMo);
         return new NewRecruitRosterEngine(browser);
     }
 
@@ -56,9 +64,10 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     public static async Task<NewRecruitRosterEngine> CreateFrozenAsync(
         string harFilePath,
         string baseUrl = "https://newrecruit.eu",
-        bool headless = true)
+        bool headless = true,
+        float? slowMo = null)
     {
-        var browser = await NewRecruitBrowser.CreateFrozenAsync(harFilePath, baseUrl, headless);
+        var browser = await NewRecruitBrowser.CreateFrozenAsync(harFilePath, baseUrl, headless, slowMo);
         return new NewRecruitRosterEngine(browser);
     }
 
@@ -238,6 +247,10 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             // Mark frozen mode as ready to skip navigation on subsequent setups
             if (setupResult == null && _browser.IsFrozen)
                 _browser.FrozenReady = true;
+
+            // In visual mode, navigate to the roster editor so the UI shows the roster
+            if (setupResult == null && Visual)
+                await NavigateToEditorVisualAsync();
         }
         catch (Exception ex)
         {
@@ -387,6 +400,10 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
             if (setupResult != null)
                 errors.Add(setupResult);
+
+            // In visual mode, navigate to the roster editor so the UI shows the roster
+            if (setupResult == null && Visual)
+                await NavigateToEditorVisualAsync();
         }
         catch (Exception ex)
         {
@@ -554,6 +571,18 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         {
             Timings.EndPhase();
         }
+    }
+
+    /// <summary>
+    /// Navigate to the roster editor page so the NR UI visually reflects roster state.
+    /// Uses Vue Router client-side navigation — preserves all JS state.
+    /// </summary>
+    private async Task NavigateToEditorVisualAsync()
+    {
+        var listKey = await _browser.Page.EvaluateAsync<string?>(
+            "window.__bsspec?.row?.list_key");
+        if (listKey != null)
+            await _browser.NavigateToEditorAsync(listKey);
     }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()

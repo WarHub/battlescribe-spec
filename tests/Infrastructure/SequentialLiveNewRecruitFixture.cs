@@ -21,7 +21,10 @@ public sealed class SequentialLiveNewRecruitFixture : IAsyncLifetime
             return;
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
-        Engine = await NewRecruitRosterEngine.CreateAsync(baseUrl, headless);
+        var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
+        float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
+        Engine = await NewRecruitRosterEngine.CreateAsync(baseUrl, headless, slowMo);
+        Engine.Visual = visual;
     }
 
     public Task DisposeAsync()
