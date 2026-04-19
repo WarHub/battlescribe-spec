@@ -61,6 +61,8 @@ public static class AdapterHandler
     {
         engine?.Dispose();
         engine = factory();
+        if (cmd.SpecId is { Length: > 0 })
+            engine.SetTestContext(cmd.SpecId);
         var errors = engine.Setup(cmd.GameSystem, cmd.Catalogues.ToArray());
         return new SetupResult { Errors = errors.ToList() };
     }
@@ -70,6 +72,8 @@ public static class AdapterHandler
     {
         engine?.Dispose();
         engine = factory();
+        if (cmd.SpecId is { Length: > 0 })
+            engine.SetTestContext(cmd.SpecId);
         var files = cmd.Files.Select(f => (f.FileName, f.Content)).ToList();
         var errors = engine.SetupFromFiles(files);
         return new SetupResult { Errors = errors.ToList() };

@@ -87,6 +87,13 @@ public interface IRosterEngine : IDisposable
     // ===== Lifecycle =====
 
     /// <summary>
+    /// Provide the spec ID for the upcoming test run.
+    /// Called by <see cref="SpecRunner"/> before <see cref="Setup"/> or <see cref="SetupFromFiles"/>.
+    /// Engines may use this to label the roster (e.g. for non-headless debugging).
+    /// </summary>
+    void SetTestContext(string specId) { }
+
+    /// <summary>
     /// Clean up engine state after a spec run completes.
     /// Called by the SpecRunner in a finally block after each spec, including
     /// when <see cref="Setup(ProtocolGameSystem, ProtocolCatalogue[])"/> fails,

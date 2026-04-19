@@ -33,6 +33,8 @@ public sealed class SpecRunner
         _isDataSourceMode = false;
         try
         {
+            _engine.SetTestContext(spec.Id);
+
             // Setup — either DataSource (file-based) or inline (model-based)
             if (spec.Setup.DataSource is { Length: > 0 } dataSourceUri)
             {

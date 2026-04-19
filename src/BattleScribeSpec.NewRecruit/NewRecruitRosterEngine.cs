@@ -26,6 +26,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     private ProtocolCatalogue[]? _catalogues;
     // Maps force index → catalogue index (tracked as forces are added)
     private readonly List<int> _forceCatalogueMap = [];
+    private string _rosterName = "Spec Test";
 
     /// <summary>
     /// Performance timing collector. Populated during test execution.
@@ -39,6 +40,8 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// for debugging and demos. State reading is unaffected (reads from JS memory).
     /// </summary>
     public bool Visual { get; set; }
+
+    public void SetTestContext(string specId) => _rosterName = specId;
 
     private NewRecruitRosterEngine(NewRecruitBrowser browser)
     {
@@ -141,7 +144,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
             // Single consolidated EvaluateAsync: setup + entryOrder + costLimitConfig
             var setupResult = await Timings.TimeAsync("SetupJsEval", () => _browser.Page.EvaluateAsync<string?>("""
-                async ([gstXml, catFiles, systemId, catNames, entryOrder, costLimitConfig]) => {
+                async ([gstXml, catFiles, systemId, catNames, entryOrder, costLimitConfig, rosterName]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
@@ -196,7 +199,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const costs = primaryBook.getCosts();
                         const roster = primaryBook.createRoster(costs);
                         if (!roster) return 'Failed to create roster';
-                        roster.setCustomName('Spec Test');
+                        roster.setCustomName(rosterName);
 
                         const autoForces = roster.getForces?.() || [];
                         for (const f of [...autoForces]) {
@@ -207,7 +210,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const selectedBook = allBooks[0].bookRef;
                         const row = {
                             list_key: 'spec_' + Date.now(),
-                            name: 'Spec Test',
+                            name: rosterName,
                             id_game_system: selectedBook.id_game_system || sys.id,
                             id_system: selectedBook.id || sys.id,
                             nrversion: selectedBook.nrversion,
@@ -239,7 +242,8 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 }
                 """, new object[] { gstXml, catFiles, gameSystem.Id, catNames,
                     entryOrder?.ToArray() ?? (object)Array.Empty<string>(),
-                    costLimitConfig ?? (object)new Dictionary<string, double?>() }));
+                    costLimitConfig ?? (object)new Dictionary<string, double?>(),
+                    _rosterName }));
 
             if (setupResult != null)
                 errors.Add(setupResult);
@@ -280,7 +284,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             var fileData = files.Select(f => new { name = f.FileName, path = $"/spec/{f.FileName}", data = f.Content }).ToArray();
 
             var setupResult = await _browser.Page.EvaluateAsync<string?>("""
-                async ([fileData]) => {
+                async ([fileData, rosterName]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
@@ -329,7 +333,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const costs = primaryBook.getCosts();
                         const roster = primaryBook.createRoster(costs);
                         if (!roster) return 'Failed to create roster';
-                        roster.setCustomName('Spec Test');
+                        roster.setCustomName(rosterName);
 
                         const autoForces = roster.getForces?.() || [];
                         for (const f of [...autoForces]) {
@@ -339,7 +343,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const selectedBook = allBooks[0].bookRef;
                         const row = {
                             list_key: 'spec_' + Date.now(),
-                            name: 'Spec Test',
+                            name: rosterName,
                             id_game_system: selectedBook.id_game_system || sys.id,
                             id_system: selectedBook.id || sys.id,
                             nrversion: selectedBook.nrversion,
@@ -396,7 +400,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         return 'Setup error: ' + e.message + '\n' + e.stack;
                     }
                 }
-                """, new object[] { fileData });
+                """, new object[] { fileData, _rosterName });
 
             if (setupResult != null)
                 errors.Add(setupResult);

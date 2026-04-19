@@ -70,6 +70,11 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
+    /// Optional roster name set before Initialize. If null, defaults to "Oracle Roster".
+    /// </summary>
+    public string? RosterName { get; set; }
+
+    /// <summary>
     /// Initialize the engine with a game system, catalogues, and an empty roster.
     /// </summary>
     public List<string> Initialize(GameSystem gameSystem, IReadOnlyDictionary<string, Catalogue> catalogues)
@@ -82,7 +87,7 @@ public sealed class BattleScribeOracle : IDisposable
 
         var roster = new Roster();
         roster.setId(java.util.UUID.randomUUID().toString());
-        roster.setName("Oracle Roster");
+        roster.setName(RosterName ?? "Oracle Roster");
         roster.setGameSystemId(gameSystem.getId());
         roster.setGameSystemName(gameSystem.getName());
         roster.setGameSystemRevision(gameSystem.getRevision());
