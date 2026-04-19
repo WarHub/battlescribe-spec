@@ -1,0 +1,86 @@
+id: entry-link-to-group-with-nested-links
+category: deep-nesting
+description: >
+  An entry link targets a shared selection entry group. That group contains
+  a selection entry and also has its own entry link to yet another shared
+  entry. Tests group-then-link resolution at depth.
+tags: [deep-nesting, entryLink]
+engines:
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-special-ammo
+          name: Special Ammo
+          type: upgrade
+      sharedSelectionEntryGroups:
+        - id: sseg-weapons
+          name: Weapon Bay
+          selectionEntries:
+            - id: se-blade
+              name: Combat Blade
+              type: upgrade
+          entryLinks:
+            - id: el-ammo
+              targetId: sse-special-ammo
+              type: selectionEntry
+      selectionEntries:
+        - id: se-unit
+          name: Heavy Trooper
+          type: unit
+          entryLinks:
+            - id: el-weapons
+              targetId: sseg-weapons
+              type: selectionEntryGroup
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Heavy Trooper selected. Entry link resolves the shared Weapon Bay group.
+  # Inside the group: Combat Blade (direct entry) and Special Ammo (via entry link).
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Heavy Trooper
+              type: unit
+              children:
+                - name: Combat Blade
+                  type: upgrade
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 1
+
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Heavy Trooper
+              type: unit
+              children:
+                - name: Combat Blade
+                  type: upgrade
+                - name: Special Ammo
+                  type: upgrade

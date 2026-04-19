@@ -174,6 +174,7 @@ public sealed class SpecLintTests
         "childForce",
         "publication", "rule", "catalogue",
         "costType", "profileType",
+        "deep-nesting",
     ];
 
     [Theory]

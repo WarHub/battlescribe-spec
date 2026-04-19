@@ -1,0 +1,95 @@
+id: chained-entry-links
+category: deep-nesting
+description: >
+  Chained entry links: an entry link targets a shared entry which itself
+  contains an entry link to another shared entry. Both inner links use
+  min=1 constraints to auto-select, creating a 3-level deep hierarchy.
+  Tests that engines correctly resolve multi-hop link chains.
+tags: [deep-nesting, entryLink, auto-select]
+engines:
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-inner
+          name: Power Core
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 5
+        - id: sse-outer
+          name: Weapon System
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+          entryLinks:
+            - id: el-inner
+              targetId: sse-inner
+              type: selectionEntry
+              constraints:
+                - id: con-inner-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+      selectionEntries:
+        - id: se-unit
+          name: Mech Warrior
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+          entryLinks:
+            - id: el-outer
+              targetId: sse-outer
+              type: selectionEntry
+              constraints:
+                - id: con-outer-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Mech Warrior selected → Weapon System auto-selects (min=1 on link) →
+  # Power Core auto-selects (min=1 on inner link).
+  # Costs: Mech Warrior 50 + Weapon System 10 + Power Core 5 = 65
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Mech Warrior
+              type: unit
+              children:
+                - name: Weapon System
+                  type: upgrade
+                  children:
+                    - name: Power Core
+                      type: upgrade
+      costs:
+        - typeId: pts
+          value: 65

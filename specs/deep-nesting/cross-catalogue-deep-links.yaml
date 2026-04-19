@@ -1,0 +1,119 @@
+id: cross-catalogue-deep-links
+category: deep-nesting
+description: >
+  A catalogue links to another catalogue via catalogueLink, then uses
+  entry links referencing shared entries in the linked catalogue. Those
+  shared entries themselves have further nesting via min=1 constraints.
+  Tests cross-catalogue resolution at depth.
+tags: [deep-nesting, entryLink, catalogue]
+engines:
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-base
+      name: Base Armoury
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-base-weapon
+          name: Standard Rifle
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+          selectionEntries:
+            - id: se-bayonet
+              name: Bayonet Attachment
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 2
+              constraints:
+                - id: con-bayonet-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+    - id: cat-faction
+      name: Faction Catalogue
+      gameSystemId: test-gs
+      catalogueLinks:
+        - id: cl-base
+          name: Base Armoury
+          targetId: cat-base
+      sharedSelectionEntries:
+        - id: sse-faction-gear
+          name: Faction Gear
+          type: upgrade
+          entryLinks:
+            - id: el-weapon
+              targetId: sse-base-weapon
+              type: selectionEntry
+              constraints:
+                - id: con-weapon-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+      selectionEntries:
+        - id: se-soldier
+          name: Faction Soldier
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 15
+          entryLinks:
+            - id: el-gear
+              targetId: sse-faction-gear
+              type: selectionEntry
+              constraints:
+                - id: con-gear-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+    catalogueIndex: 1
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Faction Soldier selected →
+  # Faction Gear auto-selects (min=1 on link) →
+  # Standard Rifle auto-selects (min=1 on inner link, from linked catalogue) →
+  # Bayonet Attachment auto-selects (min=1 on child entry)
+  # Costs: Soldier 15 + Rifle 10 + Bayonet 2 = 27
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Faction Soldier
+              type: unit
+              children:
+                - name: Faction Gear
+                  type: upgrade
+                  children:
+                    - name: Standard Rifle
+                      type: upgrade
+                      children:
+                        - name: Bayonet Attachment
+                          type: upgrade
+      costs:
+        - typeId: pts
+          value: 27

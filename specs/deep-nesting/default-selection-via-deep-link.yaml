@@ -1,0 +1,120 @@
+id: default-selection-via-deep-link
+category: deep-nesting
+description: >
+  An entry link targets a shared entry via a group with min=1 and
+  defaultSelectionEntryId. The shared entry itself has a nested group
+  (also with min=1 + defaultSelectionEntryId) containing further entries.
+  Both levels of defaults cascade through the entry link, creating a deep
+  hierarchy purely through default auto-selection.
+tags: [deep-nesting, entryLink, defaultSelectionEntryId]
+engines:
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-standard-config
+          name: Standard Config
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+          selectionEntryGroups:
+            - id: seg-power-level
+              name: Power Level
+              defaultSelectionEntryId: se-low-power
+              constraints:
+                - id: con-power-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+              selectionEntries:
+                - id: se-low-power
+                  name: Low Power
+                  type: upgrade
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 2
+                - id: se-high-power
+                  name: High Power
+                  type: upgrade
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 5
+        - id: sse-advanced-config
+          name: Advanced Config
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 20
+      selectionEntries:
+        - id: se-mech
+          name: Battle Mech
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 40
+          selectionEntryGroups:
+            - id: seg-config
+              name: Configuration
+              defaultSelectionEntryId: el-standard
+              constraints:
+                - id: con-config-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+              entryLinks:
+                - id: el-standard
+                  targetId: sse-standard-config
+                  type: selectionEntry
+                - id: el-advanced
+                  targetId: sse-advanced-config
+                  type: selectionEntry
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Battle Mech selected →
+  # Configuration group (min=1, default=el-standard) → Standard Config auto-selects →
+  # Power Level group (min=1, default=se-low-power) → Low Power auto-selects.
+  # Both levels of defaults cascade through the entry link.
+  # Costs: Mech 40 + Standard Config 10 + Low Power 2 = 52
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Battle Mech
+              type: unit
+              children:
+                - name: Standard Config
+                  type: upgrade
+                  children:
+                    - name: Low Power
+                      type: upgrade
+      costs:
+        - typeId: pts
+          value: 52

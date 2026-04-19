@@ -1,0 +1,110 @@
+id: costs-and-constraints-at-depth
+category: deep-nesting
+description: >
+  Costs on entries that are multiple link-hops deep roll up to the
+  roster total. Uses min=1 constraints for auto-selection at depth:
+  unit → weapon (via entry link) → ammo (via nested entry link).
+  Adding a second unit doubles the total cost, confirming each
+  deep link chain contributes independently.
+tags: [deep-nesting, entryLink, cost]
+engines:
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-ammo
+          name: Ammo Pack
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 3
+        - id: sse-weapon
+          name: Heavy Bolter
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 15
+          entryLinks:
+            - id: el-ammo
+              targetId: sse-ammo
+              type: selectionEntry
+              constraints:
+                - id: con-ammo-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+      selectionEntries:
+        - id: se-squad
+          name: Devastator Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 80
+          entryLinks:
+            - id: el-weapon
+              targetId: sse-weapon
+              type: selectionEntry
+              constraints:
+                - id: con-weapon-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # First Devastator Squad selected →
+  # Heavy Bolter auto-selects (min=1 on link) →
+  # Ammo Pack auto-selects (min=1 on inner link).
+  # Costs: Squad 80 + Bolter 15 + Ammo 3 = 98
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Devastator Squad
+              type: unit
+              children:
+                - name: Heavy Bolter
+                  type: upgrade
+                  children:
+                    - name: Ammo Pack
+                      type: upgrade
+      costs:
+        - typeId: pts
+          value: 98
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # Second Devastator Squad → second Heavy Bolter + Ammo auto-select.
+  # Costs: 2 × (80 + 15 + 3) = 196
+  - expectedState:
+      forces:
+        - selectionCount: 2
+      costs:
+        - typeId: pts
+          value: 196
