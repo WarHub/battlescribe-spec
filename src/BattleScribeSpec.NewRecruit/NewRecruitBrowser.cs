@@ -142,19 +142,19 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     }
 
     /// <summary>
-    /// Perform a Vue Router client-side navigation and wait for the route to resolve.
-    /// Avoids full page reloads — faster and preserves JS state (Pinia stores,
-    /// init scripts, window globals).
+    /// Perform a Vue Router client-side navigation and wait for it to complete.
+    /// Uses the Promise returned by router.push() — resolves after the final
+    /// route settles (including any redirects, e.g. /app → /app/MySystems).
+    /// Avoids full page reloads — faster and preserves JS state.
     /// </summary>
     private async Task VueRouterPushAsync(string route)
     {
         await Page.EvaluateAsync("""
-            (route) => {
+            async (route) => {
                 const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
-                if (router) router.push(route);
+                if (router) await router.push(route);
             }
             """, route);
-        await WaitForVueRouteAsync(route);
     }
 
     private static readonly Regex SafeStoreIdPattern = new("^[a-zA-Z0-9_-]+$", RegexOptions.Compiled);
@@ -205,18 +205,6 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         {
             // Expected when the site has persistent connections.
         }
-    }
-
-    /// <summary>
-    /// Wait for Vue Router to complete a client-side navigation to the expected route.
-    /// Polls the router's current path — avoids crude Task.Delay after router.push().
-    /// </summary>
-    private async Task WaitForVueRouteAsync(string expectedPath, int timeoutMs = 5_000)
-    {
-        await Page.WaitForFunctionAsync(
-            "(expected) => document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router?.currentRoute?.value?.path === expected",
-            expectedPath,
-            new() { Timeout = timeoutMs });
     }
 
     /// <summary>
