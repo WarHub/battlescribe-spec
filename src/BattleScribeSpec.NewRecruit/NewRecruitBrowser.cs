@@ -120,65 +120,41 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
 
     /// <summary>
     /// Navigate to the NR app page where systems can be selected/loaded.
+    /// Uses Vue Router client-side navigation — avoids a full page reload
+    /// (which is slower in live mode and breaks HAR replay in frozen mode).
     /// </summary>
     public async Task NavigateToAppAsync()
     {
-        if (_isFrozen)
-        {
-            // In frozen (HAR replay) mode, use Vue Router to navigate back to /app.
-            // A full GotoAsync to a different URL breaks HAR replay (Playwright
-            // fails to re-serve JS resources with correct MIME types).
-            // Since initial load goes to /app, client-side nav keeps state clean.
-            await Page.EvaluateAsync("""
-                () => {
-                    const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
-                    if (router) router.push('/app');
-                }
-                """);
-            await WaitForVueRouteAsync("/app");
-        }
-        else
-        {
-            await Page.GotoAsync($"{BaseUrl}/app", new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.Load,
-                Timeout = 30_000,
-            });
-            // Helpers are auto-injected by the init script registered on the page.
-            await WaitForNetworkSettledAsync();
-        }
+        await VueRouterPushAsync("/app");
         await DismissDialogsAsync();
     }
 
     /// <summary>
     /// Navigate to the roster editor for a specific list.
+    /// Uses Vue Router client-side navigation — avoids a full page reload
+    /// (which is slower in live mode and breaks HAR replay in frozen mode).
     /// </summary>
     public async Task NavigateToEditorAsync(string? listId = null)
     {
         var route = listId != null ? $"/app/Lists/{listId}" : "/app";
-        if (_isFrozen)
-        {
-            // In frozen (HAR replay) mode, use Vue Router client-side navigation.
-            // A full GotoAsync breaks HAR replay (same as NavigateToAppAsync).
-            await Page.EvaluateAsync("""
-                (route) => {
-                    const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
-                    if (router) router.push(route);
-                }
-                """, route);
-            await WaitForVueRouteAsync(route);
-        }
-        else
-        {
-            await Page.GotoAsync($"{BaseUrl}{route}", new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.Load,
-                Timeout = 30_000,
-            });
-            // Helpers are auto-injected by the init script registered on the page.
-            await WaitForNetworkSettledAsync();
-        }
+        await VueRouterPushAsync(route);
         await DismissDialogsAsync();
+    }
+
+    /// <summary>
+    /// Perform a Vue Router client-side navigation and wait for the route to resolve.
+    /// Avoids full page reloads — faster and preserves JS state (Pinia stores,
+    /// init scripts, window globals).
+    /// </summary>
+    private async Task VueRouterPushAsync(string route)
+    {
+        await Page.EvaluateAsync("""
+            (route) => {
+                const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
+                if (router) router.push(route);
+            }
+            """, route);
+        await WaitForVueRouteAsync(route);
     }
 
     private static readonly Regex SafeStoreIdPattern = new("^[a-zA-Z0-9_-]+$", RegexOptions.Compiled);
