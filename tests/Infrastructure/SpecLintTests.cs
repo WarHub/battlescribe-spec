@@ -132,6 +132,7 @@ public sealed class SpecLintTests
     private static readonly HashSet<string> KnownActions =
     [
         "addForce", "removeForce",
+        "addChildForce", "removeChildForce",
         "selectEntry", "selectChildEntry",
         "deselectSelection", "setSelectionCount",
         "duplicateSelection", "setCostLimit"
@@ -171,6 +172,7 @@ public sealed class SpecLintTests
         "validation-errors", "structured-errors",
         "modifierGroup", "infoGroup", "infoLink",
         "forceEntry", "categoryEntry", "categoryLink",
+        "childForce",
         "publication", "rule", "catalogue",
         "costType", "profileType",
     ];

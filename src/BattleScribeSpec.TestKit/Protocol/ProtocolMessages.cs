@@ -102,6 +102,14 @@ public sealed class ActionCommand : ProtocolCommand
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ChildEntryIndex { get; set; }
 
+    [JsonPropertyName("childForceEntryIndex")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ChildForceEntryIndex { get; set; }
+
+    [JsonPropertyName("childForceIndex")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ChildForceIndex { get; set; }
+
     [JsonPropertyName("catalogueIndex")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? CatalogueIndex { get; set; }

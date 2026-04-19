@@ -1,6 +1,6 @@
-id: force-nested-basic
+id: force-nested-child-selections
 category: force
-description: Force entries can contain nested sub-force entries for hierarchical army structures
+description: Selections can be added to a child force independently
 tags: [childForce]
 engines:
   battlescribe: fail
@@ -28,21 +28,24 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
-  # Adding the top-level "Army" force. It has a nested "Detachment" force entry.
-  - expectedState:
-      forceCount: 1
-      forces:
-        - name: Army
-          childForceCount: 0
 
   - action: addChildForce
     forceIndex: 0
     childForceEntryIndex: 0
-  # Adding nested "Detachment" child force under the "Army" parent.
+
+  # Select a unit into the child force (forceIndex 0 refers to the parent,
+  # child force index 0 within it is the Detachment).
+  # Child forces have their own selection list.
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
   - expectedState:
       forceCount: 1
       forces:
         - name: Army
+          selectionCount: 1
           childForceCount: 1
           childForces:
             - name: Detachment
+              selectionCount: 0
