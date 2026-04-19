@@ -154,16 +154,30 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// </summary>
     public async Task NavigateToEditorAsync(string? listId = null)
     {
-        var url = listId != null ? $"{BaseUrl}/app/Lists/{listId}" : $"{BaseUrl}/app";
-        await Page.GotoAsync(url, new PageGotoOptions
+        var route = listId != null ? $"/app/Lists/{listId}" : "/app";
+        if (_isFrozen)
         {
-            WaitUntil = WaitUntilState.Load,
-            Timeout = 30_000,
-        });
-        // Full page navigation destroys all JS state — must re-inject helpers
-        _helpersInjected = false;
-        if (!_isFrozen)
+            // In frozen (HAR replay) mode, use Vue Router client-side navigation.
+            // A full GotoAsync breaks HAR replay (same as NavigateToAppAsync).
+            await Page.EvaluateAsync("""
+                (route) => {
+                    const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
+                    if (router) router.push(route);
+                }
+                """, route);
+            await Task.Delay(300);
+        }
+        else
+        {
+            await Page.GotoAsync($"{BaseUrl}{route}", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.Load,
+                Timeout = 30_000,
+            });
+            // Full page navigation destroys all JS state — must re-inject helpers
+            _helpersInjected = false;
             await WaitForNetworkSettledAsync();
+        }
         await DismissDialogsAsync();
     }
 
