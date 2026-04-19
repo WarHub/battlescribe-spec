@@ -129,13 +129,13 @@ jobs:
         run: dotnet build
 
       - name: Run NR smoke tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitSmokeTests" --logger "console;verbosity=minimal" --logger GitHubActions
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitSmokeTests" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true
 
       - name: Run NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests" --logger "console;verbosity=minimal" --logger GitHubActions
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true

@@ -6,12 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed
-
-- **CI verbose test progress** — all `dotnet test` steps now include
-  `--logger "console;verbosity=minimal"` alongside the existing GitHubActions logger,
-  printing one line per completed test so CI output shows progress instead of silence.
-
 ### Added
 
 - **`publicationName` assertion field** on selections — engines now resolve publication
@@ -50,6 +44,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **CI verbose test progress** — all `dotnet test` steps now include
+  `--logger "console;verbosity=minimal"` alongside the existing GitHubActions logger,
+  printing one line per completed test so CI output shows progress instead of silence.
 - **Per-engine `expectedState` overrides** replace blunt `engines: {engineName: fail}`
   markers on 25 specs. Each spec now describes the *actual* per-engine behavior via
   `expectedState.engines.{engineName}` blocks, keeping all engines passing while
