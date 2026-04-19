@@ -73,6 +73,9 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
 
             var page = await context.NewPageAsync();
 
+            // Register JS helpers as init script — auto-injected on every navigation
+            await NewRecruitBrowser.RegisterHelpersOnPageAsync(page);
+
             // HAR replay at page level (context-level RouteFromHAR not available)
             await page.RouteFromHARAsync(harFilePath, new PageRouteFromHAROptions
             {
@@ -91,8 +94,6 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
 
             // Wait for Pinia to initialize
             await nrBrowser.WaitForPiniaAsync();
-            // Pre-inject JS helpers
-            await nrBrowser.InjectHelpersAsync();
 
             var engine = NewRecruitRosterEngine.CreateFromBrowser(nrBrowser);
             engines.Add(engine);
@@ -124,6 +125,8 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
             var context = await browser.NewContextAsync();
             contexts.Add(context);
             var page = await context.NewPageAsync();
+            // Register JS helpers as init script — auto-injected on every navigation
+            await NewRecruitBrowser.RegisterHelpersOnPageAsync(page);
             await page.GotoAsync(baseUrl, new PageGotoOptions
             {
                 WaitUntil = WaitUntilState.Load,

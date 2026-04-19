@@ -20,9 +20,10 @@ namespace BattleScribeSpec.NewRecruit;
 public static class NewRecruitActions
 {
     // JS helper functions (getForces, getSelections, getSortedSelections,
-    // findSelectorById, findSelectorByName) are pre-injected as window
-    // globals by JsHelpers.InjectionScript via NewRecruitBrowser.InjectHelpersAsync().
-    // Action methods reference them by name — no inline definitions needed.
+    // findSelectorById, findSelectorByName) are registered as page init scripts
+    // via NewRecruitBrowser.RegisterHelpersOnPageAsync() and are automatically
+    // available as window globals after every navigation. Action methods
+    // reference them by name — no inline definitions needed.
 
     /// <summary>
     /// Add a force to the roster by force entry name.
