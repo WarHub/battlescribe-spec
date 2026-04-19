@@ -143,6 +143,14 @@ public sealed class SpecRunner
                 _engine.RemoveForce(step.ForceIndex ?? 0);
                 break;
 
+            case "addChildForce":
+                _engine.AddChildForce(step.ForceIndex ?? 0, step.ChildForceEntryIndex ?? 0, step.ChildForceIndex);
+                break;
+
+            case "removeChildForce":
+                _engine.RemoveChildForce(step.ForceIndex ?? 0, step.ChildForceIndex ?? 0);
+                break;
+
             case "selectEntry":
                 if (_isDataSourceMode && step.EntryName is { Length: > 0 } dsEntryName)
                 {
@@ -352,37 +360,12 @@ public sealed class SpecRunner
         {
             for (var fi = 0; fi < expectedForces.Count; fi++)
             {
-                var ef = expectedForces[fi];
                 if (fi >= state.Forces.Count)
                 {
                     _errors.Add($"Step {stepIndex}: expected force[{fi}] but only {state.Forces.Count} forces");
                     continue;
                 }
-                var af = state.Forces[fi];
-
-                if (ef.Name is not null)
-                    AssertEqual(stepIndex, $"force[{fi}].name", ef.Name, af.Name);
-
-                if (ef.SelectionCount is { } sc)
-                    AssertEqual(stepIndex, $"force[{fi}].selectionCount", sc, af.Selections.Count);
-
-                if (ef.AvailableEntryCount is { } aec && af.AvailableEntryCount is { } actualAec)
-                    AssertEqual(stepIndex, $"force[{fi}].availableEntryCount", aec, actualAec);
-
-                if (ef.Selections is { } expectedSels)
-                    AssertSelections(stepIndex, $"force[{fi}]", expectedSels, af.Selections);
-
-                if (ef.Profiles is { } forceProfs)
-                    AssertProfiles(stepIndex, $"force[{fi}]", forceProfs, af.Profiles);
-
-                if (ef.Rules is { } forceRules)
-                    AssertRules(stepIndex, $"force[{fi}]", forceRules, af.Rules);
-
-                if (ef.PublicationId is not null)
-                    AssertEqual(stepIndex, $"force[{fi}].publicationId", ef.PublicationId, af.PublicationId ?? "");
-
-                if (ef.Page is not null)
-                    AssertEqual(stepIndex, $"force[{fi}].page", ef.Page, af.Page ?? "");
+                AssertForce(stepIndex, $"force[{fi}]", expectedForces[fi], state.Forces[fi]);
             }
         }
 
@@ -514,6 +497,49 @@ public sealed class SpecRunner
         var slashIdx = from.IndexOf('/');
         if (slashIdx < 0) return (from, "");
         return (from[..slashIdx], from[(slashIdx + 1)..]);
+    }
+
+    private void AssertForce(int stepIndex, string prefix, ExpectedForceDef ef, ForceState af)
+    {
+        if (ef.Name is not null)
+            AssertEqual(stepIndex, $"{prefix}.name", ef.Name, af.Name);
+
+        if (ef.SelectionCount is { } sc)
+            AssertEqual(stepIndex, $"{prefix}.selectionCount", sc, af.Selections.Count);
+
+        if (ef.AvailableEntryCount is { } aec && af.AvailableEntryCount is { } actualAec)
+            AssertEqual(stepIndex, $"{prefix}.availableEntryCount", aec, actualAec);
+
+        if (ef.ChildForceCount is { } cfc)
+            AssertEqual(stepIndex, $"{prefix}.childForceCount", cfc, af.ChildForces.Count);
+
+        if (ef.ChildForces is { } expectedChildForces)
+        {
+            for (var ci = 0; ci < expectedChildForces.Count; ci++)
+            {
+                if (ci >= af.ChildForces.Count)
+                {
+                    _errors.Add($"Step {stepIndex}: {prefix}.childForce[{ci}] expected but only {af.ChildForces.Count} child forces");
+                    continue;
+                }
+                AssertForce(stepIndex, $"{prefix}.childForce[{ci}]", expectedChildForces[ci], af.ChildForces[ci]);
+            }
+        }
+
+        if (ef.Selections is { } expectedSels)
+            AssertSelections(stepIndex, prefix, expectedSels, af.Selections);
+
+        if (ef.Profiles is { } forceProfs)
+            AssertProfiles(stepIndex, prefix, forceProfs, af.Profiles);
+
+        if (ef.Rules is { } forceRules)
+            AssertRules(stepIndex, prefix, forceRules, af.Rules);
+
+        if (ef.PublicationId is not null)
+            AssertEqual(stepIndex, $"{prefix}.publicationId", ef.PublicationId, af.PublicationId ?? "");
+
+        if (ef.Page is not null)
+            AssertEqual(stepIndex, $"{prefix}.page", ef.Page, af.Page ?? "");
     }
 
     private void AssertSelections(int stepIndex, string prefix,

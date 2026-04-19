@@ -93,6 +93,12 @@ public static class AdapterHandler
                 case "removeForce":
                     engine.RemoveForce(cmd.ForceIndex ?? 0);
                     break;
+                case "addChildForce":
+                    engine.AddChildForce(cmd.ForceIndex ?? 0, cmd.ChildForceEntryIndex ?? 0, cmd.ChildForceIndex);
+                    break;
+                case "removeChildForce":
+                    engine.RemoveChildForce(cmd.ForceIndex ?? 0, cmd.ChildForceIndex ?? 0);
+                    break;
                 case "selectEntry":
                     if (cmd.EntryName is { Length: > 0 })
                         engine.SelectEntryByName(cmd.ForceIndex ?? 0, cmd.EntryName);

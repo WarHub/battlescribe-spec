@@ -1,6 +1,6 @@
-id: force-nested-basic
+id: force-nested-remove-child
 category: force
-description: Force entries can contain nested sub-force entries for hierarchical army structures
+description: A child force can be removed from its parent force
 tags: [childForce]
 engines:
   battlescribe: fail
@@ -28,21 +28,24 @@ setup:
 steps:
   - action: addForce
     forceEntryIndex: 0
-  # Adding the top-level "Army" force. It has a nested "Detachment" force entry.
-  - expectedState:
-      forceCount: 1
-      forces:
-        - name: Army
-          childForceCount: 0
 
   - action: addChildForce
     forceIndex: 0
     childForceEntryIndex: 0
-  # Adding nested "Detachment" child force under the "Army" parent.
+
   - expectedState:
-      forceCount: 1
       forces:
         - name: Army
           childForceCount: 1
           childForces:
             - name: Detachment
+
+  - action: removeChildForce
+    forceIndex: 0
+    childForceIndex: 0
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Army
+          childForceCount: 0

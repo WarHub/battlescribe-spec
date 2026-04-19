@@ -1,0 +1,68 @@
+id: force-nested-parent-child-selections
+category: force
+description: Parent and child forces each maintain independent selection lists
+tags: [childForce]
+engines:
+  battlescribe: fail
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-detach
+            name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Infantry
+          type: unit
+        - id: se-2
+          name: Tank
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: addChildForce
+    forceIndex: 0
+    childForceEntryIndex: 0
+
+  # Add a unit to the parent force
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Army
+          selectionCount: 1
+          selections:
+            - name: Infantry
+          childForces:
+            - name: Detachment
+              selectionCount: 0
+
+  # Add a different unit to the parent force as well
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 1
+
+  - expectedState:
+      forces:
+        - name: Army
+          selectionCount: 2
+          selections:
+            - name: Infantry
+            - name: Tank
+          childForces:
+            - name: Detachment
+              selectionCount: 0

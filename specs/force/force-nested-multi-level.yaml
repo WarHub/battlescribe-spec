@@ -1,0 +1,61 @@
+id: force-nested-multi-level
+category: force
+description: Force entries can be nested multiple levels deep (grandchild forces)
+tags: [childForce, nested]
+engines:
+  battlescribe: fail
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-division
+            name: Division
+            forceEntries:
+              - id: fe-platoon
+                name: Platoon
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Soldier
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: addChildForce
+    forceIndex: 0
+    childForceEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Army
+          childForceCount: 1
+          childForces:
+            - name: Division
+              childForceCount: 0
+
+  # Add a grandchild: Platoon under Division (child force index 0 of parent force 0)
+  - action: addChildForce
+    forceIndex: 0
+    childForceIndex: 0
+    childForceEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Army
+          childForceCount: 1
+          childForces:
+            - name: Division
+              childForceCount: 1
+              childForces:
+                - name: Platoon

@@ -29,6 +29,21 @@ public interface IRosterEngine : IDisposable
     void RemoveForce(int forceIndex);
 
     /// <summary>
+    /// Add a child force under an existing force using a nested force entry by index.
+    /// Index refers to order in the parent force entry's <see cref="Protocol.ProtocolForceEntry.ForceEntries"/>.
+    /// When <paramref name="parentChildForceIndex"/> is specified, the new force is added under that
+    /// child force instead of directly under the top-level force (enabling grandchild forces).
+    /// </summary>
+    void AddChildForce(int forceIndex, int childForceEntryIndex, int? parentChildForceIndex = null)
+        => throw new NotSupportedException("This engine does not support child force addition.");
+
+    /// <summary>
+    /// Remove a child force from a parent force by its index within the parent's child forces.
+    /// </summary>
+    void RemoveChildForce(int forceIndex, int childForceIndex)
+        => throw new NotSupportedException("This engine does not support child force removal.");
+
+    /// <summary>
     /// Select (add) an entry in the specified force, creating a new selection.
     /// Entry index refers to order in <see cref="ProtocolCatalogue.SelectionEntries"/>.
     /// </summary>

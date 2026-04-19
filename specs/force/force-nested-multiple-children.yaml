@@ -1,0 +1,70 @@
+id: force-nested-multiple-children
+category: force
+description: A parent force can contain multiple child forces from different nested entries
+tags: [childForce]
+engines:
+  battlescribe: fail
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-patrol
+            name: Patrol
+          - id: fe-vanguard
+            name: Vanguard
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: Scout
+          type: unit
+        - id: se-2
+          name: Veteran
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: addChildForce
+    forceIndex: 0
+    childForceEntryIndex: 0
+
+  - action: addChildForce
+    forceIndex: 0
+    childForceEntryIndex: 1
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Army
+          childForceCount: 2
+          childForces:
+            - name: Patrol
+            - name: Vanguard
+
+  # Add selections to parent force
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Army
+          selectionCount: 1
+          selections:
+            - name: Scout
+          childForceCount: 2
+          childForces:
+            - name: Patrol
+              selectionCount: 0
+            - name: Vanguard
+              selectionCount: 0

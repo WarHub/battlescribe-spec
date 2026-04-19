@@ -139,6 +139,12 @@ public sealed class StepDef
     [YamlMember(Alias = "childEntryIndex")]
     public int? ChildEntryIndex { get; set; }
 
+    [YamlMember(Alias = "childForceEntryIndex")]
+    public int? ChildForceEntryIndex { get; set; }
+
+    [YamlMember(Alias = "childForceIndex")]
+    public int? ChildForceIndex { get; set; }
+
     [YamlMember(Alias = "catalogueIndex")]
     public int? CatalogueIndex { get; set; }
 
@@ -282,6 +288,12 @@ public sealed class ExpectedForceDef
 
     [YamlMember(Alias = "availableEntryCount")]
     public int? AvailableEntryCount { get; set; }
+
+    [YamlMember(Alias = "childForceCount")]
+    public int? ChildForceCount { get; set; }
+
+    [YamlMember(Alias = "childForces")]
+    public List<ExpectedForceDef>? ChildForces { get; set; }
 
     [YamlMember(Alias = "selections")]
     public List<ExpectedSelectionDef>? Selections { get; set; }

@@ -28,11 +28,14 @@ public record ForceState(
     [property: JsonPropertyName("catalogueId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CatalogueId,
     [property: JsonPropertyName("selections")] IReadOnlyList<SelectionState> Selections,
     [property: JsonPropertyName("availableEntryCount"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? AvailableEntryCount = null,
+    IReadOnlyList<ForceState>? ChildForces = null,
     IReadOnlyList<ProfileState>? Profiles = null,
     IReadOnlyList<RuleState>? Rules = null,
     [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null,
     [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null)
 {
+    [JsonPropertyName("childForces"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ForceState> ChildForces { get; init; } = ChildForces ?? [];
     [JsonPropertyName("profiles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
     [JsonPropertyName("rules"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
