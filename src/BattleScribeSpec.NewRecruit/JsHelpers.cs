@@ -2,14 +2,16 @@ namespace BattleScribeSpec.NewRecruit;
 
 /// <summary>
 /// Consolidated JS helper functions and the state reader injection script.
-/// Injected once into the page via <see cref="NewRecruitBrowser.InjectHelpersAsync"/>.
-/// Action methods and the state reader reference these globals by name.
+/// Registered as a page init script via <see cref="NewRecruitBrowser.RegisterHelpersOnPageAsync"/>
+/// so helpers are automatically available after every page navigation.
 /// </summary>
 internal static class JsHelpers
 {
     /// <summary>
     /// Single JS blob that defines all helper functions and the state reader
-    /// as window globals. Injected once, persists across test setups in frozen mode.
+    /// as window globals. Registered as an init script, it runs automatically
+    /// on every full page navigation. For client-side navigation (Vue Router),
+    /// window globals persist naturally.
     /// </summary>
     public const string InjectionScript = """
         (() => {

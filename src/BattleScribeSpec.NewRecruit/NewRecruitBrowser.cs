@@ -13,7 +13,6 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     private IBrowser? _browser;
     private bool _isFrozen;
     private bool _frozenReady;
-    private bool _helpersInjected;
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
@@ -92,6 +91,9 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             Headless = headless,
         });
         Page = await _browser.NewPageAsync();
+        // Register JS helpers as an init script — automatically re-injected
+        // on every full page navigation (GotoAsync). No manual tracking needed.
+        await RegisterHelpersOnPageAsync(Page);
         if (harFilePath is not null)
         {
             await Page.RouteFromHARAsync(harFilePath, new PageRouteFromHAROptions
@@ -142,8 +144,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
                 WaitUntil = WaitUntilState.Load,
                 Timeout = 30_000,
             });
-            // Full page navigation destroys all JS state — must re-inject helpers
-            _helpersInjected = false;
+            // Helpers are auto-injected by the init script registered on the page.
             await WaitForNetworkSettledAsync();
         }
         await DismissDialogsAsync();
@@ -174,8 +175,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
                 WaitUntil = WaitUntilState.Load,
                 Timeout = 30_000,
             });
-            // Full page navigation destroys all JS state — must re-inject helpers
-            _helpersInjected = false;
+            // Helpers are auto-injected by the init script registered on the page.
             await WaitForNetworkSettledAsync();
         }
         await DismissDialogsAsync();
@@ -251,24 +251,16 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     }
 
     /// <summary>
-    /// Pre-inject shared JS helper functions and the state reader into the page.
-    /// Called once after navigation; avoids re-parsing large JS blobs on every
-    /// EvaluateAsync call. In frozen mode, injected once and persisted across
-    /// tests (no page reloads). In live mode, must be called after each GotoAsync.
+    /// Register JS helpers as a page init script. The script runs automatically
+    /// on every full page navigation (GotoAsync), eliminating the need to manually
+    /// track and re-inject after navigations. For client-side navigations (Vue Router),
+    /// window globals persist naturally — no re-injection needed.
+    /// Call once per page, before the first navigation.
     /// </summary>
-    public async Task InjectHelpersAsync()
+    public static async Task RegisterHelpersOnPageAsync(IPage page)
     {
-        if (_helpersInjected) return;
-
-        await Page.EvaluateAsync(JsHelpers.InjectionScript);
-        _helpersInjected = true;
+        await page.AddInitScriptAsync(JsHelpers.InjectionScript);
     }
-
-    /// <summary>
-    /// Reset the helpers-injected flag. Call after a page navigation that
-    /// destroys JS state (live mode GotoAsync).
-    /// </summary>
-    internal void ResetHelpersInjected() => _helpersInjected = false;
 
     public async ValueTask DisposeAsync()
     {
