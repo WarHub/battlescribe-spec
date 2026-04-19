@@ -67,7 +67,7 @@ public static class HarRecorder
             if (await consentButton.IsVisibleAsync())
             {
                 await consentButton.ClickAsync();
-                await page.WaitForTimeoutAsync(1000);
+                await consentButton.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 2_000 });
             }
         }
         catch { /* consent dialog may not appear */ }
