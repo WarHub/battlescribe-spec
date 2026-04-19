@@ -40,10 +40,11 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// </summary>
     public static async Task<NewRecruitBrowser> CreateAsync(
         string baseUrl = "https://newrecruit.eu",
-        bool headless = true)
+        bool headless = true,
+        float? slowMo = null)
     {
         var browser = new NewRecruitBrowser(baseUrl);
-        await browser.InitializeAsync(headless, harFilePath: null);
+        await browser.InitializeAsync(headless, harFilePath: null, slowMo);
         return browser;
     }
 
@@ -54,12 +55,13 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     public static async Task<NewRecruitBrowser> CreateFrozenAsync(
         string harFilePath,
         string baseUrl = "https://newrecruit.eu",
-        bool headless = true)
+        bool headless = true,
+        float? slowMo = null)
     {
         if (!File.Exists(harFilePath))
             throw new FileNotFoundException($"HAR file not found: {harFilePath}", harFilePath);
         var browser = new NewRecruitBrowser(baseUrl);
-        await browser.InitializeAsync(headless, harFilePath);
+        await browser.InitializeAsync(headless, harFilePath, slowMo);
         return browser;
     }
 
@@ -82,13 +84,14 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         return browser;
     }
 
-    private async Task InitializeAsync(bool headless, string? harFilePath)
+    private async Task InitializeAsync(bool headless, string? harFilePath, float? slowMo = null)
     {
         _isFrozen = harFilePath is not null;
         _playwright = await Playwright.CreateAsync();
         _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
             Headless = headless,
+            SlowMo = slowMo,
         });
         Page = await _browser.NewPageAsync();
         // Register JS helpers as an init script — automatically re-injected

@@ -20,12 +20,14 @@ public sealed class LiveNewRecruitFixture : IAsyncLifetime
             return;
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
+        var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
+        float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
         var concurrency = 10;
         if (int.TryParse(Environment.GetEnvironmentVariable("NR_PARALLEL"), out var envConcurrency) && envConcurrency > 0)
             concurrency = envConcurrency;
 
-        EnginePool = await NewRecruitEnginePool.CreateLiveAsync(concurrency, baseUrl, headless);
+        EnginePool = await NewRecruitEnginePool.CreateLiveAsync(concurrency, baseUrl, headless, visual, slowMo);
     }
 
     public async Task DisposeAsync()

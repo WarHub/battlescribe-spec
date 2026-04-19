@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Visual debug mode** (`NR_VISUAL=true`) — after setup, navigates the browser to the
+  roster editor page so the NR UI visually reflects roster state. Invaluable for debugging
+  spec failures and demoing the conformance suite with `NR_HEADLESS=false`.
+- **SlowMo support** (`NR_SLOW_MO=<ms>`) — adds a Playwright SlowMo delay between
+  browser actions, making test execution watchable in real-time.
 - **`publicationName` assertion field** on selections — engines now resolve publication
   references and expose the publication's `name`, proving the link was actually resolved
   (not just echoing back the `publicationId` from XML input).

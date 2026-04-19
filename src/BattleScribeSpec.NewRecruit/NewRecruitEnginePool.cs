@@ -52,7 +52,9 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         string harFilePath,
         int concurrency = 5,
         string baseUrl = "https://newrecruit.eu",
-        bool headless = true)
+        bool headless = true,
+        bool visual = false,
+        float? slowMo = null)
     {
         if (!File.Exists(harFilePath))
             throw new FileNotFoundException($"HAR file not found: {harFilePath}", harFilePath);
@@ -61,6 +63,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
             Headless = headless,
+            SlowMo = slowMo,
         });
 
         var contexts = new List<IBrowserContext>();
@@ -96,6 +99,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
             await nrBrowser.WaitForPiniaAsync();
 
             var engine = NewRecruitRosterEngine.CreateFromBrowser(nrBrowser);
+            engine.Visual = visual;
             engines.Add(engine);
         }
 
@@ -109,12 +113,15 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
     public static async Task<NewRecruitEnginePool> CreateLiveAsync(
         int concurrency = 10,
         string baseUrl = "https://newrecruit.eu",
-        bool headless = true)
+        bool headless = true,
+        bool visual = false,
+        float? slowMo = null)
     {
         var playwright = await Playwright.CreateAsync();
         var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
             Headless = headless,
+            SlowMo = slowMo,
         });
 
         var contexts = new List<IBrowserContext>();
@@ -135,6 +142,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
 
             var nrBrowser = NewRecruitBrowser.CreateFromContext(page, baseUrl, isFrozen: false);
             var engine = NewRecruitRosterEngine.CreateFromBrowser(nrBrowser);
+            engine.Visual = visual;
             engines.Add(engine);
         }
 
