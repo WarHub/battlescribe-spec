@@ -135,7 +135,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
                     if (router) router.push('/app');
                 }
                 """);
-            await Task.Delay(300);
+            await WaitForVueRouteAsync("/app");
         }
         else
         {
@@ -166,7 +166,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
                     if (router) router.push(route);
                 }
                 """, route);
-            await Task.Delay(300);
+            await WaitForVueRouteAsync(route);
         }
         else
         {
@@ -206,7 +206,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             if (await consentButton.IsVisibleAsync())
             {
                 await consentButton.ClickAsync();
-                await Page.WaitForTimeoutAsync(500);
+                await consentButton.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 2_000 });
             }
         }
         catch
@@ -229,6 +229,18 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         {
             // Expected when the site has persistent connections.
         }
+    }
+
+    /// <summary>
+    /// Wait for Vue Router to complete a client-side navigation to the expected route.
+    /// Polls the router's current path — avoids crude Task.Delay after router.push().
+    /// </summary>
+    private async Task WaitForVueRouteAsync(string expectedPath, int timeoutMs = 5_000)
+    {
+        await Page.WaitForFunctionAsync(
+            "(expected) => document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router?.currentRoute?.value?.path === expected",
+            expectedPath,
+            new() { Timeout = timeoutMs });
     }
 
     /// <summary>
