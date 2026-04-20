@@ -1,7 +1,7 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 246 spec files covering the
+Any engine, in any language, can validate its behavior against 312 spec files covering the
 complete BattleScribe data model and editing operations.
 
 ## Quick Start
@@ -58,27 +58,34 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 246 declarative spec files covering all BattleScribe operations |
+| **YAML Specs** | 312 declarative spec files covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **CLI Runner** | Standalone console app that drives any adapter via JSON-line protocol |
 | **Adapters** | Thin wrappers translating protocol commands to engine API calls |
 
 ## Spec Coverage
 
-246 specs across 10 categories:
+312 specs across 17 categories:
 
 | Category | Specs | Description |
 |----------|------:|-------------|
-| condition | 31 | All condition types, groups, scopes, instanceOf, null-childId |
-| constraint | 34 | Min/max validation, shared, percent, hidden, cost limits, linked errors |
-| cost | 19 | Calculation, aggregation, limits, multi-type, negative |
-| force | 11 | Add/remove, nested, categories, multi-catalogue |
-| modifier | 48 | All modifier types, groups, repeats, profiles, rules, characteristics |
+| auto-select | 5 | Automatic selection with min constraints and defaults |
+| catalogue | 5 | Catalogue-level entries, rules, cost types |
+| category | 2 | Category links with modifiers, hidden categories |
+| condition | 34 | All condition types, groups, scopes, instanceOf, null-childId |
+| constraint | 40 | Min/max validation, shared, percent, hidden, cost limits, linked errors |
+| cost | 24 | Calculation, aggregation, limits, multi-type, negative, hidden |
+| deep-nesting | 6 | Cross-catalogue links, chained entry links, nested constraints |
+| entry-group | 4 | Selection entry groups with links, categories, nesting |
+| entry-link | 3 | Entry links with children, collective, groups |
+| force | 20 | Add/remove, nested, categories, multi-catalogue, multi-level |
+| gamesystem | 4 | Game system shared entries, rules, publications |
+| modifier | 54 | All modifier types, groups, repeats, profiles, rules, characteristics |
+| protocol | 1 | Full protocol smoke test (kitchen sink) |
 | real-world | 2 | DataSource specs using wh40k-10e external data |
-| refresh | 10 | State refresh after every mutation type |
-| roster | 9 | Creation, metadata, cost types |
+| roster | 10 | Creation, metadata, cost types, lifecycle |
 | scope | 14 | All scope types, child ID filters, include flags |
-| selection | 68 | Lifecycle, groups, links, collective, types, entry links, publications |
+| selection | 84 | Lifecycle, groups, links, collective, types, entry links, publications |
 
 ## Project Structure
 
@@ -88,7 +95,8 @@ battlescribe-spec/
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.Oracle/    # Oracle engine (IKVM + BattleScribe JARs)
-│   ├── BattleScribeSpec.Runner/    # CLI runner (bs-spec-runner)
+│   ├── BattleScribeSpec.Debugger/ # Spec debugger (bs-spec-debug)
+│   ├── BattleScribeSpec.Runner/   # CLI runner (bs-spec-runner)
 │   ├── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps oracle)
 │   ├── BattleScribeSpec.NewRecruit/        # New Recruit adapter (Playwright)
 │   └── BattleScribeSpec.NewRecruit.HarTool/  # HAR recording console tool

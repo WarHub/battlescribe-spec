@@ -31,9 +31,11 @@ Use `bs-spec-debug` to run a spec step-by-step and inspect full roster state:
 dotnet run --project src/BattleScribeSpec.Debugger -- selection-publication        # by spec ID
 dotnet run --project src/BattleScribeSpec.Debugger -- --dump protocol/kitchen-sink # dump after every step
 dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr --json spec.yaml # NR engine, JSON output
+dotnet run --project src/BattleScribeSpec.Debugger -- --export-xml ./out/ cost/cost-hidden-limit-validation
 ```
 
-Options: `--dump` (all steps), `--json`, `--engine oracle|nr`, `--no-headless`.
+Options: `--dump` (all steps), `--json`, `--engine oracle|nr`, `--no-headless`,
+`--export-xml <dir>` (generate .gst/.cat XML files from spec setup and exit).
 Specs can include `action: dump` steps for explicit dump points.
 
 ## After editing specs
@@ -46,7 +48,7 @@ pwsh -File tools/format-specs.ps1                                               
 
 | Path | What |
 |------|------|
-| `specs/{category}/{id}.yaml` | Spec files (309 total, 17 categories) |
+| `specs/{category}/{id}.yaml` | Spec files (312 total, 17 categories) |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
 | `src/BattleScribeSpec.TestKit/EngineTypes.cs` | State records (Roster/Force/Selection/Profile/Rule/Category/Cost) |
 | `src/BattleScribeSpec.TestKit/SpecFileModels.cs` | YAML spec model classes |

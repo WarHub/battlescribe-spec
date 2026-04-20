@@ -11,7 +11,7 @@
 | [Scope/condition evaluation](#3-scopecondition-evaluation) | 4 | Medium | NR evaluates child-force scope, ancestor scope, and null-childId conditions differently |
 | [instanceOf scope limits](#instanceof-scope-limitations-both-engines) | 12 | Info | instanceOf only works with self/parent/ancestor scope — both engines agree |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
-| [Other behavioral differences](#5-other-behavioral-differences) | 5 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
+| [Other behavioral differences](#5-other-behavioral-differences) | 4 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
 
 ---
 
@@ -155,7 +155,7 @@ on entry groups, so child selections don't appear under the expected categories.
 
 ## 5. Other Behavioral Differences
 
-**5 specs** with distinct NR behavioral differences:
+**4 specs** with distinct NR behavioral differences:
 
 ### Auto-Select with `field=forces` Constraint
 | Spec | Issue |
@@ -206,28 +206,25 @@ based on any `min>=1` regardless of field type.
 |------|-------|
 | `selection/selection-number-with-min` | NR returns different number/amount for min-constrained selections |
 
-### setSelectionCount on Child Entries — Instance Duplication
-| Spec | Issue |
-|------|-------|
-| `selection/selection-set-child-count-instance-model` | NR creates N separate instances (each number=1) instead of one selection with number=N |
-| `selection/selection-set-child-count-collective` | Same behavior for collective child entries |
+### setSelectionCount on Child Entries — Fixed
 
-When `setSelectionCount(count=3)` targets a child selection:
+> **Previously**: The adapter used `addInstance()` in a loop, creating N separate
+> instances instead of one node with number=N. This was an adapter bug, not an NR
+> engine limitation.
+>
+> **Now fixed**: The adapter uses NR's native `sel.setAmount({}, count)` which
+> correctly sets `amount=N` on a single node with proper cost propagation.
+> Both engines now produce identical results for child count changes.
 
-- **BattleScribe (Oracle)**: Single selection node, `number: 3`, costs scale
-  (e.g. 3 × 10 = 30 pts)
-- **NR (via adapter's `addInstance`)**: 3 separate selection instances, each
-  with `number: 1` and individual cost of 10 pts. Roster-level costs don't
-  recalculate after `addInstance` — stays at pre-duplication value (10 pts).
+| Spec | Status |
+|------|--------|
+| `selection/selection-set-child-count-instance-model` | ✅ Both engines agree |
+| `selection/selection-set-child-count-collective` | ✅ Both engines agree |
 
-This is an **adapter bug**, not an NR engine limitation. NR's own UI uses
-`setAmount({}, 3)` which correctly sets `amount=3` on a single node with
-proper cost propagation (30 pts). The adapter incorrectly calls
-`selector.addInstance()` in a loop instead. See [setAmount vs addInstance
-Deep Dive](#setamount-vs-addinstance-deep-dive) for details.
-
-Applies identically to both collective (`collective: true`) and non-collective
-child entries.
+**Protocol validation**: `setSelectionCount` now rejects `selectionPath` with fewer
+than 2 elements (root selections). Root selection count is managed via
+`selectEntry`/`deselectSelection`. A lint rule (`SetSelectionCountTargetsChildOnly`)
+enforces this in specs.
 
 ---
 
@@ -279,47 +276,38 @@ Oracle (BattleScribe) resolves cross-scope publication references.
 entries that reference them. A forceEntry in a gameSystem must reference a
 publication also defined in that gameSystem.
 
-### NR `setAmount()` Corruption Bugs
+### NR `setAmount()` — Signature Gotcha
 
-Calling `setAmount()` (used by the `setSelectionCount` spec action) can
-permanently corrupt NR's internal state under specific conditions:
+> **Previously documented as corruption bugs**: The issues below were discovered
+> using `setAmount(n)` with one arg, which silently corrupts state (`ctx=n,
+> n=undefined`). With the correct two-arg form `setAmount({}, n)`, NR's UI
+> uses this on all entry types without issues. The "corruption" was caused by
+> the wrong calling convention, not by setAmount itself.
 
-1. **Entries with min≥1 constraints**: Calling `setAmount()` on an auto-selected
-   entry with a `min: 1` constraint triggers an unrecoverable validation error.
-   Even `setAmount(1)` on an entry already at count 1 causes corruption.
+**Two args required**: `setAmount(ctx, n)` where `ctx` = checker context (pass `{}`).
+`setAmount(5)` with one arg sets `ctx=5, n=undefined` → silent corruption.
 
-2. **Entries with child selections**: Calling `setAmount()` on root unit entries
-   that have child selection entries corrupts conditional modifier evaluation.
-   The modifier condition stops being recalculated after the call.
-
-3. **Leaf entries without constraints**: `setAmount()` on entries WITHOUT children
-   or constraints is silently ignored (no corruption, no effect).
-
-**Impact**: Specs must not use `setSelectionCount` on entries with children or
-min constraints. The `protocol-kitchen-sink` spec was fixed by removing a
-`setSelectionCount` step that targeted a root unit entry.
+**Protocol validation**: `setSelectionCount` now rejects root selections
+(`selectionPath < 2`). Root selection lifecycle is managed via
+`selectEntry`/`deselectSelection` only.
 
 ### NR Hidden Cost Types
 
 NR's `army.calcTotalCosts()` method omits hidden cost types from its results.
-To get accurate roster totals including all cost types (visible and hidden), use
-manual summation from individual selections' `getCosts()` results:
+The adapter uses a **hybrid approach**: native `calcTotalCosts()` for visible
+cost types (which handles all the complex scope propagation correctly), plus
+manual summation only for hidden cost types:
 
 ```javascript
-// ❌ Omits hidden cost types
-const costs = army.calcTotalCosts(); // Only returns visible cost types
-
-// ✅ Includes all cost types
-function calculateTotalCost(roster, typeId) {
-    let total = 0;
-    for (const force of roster.getForces()) {
-        for (const sel of getAllSelections(force)) {
-            for (const cost of sel.getCosts()) {
-                if (cost.typeId === typeId) total += cost.value;
-            }
-        }
+// Hybrid approach: native for visible, manual for hidden only
+const nativeCosts = army.calcTotalCosts();  // visible types only
+for (const [tid, ct] of Object.entries(costIndex)) {
+    if (ct.hidden) {
+        // Manual summation for hidden types
+        total += sumFromSelections(roster, tid);
+    } else {
+        total += nativeCosts[tid] ?? 0;
     }
-    return total;
 }
 ```
 
@@ -544,20 +532,16 @@ Three distinct phases, each reading the (already-updated) cost data:
 | `addSubUnit()`, `splitDown/Up` | `selector.addInstance()` | Structural operations |
 | Mobile +/- buttons | `incrementAmount({})` / `decrementAmount({})` | Alternative path (0 call sites in bundle) |
 
-#### Adapter bug implication
+#### Adapter fix (applied)
 
-`NewRecruitActions.cs` `SetSelectionCount` uses `addInstance()` in a loop:
-```javascript
-for (let i = current; i < count; i++) selector.addInstance();
-```
-
-Should instead use:
+`NewRecruitActions.cs` `SetSelectionCountAsync` now uses `setAmount({}, count)`:
 ```javascript
 sel.setAmount({}, count);
 ```
 
-This would produce the correct single-node-with-count behavior matching both
-NR's own UI and BattleScribe Oracle's behavior.
+This produces the correct single-node-with-count behavior matching both
+NR's own UI and BattleScribe Oracle's behavior. The old `addInstance()` loop
+approach has been removed.
 
 ---
 

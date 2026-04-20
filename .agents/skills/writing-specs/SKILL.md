@@ -68,7 +68,7 @@ If the roster has validation errors at that point, the step fails. Use `errorsCo
 | `selectEntry` | `forceIndex` or `forcePath`, `entryIndex` or `entryName` |
 | `selectChildEntry` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath`, `childEntryIndex` or `childEntryName` |
 | `deselectSelection` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath` |
-| `setSelectionCount` | `forceIndex`/`forcePath`, `entryIndex`, `count` (no-op for root entries) |
+| `setSelectionCount` | `forceIndex`/`forcePath`, `selectionPath` (≥2 elements), `count`. Rejects root selections (selectionPath < 2) — lint rule enforced |
 | `duplicateSelection` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath` |
 | `setCostLimit` | `costTypeId`, `value` |
 | `removeForce` | `forceIndex` or `forcePath` |
