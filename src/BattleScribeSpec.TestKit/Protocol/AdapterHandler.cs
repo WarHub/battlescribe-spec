@@ -82,7 +82,12 @@ public static class AdapterHandler
 
         try
         {
-            var forcePath = cmd.ForcePath ?? (cmd.ForceIndex is { } fi ? [fi] : []);
+            var forcePath = cmd.ForcePath
+                ?? (cmd.ForceIndex is { } fi
+                    ? [fi]
+                    : cmd.Action == "addForce"
+                        ? []
+                        : [0]);
             var selectionPath = cmd.SelectionPath ?? (cmd.SelectionIndex is { } si ? [si] : [0]);
 
             switch (cmd.Action)

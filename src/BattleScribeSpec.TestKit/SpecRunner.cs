@@ -175,7 +175,7 @@ public sealed class SpecRunner
                 {
                     var selectChildCatalogueIndex = step.CatalogueIndex ?? 0;
                     var childEntryIndex = step.ChildEntryName is { Length: > 0 } childEntryName
-                        ? ResolveChildEntryIndex(childEntryName, forcePath[0], selectionPath[0], selectChildCatalogueIndex, stepIndex)
+                        ? ResolveChildEntryIndex(childEntryName, forcePath, selectionPath, selectChildCatalogueIndex, stepIndex)
                         : step.ChildEntryIndex ?? 0;
                     if (childEntryIndex < 0) return;
                     _engine.SelectChildEntry(
@@ -269,23 +269,53 @@ public sealed class SpecRunner
         return index;
     }
 
-    private int ResolveChildEntryIndex(string childEntryName, int forceIndex, int selectionIndex, int catalogueIndex, int stepIndex)
+    private int ResolveChildEntryIndex(string childEntryName, int[] forcePath, int[] selectionPath, int catalogueIndex, int stepIndex)
     {
         var state = _engine.GetRosterState();
-        if (forceIndex < 0 || forceIndex >= state.Forces.Count)
+
+        // Traverse forcePath to find the target force
+        ForceState? force = null;
+        var forces = state.Forces;
+        for (var i = 0; i < forcePath.Length; i++)
         {
-            _errors.Add($"Step {stepIndex}: force index {forceIndex} out of range (have {state.Forces.Count})");
+            var idx = forcePath[i];
+            if (idx < 0 || idx >= forces.Count)
+            {
+                _errors.Add($"Step {stepIndex}: forcePath[{i}]={idx} out of range (have {forces.Count})");
+                return -1;
+            }
+            force = forces[idx];
+            forces = force.ChildForces ?? (IReadOnlyList<ForceState>)[];
+        }
+
+        if (force is null)
+        {
+            _errors.Add($"Step {stepIndex}: empty forcePath for selectChildEntry");
             return -1;
         }
 
-        var selections = state.Forces[forceIndex].Selections;
-        if (selectionIndex < 0 || selectionIndex >= selections.Count)
+        // Traverse selectionPath to find the parent selection
+        SelectionState? parentSelection = null;
+        var selections = force.Selections;
+        for (var i = 0; i < selectionPath.Length; i++)
         {
-            _errors.Add($"Step {stepIndex}: selection index {selectionIndex} out of range (have {selections.Count})");
+            var idx = selectionPath[i];
+            if (idx < 0 || idx >= selections.Count)
+            {
+                _errors.Add($"Step {stepIndex}: selectionPath[{i}]={idx} out of range (have {selections.Count})");
+                return -1;
+            }
+            parentSelection = selections[idx];
+            selections = parentSelection.Children ?? (IReadOnlyList<SelectionState>)[];
+        }
+
+        if (parentSelection is null)
+        {
+            _errors.Add($"Step {stepIndex}: empty selectionPath for selectChildEntry");
             return -1;
         }
 
-        var parentSelectionName = selections[selectionIndex].Name;
+        var parentSelectionName = parentSelection.Name;
         var catalogue = GetCatalogue(catalogueIndex, stepIndex);
         var parentEntry = catalogue?.SelectionEntries?
             .FirstOrDefault(se => string.Equals(se.Name, parentSelectionName, StringComparison.OrdinalIgnoreCase));
