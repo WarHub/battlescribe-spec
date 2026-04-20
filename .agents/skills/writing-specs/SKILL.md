@@ -72,6 +72,7 @@ If the roster has validation errors at that point, the step fails. Use `errorsCo
 | `duplicateSelection` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath` |
 | `setCostLimit` | `costTypeId`, `value` |
 | `removeForce` | `forceIndex` or `forcePath` |
+| `dump` | (none) — triggers state dump in debugger; no-op in test runner |
 
 ### Path-based addressing (nested forces/selections)
 
