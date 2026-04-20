@@ -3,6 +3,14 @@
 BattleScribe Spec — declarative conformance test suite for BattleScribe roster engines.
 YAML specs in `specs/` define setup, actions, and expected state. SpecRunner executes them.
 
+## Project status: Experimental
+
+This project is in an **experimental stage**. All interfaces, formats, conventions, and
+architecture are subject to change without notice. There is **no backward compatibility
+guarantee** — breaking changes are not just allowed but actively encouraged when they
+improve architecture, code quality, or reduce tech debt. Prefer bold restructuring over
+incremental workarounds. When in doubt, choose the cleaner design.
+
 ## Build & test
 
 ```bash
