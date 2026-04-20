@@ -2,8 +2,6 @@ id: selection-nested-deselect
 category: selection
 description: deselectSelection can target nested selections via selectionPath
 tags: [selection, nested]
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:

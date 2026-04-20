@@ -1,7 +1,11 @@
-id: force-nested-parent-child-selections
+id: force-nested-multi-catalogue
 category: force
-description: Parent and child forces each maintain independent selection lists
-tags: [childForce]
+description: >
+  Child forces can use different catalogues than their parent.
+  Each force gets selections from its own catalogue.
+tags: [childForce, catalogue]
+engines:
+  newrecruit: fail
 
 setup:
   gameSystem:
@@ -14,53 +18,53 @@ setup:
           - id: fe-detach
             name: Detachment
   catalogues:
-    - id: cat-1
-      name: Cat
+    - id: cat-a
+      name: Faction A
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
-          name: Infantry
+        - id: se-a1
+          name: Alpha Unit
           type: unit
-        - id: se-2
-          name: Tank
+    - id: cat-b
+      name: Faction B
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-b1
+          name: Beta Unit
           type: unit
 
 steps:
   - action: addForce
     forceEntryIndex: 0
+    catalogueIndex: 0
 
   - action: addForce
     forcePath: [0]
     forceEntryIndex: 0
+    catalogueIndex: 1
 
-  # Add a unit to the parent force
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Army
+          childForceCount: 1
+          childForces:
+            - name: Detachment
+
   - action: selectEntry
     forceIndex: 0
+    entryIndex: 0
+
+  - action: selectEntry
+    forcePath: [0, 0]
     entryIndex: 0
 
   - expectedState:
       forces:
         - name: Army
-          selectionCount: 1
           selections:
-            - name: Infantry
+            - name: Alpha Unit
           childForces:
             - name: Detachment
-              selectionCount: 0
-
-  # Add a unit to the child force
-  - action: selectEntry
-    forcePath: [0, 0]
-    entryIndex: 1
-
-  - expectedState:
-      forces:
-        - name: Army
-          selectionCount: 1
-          selections:
-            - name: Infantry
-          childForces:
-            - name: Detachment
-              selectionCount: 1
               selections:
-                - name: Tank
+                - name: Beta Unit
