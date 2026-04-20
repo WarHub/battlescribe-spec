@@ -3,7 +3,6 @@ category: force
 description: Selections can be added to a child force independently using forcePath
 tags: [childForce]
 engines:
-  battlescribe: fail
   newrecruit: fail
 
 setup:

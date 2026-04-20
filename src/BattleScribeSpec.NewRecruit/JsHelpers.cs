@@ -33,6 +33,33 @@ internal static class JsHelpers
                 return [];
             };
 
+            // Navigate to a force at a given path (array of indices).
+            // path=[0] → first root force; path=[0,1] → second child of first root force.
+            window.getForceAtPath = function(army, path) {
+                let forces = getForces(army);
+                for (let i = 0; i < path.length; i++) {
+                    if (path[i] >= forces.length) return null;
+                    if (i < path.length - 1) {
+                        forces = forces[path[i]].getForces?.() || [];
+                    } else {
+                        return forces[path[i]];
+                    }
+                }
+                return null;
+            };
+
+            // Navigate to a selection at a given path within a force.
+            // path=[0] → first selection; path=[0,2] → third child of first selection.
+            window.getSelectionAtPath = function(force, path) {
+                let parent = force;
+                for (let i = 0; i < path.length; i++) {
+                    const sels = getSortedSelections(parent);
+                    if (path[i] >= sels.length) return null;
+                    parent = sels[path[i]];
+                }
+                return parent === force ? null : parent;
+            };
+
             window.getSortedSelections = function(force) {
                 const sels = getSelections(force);
                 const entryOrder = window.__bsspec?.entryOrder || [];
@@ -122,15 +149,21 @@ internal static class JsHelpers
                     if (!forces?.length) forces = army.getChildren?.();
                     if (!forces?.length) forces = [];
                     if (!Array.isArray(forces)) return [];
-                    return forces.map(f => ({
+                    return forces.map(f => extractForce(f));
+                }
+
+                function extractForce(f) {
+                    const childForces = f.getForces?.() || [];
+                    return {
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
                         selections: extractSelections(f, false),
+                        childForces: Array.isArray(childForces) ? childForces.map(cf => extractForce(cf)) : [],
                         profiles: extractProfiles(f),
                         rules: extractRules(f),
                         publicationId: f.publicationId || null,
                         page: f.page != null ? String(f.page) : null
-                    }));
+                    };
                 }
 
                 function extractSelections(parent, sortByEntryOrder) {

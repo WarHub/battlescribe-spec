@@ -3,7 +3,6 @@ category: force
 description: A child force can be removed from its parent force using forcePath
 tags: [childForce]
 engines:
-  battlescribe: fail
   newrecruit: fail
 
 setup:

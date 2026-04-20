@@ -3,7 +3,6 @@ category: force
 description: A parent force can contain multiple child forces, each with independent selections
 tags: [childForce]
 engines:
-  battlescribe: fail
   newrecruit: fail
 
 setup:

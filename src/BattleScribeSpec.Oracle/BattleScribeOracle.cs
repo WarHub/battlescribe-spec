@@ -769,6 +769,96 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
+    /// Add a child force under an existing parent force.
+    /// Resolves the child ForceEntry from the parent force's ForceEntry definition
+    /// and creates the child force via the Java engine.
+    /// </summary>
+    public void AddChildForce(Force parentForce, int childForceEntryIndex, int catalogueIndex = 0)
+    {
+        EnsureInitialized();
+        // Get the parent force's ForceEntry to find child force entries
+        var parentForceEntryId = parentForce.getEntryId();
+        var parentForceEntry = FindForceEntryById(parentForceEntryId);
+        if (parentForceEntry is null)
+            throw new InvalidOperationException(
+                $"Could not find ForceEntry '{parentForceEntryId}' for parent force '{parentForce.getName()}'.");
+
+        var childForceEntries = JavaListToList<ForceEntry>(parentForceEntry.getForceEntries());
+        if (childForceEntryIndex < 0 || childForceEntryIndex >= childForceEntries.Count)
+            throw new ArgumentOutOfRangeException(nameof(childForceEntryIndex),
+                $"Child force entry index {childForceEntryIndex} out of range ({childForceEntries.Count} available).");
+
+        var childForceEntry = childForceEntries[childForceEntryIndex];
+
+        if (catalogueIndex < 0) catalogueIndex = 0;
+        if (catalogueIndex >= _setupCatalogues.Count)
+            throw new ArgumentOutOfRangeException(nameof(catalogueIndex));
+        var catalogue = _setupCatalogues[catalogueIndex];
+        var linked = ResolveLinkedCatalogues(catalogue);
+
+        var linkedCatMap = new JavaHashMap();
+        if (linked.Count > 0)
+        {
+            foreach (var kvp in linked)
+                linkedCatMap.put(kvp.Key, kvp.Value);
+        }
+
+        var favourites = new JavaArrayList();
+        var errors = new JavaArrayList();
+        // Use the engine's native selectForce(parentForce, ...) to properly add as child
+        var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors);
+
+        if (childForce is null)
+            throw new InvalidOperationException("Java engine returned null when creating child force.");
+
+        _forceCatalogueMap[childForce] = catalogueIndex;
+    }
+
+    /// <summary>
+    /// Find the index of a child force entry by name under a parent force.
+    /// </summary>
+    public int GetChildForceEntryIndexByName(Force parentForce, string name)
+    {
+        var parentForceEntryId = parentForce.getEntryId();
+        var parentForceEntry = FindForceEntryById(parentForceEntryId);
+        if (parentForceEntry is null) return -1;
+
+        var childForceEntries = JavaListToList<ForceEntry>(parentForceEntry.getForceEntries());
+        for (int i = 0; i < childForceEntries.Count; i++)
+        {
+            var feName = childForceEntries[i].getName();
+            if (feName != null && feName.Contains(name, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Recursively search for a ForceEntry by ID in the setup force entries tree.
+    /// </summary>
+    private ForceEntry? FindForceEntryById(string? id)
+    {
+        if (id is null) return null;
+        foreach (var fe in _setupForceEntries)
+        {
+            var found = FindForceEntryRecursive(fe, id);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    private static ForceEntry? FindForceEntryRecursive(ForceEntry entry, string id)
+    {
+        if (entry.getId() == id) return entry;
+        foreach (var child in JavaListToList<ForceEntry>(entry.getForceEntries()))
+        {
+            var found = FindForceEntryRecursive(child, id);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Resolve linked catalogues for a catalogue by reading its CatalogueLink elements
     /// and looking up target catalogue IDs in the loaded catalogue dictionary.
     /// </summary>
@@ -838,12 +928,16 @@ public sealed class BattleScribeOracle : IDisposable
         var forces = GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        return GetEntriesForForce(forces[forceIndex]);
+    }
 
-        // Use the engine's catalogue manager (d.R()) which returns properly expanded entries.
-        // Entry links are resolved to copies with merged constraints and composite IDs.
+    /// <summary>
+    /// Get entries for a force object (supports both root and nested forces).
+    /// </summary>
+    public List<SelectionEntry> GetEntriesForForce(Force force)
+    {
         try
         {
-            var force = forces[forceIndex];
             var catMgr = _engine.e(force);
             if (catMgr != null)
             {
@@ -855,15 +949,13 @@ public sealed class BattleScribeOracle : IDisposable
             // Fall through to legacy path
         }
 
-        // Fallback: pre-computed entries (may lack entry link expansion)
-        var forceObj = forces[forceIndex];
-        if (_forceCatalogueMap.TryGetValue(forceObj, out var catIdx)
+        if (_forceCatalogueMap.TryGetValue(force, out var catIdx)
             && catIdx < _perCatalogueEntries.Count)
         {
             return _perCatalogueEntries[catIdx];
         }
         throw new InvalidOperationException(
-            $"No catalogue mapping found for force {forceIndex}. Force must be added via AddForceByIndex.");
+            "No catalogue mapping found for force. Force must be added via AddForceByIndex.");
     }
 
     /// <summary>

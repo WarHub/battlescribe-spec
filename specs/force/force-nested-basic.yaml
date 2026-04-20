@@ -3,7 +3,6 @@ category: force
 description: Force entries can contain nested sub-force entries for hierarchical army structures
 tags: [childForce]
 engines:
-  battlescribe: fail
   newrecruit: fail
 
 setup:

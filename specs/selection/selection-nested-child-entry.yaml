@@ -3,7 +3,6 @@ category: selection
 description: selectChildEntry can target deeply nested selections via selectionPath
 tags: [selection, nested]
 engines:
-  battlescribe: fail
   newrecruit: fail
 
 setup:
