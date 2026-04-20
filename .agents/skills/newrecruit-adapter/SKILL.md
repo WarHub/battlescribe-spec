@@ -145,7 +145,32 @@ State reader sorts by `__bsspec_seq`, with catalogue entry order as tiebreaker.
 | No `getPage()` method | NR tracks page on forces only, not selections | None — architectural limitation |
 | costIndex not auto-populated | Child cost calculations return 0 | Manual population in setup (see above) |
 | Child nodes pre-created with amount=0 | selectChildEntry must increment, not addInstance | Increment existing node amount |
+| autocheck ignores defaultSelectionEntryId | Selects alphabetically first entry in groups | Use single-option groups for deterministic auto-selection |
 | NetworkIdle hangs | Persistent connections prevent WaitUntilState.NetworkIdle | Use WaitUntilState.Load |
+
+## Selection mechanics
+
+NR's roster tree uses **selectors** (templates) and **instances** (selections).
+
+### addInstance vs incrementAmount
+
+- **`addInstance()`** — on a force-level selector, creates a new instance (selection)
+- **`incrementAmount()`** — on a pre-created child node, bumps count from 0→1
+
+### autocheck — cascading auto-selection
+
+After `addInstance()`, the new instance's children with `min` constraints remain at
+`amount=0`. Calling **`autocheck()`** on the new instance triggers recursive
+auto-selection: it walks child selectors, finds `min>=1` entries, and selects them.
+
+All 5 selection methods in `NewRecruitActions.cs` call `autocheck()` after creating
+an instance. Without it, nested min-constraint children aren't populated.
+
+**Caveat:** `autocheck()` ignores `defaultSelectionEntryId` — it picks entries
+alphabetically. Specs must use single-option groups for deterministic auto-selection.
+
+See [NR-INTERNALS.md](../nr-adhoc-probing/references/NR-INTERNALS.md) for the full
+deobfuscated behavior reference.
 
 ## HAR recording and replay
 
