@@ -1,0 +1,62 @@
+id: force-remove-first-multi-catalogue
+category: force
+description: >
+  Removing the first force correctly shifts catalogue tracking for subsequent
+  forces. After removal, selections on the remaining force use the correct
+  catalogue (not the removed one).
+tags: [forceEntry, catalogue]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogues:
+    - id: cat-a
+      name: Faction A
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-alpha
+          name: Alpha
+          type: unit
+    - id: cat-b
+      name: Faction B
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-beta
+          name: Beta
+          type: unit
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+    catalogueIndex: 0
+
+  - action: addForce
+    forceEntryIndex: 0
+    catalogueIndex: 1
+
+  - expectedState:
+      forceCount: 2
+
+  # Remove first force (catalogue A)
+  - action: removeForce
+    forceIndex: 0
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Patrol
+
+  # Select on remaining force — should use catalogue B (Beta), not A (Alpha)
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Patrol
+          selections:
+            - name: Beta

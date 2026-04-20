@@ -23,6 +23,14 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id
 (offline HAR replay) in one fast command. Other profiles: `lint`, `oracle`, `nr-frozen`,
 `nr-live`, `nr-live-visible`.
 
+## NR frozen tests and HAR
+
+The frozen NR tests replay a **single HAR snapshot of the entire NR web application** (JS
+bundles, CSS, assets). This is NOT per-spec — all specs run against the same HAR. Adding or
+editing specs requires no HAR changes; new specs work immediately. The HAR is versioned by
+NR client version (pinned in `testdata.json`), updated separately via
+[WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har) releases.
+
 ## Debugging specs
 
 Use `bs-spec-debug` to run a spec step-by-step and inspect full roster state:

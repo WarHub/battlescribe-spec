@@ -58,6 +58,12 @@ var engine = await NewRecruitRosterEngine.CreateFrozenAsync(
 HAR replay intercepts all network requests via `Page.RouteFromHARAsync()`.
 No internet needed. Deterministic results.
 
+**Important**: The HAR is a single snapshot of the entire NR web application
+(JS bundles, CSS, assets) — NOT per-spec recordings. All specs run against the
+same HAR. New specs work immediately against the existing HAR without any
+recording step. The HAR is versioned by NR client version (pinned in
+`testdata.json`), not by spec content.
+
 ## Playwright browser setup
 
 ### Pinia store access

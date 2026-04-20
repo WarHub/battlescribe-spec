@@ -469,6 +469,39 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             .ToList();
         foreach (var key in keysToRemove)
             _forceCatalogueMap.Remove(key);
+        // Renumber sibling keys after the removed force to stay in sync with NR's indices
+        RenumberForceCatalogueMap(forcePath);
+    }
+
+    /// <summary>
+    /// After removing a force at <paramref name="removedPath"/>, decrement the index
+    /// at that depth for all sibling entries that came after the removed one.
+    /// E.g. removing [0] shifts "1"→"0", "2"→"1"; removing [0,1] shifts [0,2]→[0,1].
+    /// </summary>
+    private void RenumberForceCatalogueMap(int[] removedPath)
+    {
+        var depth = removedPath.Length - 1;
+        var removedIndex = removedPath[depth];
+        var prefix = depth > 0 ? string.Join(",", removedPath.Take(depth)) + "," : "";
+        // Find keys that are siblings at the same depth with a higher index
+        var toRenumber = new List<(string oldKey, string newKey, int catIdx)>();
+        foreach (var (key, catIdx) in _forceCatalogueMap.ToList())
+        {
+            if (!key.StartsWith(prefix))
+                continue;
+            var suffix = key[prefix.Length..];
+            var parts = suffix.Split(',');
+            if (!int.TryParse(parts[0], out var siblingIndex) || siblingIndex <= removedIndex)
+                continue;
+            parts[0] = (siblingIndex - 1).ToString();
+            var newKey = prefix + string.Join(",", parts);
+            toRenumber.Add((key, newKey, catIdx));
+        }
+        foreach (var (oldKey, newKey, catIdx) in toRenumber)
+        {
+            _forceCatalogueMap.Remove(oldKey);
+            _forceCatalogueMap[newKey] = catIdx;
+        }
     }
 
     public void SelectEntry(int[] forcePath, int entryIndex)
