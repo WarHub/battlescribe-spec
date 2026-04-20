@@ -213,7 +213,7 @@ DataSource specs are resolved by the test runner using `DataSourceResolver` and 
 by engines that implement the `IRosterEngine` file-based interface methods:
 
 - `SetupFromFiles(files)` — load raw `.gst`/`.cat` XML files
-- `AddForceByName(forcePath, forceName, catalogueName)` — add a force, optionally specifying the faction catalogue
+- `AddForceByName(forcePath, forceName, catalogueName = null, catalogueIndex = 0)` — add a force, optionally selecting the faction catalogue by name or index
 - `SelectEntryByName(forcePath, entryName)` — select an entry by name
 - `SelectChildEntryByName(forcePath, selectionPath, childEntryName)` — select a child entry by name
 

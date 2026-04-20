@@ -89,7 +89,7 @@ Sent once at the start of each spec test. Provides game system and catalogues da
 
 | Action | Required Fields | Description |
 |--------|----------------|-------------|
-| `addForce` | `forceEntryIndex` | Add a force. Optional: `forcePath` (parent, default `[]` = top-level), `catalogueIndex` (default 0) |
+| `addForce` | `forceEntryIndex` | Add a force. Optional: `forcePath` (parent, default `[]` = top-level) or legacy `forceIndex` (equivalent to `forcePath: [N]`), `catalogueIndex` (default 0) |
 | `removeForce` | `forcePath` or `forceIndex` | Remove a force identified by path |
 | `selectEntry` | `entryIndex`, `forcePath` or `forceIndex` | Add a selection to a force |
 | `selectChildEntry` | `childEntryIndex`, `forcePath`/`forceIndex`, `selectionPath`/`selectionIndex` | Add a child selection |
@@ -101,15 +101,18 @@ Sent once at the start of each spec test. Provides game system and catalogues da
 #### Path-based addressing
 
 Actions that target forces accept either a legacy `forceIndex` (integer) or a `forcePath`
-(array of integers) for nested addressing. Similarly, selection-targeting actions accept
-`selectionIndex` (integer) or `selectionPath` (array of integers).
+(array of integers) for nested addressing. If both are provided, `forcePath` wins and
+`forceIndex` is ignored. For non-`addForce` actions, if neither is provided, the target
+force defaults to `[0]`. Similarly, selection-targeting actions accept `selectionIndex`
+(integer) or `selectionPath` (array of integers); if both are provided, `selectionPath`
+wins and `selectionIndex` is ignored.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `forcePath` | `int[]` | Path to a force in the hierarchy. For `addForce`: identifies the parent (empty `[]` = top-level). For all other actions: identifies the target force. |
 | `selectionPath` | `int[]` | Path to a selection in the hierarchy. `[0]` = first selection, `[0, 2]` = third child of first selection. |
-| `forceIndex` | `int` | Legacy shorthand for `forcePath: [N]`. Takes precedence if `forcePath` is absent. |
-| `selectionIndex` | `int` | Legacy shorthand for `selectionPath: [N]`. Takes precedence if `selectionPath` is absent. |
+| `forceIndex` | `int` | Legacy shorthand for `forcePath: [N]`. Used only when `forcePath` is not provided. |
+| `selectionIndex` | `int` | Legacy shorthand for `selectionPath: [N]`. Used only when `selectionPath` is not provided. |
 
 Example:
 ```json

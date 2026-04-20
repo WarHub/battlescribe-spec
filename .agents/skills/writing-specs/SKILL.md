@@ -91,6 +91,7 @@ to target nested forces or selections:
 
 # Deselect a nested selection (child 1 of selection 0)
 - action: deselectSelection
+  forcePath: [0]
   selectionPath: [0, 1]
 ```
 
