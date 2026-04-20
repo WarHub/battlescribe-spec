@@ -134,7 +134,8 @@ public sealed class SpecLintTests
         "addForce", "removeForce",
         "selectEntry", "selectChildEntry",
         "deselectSelection", "setSelectionCount",
-        "duplicateSelection", "setCostLimit"
+        "duplicateSelection", "setCostLimit",
+        "dump"
     ];
 
     [Theory]

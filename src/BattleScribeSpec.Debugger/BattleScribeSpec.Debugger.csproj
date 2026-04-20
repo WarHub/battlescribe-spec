@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BattleScribeSpec.Debugger</RootNamespace>
+    <AssemblyName>bs-spec-debug</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BattleScribeSpec.Oracle\BattleScribeSpec.Oracle.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
+  </ItemGroup>
+
+</Project>

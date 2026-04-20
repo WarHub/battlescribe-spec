@@ -13,6 +13,13 @@ public sealed class SpecRunner
     private readonly List<string> _errors = [];
     private bool _isDataSourceMode;
 
+    /// <summary>
+    /// Called after each step (action, assertion, or dump) completes.
+    /// Parameters: step index, step definition, roster state, validation errors.
+    /// Set this to enable state dumping in debugger mode.
+    /// </summary>
+    public Action<int, StepDef, RosterState, IReadOnlyList<ValidationErrorState>>? OnStepCompleted { get; set; }
+
     public SpecRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null, string? engineName = null)
     {
         _engine = engine;
@@ -54,17 +61,24 @@ public sealed class SpecRunner
                 var step = spec.Steps[i];
                 try
                 {
-                    if (step.Action is not null)
+                    if (step.Action == "dump")
+                    {
+                        // dump is a no-op in the runner itself; the callback does the work
+                    }
+                    else if (step.Action is not null)
                         ExecuteAction(step, i);
                     else if (step.ExpectedState is not null)
                         ExecuteAssertion(step, i);
                     else
                         _errors.Add($"Step {i}: neither 'action' nor 'expectedState' defined");
+
+                    NotifyStepCompleted(i, step);
                 }
                 catch (Exception ex)
                 {
                     _errors.Add($"Step {i}: {ex.GetType().Name}: {ex.Message}");
-                    if (step.Action is not null)
+                    NotifyStepCompleted(i, step);
+                    if (step.Action is not null && step.Action != "dump")
                         break;
                 }
             }
@@ -86,6 +100,22 @@ public sealed class SpecRunner
         }
 
         return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
+    }
+
+    private void NotifyStepCompleted(int stepIndex, StepDef step)
+    {
+        if (OnStepCompleted is not { } callback)
+            return;
+        try
+        {
+            var state = _engine.GetRosterState();
+            var errors = _engine.GetValidationErrors();
+            callback(stepIndex, step, state, errors);
+        }
+        catch
+        {
+            // Don't let dump failures break spec execution
+        }
     }
 
     private void SetupFromDataSource(string dataSourceUri)
