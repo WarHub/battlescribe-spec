@@ -284,31 +284,31 @@ internal static class JsHelpers
                 }
 
                 function extractTotalCosts(army) {
-                    // Use NR's native calcTotalCosts for visible cost types.
-                    // It correctly reflects scope-propagated totals after setAmount.
+                    // Manual summation for ALL cost types (visible and hidden).
+                    // NR's calcTotalCosts() omits hidden types, so we use uniform
+                    // summation from individual selections for correctness.
                     const result = {};
-                    try {
-                        const nativeCosts = army.calcTotalCosts?.() || [];
-                        for (const c of nativeCosts) {
-                            const tid = c.typeId || c.id || '';
-                            if (tid) result[tid] = { name: c.name || '', typeId: tid, value: c.value || 0 };
-                        }
-                    } catch(e) { /* fall through */ }
-
-                    // calcTotalCosts omits hidden cost types. Add any hidden
-                    // cost types from the game system via manual summation.
-                    const costIndex = window.__bsspec?.book?.catalogue?.costIndex || {};
-                    for (const tid of Object.keys(costIndex)) {
-                        if (!result[tid] && costIndex[tid].hidden) {
-                            const ct = costIndex[tid];
-                            result[tid] = { name: ct.name || '', typeId: tid, value: sumCostType(army, tid) };
+                    for (const force of (army.getForces?.() || [])) {
+                        sumNode(force);
+                    }
+                    function sumNode(node) {
+                        for (const sel of (node.getSelections?.() || node.getChildren?.() || [])) {
+                            const amount = sel.getAmount?.() ?? 0;
+                            if (amount <= 0) continue;
+                            for (const c of (sel.getCosts?.() || [])) {
+                                const tid = c.typeId || '';
+                                if (!tid) continue;
+                                if (!result[tid]) result[tid] = { name: c.name || '', typeId: tid, value: 0 };
+                                result[tid].value += (c.value || 0) * amount;
+                            }
+                            sumNode(sel);
                         }
                     }
 
                     const vals = Object.values(result);
                     if (vals.length > 0) return vals;
 
-                    // Last-resort fallback: zero-valued from game system
+                    // Fallback for empty roster: zero-valued from game system
                     const gs = window.__bsspec?.book?.catalogue?.gameSystem;
                     if (gs?.costTypes) {
                         return gs.costTypes.map(ct => ({
@@ -318,27 +318,6 @@ internal static class JsHelpers
                         }));
                     }
                     return [];
-                }
-
-                function sumCostType(army, typeId) {
-                    let total = 0;
-                    for (const force of (army.getForces?.() || [])) {
-                        total += sumNodeCostType(force, typeId);
-                    }
-                    return total;
-                }
-
-                function sumNodeCostType(node, typeId) {
-                    let total = 0;
-                    for (const sel of (node.getSelections?.() || node.getChildren?.() || [])) {
-                        const amount = sel.getAmount?.() ?? 0;
-                        if (amount <= 0) continue;
-                        for (const c of (sel.getCosts?.() || [])) {
-                            if ((c.typeId || '') === typeId) total += (c.value || 0) * amount;
-                        }
-                        total += sumNodeCostType(sel, typeId);
-                    }
-                    return total;
                 }
 
                 function extractErrors(army) {
@@ -357,13 +336,6 @@ internal static class JsHelpers
                                 }
                             })(sel);
                         }
-                    }
-
-                    const costTypeLookup = [];
-                    const costTypes = spec?.book?.catalogue?.gameSystem?.costTypes || [];
-                    const costLimitConfig = spec?.costLimitConfig || {};
-                    for (const ct of costTypes) {
-                        costTypeLookup.push({ name: ct.name, typeId: ct.id });
                     }
 
                     const seen = new Set();
@@ -437,7 +409,17 @@ internal static class JsHelpers
                             }
                         }
 
+                        // Roster-level errors: only emit cost limit violations
                         if (ownerType === 'roster') {
+                            if (e.constraint?.type === 'max' && e.constraint?.field) {
+                                result.push({
+                                    message: cleanMsg,
+                                    ownerType: 'roster',
+                                    ownerEntryId: null,
+                                    entryId: 'costLimits',
+                                    constraintId: e.constraint.field
+                                });
+                            }
                             return;
                         }
 
@@ -473,23 +455,6 @@ internal static class JsHelpers
                         }
                         for (const sel of (f.getSelections?.() || []))
                             walkSel(sel);
-                    }
-
-                    const totalCosts = extractTotalCosts(army);
-                    for (const ct of costTypeLookup) {
-                        const configuredLimit = costLimitConfig[ct.name];
-                        if (configuredLimit === undefined || configuredLimit === null || configuredLimit < 0) continue;
-                        const actual = totalCosts.find(c => c.typeId === ct.typeId);
-                        const totalValue = actual?.value || 0;
-                        if (totalValue > configuredLimit) {
-                            result.push({
-                                message: '',
-                                ownerType: 'roster',
-                                ownerEntryId: null,
-                                entryId: 'costLimits',
-                                constraintId: ct.typeId
-                            });
-                        }
                     }
 
                     if (result.length === 0) {

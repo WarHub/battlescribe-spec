@@ -130,22 +130,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                     CollectEntryIds(cat.SelectionEntries, entryOrder);
             }
 
-            // Build cost limit config from game system cost types
-            Dictionary<string, double?>? costLimitConfig = null;
-            if (gameSystem.CostTypes is { Count: > 0 })
-            {
-                costLimitConfig = new Dictionary<string, double?>();
-                foreach (var ct in gameSystem.CostTypes)
-                    costLimitConfig[ct.Name] = ct.DefaultCostLimit;
-            }
-
             // Build files array and catalogue name list for multi-catalogue support
             var catFiles = allCatXml.Select(c => new { name = c.FileName, path = $"/spec/{c.FileName}", data = c.Xml }).ToArray();
             var catNames = catalogues.Select(c => c.Name).ToArray();
 
-            // Single consolidated EvaluateAsync: setup + entryOrder + costLimitConfig
+            // Single consolidated EvaluateAsync: setup + entryOrder
             var setupResult = await Timings.TimeAsync("SetupJsEval", () => _browser.Page.EvaluateAsync<string?>("""
-                async ([gstXml, catFiles, systemId, catNames, entryOrder, costLimitConfig, rosterName]) => {
+                async ([gstXml, catFiles, systemId, catNames, entryOrder, rosterName]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
@@ -202,6 +193,18 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         if (!roster) return 'Failed to create roster';
                         roster.setCustomName(rosterName);
 
+                        // Apply defaultCostLimit as the actual max cost limits.
+                        // NR's createRoster uses costs[].value (always 0) as limits;
+                        // we must explicitly set them from defaultCostLimit.
+                        const maxCosts = roster.getMaxCosts?.() || [];
+                        if (maxCosts.length > 0) {
+                            const corrected = maxCosts.map(c => ({
+                                ...c,
+                                value: c.defaultCostLimit >= 0 ? c.defaultCostLimit : -1
+                            }));
+                            roster.setMaxCosts(corrected);
+                        }
+
                         const autoForces = roster.getForces?.() || [];
                         for (const f of [...autoForces]) {
                             if (typeof f.delete === 'function') f.delete();
@@ -226,14 +229,12 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         await listsStore.addList({row, army: roster, book: primaryBook});
 
                         // Save references globally — books array for multi-catalogue AddForce
-                        // Also inject entryOrder and costLimitConfig inline
                         window.__bsspec = {
                             army: roster,
                             book: primaryBook,
                             books: allBooks.map(b => b.bookData),
                             row,
-                            entryOrder: entryOrder || null,
-                            costLimitConfig: costLimitConfig || null
+                            entryOrder: entryOrder || null
                         };
 
                         return null; // success
@@ -243,7 +244,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 }
                 """, new object[] { gstXml, catFiles, gameSystem.Id, catNames,
                     entryOrder?.ToArray() ?? (object)Array.Empty<string>(),
-                    costLimitConfig ?? (object)new Dictionary<string, double?>(),
                     _rosterName }));
 
             if (setupResult != null)
@@ -336,6 +336,16 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         if (!roster) return 'Failed to create roster';
                         roster.setCustomName(rosterName);
 
+                        // Apply defaultCostLimit as actual max cost limits
+                        const maxCosts = roster.getMaxCosts?.() || [];
+                        if (maxCosts.length > 0) {
+                            const corrected = maxCosts.map(c => ({
+                                ...c,
+                                value: c.defaultCostLimit >= 0 ? c.defaultCostLimit : -1
+                            }));
+                            roster.setMaxCosts(corrected);
+                        }
+
                         const autoForces = roster.getForces?.() || [];
                         for (const f of [...autoForces]) {
                             if (typeof f.delete === 'function') f.delete();
@@ -384,17 +394,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             }
                         }
                         window.__bsspec.entryOrder = entryOrder;
-
-                        // Populate costLimitConfig from game system cost types
-                        // so the reader can distinguish "no limit" from "limit=0".
-                        const costLimitConfig = {};
-                        const gs = primaryBook?.catalogue?.gameSystem;
-                        if (gs?.costTypes) {
-                            for (const ct of gs.costTypes) {
-                                costLimitConfig[ct.name] = ct.defaultCostLimit ?? -1;
-                            }
-                        }
-                        window.__bsspec.costLimitConfig = costLimitConfig;
 
                         return null; // success
                     } catch(e) {

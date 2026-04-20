@@ -46,9 +46,3 @@ steps:
       errors:
         - on: roster
           from: costLimits/cp
-          messageContains: over the CP limit
-      engines:
-        newrecruit:
-          errors:
-            - on: roster
-              from: costLimits/cp

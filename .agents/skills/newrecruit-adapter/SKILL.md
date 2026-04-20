@@ -146,7 +146,7 @@ State reader sorts by `__bsspec_seq`, with catalogue entry order as tiebreaker.
 | Page modifier not applied | `type: set, field: page` doesn't update selection page | Per-engine `expectedState` override |
 | `setAmount()` requires two args | `setAmount(n)` with one arg corrupts: sets `ctx=n, n=undefined` | Always use `sel.setAmount({}, count)` |
 | `setSelectionCount` rejects root selections | Protocol validates `selectionPath.Length >= 2` | Use `selectEntry`/`deselectSelection` for roots |
-| `calcTotalCosts()` omits hidden cost types | Roster cost totals exclude hidden cost types | Hybrid: native for visible, manual summation for hidden |
+| `calcTotalCosts()` omits hidden cost types | Roster cost totals exclude hidden cost types | Uniform manual summation for all types |
 | costIndex not auto-populated | Child cost calculations return 0 | Manual population in setup (see above) |
 | Child nodes pre-created with amount=0 | selectChildEntry must increment, not addInstance | Increment existing node amount |
 | autocheck ignores defaultSelectionEntryId | Selects alphabetically first entry in groups | Use single-option groups for deterministic auto-selection |

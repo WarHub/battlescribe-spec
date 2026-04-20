@@ -96,11 +96,13 @@ the roster hierarchy:
 
 - Invoke `checkConstraints()` on the current army/roster to populate
   constraint state.
+- Cost limit errors are handled natively by NR after applying `defaultCostLimit`
+  via `setMaxCosts` at roster creation (see NR-INTERNALS.md for details).
 - Traverse `roster → forces → categories → selections`, calling
   `checkConstraints()` on each element recursively (including child selections).
 - Collect constraint violations attached to each element after checking.
-- Inject additional cost-limit validation during this traversal (e.g. total
-  roster or force cost exceeding configured limits).
+- Roster-level cost limit errors (with `constraint.type === 'max'` and
+  `constraint.field`) are mapped to `costLimits/{field}` entries.
 
 Each detected violation is mapped to `ValidationErrorState` with:
 - `Message` — error text

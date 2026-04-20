@@ -236,21 +236,39 @@ hidden cost types are expected in totals.
 army.calcTotalCosts()  // → only includes "pts", omits "PL"
 ```
 
-**Fix**: Always use manual summation from individual selections:
+**Fix**: Use uniform manual summation from individual selections for ALL cost types:
 ```javascript
-function calculateTotalCost(roster, typeId) {
-    let total = 0;
-    for (const force of roster.getForces()) {
-        walkSelections(force, sel => {
-            for (const cost of sel.getCosts())
-                if (cost.typeId === typeId) total += cost.value;
-        });
+function sumNode(node, result) {
+    for (const sel of (node.getSelections?.() || [])) {
+        const amount = sel.getAmount?.() ?? 0;
+        if (amount <= 0) continue;
+        for (const c of (sel.getCosts?.() || [])) {
+            result[c.typeId] = (result[c.typeId] || 0) + c.value * amount;
+        }
+        sumNode(sel, result);
     }
-    return total;
 }
 ```
 
 This includes ALL cost types regardless of visibility.
+
+## Hidden cost type VALIDATION (defaultCostLimit)
+
+**Discovered April 2026.** NR's `createRoster(costs)` uses `costs[].value` (always 0)
+as the limit, NOT `defaultCostLimit`. You must explicitly apply limits after creation:
+
+```javascript
+const maxCosts = roster.getMaxCosts();  // includes defaultCostLimit metadata
+const corrected = maxCosts.map(c => ({
+    ...c,
+    value: c.defaultCostLimit >= 0 ? c.defaultCostLimit : -1
+}));
+roster.setMaxCosts(corrected);
+```
+
+After this, `checkConstraints()` correctly produces errors for hidden cost types:
+- Error: `{msg: "Roster has 1 CP too many (max 1)", constraint: {field: "cp", type: "max", id: "max::cp::CP"}}`
+- `constraint.field` = the cost type ID → maps to `costLimits/{field}`
 
 ## NR `.page` is a number
 

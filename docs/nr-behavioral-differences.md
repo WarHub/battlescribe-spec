@@ -294,22 +294,16 @@ publication also defined in that gameSystem.
 ### NR Hidden Cost Types
 
 NR's `army.calcTotalCosts()` method omits hidden cost types from its results.
-The adapter uses a **hybrid approach**: native `calcTotalCosts()` for visible
-cost types (which handles all the complex scope propagation correctly), plus
-manual summation only for hidden cost types:
+The adapter uses **uniform manual summation** for all cost types (hidden and
+visible alike), walking the selection tree and multiplying `getCosts()` by
+`getAmount()` per selection. This is simpler and produces correct totals for
+all types regardless of visibility.
 
-```javascript
-// Hybrid approach: native for visible, manual for hidden only
-const nativeCosts = army.calcTotalCosts();  // visible types only
-for (const [tid, ct] of Object.entries(costIndex)) {
-    if (ct.hidden) {
-        // Manual summation for hidden types
-        total += sumFromSelections(roster, tid);
-    } else {
-        total += nativeCosts[tid] ?? 0;
-    }
-}
-```
+NR's `createRoster(costs)` sets cost limits to 0 (from `costs[].value`, which
+is the starting total, not the limit). The adapter explicitly applies
+`defaultCostLimit` via `setMaxCosts()` after roster creation so that NR's
+native `checkConstraints()` correctly validates limits for both visible and
+hidden cost types.
 
 ### NR Selection Ordering
 
