@@ -119,18 +119,23 @@ as unselected despite the constraint.
 **Adapter pattern:**
 
 ```javascript
-// Force-level entry selection
+// Force-level entry selection (adding a new unit)
 if (typeof selector.addInstance === 'function') {
     selector.addInstance();
     // MUST call autocheck to cascade min-constraint auto-selection
     const insts = selector.instances || [];
     insts[insts.length - 1]?.autocheck?.();
 }
-// Child entry increment (already materialized)
+// Child entry increment (already materialized, amount=0→1)
 else if (selector.getAmount?.() === 0) {
     selector.incrementAmount();
     selector.autocheck?.(); // also triggers cascade on children
 }
+
+// Changing count on existing selection (e.g. 1→3)
+// ✅ Use setAmount — matches NR UI behavior, proper cost propagation
+sel.setAmount({}, 3);
+// ❌ DON'T loop addInstance — creates siblings, costs don't aggregate
 ```
 
 ## Selection source pattern — page and publication
@@ -260,3 +265,106 @@ String(obj.page)   // → "42" (what BattleScribe expects)
 // Safe pattern:
 obj.page != null ? String(obj.page) : null
 ```
+
+## `setAmount()` vs `addInstance()` — Selection Count Mechanics
+
+**Discovered April 2026 via live Playwright UI method tracing.**
+
+Two fundamentally different operations for changing selection counts:
+
+### `setAmount(ctx, n)` — Counter Mutation (correct for count changes)
+
+Sets the `amount` property on an **existing** node. Used by NR's UI spinbutton.
+Triggers full cost propagation via scope queue.
+
+**Signature**: Two args required — `ctx` = tracker context, `n` = new amount.
+
+```javascript
+// ✅ Correct — NR UI passes {} as context
+node.setAmount({}, 5);
+
+// ❌ WRONG — sets ctx=5, n=undefined → silent corruption
+node.setAmount(5);
+```
+
+Deobfuscated `amount` setter:
+```javascript
+set amount(e) { e && this.enable(e); e || this.disable(0); }
+```
+
+**Internal chain** (323 method calls traced for Trooper 3→4):
+1. Guard checks: `isConstantRecursive`, `isHidden`, `isConstant`
+2. `setLastChecked("add", tracker)` — mark as being modified
+3. `enable(4)` → `state.setSelections(4)` → `scope.updateMultipliers(4, 4)`
+4. `onTotalCostChanged("pts")` — notify cost system
+5. `scope.getQueue().empty()` — drain priority queue (parent listeners fire)
+6. `eachParent` → `Squad.onChildAmountChanged()`
+7. `applyModifications(tracker)` → `checkConstraints` → `fixReactivity`
+8. `calcTotalCosts` (5 passes — NOT a loop, see below)
+9. `toJsonObject` → `saveListLocally` → `doSaveList`
+
+### `addInstance()` — Node Duplication (correct for adding new entries)
+
+Creates a **new sibling node** with `amount=0`. Used by NR UI for:
+- "Duplicate Unit" button: `node.dupe()` → `selector.addInstance()` + copy
+- "Create Unit" (+) button: `force.insertUnit()` → `selector.addInstance()`
+- `addSubUnit()`, `splitDown()`, `splitUp()` — structural operations
+
+**Not used by NR UI** for changing child counts.
+
+### When to use which
+
+| Scenario | Correct API | Wrong API |
+|----------|-------------|-----------|
+| Change child count (3→5) | `setAmount({}, 5)` | ~~`addInstance()` × 2~~ |
+| Add second Squad to force | `selector.addInstance()` | ~~`setAmount({}, 2)`~~ |
+| Duplicate a unit | `selector.addInstance()` + copy | ~~`setAmount`~~ |
+
+## Cost Recalculation Cascade — Not a Loop
+
+When `setAmount` changes a count, `calcTotalCosts()` is called 5+ times.
+This is **not** a convergence loop — it's three independent phases:
+
+### Phase 1: Scope Propagation (synchronous, bottom-up)
+
+```
+enable(n) → state.setSelections(n)
+  → scope.updateMultipliers(n, n)     // cost deltas propagated UP
+  → onTotalCostChanged("pts")         // fires on child
+  → scope.getQueue().empty()          // drains priority queue
+    → parent.state.onTotalCostChanged // queue listener
+    → grandparent.state.onTotalCostChanged
+```
+
+### Phase 2: Vue Re-rendering (async, reads dirty computed properties)
+
+Vue computed properties (`totalCost`, `cost`, `displayedCost`) are dirtied
+by `vueCostsKey++`. Each UI component that displays costs reads
+`calcTotalCosts()` independently.
+
+### Phase 3: Auto-save
+
+`doSaveList` calls `getPointsCost()` → reads `calcTotalCosts()`.
+
+### Stop guarantee (structural, not convergence)
+
+```javascript
+// Queue mechanism — deduplication via Map
+empty() {
+  for (; this.highest_priority >= 0;) {
+    const e = this.queues[this.highest_priority];
+    if (e && e.size > 0) {
+      for (const [callback, args] of e) {
+        e.delete(callback);
+        callback(...args);
+        if (this.highest_priority > t) continue outer; // restart if higher-prio appeared
+      }
+    } else this.highest_priority--;
+  }
+}
+```
+
+- **Upward-only**: parent chain walk, never back down
+- **Queue dedup**: `Map<callback, args>` — same listener queued once
+- **Finite depth**: O(tree depth) steps
+- **autocheck guard**: `!state.autochecked` prevents re-entry

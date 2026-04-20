@@ -1,0 +1,87 @@
+id: selection-set-child-count-collective
+category: selection
+description: >
+  setSelectionCount on a collective child entry. Collective entries are shared
+  across sibling instances. Verifies number=N on a single selection with
+  scaled costs (N × per-unit cost).
+tags:
+  - selection
+  - number
+  - cost
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-weapon
+              name: Weapon
+              type: upgrade
+              collective: true
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 5
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Weapon
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 5
+      costs:
+        - typeId: pts
+          value: 5
+
+  # setSelectionCount to 3 on the collective child
+  - action: setSelectionCount
+    forceIndex: 0
+    selectionPath: [0, 0]
+    count: 3
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Weapon
+                  number: 3
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 15
+      costs:
+        - typeId: pts
+          value: 15

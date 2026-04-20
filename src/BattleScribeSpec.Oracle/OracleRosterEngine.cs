@@ -107,18 +107,18 @@ public sealed class OracleRosterEngine : IRosterEngine
     {
         if (forcePath.Length == 0)
             throw new ArgumentException("forcePath cannot be empty for SetSelectionCount.");
-        if (selectionPath.Length == 0)
-            throw new ArgumentException("selectionPath cannot be empty for SetSelectionCount.");
+        if (selectionPath.Length < 2)
+            throw new ArgumentException(
+                "selectionPath must have at least 2 elements for SetSelectionCount " +
+                "(targets child selections only; use SelectEntry/DeselectSelection for root selections).");
         var force = NavigateForce(forcePath);
         var targetSelection = NavigateSelection(force, selectionPath);
         var entryId = targetSelection.getEntryId();
         var dataEntry = _oracle.GetEntryById(entryId)
             ?? _oracle.GetEntryByCompositeId(entryId)
             ?? throw new InvalidOperationException($"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
-        // Parent is the force for top-level selections, or the parent selection for nested
-        net.battlescribe.model.roster.BaseSelectionParent parent = selectionPath.Length == 1
-            ? force
-            : NavigateSelection(force, selectionPath[..^1]);
+        // Parent is always a selection (path has 2+ elements, so [..^1] is non-empty)
+        var parent = NavigateSelection(force, selectionPath[..^1]);
         _oracle.SetNumSelections(parent, dataEntry, count);
     }
 

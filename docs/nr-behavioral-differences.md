@@ -206,6 +206,29 @@ based on any `min>=1` regardless of field type.
 |------|-------|
 | `selection/selection-number-with-min` | NR returns different number/amount for min-constrained selections |
 
+### setSelectionCount on Child Entries — Instance Duplication
+| Spec | Issue |
+|------|-------|
+| `selection/selection-set-child-count-instance-model` | NR creates N separate instances (each number=1) instead of one selection with number=N |
+| `selection/selection-set-child-count-collective` | Same behavior for collective child entries |
+
+When `setSelectionCount(count=3)` targets a child selection:
+
+- **BattleScribe (Oracle)**: Single selection node, `number: 3`, costs scale
+  (e.g. 3 × 10 = 30 pts)
+- **NR (via adapter's `addInstance`)**: 3 separate selection instances, each
+  with `number: 1` and individual cost of 10 pts. Roster-level costs don't
+  recalculate after `addInstance` — stays at pre-duplication value (10 pts).
+
+This is an **adapter bug**, not an NR engine limitation. NR's own UI uses
+`setAmount({}, 3)` which correctly sets `amount=3` on a single node with
+proper cost propagation (30 pts). The adapter incorrectly calls
+`selector.addInstance()` in a loop instead. See [setAmount vs addInstance
+Deep Dive](#setamount-vs-addinstance-deep-dive) for details.
+
+Applies identically to both collective (`collective: true`) and non-collective
+child entries.
+
 ---
 
 ## Discoveries
@@ -428,6 +451,113 @@ Three methods for loading game data:
    array with XML strings (used for spec tests)
 2. **`addGithubSystem()`** — downloads from BSData GitHub repos
 3. **Mock `showDirectoryPicker()`** — intercepts folder upload UI
+
+### `setAmount()` vs `addInstance()` Deep Dive
+
+**Discovered April 2026 via live Playwright UI replay and method tracing.**
+
+These are two fundamentally different operations in NR's selection tree:
+
+| | `node.setAmount(ctx, n)` | `selector.addInstance()` |
+|---|---|---|
+| **What it does** | Changes `amount` property on an **existing** node | Creates a **new sibling node** (amount=0) |
+| **Tree effect** | No structural change (property mutation) | Structural change (new node) |
+| **Cost recalculation** | Full scope propagation via queue (correct) | New node doesn't trigger parent cost update (stale) |
+| **Used by NR UI** | ✅ Spinbutton count changes | ✅ "Duplicate Unit", "Create Unit (+)" |
+
+#### `setAmount(ctx, n)` — Signature Gotcha
+
+**Two args required**: `ctx` = checker context object, `n` = new amount value.
+
+```javascript
+// ✅ Correct — NR UI passes {} as context
+node.setAmount({}, 5);
+
+// ❌ WRONG — sets ctx=5, n=undefined → amount becomes undefined (silent corruption)
+node.setAmount(5);
+```
+
+The NR UI spinbutton calls `this.opt.setAmount({}, newValue)` where `this.opt`
+is the tree node. The `{}` is an empty tracker context (normally contains
+`{currentDepth, errorStack, warningStack, modStack, autofixUnit}`).
+
+#### `setAmount` internal call chain (traced via method proxies)
+
+When amount changes from 3→4 on a child "Trooper" node (323 total method calls):
+
+```
+DOM input/change event
+  → setAmount({}, 4)
+    → guard checks: isConstantRecursive, isHidden, isConstant
+    → setLastChecked("add", tracker)
+    → enable(4)                          // sets internal amount
+      → state.setSelections(4)
+      → scope.updateMultipliers(4, 4)    // propagates cost deltas UP
+      → onTotalCostChanged("pts")        // notify cost system
+      → scope.getQueue().empty()         // drain priority queue
+        → Squad.state.onTotalCostChanged // parent listener fires
+        → Force.state.onTotalCostChanged // grandparent fires
+    → eachParent → Squad.onChildAmountChanged()
+    → refreshErrors
+    → initializeChilds
+    → unsetLastChecked
+  → Squad.applyModifications(tracker)
+    → checkConstraints (×3 nodes)
+    → fixReactivity (×6 calls)           // trigger Vue computed updates
+    → updateDisplayStatus
+    → calcTotalUnitSize
+    → calcTotalCosts (×5 passes)         // NOT a loop — see below
+    → autocheck
+    → toJsonObject                       // serialize for save
+  → lists.saveListLocally()              // persist to IndexedDB
+  → lists.doSaveList()                   // queue server save
+```
+
+#### Why `calcTotalCosts` is called 5+ times (NOT a loop)
+
+Three distinct phases, each reading the (already-updated) cost data:
+
+1. **Scope propagation** (synchronous, bottom-up): `onTotalCostChanged` fires
+   from child → parent → root via priority queue. Queue uses `Map<callback, args>`
+   for deduplication — same listener can only be queued once.
+
+2. **Vue re-rendering** (async): Vue computed properties (`totalCost`, `cost`,
+   `displayedCost`) are dirtied by `vueCostsKey++`. Each UI location that
+   displays costs triggers a `calcTotalCosts()` read.
+
+3. **Auto-save**: `doSaveList` calls `getPointsCost()` which reads
+   `calcTotalCosts()`.
+
+**Stop guarantee** is structural (not convergence-based):
+- Upward-only propagation: parent → parent → root (never back down)
+- Queue deduplication: `Map<callback, args>` — re-enqueue replaces, doesn't accumulate
+- Finite tree depth: O(depth) steps guaranteed
+- `autocheck` guard: `!state.autochecked` ensures single execution per node
+
+#### Where NR uses each method
+
+| NR UI action | API called | Effect |
+|-------------|-----------|--------|
+| Spinbutton count change (±) | `node.setAmount({}, n)` | Mutates amount on existing node |
+| "Duplicate Unit" button | `selector.addInstance()` + copy state | Creates new sibling |
+| "Create Unit" (+) in catalogue panel | `force.insertUnit()` → `selector.addInstance()` | New selection node |
+| `addSubUnit()`, `splitDown/Up` | `selector.addInstance()` | Structural operations |
+| Mobile +/- buttons | `incrementAmount({})` / `decrementAmount({})` | Alternative path (0 call sites in bundle) |
+
+#### Adapter bug implication
+
+`NewRecruitActions.cs` `SetSelectionCount` uses `addInstance()` in a loop:
+```javascript
+for (let i = current; i < count; i++) selector.addInstance();
+```
+
+Should instead use:
+```javascript
+sel.setAmount({}, count);
+```
+
+This would produce the correct single-node-with-count behavior matching both
+NR's own UI and BattleScribe Oracle's behavior.
 
 ---
 

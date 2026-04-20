@@ -294,14 +294,17 @@ public static class NewRecruitActions
     }
 
     /// <summary>
-    /// Set the number of instances for a selection.
-    /// For child selections (path length > 1), uses the parent selector's addInstance/removeInstance
-    /// to properly handle NR's instance-based model.
-    /// Root-level selections (path length == 1) are a no-op — BattleScribe engines manage
-    /// root selection count via selectEntry/deselectEntry, not setSelectionCount.
+    /// Set the number of instances for a child selection.
+    /// Uses NR's native setAmount({}, count) — matches the UI spinbutton behavior.
+    /// Root-level selections (selectionPath length &lt; 2) are rejected — use selectEntry/deselectEntry instead.
     /// </summary>
     public static async Task SetSelectionCountAsync(IPage page, int[] forcePath, int[] selectionPath, int count)
     {
+        if (selectionPath.Length < 2)
+            throw new ArgumentException(
+                "selectionPath must have at least 2 elements for SetSelectionCount " +
+                "(targets child selections only; use SelectEntry/DeselectSelection for root selections).");
+
         var error = await page.EvaluateAsync<string?>("""
             ({forcePath, selectionPath, count}) => {
                 try {
@@ -311,41 +314,20 @@ public static class NewRecruitActions
                     const force = getForceAtPath(army, forcePath);
                     if (!force) return `Force not found at path [${forcePath}]`;
 
-                    // Root-level selections: no-op (consistent with Oracle/Desktop behavior).
-                    // Root entries are managed via selectEntry/deselectEntry, not count changes.
-                    if (selectionPath.length <= 1) return null;
-
                     const sel = getSelectionAtPath(force, selectionPath);
                     if (!sel) return `Selection not found at path [${selectionPath}]`;
 
                     const current = sel.getAmount?.() ?? 1;
                     if (current === count) return null;
 
-                    // For child selections, use the parent's selector mechanism.
-                    // Direct setAmount/incrementAmount on child selections gets reset by NR watchers.
-                    const parentPath = selectionPath.slice(0, -1);
-                    const parentSel = getSelectionAtPath(force, parentPath);
-                    if (!parentSel) return `Parent selection not found at path [${parentPath}]`;
-
-                    const entryId = sel.getId?.();
-                    const selector = findSelectorById(parentSel, entryId);
-
-                    if (selector && typeof selector.addInstance === 'function') {
-                        if (count > current) {
-                            for (let i = current; i < count; i++) {
-                                selector.addInstance();
-                                selector.autocheck?.();
-                            }
-                        } else if (typeof selector.removeInstance === 'function') {
-                            for (let i = current; i > count; i--) {
-                                selector.removeInstance();
-                                selector.autocheck?.();
-                            }
-                        }
+                    // Use setAmount — matches NR's own UI spinbutton behavior.
+                    // Two args required: context object + new amount value.
+                    if (typeof sel.setAmount === 'function') {
+                        sel.setAmount({}, count);
                         return null;
                     }
 
-                    return `No selector found for child entry '${entryId}' — cannot change count`;
+                    return `Selection has no setAmount method — cannot change count`;
                 } catch(e) {
                     return 'SetSelectionCount error: ' + e.message;
                 }

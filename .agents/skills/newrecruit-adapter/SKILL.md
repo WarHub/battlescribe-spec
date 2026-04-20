@@ -144,9 +144,8 @@ State reader sorts by `__bsspec_seq`, with catalogue entry order as tiebreaker.
 | InfoLink publication override | NR uses infoLink's own pub, not target's | Per-engine `expectedState` overrides in specs |
 | InfoLink page override | NR uses infoLink's own page, not target's | Per-engine `expectedState` overrides in specs |
 | Page modifier not applied | `type: set, field: page` doesn't update selection page | Per-engine `expectedState` override |
-| `setAmount()` corrupts entries with min constraints | Calling `setAmount()` on auto-selected entries with `min≥1` permanently breaks validation | Avoid `setSelectionCount` on such entries |
-| `setAmount()` corrupts entries with children | Calling `setAmount()` on entries with child selections breaks modifier evaluation | Avoid `setSelectionCount` on parent entries |
-| `calcTotalCosts()` omits hidden cost types | Roster cost totals exclude hidden cost types | Use manual summation from selections' `getCosts()` |
+| `setAmount()` requires two args | `setAmount(n)` with one arg corrupts: sets `ctx=n, n=undefined` | Always use `sel.setAmount({}, count)` |
+| `calcTotalCosts()` omits hidden cost types | Roster cost totals exclude hidden cost types | Hybrid: native for visible, manual summation for hidden |
 | costIndex not auto-populated | Child cost calculations return 0 | Manual population in setup (see above) |
 | Child nodes pre-created with amount=0 | selectChildEntry must increment, not addInstance | Increment existing node amount |
 | autocheck ignores defaultSelectionEntryId | Selects alphabetically first entry in groups | Use single-option groups for deterministic auto-selection |
@@ -156,11 +155,41 @@ State reader sorts by `__bsspec_seq`, with catalogue entry order as tiebreaker.
 ## Selection mechanics
 
 NR's roster tree uses **selectors** (templates) and **instances** (selections).
+Three distinct APIs exist for changing selection counts:
 
-### addInstance vs incrementAmount
+### setAmount(ctx, n) — Counter Mutation
 
-- **`addInstance()`** — on a force-level selector, creates a new instance (selection)
-- **`incrementAmount()`** — on a pre-created child node, bumps count from 0→1
+Called on an existing **instance** to change its count. **This is what NR's
+UI spinbutton uses.** The `ctx` arg is a tracker context (pass `{}` for empty).
+
+```javascript
+// ✅ NR UI's approach: single node, correct cost propagation
+node.setAmount({}, 3);  // sets amount=3, triggers full cost cascade
+```
+
+**Warning**: Two args required. `setAmount(3)` with one arg sets `ctx=3, n=undefined`
+→ silently corrupts the node's amount to `undefined`.
+
+The adapter's `SetSelectionCountAsync` uses `sel.setAmount({}, count)` which matches
+NR's own UI spinbutton behavior. Protocol validation rejects root selections
+(`selectionPath.Length < 2`) — use `selectEntry`/`deselectSelection` for those.
+
+### addInstance()
+
+Called on a **selector** to create a new instance (selection). Used for
+force-level entry selectors — these have an `addInstance` method and create
+a fresh child node each time. After creation, the new instance starts with
+`amount=0` and child selectors/instances are not yet fully materialized.
+
+**Used by NR UI for**: "Duplicate Unit", "Create Unit (+)", structural operations.
+**NOT used by NR UI for** changing child counts (that's `setAmount`).
+
+### incrementAmount()
+
+Called on an existing **instance** (child node) to increment its count.
+Used for child entries that already exist as pre-created nodes with
+`amount=0` under a parent selection. Unlike `addInstance`, this doesn't
+create a new node — it bumps the count on an existing one.
 
 ### autocheck — cascading auto-selection
 

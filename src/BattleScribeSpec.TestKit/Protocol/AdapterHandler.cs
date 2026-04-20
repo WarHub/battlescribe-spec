@@ -112,6 +112,14 @@ public static class AdapterHandler
                     engine.DeselectSelection(forcePath, selectionPath);
                     break;
                 case "setSelectionCount":
+                    if (selectionPath.Length < 2)
+                        return new ActionResult
+                        {
+                            Ok = false,
+                            Error = "Invalid protocol message: setSelectionCount targets child selections only " +
+                                    "(selectionPath must have at least 2 elements). " +
+                                    "Use selectEntry/deselectEntry for root selections."
+                        };
                     engine.SetSelectionCount(forcePath, selectionPath, cmd.Count ?? 1);
                     break;
                 case "duplicateSelection":

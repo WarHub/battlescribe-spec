@@ -1,0 +1,54 @@
+id: cost-hidden-limit-validation
+category: cost
+description: Hidden cost type with a limit still produces validation error when exceeded
+tags: [cost, costType, validation-errors]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+      - id: cp
+        name: CP
+        hidden: true
+        defaultCostLimit: 1
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-1
+          name: HQ
+          type: unit
+          costs:
+            - name: CP
+              typeId: cp
+              value: 2
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  # HQ costs 2 CP, limit is 1 — should produce a validation error
+  - expectedState:
+      costs:
+        - typeId: cp
+          value: 2
+      errors:
+        - on: roster
+          from: costLimits/cp
+          messageContains: over the CP limit
+      engines:
+        newrecruit:
+          errors:
+            - on: roster
+              from: costLimits/cp

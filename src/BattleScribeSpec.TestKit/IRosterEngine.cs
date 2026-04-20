@@ -61,9 +61,10 @@ public interface IRosterEngine : IDisposable
     void DeselectSelection(int[] forcePath, int[] selectionPath);
 
     /// <summary>
-    /// Set the number of instances for a selection.
+    /// Set the number of instances for a child selection.
     /// <paramref name="forcePath"/> identifies the target force.
-    /// <paramref name="selectionPath"/> identifies the selection within the force.
+    /// <paramref name="selectionPath"/> identifies the child selection within the force (must have at least 2 elements).
+    /// Root selections are managed via <see cref="SelectEntry"/>/<see cref="DeselectSelection"/>, not count changes.
     /// </summary>
     void SetSelectionCount(int[] forcePath, int[] selectionPath, int count);
 

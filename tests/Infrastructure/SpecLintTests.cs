@@ -228,6 +228,32 @@ public sealed class SpecLintTests
         }
     }
 
+    // ── setSelectionCount must target child selections ─────────────
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void SetSelectionCountTargetsChildOnly(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        if (spec.Steps is null) return;
+        var violations = new List<string>();
+        for (var i = 0; i < spec.Steps.Count; i++)
+        {
+            var step = spec.Steps[i];
+            if (step.Action != "setSelectionCount") continue;
+
+            // selectionPath explicitly provided — must have 2+ elements
+            if (step.SelectionPath is { Count: < 2 })
+                violations.Add($"step {i + 1}: selectionPath has {step.SelectionPath.Count} element(s), needs at least 2");
+
+            // selectionIndex (legacy shorthand) resolves to a single-element path — always invalid
+            if (step.SelectionPath is null && step.SelectionIndex is not null)
+                violations.Add($"step {i + 1}: selectionIndex targets a root selection; use selectionPath with 2+ elements");
+        }
+        Assert.True(violations.Count == 0,
+            $"{specName}: setSelectionCount must target child selections (not root):\n  {string.Join("\n  ", violations)}");
+    }
+
     // ── No trailing whitespace ───────────────────────────────────────
 
     [Theory]

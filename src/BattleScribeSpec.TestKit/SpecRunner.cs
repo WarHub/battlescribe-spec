@@ -177,6 +177,10 @@ public sealed class SpecRunner
                 break;
 
             case "setSelectionCount":
+                if (selectionPath.Length < 2)
+                    throw new InvalidOperationException(
+                        "setSelectionCount targets child selections only (selectionPath must have at least 2 elements). " +
+                        "Use selectEntry/deselectEntry for root selections.");
                 _engine.SetSelectionCount(
                     forcePath,
                     selectionPath,
