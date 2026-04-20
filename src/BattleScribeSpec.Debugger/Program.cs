@@ -7,6 +7,7 @@ var engineName = "oracle";
 var dumpAll = false;
 var json = false;
 var headless = true;
+string? exportXmlDir = null;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -23,6 +24,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--no-headless":
             headless = false;
+            break;
+        case "--export-xml" when i + 1 < args.Length:
+            exportXmlDir = args[++i];
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -66,6 +70,33 @@ catch (Exception ex)
 {
     Console.Error.WriteLine($"Error loading spec: {ex.Message}");
     return 1;
+}
+
+// ===== Export XML mode =====
+if (exportXmlDir is not null)
+{
+    if (spec.Setup.DataSource is { Length: > 0 })
+    {
+        Console.Error.WriteLine("Error: --export-xml is not supported for dataSource specs.");
+        return 1;
+    }
+
+    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+    Directory.CreateDirectory(exportXmlDir);
+
+    var gstFile = Path.Combine(exportXmlDir, "system.gst");
+    File.WriteAllText(gstFile, CatXmlGenerator.GenerateGameSystemXml(gameSystem));
+    Console.Error.WriteLine($"Wrote {gstFile}");
+
+    foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues))
+    {
+        var catFile = Path.Combine(exportXmlDir, fileName);
+        File.WriteAllText(catFile, xml);
+        Console.Error.WriteLine($"Wrote {catFile}");
+    }
+
+    Console.Error.WriteLine($"Exported {1 + catalogues.Length} file(s) to {exportXmlDir}");
+    return 0;
 }
 
 // ===== Create engine =====
@@ -243,6 +274,7 @@ static void PrintUsage()
           --dump          Dump state after every step (default: after last step only)
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)
+          --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
           -h, --help      Show this help
 
         Examples:
@@ -250,6 +282,18 @@ static void PrintUsage()
           bs-spec-debug selection/selection-page
           bs-spec-debug selection-page
           bs-spec-debug --engine nr --dump specs/protocol/protocol-kitchen-sink.yaml
+          bs-spec-debug --export-xml ./output/ cost/cost-hidden-limit-validation
           cat spec.yaml | bs-spec-debug -
         """);
+}
+
+/// <summary>Expose the compiler-generated Program class for test invocation.</summary>
+public partial class Program
+{
+    /// <summary>Entry point for test invocation. Forwards to the compiler-generated &lt;Main&gt;$.</summary>
+    public static Task<int> RunAsync(params string[] args) =>
+        typeof(Program)
+            .GetMethod("<Main>$", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, [args]) as Task<int>
+        ?? Task.FromResult(1);
 }
