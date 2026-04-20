@@ -35,14 +35,20 @@ internal static class JsHelpers
 
             // Navigate to a force at a given path (array of indices).
             // path=[0] → first root force; path=[0,1] → second child of first root force.
+            // NR flattens ALL descendant forces under getForces() at every level,
+            // so we must filter to only direct children at each step.
             window.getForceAtPath = function(army, path) {
-                let forces = getForces(army);
+                let forces = getForces(army).filter(f => !f.getParent?.()?.isForce?.());
                 for (let i = 0; i < path.length; i++) {
                     if (path[i] >= forces.length) return null;
+                    const current = forces[path[i]];
                     if (i < path.length - 1) {
-                        forces = forces[path[i]].getForces?.() || [];
+                        // Filter to direct children of current force
+                        const all = current.getForces?.() || [];
+                        forces = all.filter(cf => cf.getParentForce?.() === current
+                            || cf.getParentForce?.() === (current?.__v_raw || current));
                     } else {
-                        return forces[path[i]];
+                        return current;
                     }
                 }
                 return null;
@@ -149,16 +155,23 @@ internal static class JsHelpers
                     if (!forces?.length) forces = army.getChildren?.();
                     if (!forces?.length) forces = [];
                     if (!Array.isArray(forces)) return [];
-                    return forces.map(f => extractForce(f));
+                    // NR flattens all forces (including children) under army.getForces().
+                    // Filter to only root forces whose parent is not a force.
+                    return forces.filter(f => !f.getParent?.()?.isForce?.()).map(f => extractForce(f));
                 }
 
                 function extractForce(f) {
-                    const childForces = f.getForces?.() || [];
+                    const allChildren = f.getForces?.() || [];
+                    // NR flattens all descendants — filter to direct children only.
+                    const directChildren = Array.isArray(allChildren)
+                        ? allChildren.filter(cf => cf.getParentForce?.() === f
+                            || cf.getParentForce?.() === (f?.__v_raw || f))
+                        : [];
                     return {
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
                         selections: extractSelections(f, false),
-                        childForces: Array.isArray(childForces) ? childForces.map(cf => extractForce(cf)) : [],
+                        childForces: directChildren.map(cf => extractForce(cf)),
                         profiles: extractProfiles(f),
                         rules: extractRules(f),
                         publicationId: f.publicationId || null,

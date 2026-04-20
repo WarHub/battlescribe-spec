@@ -2,8 +2,6 @@ id: force-nested-multiple-children
 category: force
 description: A parent force can contain multiple child forces, each with independent selections
 tags: [childForce]
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:

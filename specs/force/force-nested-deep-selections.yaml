@@ -1,0 +1,131 @@
+id: force-nested-deep-selections
+category: force
+description: >-
+  Triple-nested forces (Army > Division > Platoon) each containing
+  triple-nested selections (Squad > Weapon > Scope), verifying that
+  deep path navigation works for both forces and selections combined.
+tags: [childForce, nested, selection]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-division
+            name: Division
+            forceEntries:
+              - id: fe-platoon
+                name: Platoon
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-weapon
+              name: Weapon
+              type: upgrade
+              selectionEntries:
+                - id: se-scope
+                  name: Scope
+                  type: upgrade
+
+steps:
+  # Build force hierarchy: Army > Division > Platoon
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: addForce
+    forcePath: [0]
+    forceEntryIndex: 0
+
+  - action: addForce
+    forcePath: [0, 0]
+    forceEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Army
+          childForces:
+            - name: Division
+              childForces:
+                - name: Platoon
+
+  # Add Squad into each force level
+  - action: selectEntry
+    forcePath: [0]
+    entryIndex: 0
+
+  - action: selectEntry
+    forcePath: [0, 0]
+    entryIndex: 0
+
+  - action: selectEntry
+    forcePath: [0, 0, 0]
+    entryIndex: 0
+
+  # Build selection hierarchy in Army's Squad: Squad > Weapon > Scope
+  - action: selectChildEntry
+    forcePath: [0]
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - action: selectChildEntry
+    forcePath: [0]
+    selectionPath: [0, 0]
+    childEntryIndex: 0
+
+  # Build selection hierarchy in Division's Squad
+  - action: selectChildEntry
+    forcePath: [0, 0]
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - action: selectChildEntry
+    forcePath: [0, 0]
+    selectionPath: [0, 0]
+    childEntryIndex: 0
+
+  # Build selection hierarchy in Platoon's Squad
+  - action: selectChildEntry
+    forcePath: [0, 0, 0]
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - action: selectChildEntry
+    forcePath: [0, 0, 0]
+    selectionPath: [0, 0]
+    childEntryIndex: 0
+
+  # Verify the full tree
+  - expectedState:
+      forces:
+        - name: Army
+          selections:
+            - name: Squad
+              children:
+                - name: Weapon
+                  children:
+                    - name: Scope
+          childForces:
+            - name: Division
+              selections:
+                - name: Squad
+                  children:
+                    - name: Weapon
+                      children:
+                        - name: Scope
+              childForces:
+                - name: Platoon
+                  selections:
+                    - name: Squad
+                      children:
+                        - name: Weapon
+                          children:
+                            - name: Scope
