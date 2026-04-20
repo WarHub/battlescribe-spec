@@ -14,22 +14,19 @@ incremental workarounds. When in doubt, choose the cleaner design.
 ## Build & test
 
 ```bash
-dotnet restore && dotnet build    # first time
-dotnet test                       # all tests
+dotnet restore && dotnet build                                                     # first time
+dotnet test -p:TestProfile=pre-push                                                # lint + Oracle + NR frozen (~40s)
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
-dotnet test -p:TestProfile=oracle                                                  # Oracle engine only
-dotnet test -p:TestProfile=nr-frozen                                               # NR frozen (HAR replay, no browser needed)
 ```
 
-NR frozen tests replay recorded HTTP responses — they verify NR conformance **locally and
-offline** without needing a live browser or internet. Always run them after changing NR engine
-code or specs with NR overrides.
+**Always run `pre-push` before pushing.** It covers lint, Oracle conformance, and NR frozen
+(offline HAR replay) in one fast command. Other profiles: `lint`, `oracle`, `nr-frozen`,
+`nr-live`, `nr-live-visible`.
 
 ## After editing specs
 
 ```bash
 pwsh -File tools/format-specs.ps1                                                  # auto-fix formatting
-dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~SpecLint"    # verify lint
 ```
 
 ## Key files
