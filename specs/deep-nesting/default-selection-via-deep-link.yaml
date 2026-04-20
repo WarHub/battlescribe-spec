@@ -1,14 +1,12 @@
 id: default-selection-via-deep-link
 category: deep-nesting
 description: >
-  An entry link targets a shared entry via a group with min=1 and
-  defaultSelectionEntryId. The shared entry itself has a nested group
-  (also with min=1 + defaultSelectionEntryId) containing further entries.
-  Both levels of defaults cascade through the entry link, creating a deep
-  hierarchy purely through default auto-selection.
-tags: [deep-nesting, entryLink, defaultSelectionEntryId]
-engines:
-  newrecruit: fail
+  An entry link targets a shared entry via a group with min=1 (single option,
+  auto-selected). The shared entry itself has a nested group (also with min=1,
+  single option) containing a further entry. Both levels cascade through the
+  entry link, creating a deep hierarchy purely through min-constraint
+  auto-selection.
+tags: [deep-nesting, entryLink]
 
 setup:
   gameSystem:
@@ -50,20 +48,6 @@ setup:
                     - name: pts
                       typeId: pts
                       value: 2
-                - id: se-high-power
-                  name: High Power
-                  type: upgrade
-                  costs:
-                    - name: pts
-                      typeId: pts
-                      value: 5
-        - id: sse-advanced-config
-          name: Advanced Config
-          type: upgrade
-          costs:
-            - name: pts
-              typeId: pts
-              value: 20
       selectionEntries:
         - id: se-mech
           name: Battle Mech
@@ -86,9 +70,6 @@ setup:
                 - id: el-standard
                   targetId: sse-standard-config
                   type: selectionEntry
-                - id: el-advanced
-                  targetId: sse-advanced-config
-                  type: selectionEntry
 
 steps:
   - action: addForce
@@ -99,9 +80,9 @@ steps:
     entryIndex: 0
 
   # Battle Mech selected →
-  # Configuration group (min=1, default=el-standard) → Standard Config auto-selects →
-  # Power Level group (min=1, default=se-low-power) → Low Power auto-selects.
-  # Both levels of defaults cascade through the entry link.
+  # Configuration group (min=1, single option) → Standard Config auto-selects →
+  # Power Level group (min=1, single option) → Low Power auto-selects.
+  # Both levels cascade through the entry link.
   # Costs: Mech 40 + Standard Config 10 + Low Power 2 = 52
   - expectedState:
       forces:

@@ -6,8 +6,6 @@ description: >
   min=1 constraints to auto-select, creating a 3-level deep hierarchy.
   Tests that engines correctly resolve multi-hop link chains.
 tags: [deep-nesting, entryLink, auto-select]
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:

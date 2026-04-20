@@ -88,6 +88,9 @@ public static class NewRecruitActions
 
                     if (typeof selector.addInstance === 'function') {
                         selector.addInstance();
+                        // Trigger auto-selection of children with min constraints
+                        const insts = selector.instances || [];
+                        insts[insts.length - 1]?.autocheck?.();
                     } else if (selector.getAmount?.() === 0 && typeof selector.incrementAmount === 'function') {
                         selector.incrementAmount();
                     } else {
@@ -127,6 +130,9 @@ public static class NewRecruitActions
 
                     if (typeof result.addInstance === 'function') {
                         result.addInstance();
+                        // Trigger auto-selection of children with min constraints
+                        const insts = result.instances || [];
+                        insts[insts.length - 1]?.autocheck?.();
                     } else if (result.getAmount?.() === 0 && typeof result.incrementAmount === 'function') {
                         result.incrementAmount();
                     } else {
@@ -218,6 +224,9 @@ public static class NewRecruitActions
                     // addInstance() on the selector creates a new selection instance
                     if (typeof selector.addInstance === 'function') {
                         selector.addInstance();
+                        // Trigger auto-selection of children with min constraints
+                        const insts = selector.instances || [];
+                        insts[insts.length - 1]?.autocheck?.();
                     } else if (selector.getAmount?.() === 0 && typeof selector.incrementAmount === 'function') {
                         selector.incrementAmount();
                     } else {
@@ -281,6 +290,9 @@ public static class NewRecruitActions
                     const sel = allEntrySelectors[entryIndex];
                     if (typeof sel.addInstance === 'function') {
                         sel.addInstance();
+                        // Trigger auto-selection of children with min constraints
+                        const insts = sel.instances || [];
+                        insts[insts.length - 1]?.autocheck?.();
                     } else if (sel.getAmount?.() === 0 && typeof sel.incrementAmount === 'function') {
                         sel.incrementAmount();
                     } else {
@@ -329,6 +341,8 @@ public static class NewRecruitActions
                         } else if (typeof child.setAmount === 'function') {
                             child.setAmount((child.getAmount?.() || 0) + 1);
                         }
+                        // Trigger auto-selection of grandchildren with min constraints
+                        child.autocheck?.();
                         return null;
                     }
 
@@ -339,6 +353,9 @@ public static class NewRecruitActions
 
                     if (typeof found.addInstance === 'function') {
                         found.addInstance();
+                        // Trigger auto-selection of children with min constraints
+                        const insts = found.instances || [];
+                        insts[insts.length - 1]?.autocheck?.();
                     } else if (typeof found.incrementAmount === 'function') {
                         found.incrementAmount();
                     } else {

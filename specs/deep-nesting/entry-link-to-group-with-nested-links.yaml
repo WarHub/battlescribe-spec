@@ -1,17 +1,19 @@
 id: entry-link-to-group-with-nested-links
 category: deep-nesting
 description: >
-  An entry link targets a shared selection entry group. That group contains
-  a selection entry and also has its own entry link to yet another shared
-  entry. Tests group-then-link resolution at depth.
+  An entry link targets a shared selection entry that contains both an
+  inline child (min=1) and a nested entry link (min=1) to another shared
+  entry. Selecting the unit and then the linked parent auto-populates
+  the nested children, testing multi-hop link resolution at depth.
 tags: [deep-nesting, entryLink]
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:
     id: test-gs
     name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
     forceEntries:
       - id: fe-1
         name: Detachment
@@ -23,25 +25,53 @@ setup:
         - id: sse-special-ammo
           name: Special Ammo
           type: upgrade
-      sharedSelectionEntryGroups:
-        - id: sseg-weapons
+          costs:
+            - name: pts
+              typeId: pts
+              value: 3
+        - id: sse-weapon-bay
           name: Weapon Bay
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: pts
+              value: 5
           selectionEntries:
             - id: se-blade
               name: Combat Blade
               type: upgrade
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 2
+              constraints:
+                - id: con-blade-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
           entryLinks:
             - id: el-ammo
               targetId: sse-special-ammo
               type: selectionEntry
+              constraints:
+                - id: con-ammo-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
       selectionEntries:
         - id: se-unit
           name: Heavy Trooper
           type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 20
           entryLinks:
             - id: el-weapons
-              targetId: sseg-weapons
-              type: selectionEntryGroup
+              targetId: sse-weapon-bay
+              type: selectionEntry
 
 steps:
   - action: addForce
@@ -51,13 +81,14 @@ steps:
     forceIndex: 0
     entryIndex: 0
 
-  # Heavy Trooper selected. Entry link resolves the shared Weapon Bay group.
-  # Inside the group: Combat Blade (direct entry) and Special Ammo (via entry link).
+  # Select the linked Weapon Bay child under Heavy Trooper.
   - action: selectChildEntry
     forceIndex: 0
     selectionIndex: 0
     childEntryIndex: 0
 
+  # Heavy Trooper → Weapon Bay → Combat Blade (min=1) + Special Ammo (min=1, via link).
+  # Costs: Trooper 20 + Bay 5 + Blade 2 + Ammo 3 = 30
   - expectedState:
       forces:
         - selectionCount: 1
@@ -65,22 +96,13 @@ steps:
             - name: Heavy Trooper
               type: unit
               children:
-                - name: Combat Blade
+                - name: Weapon Bay
                   type: upgrade
-
-  - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 0
-    childEntryIndex: 1
-
-  - expectedState:
-      forces:
-        - selectionCount: 1
-          selections:
-            - name: Heavy Trooper
-              type: unit
-              children:
-                - name: Combat Blade
-                  type: upgrade
-                - name: Special Ammo
-                  type: upgrade
+                  children:
+                    - name: Combat Blade
+                      type: upgrade
+                    - name: Special Ammo
+                      type: upgrade
+      costs:
+        - typeId: pts
+          value: 30

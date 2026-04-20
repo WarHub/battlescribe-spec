@@ -6,8 +6,6 @@ description: >
   shared entries themselves have further nesting via min=1 constraints.
   Tests cross-catalogue resolution at depth.
 tags: [deep-nesting, entryLink, catalogue]
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:

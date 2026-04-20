@@ -7,8 +7,6 @@ description: >
   Adding a second unit doubles the total cost, confirming each
   deep link chain contributes independently.
 tags: [deep-nesting, entryLink, cost]
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:
