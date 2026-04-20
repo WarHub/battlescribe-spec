@@ -157,8 +157,8 @@ These are the assertion targets — what you check in `expectedState`.
 **SelectionState**: name, entryId, type, number, hidden, costs[], children[], profiles[],
 rules[], categories[], page, publicationId, publicationName
 
-**ForceState**: name, catalogueId, selections[], availableEntryCount, profiles[], rules[],
-publicationId, page
+**ForceState**: name, catalogueId, selections[], childForces[] (recursive ForceState),
+availableEntryCount, profiles[], rules[], publicationId, page
 
 **CostState**: name, typeId, value
 

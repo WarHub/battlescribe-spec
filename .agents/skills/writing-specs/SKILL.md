@@ -64,14 +64,37 @@ If the roster has validation errors at that point, the step fails. Use `errorsCo
 
 | Action | Key params |
 |--------|-----------|
-| `addForce` | `forceEntryIndex` or `forceEntryName` |
-| `selectEntry` | `forceIndex`, `entryIndex` or `entryName` |
-| `selectChildEntry` | `forceIndex`, `selectionIndex`, `childEntryIndex` or `childEntryName` |
-| `deselectSelection` | `forceIndex`, `selectionIndex` |
-| `setSelectionCount` | `forceIndex`, `entryIndex`, `count` (no-op for root entries) |
-| `duplicateSelection` | `forceIndex`, `selectionIndex` |
+| `addForce` | `forceEntryIndex` or `forceEntryName`. Optional: `forcePath` (parent), `catalogueIndex` |
+| `selectEntry` | `forceIndex` or `forcePath`, `entryIndex` or `entryName` |
+| `selectChildEntry` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath`, `childEntryIndex` or `childEntryName` |
+| `deselectSelection` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath` |
+| `setSelectionCount` | `forceIndex`/`forcePath`, `entryIndex`, `count` (no-op for root entries) |
+| `duplicateSelection` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath` |
 | `setCostLimit` | `costTypeId`, `value` |
-| `removeForce` | `forceIndex` |
+| `removeForce` | `forceIndex` or `forcePath` |
+
+### Path-based addressing (nested forces/selections)
+
+Use `forcePath` and `selectionPath` (integer arrays) instead of `forceIndex`/`selectionIndex`
+to target nested forces or selections:
+
+```yaml
+# Add a child force under force 0
+- action: addForce
+  forcePath: [0]
+  forceEntryIndex: 0
+
+# Select into a child force (child 0 of force 0)
+- action: selectEntry
+  forcePath: [0, 0]
+  entryIndex: 0
+
+# Deselect a nested selection (child 1 of selection 0)
+- action: deselectSelection
+  selectionPath: [0, 1]
+```
+
+Legacy `forceIndex: N` / `selectionIndex: N` are converted to `[N]` automatically.
 
 ## Error assertions
 

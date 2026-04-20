@@ -15,4 +15,4 @@ To add new tags, update `KnownTags` in `tests/Infrastructure/SpecLintTests.cs`.
 `space-marines`, `profile`, `selection`, `number`, `defaultSelectionEntryId`,
 `entryLink`, `edge-case`, `validation-errors`, `structured-errors`,
 `modifierGroup`, `infoGroup`, `infoLink`, `forceEntry`, `categoryEntry`,
-`categoryLink`, `publication`, `rule`, `catalogue`, `costType`, `profileType`
+`categoryLink`, `childForce`, `publication`, `rule`, `catalogue`, `costType`, `profileType`
