@@ -17,7 +17,13 @@ incremental workarounds. When in doubt, choose the cleaner design.
 dotnet restore && dotnet build    # first time
 dotnet test                       # all tests
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
+dotnet test -p:TestProfile=oracle                                                  # Oracle engine only
+dotnet test -p:TestProfile=nr-frozen                                               # NR frozen (HAR replay, no browser needed)
 ```
+
+NR frozen tests replay recorded HTTP responses — they verify NR conformance **locally and
+offline** without needing a live browser or internet. Always run them after changing NR engine
+code or specs with NR overrides.
 
 ## After editing specs
 
@@ -30,7 +36,7 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~SpecLint" 
 
 | Path | What |
 |------|------|
-| `specs/{category}/{id}.yaml` | Spec files (302 total, 16 categories) |
+| `specs/{category}/{id}.yaml` | Spec files (309 total, 17 categories) |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
 | `src/BattleScribeSpec.TestKit/EngineTypes.cs` | State records (Roster/Force/Selection/Profile/Rule/Category/Cost) |
 | `src/BattleScribeSpec.TestKit/SpecFileModels.cs` | YAML spec model classes |

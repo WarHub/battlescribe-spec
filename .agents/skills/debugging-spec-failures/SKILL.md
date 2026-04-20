@@ -199,7 +199,8 @@ See [ERROR-ASSERTIONS.md](references/ERROR-ASSERTIONS.md) for error matching det
 3. **Check matching:** Is it index vs name? Is ordering correct?
 4. **Check defaults:** Is zero-errors implicit check triggering?
 5. **Compare engines:** Does it fail for one engine only? Use `engines:` overrides.
-6. **Iterate:** Fix and re-run. Lint after: `pwsh -File tools/format-specs.ps1`
+6. **Verify NR frozen:** Run `dotnet test -p:TestProfile=nr-frozen` to test NR offline via HAR replay — no browser needed. This catches NR-specific regressions quickly.
+7. **Iterate:** Fix and re-run. Lint after: `pwsh -File tools/format-specs.ps1`
 
 ## Reference files
 
