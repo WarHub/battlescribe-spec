@@ -37,6 +37,8 @@ Step {stepIndex}: {fieldPath}: expected {expected} but got {actual}
 | `force[0].selection[0].cost[pts]` | Cost on first selection, matched by typeId or name |
 | `force[0].profile[Marine].typeName` | Profile matched by name "Marine" |
 | `force[0].rule[0].hidden` | Rule matched by index |
+| `force[0].childForce[0].name` | First child force's name |
+| `force[0].childForce[0].selection[0].name` | Selection in child force |
 
 **Count mismatch errors:**
 

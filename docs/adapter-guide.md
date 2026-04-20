@@ -75,14 +75,18 @@ what to do:
 
 | Action | Description |
 |--------|-------------|
-| `addForce` | Add a force with `forceEntryIndex` and optional `catalogueIndex` |
-| `removeForce` | Remove the force at the given index |
+| `addForce` | Add a force with `forceEntryIndex` and optional `catalogueIndex`. Use `forcePath` for nested parent targeting. |
+| `removeForce` | Remove the force at the given `forcePath` or `forceIndex` |
 | `selectEntry` | Select an entry in the given force using `entryIndex` |
 | `selectChildEntry` | Select a child entry using `childEntryIndex` |
-| `deselectSelection` | Deselect a selection by force and selection index |
+| `deselectSelection` | Deselect a selection by `forcePath`/`forceIndex` and `selectionPath`/`selectionIndex` |
 | `setSelectionCount` | Change quantity by `entryIndex` + `count` |
 | `duplicateSelection` | Duplicate a selection |
 | `setCostLimit` | Set a cost limit value |
+
+All force-targeting actions accept either `forceIndex` (integer, targets `[N]`) or `forcePath`
+(integer array, for nested forces). Selection-targeting actions similarly accept `selectionIndex`
+or `selectionPath`. See [adapter-protocol.md](adapter-protocol.md#path-based-addressing) for details.
 
 ```json
 // Input
@@ -209,9 +213,9 @@ DataSource specs are resolved by the test runner using `DataSourceResolver` and 
 by engines that implement the `IRosterEngine` file-based interface methods:
 
 - `SetupFromFiles(files)` — load raw `.gst`/`.cat` XML files
-- `AddForceByName(forceName, catalogueName)` — add a force, optionally specifying the faction catalogue
-- `SelectEntryByName(forceIndex, entryName)` — select an entry by name
-- `SelectChildEntryByName(forceIndex, selectionIndex, childEntryName)` — select a child entry by name
+- `AddForceByName(forcePath, forceName, catalogueName = null, catalogueIndex = 0)` — add a force, optionally selecting the faction catalogue by name or index
+- `SelectEntryByName(forcePath, entryName)` — select an entry by name
+- `SelectChildEntryByName(forcePath, selectionPath, childEntryName)` — select a child entry by name
 
 The protocol adapter does not need to support DataSource specs — they are handled internally
 by the spec runner and the `IRosterEngine` implementation.

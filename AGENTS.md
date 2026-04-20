@@ -30,7 +30,7 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~SpecLint" 
 
 | Path | What |
 |------|------|
-| `specs/{category}/{id}.yaml` | Spec files (295 total, 16 categories) |
+| `specs/{category}/{id}.yaml` | Spec files (302 total, 16 categories) |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
 | `src/BattleScribeSpec.TestKit/EngineTypes.cs` | State records (Roster/Force/Selection/Profile/Rule/Category/Cost) |
 | `src/BattleScribeSpec.TestKit/SpecFileModels.cs` | YAML spec model classes |
