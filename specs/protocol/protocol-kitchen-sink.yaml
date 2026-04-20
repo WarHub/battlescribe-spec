@@ -487,7 +487,47 @@ steps:
                   entryId: cat-hq
                   primary: true
 
-  # Step 5: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
+  # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
+  - action: setSelectionCount
+    forceIndex: 0
+    selectionPath: [1, 0]
+    count: 2
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Required Unit
+            - name: Infantry Squad
+              children:
+                - name: Trooper
+                  number: 2
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 20
+      engines:
+        # NR uses instance duplication (2 separate Trooper selections ×1)
+        # instead of single selection with number=2
+        newrecruit:
+          forces:
+            - selections:
+                - name: Required Unit
+                - name: Infantry Squad
+                  children:
+                    - name: Trooper
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 10
+                    - name: Trooper
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 10
+
+  # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
   #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)
   - action: selectEntry
     forceIndex: 0

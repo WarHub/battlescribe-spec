@@ -87,13 +87,13 @@ public sealed class JsonProtocolEngine : IRosterEngine
         });
     }
 
-    public void SetSelectionCount(int[] forcePath, int entryIndex, int count)
+    public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count)
     {
         SendAction(new ActionCommand
         {
             Action = "setSelectionCount",
             ForcePath = forcePath,
-            EntryIndex = entryIndex,
+            SelectionPath = selectionPath,
             Count = count,
         });
     }

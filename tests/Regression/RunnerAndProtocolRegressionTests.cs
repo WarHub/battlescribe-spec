@@ -245,7 +245,7 @@ public class RunnerAndProtocolRegressionTests
 
         public void DeselectSelection(int[] forcePath, int[] selectionPath) => ActionCalls++;
 
-        public void SetSelectionCount(int[] forcePath, int entryIndex, int count) => ActionCalls++;
+        public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count) => ActionCalls++;
 
         public void DuplicateSelection(int[] forcePath, int[] selectionPath) => ActionCalls++;
 

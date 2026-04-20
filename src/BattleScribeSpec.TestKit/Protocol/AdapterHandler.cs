@@ -112,7 +112,7 @@ public static class AdapterHandler
                     engine.DeselectSelection(forcePath, selectionPath);
                     break;
                 case "setSelectionCount":
-                    engine.SetSelectionCount(forcePath, cmd.EntryIndex ?? 0, cmd.Count ?? 1);
+                    engine.SetSelectionCount(forcePath, selectionPath, cmd.Count ?? 1);
                     break;
                 case "duplicateSelection":
                     engine.DuplicateSelection(forcePath, selectionPath);

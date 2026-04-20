@@ -569,9 +569,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             .GetAwaiter().GetResult();
     }
 
-    public void SetSelectionCount(int[] forcePath, int entryIndex, int count)
+    public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count)
     {
-        NewRecruitActions.SetSelectionCountAsync(_browser.Page, forcePath, entryIndex, count)
+        NewRecruitActions.SetSelectionCountAsync(_browser.Page, forcePath, selectionPath, count)
             .GetAwaiter().GetResult();
     }
 

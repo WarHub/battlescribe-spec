@@ -179,7 +179,7 @@ public sealed class SpecRunner
             case "setSelectionCount":
                 _engine.SetSelectionCount(
                     forcePath,
-                    step.EntryIndex ?? 0,
+                    selectionPath,
                     step.Count ?? 1);
                 break;
 

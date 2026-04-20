@@ -294,12 +294,16 @@ public static class NewRecruitActions
     }
 
     /// <summary>
-    /// Set the number of instances for a selection entry using setAmount().
+    /// Set the number of instances for a selection.
+    /// For child selections (path length > 1), uses the parent selector's addInstance/removeInstance
+    /// to properly handle NR's instance-based model.
+    /// Root-level selections (path length == 1) are a no-op — BattleScribe engines manage
+    /// root selection count via selectEntry/deselectEntry, not setSelectionCount.
     /// </summary>
-    public static async Task SetSelectionCountAsync(IPage page, int[] forcePath, int entryIndex, int count)
+    public static async Task SetSelectionCountAsync(IPage page, int[] forcePath, int[] selectionPath, int count)
     {
         var error = await page.EvaluateAsync<string?>("""
-            ({forcePath, entryIndex, count}) => {
+            ({forcePath, selectionPath, count}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
@@ -307,16 +311,46 @@ public static class NewRecruitActions
                     const force = getForceAtPath(army, forcePath);
                     if (!force) return `Force not found at path [${forcePath}]`;
 
-                    const selections = getSortedSelections(force);
-                    if (entryIndex >= selections.length) return `Selection index ${entryIndex} out of range`;
+                    // Root-level selections: no-op (consistent with Oracle/Desktop behavior).
+                    // Root entries are managed via selectEntry/deselectEntry, not count changes.
+                    if (selectionPath.length <= 1) return null;
 
-                    selections[entryIndex].setAmount(count);
-                    return null;
+                    const sel = getSelectionAtPath(force, selectionPath);
+                    if (!sel) return `Selection not found at path [${selectionPath}]`;
+
+                    const current = sel.getAmount?.() ?? 1;
+                    if (current === count) return null;
+
+                    // For child selections, use the parent's selector mechanism.
+                    // Direct setAmount/incrementAmount on child selections gets reset by NR watchers.
+                    const parentPath = selectionPath.slice(0, -1);
+                    const parentSel = getSelectionAtPath(force, parentPath);
+                    if (!parentSel) return `Parent selection not found at path [${parentPath}]`;
+
+                    const entryId = sel.getId?.();
+                    const selector = findSelectorById(parentSel, entryId);
+
+                    if (selector && typeof selector.addInstance === 'function') {
+                        if (count > current) {
+                            for (let i = current; i < count; i++) {
+                                selector.addInstance();
+                                selector.autocheck?.();
+                            }
+                        } else if (typeof selector.removeInstance === 'function') {
+                            for (let i = current; i > count; i--) {
+                                selector.removeInstance();
+                                selector.autocheck?.();
+                            }
+                        }
+                        return null;
+                    }
+
+                    return `No selector found for child entry '${entryId}' — cannot change count`;
                 } catch(e) {
                     return 'SetSelectionCount error: ' + e.message;
                 }
             }
-            """, new { forcePath, entryIndex, count });
+            """, new { forcePath, selectionPath, count });
         if (error != null) throw new InvalidOperationException(error);
     }
 

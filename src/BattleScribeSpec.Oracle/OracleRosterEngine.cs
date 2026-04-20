@@ -103,25 +103,23 @@ public sealed class OracleRosterEngine : IRosterEngine
         _oracle.DeselectEntry(selection);
     }
 
-    public void SetSelectionCount(int[] forcePath, int entryIndex, int count)
+    public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count)
     {
         if (forcePath.Length == 0)
             throw new ArgumentException("forcePath cannot be empty for SetSelectionCount.");
-        if (forcePath.Length == 1)
-        {
-            var forceIndex = forcePath[0];
-            var forces = _oracle.GetForces();
-            if (forceIndex < 0 || forceIndex >= forces.Count)
-                throw new ArgumentOutOfRangeException(nameof(forcePath));
-            var entry = _oracle.GetSelectionEntryForForce(forceIndex, entryIndex);
-            _oracle.SetNumSelections(forces[forceIndex], entry, count);
-            return;
-        }
+        if (selectionPath.Length == 0)
+            throw new ArgumentException("selectionPath cannot be empty for SetSelectionCount.");
         var force = NavigateForce(forcePath);
-        var entries = _oracle.GetEntriesForForce(force);
-        if (entryIndex < 0 || entryIndex >= entries.Count)
-            throw new ArgumentOutOfRangeException(nameof(entryIndex));
-        _oracle.SetNumSelections(force, entries[entryIndex], count);
+        var targetSelection = NavigateSelection(force, selectionPath);
+        var entryId = targetSelection.getEntryId();
+        var dataEntry = _oracle.GetEntryById(entryId)
+            ?? _oracle.GetEntryByCompositeId(entryId)
+            ?? throw new InvalidOperationException($"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
+        // Parent is the force for top-level selections, or the parent selection for nested
+        net.battlescribe.model.roster.BaseSelectionParent parent = selectionPath.Length == 1
+            ? force
+            : NavigateSelection(force, selectionPath[..^1]);
+        _oracle.SetNumSelections(parent, dataEntry, count);
     }
 
     public void DuplicateSelection(int[] forcePath, int[] selectionPath)

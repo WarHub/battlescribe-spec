@@ -61,10 +61,11 @@ public interface IRosterEngine : IDisposable
     void DeselectSelection(int[] forcePath, int[] selectionPath);
 
     /// <summary>
-    /// Set the number of instances for a selection entry.
+    /// Set the number of instances for a selection.
     /// <paramref name="forcePath"/> identifies the target force.
+    /// <paramref name="selectionPath"/> identifies the selection within the force.
     /// </summary>
-    void SetSelectionCount(int[] forcePath, int entryIndex, int count);
+    void SetSelectionCount(int[] forcePath, int[] selectionPath, int count);
 
     /// <summary>
     /// Duplicate a selection within a force.
