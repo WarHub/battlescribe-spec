@@ -141,12 +141,17 @@ State reader sorts by `__bsspec_seq`, with catalogue entry order as tiebreaker.
 
 | Limitation | Impact | Workaround |
 |-----------|--------|-----------|
-| No `page` on selections | `SelectionState.Page` always null | Use engine-specific override to omit page assertion |
-| No `getPage()` method | NR tracks page on forces only, not selections | None — architectural limitation |
+| InfoLink publication override | NR uses infoLink's own pub, not target's | Per-engine `expectedState` overrides in specs |
+| InfoLink page override | NR uses infoLink's own page, not target's | Per-engine `expectedState` overrides in specs |
+| Page modifier not applied | `type: set, field: page` doesn't update selection page | Per-engine `expectedState` override |
+| `setAmount()` corrupts entries with min constraints | Calling `setAmount()` on auto-selected entries with `min≥1` permanently breaks validation | Avoid `setSelectionCount` on such entries |
+| `setAmount()` corrupts entries with children | Calling `setAmount()` on entries with child selections breaks modifier evaluation | Avoid `setSelectionCount` on parent entries |
+| `calcTotalCosts()` omits hidden cost types | Roster cost totals exclude hidden cost types | Use manual summation from selections' `getCosts()` |
 | costIndex not auto-populated | Child cost calculations return 0 | Manual population in setup (see above) |
 | Child nodes pre-created with amount=0 | selectChildEntry must increment, not addInstance | Increment existing node amount |
 | autocheck ignores defaultSelectionEntryId | Selects alphabetically first entry in groups | Use single-option groups for deterministic auto-selection |
 | NetworkIdle hangs | Persistent connections prevent WaitUntilState.NetworkIdle | Use WaitUntilState.Load |
+| Publication scope resolution | ForceEntry in gameSystem can't resolve catalogue-only publications | Define publications in same file as referencing entries |
 
 ## Selection mechanics
 

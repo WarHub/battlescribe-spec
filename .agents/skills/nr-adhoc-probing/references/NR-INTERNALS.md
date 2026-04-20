@@ -132,3 +132,131 @@ else if (selector.getAmount?.() === 0) {
     selector.autocheck?.(); // also triggers cascade on children
 }
 ```
+
+## Selection source pattern — page and publication
+
+Selections don't have `.page` or `.publication` directly. These live on `sel.source`,
+which is the backing catalogue entry definition:
+
+```javascript
+sel.page                     // → undefined (NEVER works)
+sel.publication              // → undefined (NEVER works)
+sel.source?.page             // → 42 (number, must stringify)
+sel.source?.publication?.id  // → "pub-core"
+sel.source?.publication?.name // → "Core Rulebook"
+```
+
+**Verified April 2026** by probing all NR frozen HAR snapshots: `sel.page` is
+`undefined` in 100% of cases. Page and publication always live on `.source`.
+
+No `__v_raw` unwrapping is needed — Vue proxy doesn't affect primitive property reads.
+
+Forces follow the same pattern:
+```javascript
+f.source?.page               // → 42
+f.source?.publication?.id    // → "pub-1"
+f.source?.publication?.name  // → "Core Rules"
+```
+
+## Publication scope resolution
+
+NR resolves `publicationId` references **within the same file scope** at parse time.
+If a forceEntry in a gameSystem references a publication defined only in a catalogue,
+the `.publication` object will be `undefined` (not resolved).
+
+**Verified April 2026:**
+```javascript
+// gameSystem has forceEntry with publicationId: "pub-1"
+// Publication "pub-1" is defined ONLY in catalogue
+f.source?.publication  // → undefined ❌ (out of scope)
+
+// Move publication to gameSystem
+f.source?.publication?.id  // → "pub-1" ✅
+```
+
+**Rule**: Publications must be defined in the same file as entries that reference them.
+Oracle (BattleScribe) resolves cross-scope, but NR's behavior is arguably more correct.
+
+## `setAmount()` corruption bugs
+
+**Discovered April 2026.** Calling `setAmount()` on certain entry types permanently
+corrupts NR's internal state. Three distinct failure modes:
+
+### 1. Entries with min≥1 constraints
+
+Calling `setAmount(n)` on an entry that was auto-selected due to a `min: 1`
+constraint triggers an unrecoverable validation error. Even `setAmount(1)` on
+an entry already at count 1 causes corruption:
+
+```javascript
+// Entry has min:1, auto-selected to amount=1
+sel.setAmount(1);  // ❌ Permanently breaks validation
+// Error: "1 or more must be taken" appears and never resolves
+```
+
+### 2. Entries with child selections
+
+Calling `setAmount()` on root unit entries that have child selection entries
+corrupts conditional modifier evaluation. After the call, modifier conditions
+stop being recalculated — conditional name changes, profile modifications, etc.
+freeze in their current state:
+
+```javascript
+// Root unit has children (model, upgrade selections)
+rootUnit.setAmount(2);  // ❌ Conditional modifiers stop updating
+// Subsequent selection changes don't trigger modifier re-evaluation
+```
+
+### 3. Safe entries (leaf, no constraints)
+
+`setAmount()` on leaf entries WITHOUT children or min constraints is silently
+ignored — no corruption, but also no effect:
+
+```javascript
+leafEntry.setAmount(5);  // No error, no effect, no corruption
+```
+
+**Impact**: Specs must avoid `setSelectionCount` on entries with children or
+min constraints. Use `selectEntry`/`selectChildEntry` (which use
+`addInstance`/`incrementAmount`) instead.
+
+## Hidden cost types in `calcTotalCosts()`
+
+**Discovered April 2026.** NR's `army.calcTotalCosts()` method omits cost types
+that have `hidden: true`. This causes roster-level cost assertions to fail when
+hidden cost types are expected in totals.
+
+```javascript
+// Game system has two cost types: "pts" (visible) and "PL" (hidden: true)
+army.calcTotalCosts()  // → only includes "pts", omits "PL"
+```
+
+**Fix**: Always use manual summation from individual selections:
+```javascript
+function calculateTotalCost(roster, typeId) {
+    let total = 0;
+    for (const force of roster.getForces()) {
+        walkSelections(force, sel => {
+            for (const cost of sel.getCosts())
+                if (cost.typeId === typeId) total += cost.value;
+        });
+    }
+    return total;
+}
+```
+
+This includes ALL cost types regardless of visibility.
+
+## NR `.page` is a number
+
+BattleScribe XML stores page as a string attribute (`page="42"`), but NR parses
+it to a JavaScript number during catalogue loading. The adapter must stringify:
+
+```javascript
+obj.page           // → 42 (number)
+typeof obj.page    // → "number"
+String(obj.page)   // → "42" (what BattleScribe expects)
+
+// Safe pattern:
+obj.page != null ? String(obj.page) : null
+```

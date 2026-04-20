@@ -7,7 +7,7 @@
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
 | [Import ordering](#1-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#2-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
+| [Missing features](#2-missing-features) | 4 | Low | InfoLink pub/page override, page modifier, unset-primary |
 | [Scope/condition evaluation](#3-scopecondition-evaluation) | 4 | Medium | NR evaluates child-force scope, ancestor scope, and null-childId conditions differently |
 | [instanceOf scope limits](#instanceof-scope-limitations-both-engines) | 12 | Info | instanceOf only works with self/parent/ancestor scope — both engines agree |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
@@ -32,40 +32,45 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ## 2. Missing Features
 
-**11 specs** — NR doesn't implement or expose certain BattleScribe features.
+**4 specs** — NR doesn't implement or expose certain BattleScribe features.
 
-### Selection-level publication/page (4 specs)
-
-| Spec | Feature | Detail |
-|------|---------|--------|
-| `modifier/modifier-entry-page` | Page numbers | NR doesn't expose `page` on selections |
-| `selection/selection-page` | Page numbers | NR doesn't expose `page` on selections |
-| `selection/selection-publication` | PublicationId | NR doesn't expose `publicationId` on selections |
-| `selection/selection-publication-and-page` | PublicationId + Page | NR doesn't expose `publicationId` or `page` on selections |
-
-### Rule/profile publication and page (6 specs)
+### InfoLink publication/page override behavior (2 specs)
 
 | Spec | Feature | Detail |
 |------|---------|--------|
-| `selection/rule-publication` | Rule publicationId | Rule on a selection should preserve its publicationId |
-| `selection/profile-publication` | Profile publicationId | Profile on a selection should preserve its publicationId |
-| `selection/infolink-profile-publication` | InfoLink profile publicationId | Profile linked via InfoLink should preserve target's publicationId |
-| `selection/infolink-publication-override` | InfoLink publication non-override | InfoLink publicationId should NOT override linked target's own publicationId |
-| `gamesystem/gamesystem-publication` | GameSystem publication | Publication defined at GameSystem level should be resolved — asserts publicationName on selection |
-| `selection/infolink-page-override` | InfoLink page non-override | InfoLink page should NOT override linked rule's own page |
+| `selection/infolink-publication-override` | InfoLink publication non-override | BattleScribe preserves target's `publicationId`; NR uses the infoLink's own publication instead |
+| `selection/infolink-page-override` | InfoLink page non-override | BattleScribe preserves target's `page`; NR uses the infoLink's own page instead |
 
-**Root cause**: NR's data model doesn't fully wire publication resolution
-through the InfoLink chain. While NR does expose `publicationId` and `page` on
-some profiles and rules, it fails when: (a) the publication is defined at the
-GameSystem level rather than catalogue level, (b) an InfoLink references a
-shared rule/profile that has its own publicationId — NR loses the target's
-publication during link resolution.
+**Root cause**: NR resolves InfoLink publication/page from the link itself, not
+the linked target. BattleScribe preserves the target entry's values. This is a
+genuine behavioral difference in link resolution semantics.
+
+### Page modifier not applied (1 spec)
+
+| Spec | Feature | Detail |
+|------|---------|--------|
+| `modifier/modifier-entry-page` | Page modifier | NR doesn't apply `type: set, field: page` modifiers to selections |
 
 ### Unset-primary modifier (1 spec)
 
 | Spec | Feature | Detail |
 |------|---------|--------|
 | `modifier/modifier-category-unset-primary` | Unset-primary modifier | NR ignores the `unset-primary` category modifier |
+
+### Previously missing, now resolved
+
+The following features were previously listed as missing but are now working
+after discovering NR's publication object model (April 2026):
+
+- **Selection publication/page** — NR stores these on `sel.source` (not `sel`
+  directly). Reading `sel.source?.publication?.id` and `String(sel.source?.page)`
+  now returns correct values.
+- **Rule/profile publication** — NR resolves `publicationId` into a
+  `.publication` object. Using `rule.publication?.id` works correctly.
+- **GameSystem-level publication** — Resolved when publication is defined in the
+  same scope as the entry. See [Publication Scope Resolution](#publication-scope-resolution).
+- **Force publication/page** — Accessed via `f.source?.publication?.id` and
+  `String(f.source?.page)`.
 
 ---
 
@@ -226,10 +231,74 @@ linked target's values. When an InfoLink references a shared rule with
 the resulting rule on the selection has `publicationId: pub-core` (the target's
 value, not the link's).
 
-**NR behavior**:
-- Selections: NR does not expose `publicationId` or `page`
-- Profiles: NR preserves `publicationId` and `page` from the data definition
-- Rules: NR preserves `publicationId` and `page` from the data definition
+**NR behavior** (updated April 2026 — major discovery):
+- NR resolves `publicationId` XML attributes into `.publication` object references
+  at catalogue parse time. The raw `.publicationId` property is always `undefined`.
+- **Selections**: Page and publication live on `sel.source` (not `sel` directly).
+  Access via `sel.source?.publication?.id` and `String(sel.source?.page)`.
+- **Profiles**: `profile.publication?.id` and `String(profile.page)` work directly.
+- **Rules**: `rule.publication?.id` and `String(rule.page)` work directly.
+- **Forces**: `f.source?.publication?.id` and `String(f.source?.page)`.
+- **Categories**: `cat.publication?.id` works directly.
+- **InfoLinks**: NR uses the infoLink's own publication, NOT the target's (differs
+  from BattleScribe). This is the remaining behavioral difference.
+- **Page type**: NR stores page as a number (BattleScribe XML stores it as a
+  string). Must stringify: `obj.page != null ? String(obj.page) : null`.
+
+### Publication Scope Resolution
+
+NR resolves `publicationId` references **within the same scope** at parse time.
+A forceEntry in the gameSystem referencing a publication defined only in a
+catalogue will NOT resolve — the `.publication` object will be `undefined`.
+Oracle (BattleScribe) resolves cross-scope publication references.
+
+**Rule**: Define publications in the same file (gameSystem or catalogue) as the
+entries that reference them. A forceEntry in a gameSystem must reference a
+publication also defined in that gameSystem.
+
+### NR `setAmount()` Corruption Bugs
+
+Calling `setAmount()` (used by the `setSelectionCount` spec action) can
+permanently corrupt NR's internal state under specific conditions:
+
+1. **Entries with min≥1 constraints**: Calling `setAmount()` on an auto-selected
+   entry with a `min: 1` constraint triggers an unrecoverable validation error.
+   Even `setAmount(1)` on an entry already at count 1 causes corruption.
+
+2. **Entries with child selections**: Calling `setAmount()` on root unit entries
+   that have child selection entries corrupts conditional modifier evaluation.
+   The modifier condition stops being recalculated after the call.
+
+3. **Leaf entries without constraints**: `setAmount()` on entries WITHOUT children
+   or constraints is silently ignored (no corruption, no effect).
+
+**Impact**: Specs must not use `setSelectionCount` on entries with children or
+min constraints. The `protocol-kitchen-sink` spec was fixed by removing a
+`setSelectionCount` step that targeted a root unit entry.
+
+### NR Hidden Cost Types
+
+NR's `army.calcTotalCosts()` method omits hidden cost types from its results.
+To get accurate roster totals including all cost types (visible and hidden), use
+manual summation from individual selections' `getCosts()` results:
+
+```javascript
+// ❌ Omits hidden cost types
+const costs = army.calcTotalCosts(); // Only returns visible cost types
+
+// ✅ Includes all cost types
+function calculateTotalCost(roster, typeId) {
+    let total = 0;
+    for (const force of roster.getForces()) {
+        for (const sel of getAllSelections(force)) {
+            for (const cost of sel.getCosts()) {
+                if (cost.typeId === typeId) total += cost.value;
+            }
+        }
+    }
+    return total;
+}
+```
 
 ### NR Selection Ordering
 
@@ -416,3 +485,9 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 | Force-catalogue map state leak | `_forceCatalogueMap.Clear()` in Setup prevents cross-test contamination | 1 |
 | NR cost limit false positives | Parse NR error messages + compare vs configured `defaultCostLimit` from spec | ~65 |
 | NR generic hidden errors | Suppress "cannot be selected while hidden" without `constraint.id` | 4 |
+| Publication field extraction | Use `.publication?.id` object pattern instead of `.publicationId` string | 7 |
+| Selection page/pub on source | Read from `sel.source?.page` / `sel.source?.publication` instead of `sel` directly | 4 |
+| Force page/pub on source | Read from `f.source?.page` / `f.source?.publication` | 1 |
+| Hidden cost types omitted | Always use manual summation instead of `calcTotalCosts()` | 1 |
+| setAmount corrupts NR state | Remove `setSelectionCount` on entries with children/min constraints | 1 |
+| Publication scope in forceEntry | Move publication to gameSystem (same scope as forceEntry) | 1 |

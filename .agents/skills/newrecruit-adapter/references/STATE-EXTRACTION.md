@@ -42,9 +42,9 @@ const row = bsspec.row;
 | `sel.getModifiedProfiles?.()` | Profiles[] | Includes modifier effects |
 | `sel.getModifiedRules?.()` | Rules[] | Includes modifier effects |
 | `sel.getSelectionCategories?.()` | Categories[] | Via category links |
-| `sel.page` or `src.page` | Page | Number in NR, must stringify |
-| `sel.publication?.id` or `src.publication?.id` | PublicationId | Via resolved `.publication` object |
-| `sel.publication?.name` or `src.publication?.name` | PublicationName | Same `.publication` object |
+| `sel.source?.page` | Page | Number in NR, must stringify; `sel.page` is always undefined |
+| `sel.source?.publication?.id` | PublicationId | Via resolved `.publication` object on source; `sel.publication` is undefined |
+| `sel.source?.publication?.name` | PublicationName | Same `.publication` object on source |
 
 ## Selection sorting
 
@@ -66,6 +66,9 @@ alphabetically.
 | `force.availableEntries` | AvailableEntryCount | Count of selectable entries |
 | `force.profiles` | Profiles[] | Force-level profiles |
 | `force.rules` | Rules[] | Force-level rules |
+| `f.source?.publication?.id` | PublicationId | Via resolved `.publication` object on source |
+| `f.source?.publication?.name` | PublicationName | Same `.publication` object on source |
+| `f.source?.page` | Page | Number in NR, must stringify |
 
 ## Cost state mapping
 
@@ -81,6 +84,10 @@ for (const [typeId, ct] of Object.entries(catalogue.costIndex || {})) {
 ```
 
 Total costs are calculated by summing selection costs recursively.
+
+**Important**: NR's `army.calcTotalCosts()` omits hidden cost types. The adapter
+always uses manual summation from individual selections' `getCosts()` to include
+all cost types (visible and hidden) in roster-level totals.
 
 ## Validation errors
 
