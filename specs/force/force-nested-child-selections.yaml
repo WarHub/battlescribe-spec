@@ -1,6 +1,6 @@
 id: force-nested-child-selections
 category: force
-description: Selections can be added to a child force independently
+description: Selections can be added to a child force independently using forcePath
 tags: [childForce]
 engines:
   battlescribe: fail
@@ -29,23 +29,23 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: addChildForce
-    forceIndex: 0
-    childForceEntryIndex: 0
+  - action: addForce
+    forcePath: [0]
+    forceEntryIndex: 0
 
-  # Select a unit into the child force (forceIndex 0 refers to the parent,
-  # child force index 0 within it is the Detachment).
-  # Child forces have their own selection list.
+  # Select a unit INTO the child force using forcePath
   - action: selectEntry
-    forceIndex: 0
+    forcePath: [0, 0]
     entryIndex: 0
 
   - expectedState:
       forceCount: 1
       forces:
         - name: Army
-          selectionCount: 1
+          selectionCount: 0
           childForceCount: 1
           childForces:
             - name: Detachment
-              selectionCount: 0
+              selectionCount: 1
+              selections:
+                - name: Squad

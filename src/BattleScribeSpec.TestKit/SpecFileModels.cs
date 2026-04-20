@@ -139,11 +139,11 @@ public sealed class StepDef
     [YamlMember(Alias = "childEntryIndex")]
     public int? ChildEntryIndex { get; set; }
 
-    [YamlMember(Alias = "childForceEntryIndex")]
-    public int? ChildForceEntryIndex { get; set; }
+    [YamlMember(Alias = "forcePath")]
+    public List<int>? ForcePath { get; set; }
 
-    [YamlMember(Alias = "childForceIndex")]
-    public int? ChildForceIndex { get; set; }
+    [YamlMember(Alias = "selectionPath")]
+    public List<int>? SelectionPath { get; set; }
 
     [YamlMember(Alias = "catalogueIndex")]
     public int? CatalogueIndex { get; set; }

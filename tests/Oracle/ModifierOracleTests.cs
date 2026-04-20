@@ -156,8 +156,8 @@ public class ModifierOracleTests(ITestOutputHelper output)
             ],
         };
         engine.Setup(gs, [cat]);
-        engine.AddForce(0);
-        engine.SelectEntry(0, 0);
+        engine.AddForce([], 0);
+        engine.SelectEntry([0], 0);
         var state = engine.GetRosterState();
 
         var sel = state.Forces[0].Selections[0];
@@ -189,8 +189,8 @@ public class ModifierOracleTests(ITestOutputHelper output)
             ],
         };
         engine.Setup(gs, [cat]);
-        engine.AddForce(0);
-        engine.SelectEntry(0, 0);
+        engine.AddForce([], 0);
+        engine.SelectEntry([0], 0);
         var state = engine.GetRosterState();
 
         var sel = state.Forces[0].Selections[0];

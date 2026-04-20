@@ -1,6 +1,6 @@
 id: force-nested-multiple-children
 category: force
-description: A parent force can contain multiple child forces from different nested entries
+description: A parent force can contain multiple child forces, each with independent selections
 tags: [childForce]
 engines:
   battlescribe: fail
@@ -34,13 +34,13 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: addChildForce
-    forceIndex: 0
-    childForceEntryIndex: 0
+  - action: addForce
+    forcePath: [0]
+    forceEntryIndex: 0
 
-  - action: addChildForce
-    forceIndex: 0
-    childForceEntryIndex: 1
+  - action: addForce
+    forcePath: [0]
+    forceEntryIndex: 1
 
   - expectedState:
       forceCount: 1
@@ -51,20 +51,27 @@ steps:
             - name: Patrol
             - name: Vanguard
 
-  # Add selections to parent force
+  # Select into first child force
   - action: selectEntry
-    forceIndex: 0
+    forcePath: [0, 0]
     entryIndex: 0
+
+  # Select into second child force
+  - action: selectEntry
+    forcePath: [0, 1]
+    entryIndex: 1
 
   - expectedState:
       forces:
         - name: Army
-          selectionCount: 1
-          selections:
-            - name: Scout
+          selectionCount: 0
           childForceCount: 2
           childForces:
             - name: Patrol
-              selectionCount: 0
+              selectionCount: 1
+              selections:
+                - name: Scout
             - name: Vanguard
-              selectionCount: 0
+              selectionCount: 1
+              selections:
+                - name: Veteran

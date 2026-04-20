@@ -6,6 +6,15 @@ namespace BattleScribeSpec;
 /// Abstraction for a BattleScribe-compatible roster editing engine.
 /// Any engine conforming to BattleScribe v2.03 behavior should implement this interface.
 /// The spec runner executes declarative YAML tests against implementations of this interface.
+/// <para>
+/// All force-targeting methods use <c>int[] forcePath</c> to address forces at any depth.
+/// For <c>AddForce</c>, forcePath identifies the parent (empty = top-level).
+/// For all other actions, forcePath identifies the target force.
+/// </para>
+/// <para>
+/// Selection-targeting methods additionally use <c>int[] selectionPath</c> to address
+/// selections at any depth within the target force.
+/// </para>
 /// </summary>
 public interface IRosterEngine : IDisposable
 {
@@ -17,57 +26,52 @@ public interface IRosterEngine : IDisposable
     IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues);
 
     /// <summary>
-    /// Add a force to the roster using a force entry by index.
-    /// Index refers to the order in <see cref="ProtocolGameSystem.ForceEntries"/>.
-    /// CatalogueIndex specifies which catalogue's entries to use (default 0).
+    /// Add a force to the roster.
+    /// <paramref name="forcePath"/> identifies the parent force: empty array adds a top-level force,
+    /// <c>[0]</c> adds a child under force 0, <c>[0, 1]</c> adds under force 0's child 1, etc.
+    /// <paramref name="forceEntryIndex"/> indexes force entries at the target level.
     /// </summary>
-    void AddForce(int forceEntryIndex, int catalogueIndex = 0);
+    void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0);
 
     /// <summary>
-    /// Remove a force from the roster by its index.
+    /// Remove a force from the roster.
+    /// <paramref name="forcePath"/> identifies the target force to remove:
+    /// <c>[0]</c> removes top-level force 0, <c>[0, 1]</c> removes child 1 of force 0, etc.
     /// </summary>
-    void RemoveForce(int forceIndex);
-
-    /// <summary>
-    /// Add a child force under an existing force using a nested force entry by index.
-    /// Index refers to order in the parent force entry's <see cref="Protocol.ProtocolForceEntry.ForceEntries"/>.
-    /// When <paramref name="parentChildForceIndex"/> is specified, the new force is added under that
-    /// child force instead of directly under the top-level force (enabling grandchild forces).
-    /// </summary>
-    void AddChildForce(int forceIndex, int childForceEntryIndex, int? parentChildForceIndex = null)
-        => throw new NotSupportedException("This engine does not support child force addition.");
-
-    /// <summary>
-    /// Remove a child force from a parent force by its index within the parent's child forces.
-    /// </summary>
-    void RemoveChildForce(int forceIndex, int childForceIndex)
-        => throw new NotSupportedException("This engine does not support child force removal.");
+    void RemoveForce(int[] forcePath);
 
     /// <summary>
     /// Select (add) an entry in the specified force, creating a new selection.
-    /// Entry index refers to order in <see cref="ProtocolCatalogue.SelectionEntries"/>.
+    /// <paramref name="forcePath"/> identifies the target force.
     /// </summary>
-    void SelectEntry(int forceIndex, int entryIndex);
+    void SelectEntry(int[] forcePath, int entryIndex);
 
     /// <summary>
     /// Select a child entry under an existing selection.
+    /// <paramref name="forcePath"/> identifies the target force.
+    /// <paramref name="selectionPath"/> identifies the parent selection within the force.
     /// </summary>
-    void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex);
+    void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex);
 
     /// <summary>
-    /// Deselect (remove) a selection by its index within the force.
+    /// Deselect (remove) a selection.
+    /// <paramref name="forcePath"/> identifies the target force.
+    /// <paramref name="selectionPath"/> identifies the selection to remove.
     /// </summary>
-    void DeselectSelection(int forceIndex, int selectionIndex);
+    void DeselectSelection(int[] forcePath, int[] selectionPath);
 
     /// <summary>
     /// Set the number of instances for a selection entry.
+    /// <paramref name="forcePath"/> identifies the target force.
     /// </summary>
-    void SetSelectionCount(int forceIndex, int entryIndex, int count);
+    void SetSelectionCount(int[] forcePath, int entryIndex, int count);
 
     /// <summary>
     /// Duplicate a selection within a force.
+    /// <paramref name="forcePath"/> identifies the target force.
+    /// <paramref name="selectionPath"/> identifies the selection to duplicate.
     /// </summary>
-    void DuplicateSelection(int forceIndex, int selectionIndex);
+    void DuplicateSelection(int[] forcePath, int[] selectionPath);
 
     /// <summary>
     /// Set cost limit for a cost type by its ID.
@@ -111,20 +115,23 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Add a force by name (for DataSource specs where index-based resolution isn't available).
-    /// catalogueName identifies which faction/catalogue to use.
+    /// <paramref name="forcePath"/> identifies the parent force (empty = top-level).
     /// </summary>
-    void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
+    void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
         => throw new NotSupportedException("This engine does not support name-based force addition.");
 
     /// <summary>
     /// Select an entry by name within the specified force.
+    /// <paramref name="forcePath"/> identifies the target force.
     /// </summary>
-    void SelectEntryByName(int forceIndex, string entryName)
+    void SelectEntryByName(int[] forcePath, string entryName)
         => throw new NotSupportedException("This engine does not support name-based entry selection.");
 
     /// <summary>
     /// Select a child entry by name under an existing selection.
+    /// <paramref name="forcePath"/> identifies the target force.
+    /// <paramref name="selectionPath"/> identifies the parent selection.
     /// </summary>
-    void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+    void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
         => throw new NotSupportedException("This engine does not support name-based child entry selection.");
 }

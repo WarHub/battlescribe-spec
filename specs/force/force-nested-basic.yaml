@@ -35,10 +35,11 @@ steps:
         - name: Army
           childForceCount: 0
 
-  - action: addChildForce
-    forceIndex: 0
-    childForceEntryIndex: 0
-  # Adding nested "Detachment" child force under the "Army" parent.
+  # Add a child force under force 0 using forcePath
+  - action: addForce
+    forcePath: [0]
+    forceEntryIndex: 0
+
   - expectedState:
       forceCount: 1
       forces:

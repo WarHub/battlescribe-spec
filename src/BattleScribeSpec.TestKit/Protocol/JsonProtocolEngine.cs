@@ -46,81 +46,81 @@ public sealed class JsonProtocolEngine : IRosterEngine
         };
     }
 
-    public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
+    public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
     {
-        SendAction(new ActionCommand { Action = "addForce", ForceEntryIndex = forceEntryIndex, CatalogueIndex = catalogueIndex });
+        SendAction(new ActionCommand { Action = "addForce", ForcePath = forcePath, ForceEntryIndex = forceEntryIndex, CatalogueIndex = catalogueIndex });
     }
 
-    public void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
+    public void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
     {
-        SendAction(new ActionCommand { Action = "addForce", ForceEntryName = forceName, CatalogueName = catalogueName, CatalogueIndex = catalogueIndex });
+        SendAction(new ActionCommand { Action = "addForce", ForcePath = forcePath, ForceEntryName = forceName, CatalogueName = catalogueName, CatalogueIndex = catalogueIndex });
     }
 
-    public void RemoveForce(int forceIndex)
+    public void RemoveForce(int[] forcePath)
     {
-        SendAction(new ActionCommand { Action = "removeForce", ForceIndex = forceIndex });
+        SendAction(new ActionCommand { Action = "removeForce", ForcePath = forcePath });
     }
 
-    public void SelectEntry(int forceIndex, int entryIndex)
+    public void SelectEntry(int[] forcePath, int entryIndex)
     {
-        SendAction(new ActionCommand { Action = "selectEntry", ForceIndex = forceIndex, EntryIndex = entryIndex });
+        SendAction(new ActionCommand { Action = "selectEntry", ForcePath = forcePath, EntryIndex = entryIndex });
     }
 
-    public void SelectEntryByName(int forceIndex, string entryName)
+    public void SelectEntryByName(int[] forcePath, string entryName)
     {
-        SendAction(new ActionCommand { Action = "selectEntry", ForceIndex = forceIndex, EntryName = entryName });
+        SendAction(new ActionCommand { Action = "selectEntry", ForcePath = forcePath, EntryName = entryName });
     }
 
-    public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex)
+    public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex)
     {
         SendAction(new ActionCommand
         {
             Action = "selectChildEntry",
-            ForceIndex = forceIndex,
-            SelectionIndex = selectionIndex,
+            ForcePath = forcePath,
+            SelectionPath = selectionPath,
             ChildEntryIndex = childEntryIndex,
         });
     }
 
-    public void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+    public void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
     {
         SendAction(new ActionCommand
         {
             Action = "selectChildEntry",
-            ForceIndex = forceIndex,
-            SelectionIndex = selectionIndex,
+            ForcePath = forcePath,
+            SelectionPath = selectionPath,
             ChildEntryName = childEntryName,
         });
     }
 
-    public void DeselectSelection(int forceIndex, int selectionIndex)
+    public void DeselectSelection(int[] forcePath, int[] selectionPath)
     {
         SendAction(new ActionCommand
         {
             Action = "deselectSelection",
-            ForceIndex = forceIndex,
-            SelectionIndex = selectionIndex,
+            ForcePath = forcePath,
+            SelectionPath = selectionPath,
         });
     }
 
-    public void SetSelectionCount(int forceIndex, int entryIndex, int count)
+    public void SetSelectionCount(int[] forcePath, int entryIndex, int count)
     {
         SendAction(new ActionCommand
         {
             Action = "setSelectionCount",
-            ForceIndex = forceIndex,
+            ForcePath = forcePath,
             EntryIndex = entryIndex,
             Count = count,
         });
     }
 
-    public void DuplicateSelection(int forceIndex, int selectionIndex)
+    public void DuplicateSelection(int[] forcePath, int[] selectionPath)
     {
         SendAction(new ActionCommand
         {
             Action = "duplicateSelection",
-            ForceIndex = forceIndex,
-            SelectionIndex = selectionIndex,
+            ForcePath = forcePath,
+            SelectionPath = selectionPath,
         });
     }
 

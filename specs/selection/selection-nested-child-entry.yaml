@@ -1,0 +1,66 @@
+id: selection-nested-child-entry
+category: selection
+description: selectChildEntry can target deeply nested selections via selectionPath
+tags: [selection, nested]
+engines:
+  battlescribe: fail
+  newrecruit: fail
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-weapon
+              name: Weapon
+              type: upgrade
+              selectionEntries:
+                - id: se-scope
+                  name: Scope
+                  type: upgrade
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    entryIndex: 0
+
+  # Add "Weapon" as child of "Squad" (selection 0)
+  - action: selectChildEntry
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Army
+          selections:
+            - name: Squad
+              children:
+                - name: Weapon
+
+  # Add "Scope" as child of "Weapon" using selectionPath to target the nested selection
+  - action: selectChildEntry
+    selectionPath: [0, 0]
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Army
+          selections:
+            - name: Squad
+              children:
+                - name: Weapon
+                  children:
+                    - name: Scope

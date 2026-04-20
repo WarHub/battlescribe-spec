@@ -121,13 +121,17 @@ public sealed class SpecRunner
 
     private void ExecuteAction(StepDef step, int stepIndex)
     {
+        // Resolve paths from step fields
+        var forcePath = ResolveForcePath(step);
+        var selectionPath = ResolveSelectionPath(step);
+
         switch (step.Action)
         {
             case "addForce":
                 var addForceCatalogueIndex = step.CatalogueIndex ?? 0;
                 if (_isDataSourceMode && step.ForceEntryName is { Length: > 0 } dsForceEntryName)
                 {
-                    _engine.AddForceByName(dsForceEntryName, step.CatalogueName, addForceCatalogueIndex);
+                    _engine.AddForceByName(forcePath, dsForceEntryName, step.CatalogueName, addForceCatalogueIndex);
                 }
                 else
                 {
@@ -135,26 +139,18 @@ public sealed class SpecRunner
                         ? ResolveForceEntryIndex(forceEntryName, stepIndex)
                         : step.ForceEntryIndex ?? 0;
                     if (forceEntryIndex < 0) return;
-                    _engine.AddForce(forceEntryIndex, addForceCatalogueIndex);
+                    _engine.AddForce(forcePath, forceEntryIndex, addForceCatalogueIndex);
                 }
                 break;
 
             case "removeForce":
-                _engine.RemoveForce(step.ForceIndex ?? 0);
-                break;
-
-            case "addChildForce":
-                _engine.AddChildForce(step.ForceIndex ?? 0, step.ChildForceEntryIndex ?? 0, step.ChildForceIndex);
-                break;
-
-            case "removeChildForce":
-                _engine.RemoveChildForce(step.ForceIndex ?? 0, step.ChildForceIndex ?? 0);
+                _engine.RemoveForce(forcePath);
                 break;
 
             case "selectEntry":
                 if (_isDataSourceMode && step.EntryName is { Length: > 0 } dsEntryName)
                 {
-                    _engine.SelectEntryByName(step.ForceIndex ?? 0, dsEntryName);
+                    _engine.SelectEntryByName(forcePath, dsEntryName);
                 }
                 else
                 {
@@ -163,7 +159,7 @@ public sealed class SpecRunner
                         ? ResolveEntryIndex(entryName, selectEntryCatalogueIndex, stepIndex)
                         : step.EntryIndex ?? 0;
                     if (entryIndex < 0) return;
-                    _engine.SelectEntry(step.ForceIndex ?? 0, entryIndex);
+                    _engine.SelectEntry(forcePath, entryIndex);
                 }
                 break;
 
@@ -171,37 +167,37 @@ public sealed class SpecRunner
                 if (_isDataSourceMode && step.ChildEntryName is { Length: > 0 } dsChildEntryName)
                 {
                     _engine.SelectChildEntryByName(
-                        step.ForceIndex ?? 0,
-                        step.SelectionIndex ?? 0,
+                        forcePath,
+                        selectionPath,
                         dsChildEntryName);
                 }
                 else
                 {
                     var selectChildCatalogueIndex = step.CatalogueIndex ?? 0;
                     var childEntryIndex = step.ChildEntryName is { Length: > 0 } childEntryName
-                        ? ResolveChildEntryIndex(childEntryName, step.ForceIndex ?? 0, step.SelectionIndex ?? 0, selectChildCatalogueIndex, stepIndex)
+                        ? ResolveChildEntryIndex(childEntryName, forcePath[0], selectionPath[0], selectChildCatalogueIndex, stepIndex)
                         : step.ChildEntryIndex ?? 0;
                     if (childEntryIndex < 0) return;
                     _engine.SelectChildEntry(
-                        step.ForceIndex ?? 0,
-                        step.SelectionIndex ?? 0,
+                        forcePath,
+                        selectionPath,
                         childEntryIndex);
                 }
                 break;
 
             case "deselectSelection":
-                _engine.DeselectSelection(step.ForceIndex ?? 0, step.SelectionIndex ?? 0);
+                _engine.DeselectSelection(forcePath, selectionPath);
                 break;
 
             case "setSelectionCount":
                 _engine.SetSelectionCount(
-                    step.ForceIndex ?? 0,
+                    forcePath,
                     step.EntryIndex ?? 0,
                     step.Count ?? 1);
                 break;
 
             case "duplicateSelection":
-                _engine.DuplicateSelection(step.ForceIndex ?? 0, step.SelectionIndex ?? 0);
+                _engine.DuplicateSelection(forcePath, selectionPath);
                 break;
 
             case "setCostLimit":
@@ -212,6 +208,29 @@ public sealed class SpecRunner
                 _errors.Add($"Step {stepIndex}: unknown action '{step.Action}'");
                 break;
         }
+    }
+
+    /// <summary>
+    /// Resolve forcePath from step: explicit forcePath, or derived from forceIndex.
+    /// For addForce: absent means top-level (empty path). For others: absent means [forceIndex ?? 0].
+    /// </summary>
+    private static int[] ResolveForcePath(StepDef step)
+    {
+        if (step.ForcePath is { } fp)
+            return [.. fp];
+        if (step.Action == "addForce")
+            return [];
+        return [step.ForceIndex ?? 0];
+    }
+
+    /// <summary>
+    /// Resolve selectionPath from step: explicit selectionPath, or [selectionIndex ?? 0].
+    /// </summary>
+    private static int[] ResolveSelectionPath(StepDef step)
+    {
+        if (step.SelectionPath is { } sp)
+            return [.. sp];
+        return [step.SelectionIndex ?? 0];
     }
 
     private int ResolveForceEntryIndex(string forceEntryName, int stepIndex)

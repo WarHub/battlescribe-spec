@@ -1,6 +1,6 @@
 id: force-nested-remove-child
 category: force
-description: A child force can be removed from its parent force
+description: A child force can be removed from its parent force using forcePath
 tags: [childForce]
 engines:
   battlescribe: fail
@@ -29,9 +29,9 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: addChildForce
-    forceIndex: 0
-    childForceEntryIndex: 0
+  - action: addForce
+    forcePath: [0]
+    forceEntryIndex: 0
 
   - expectedState:
       forces:
@@ -40,9 +40,9 @@ steps:
           childForces:
             - name: Detachment
 
-  - action: removeChildForce
-    forceIndex: 0
-    childForceIndex: 0
+  # Remove the child force using forcePath targeting it directly
+  - action: removeForce
+    forcePath: [0, 0]
 
   - expectedState:
       forceCount: 1

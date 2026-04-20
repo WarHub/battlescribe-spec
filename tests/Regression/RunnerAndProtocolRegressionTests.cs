@@ -230,24 +230,24 @@ public class RunnerAndProtocolRegressionTests
             return SetupErrors;
         }
 
-        public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
+        public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
         {
             ActionCalls++;
             if (ThrowOnAddForce)
                 throw new InvalidOperationException("boom");
         }
 
-        public void RemoveForce(int forceIndex) => ActionCalls++;
+        public void RemoveForce(int[] forcePath) => ActionCalls++;
 
-        public void SelectEntry(int forceIndex, int entryIndex) => ActionCalls++;
+        public void SelectEntry(int[] forcePath, int entryIndex) => ActionCalls++;
 
-        public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex) => ActionCalls++;
+        public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex) => ActionCalls++;
 
-        public void DeselectSelection(int forceIndex, int selectionIndex) => ActionCalls++;
+        public void DeselectSelection(int[] forcePath, int[] selectionPath) => ActionCalls++;
 
-        public void SetSelectionCount(int forceIndex, int entryIndex, int count) => ActionCalls++;
+        public void SetSelectionCount(int[] forcePath, int entryIndex, int count) => ActionCalls++;
 
-        public void DuplicateSelection(int forceIndex, int selectionIndex) => ActionCalls++;
+        public void DuplicateSelection(int[] forcePath, int[] selectionPath) => ActionCalls++;
 
         public void SetCostLimit(string costTypeId, double value) => ActionCalls++;
 

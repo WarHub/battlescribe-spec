@@ -17,32 +17,45 @@ public sealed class OracleRosterEngine : IRosterEngine
         return _oracle.SetupFromProtocol(gameSystem, catalogues);
     }
 
-    public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
+    public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
     {
+        if (forcePath.Length > 0)
+            throw new NotSupportedException("Oracle does not support nested force paths.");
         _oracle.AddForceByIndex(forceEntryIndex, catalogueIndex);
     }
 
-    public void RemoveForce(int forceIndex)
+    public void RemoveForce(int[] forcePath)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested force paths.");
+        var forceIndex = forcePath[0];
         var forces = _oracle.GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+            throw new ArgumentOutOfRangeException(nameof(forcePath));
         _oracle.RemoveForce(forces[forceIndex]);
     }
 
-    public void SelectEntry(int forceIndex, int entryIndex)
+    public void SelectEntry(int[] forcePath, int entryIndex)
     {
-        _oracle.SelectEntryByIndex(forceIndex, entryIndex);
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested force paths.");
+        _oracle.SelectEntryByIndex(forcePath[0], entryIndex);
     }
 
-    public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex)
+    public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested force paths.");
+        if (selectionPath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested selection paths.");
+        var forceIndex = forcePath[0];
+        var selectionIndex = selectionPath[0];
         var forces = _oracle.GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+            throw new ArgumentOutOfRangeException(nameof(forcePath));
         var selections = JavaListToList<net.battlescribe.model.roster.Selection>(forces[forceIndex].getSelections());
         if (selectionIndex < 0 || selectionIndex >= selections.Count)
-            throw new ArgumentOutOfRangeException(nameof(selectionIndex));
+            throw new ArgumentOutOfRangeException(nameof(selectionPath));
         var parentSelection = selections[selectionIndex];
         var parentEntryId = parentSelection.getEntryId();
         var parentEntry = _oracle.GetEntryById(parentEntryId)
@@ -54,34 +67,49 @@ public sealed class OracleRosterEngine : IRosterEngine
         _oracle.SelectEntry(parentSelection, childEntries[childEntryIndex]);
     }
 
-    public void DeselectSelection(int forceIndex, int selectionIndex)
+    public void DeselectSelection(int[] forcePath, int[] selectionPath)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested force paths.");
+        if (selectionPath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested selection paths.");
+        var forceIndex = forcePath[0];
+        var selectionIndex = selectionPath[0];
         var forces = _oracle.GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+            throw new ArgumentOutOfRangeException(nameof(forcePath));
         var selections = JavaListToList<net.battlescribe.model.roster.Selection>(forces[forceIndex].getSelections());
         if (selectionIndex < 0 || selectionIndex >= selections.Count)
-            throw new ArgumentOutOfRangeException(nameof(selectionIndex));
+            throw new ArgumentOutOfRangeException(nameof(selectionPath));
         _oracle.DeselectEntry(selections[selectionIndex]);
     }
 
-    public void SetSelectionCount(int forceIndex, int entryIndex, int count)
+    public void SetSelectionCount(int[] forcePath, int entryIndex, int count)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested force paths.");
+        var forceIndex = forcePath[0];
         var forces = _oracle.GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+            throw new ArgumentOutOfRangeException(nameof(forcePath));
         var entry = _oracle.GetSelectionEntryForForce(forceIndex, entryIndex);
         _oracle.SetNumSelections(forces[forceIndex], entry, count);
     }
 
-    public void DuplicateSelection(int forceIndex, int selectionIndex)
+    public void DuplicateSelection(int[] forcePath, int[] selectionPath)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested force paths.");
+        if (selectionPath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested selection paths.");
+        var forceIndex = forcePath[0];
+        var selectionIndex = selectionPath[0];
         var forces = _oracle.GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+            throw new ArgumentOutOfRangeException(nameof(forcePath));
         var selections = JavaListToList<net.battlescribe.model.roster.Selection>(forces[forceIndex].getSelections());
         if (selectionIndex < 0 || selectionIndex >= selections.Count)
-            throw new ArgumentOutOfRangeException(nameof(selectionIndex));
+            throw new ArgumentOutOfRangeException(nameof(selectionPath));
         _oracle.DuplicateSelection(selections[selectionIndex]);
     }
 
@@ -172,8 +200,10 @@ public sealed class OracleRosterEngine : IRosterEngine
         }
     }
 
-    public void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
+    public void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
     {
+        if (forcePath.Length > 0)
+            throw new NotSupportedException("Oracle does not support nested force paths for name-based force addition.");
         var index = _oracle.GetForceEntryIndexByName(forceName);
         if (index < 0)
             throw new InvalidOperationException(
@@ -188,22 +218,30 @@ public sealed class OracleRosterEngine : IRosterEngine
         _oracle.AddForceByIndex(index, catalogueIndex);
     }
 
-    public void SelectEntryByName(int forceIndex, string entryName)
+    public void SelectEntryByName(int[] forcePath, string entryName)
     {
-        var result = _oracle.SelectEntryByNameOnForce(entryName, forceIndex);
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested force paths for name-based entry selection.");
+        var result = _oracle.SelectEntryByNameOnForce(entryName, forcePath[0]);
         if (result < 0)
             throw new InvalidOperationException(
-                $"Entry '{entryName}' not found on force {forceIndex}. Available: {string.Join(", ", _oracle.GetAllAvailableEntryNames().Take(30))}");
+                $"Entry '{entryName}' not found on force {forcePath[0]}. Available: {string.Join(", ", _oracle.GetAllAvailableEntryNames().Take(30))}");
     }
 
-    public void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+    public void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested force paths for name-based child entry selection.");
+        if (selectionPath.Length != 1)
+            throw new NotSupportedException("Oracle does not support nested selection paths for name-based child entry selection.");
+        var forceIndex = forcePath[0];
+        var selectionIndex = selectionPath[0];
         var forces = _oracle.GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+            throw new ArgumentOutOfRangeException(nameof(forcePath));
         var selections = JavaListToList<net.battlescribe.model.roster.Selection>(forces[forceIndex].getSelections());
         if (selectionIndex < 0 || selectionIndex >= selections.Count)
-            throw new ArgumentOutOfRangeException(nameof(selectionIndex));
+            throw new ArgumentOutOfRangeException(nameof(selectionPath));
         var parentSelection = selections[selectionIndex];
 
         var parentEntryId = parentSelection.getEntryId();
