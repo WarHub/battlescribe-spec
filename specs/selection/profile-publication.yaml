@@ -1,7 +1,7 @@
 id: profile-publication
 category: selection
 description: Profile on a selection preserves its publicationId
-tags: [newrecruit-missing-feature]
+tags: []
 
 setup:
   gameSystem:
@@ -57,14 +57,3 @@ steps:
                   characteristics:
                     - name: M
                       value: "6"
-      engines:
-        newrecruit:
-          forces:
-            - selections:
-                - name: Marine
-                  profiles:
-                    - name: Marine Stats
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: M
-                          value: "6"

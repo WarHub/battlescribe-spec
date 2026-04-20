@@ -42,8 +42,9 @@ const row = bsspec.row;
 | `sel.getModifiedProfiles?.()` | Profiles[] | Includes modifier effects |
 | `sel.getModifiedRules?.()` | Rules[] | Includes modifier effects |
 | `sel.getSelectionCategories?.()` | Categories[] | Via category links |
-| *(not available)* | Page | Always null |
-| source entry definition | PublicationId | From entry definition |
+| `sel.page` or `src.page` | Page | Number in NR, must stringify |
+| `sel.publication?.id` or `src.publication?.id` | PublicationId | Via resolved `.publication` object |
+| `sel.publication?.name` or `src.publication?.name` | PublicationName | Same `.publication` object |
 
 ## Selection sorting
 
@@ -100,6 +101,44 @@ Each detected violation is mapped to `ValidationErrorState` with:
 - `OwnerId` — ID of the owning roster element
 - `EntryId` — entry that defines the constraint
 - `ConstraintId` — specific constraint ID
+
+## Publication ID resolution
+
+NR resolves `publicationId` XML attributes into actual publication objects at
+parse time. Every entry type (selections, rules, profiles, categories, forces)
+stores a `.publication` object reference instead of a raw `publicationId` string.
+
+**Pattern:** `obj.publication?.id` — not `obj.publicationId`
+
+```javascript
+// ✅ Correct — NR resolves the reference into an object
+rule.publication?.id    // → "pub-core"
+rule.publication?.name  // → "Core Rulebook"
+
+// ❌ Wrong — NR does NOT keep the raw string
+rule.publicationId      // → undefined
+```
+
+This applies uniformly to all entry types:
+- `selection.publication?.id` (via source: `src.publication?.id`)
+- `rule.publication?.id`
+- `profile.publication?.id`
+- `category.publication?.id`
+- `force.publication?.id`
+
+The `.publication` object has these properties:
+- `id` — publication ID string (matches XML `publicationId`)
+- `name` — full name (e.g. "Core Rulebook")
+- `shortName` — abbreviated name (e.g. "CR")
+- `catalogue` — back-reference to owning catalogue (circular)
+
+For `publicationName`, read it directly from the same `.publication` object:
+
+```javascript
+const pub = sel.publication || src?.publication;
+const pubId = pub?.id || null;
+const pubName = pub?.name || null;
+```
 
 ## Reactive object unwrapping
 

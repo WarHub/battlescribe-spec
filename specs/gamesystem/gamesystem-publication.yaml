@@ -4,7 +4,7 @@ description: >
   Publication defined at GameSystem level can be referenced by entries
   in catalogues via publicationId. The publication metadata flows to
   selections.
-tags: [newrecruit-missing-feature]
+tags: []
 
 setup:
   gameSystem:
@@ -47,8 +47,3 @@ steps:
               publicationId: pub-core
               publicationName: Core Rulebook
               page: "42"
-      engines:
-        newrecruit:
-          forces:
-            - selections:
-                - name: Unit A

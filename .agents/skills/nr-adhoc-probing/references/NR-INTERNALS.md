@@ -48,6 +48,36 @@ createRoster(costs) {
 catalogue tree. The adapter must always provide at least one force entry
 in either the game system or catalogue protocol data.
 
+## Publication references are resolved objects
+
+NR resolves `publicationId` XML attributes into object references at catalogue
+parse time. All entry types (rules, profiles, selections, categories, forces)
+store `.publication` as an object, not `.publicationId` as a string.
+
+**Discovered April 2026 via probing:**
+
+```javascript
+const rule = selection.getModifiedRules()[0];
+rule.publicationId  // → undefined  (does NOT exist)
+rule.publication    // → { id: "pub-core", name: "Core Rulebook", shortName: "CR", catalogue: {...} }
+rule.publication.id // → "pub-core"
+rule.page           // → 43  (number, NOT string — must stringify)
+```
+
+**Uniform pattern for all entry types:**
+```javascript
+obj.publication?.id || null     // publicationId
+obj.publication?.name || null   // publicationName
+obj.page != null ? String(obj.page) : null  // page (number → string)
+```
+
+**Key points:**
+- `.publication` is the resolved reference — `.publicationId` is always `undefined`
+- `.page` is a number in NR (BattleScribe XML stores it as a string)
+- The publication object has a circular `.catalogue` back-reference — don't
+  JSON.stringify it directly
+- Vue proxy doesn't affect `.publication?.id` since `.id` is a primitive
+
 ## Selection mechanics: addInstance, incrementAmount, autocheck
 
 NR's roster tree uses **selectors** (templates) and **instances** (materialized

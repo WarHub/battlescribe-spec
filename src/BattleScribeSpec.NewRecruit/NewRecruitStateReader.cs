@@ -108,7 +108,9 @@ public static class NewRecruitStateReader
                 Rules: c.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
                 PublicationId: c.PublicationId,
                 Page: c.Page)).ToList(),
-            Page: sel.Page);
+            Page: sel.Page,
+            PublicationId: sel.PublicationId,
+            PublicationName: sel.PublicationName);
     }
 
     // JSON-serializable snapshot types for page.EvaluateAsync deserialization
@@ -155,6 +157,8 @@ public static class NewRecruitStateReader
         public List<NrRuleSnapshot> Rules { get; init; } = [];
         public List<NrCategorySnapshot> Categories { get; init; } = [];
         public string? Page { get; init; }
+        public string? PublicationId { get; init; }
+        public string? PublicationName { get; init; }
     }
 
     internal record NrCostSnapshot

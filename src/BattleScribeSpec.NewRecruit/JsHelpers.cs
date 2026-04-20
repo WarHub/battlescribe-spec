@@ -153,8 +153,8 @@ internal static class JsHelpers
                         childForces: directChildren.map(cf => extractForce(cf)),
                         profiles: extractProfiles(f),
                         rules: extractRules(f),
-                        publicationId: f.publicationId || null,
-                        page: f.page != null ? String(f.page) : null
+                        publicationId: f.publication?.id || f.source?.publication?.id || null,
+                        page: (f.page ?? f.source?.page) != null ? String(f.page ?? f.source?.page) : null
                     };
                 }
 
@@ -204,6 +204,10 @@ internal static class JsHelpers
                     const profiles = sel.getModifiedProfiles?.() || [];
                     const rules = sel.getModifiedRules?.() || [];
                     const cats = sel.getSelectionCategories?.() || [];
+                    const src = sel.source;
+                    const selPage = src?.page != null ? String(src.page) : null;
+                    const selPubId = src?.publication?.id || null;
+                    const selPubName = src?.publication?.name || null;
 
                     return {
                         name: sel.getName?.() || '',
@@ -223,8 +227,7 @@ internal static class JsHelpers
                             typeName: p.typeName || null,
                             hidden: p.hidden || false,
                             page: p.page != null ? String(p.page) : null,
-                            publicationId: p.publicationId || null,
-                            characteristics: (p.characteristics || []).map(ch => ({
+                            publicationId: p.publication?.id || null,                            characteristics: (p.characteristics || []).map(ch => ({
                                 name: ch.name || '',
                                 typeId: ch.typeId || '',
                                 value: (ch.value ?? '').toString()
@@ -235,7 +238,7 @@ internal static class JsHelpers
                             description: r.description || '',
                             hidden: r.hidden || false,
                             page: r.page != null ? String(r.page) : null,
-                            publicationId: r.publicationId || null
+                            publicationId: r.publication?.id || null
                         })),
                         categories: cats.map(cat => ({
                             name: cat.name || cat.getName?.() || '',
@@ -243,10 +246,12 @@ internal static class JsHelpers
                             primary: cat.primary || false,
                             profiles: extractProfiles(cat),
                             rules: extractRules(cat),
-                            publicationId: cat.publicationId || null,
+                            publicationId: cat.publication?.id || null,
                             page: cat.page != null ? String(cat.page) : null
                         })),
-                        page: null
+                        page: selPage != null ? String(selPage) : null,
+                        publicationId: selPubId,
+                        publicationName: selPubName
                     };
                 }
 
@@ -258,7 +263,7 @@ internal static class JsHelpers
                         typeName: p.typeName || null,
                         hidden: p.hidden || false,
                         page: p.page != null ? String(p.page) : null,
-                        publicationId: p.publicationId || null,
+                        publicationId: p.publication?.id || null,
                         characteristics: (p.characteristics || []).map(ch => ({
                             name: ch.name || '',
                             typeId: ch.typeId || '',
@@ -274,19 +279,13 @@ internal static class JsHelpers
                         description: r.description || '',
                         hidden: r.hidden || false,
                         page: r.page != null ? String(r.page) : null,
-                        publicationId: r.publicationId || null
+                        publicationId: r.publication?.id || null
                     }));
                 }
 
                 function extractTotalCosts(army) {
-                    const apiCosts = army.calcTotalCosts?.() || [];
-                    if (Array.isArray(apiCosts) && apiCosts.length > 0) {
-                        return apiCosts.map(c => ({
-                            name: c.name || '',
-                            typeId: c.typeId || '',
-                            value: c.value || 0
-                        }));
-                    }
+                    // Don't use army.calcTotalCosts() — it omits hidden cost types.
+                    // Sum costs manually from all selections to include all cost types.
                     const forces = army.getForces?.() || [];
                     const totals = {};
                     function sumNodeCosts(node) {
