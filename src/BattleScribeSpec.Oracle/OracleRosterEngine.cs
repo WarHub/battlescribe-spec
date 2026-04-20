@@ -11,9 +11,13 @@ namespace BattleScribeSpec;
 public sealed class OracleRosterEngine : IRosterEngine
 {
     private readonly BattleScribeOracle _oracle = new();
+    private string? _specId;
+
+    public void SetTestContext(string specId) => _specId = specId;
 
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
+        _oracle.RosterName = _specId;
         return _oracle.SetupFromProtocol(gameSystem, catalogues);
     }
 
@@ -134,6 +138,7 @@ public sealed class OracleRosterEngine : IRosterEngine
 
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
     {
+        _oracle.RosterName = _specId;
         // Write files to a temp directory so the oracle can load them via SimpleXML
         var tempDir = Path.Combine(Path.GetTempPath(), "bsspec-oracle-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(tempDir);

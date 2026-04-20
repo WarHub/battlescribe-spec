@@ -57,11 +57,12 @@ for scanner.Scan() {
 
 The setup command provides the full game system, catalogues, and roster definition.
 Your adapter must initialize the engine with this data and respond with a
-`setupResult`.
+`setupResult`. The optional `specId` field contains the spec test identifier;
+adapters may use it to name the roster for debugging/observability.
 
 ```json
 // Input
-{"type":"setup","version":"1.0","gameSystem":{...},"catalogues":[...]}
+{"type":"setup","version":"1.0","specId":"cost-default-limit-positive","gameSystem":{...},"catalogues":[...]}
 
 // Output
 {"type":"setupResult","errors":[]}

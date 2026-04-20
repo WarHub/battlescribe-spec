@@ -39,6 +39,10 @@ public sealed class SetupCommand : ProtocolCommand
     [JsonPropertyName("version")]
     public string Version { get; set; } = "1.0";
 
+    [JsonPropertyName("specId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SpecId { get; set; }
+
     [JsonPropertyName("gameSystem")]
     public ProtocolGameSystem GameSystem { get; set; } = new();
 
@@ -54,6 +58,10 @@ public sealed class SetupFromFilesCommand : ProtocolCommand
 {
     [JsonPropertyName("type")]
     public override string Type => "setupFromFiles";
+
+    [JsonPropertyName("specId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SpecId { get; set; }
 
     [JsonPropertyName("files")]
     public List<ProtocolDataFile> Files { get; set; } = [];

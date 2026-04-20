@@ -8,6 +8,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
 {
     private readonly AdapterProcess _adapter;
     private readonly TimeSpan _requestTimeout;
+    private string? _specId;
 
     public JsonProtocolEngine(AdapterProcess adapter, TimeSpan? requestTimeout = null)
     {
@@ -15,10 +16,13 @@ public sealed class JsonProtocolEngine : IRosterEngine
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
     }
 
+    public void SetTestContext(string specId) => _specId = specId;
+
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         var cmd = new SetupCommand
         {
+            SpecId = _specId,
             GameSystem = gameSystem,
             Catalogues = catalogues.ToList(),
         };
@@ -35,6 +39,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
     {
         var cmd = new SetupFromFilesCommand
         {
+            SpecId = _specId,
             Files = files.Select(f => new ProtocolDataFile { FileName = f.FileName, Content = f.Content }).ToList()
         };
         var response = SendCommand(cmd, TimeSpan.FromMinutes(5));
