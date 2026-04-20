@@ -24,8 +24,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     private bool _disposed;
     private ProtocolGameSystem? _gameSystem;
     private ProtocolCatalogue[]? _catalogues;
-    // Maps force index → catalogue index (tracked as forces are added)
-    private readonly List<int> _forceCatalogueMap = [];
+    // Maps force path (e.g. "0" for root, "0,0" for child) → catalogue index.
+    // Populated as forces are added, used to resolve entry IDs for SelectEntry.
+    private readonly Dictionary<string, int> _forceCatalogueMap = [];
     private string _rosterName = "Spec Test";
 
     /// <summary>
@@ -421,9 +422,11 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     {
         if (forcePath.Length > 0)
             throw new NotSupportedException("NewRecruit nested AddForceByName not yet implemented.");
+        // Determine the index this new root force will get
+        var newIndex = _forceCatalogueMap.Count(kv => !kv.Key.Contains(','));
         NewRecruitActions.AddForceByNameAsync(_browser.Page, forceName, catalogueIndex)
             .GetAwaiter().GetResult();
-        _forceCatalogueMap.Add(catalogueIndex);
+        _forceCatalogueMap[newIndex.ToString()] = catalogueIndex;
     }
 
     public void SelectEntryByName(int[] forcePath, string entryName)
@@ -455,15 +458,26 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             if (forceId is null)
                 throw new ArgumentOutOfRangeException(nameof(forceEntryIndex),
                     $"Force entry index {forceEntryIndex} out of range ({allForceEntries.Count} available)");
+            // Determine the index this new root force will get
+            var newIndex = _forceCatalogueMap.Count(kv => !kv.Key.Contains(','));
             NewRecruitActions.AddForceByIdAsync(_browser.Page, forceId, catalogueIndex)
                 .GetAwaiter().GetResult();
-            _forceCatalogueMap.Add(catalogueIndex);
+            _forceCatalogueMap[newIndex.ToString()] = catalogueIndex;
             return;
         }
         // Nested: find child force entry under parent's force entry
         var childForceId = ResolveChildForceEntryId(forcePath, forceEntryIndex);
         NewRecruitActions.AddChildForceByIdAsync(_browser.Page, forcePath, childForceId, catalogueIndex)
             .GetAwaiter().GetResult();
+        // Track the new child's path — it's appended as the next child index under forcePath
+        var siblingCount = _forceCatalogueMap.Count(kv =>
+        {
+            var parentKey = string.Join(",", forcePath);
+            return kv.Key.StartsWith(parentKey + ",")
+                && kv.Key[(parentKey.Length + 1)..].IndexOf(',') < 0;
+        });
+        var childPath = string.Join(",", forcePath.Append(siblingCount));
+        _forceCatalogueMap[childPath] = catalogueIndex;
     }
 
     public void RemoveForce(int[] forcePath)
@@ -472,18 +486,31 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             throw new ArgumentException("forcePath cannot be empty for RemoveForce.");
         NewRecruitActions.RemoveForceAsync(_browser.Page, forcePath)
             .GetAwaiter().GetResult();
-        // Only track root force catalogue mappings
-        if (forcePath.Length == 1 && forcePath[0] < _forceCatalogueMap.Count)
-            _forceCatalogueMap.RemoveAt(forcePath[0]);
+        var pathKey = string.Join(",", forcePath);
+        // Remove this force and any children from the catalogue map
+        var keysToRemove = _forceCatalogueMap.Keys
+            .Where(k => k == pathKey || k.StartsWith(pathKey + ","))
+            .ToList();
+        foreach (var key in keysToRemove)
+            _forceCatalogueMap.Remove(key);
     }
 
     public void SelectEntry(int[] forcePath, int entryIndex)
     {
         if (forcePath.Length == 0)
             throw new ArgumentException("forcePath cannot be empty for SelectEntry.");
-        // Determine which catalogue this force belongs to
-        var rootForceIndex = forcePath[0];
-        var catIdx = rootForceIndex < _forceCatalogueMap.Count ? _forceCatalogueMap[rootForceIndex] : 0;
+        // Determine which catalogue this force belongs to.
+        // Look up the exact force path first, fall back to ancestors.
+        var catIdx = 0;
+        for (var depth = forcePath.Length; depth > 0; depth--)
+        {
+            var pathKey = string.Join(",", forcePath.Take(depth));
+            if (_forceCatalogueMap.TryGetValue(pathKey, out var idx))
+            {
+                catIdx = idx;
+                break;
+            }
+        }
         var cat = _catalogues?.ElementAtOrDefault(catIdx) ?? _catalogues?.FirstOrDefault();
         // Build ordered list: catalogue entries, then GameSystem-level entries
         var entryIds = (cat?.SelectionEntries ?? []).Select(e => e.Id)

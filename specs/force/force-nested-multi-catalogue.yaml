@@ -4,8 +4,6 @@ description: >
   Child forces can use different catalogues than their parent.
   Each force gets selections from its own catalogue.
 tags: [childForce, catalogue]
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:
