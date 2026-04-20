@@ -417,27 +417,37 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return errors;
     }
 
-    public void AddForceByName(string forceName, string? catalogueName = null, int catalogueIndex = 0)
+    public void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
     {
+        if (forcePath.Length > 0)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
         NewRecruitActions.AddForceByNameAsync(_browser.Page, forceName, catalogueIndex)
             .GetAwaiter().GetResult();
         _forceCatalogueMap.Add(catalogueIndex);
     }
 
-    public void SelectEntryByName(int forceIndex, string entryName)
+    public void SelectEntryByName(int[] forcePath, string entryName)
     {
-        NewRecruitActions.SelectEntryByNameAsync(_browser.Page, forceIndex, entryName)
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
+        NewRecruitActions.SelectEntryByNameAsync(_browser.Page, forcePath[0], entryName)
             .GetAwaiter().GetResult();
     }
 
-    public void SelectChildEntryByName(int forceIndex, int selectionIndex, string childEntryName)
+    public void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
     {
-        NewRecruitActions.SelectChildEntryByNameAsync(_browser.Page, forceIndex, selectionIndex, childEntryName)
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
+        if (selectionPath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested selection paths.");
+        NewRecruitActions.SelectChildEntryByNameAsync(_browser.Page, forcePath[0], selectionPath[0], childEntryName)
             .GetAwaiter().GetResult();
     }
 
-    public void AddForce(int forceEntryIndex, int catalogueIndex = 0)
+    public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
     {
+        if (forcePath.Length > 0)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
         // Build combined list: GS force entries + catalogue force entries
         var allForceEntries = new List<ProtocolForceEntry>();
         if (_gameSystem?.ForceEntries != null)
@@ -456,16 +466,22 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         _forceCatalogueMap.Add(catalogueIndex);
     }
 
-    public void RemoveForce(int forceIndex)
+    public void RemoveForce(int[] forcePath)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
+        var forceIndex = forcePath[0];
         NewRecruitActions.RemoveForceAsync(_browser.Page, forceIndex)
             .GetAwaiter().GetResult();
         if (forceIndex < _forceCatalogueMap.Count)
             _forceCatalogueMap.RemoveAt(forceIndex);
     }
 
-    public void SelectEntry(int forceIndex, int entryIndex)
+    public void SelectEntry(int[] forcePath, int entryIndex)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
+        var forceIndex = forcePath[0];
         // Determine which catalogue this force belongs to
         var catIdx = forceIndex < _forceCatalogueMap.Count ? _forceCatalogueMap[forceIndex] : 0;
         var cat = _catalogues?.ElementAtOrDefault(catIdx) ?? _catalogues?.FirstOrDefault();
@@ -482,15 +498,21 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             .GetAwaiter().GetResult();
     }
 
-    public void SelectChildEntry(int forceIndex, int selectionIndex, int childEntryIndex)
+    public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex)
     {
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
+        if (selectionPath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested selection paths.");
+        var forceIndex = forcePath[0];
+        var selectionIndex = selectionPath[0];
         // Resolve child entry ID: find the parent selection's entry,
         // then flatten all children (direct, groups, links) by index
         var state = GetRosterState();
         if (forceIndex >= state.Forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
+            throw new ArgumentOutOfRangeException(nameof(forcePath));
         if (selectionIndex >= state.Forces[forceIndex].Selections.Count)
-            throw new ArgumentOutOfRangeException(nameof(selectionIndex));
+            throw new ArgumentOutOfRangeException(nameof(selectionPath));
 
         var parentEntryId = state.Forces[forceIndex].Selections[selectionIndex].EntryId;
         var parentEntry = FindEntryById(parentEntryId);
@@ -539,21 +561,31 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return null;
     }
 
-    public void DeselectSelection(int forceIndex, int selectionIndex)
+    public void DeselectSelection(int[] forcePath, int[] selectionPath)
     {
-        NewRecruitActions.DeselectSelectionAsync(_browser.Page, forceIndex, selectionIndex)
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
+        if (selectionPath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested selection paths.");
+        NewRecruitActions.DeselectSelectionAsync(_browser.Page, forcePath[0], selectionPath[0])
             .GetAwaiter().GetResult();
     }
 
-    public void SetSelectionCount(int forceIndex, int entryIndex, int count)
+    public void SetSelectionCount(int[] forcePath, int entryIndex, int count)
     {
-        NewRecruitActions.SetSelectionCountAsync(_browser.Page, forceIndex, entryIndex, count)
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
+        NewRecruitActions.SetSelectionCountAsync(_browser.Page, forcePath[0], entryIndex, count)
             .GetAwaiter().GetResult();
     }
 
-    public void DuplicateSelection(int forceIndex, int selectionIndex)
+    public void DuplicateSelection(int[] forcePath, int[] selectionPath)
     {
-        NewRecruitActions.DuplicateSelectionAsync(_browser.Page, forceIndex, selectionIndex)
+        if (forcePath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested force paths.");
+        if (selectionPath.Length != 1)
+            throw new NotSupportedException("NewRecruit does not support nested selection paths.");
+        NewRecruitActions.DuplicateSelectionAsync(_browser.Page, forcePath[0], selectionPath[0])
             .GetAwaiter().GetResult();
     }
 

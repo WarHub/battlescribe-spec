@@ -86,43 +86,45 @@ public static class AdapterHandler
 
         try
         {
+            var forcePath = cmd.ForcePath
+                ?? (cmd.ForceIndex is { } fi
+                    ? [fi]
+                    : cmd.Action == "addForce"
+                        ? []
+                        : [0]);
+            var selectionPath = cmd.SelectionPath ?? (cmd.SelectionIndex is { } si ? [si] : [0]);
+
             switch (cmd.Action)
             {
                 case "addForce":
                     if (cmd.ForceEntryName is { Length: > 0 })
-                        engine.AddForceByName(cmd.ForceEntryName, cmd.CatalogueName, cmd.CatalogueIndex ?? 0);
+                        engine.AddForceByName(forcePath, cmd.ForceEntryName, cmd.CatalogueName, cmd.CatalogueIndex ?? 0);
                     else
-                        engine.AddForce(cmd.ForceEntryIndex ?? 0, cmd.CatalogueIndex ?? 0);
+                        engine.AddForce(forcePath, cmd.ForceEntryIndex ?? 0, cmd.CatalogueIndex ?? 0);
                     break;
                 case "removeForce":
-                    engine.RemoveForce(cmd.ForceIndex ?? 0);
-                    break;
-                case "addChildForce":
-                    engine.AddChildForce(cmd.ForceIndex ?? 0, cmd.ChildForceEntryIndex ?? 0, cmd.ChildForceIndex);
-                    break;
-                case "removeChildForce":
-                    engine.RemoveChildForce(cmd.ForceIndex ?? 0, cmd.ChildForceIndex ?? 0);
+                    engine.RemoveForce(forcePath);
                     break;
                 case "selectEntry":
                     if (cmd.EntryName is { Length: > 0 })
-                        engine.SelectEntryByName(cmd.ForceIndex ?? 0, cmd.EntryName);
+                        engine.SelectEntryByName(forcePath, cmd.EntryName);
                     else
-                        engine.SelectEntry(cmd.ForceIndex ?? 0, cmd.EntryIndex ?? 0);
+                        engine.SelectEntry(forcePath, cmd.EntryIndex ?? 0);
                     break;
                 case "selectChildEntry":
                     if (cmd.ChildEntryName is { Length: > 0 })
-                        engine.SelectChildEntryByName(cmd.ForceIndex ?? 0, cmd.SelectionIndex ?? 0, cmd.ChildEntryName);
+                        engine.SelectChildEntryByName(forcePath, selectionPath, cmd.ChildEntryName);
                     else
-                        engine.SelectChildEntry(cmd.ForceIndex ?? 0, cmd.SelectionIndex ?? 0, cmd.ChildEntryIndex ?? 0);
+                        engine.SelectChildEntry(forcePath, selectionPath, cmd.ChildEntryIndex ?? 0);
                     break;
                 case "deselectSelection":
-                    engine.DeselectSelection(cmd.ForceIndex ?? 0, cmd.SelectionIndex ?? 0);
+                    engine.DeselectSelection(forcePath, selectionPath);
                     break;
                 case "setSelectionCount":
-                    engine.SetSelectionCount(cmd.ForceIndex ?? 0, cmd.EntryIndex ?? 0, cmd.Count ?? 1);
+                    engine.SetSelectionCount(forcePath, cmd.EntryIndex ?? 0, cmd.Count ?? 1);
                     break;
                 case "duplicateSelection":
-                    engine.DuplicateSelection(cmd.ForceIndex ?? 0, cmd.SelectionIndex ?? 0);
+                    engine.DuplicateSelection(forcePath, selectionPath);
                     break;
                 case "setCostLimit":
                     engine.SetCostLimit(cmd.CostTypeId ?? "", cmd.Value ?? 0);

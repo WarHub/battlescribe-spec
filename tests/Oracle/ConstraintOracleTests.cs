@@ -350,10 +350,10 @@ public class ConstraintOracleTests
             }],
         };
         engine.Setup(gs, [cat]);
-        engine.AddForce(0);
-        engine.SelectEntry(0, 0);
-        engine.SelectEntry(0, 0);
-        engine.SelectEntry(0, 0);
+        engine.AddForce([], 0);
+        engine.SelectEntry([0], 0);
+        engine.SelectEntry([0], 0);
+        engine.SelectEntry([0], 0);
 
         var errors = engine.GetValidationErrors();
         Assert.Single(errors);

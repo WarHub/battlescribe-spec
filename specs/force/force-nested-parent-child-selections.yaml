@@ -32,9 +32,9 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: addChildForce
-    forceIndex: 0
-    childForceEntryIndex: 0
+  - action: addForce
+    forcePath: [0]
+    forceEntryIndex: 0
 
   # Add a unit to the parent force
   - action: selectEntry
@@ -51,18 +51,19 @@ steps:
             - name: Detachment
               selectionCount: 0
 
-  # Add a different unit to the parent force as well
+  # Add a unit to the child force
   - action: selectEntry
-    forceIndex: 0
+    forcePath: [0, 0]
     entryIndex: 1
 
   - expectedState:
       forces:
         - name: Army
-          selectionCount: 2
+          selectionCount: 1
           selections:
             - name: Infantry
-            - name: Tank
           childForces:
             - name: Detachment
-              selectionCount: 0
+              selectionCount: 1
+              selections:
+                - name: Tank

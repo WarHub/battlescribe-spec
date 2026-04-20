@@ -1,6 +1,6 @@
 id: force-nested-multi-level
 category: force
-description: Force entries can be nested multiple levels deep (grandchild forces)
+description: Force entries can be nested multiple levels deep (grandchild forces via forcePath)
 tags: [childForce, nested]
 engines:
   battlescribe: fail
@@ -32,9 +32,10 @@ steps:
   - action: addForce
     forceEntryIndex: 0
 
-  - action: addChildForce
-    forceIndex: 0
-    childForceEntryIndex: 0
+  # Add Division as child of Army
+  - action: addForce
+    forcePath: [0]
+    forceEntryIndex: 0
 
   - expectedState:
       forces:
@@ -44,11 +45,10 @@ steps:
             - name: Division
               childForceCount: 0
 
-  # Add a grandchild: Platoon under Division (child force index 0 of parent force 0)
-  - action: addChildForce
-    forceIndex: 0
-    childForceIndex: 0
-    childForceEntryIndex: 0
+  # Add Platoon as grandchild: child of Division (which is child 0 of force 0)
+  - action: addForce
+    forcePath: [0, 0]
+    forceEntryIndex: 0
 
   - expectedState:
       forces:
@@ -59,3 +59,21 @@ steps:
               childForceCount: 1
               childForces:
                 - name: Platoon
+
+  # Select a unit into the grandchild force
+  - action: selectEntry
+    forcePath: [0, 0, 0]
+    entryIndex: 0
+
+  - expectedState:
+      forces:
+        - name: Army
+          selectionCount: 0
+          childForces:
+            - name: Division
+              selectionCount: 0
+              childForces:
+                - name: Platoon
+                  selectionCount: 1
+                  selections:
+                    - name: Soldier
