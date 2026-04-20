@@ -13,8 +13,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryName: "Army Roster"
-    catalogueName: "Imperium - Space Marines"
+    forceEntryIndex: 0
+    catalogueIndex: 27
 
   # After force creation, mandatory entries are auto-selected
   - expectedState:
@@ -32,7 +32,7 @@ steps:
 
   - action: selectEntry
     forceIndex: 0
-    entryName: "Captain"
+    entryIndex: 79
 
   - expectedState:
       costs:
@@ -53,7 +53,7 @@ steps:
 
   - action: selectEntry
     forceIndex: 0
-    entryName: "Intercessor Squad"
+    entryIndex: 43
 
   - expectedState:
       costs:
@@ -76,7 +76,7 @@ steps:
 
   - action: selectEntry
     forceIndex: 0
-    entryName: "Intercessor Squad"
+    entryIndex: 43
 
   # Final state: 3 auto + 3 user = 6 selections, 80+80+80 = 240 pts
   - expectedState:

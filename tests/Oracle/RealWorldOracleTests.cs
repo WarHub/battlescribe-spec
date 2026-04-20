@@ -31,33 +31,15 @@ public class RealWorldOracleTests(ITestOutputHelper output)
         foreach (var e in errors.Take(5))
             output.WriteLine($"  - {e}");
 
-        var forceEntries = oracle.GetAvailableForceEntryNames();
-        output.WriteLine($"Force entries: {string.Join(", ", forceEntries)}");
-        Assert.NotEmpty(forceEntries);
-    }
+        // After loading, we should be able to add at least one force
+        oracle.AddForceByIndex(0);
+        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        Assert.Single(snapshot.Forces);
+        output.WriteLine($"Force name: {snapshot.Forces[0].Name}");
 
-    [SkippableFact]
-    public void LoadGameSystemAndCatalogue_ViaJavaDeserializer()
-    {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
-
-        using var oracle = new BattleScribeOracle();
-        var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
-        oracle.LoadGameSystemFile(gstFile);
-
-        // Load a specific catalogue (Space Marines is common)
-        var catFiles = Directory.GetFiles(Wh40kDataDir, "*.cat");
-        var smCat = catFiles.FirstOrDefault(f => f.Contains("Space Marines", StringComparison.OrdinalIgnoreCase))
-            ?? catFiles.First();
-        oracle.LoadCatalogueFile(smCat);
-
-        var errors = oracle.InitializeFromLoadedData();
-        output.WriteLine($"Loaded {Path.GetFileName(smCat)}");
-        output.WriteLine($"Init errors: {errors.Count}");
-
-        var forceEntries = oracle.GetAvailableForceEntryNames();
-        output.WriteLine($"Force entries: {string.Join(", ", forceEntries)}");
-        Assert.NotEmpty(forceEntries);
+        var entryCount = oracle.GetAvailableEntryCountForForce(0);
+        output.WriteLine($"Available entries for force 0: {entryCount}");
+        Assert.True(entryCount > 0);
     }
 
     [SkippableFact]
@@ -137,13 +119,22 @@ public class RealWorldOracleTests(ITestOutputHelper output)
         var whamGs = DataLoader.LoadFile(gstFile) as WarHub.ArmouryModel.Source.GamesystemNode;
         Assert.NotNull(whamGs);
 
-        // Load via Java
+        // Load via Java — add each force entry by index to discover names
         using var oracle = new BattleScribeOracle();
         oracle.LoadGameSystemFile(gstFile);
         oracle.InitializeFromLoadedData();
 
         var whamForceNames = whamGs.ForceEntries.Select(fe => fe.Name).OrderBy(x => x).ToList();
-        var javaForceNames = oracle.GetAvailableForceEntryNames().OrderBy(x => x).ToList();
+
+        // Add each force entry sequentially to discover Java-side names
+        var javaForceNames = new List<string>();
+        for (var i = 0; i < whamForceNames.Count; i++)
+        {
+            oracle.AddForceByIndex(i);
+            var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+            javaForceNames.Add(snapshot.Forces[i].Name);
+        }
+        javaForceNames.Sort();
 
         output.WriteLine($"wham force entries ({whamForceNames.Count}): {string.Join(", ", whamForceNames)}");
         output.WriteLine($"Java force entries ({javaForceNames.Count}): {string.Join(", ", javaForceNames)}");

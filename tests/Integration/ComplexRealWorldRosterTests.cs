@@ -93,14 +93,12 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// Helper: add force by name, log results.
+    /// Helper: add force by index (typically 0 for the first/only force entry), log results.
     /// </summary>
-    private void AddForce(BattleScribeOracle oracle, string forceName)
+    private void AddForce(BattleScribeOracle oracle, string forceName, int forceEntryIndex = 0)
     {
-        var idx = oracle.GetForceEntryIndexByName(forceName);
-        Assert.True(idx >= 0, $"Force entry containing '{forceName}' not found. Available: {string.Join(", ", oracle.GetAvailableForceEntryNames())}");
-        oracle.AddForceByIndex(idx);
-        output.WriteLine($"Added force: {forceName} (index {idx})");
+        oracle.AddForceByIndex(forceEntryIndex);
+        output.WriteLine($"Added force: {forceName} (index {forceEntryIndex})");
     }
 
     /// <summary>
@@ -108,19 +106,9 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     /// </summary>
     private void SelectEntry(BattleScribeOracle oracle, string entryName, int forceIndex = 0)
     {
-        var count = oracle.SelectEntryByNameOnForce(entryName, forceIndex);
-        if (count <= 0)
-        {
-            // Debug: dump available entries
-            var available = oracle.GetAllAvailableEntryNames();
-            var matching = available.Where(n => n.Contains(entryName, StringComparison.OrdinalIgnoreCase)).Take(10).ToList();
-            output.WriteLine($"  DEBUG: '{entryName}' not found. Similar entries: [{string.Join(", ", matching)}]");
-            output.WriteLine($"  DEBUG: Total available entries: {available.Count}");
-            if (matching.Count == 0)
-                output.WriteLine($"  DEBUG: First 20 entries: [{string.Join(", ", available.Take(20))}]");
-        }
-        Assert.True(count > 0, $"Entry '{entryName}' not found or produced 0 selections on force {forceIndex}");
-        output.WriteLine($"  Selected: {entryName} (created {count} selection(s) on force {forceIndex})");
+        var idx = oracle.SelectEntryByName(forceIndex, entryName);
+        Assert.True(idx >= 0, $"Entry '{entryName}' not found on force {forceIndex}");
+        output.WriteLine($"  Selected: {entryName} (index {idx} on force {forceIndex})");
     }
 
     /// <summary>

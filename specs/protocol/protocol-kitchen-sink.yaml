@@ -411,7 +411,7 @@ steps:
   - action: selectChildEntry
     forceIndex: 0
     selectionIndex: 1
-    childEntryName: Trooper
+    childEntryIndex: 0
 
   - expectedState:
       forces:

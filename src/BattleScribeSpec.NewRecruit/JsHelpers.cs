@@ -104,27 +104,6 @@ internal static class JsHelpers
                 return null;
             };
 
-            window.findSelectorByName = function(node, targetName) {
-                if (!node) return null;
-                if (node.getName?.() === targetName || node.name === targetName) return node;
-                const sels = node.selectors || [];
-                for (const s of sels) {
-                    if (s.getName?.() === targetName || s.name === targetName) return s;
-                    if (typeof s.first === 'function') {
-                        const inst = s.first();
-                        if (inst?.selectors) {
-                            const found = findSelectorByName(inst, targetName);
-                            if (found) return found;
-                        }
-                    }
-                    if (s.selectors) {
-                        const found = findSelectorByName(s, targetName);
-                        if (found) return found;
-                    }
-                }
-                return null;
-            };
-
             // --- State reader (used by NewRecruitStateReader.cs) ---
 
             window.__bsspec_readState = function() {

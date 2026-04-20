@@ -11,8 +11,6 @@ public sealed class SpecRunner
     private readonly DataSourceResolver? _dataSourceResolver;
     private readonly string? _engineName;
     private readonly List<string> _errors = [];
-    private ProtocolGameSystem? _gameSystem;
-    private ProtocolCatalogue[]? _catalogues;
     private bool _isDataSourceMode;
 
     public SpecRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null, string? engineName = null)
@@ -28,8 +26,6 @@ public sealed class SpecRunner
     public SpecResult Run(SpecFile spec)
     {
         _errors.Clear();
-        _gameSystem = null;
-        _catalogues = null;
         _isDataSourceMode = false;
         try
         {
@@ -43,8 +39,6 @@ public sealed class SpecRunner
             else
             {
                 var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
-                _gameSystem = gameSystem;
-                _catalogues = catalogues;
                 var setupErrors = _engine.Setup(gameSystem, catalogues);
                 if (setupErrors.Count > 0)
                 {
@@ -130,19 +124,7 @@ public sealed class SpecRunner
         switch (step.Action)
         {
             case "addForce":
-                var addForceCatalogueIndex = step.CatalogueIndex ?? 0;
-                if (_isDataSourceMode && step.ForceEntryName is { Length: > 0 } dsForceEntryName)
-                {
-                    _engine.AddForceByName(forcePath, dsForceEntryName, step.CatalogueName, addForceCatalogueIndex);
-                }
-                else
-                {
-                    var forceEntryIndex = step.ForceEntryName is { Length: > 0 } forceEntryName
-                        ? ResolveForceEntryIndex(forceEntryName, stepIndex)
-                        : step.ForceEntryIndex ?? 0;
-                    if (forceEntryIndex < 0) return;
-                    _engine.AddForce(forcePath, forceEntryIndex, addForceCatalogueIndex);
-                }
+                _engine.AddForce(forcePath, step.ForceEntryIndex ?? 0, step.CatalogueIndex ?? 0);
                 break;
 
             case "removeForce":
@@ -150,41 +132,14 @@ public sealed class SpecRunner
                 break;
 
             case "selectEntry":
-                if (_isDataSourceMode && step.EntryName is { Length: > 0 } dsEntryName)
-                {
-                    _engine.SelectEntryByName(forcePath, dsEntryName);
-                }
-                else
-                {
-                    var selectEntryCatalogueIndex = step.CatalogueIndex ?? 0;
-                    var entryIndex = step.EntryName is { Length: > 0 } entryName
-                        ? ResolveEntryIndex(entryName, selectEntryCatalogueIndex, stepIndex)
-                        : step.EntryIndex ?? 0;
-                    if (entryIndex < 0) return;
-                    _engine.SelectEntry(forcePath, entryIndex);
-                }
+                _engine.SelectEntry(forcePath, step.EntryIndex ?? 0);
                 break;
 
             case "selectChildEntry":
-                if (_isDataSourceMode && step.ChildEntryName is { Length: > 0 } dsChildEntryName)
-                {
-                    _engine.SelectChildEntryByName(
-                        forcePath,
-                        selectionPath,
-                        dsChildEntryName);
-                }
-                else
-                {
-                    var selectChildCatalogueIndex = step.CatalogueIndex ?? 0;
-                    var childEntryIndex = step.ChildEntryName is { Length: > 0 } childEntryName
-                        ? ResolveChildEntryIndex(childEntryName, forcePath, selectionPath, selectChildCatalogueIndex, stepIndex)
-                        : step.ChildEntryIndex ?? 0;
-                    if (childEntryIndex < 0) return;
-                    _engine.SelectChildEntry(
-                        forcePath,
-                        selectionPath,
-                        childEntryIndex);
-                }
+                _engine.SelectChildEntry(
+                    forcePath,
+                    selectionPath,
+                    step.ChildEntryIndex ?? 0);
                 break;
 
             case "deselectSelection":
@@ -233,128 +188,6 @@ public sealed class SpecRunner
         if (step.SelectionPath is { } sp)
             return [.. sp];
         return [step.SelectionIndex ?? 0];
-    }
-
-    private int ResolveForceEntryIndex(string forceEntryName, int stepIndex)
-    {
-        var allForceEntries = new List<ProtocolForceEntry>();
-        if (_gameSystem?.ForceEntries != null)
-            allForceEntries.AddRange(_gameSystem.ForceEntries);
-        if (_catalogues != null)
-            foreach (var cat in _catalogues)
-                if (cat.ForceEntries != null)
-                    allForceEntries.AddRange(cat.ForceEntries);
-        if (allForceEntries.Count == 0)
-        {
-            _errors.Add($"Step {stepIndex}: no force entries available for force entry '{forceEntryName}'");
-            return -1;
-        }
-
-        var index = allForceEntries.FindIndex(fe => string.Equals(fe.Name, forceEntryName, StringComparison.OrdinalIgnoreCase));
-        if (index < 0)
-            _errors.Add($"Step {stepIndex}: force entry name '{forceEntryName}' not found");
-        return index;
-    }
-
-    private int ResolveEntryIndex(string entryName, int catalogueIndex, int stepIndex)
-    {
-        var catalogue = GetCatalogue(catalogueIndex, stepIndex);
-        if (catalogue?.SelectionEntries is null)
-        {
-            _errors.Add($"Step {stepIndex}: catalogue[{catalogueIndex}] selection entries not available for entry '{entryName}'");
-            return -1;
-        }
-
-        var index = catalogue.SelectionEntries.FindIndex(se => string.Equals(se.Name, entryName, StringComparison.OrdinalIgnoreCase));
-        if (index < 0)
-            _errors.Add($"Step {stepIndex}: entry name '{entryName}' not found in catalogue[{catalogueIndex}]");
-        return index;
-    }
-
-    private int ResolveChildEntryIndex(string childEntryName, int[] forcePath, int[] selectionPath, int catalogueIndex, int stepIndex)
-    {
-        var state = _engine.GetRosterState();
-
-        // Traverse forcePath to find the target force
-        ForceState? force = null;
-        var forces = state.Forces;
-        for (var i = 0; i < forcePath.Length; i++)
-        {
-            var idx = forcePath[i];
-            if (idx < 0 || idx >= forces.Count)
-            {
-                _errors.Add($"Step {stepIndex}: forcePath[{i}]={idx} out of range (have {forces.Count})");
-                return -1;
-            }
-            force = forces[idx];
-            forces = force.ChildForces ?? (IReadOnlyList<ForceState>)[];
-        }
-
-        if (force is null)
-        {
-            _errors.Add($"Step {stepIndex}: empty forcePath for selectChildEntry");
-            return -1;
-        }
-
-        // Traverse selectionPath to find the parent selection
-        SelectionState? parentSelection = null;
-        var selections = force.Selections;
-        for (var i = 0; i < selectionPath.Length; i++)
-        {
-            var idx = selectionPath[i];
-            if (idx < 0 || idx >= selections.Count)
-            {
-                _errors.Add($"Step {stepIndex}: selectionPath[{i}]={idx} out of range (have {selections.Count})");
-                return -1;
-            }
-            parentSelection = selections[idx];
-            selections = parentSelection.Children ?? (IReadOnlyList<SelectionState>)[];
-        }
-
-        if (parentSelection is null)
-        {
-            _errors.Add($"Step {stepIndex}: empty selectionPath for selectChildEntry");
-            return -1;
-        }
-
-        var parentSelectionName = parentSelection.Name;
-        var catalogue = GetCatalogue(catalogueIndex, stepIndex);
-        var parentEntry = catalogue?.SelectionEntries?
-            .FirstOrDefault(se => string.Equals(se.Name, parentSelectionName, StringComparison.OrdinalIgnoreCase));
-
-        if (parentEntry is null)
-        {
-            _errors.Add($"Step {stepIndex}: parent entry '{parentSelectionName}' not found in catalogue[{catalogueIndex}]");
-            return -1;
-        }
-
-        if (parentEntry.SelectionEntries is null)
-        {
-            _errors.Add($"Step {stepIndex}: parent entry '{parentSelectionName}' has no child entries in catalogue[{catalogueIndex}]");
-            return -1;
-        }
-
-        var childIndex = parentEntry.SelectionEntries.FindIndex(se => string.Equals(se.Name, childEntryName, StringComparison.OrdinalIgnoreCase));
-        if (childIndex < 0)
-            _errors.Add($"Step {stepIndex}: child entry name '{childEntryName}' not found under parent '{parentSelectionName}'");
-        return childIndex;
-    }
-
-    private ProtocolCatalogue? GetCatalogue(int catalogueIndex, int stepIndex)
-    {
-        if (_catalogues is null)
-        {
-            _errors.Add($"Step {stepIndex}: catalogues not available");
-            return null;
-        }
-
-        if (catalogueIndex < 0 || catalogueIndex >= _catalogues.Length)
-        {
-            _errors.Add($"Step {stepIndex}: catalogue index {catalogueIndex} out of range (have {_catalogues.Length})");
-            return null;
-        }
-
-        return _catalogues[catalogueIndex];
     }
 
     private void ExecuteAssertion(StepDef step, int stepIndex)

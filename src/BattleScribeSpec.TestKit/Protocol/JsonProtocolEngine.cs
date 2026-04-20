@@ -56,11 +56,6 @@ public sealed class JsonProtocolEngine : IRosterEngine
         SendAction(new ActionCommand { Action = "addForce", ForcePath = forcePath, ForceEntryIndex = forceEntryIndex, CatalogueIndex = catalogueIndex });
     }
 
-    public void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
-    {
-        SendAction(new ActionCommand { Action = "addForce", ForcePath = forcePath, ForceEntryName = forceName, CatalogueName = catalogueName, CatalogueIndex = catalogueIndex });
-    }
-
     public void RemoveForce(int[] forcePath)
     {
         SendAction(new ActionCommand { Action = "removeForce", ForcePath = forcePath });
@@ -71,11 +66,6 @@ public sealed class JsonProtocolEngine : IRosterEngine
         SendAction(new ActionCommand { Action = "selectEntry", ForcePath = forcePath, EntryIndex = entryIndex });
     }
 
-    public void SelectEntryByName(int[] forcePath, string entryName)
-    {
-        SendAction(new ActionCommand { Action = "selectEntry", ForcePath = forcePath, EntryName = entryName });
-    }
-
     public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex)
     {
         SendAction(new ActionCommand
@@ -84,17 +74,6 @@ public sealed class JsonProtocolEngine : IRosterEngine
             ForcePath = forcePath,
             SelectionPath = selectionPath,
             ChildEntryIndex = childEntryIndex,
-        });
-    }
-
-    public void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
-    {
-        SendAction(new ActionCommand
-        {
-            Action = "selectChildEntry",
-            ForcePath = forcePath,
-            SelectionPath = selectionPath,
-            ChildEntryName = childEntryName,
         });
     }
 

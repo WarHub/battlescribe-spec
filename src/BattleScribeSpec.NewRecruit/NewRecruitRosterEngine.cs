@@ -418,29 +418,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return errors;
     }
 
-    public void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
-    {
-        if (forcePath.Length > 0)
-            throw new NotSupportedException("NewRecruit nested AddForceByName not yet implemented.");
-        // Determine the index this new root force will get
-        var newIndex = _forceCatalogueMap.Count(kv => !kv.Key.Contains(','));
-        NewRecruitActions.AddForceByNameAsync(_browser.Page, forceName, catalogueIndex)
-            .GetAwaiter().GetResult();
-        _forceCatalogueMap[newIndex.ToString()] = catalogueIndex;
-    }
-
-    public void SelectEntryByName(int[] forcePath, string entryName)
-    {
-        NewRecruitActions.SelectEntryByNameAsync(_browser.Page, forcePath, entryName)
-            .GetAwaiter().GetResult();
-    }
-
-    public void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
-    {
-        NewRecruitActions.SelectChildEntryByNameAsync(_browser.Page, forcePath, selectionPath, childEntryName)
-            .GetAwaiter().GetResult();
-    }
-
     public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
     {
         if (forcePath.Length == 0)

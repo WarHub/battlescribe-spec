@@ -815,25 +815,6 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Find the index of a child force entry by name under a parent force.
-    /// </summary>
-    public int GetChildForceEntryIndexByName(Force parentForce, string name)
-    {
-        var parentForceEntryId = parentForce.getEntryId();
-        var parentForceEntry = FindForceEntryById(parentForceEntryId);
-        if (parentForceEntry is null) return -1;
-
-        var childForceEntries = JavaListToList<ForceEntry>(parentForceEntry.getForceEntries());
-        for (int i = 0; i < childForceEntries.Count; i++)
-        {
-            var feName = childForceEntries[i].getName();
-            if (feName != null && feName.Contains(name, StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-        return -1;
-    }
-
-    /// <summary>
     /// Recursively search for a ForceEntry by ID in the setup force entries tree.
     /// </summary>
     private ForceEntry? FindForceEntryById(string? id)
@@ -990,30 +971,21 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Get the names of available root selection entries for a force,
-    /// as resolved by the Java engine (respects import filtering and CatalogueLink merging).
+    /// Find and select an entry by name on a force.
+    /// Returns the index of the entry, or -1 if not found. Used by integration tests.
     /// </summary>
-    public List<string> GetAvailableEntryNamesForForce(int forceIndex)
+    public int SelectEntryByName(int forceIndex, string name)
     {
-        EnsureInitialized();
-        var forces = GetForces();
-        if (forceIndex < 0 || forceIndex >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
-        var force = forces[forceIndex];
-        var names = new List<string>();
-        var seen = new HashSet<string>();
-        var categories = JavaListToList<Category>(force.getCategories());
-        foreach (var category in categories)
+        var entries = GetEntriesForForce(forceIndex);
+        for (var i = 0; i < entries.Count; i++)
         {
-            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
-            foreach (var entry in entries)
+            if (string.Equals(entries[i].getName(), name, StringComparison.OrdinalIgnoreCase))
             {
-                var name = entry.getName() ?? "?";
-                if (seen.Add(name))
-                    names.Add(name);
+                SelectEntryByIndex(forceIndex, i);
+                return i;
             }
         }
-        return names;
+        return -1;
     }
 
     /// <summary>
@@ -1239,98 +1211,6 @@ public sealed class BattleScribeOracle : IDisposable
         }
 
         return Initialize(_gameSystem, new Dictionary<string, Catalogue>(_catalogues));
-    }
-
-    /// <summary>
-    /// Get list of force entry names (for test inspection).
-    /// </summary>
-    public List<string> GetAvailableForceEntryNames()
-    {
-        return _setupForceEntries.Select(fe => fe.getName() ?? "?").ToList();
-    }
-
-    public List<string> GetLoadedCatalogueNames() =>
-        _catalogues.Values.Select(c => $"{c.getName()} ({c.getId()})").ToList();
-
-    public int GetCatalogueIndexByName(string name)
-    {
-        for (int i = 0; i < _setupCatalogues.Count; i++)
-        {
-            if (string.Equals(_setupCatalogues[i].getName(), name, StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-        return -1;
-    }
-
-    /// <summary>
-    /// Select a catalogue entry by name on a specific force.
-    /// Uses the engine's resolved entry index (via categories) to find entries
-    /// with proper composite IDs, ensuring costs and modifiers propagate correctly.
-    /// Returns count of selections created, or -1 if not found.
-    /// </summary>
-    public int SelectEntryByNameOnForce(string entryName, int forceIndex)
-    {
-        EnsureInitialized();
-        var forces = GetForces();
-        if (forceIndex < 0 || forceIndex >= forces.Count) return -1;
-
-        var force = forces[forceIndex];
-
-        // Use engine's category API to get properly resolved entries.
-        // The engine resolves entry links during init, creating entries with
-        // composite IDs (linkId::sharedId) that match its internal index.
-        // Raw catalogue entries have unresolved IDs that the engine can't find
-        // during refresh, causing cost calculation to silently fail.
-        var categories = JavaListToList<Category>(force.getCategories());
-        foreach (var category in categories)
-        {
-            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
-            foreach (var entry in entries)
-            {
-                if (entry.getName() == entryName)
-                {
-                    var sels = SelectEntry(force, entry);
-                    return sels.Count;
-                }
-            }
-        }
-        return -1;
-    }
-
-    /// <summary>
-    /// Get all available entry names from all forces using the engine's resolved entries.
-    /// </summary>
-    public List<string> GetAllAvailableEntryNames()
-    {
-        EnsureInitialized();
-        var names = new HashSet<string>();
-        var forces = GetForces();
-        foreach (var force in forces)
-        {
-            var categories = JavaListToList<Category>(force.getCategories());
-            foreach (var category in categories)
-            {
-                var entries = JavaListToList<SelectionEntry>(_engine.a(category));
-                foreach (var entry in entries)
-                    names.Add(entry.getName() ?? "?");
-            }
-        }
-        return names.OrderBy(x => x).ToList();
-    }
-
-    /// <summary>
-    /// Find force entry index by name (for AddForceByIndex).
-    /// Returns -1 if not found.
-    /// </summary>
-    public int GetForceEntryIndexByName(string name)
-    {
-        for (int i = 0; i < _setupForceEntries.Count; i++)
-        {
-            var feName = _setupForceEntries[i].getName();
-            if (feName != null && feName.Contains(name, StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-        return -1;
     }
 
     /// <summary>
