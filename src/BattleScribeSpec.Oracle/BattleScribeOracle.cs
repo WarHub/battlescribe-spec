@@ -1214,6 +1214,14 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
+    /// Get the names of available force entries from the loaded game system.
+    /// </summary>
+    public List<string> GetAvailableForceEntryNames()
+    {
+        return _setupForceEntries.Select(fe => fe.getName() ?? "?").ToList();
+    }
+
+    /// <summary>
     /// Set the active catalogue for AddForceByIndex (when multiple catalogues are loaded).
     /// </summary>
     public void SetActiveCatalogue(string catalogueId)

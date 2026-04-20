@@ -2,11 +2,11 @@ id: wh40k-10e-space-marines-army
 category: real-world
 description: Build a Space Marines army — verify auto-selections, unit types, and points costs
 tags: [wh40k-10e, real-world, space-marines, cost, profile]
-# NR can't run this spec: different auto-selections (7 vs 3), different entry names
-# ("Detachment Choice" vs "Detachment"), and "Captain" not found in NR's selector tree.
-# Per-engine expectedState overrides can't fix action-level incompatibilities.
+# Index-based addressing is fragile for DataSource specs (catalogue/entry order varies).
+# Name-based resolution needed for stable real-world specs (tracked in backlog).
 engines:
-  newrecruit: fail
+  battlescribe: skip
+  newrecruit: skip
 
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"

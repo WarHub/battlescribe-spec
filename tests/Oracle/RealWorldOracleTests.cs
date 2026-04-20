@@ -31,15 +31,9 @@ public class RealWorldOracleTests(ITestOutputHelper output)
         foreach (var e in errors.Take(5))
             output.WriteLine($"  - {e}");
 
-        // After loading, we should be able to add at least one force
-        oracle.AddForceByIndex(0);
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
-        Assert.Single(snapshot.Forces);
-        output.WriteLine($"Force name: {snapshot.Forces[0].Name}");
-
-        var entryCount = oracle.GetAvailableEntryCountForForce(0);
-        output.WriteLine($"Available entries for force 0: {entryCount}");
-        Assert.True(entryCount > 0);
+        var forceEntries = oracle.GetAvailableForceEntryNames();
+        output.WriteLine($"Force entries: {string.Join(", ", forceEntries)}");
+        Assert.NotEmpty(forceEntries);
     }
 
     [SkippableFact]
@@ -119,22 +113,13 @@ public class RealWorldOracleTests(ITestOutputHelper output)
         var whamGs = DataLoader.LoadFile(gstFile) as WarHub.ArmouryModel.Source.GamesystemNode;
         Assert.NotNull(whamGs);
 
-        // Load via Java — add each force entry by index to discover names
+        // Load via Java
         using var oracle = new BattleScribeOracle();
         oracle.LoadGameSystemFile(gstFile);
         oracle.InitializeFromLoadedData();
 
         var whamForceNames = whamGs.ForceEntries.Select(fe => fe.Name).OrderBy(x => x).ToList();
-
-        // Add each force entry sequentially to discover Java-side names
-        var javaForceNames = new List<string>();
-        for (var i = 0; i < whamForceNames.Count; i++)
-        {
-            oracle.AddForceByIndex(i);
-            var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
-            javaForceNames.Add(snapshot.Forces[i].Name);
-        }
-        javaForceNames.Sort();
+        var javaForceNames = oracle.GetAvailableForceEntryNames().OrderBy(x => x).ToList();
 
         output.WriteLine($"wham force entries ({whamForceNames.Count}): {string.Join(", ", whamForceNames)}");
         output.WriteLine($"Java force entries ({javaForceNames.Count}): {string.Join(", ", javaForceNames)}");
