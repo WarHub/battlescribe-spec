@@ -74,9 +74,11 @@ steps:
   # Remove both auto-selected entries to trigger both min violations
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-hq }}
 
   - expectedState:
       forces:

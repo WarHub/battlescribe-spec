@@ -54,6 +54,7 @@ steps:
   # Remove auto-selected entry to trigger structured min violation error
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - expectedState:
       forces:

@@ -48,6 +48,7 @@ steps:
   # Remove to trigger min violation
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - expectedState:
       forces:

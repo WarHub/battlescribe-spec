@@ -63,9 +63,11 @@ steps:
   # Auto-select satisfies min constraints. Remove all to trigger violations.
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-hq }}
 
   # errorsContain: assert only one of the two errors, ignoring the other
   - expectedState:

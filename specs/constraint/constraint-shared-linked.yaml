@@ -73,9 +73,11 @@ steps:
   # Remove both auto-selected entries to trigger shared constraint violation
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-b }}
 
   - expectedState:
       forces:
