@@ -37,13 +37,9 @@ steps:
     forceId: ${{ steps.add-army.forceId }}
     entryId: se-squad
 
-  # Add "Weapon" as child of "Squad" (selection 0)
+  # Add "Weapon" as child of "Squad"
   - action: selectChildEntry
     id: select-weapon
-    forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: se-weapon
-
     forceId: ${{ steps.add-army.forceId }}
     selectionId: ${{ steps.select-squad.selectionId }}
     entryId: se-weapon
@@ -52,12 +48,7 @@ steps:
       forces:
         - name: Army
 
-  # Add "Scope" as child of "Weapon" using selectionPath to target the nested selection
-  - action: selectChildEntry
-    forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-weapon.selectionId }}
-    entryId: se-scope
-  # Add "Scope" as child of "Weapon" using selectionPath to target the nested selection
+  # Add "Scope" as child of "Weapon" using selectionId to target the nested selection
   - action: selectChildEntry
     forceId: ${{ steps.add-army.forceId }}
     selectionId: ${{ steps.select-weapon.selectionId }}

@@ -40,7 +40,7 @@ steps:
             - name: Detachment
 
 
-  # Remove the child force using forcePath targeting it directly
+  # Remove the child force using its forceId
   - action: removeForce
     forceId: ${{ steps.add-detachment.forceId }}
 
