@@ -678,8 +678,8 @@ public sealed class BattleScribeOracle : IDisposable
     private readonly Dictionary<string, string> _linkTargetMap = new();
     // Per-catalogue entry lists for multi-catalogue support
     private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
-    // Maps force object identity to catalogue index (avoids positional corruption on removal)
-    private readonly Dictionary<Force, int> _forceCatalogueMap = new(ReferenceEqualityComparer.Instance);
+    // Maps force object identity to catalogue (avoids positional corruption on removal)
+    private readonly Dictionary<Force, Catalogue> _forceCatalogueMap = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
     /// Set up the oracle with a Patrol force entry (no units).
@@ -763,7 +763,7 @@ public sealed class BattleScribeOracle : IDisposable
         foreach (var force in GetForces())
         {
             if (!forcesBefore.Contains(force))
-                _forceCatalogueMap[force] = catalogueIndex;
+                _forceCatalogueMap[force] = catalogue;
         }
         return errors;
     }
@@ -811,7 +811,7 @@ public sealed class BattleScribeOracle : IDisposable
         if (childForce is null)
             throw new InvalidOperationException("Java engine returned null when creating child force.");
 
-        _forceCatalogueMap[childForce] = catalogueIndex;
+        _forceCatalogueMap[childForce] = catalogue;
     }
 
     /// <summary>
@@ -930,10 +930,11 @@ public sealed class BattleScribeOracle : IDisposable
             // Fall through to legacy path
         }
 
-        if (_forceCatalogueMap.TryGetValue(force, out var catIdx)
-            && catIdx < _perCatalogueEntries.Count)
+        if (_forceCatalogueMap.TryGetValue(force, out var catalogue))
         {
-            return _perCatalogueEntries[catIdx];
+            var catIdx = _setupCatalogues.IndexOf(catalogue);
+            if (catIdx >= 0 && catIdx < _perCatalogueEntries.Count)
+                return _perCatalogueEntries[catIdx];
         }
         throw new InvalidOperationException(
             "No catalogue mapping found for force. Force must be added via AddForceByIndex.");
@@ -1838,45 +1839,44 @@ public sealed class BattleScribeOracle : IDisposable
 
     /// <summary>
     /// Resolve a catalogue by ID, or return the default catalogue if null.
-    /// Returns the catalogue and its index in the setup catalogues list.
     /// </summary>
-    internal (Catalogue Catalogue, int Index) ResolveCatalogue(string? catalogueId)
+    internal Catalogue ResolveCatalogue(string? catalogueId)
     {
         if (catalogueId != null)
         {
             for (int i = 0; i < _setupCatalogues.Count; i++)
             {
                 if (_setupCatalogues[i].getId() == catalogueId)
-                    return (_setupCatalogues[i], i);
+                    return _setupCatalogues[i];
             }
             throw new InvalidOperationException($"Catalogue '{catalogueId}' not found.");
         }
-        var idx = _setupCatalogue != null ? _setupCatalogues.IndexOf(_setupCatalogue) : 0;
-        if (idx < 0) idx = 0;
-        return (_setupCatalogues[idx], idx);
+        if (_setupCatalogue != null)
+        {
+            var idx = _setupCatalogues.IndexOf(_setupCatalogue);
+            return idx >= 0 ? _setupCatalogues[idx] : _setupCatalogues[0];
+        }
+        return _setupCatalogues[0];
     }
 
     /// <summary>
-    /// Track the catalogue index for a newly created force.
+    /// Track the catalogue for a newly created force.
     /// </summary>
-    internal void TrackForceCatalogue(Force force, int catalogueIndex) =>
-        _forceCatalogueMap[force] = catalogueIndex;
+    internal void TrackForceCatalogue(Force force, Catalogue catalogue) =>
+        _forceCatalogueMap[force] = catalogue;
 
     /// <summary>
-    /// Get the tracked catalogue index for a force.
+    /// Get the tracked catalogue for a force.
     /// </summary>
-    internal int GetForceCatalogueIndex(Force force) =>
-        _forceCatalogueMap.TryGetValue(force, out var idx) ? idx : 0;
+    internal Catalogue GetForceCatalogue(Force force) =>
+        _forceCatalogueMap.TryGetValue(force, out var cat) ? cat : _setupCatalogues[0];
 
     /// <summary>
     /// Create a child force under a parent using a ForceEntry object.
     /// </summary>
-    internal Force CreateChildForce(Force parentForce, ForceEntry childForceEntry, int catalogueIndex)
+    internal Force CreateChildForce(Force parentForce, ForceEntry childForceEntry, Catalogue catalogue)
     {
         EnsureInitialized();
-        if (catalogueIndex < 0 || catalogueIndex >= _setupCatalogues.Count)
-            throw new ArgumentOutOfRangeException(nameof(catalogueIndex));
-        var catalogue = _setupCatalogues[catalogueIndex];
         var linked = ResolveLinkedCatalogues(catalogue);
 
         var linkedCatMap = new JavaHashMap();
@@ -1890,7 +1890,7 @@ public sealed class BattleScribeOracle : IDisposable
         if (childForce is null)
             throw new InvalidOperationException("Java engine returned null when creating child force.");
 
-        _forceCatalogueMap[childForce] = catalogueIndex;
+        _forceCatalogueMap[childForce] = catalogue;
         return childForce;
     }
 

@@ -33,16 +33,19 @@ public static class NewRecruitActions
     /// Add a force to the roster by force entry ID.
     /// Returns the uid of the created force.
     /// </summary>
-    public static async Task<string?> AddForceByIdAsync(IPage page, string forceEntryId, int catalogueIndex = 0)
+    public static async Task<string?> AddForceByIdAsync(IPage page, string forceEntryId, string? catalogueId = null)
     {
         var result = await page.EvaluateAsync<string?>("""
-            ({forceEntryId, catalogueIndex}) => {
+            ({forceEntryId, catalogueId}) => {
                 try {
                     const spec = window.__bsspec;
                     if (!spec) return 'ERROR:No spec state — was Setup called?';
                     const army = spec.army;
                     const books = spec.books || [spec.book];
-                    const book = books[catalogueIndex] || books[0];
+                    const catIds = spec.bookCatalogueIds || [];
+                    const book = catalogueId
+                        ? (books[catIds.indexOf(catalogueId)] || books[0])
+                        : books[0];
                     if (!army || !book) return 'ERROR:No army or book';
 
                     const beforeUids = new Set(
@@ -51,15 +54,14 @@ public static class NewRecruitActions
                     army.insertForce(book, forceEntryId);
 
                     for (const f of (army.getForces?.() || [])) {
-                        const raw = f;
-                        if (raw?.uid && !beforeUids.has(raw.uid)) return raw.uid;
+                        if (f?.uid && !beforeUids.has(f.uid)) return f.uid;
                     }
                     return null;
                 } catch(e) {
                     return 'ERROR:AddForce error: ' + e.message;
                 }
             }
-            """, new { forceEntryId, catalogueIndex });
+            """, new { forceEntryId, catalogueId });
         return HandleCreateResult(result);
     }
 
@@ -99,16 +101,19 @@ public static class NewRecruitActions
     /// Add a child force under an existing force by child force entry ID.
     /// Returns the uid of the created child force.
     /// </summary>
-    public static async Task<string?> AddChildForceByIdAsync(IPage page, string parentForceUid, string childForceEntryId, int catalogueIndex = 0)
+    public static async Task<string?> AddChildForceByIdAsync(IPage page, string parentForceUid, string childForceEntryId, string? catalogueId = null)
     {
         var result = await page.EvaluateAsync<string?>("""
-            ({parentForceUid, childForceEntryId, catalogueIndex}) => {
+            ({parentForceUid, childForceEntryId, catalogueId}) => {
                 try {
                     const spec = window.__bsspec;
                     if (!spec) return 'ERROR:No spec state — was Setup called?';
                     const army = spec.army;
                     const books = spec.books || [spec.book];
-                    const book = books[catalogueIndex] || books[0];
+                    const catIds = spec.bookCatalogueIds || [];
+                    const book = catalogueId
+                        ? (books[catIds.indexOf(catalogueId)] || books[0])
+                        : books[0];
                     if (!army || !book) return 'ERROR:No army or book';
 
                     const parentForce = getForceByUid(army, parentForceUid);
@@ -124,15 +129,14 @@ public static class NewRecruitActions
                     }
 
                     for (const f of (army.getForces?.() || [])) {
-                        const raw = f;
-                        if (raw?.uid && !beforeUids.has(raw.uid)) return raw.uid;
+                        if (f?.uid && !beforeUids.has(f.uid)) return f.uid;
                     }
                     return null;
                 } catch(e) {
                     return 'ERROR:AddChildForce error: ' + e.message;
                 }
             }
-            """, new { parentForceUid, childForceEntryId, catalogueIndex });
+            """, new { parentForceUid, childForceEntryId, catalogueId });
         return HandleCreateResult(result);
     }
 

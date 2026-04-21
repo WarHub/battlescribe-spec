@@ -23,7 +23,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     internal NewRecruitBrowser Browser => _browser;
     private bool _disposed;
     private ProtocolGameSystem? _gameSystem;
-    private ProtocolCatalogue[]? _catalogues;
     private string _rosterName = "Spec Test";
 
     /// <summary>
@@ -84,7 +83,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         _gameSystem = gameSystem;
-        _catalogues = catalogues;
         return SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
     }
 
@@ -229,6 +227,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             army: roster,
                             book: primaryBook,
                             books: allBooks.map(b => b.bookData),
+                            bookCatalogueIds: allBooks.map(b => b.bookRef.bsid || ''),
                             row,
                             entryOrder: entryOrder || null
                         };
@@ -264,7 +263,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
     {
         _gameSystem = null;
-        _catalogues = null;
         return SetupFromFilesAsync(files).GetAwaiter().GetResult();
     }
 
@@ -367,6 +365,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             army: roster,
                             book: primaryBook,
                             books: allBooks.map(b => b.bookData),
+                            bookCatalogueIds: allBooks.map(b => b.bookRef.bsid || ''),
                             row
                         };
 
@@ -414,8 +413,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public ActionOutputs AddForce(string forceEntryId, string? catalogueId = null)
     {
-        var catalogueIndex = ResolveCatalogueIndex(catalogueId);
-        var forceId = NewRecruitActions.AddForceByIdAsync(_browser.Page, forceEntryId, catalogueIndex)
+        var forceId = NewRecruitActions.AddForceByIdAsync(_browser.Page, forceEntryId, catalogueId)
             .GetAwaiter().GetResult();
         // Collect auto-selected entries (from min constraints)
         var selections = forceId is not null
@@ -427,7 +425,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
     {
-        var forceId = NewRecruitActions.AddChildForceByIdAsync(_browser.Page, parentForceId, forceEntryId)
+        var forceId = NewRecruitActions.AddChildForceByIdAsync(_browser.Page, parentForceId, forceEntryId, catalogueId)
             .GetAwaiter().GetResult();
         return new ActionOutputs { ForceId = forceId };
     }
@@ -573,17 +571,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 _disposed = true;
             }
         }
-    }
-
-    private int ResolveCatalogueIndex(string? catalogueId)
-    {
-        if (catalogueId is null || _catalogues is null) return 0;
-        for (int i = 0; i < _catalogues.Length; i++)
-        {
-            if (_catalogues[i].Id == catalogueId)
-                return i;
-        }
-        return 0;
     }
 
     /// <summary>

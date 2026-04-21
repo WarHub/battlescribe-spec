@@ -28,7 +28,7 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forceEntry = _oracle.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
 
-        var (catalogue, catIndex) = _oracle.ResolveCatalogue(catalogueId);
+        var catalogue = _oracle.ResolveCatalogue(catalogueId);
         var linked = _oracle.ResolveLinkedCatalogues(catalogue);
         var forcesBefore = new HashSet<net.battlescribe.model.roster.Force>(
             _oracle.GetForces(), ReferenceEqualityComparer.Instance);
@@ -41,7 +41,7 @@ public sealed class OracleRosterEngine : IRosterEngine
         foreach (var f in _oracle.GetForces())
         {
             if (!forcesBefore.Contains(f))
-                _oracle.TrackForceCatalogue(f, catIndex);
+                _oracle.TrackForceCatalogue(f, catalogue);
         }
 
         // Re-read force from roster to capture auto-selected entries (from constraints)
@@ -56,18 +56,11 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forceEntry = _oracle.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
 
-        int catIndex;
-        if (catalogueId is not null)
-        {
-            var (_, idx) = _oracle.ResolveCatalogue(catalogueId);
-            catIndex = idx;
-        }
-        else
-        {
-            catIndex = _oracle.GetForceCatalogueIndex(parentForce);
-        }
+        var catalogue = catalogueId is not null
+            ? _oracle.ResolveCatalogue(catalogueId)
+            : _oracle.GetForceCatalogue(parentForce);
 
-        var childForce = _oracle.CreateChildForce(parentForce, forceEntry, catIndex);
+        var childForce = _oracle.CreateChildForce(parentForce, forceEntry, catalogue);
         return new ActionOutputs { ForceId = childForce.getId() };
     }
 
