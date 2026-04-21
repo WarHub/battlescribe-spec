@@ -64,6 +64,38 @@ public static class NewRecruitActions
     }
 
     /// <summary>
+    /// Collect auto-selected root selections for a force after addForce.
+    /// Returns a map of entryId → selection uid, or null if no selections.
+    /// </summary>
+    public static async Task<Dictionary<string, string>?> GetForceAutoSelectionsAsync(IPage page, string forceUid)
+    {
+        var json = await page.EvaluateAsync<string?>("""
+            (forceUid) => {
+                try {
+                    const army = window.__bsspec?.army;
+                    if (!army) return null;
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return null;
+                    const sels = getSelections(force);
+                    if (!sels || sels.length === 0) return null;
+                    const map = {};
+                    for (const s of sels) {
+                        const raw = s?.__v_raw || s;
+                        const entryId = s.getId?.() || null;
+                        const uid = raw?.uid || null;
+                        if (entryId && uid) map[entryId] = uid;
+                    }
+                    return Object.keys(map).length > 0 ? JSON.stringify(map) : null;
+                } catch(e) {
+                    return null;
+                }
+            }
+            """, forceUid);
+        if (json is null) return null;
+        return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+    }
+
+    /// <summary>
     /// Add a child force under an existing force by child force entry ID.
     /// Returns the uid of the created child force.
     /// </summary>

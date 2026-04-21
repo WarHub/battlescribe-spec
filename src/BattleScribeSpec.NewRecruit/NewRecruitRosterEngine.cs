@@ -417,10 +417,15 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         var catalogueIndex = ResolveCatalogueIndex(catalogueId);
         var forceId = NewRecruitActions.AddForceByIdAsync(_browser.Page, forceEntryId, catalogueIndex)
             .GetAwaiter().GetResult();
-        return new ActionOutputs { ForceId = forceId };
+        // Collect auto-selected entries (from min constraints)
+        var selections = forceId is not null
+            ? NewRecruitActions.GetForceAutoSelectionsAsync(_browser.Page, forceId)
+                .GetAwaiter().GetResult()
+            : null;
+        return new ActionOutputs { ForceId = forceId, Selections = selections };
     }
 
-    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId)
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
     {
         var forceId = NewRecruitActions.AddChildForceByIdAsync(_browser.Page, parentForceId, forceEntryId)
             .GetAwaiter().GetResult();
