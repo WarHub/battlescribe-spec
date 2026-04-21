@@ -65,6 +65,7 @@ public static class NewRecruitStateReader
     private static ForceState MapForce(NrForceSnapshot f)
     {
         return new ForceState(
+            Id: f.Id,
             f.Name,
             f.CatalogueId,
             f.Selections.Select(MapSelection).ToList(),
@@ -82,6 +83,7 @@ public static class NewRecruitStateReader
     private static SelectionState MapSelection(NrSelectionSnapshot sel)
     {
         return new SelectionState(
+            Id: sel.Id,
             sel.Name,
             sel.EntryId,
             sel.Type,
@@ -134,6 +136,7 @@ public static class NewRecruitStateReader
 
     internal record NrForceSnapshot
     {
+        public string? Id { get; init; }
         public string Name { get; init; } = "";
         public string? CatalogueId { get; init; }
         public List<NrSelectionSnapshot> Selections { get; init; } = [];
@@ -146,6 +149,7 @@ public static class NewRecruitStateReader
 
     internal record NrSelectionSnapshot
     {
+        public string? Id { get; init; }
         public string Name { get; init; } = "";
         public string? EntryId { get; init; }
         public string? Type { get; init; }

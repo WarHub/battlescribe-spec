@@ -83,6 +83,30 @@ internal static class JsHelpers
                 });
             };
 
+            // Find a force anywhere in the army tree by its uid.
+            window.getForceByUid = function(army, uid) {
+                for (const f of (army.getForces?.() || [])) {
+                    const raw = f?.__v_raw || f;
+                    if (raw?.uid === uid) return f;
+                }
+                return null;
+            };
+
+            // Find a selection anywhere under a parent by its uid (recursive).
+            window.getSelectionByUid = function(parent, uid) {
+                function search(nodes) {
+                    for (const s of nodes) {
+                        const raw = s?.__v_raw || s;
+                        if (raw?.uid === uid) return s;
+                        const children = s.getSelections?.() || s.getChildren?.() || [];
+                        const found = search(children);
+                        if (found) return found;
+                    }
+                    return null;
+                }
+                return search(getSelections(parent));
+            };
+
             window.findSelectorById = function(node, targetId) {
                 if (!node) return null;
                 if (node.ids?.includes(targetId)) return node;
@@ -147,6 +171,7 @@ internal static class JsHelpers
                             || cf.getParentForce?.() === (f?.__v_raw || f))
                         : [];
                     return {
+                        id: (f?.__v_raw || f)?.uid || null,
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
                         selections: extractSelections(f, false),
@@ -210,6 +235,7 @@ internal static class JsHelpers
                     const selPubName = src?.publication?.name || null;
 
                     return {
+                        id: (sel?.__v_raw || sel)?.uid || null,
                         name: sel.getName?.() || '',
                         entryId: sel.getId?.() || null,
                         type: sel.getType?.() || null,
