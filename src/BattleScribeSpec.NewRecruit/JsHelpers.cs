@@ -46,7 +46,7 @@ internal static class JsHelpers
                         // Filter to direct children of current force
                         const all = current.getForces?.() || [];
                         forces = all.filter(cf => cf.getParentForce?.() === current
-                            || cf.getParentForce?.() === (current?.__v_raw || current));
+                            || cf.getParentForce?.() === current);
                     } else {
                         return current;
                     }
@@ -72,8 +72,8 @@ internal static class JsHelpers
                 const orderMap = {};
                 entryOrder.forEach((id, i) => { orderMap[id] = i; });
                 return [...sels].sort((a, b) => {
-                    const ra = a?.__v_raw || a;
-                    const rb = b?.__v_raw || b;
+                    const ra = a;
+                    const rb = b;
                     const seqA = ra?.__bsspec_seq ?? -1;
                     const seqB = rb?.__bsspec_seq ?? -1;
                     if (seqA !== seqB) return seqA - seqB;
@@ -86,7 +86,7 @@ internal static class JsHelpers
             // Find a force anywhere in the army tree by its uid.
             window.getForceByUid = function(army, uid) {
                 for (const f of (army.getForces?.() || [])) {
-                    const raw = f?.__v_raw || f;
+                    const raw = f;
                     if (raw?.uid === uid) return f;
                 }
                 return null;
@@ -96,7 +96,7 @@ internal static class JsHelpers
             window.getSelectionByUid = function(parent, uid) {
                 function search(nodes) {
                     for (const s of nodes) {
-                        const raw = s?.__v_raw || s;
+                        const raw = s;
                         if (raw?.uid === uid) return s;
                         const children = s.getSelections?.() || s.getChildren?.() || [];
                         const found = search(children);
@@ -168,10 +168,10 @@ internal static class JsHelpers
                     // NR flattens all descendants — filter to direct children only.
                     const directChildren = Array.isArray(allChildren)
                         ? allChildren.filter(cf => cf.getParentForce?.() === f
-                            || cf.getParentForce?.() === (f?.__v_raw || f))
+                            || cf.getParentForce?.() === f)
                         : [];
                     return {
-                        id: (f?.__v_raw || f)?.uid || null,
+                        id: f?.uid || null,
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
                         selections: extractSelections(f, false),
@@ -194,8 +194,8 @@ internal static class JsHelpers
 
                     if (!sortByEntryOrder) {
                         const sorted = [...selections].sort((a, b) => {
-                            const ra = a?.__v_raw || a;
-                            const rb = b?.__v_raw || b;
+                            const ra = a;
+                            const rb = b;
                             const seqA = ra?.__bsspec_seq ?? -1;
                             const seqB = rb?.__bsspec_seq ?? -1;
                             if (seqA !== seqB) return seqA - seqB;
@@ -209,8 +209,8 @@ internal static class JsHelpers
                     }
 
                     const sorted = [...selections].sort((a, b) => {
-                        const ra = a?.__v_raw || a;
-                        const rb = b?.__v_raw || b;
+                        const ra = a;
+                        const rb = b;
                         const idA = ra?.selector?.source?.id || ra?.source?.id;
                         const idB = rb?.selector?.source?.id || rb?.source?.id;
                         const orderA = orderMap[idA] ?? 999;
@@ -235,7 +235,7 @@ internal static class JsHelpers
                     const selPubName = src?.publication?.name || null;
 
                     return {
-                        id: (sel?.__v_raw || sel)?.uid || null,
+                        id: sel?.uid || null,
                         name: sel.getName?.() || '',
                         entryId: sel.getId?.() || null,
                         type: sel.getType?.() || null,
@@ -377,7 +377,7 @@ internal static class JsHelpers
                         const cleanMsg = msg.replace(/<[^>]*>/g, '');
 
                         let ownerEntryId = null;
-                        const raw = ownerNode?.__v_raw || ownerNode;
+                        const raw = ownerNode;
                         if (raw) {
                             const srcId = raw.source?.id;
                             const targetId = raw.source?.targetId;
@@ -389,10 +389,10 @@ internal static class JsHelpers
 
                         let entryId = null;
                         if (constraintId && ownerNode) {
-                            const rawOwner = ownerNode.__v_raw || ownerNode;
+                            const rawOwner = ownerNode;
                             const selectors = rawOwner.selectors || [];
                             for (const sel of selectors) {
-                                const rawSel = sel?.__v_raw || sel;
+                                const rawSel = sel;
                                 const srcCons = rawSel?.source?.constraints || [];
                                 for (const c of srcCons) {
                                     if (c.id === constraintId) {
@@ -405,7 +405,7 @@ internal static class JsHelpers
                             if (!entryId) {
                                 const entries = rawOwner.getEntries?.() || [];
                                 for (const entry of entries) {
-                                    const rawEntry = entry?.__v_raw || entry;
+                                    const rawEntry = entry;
                                     const selSrc = rawEntry?.selector?.source;
                                     if (selSrc?.constraints) {
                                         for (const c of selSrc.constraints) {
@@ -450,7 +450,7 @@ internal static class JsHelpers
                         }
 
                         if (ownerType === 'selection' && !constraintId) {
-                            const raw = ownerNode?.__v_raw || ownerNode;
+                            const raw = ownerNode;
                             if (raw?.isHidden?.()) {
                                 entryId = ownerEntryId || null;
                                 constraintId = 'hidden';

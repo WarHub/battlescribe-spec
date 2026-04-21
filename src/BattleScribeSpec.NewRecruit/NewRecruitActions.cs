@@ -46,12 +46,12 @@ public static class NewRecruitActions
                     if (!army || !book) return 'ERROR:No army or book';
 
                     const beforeUids = new Set(
-                        (army.getForces?.() || []).map(f => (f?.__v_raw || f)?.uid || ''));
+                        (army.getForces?.() || []).map(f => f?.uid || ''));
 
                     army.insertForce(book, forceEntryId);
 
                     for (const f of (army.getForces?.() || [])) {
-                        const raw = f?.__v_raw || f;
+                        const raw = f;
                         if (raw?.uid && !beforeUids.has(raw.uid)) return raw.uid;
                     }
                     return null;
@@ -80,7 +80,7 @@ public static class NewRecruitActions
                     if (!sels || sels.length === 0) return null;
                     const map = {};
                     for (const s of sels) {
-                        const raw = s?.__v_raw || s;
+                        const raw = s;
                         const entryId = s.getId?.() || null;
                         const uid = raw?.uid || null;
                         if (entryId && uid) map[entryId] = uid;
@@ -115,7 +115,7 @@ public static class NewRecruitActions
                     if (!parentForce) return `ERROR:Parent force not found with uid '${parentForceUid}'`;
 
                     const beforeUids = new Set(
-                        (army.getForces?.() || []).map(f => (f?.__v_raw || f)?.uid || ''));
+                        (army.getForces?.() || []).map(f => f?.uid || ''));
 
                     if (typeof parentForce.insertForce === 'function') {
                         parentForce.insertForce(book, childForceEntryId);
@@ -124,7 +124,7 @@ public static class NewRecruitActions
                     }
 
                     for (const f of (army.getForces?.() || [])) {
-                        const raw = f?.__v_raw || f;
+                        const raw = f;
                         if (raw?.uid && !beforeUids.has(raw.uid)) return raw.uid;
                     }
                     return null;
@@ -176,7 +176,7 @@ public static class NewRecruitActions
                     if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
 
                     const before = new Set(
-                        getSelections(force).map(s => (s?.__v_raw || s)?.uid || ''));
+                        getSelections(force).map(s => s?.uid || ''));
 
                     const selector = findSelectorById(force, entryId);
                     if (!selector) return `ERROR:Entry '${entryId}' not found in force selector tree`;
@@ -196,7 +196,7 @@ public static class NewRecruitActions
                     const after = getSelections(force);
                     let newUid = null;
                     for (const s of after) {
-                        const raw = s?.__v_raw || s;
+                        const raw = s;
                         if (raw && !before.has(raw.uid || '')) {
                             if (raw.__bsspec_seq === undefined) {
                                 raw.__bsspec_seq = window.__bsspec._selSeq;
@@ -243,7 +243,7 @@ public static class NewRecruitActions
                             child.setAmount((child.getAmount?.() || 0) + 1);
                         }
                         child.autocheck?.();
-                        return (child?.__v_raw || child)?.uid || null;
+                        return child?.uid || null;
                     }
 
                     // Fallback: search the selector tree
@@ -256,7 +256,7 @@ public static class NewRecruitActions
                         const insts = found.instances || [];
                         const last = insts[insts.length - 1];
                         last?.autocheck?.();
-                        return (last?.__v_raw || last)?.uid || null;
+                        return last?.uid || null;
                     } else if (typeof found.incrementAmount === 'function') {
                         found.incrementAmount();
                     } else {
@@ -353,7 +353,7 @@ public static class NewRecruitActions
                     if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
 
                     const before = new Set(
-                        getSelections(force).map(s => (s?.__v_raw || s)?.uid || ''));
+                        getSelections(force).map(s => s?.uid || ''));
 
                     const sel = getSelectionByUid(force, selectionUid);
                     if (!sel) return `ERROR:Selection not found with uid '${selectionUid}'`;
@@ -369,7 +369,7 @@ public static class NewRecruitActions
                     const after = getSelections(force);
                     let newUid = null;
                     for (const s of after) {
-                        const raw = s?.__v_raw || s;
+                        const raw = s;
                         if (raw && !before.has(raw.uid || '')) {
                             if (raw.__bsspec_seq === undefined) {
                                 raw.__bsspec_seq = window.__bsspec._selSeq;
