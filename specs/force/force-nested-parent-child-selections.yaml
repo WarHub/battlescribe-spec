@@ -31,8 +31,9 @@ steps:
     forceEntryId: fe-army
 
   - action: addChildForce
+    id: add-detachment
     forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    forceEntryId: fe-detach
 
   # Add a unit to the parent force
   - action: selectEntry
@@ -49,9 +50,10 @@ steps:
             - name: Detachment
               selectionCount: 0
 
+
   # Add a unit to the child force
   - action: selectEntry
-    forceId: ${{ steps.add-army.forceId }}
+    forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-2
 
   - expectedState:

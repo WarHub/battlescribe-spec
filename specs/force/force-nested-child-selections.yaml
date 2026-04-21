@@ -28,12 +28,14 @@ steps:
     forceEntryId: fe-army
 
   - action: addChildForce
+    id: add-detachment
     forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    forceEntryId: fe-detach
 
   # Select a unit INTO the child force using forcePath
   - action: selectEntry
-    forceId: ${{ steps.add-army.forceId }}
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
     entryId: se-1
 
   - expectedState:

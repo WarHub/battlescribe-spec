@@ -28,8 +28,9 @@ steps:
     forceEntryId: fe-army
 
   - action: addChildForce
+    id: add-detachment
     forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    forceEntryId: fe-detach
 
   - expectedState:
       forces:
@@ -38,8 +39,10 @@ steps:
           childForces:
             - name: Detachment
 
+
   # Remove the child force using forcePath targeting it directly
   - action: removeForce
+    forceId: ${{ steps.add-detachment.forceId }}
 
   - expectedState:
       forceCount: 1

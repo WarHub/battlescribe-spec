@@ -32,8 +32,9 @@ steps:
 
   # Add Division as child of Army
   - action: addChildForce
+    id: add-division
     forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    forceEntryId: fe-division
 
   - expectedState:
       forces:
@@ -43,10 +44,12 @@ steps:
             - name: Division
               childForceCount: 0
 
+
   # Add Platoon as grandchild: child of Division (which is child 0 of force 0)
   - action: addChildForce
-    forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    id: add-platoon
+    forceId: ${{ steps.add-division.forceId }}
+    forceEntryId: fe-platoon
 
   - expectedState:
       forces:
@@ -58,9 +61,10 @@ steps:
               childForces:
                 - name: Platoon
 
+
   # Select a unit into the grandchild force
   - action: selectEntry
-    forceId: ${{ steps.add-army.forceId }}
+    forceId: ${{ steps.add-platoon.forceId }}
     entryId: se-1
 
   - expectedState:

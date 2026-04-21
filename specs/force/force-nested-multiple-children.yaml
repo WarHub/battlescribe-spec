@@ -33,12 +33,14 @@ steps:
     forceEntryId: fe-army
 
   - action: addChildForce
+    id: add-patrol
     forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    forceEntryId: fe-patrol
 
   - action: addChildForce
+    id: add-vanguard
     forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: UNKNOWN_FE_1
+    forceEntryId: fe-vanguard
 
   - expectedState:
       forceCount: 1
@@ -49,14 +51,15 @@ steps:
             - name: Patrol
             - name: Vanguard
 
+
   # Select into first child force
   - action: selectEntry
-    forceId: ${{ steps.add-army.forceId }}
+    forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-1
 
   # Select into second child force
   - action: selectEntry
-    forceId: ${{ steps.add-army.forceId }}
+    forceId: ${{ steps.add-vanguard.forceId }}
     entryId: se-2
 
   - expectedState:
