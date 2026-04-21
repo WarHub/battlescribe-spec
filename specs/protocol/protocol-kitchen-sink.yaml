@@ -351,6 +351,7 @@ steps:
 
   # Step 2: selectEntry Infantry Squad — assert ALL selection fields
   - action: selectEntry
+    id: select-infantry
     forceId: ${{ steps.add-battalion.forceId }}
     entryId: se-infantry
 
@@ -408,9 +409,10 @@ steps:
 
   # Step 3: selectChildEntry — add Trooper model to Infantry Squad
   - action: selectChildEntry
+    id: select-trooper
     forceId: ${{ steps.add-battalion.forceId }}
-    selectionId: ${{ steps.select-commander.selectionId }}
-    entryId: CHILD_0
+    selectionId: ${{ steps.select-infantry.selectionId }}
+    entryId: se-inf-trooper
 
   - expectedState:
       forces:
@@ -492,7 +494,7 @@ steps:
   # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
   - action: setSelectionCount
     forceId: ${{ steps.add-battalion.forceId }}
-    selectionId: ${{ steps.select-commander.selectionId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
     count: 2
 
   - expectedState:
@@ -511,6 +513,7 @@ steps:
   # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
   #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)
   - action: selectEntry
+    id: select-infantry-2
     forceId: ${{ steps.add-battalion.forceId }}
     entryId: se-infantry
 
@@ -532,9 +535,9 @@ steps:
 
   # Step 7: duplicateSelection — duplicate Infantry Squad #2
   - action: duplicateSelection
-    id: select-entry
+    id: duplicate-infantry
     forceId: ${{ steps.add-battalion.forceId }}
-    selectionId: ${{ steps.select-entry.selectionId }}
+    selectionId: ${{ steps.select-infantry-2.selectionId }}
 
   - expectedState:
       forces:
@@ -543,6 +546,7 @@ steps:
   # Step 8: deselectSelection — remove duplicated copy
   - action: deselectSelection
     forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.duplicate-infantry.selectionId }}
 
   - expectedState:
       forces:

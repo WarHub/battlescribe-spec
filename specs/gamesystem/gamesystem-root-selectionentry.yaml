@@ -27,8 +27,9 @@ steps:
     forceEntryId: fe-patrol
 
   - action: selectEntry
+    id: select-gs-unit
     forceId: ${{ steps.add-patrol.forceId }}
-    entryId: UNKNOWN_ENTRY_0
+    entryId: se-gs-unit
 
   - expectedState:
       forces:

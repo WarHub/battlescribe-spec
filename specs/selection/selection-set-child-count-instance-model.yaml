@@ -46,9 +46,10 @@ steps:
     entryId: se-squad
 
   - action: selectChildEntry
+    id: select-trooper
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    entryId: se-trooper
 
   - expectedState:
       forces:
@@ -68,7 +69,7 @@ steps:
   # setSelectionCount to 3
   - action: setSelectionCount
     forceId: ${{ steps.add-detachment.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
     count: 3
 
   - expectedState:

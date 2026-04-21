@@ -48,9 +48,10 @@ steps:
     entryId: se-squad
 
   - action: selectChildEntry
+    id: select-weapon
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    entryId: se-weapon
 
   - expectedState:
       forces:
@@ -70,7 +71,7 @@ steps:
   # setSelectionCount to 3 on the collective child
   - action: setSelectionCount
     forceId: ${{ steps.add-detachment.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
     count: 3
 
   - expectedState:
