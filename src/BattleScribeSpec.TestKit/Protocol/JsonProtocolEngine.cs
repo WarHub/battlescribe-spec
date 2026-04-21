@@ -56,9 +56,9 @@ public sealed class JsonProtocolEngine : IRosterEngine
         return SendAction(new ActionCommand { Action = "addForce", ForceEntryId = forceEntryId, CatalogueId = catalogueId });
     }
 
-    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId)
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
     {
-        return SendAction(new ActionCommand { Action = "addChildForce", ForceId = parentForceId, ForceEntryId = forceEntryId });
+        return SendAction(new ActionCommand { Action = "addChildForce", ForceId = parentForceId, ForceEntryId = forceEntryId, CatalogueId = catalogueId });
     }
 
     public void RemoveForce(string forceId)

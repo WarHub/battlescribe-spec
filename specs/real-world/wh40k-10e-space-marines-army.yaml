@@ -2,19 +2,17 @@ id: wh40k-10e-space-marines-army
 category: real-world
 description: Build a Space Marines army — verify auto-selections, unit types, and points costs
 tags: [wh40k-10e, real-world, space-marines, cost, profile]
-# Index-based addressing is fragile for DataSource specs (catalogue/entry order varies).
-# Name-based resolution needed for stable real-world specs (tracked in backlog).
 engines:
-  battlescribe: skip
   newrecruit: skip
 
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
 
 steps:
-  - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 27
+  - id: add-force
+    action: addForce
+    forceEntryId: bb9d-299a-ed60-2d8a
+    catalogueId: e0af-67df-9d63-8fb7
 
   # After force creation, mandatory entries are auto-selected
   - expectedState:
@@ -31,8 +29,8 @@ steps:
               type: upgrade
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 79
+    forceId: ${{ steps.add-force.forceId }}
+    entryId: 6c10-5b51-5bc0-8d2c
 
   - expectedState:
       costs:
@@ -52,8 +50,8 @@ steps:
               type: model
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 43
+    forceId: ${{ steps.add-force.forceId }}
+    entryId: 8da0-4570-c3c-819f
 
   - expectedState:
       costs:
@@ -75,8 +73,8 @@ steps:
               type: unit
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 43
+    forceId: ${{ steps.add-force.forceId }}
+    entryId: 8da0-4570-c3c-819f
 
   # Final state: 3 auto + 3 user = 6 selections, 80+80+80 = 240 pts
   - expectedState:

@@ -238,7 +238,7 @@ public class RunnerAndProtocolRegressionTests
             return new ActionOutputs { ForceId = "force-1" };
         }
 
-        public ActionOutputs AddChildForce(string parentForceId, string forceEntryId)
+        public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
         {
             ActionCalls++;
             return new ActionOutputs { ForceId = "child-force-1" };

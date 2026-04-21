@@ -37,7 +37,7 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-patrol.forceId }}
-    entryId: UNKNOWN_ENTRY_0
+    entryId: se-1
 
   - expectedState:
       forces:

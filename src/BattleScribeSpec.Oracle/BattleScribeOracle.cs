@@ -1863,6 +1863,12 @@ public sealed class BattleScribeOracle : IDisposable
         _forceCatalogueMap[force] = catalogueIndex;
 
     /// <summary>
+    /// Get the tracked catalogue index for a force.
+    /// </summary>
+    internal int GetForceCatalogueIndex(Force force) =>
+        _forceCatalogueMap.TryGetValue(force, out var idx) ? idx : 0;
+
+    /// <summary>
     /// Create a child force under a parent using a ForceEntry object.
     /// </summary>
     internal Force CreateChildForce(Force parentForce, ForceEntry childForceEntry, int catalogueIndex)

@@ -58,7 +58,7 @@ steps:
   - action: selectChildEntry
     forceId: ${{ steps.add-patrol.forceId }}
     selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    entryId: se-sword
 
   - expectedState:
       forces:

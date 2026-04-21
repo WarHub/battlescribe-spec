@@ -29,11 +29,13 @@ steps:
       forceCount: 2
 
   - action: removeForce
+    forceId: ${{ steps.add-patrol.forceId }}
 
   - expectedState:
       forceCount: 1
 
   - action: removeForce
+    forceId: ${{ steps.add-battalion.forceId }}
 
   - expectedState:
       forceCount: 0

@@ -10,7 +10,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: bb9d-299a-ed60-2d8a
 
   - expectedState:
       forceCount: 1

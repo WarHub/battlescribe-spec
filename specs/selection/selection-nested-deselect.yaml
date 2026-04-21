@@ -39,21 +39,15 @@ steps:
     selectionId: ${{ steps.select-squad.selectionId }}
     entryId: se-weapon
 
-    forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: se-weapon
-
   - expectedState:
       forces:
         - name: Army
           selections:
+            - name: Squad
+              children:
+                - name: Weapon
 
-  # Deselect the nested "Weapon" using selectionPath
-  - action: deselectSelection
-    forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-weapon.selectionId }}
-
-  # Deselect the nested "Weapon" using selectionPath
+  # Deselect the nested Weapon
   - action: deselectSelection
     forceId: ${{ steps.add-army.forceId }}
     selectionId: ${{ steps.select-weapon.selectionId }}

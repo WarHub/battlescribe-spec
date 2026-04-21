@@ -38,12 +38,12 @@ steps:
   - action: selectChildEntry
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-hq-unit.selectionId }}
-    entryId: CHILD_0
+    entryId: se-child-1
 
   - action: selectChildEntry
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-hq-unit.selectionId }}
-    entryId: CHILD_1
+    entryId: se-child-2
 
   - expectedState:
       forces:

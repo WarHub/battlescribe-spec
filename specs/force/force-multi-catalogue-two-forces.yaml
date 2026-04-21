@@ -53,7 +53,7 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-patrol-2.forceId }}
-    entryId: se-a1
+    entryId: se-b1
 
   - expectedState:
       forces:

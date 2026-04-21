@@ -91,7 +91,7 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: UNKNOWN_ENTRY_0
+    entryId: se-soldier
 
   # Faction Soldier selected →
   # Faction Gear auto-selects (min=1 on link) →

@@ -36,6 +36,7 @@ steps:
 
   # Remove second (empty) force
   - action: removeForce
+    forceId: ${{ steps.add-patrol-2.forceId }}
 
   - expectedState:
       forceCount: 1

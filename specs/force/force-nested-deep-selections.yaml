@@ -43,12 +43,14 @@ steps:
     forceEntryId: fe-army
 
   - action: addChildForce
+    id: add-division
     forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    forceEntryId: fe-division
 
   - action: addChildForce
-    forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    id: add-platoon
+    forceId: ${{ steps.add-division.forceId }}
+    forceEntryId: fe-platoon
 
   - expectedState:
       forces:
@@ -60,50 +62,55 @@ steps:
 
   # Add Squad into each force level
   - action: selectEntry
-    id: select-squad
+    id: select-army-squad
     forceId: ${{ steps.add-army.forceId }}
     entryId: se-squad
 
   - action: selectEntry
-    forceId: ${{ steps.add-army.forceId }}
+    id: select-div-squad
+    forceId: ${{ steps.add-division.forceId }}
     entryId: se-squad
 
   - action: selectEntry
-    forceId: ${{ steps.add-army.forceId }}
+    id: select-plt-squad
+    forceId: ${{ steps.add-platoon.forceId }}
     entryId: se-squad
 
   # Build selection hierarchy in Army's Squad: Squad > Weapon > Scope
   - action: selectChildEntry
+    id: select-army-weapon
     forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    selectionId: ${{ steps.select-army-squad.selectionId }}
+    entryId: se-weapon
 
   - action: selectChildEntry
     forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    selectionId: ${{ steps.select-army-weapon.selectionId }}
+    entryId: se-scope
 
   # Build selection hierarchy in Division's Squad
   - action: selectChildEntry
-    forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    id: select-div-weapon
+    forceId: ${{ steps.add-division.forceId }}
+    selectionId: ${{ steps.select-div-squad.selectionId }}
+    entryId: se-weapon
 
   - action: selectChildEntry
-    forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    forceId: ${{ steps.add-division.forceId }}
+    selectionId: ${{ steps.select-div-weapon.selectionId }}
+    entryId: se-scope
 
   # Build selection hierarchy in Platoon's Squad
   - action: selectChildEntry
-    forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    id: select-plt-weapon
+    forceId: ${{ steps.add-platoon.forceId }}
+    selectionId: ${{ steps.select-plt-squad.selectionId }}
+    entryId: se-weapon
 
   - action: selectChildEntry
-    forceId: ${{ steps.add-army.forceId }}
-    selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    forceId: ${{ steps.add-platoon.forceId }}
+    selectionId: ${{ steps.select-plt-weapon.selectionId }}
+    entryId: se-scope
 
   # Verify the full tree
   - expectedState:

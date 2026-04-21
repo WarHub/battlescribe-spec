@@ -59,7 +59,7 @@ public interface IRosterEngine : IDisposable
     /// <summary>
     /// Add a child force under an existing parent force.
     /// </summary>
-    ActionOutputs AddChildForce(string parentForceId, string forceEntryId);
+    ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null);
 
     /// <summary>
     /// Remove a force from the roster by its instance ID.

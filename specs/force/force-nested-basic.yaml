@@ -36,7 +36,7 @@ steps:
   # Add a child force under force 0 using forcePath
   - action: addChildForce
     forceId: ${{ steps.add-army.forceId }}
-    forceEntryId: fe-army
+    forceEntryId: fe-detach
 
   - expectedState:
       forceCount: 1

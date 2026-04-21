@@ -97,7 +97,8 @@ public static class AdapterHandler
                 case "addChildForce":
                     outputs = engine.AddChildForce(
                         cmd.ForceId ?? throw new InvalidOperationException("addChildForce requires forceId"),
-                        cmd.ForceEntryId ?? throw new InvalidOperationException("addChildForce requires forceEntryId"));
+                        cmd.ForceEntryId ?? throw new InvalidOperationException("addChildForce requires forceEntryId"),
+                        cmd.CatalogueId);
                     break;
                 case "removeForce":
                     engine.RemoveForce(

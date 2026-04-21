@@ -44,24 +44,30 @@ public sealed class OracleRosterEngine : IRosterEngine
                 _oracle.TrackForceCatalogue(f, catIndex);
         }
 
-        return new ActionOutputs { ForceId = force.getId() };
+        // Re-read force from roster to capture auto-selected entries (from constraints)
+        var rosterForce = FindForceById(force.getId());
+        var selections = CollectForceSelectionIds(rosterForce);
+        return new ActionOutputs { ForceId = force.getId(), Selections = selections };
     }
 
-    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId)
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
     {
         var parentForce = FindForceById(parentForceId);
         var forceEntry = _oracle.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
 
-        // Use parent force's catalogue index for the child
-        var parentCatIndex = 0;
-        foreach (var f in _oracle.GetForces())
+        int catIndex;
+        if (catalogueId is not null)
         {
-            // The parent force might not be at root level, but we need to find a root-level
-            // ancestor to determine catalogue. Use default (0) as fallback.
+            var (_, idx) = _oracle.ResolveCatalogue(catalogueId);
+            catIndex = idx;
+        }
+        else
+        {
+            catIndex = _oracle.GetForceCatalogueIndex(parentForce);
         }
 
-        var childForce = _oracle.CreateChildForce(parentForce, forceEntry, parentCatIndex);
+        var childForce = _oracle.CreateChildForce(parentForce, forceEntry, catIndex);
         return new ActionOutputs { ForceId = childForce.getId() };
     }
 
@@ -365,6 +371,21 @@ public sealed class OracleRosterEngine : IRosterEngine
             map[entryId] = sel.getId();
         foreach (var child in JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections()))
             CollectSelectionIdsRecursive(child, map);
+    }
+
+    /// <summary>
+    /// Collect entryId → selectionId map for all selections in a force (top-level + nested).
+    /// Used to expose auto-selected entries after AddForce.
+    /// </summary>
+    private static Dictionary<string, string>? CollectForceSelectionIds(
+        net.battlescribe.model.roster.Force force)
+    {
+        var selections = JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections());
+        if (selections.Count == 0) return null;
+        var map = new Dictionary<string, string>();
+        foreach (var sel in selections)
+            CollectSelectionIdsRecursive(sel, map);
+        return map.Count > 0 ? map : null;
     }
 
     /// <summary>

@@ -47,7 +47,7 @@ steps:
   - action: selectChildEntry
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    entryId: se-weapon
   # Parent unit costs 50pts, child upgrade costs 15pts, total 65pts
   - expectedState:
       forces:

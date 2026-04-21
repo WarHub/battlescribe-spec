@@ -49,7 +49,7 @@ steps:
   - action: selectChildEntry
     forceId: ${{ steps.add-patrol.forceId }}
     selectionId: ${{ steps.select-parent-unit.selectionId }}
-    entryId: CHILD_0
+    entryId: se-child
 
   # scope=ancestor walks the parent chain from the child. The parent
   # selection was created from se-parent → instanceOf matches → name set.

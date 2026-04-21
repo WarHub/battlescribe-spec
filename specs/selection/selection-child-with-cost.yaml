@@ -51,7 +51,7 @@ steps:
   - action: selectChildEntry
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: CHILD_0
+    entryId: se-child
 
   - expectedState:
       costs:
