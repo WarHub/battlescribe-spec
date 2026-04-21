@@ -1,7 +1,7 @@
 id: rule-publication
 category: selection
 description: Rule on a selection preserves its publicationId
-tags: [newrecruit-missing-feature]
+tags: []
 
 setup:
   gameSystem:
@@ -43,11 +43,3 @@ steps:
                 - name: Steadfast
                   description: This unit never falls back
                   publicationId: pub-1
-      engines:
-        newrecruit:
-          forces:
-            - selections:
-                - name: Marine
-                  rules:
-                    - name: Steadfast
-                      description: This unit never falls back

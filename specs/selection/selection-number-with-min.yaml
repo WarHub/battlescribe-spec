@@ -1,7 +1,7 @@
 id: selection-number-with-min
 category: selection
 description: Entry with min=3 constraint — verify initial selection number respects min
-tags: [selection, number, constraint, min, newrecruit-bug]
+tags: [selection, number, constraint, min]
 
 setup:
   gameSystem:
@@ -53,17 +53,3 @@ steps:
                 - name: Trooper
                   type: model
                   number: 3
-      engines:
-        # NR doesn't apply min constraint to initial number — gets number=1, reports error
-        newrecruit:
-          forces:
-            - selectionCount: 1
-              selections:
-                - name: Parent Unit
-                  children:
-                    - name: Trooper
-                      type: model
-                      number: 1
-          errors:
-            - on: selection se-parent
-              from: se-trooper/con-min

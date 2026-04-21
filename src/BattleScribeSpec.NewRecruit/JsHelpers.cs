@@ -33,6 +33,39 @@ internal static class JsHelpers
                 return [];
             };
 
+            // Navigate to a force at a given path (array of indices).
+            // path=[0] → first root force; path=[0,1] → second child of first root force.
+            // NR flattens ALL descendant forces under getForces() at every level,
+            // so we must filter to only direct children at each step.
+            window.getForceAtPath = function(army, path) {
+                let forces = getForces(army).filter(f => !f.getParent?.()?.isForce?.());
+                for (let i = 0; i < path.length; i++) {
+                    if (path[i] >= forces.length) return null;
+                    const current = forces[path[i]];
+                    if (i < path.length - 1) {
+                        // Filter to direct children of current force
+                        const all = current.getForces?.() || [];
+                        forces = all.filter(cf => cf.getParentForce?.() === current
+                            || cf.getParentForce?.() === (current?.__v_raw || current));
+                    } else {
+                        return current;
+                    }
+                }
+                return null;
+            };
+
+            // Navigate to a selection at a given path within a force.
+            // path=[0] → first selection; path=[0,2] → third child of first selection.
+            window.getSelectionAtPath = function(force, path) {
+                let parent = force;
+                for (let i = 0; i < path.length; i++) {
+                    const sels = getSortedSelections(parent);
+                    if (path[i] >= sels.length) return null;
+                    parent = sels[path[i]];
+                }
+                return parent === force ? null : parent;
+            };
+
             window.getSortedSelections = function(force) {
                 const sels = getSelections(force);
                 const entryOrder = window.__bsspec?.entryOrder || [];
@@ -71,27 +104,6 @@ internal static class JsHelpers
                 return null;
             };
 
-            window.findSelectorByName = function(node, targetName) {
-                if (!node) return null;
-                if (node.getName?.() === targetName || node.name === targetName) return node;
-                const sels = node.selectors || [];
-                for (const s of sels) {
-                    if (s.getName?.() === targetName || s.name === targetName) return s;
-                    if (typeof s.first === 'function') {
-                        const inst = s.first();
-                        if (inst?.selectors) {
-                            const found = findSelectorByName(inst, targetName);
-                            if (found) return found;
-                        }
-                    }
-                    if (s.selectors) {
-                        const found = findSelectorByName(s, targetName);
-                        if (found) return found;
-                    }
-                }
-                return null;
-            };
-
             // --- State reader (used by NewRecruitStateReader.cs) ---
 
             window.__bsspec_readState = function() {
@@ -122,15 +134,28 @@ internal static class JsHelpers
                     if (!forces?.length) forces = army.getChildren?.();
                     if (!forces?.length) forces = [];
                     if (!Array.isArray(forces)) return [];
-                    return forces.map(f => ({
+                    // NR flattens all forces (including children) under army.getForces().
+                    // Filter to only root forces whose parent is not a force.
+                    return forces.filter(f => !f.getParent?.()?.isForce?.()).map(f => extractForce(f));
+                }
+
+                function extractForce(f) {
+                    const allChildren = f.getForces?.() || [];
+                    // NR flattens all descendants — filter to direct children only.
+                    const directChildren = Array.isArray(allChildren)
+                        ? allChildren.filter(cf => cf.getParentForce?.() === f
+                            || cf.getParentForce?.() === (f?.__v_raw || f))
+                        : [];
+                    return {
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
                         selections: extractSelections(f, false),
+                        childForces: directChildren.map(cf => extractForce(cf)),
                         profiles: extractProfiles(f),
                         rules: extractRules(f),
-                        publicationId: f.publicationId || null,
-                        page: f.page != null ? String(f.page) : null
-                    }));
+                        publicationId: f.publication?.id || f.source?.publication?.id || null,
+                        page: (f.page ?? f.source?.page) != null ? String(f.page ?? f.source?.page) : null
+                    };
                 }
 
                 function extractSelections(parent, sortByEntryOrder) {
@@ -179,6 +204,10 @@ internal static class JsHelpers
                     const profiles = sel.getModifiedProfiles?.() || [];
                     const rules = sel.getModifiedRules?.() || [];
                     const cats = sel.getSelectionCategories?.() || [];
+                    const src = sel.source;
+                    const selPage = src?.page != null ? String(src.page) : null;
+                    const selPubId = src?.publication?.id || null;
+                    const selPubName = src?.publication?.name || null;
 
                     return {
                         name: sel.getName?.() || '',
@@ -189,7 +218,7 @@ internal static class JsHelpers
                         costs: costs.map(c => ({
                             name: c.name || '',
                             typeId: c.typeId || '',
-                            value: c.value || 0
+                            value: (c.value || 0) * (sel.getAmount?.() || 1)
                         })),
                         children: extractSelections(sel, true),
                         profiles: profiles.map(p => ({
@@ -198,8 +227,7 @@ internal static class JsHelpers
                             typeName: p.typeName || null,
                             hidden: p.hidden || false,
                             page: p.page != null ? String(p.page) : null,
-                            publicationId: p.publicationId || null,
-                            characteristics: (p.characteristics || []).map(ch => ({
+                            publicationId: p.publication?.id || null,                            characteristics: (p.characteristics || []).map(ch => ({
                                 name: ch.name || '',
                                 typeId: ch.typeId || '',
                                 value: (ch.value ?? '').toString()
@@ -210,7 +238,7 @@ internal static class JsHelpers
                             description: r.description || '',
                             hidden: r.hidden || false,
                             page: r.page != null ? String(r.page) : null,
-                            publicationId: r.publicationId || null
+                            publicationId: r.publication?.id || null
                         })),
                         categories: cats.map(cat => ({
                             name: cat.name || cat.getName?.() || '',
@@ -218,10 +246,12 @@ internal static class JsHelpers
                             primary: cat.primary || false,
                             profiles: extractProfiles(cat),
                             rules: extractRules(cat),
-                            publicationId: cat.publicationId || null,
+                            publicationId: cat.publication?.id || null,
                             page: cat.page != null ? String(cat.page) : null
                         })),
-                        page: null
+                        page: selPage != null ? String(selPage) : null,
+                        publicationId: selPubId,
+                        publicationName: selPubName
                     };
                 }
 
@@ -233,7 +263,7 @@ internal static class JsHelpers
                         typeName: p.typeName || null,
                         hidden: p.hidden || false,
                         page: p.page != null ? String(p.page) : null,
-                        publicationId: p.publicationId || null,
+                        publicationId: p.publication?.id || null,
                         characteristics: (p.characteristics || []).map(ch => ({
                             name: ch.name || '',
                             typeId: ch.typeId || '',
@@ -249,43 +279,37 @@ internal static class JsHelpers
                         description: r.description || '',
                         hidden: r.hidden || false,
                         page: r.page != null ? String(r.page) : null,
-                        publicationId: r.publicationId || null
+                        publicationId: r.publication?.id || null
                     }));
                 }
 
                 function extractTotalCosts(army) {
-                    const apiCosts = army.calcTotalCosts?.() || [];
-                    if (Array.isArray(apiCosts) && apiCosts.length > 0) {
-                        return apiCosts.map(c => ({
-                            name: c.name || '',
-                            typeId: c.typeId || '',
-                            value: c.value || 0
-                        }));
+                    // Manual summation for ALL cost types (visible and hidden).
+                    // NR's calcTotalCosts() omits hidden types, so we use uniform
+                    // summation from individual selections for correctness.
+                    const result = {};
+                    for (const force of (army.getForces?.() || [])) {
+                        sumNode(force);
                     }
-                    const forces = army.getForces?.() || [];
-                    const totals = {};
-                    function sumNodeCosts(node) {
-                        const children = node.getSelections?.() || node.getChildren?.() || [];
-                        for (const sel of children) {
+                    function sumNode(node) {
+                        for (const sel of (node.getSelections?.() || node.getChildren?.() || [])) {
                             const amount = sel.getAmount?.() ?? 0;
                             if (amount <= 0) continue;
-                            const costs = sel.getCosts?.() || [];
-                            for (const c of costs) {
+                            for (const c of (sel.getCosts?.() || [])) {
                                 const tid = c.typeId || '';
-                                if (!totals[tid]) totals[tid] = { name: c.name || '', typeId: tid, value: 0 };
-                                totals[tid].value += (c.value || 0) * amount;
+                                if (!tid) continue;
+                                if (!result[tid]) result[tid] = { name: c.name || '', typeId: tid, value: 0 };
+                                result[tid].value += (c.value || 0) * amount;
                             }
-                            sumNodeCosts(sel);
+                            sumNode(sel);
                         }
                     }
-                    for (const force of forces) {
-                        sumNodeCosts(force);
-                    }
-                    const result = Object.values(totals);
-                    if (result.length > 0) return result;
 
-                    const spec = window.__bsspec;
-                    const gs = spec?.book?.catalogue?.gameSystem;
+                    const vals = Object.values(result);
+                    if (vals.length > 0) return vals;
+
+                    // Fallback for empty roster: zero-valued from game system
+                    const gs = window.__bsspec?.book?.catalogue?.gameSystem;
                     if (gs?.costTypes) {
                         return gs.costTypes.map(ct => ({
                             name: ct.name || '',
@@ -312,13 +336,6 @@ internal static class JsHelpers
                                 }
                             })(sel);
                         }
-                    }
-
-                    const costTypeLookup = [];
-                    const costTypes = spec?.book?.catalogue?.gameSystem?.costTypes || [];
-                    const costLimitConfig = spec?.costLimitConfig || {};
-                    for (const ct of costTypes) {
-                        costTypeLookup.push({ name: ct.name, typeId: ct.id });
                     }
 
                     const seen = new Set();
@@ -392,7 +409,17 @@ internal static class JsHelpers
                             }
                         }
 
+                        // Roster-level errors: only emit cost limit violations
                         if (ownerType === 'roster') {
+                            if (e.constraint?.type === 'max' && e.constraint?.field) {
+                                result.push({
+                                    message: cleanMsg,
+                                    ownerType: 'roster',
+                                    ownerEntryId: null,
+                                    entryId: 'costLimits',
+                                    constraintId: e.constraint.field
+                                });
+                            }
                             return;
                         }
 
@@ -428,23 +455,6 @@ internal static class JsHelpers
                         }
                         for (const sel of (f.getSelections?.() || []))
                             walkSel(sel);
-                    }
-
-                    const totalCosts = extractTotalCosts(army);
-                    for (const ct of costTypeLookup) {
-                        const configuredLimit = costLimitConfig[ct.name];
-                        if (configuredLimit === undefined || configuredLimit === null || configuredLimit < 0) continue;
-                        const actual = totalCosts.find(c => c.typeId === ct.typeId);
-                        const totalValue = actual?.value || 0;
-                        if (totalValue > configuredLimit) {
-                            result.push({
-                                message: '',
-                                ownerType: 'roster',
-                                ownerEntryId: null,
-                                entryId: 'costLimits',
-                                constraintId: ct.typeId
-                            });
-                        }
                     }
 
                     if (result.length === 0) {

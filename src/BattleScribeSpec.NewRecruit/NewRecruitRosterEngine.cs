@@ -24,8 +24,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     private bool _disposed;
     private ProtocolGameSystem? _gameSystem;
     private ProtocolCatalogue[]? _catalogues;
-    // Maps force index → catalogue index (tracked as forces are added)
-    private readonly List<int> _forceCatalogueMap = [];
+    // Maps force path (e.g. "0" for root, "0,0" for child) → catalogue index.
+    // Populated as forces are added, used to resolve entry IDs for SelectEntry.
+    private readonly Dictionary<string, int> _forceCatalogueMap = [];
     private string _rosterName = "Spec Test";
 
     /// <summary>
@@ -129,22 +130,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                     CollectEntryIds(cat.SelectionEntries, entryOrder);
             }
 
-            // Build cost limit config from game system cost types
-            Dictionary<string, double?>? costLimitConfig = null;
-            if (gameSystem.CostTypes is { Count: > 0 })
-            {
-                costLimitConfig = new Dictionary<string, double?>();
-                foreach (var ct in gameSystem.CostTypes)
-                    costLimitConfig[ct.Name] = ct.DefaultCostLimit;
-            }
-
             // Build files array and catalogue name list for multi-catalogue support
             var catFiles = allCatXml.Select(c => new { name = c.FileName, path = $"/spec/{c.FileName}", data = c.Xml }).ToArray();
             var catNames = catalogues.Select(c => c.Name).ToArray();
 
-            // Single consolidated EvaluateAsync: setup + entryOrder + costLimitConfig
+            // Single consolidated EvaluateAsync: setup + entryOrder
             var setupResult = await Timings.TimeAsync("SetupJsEval", () => _browser.Page.EvaluateAsync<string?>("""
-                async ([gstXml, catFiles, systemId, catNames, entryOrder, costLimitConfig, rosterName]) => {
+                async ([gstXml, catFiles, systemId, catNames, entryOrder, rosterName]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
@@ -201,6 +193,18 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         if (!roster) return 'Failed to create roster';
                         roster.setCustomName(rosterName);
 
+                        // Apply defaultCostLimit as the actual max cost limits.
+                        // NR's createRoster uses costs[].value (always 0) as limits;
+                        // we must explicitly set them from defaultCostLimit.
+                        const maxCosts = roster.getMaxCosts?.() || [];
+                        if (maxCosts.length > 0) {
+                            const corrected = maxCosts.map(c => ({
+                                ...c,
+                                value: c.defaultCostLimit >= 0 ? c.defaultCostLimit : -1
+                            }));
+                            roster.setMaxCosts(corrected);
+                        }
+
                         const autoForces = roster.getForces?.() || [];
                         for (const f of [...autoForces]) {
                             if (typeof f.delete === 'function') f.delete();
@@ -225,14 +229,12 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         await listsStore.addList({row, army: roster, book: primaryBook});
 
                         // Save references globally — books array for multi-catalogue AddForce
-                        // Also inject entryOrder and costLimitConfig inline
                         window.__bsspec = {
                             army: roster,
                             book: primaryBook,
                             books: allBooks.map(b => b.bookData),
                             row,
-                            entryOrder: entryOrder || null,
-                            costLimitConfig: costLimitConfig || null
+                            entryOrder: entryOrder || null
                         };
 
                         return null; // success
@@ -242,7 +244,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 }
                 """, new object[] { gstXml, catFiles, gameSystem.Id, catNames,
                     entryOrder?.ToArray() ?? (object)Array.Empty<string>(),
-                    costLimitConfig ?? (object)new Dictionary<string, double?>(),
                     _rosterName }));
 
             if (setupResult != null)
@@ -335,6 +336,16 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         if (!roster) return 'Failed to create roster';
                         roster.setCustomName(rosterName);
 
+                        // Apply defaultCostLimit as actual max cost limits
+                        const maxCosts = roster.getMaxCosts?.() || [];
+                        if (maxCosts.length > 0) {
+                            const corrected = maxCosts.map(c => ({
+                                ...c,
+                                value: c.defaultCostLimit >= 0 ? c.defaultCostLimit : -1
+                            }));
+                            roster.setMaxCosts(corrected);
+                        }
+
                         const autoForces = roster.getForces?.() || [];
                         for (const f of [...autoForces]) {
                             if (typeof f.delete === 'function') f.delete();
@@ -384,17 +395,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         }
                         window.__bsspec.entryOrder = entryOrder;
 
-                        // Populate costLimitConfig from game system cost types
-                        // so the reader can distinguish "no limit" from "limit=0".
-                        const costLimitConfig = {};
-                        const gs = primaryBook?.catalogue?.gameSystem;
-                        if (gs?.costTypes) {
-                            for (const ct of gs.costTypes) {
-                                costLimitConfig[ct.name] = ct.defaultCostLimit ?? -1;
-                            }
-                        }
-                        window.__bsspec.costLimitConfig = costLimitConfig;
-
                         return null; // success
                     } catch(e) {
                         return 'Setup error: ' + e.message + '\n' + e.stack;
@@ -417,73 +417,109 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return errors;
     }
 
-    public void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
-    {
-        if (forcePath.Length > 0)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        NewRecruitActions.AddForceByNameAsync(_browser.Page, forceName, catalogueIndex)
-            .GetAwaiter().GetResult();
-        _forceCatalogueMap.Add(catalogueIndex);
-    }
-
-    public void SelectEntryByName(int[] forcePath, string entryName)
-    {
-        if (forcePath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        NewRecruitActions.SelectEntryByNameAsync(_browser.Page, forcePath[0], entryName)
-            .GetAwaiter().GetResult();
-    }
-
-    public void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
-    {
-        if (forcePath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        if (selectionPath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested selection paths.");
-        NewRecruitActions.SelectChildEntryByNameAsync(_browser.Page, forcePath[0], selectionPath[0], childEntryName)
-            .GetAwaiter().GetResult();
-    }
-
     public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
     {
-        if (forcePath.Length > 0)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        // Build combined list: GS force entries + catalogue force entries
-        var allForceEntries = new List<ProtocolForceEntry>();
-        if (_gameSystem?.ForceEntries != null)
-            allForceEntries.AddRange(_gameSystem.ForceEntries);
-        if (_catalogues != null)
-            foreach (var cat in _catalogues)
-                if (cat.ForceEntries != null)
-                    allForceEntries.AddRange(cat.ForceEntries);
-        var forceEntry = allForceEntries.ElementAtOrDefault(forceEntryIndex);
-        var forceId = forceEntry?.Id;
-        if (forceId is null)
-            throw new ArgumentOutOfRangeException(nameof(forceEntryIndex),
-                $"Force entry index {forceEntryIndex} out of range ({allForceEntries.Count} available)");
-        NewRecruitActions.AddForceByIdAsync(_browser.Page, forceId, catalogueIndex)
+        if (forcePath.Length == 0)
+        {
+            // Root force: resolve ID from setup data
+            var allForceEntries = new List<ProtocolForceEntry>();
+            if (_gameSystem?.ForceEntries != null)
+                allForceEntries.AddRange(_gameSystem.ForceEntries);
+            if (_catalogues != null)
+                foreach (var cat in _catalogues)
+                    if (cat.ForceEntries != null)
+                        allForceEntries.AddRange(cat.ForceEntries);
+            var forceEntry = allForceEntries.ElementAtOrDefault(forceEntryIndex);
+            var forceId = forceEntry?.Id;
+            if (forceId is null)
+                throw new ArgumentOutOfRangeException(nameof(forceEntryIndex),
+                    $"Force entry index {forceEntryIndex} out of range ({allForceEntries.Count} available)");
+            // Determine the index this new root force will get
+            var newIndex = _forceCatalogueMap.Count(kv => !kv.Key.Contains(','));
+            NewRecruitActions.AddForceByIdAsync(_browser.Page, forceId, catalogueIndex)
+                .GetAwaiter().GetResult();
+            _forceCatalogueMap[newIndex.ToString()] = catalogueIndex;
+            return;
+        }
+        // Nested: find child force entry under parent's force entry
+        var childForceId = ResolveChildForceEntryId(forcePath, forceEntryIndex);
+        NewRecruitActions.AddChildForceByIdAsync(_browser.Page, forcePath, childForceId, catalogueIndex)
             .GetAwaiter().GetResult();
-        _forceCatalogueMap.Add(catalogueIndex);
+        // Track the new child's path — it's appended as the next child index under forcePath
+        var siblingCount = _forceCatalogueMap.Count(kv =>
+        {
+            var parentKey = string.Join(",", forcePath);
+            return kv.Key.StartsWith(parentKey + ",")
+                && kv.Key[(parentKey.Length + 1)..].IndexOf(',') < 0;
+        });
+        var childPath = string.Join(",", forcePath.Append(siblingCount));
+        _forceCatalogueMap[childPath] = catalogueIndex;
     }
 
     public void RemoveForce(int[] forcePath)
     {
-        if (forcePath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        var forceIndex = forcePath[0];
-        NewRecruitActions.RemoveForceAsync(_browser.Page, forceIndex)
+        if (forcePath.Length == 0)
+            throw new ArgumentException("forcePath cannot be empty for RemoveForce.");
+        NewRecruitActions.RemoveForceAsync(_browser.Page, forcePath)
             .GetAwaiter().GetResult();
-        if (forceIndex < _forceCatalogueMap.Count)
-            _forceCatalogueMap.RemoveAt(forceIndex);
+        var pathKey = string.Join(",", forcePath);
+        // Remove this force and any children from the catalogue map
+        var keysToRemove = _forceCatalogueMap.Keys
+            .Where(k => k == pathKey || k.StartsWith(pathKey + ","))
+            .ToList();
+        foreach (var key in keysToRemove)
+            _forceCatalogueMap.Remove(key);
+        // Renumber sibling keys after the removed force to stay in sync with NR's indices
+        RenumberForceCatalogueMap(forcePath);
+    }
+
+    /// <summary>
+    /// After removing a force at <paramref name="removedPath"/>, decrement the index
+    /// at that depth for all sibling entries that came after the removed one.
+    /// E.g. removing [0] shifts "1"→"0", "2"→"1"; removing [0,1] shifts [0,2]→[0,1].
+    /// </summary>
+    private void RenumberForceCatalogueMap(int[] removedPath)
+    {
+        var depth = removedPath.Length - 1;
+        var removedIndex = removedPath[depth];
+        var prefix = depth > 0 ? string.Join(",", removedPath.Take(depth)) + "," : "";
+        // Find keys that are siblings at the same depth with a higher index
+        var toRenumber = new List<(string oldKey, string newKey, int catIdx)>();
+        foreach (var (key, catIdx) in _forceCatalogueMap.ToList())
+        {
+            if (!key.StartsWith(prefix))
+                continue;
+            var suffix = key[prefix.Length..];
+            var parts = suffix.Split(',');
+            if (!int.TryParse(parts[0], out var siblingIndex) || siblingIndex <= removedIndex)
+                continue;
+            parts[0] = (siblingIndex - 1).ToString();
+            var newKey = prefix + string.Join(",", parts);
+            toRenumber.Add((key, newKey, catIdx));
+        }
+        foreach (var (oldKey, newKey, catIdx) in toRenumber)
+        {
+            _forceCatalogueMap.Remove(oldKey);
+            _forceCatalogueMap[newKey] = catIdx;
+        }
     }
 
     public void SelectEntry(int[] forcePath, int entryIndex)
     {
-        if (forcePath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        var forceIndex = forcePath[0];
-        // Determine which catalogue this force belongs to
-        var catIdx = forceIndex < _forceCatalogueMap.Count ? _forceCatalogueMap[forceIndex] : 0;
+        if (forcePath.Length == 0)
+            throw new ArgumentException("forcePath cannot be empty for SelectEntry.");
+        // Determine which catalogue this force belongs to.
+        // Look up the exact force path first, fall back to ancestors.
+        var catIdx = 0;
+        for (var depth = forcePath.Length; depth > 0; depth--)
+        {
+            var pathKey = string.Join(",", forcePath.Take(depth));
+            if (_forceCatalogueMap.TryGetValue(pathKey, out var idx))
+            {
+                catIdx = idx;
+                break;
+            }
+        }
         var cat = _catalogues?.ElementAtOrDefault(catIdx) ?? _catalogues?.FirstOrDefault();
         // Build ordered list: catalogue entries, then GameSystem-level entries
         var entryIds = (cat?.SelectionEntries ?? []).Select(e => e.Id)
@@ -494,27 +530,25 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         if (entryIndex >= entryIds.Count)
             throw new ArgumentOutOfRangeException(nameof(entryIndex),
                 $"Entry index {entryIndex} out of range (catalogue has {entryIds.Count} entries)");
-        NewRecruitActions.SelectEntryByIdAsync(_browser.Page, forceIndex, entryIds[entryIndex])
+        NewRecruitActions.SelectEntryByIdAsync(_browser.Page, forcePath, entryIds[entryIndex])
             .GetAwaiter().GetResult();
     }
 
     public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex)
     {
-        if (forcePath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        if (selectionPath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested selection paths.");
-        var forceIndex = forcePath[0];
-        var selectionIndex = selectionPath[0];
-        // Resolve child entry ID: find the parent selection's entry,
-        // then flatten all children (direct, groups, links) by index
+        if (forcePath.Length == 0)
+            throw new ArgumentException("forcePath cannot be empty for SelectChildEntry.");
+        // Resolve child entry ID from the state tree
         var state = GetRosterState();
-        if (forceIndex >= state.Forces.Count)
+        // Navigate state to find the parent selection
+        var forceState = NavigateForceState(state, forcePath);
+        if (forceState is null)
             throw new ArgumentOutOfRangeException(nameof(forcePath));
-        if (selectionIndex >= state.Forces[forceIndex].Selections.Count)
+        var selectionState = NavigateSelectionState(forceState.Selections, selectionPath);
+        if (selectionState is null)
             throw new ArgumentOutOfRangeException(nameof(selectionPath));
 
-        var parentEntryId = state.Forces[forceIndex].Selections[selectionIndex].EntryId;
+        var parentEntryId = selectionState.EntryId;
         var parentEntry = FindEntryById(parentEntryId);
         var childEntries = FlattenChildEntries(parentEntry);
         if (childEntryIndex >= childEntries.Count)
@@ -522,7 +556,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 $"Child entry index {childEntryIndex} out of range for parent '{parentEntryId}'");
 
         var childEntryId = childEntries[childEntryIndex];
-        NewRecruitActions.SelectChildEntryByIdAsync(_browser.Page, forceIndex, selectionIndex, childEntryId)
+        NewRecruitActions.SelectChildEntryByIdAsync(_browser.Page, forcePath, selectionPath, childEntryId)
             .GetAwaiter().GetResult();
     }
 
@@ -563,29 +597,19 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public void DeselectSelection(int[] forcePath, int[] selectionPath)
     {
-        if (forcePath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        if (selectionPath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested selection paths.");
-        NewRecruitActions.DeselectSelectionAsync(_browser.Page, forcePath[0], selectionPath[0])
+        NewRecruitActions.DeselectSelectionAsync(_browser.Page, forcePath, selectionPath)
             .GetAwaiter().GetResult();
     }
 
-    public void SetSelectionCount(int[] forcePath, int entryIndex, int count)
+    public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count)
     {
-        if (forcePath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        NewRecruitActions.SetSelectionCountAsync(_browser.Page, forcePath[0], entryIndex, count)
+        NewRecruitActions.SetSelectionCountAsync(_browser.Page, forcePath, selectionPath, count)
             .GetAwaiter().GetResult();
     }
 
     public void DuplicateSelection(int[] forcePath, int[] selectionPath)
     {
-        if (forcePath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested force paths.");
-        if (selectionPath.Length != 1)
-            throw new NotSupportedException("NewRecruit does not support nested selection paths.");
-        NewRecruitActions.DuplicateSelectionAsync(_browser.Page, forcePath[0], selectionPath[0])
+        NewRecruitActions.DuplicateSelectionAsync(_browser.Page, forcePath, selectionPath)
             .GetAwaiter().GetResult();
     }
 
@@ -745,5 +769,84 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             ids.Add(entry.Id);
             CollectEntryIds(entry.SelectionEntries, ids);
         }
+    }
+
+    /// <summary>
+    /// Navigate the state tree to find a ForceState at the given path.
+    /// </summary>
+    private static ForceState? NavigateForceState(RosterState state, int[] forcePath)
+    {
+        if (forcePath.Length == 0) return null;
+        if (forcePath[0] >= state.Forces.Count) return null;
+        var force = state.Forces[forcePath[0]];
+        for (int i = 1; i < forcePath.Length; i++)
+        {
+            if (i >= forcePath.Length || forcePath[i] >= force.ChildForces.Count)
+                return null;
+            force = force.ChildForces[forcePath[i]];
+        }
+        return force;
+    }
+
+    /// <summary>
+    /// Navigate the state tree to find a SelectionState at the given path within a force.
+    /// </summary>
+    private static SelectionState? NavigateSelectionState(IReadOnlyList<SelectionState> selections, int[] selectionPath)
+    {
+        if (selectionPath.Length == 0) return null;
+        if (selectionPath[0] >= selections.Count) return null;
+        var sel = selections[selectionPath[0]];
+        for (int i = 1; i < selectionPath.Length; i++)
+        {
+            if (selectionPath[i] >= sel.Children.Count) return null;
+            sel = sel.Children[selectionPath[i]];
+        }
+        return sel;
+    }
+
+    /// <summary>
+    /// Resolve a child force entry ID by navigating the setup data's force entry tree.
+    /// The forcePath identifies the parent force; forceEntryIndex is the child index.
+    /// </summary>
+    private string ResolveChildForceEntryId(int[] parentForcePath, int childForceEntryIndex)
+    {
+        // Walk the force entry tree using the parent path
+        var allForceEntries = new List<ProtocolForceEntry>();
+        if (_gameSystem?.ForceEntries != null)
+            allForceEntries.AddRange(_gameSystem.ForceEntries);
+        if (_catalogues != null)
+            foreach (var cat in _catalogues)
+                if (cat.ForceEntries != null)
+                    allForceEntries.AddRange(cat.ForceEntries);
+
+        // Navigate to the parent force entry using the roster state to determine
+        // which force entries were used at each level
+        var state = GetRosterState();
+        var currentEntries = allForceEntries;
+        ForceState? currentForce = null;
+
+        for (int i = 0; i < parentForcePath.Length; i++)
+        {
+            var idx = parentForcePath[i];
+            IReadOnlyList<ForceState> forces = i == 0
+                ? state.Forces
+                : (currentForce?.ChildForces ?? (IReadOnlyList<ForceState>)[]);
+            if (idx >= forces.Count)
+                throw new ArgumentOutOfRangeException(nameof(parentForcePath));
+            currentForce = forces[idx];
+            // Find matching force entry by name
+            var matchingEntry = currentEntries.FirstOrDefault(fe =>
+                fe.Name == currentForce.Name);
+            if (matchingEntry is null)
+                throw new InvalidOperationException(
+                    $"Could not find force entry matching name '{currentForce.Name}'");
+            currentEntries = matchingEntry.ForceEntries ?? [];
+        }
+
+        if (childForceEntryIndex >= currentEntries.Count)
+            throw new ArgumentOutOfRangeException(nameof(childForceEntryIndex),
+                $"Child force entry index {childForceEntryIndex} out of range ({currentEntries.Count} available)");
+
+        return currentEntries[childForceEntryIndex].Id;
     }
 }

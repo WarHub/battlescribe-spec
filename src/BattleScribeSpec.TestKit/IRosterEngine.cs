@@ -61,10 +61,12 @@ public interface IRosterEngine : IDisposable
     void DeselectSelection(int[] forcePath, int[] selectionPath);
 
     /// <summary>
-    /// Set the number of instances for a selection entry.
+    /// Set the number of instances for a child selection.
     /// <paramref name="forcePath"/> identifies the target force.
+    /// <paramref name="selectionPath"/> identifies the child selection within the force (must have at least 2 elements).
+    /// Root selections are managed via <see cref="SelectEntry"/>/<see cref="DeselectSelection"/>, not count changes.
     /// </summary>
-    void SetSelectionCount(int[] forcePath, int entryIndex, int count);
+    void SetSelectionCount(int[] forcePath, int[] selectionPath, int count);
 
     /// <summary>
     /// Duplicate a selection within a force.
@@ -111,7 +113,7 @@ public interface IRosterEngine : IDisposable
     /// </summary>
     void Cleanup() { }
 
-    // ===== DataSource support (file-based setup + name-based actions) =====
+    // ===== DataSource support =====
 
     /// <summary>
     /// Configure the engine with raw BattleScribe XML files (e.g. from a DataSource).
@@ -119,26 +121,4 @@ public interface IRosterEngine : IDisposable
     /// </summary>
     IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
         => throw new NotSupportedException("This engine does not support file-based setup.");
-
-    /// <summary>
-    /// Add a force by name (for DataSource specs where index-based resolution isn't available).
-    /// <paramref name="forcePath"/> identifies the parent force (empty = top-level).
-    /// </summary>
-    void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
-        => throw new NotSupportedException("This engine does not support name-based force addition.");
-
-    /// <summary>
-    /// Select an entry by name within the specified force.
-    /// <paramref name="forcePath"/> identifies the target force.
-    /// </summary>
-    void SelectEntryByName(int[] forcePath, string entryName)
-        => throw new NotSupportedException("This engine does not support name-based entry selection.");
-
-    /// <summary>
-    /// Select a child entry by name under an existing selection.
-    /// <paramref name="forcePath"/> identifies the target force.
-    /// <paramref name="selectionPath"/> identifies the parent selection.
-    /// </summary>
-    void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
-        => throw new NotSupportedException("This engine does not support name-based child entry selection.");
 }

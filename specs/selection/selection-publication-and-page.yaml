@@ -1,7 +1,7 @@
 id: selection-publication-and-page
 category: selection
 description: Selection entry with both publicationId and page preserves both fields
-tags: [newrecruit-missing-feature]
+tags: []
 
 setup:
   gameSystem:
@@ -38,8 +38,3 @@ steps:
             - name: Marine
               publicationId: pub-1
               page: "42"
-      engines:
-        newrecruit:
-          forces:
-            - selections:
-                - name: Marine

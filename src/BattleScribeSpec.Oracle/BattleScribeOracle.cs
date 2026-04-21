@@ -769,6 +769,77 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
+    /// Add a child force under an existing parent force.
+    /// Resolves the child ForceEntry from the parent force's ForceEntry definition
+    /// and creates the child force via the Java engine.
+    /// </summary>
+    public void AddChildForce(Force parentForce, int childForceEntryIndex, int catalogueIndex = 0)
+    {
+        EnsureInitialized();
+        // Get the parent force's ForceEntry to find child force entries
+        var parentForceEntryId = parentForce.getEntryId();
+        var parentForceEntry = FindForceEntryById(parentForceEntryId);
+        if (parentForceEntry is null)
+            throw new InvalidOperationException(
+                $"Could not find ForceEntry '{parentForceEntryId}' for parent force '{parentForce.getName()}'.");
+
+        var childForceEntries = JavaListToList<ForceEntry>(parentForceEntry.getForceEntries());
+        if (childForceEntryIndex < 0 || childForceEntryIndex >= childForceEntries.Count)
+            throw new ArgumentOutOfRangeException(nameof(childForceEntryIndex),
+                $"Child force entry index {childForceEntryIndex} out of range ({childForceEntries.Count} available).");
+
+        var childForceEntry = childForceEntries[childForceEntryIndex];
+
+        if (catalogueIndex < 0) catalogueIndex = 0;
+        if (catalogueIndex >= _setupCatalogues.Count)
+            throw new ArgumentOutOfRangeException(nameof(catalogueIndex));
+        var catalogue = _setupCatalogues[catalogueIndex];
+        var linked = ResolveLinkedCatalogues(catalogue);
+
+        var linkedCatMap = new JavaHashMap();
+        if (linked.Count > 0)
+        {
+            foreach (var kvp in linked)
+                linkedCatMap.put(kvp.Key, kvp.Value);
+        }
+
+        var favourites = new JavaArrayList();
+        var errors = new JavaArrayList();
+        // Use the engine's native selectForce(parentForce, ...) to properly add as child
+        var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors);
+
+        if (childForce is null)
+            throw new InvalidOperationException("Java engine returned null when creating child force.");
+
+        _forceCatalogueMap[childForce] = catalogueIndex;
+    }
+
+    /// <summary>
+    /// Recursively search for a ForceEntry by ID in the setup force entries tree.
+    /// </summary>
+    private ForceEntry? FindForceEntryById(string? id)
+    {
+        if (id is null) return null;
+        foreach (var fe in _setupForceEntries)
+        {
+            var found = FindForceEntryRecursive(fe, id);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    private static ForceEntry? FindForceEntryRecursive(ForceEntry entry, string id)
+    {
+        if (entry.getId() == id) return entry;
+        foreach (var child in JavaListToList<ForceEntry>(entry.getForceEntries()))
+        {
+            var found = FindForceEntryRecursive(child, id);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Resolve linked catalogues for a catalogue by reading its CatalogueLink elements
     /// and looking up target catalogue IDs in the loaded catalogue dictionary.
     /// </summary>
@@ -838,12 +909,16 @@ public sealed class BattleScribeOracle : IDisposable
         var forces = GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        return GetEntriesForForce(forces[forceIndex]);
+    }
 
-        // Use the engine's catalogue manager (d.R()) which returns properly expanded entries.
-        // Entry links are resolved to copies with merged constraints and composite IDs.
+    /// <summary>
+    /// Get entries for a force object (supports both root and nested forces).
+    /// </summary>
+    public List<SelectionEntry> GetEntriesForForce(Force force)
+    {
         try
         {
-            var force = forces[forceIndex];
             var catMgr = _engine.e(force);
             if (catMgr != null)
             {
@@ -855,15 +930,13 @@ public sealed class BattleScribeOracle : IDisposable
             // Fall through to legacy path
         }
 
-        // Fallback: pre-computed entries (may lack entry link expansion)
-        var forceObj = forces[forceIndex];
-        if (_forceCatalogueMap.TryGetValue(forceObj, out var catIdx)
+        if (_forceCatalogueMap.TryGetValue(force, out var catIdx)
             && catIdx < _perCatalogueEntries.Count)
         {
             return _perCatalogueEntries[catIdx];
         }
         throw new InvalidOperationException(
-            $"No catalogue mapping found for force {forceIndex}. Force must be added via AddForceByIndex.");
+            "No catalogue mapping found for force. Force must be added via AddForceByIndex.");
     }
 
     /// <summary>
@@ -898,30 +971,21 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Get the names of available root selection entries for a force,
-    /// as resolved by the Java engine (respects import filtering and CatalogueLink merging).
+    /// Find and select an entry by name on a force.
+    /// Returns the index of the entry, or -1 if not found. Used by integration tests.
     /// </summary>
-    public List<string> GetAvailableEntryNamesForForce(int forceIndex)
+    public int SelectEntryByName(int forceIndex, string name)
     {
-        EnsureInitialized();
-        var forces = GetForces();
-        if (forceIndex < 0 || forceIndex >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forceIndex));
-        var force = forces[forceIndex];
-        var names = new List<string>();
-        var seen = new HashSet<string>();
-        var categories = JavaListToList<Category>(force.getCategories());
-        foreach (var category in categories)
+        var entries = GetEntriesForForce(forceIndex);
+        for (var i = 0; i < entries.Count; i++)
         {
-            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
-            foreach (var entry in entries)
+            if (string.Equals(entries[i].getName(), name, StringComparison.OrdinalIgnoreCase))
             {
-                var name = entry.getName() ?? "?";
-                if (seen.Add(name))
-                    names.Add(name);
+                SelectEntryByIndex(forceIndex, i);
+                return i;
             }
         }
-        return names;
+        return -1;
     }
 
     /// <summary>
@@ -1150,95 +1214,11 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Get list of force entry names (for test inspection).
+    /// Get the names of available force entries from the loaded game system.
     /// </summary>
     public List<string> GetAvailableForceEntryNames()
     {
         return _setupForceEntries.Select(fe => fe.getName() ?? "?").ToList();
-    }
-
-    public List<string> GetLoadedCatalogueNames() =>
-        _catalogues.Values.Select(c => $"{c.getName()} ({c.getId()})").ToList();
-
-    public int GetCatalogueIndexByName(string name)
-    {
-        for (int i = 0; i < _setupCatalogues.Count; i++)
-        {
-            if (string.Equals(_setupCatalogues[i].getName(), name, StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-        return -1;
-    }
-
-    /// <summary>
-    /// Select a catalogue entry by name on a specific force.
-    /// Uses the engine's resolved entry index (via categories) to find entries
-    /// with proper composite IDs, ensuring costs and modifiers propagate correctly.
-    /// Returns count of selections created, or -1 if not found.
-    /// </summary>
-    public int SelectEntryByNameOnForce(string entryName, int forceIndex)
-    {
-        EnsureInitialized();
-        var forces = GetForces();
-        if (forceIndex < 0 || forceIndex >= forces.Count) return -1;
-
-        var force = forces[forceIndex];
-
-        // Use engine's category API to get properly resolved entries.
-        // The engine resolves entry links during init, creating entries with
-        // composite IDs (linkId::sharedId) that match its internal index.
-        // Raw catalogue entries have unresolved IDs that the engine can't find
-        // during refresh, causing cost calculation to silently fail.
-        var categories = JavaListToList<Category>(force.getCategories());
-        foreach (var category in categories)
-        {
-            var entries = JavaListToList<SelectionEntry>(_engine.a(category));
-            foreach (var entry in entries)
-            {
-                if (entry.getName() == entryName)
-                {
-                    var sels = SelectEntry(force, entry);
-                    return sels.Count;
-                }
-            }
-        }
-        return -1;
-    }
-
-    /// <summary>
-    /// Get all available entry names from all forces using the engine's resolved entries.
-    /// </summary>
-    public List<string> GetAllAvailableEntryNames()
-    {
-        EnsureInitialized();
-        var names = new HashSet<string>();
-        var forces = GetForces();
-        foreach (var force in forces)
-        {
-            var categories = JavaListToList<Category>(force.getCategories());
-            foreach (var category in categories)
-            {
-                var entries = JavaListToList<SelectionEntry>(_engine.a(category));
-                foreach (var entry in entries)
-                    names.Add(entry.getName() ?? "?");
-            }
-        }
-        return names.OrderBy(x => x).ToList();
-    }
-
-    /// <summary>
-    /// Find force entry index by name (for AddForceByIndex).
-    /// Returns -1 if not found.
-    /// </summary>
-    public int GetForceEntryIndexByName(string name)
-    {
-        for (int i = 0; i < _setupForceEntries.Count; i++)
-        {
-            var feName = _setupForceEntries[i].getName();
-            if (feName != null && feName.Contains(name, StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-        return -1;
     }
 
     /// <summary>

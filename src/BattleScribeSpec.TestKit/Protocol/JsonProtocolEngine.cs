@@ -56,11 +56,6 @@ public sealed class JsonProtocolEngine : IRosterEngine
         SendAction(new ActionCommand { Action = "addForce", ForcePath = forcePath, ForceEntryIndex = forceEntryIndex, CatalogueIndex = catalogueIndex });
     }
 
-    public void AddForceByName(int[] forcePath, string forceName, string? catalogueName = null, int catalogueIndex = 0)
-    {
-        SendAction(new ActionCommand { Action = "addForce", ForcePath = forcePath, ForceEntryName = forceName, CatalogueName = catalogueName, CatalogueIndex = catalogueIndex });
-    }
-
     public void RemoveForce(int[] forcePath)
     {
         SendAction(new ActionCommand { Action = "removeForce", ForcePath = forcePath });
@@ -69,11 +64,6 @@ public sealed class JsonProtocolEngine : IRosterEngine
     public void SelectEntry(int[] forcePath, int entryIndex)
     {
         SendAction(new ActionCommand { Action = "selectEntry", ForcePath = forcePath, EntryIndex = entryIndex });
-    }
-
-    public void SelectEntryByName(int[] forcePath, string entryName)
-    {
-        SendAction(new ActionCommand { Action = "selectEntry", ForcePath = forcePath, EntryName = entryName });
     }
 
     public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex)
@@ -87,17 +77,6 @@ public sealed class JsonProtocolEngine : IRosterEngine
         });
     }
 
-    public void SelectChildEntryByName(int[] forcePath, int[] selectionPath, string childEntryName)
-    {
-        SendAction(new ActionCommand
-        {
-            Action = "selectChildEntry",
-            ForcePath = forcePath,
-            SelectionPath = selectionPath,
-            ChildEntryName = childEntryName,
-        });
-    }
-
     public void DeselectSelection(int[] forcePath, int[] selectionPath)
     {
         SendAction(new ActionCommand
@@ -108,13 +87,13 @@ public sealed class JsonProtocolEngine : IRosterEngine
         });
     }
 
-    public void SetSelectionCount(int[] forcePath, int entryIndex, int count)
+    public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count)
     {
         SendAction(new ActionCommand
         {
             Action = "setSelectionCount",
             ForcePath = forcePath,
-            EntryIndex = entryIndex,
+            SelectionPath = selectionPath,
             Count = count,
         });
     }

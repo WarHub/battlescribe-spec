@@ -37,30 +37,6 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     }
 
     [SkippableFact]
-    public void LoadGameSystemAndCatalogue_ViaJavaDeserializer()
-    {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
-
-        using var oracle = new BattleScribeOracle();
-        var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
-        oracle.LoadGameSystemFile(gstFile);
-
-        // Load a specific catalogue (Space Marines is common)
-        var catFiles = Directory.GetFiles(Wh40kDataDir, "*.cat");
-        var smCat = catFiles.FirstOrDefault(f => f.Contains("Space Marines", StringComparison.OrdinalIgnoreCase))
-            ?? catFiles.First();
-        oracle.LoadCatalogueFile(smCat);
-
-        var errors = oracle.InitializeFromLoadedData();
-        output.WriteLine($"Loaded {Path.GetFileName(smCat)}");
-        output.WriteLine($"Init errors: {errors.Count}");
-
-        var forceEntries = oracle.GetAvailableForceEntryNames();
-        output.WriteLine($"Force entries: {string.Join(", ", forceEntries)}");
-        Assert.NotEmpty(forceEntries);
-    }
-
-    [SkippableFact]
     public void AddForce_WithRealData()
     {
         Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");

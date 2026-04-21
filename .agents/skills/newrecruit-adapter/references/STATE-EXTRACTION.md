@@ -42,8 +42,9 @@ const row = bsspec.row;
 | `sel.getModifiedProfiles?.()` | Profiles[] | Includes modifier effects |
 | `sel.getModifiedRules?.()` | Rules[] | Includes modifier effects |
 | `sel.getSelectionCategories?.()` | Categories[] | Via category links |
-| *(not available)* | Page | Always null |
-| source entry definition | PublicationId | From entry definition |
+| `sel.source?.page` | Page | Number in NR, must stringify; `sel.page` is always undefined |
+| `sel.source?.publication?.id` | PublicationId | Via resolved `.publication` object on source; `sel.publication` is undefined |
+| `sel.source?.publication?.name` | PublicationName | Same `.publication` object on source |
 
 ## Selection sorting
 
@@ -65,6 +66,9 @@ alphabetically.
 | `force.availableEntries` | AvailableEntryCount | Count of selectable entries |
 | `force.profiles` | Profiles[] | Force-level profiles |
 | `force.rules` | Rules[] | Force-level rules |
+| `f.source?.publication?.id` | PublicationId | Via resolved `.publication` object on source |
+| `f.source?.publication?.name` | PublicationName | Same `.publication` object on source |
+| `f.source?.page` | Page | Number in NR, must stringify |
 
 ## Cost state mapping
 
@@ -81,6 +85,10 @@ for (const [typeId, ct] of Object.entries(catalogue.costIndex || {})) {
 
 Total costs are calculated by summing selection costs recursively.
 
+**Important**: NR's `army.calcTotalCosts()` omits hidden cost types. The adapter
+always uses manual summation from individual selections' `getCosts()` to include
+all cost types (visible and hidden) in roster-level totals.
+
 ## Validation errors
 
 NR validation errors are derived by running constraint checks and then walking
@@ -88,11 +96,13 @@ the roster hierarchy:
 
 - Invoke `checkConstraints()` on the current army/roster to populate
   constraint state.
+- Cost limit errors are handled natively by NR after applying `defaultCostLimit`
+  via `setMaxCosts` at roster creation (see NR-INTERNALS.md for details).
 - Traverse `roster → forces → categories → selections`, calling
   `checkConstraints()` on each element recursively (including child selections).
 - Collect constraint violations attached to each element after checking.
-- Inject additional cost-limit validation during this traversal (e.g. total
-  roster or force cost exceeding configured limits).
+- Roster-level cost limit errors (with `constraint.type === 'max'` and
+  `constraint.field`) are mapped to `costLimits/{field}` entries.
 
 Each detected violation is mapped to `ValidationErrorState` with:
 - `Message` — error text
@@ -100,6 +110,44 @@ Each detected violation is mapped to `ValidationErrorState` with:
 - `OwnerId` — ID of the owning roster element
 - `EntryId` — entry that defines the constraint
 - `ConstraintId` — specific constraint ID
+
+## Publication ID resolution
+
+NR resolves `publicationId` XML attributes into actual publication objects at
+parse time. Every entry type (selections, rules, profiles, categories, forces)
+stores a `.publication` object reference instead of a raw `publicationId` string.
+
+**Pattern:** `obj.publication?.id` — not `obj.publicationId`
+
+```javascript
+// ✅ Correct — NR resolves the reference into an object
+rule.publication?.id    // → "pub-core"
+rule.publication?.name  // → "Core Rulebook"
+
+// ❌ Wrong — NR does NOT keep the raw string
+rule.publicationId      // → undefined
+```
+
+This applies uniformly to all entry types:
+- `selection.publication?.id` (via source: `src.publication?.id`)
+- `rule.publication?.id`
+- `profile.publication?.id`
+- `category.publication?.id`
+- `force.publication?.id`
+
+The `.publication` object has these properties:
+- `id` — publication ID string (matches XML `publicationId`)
+- `name` — full name (e.g. "Core Rulebook")
+- `shortName` — abbreviated name (e.g. "CR")
+- `catalogue` — back-reference to owning catalogue (circular)
+
+For `publicationName`, read it directly from the same `.publication` object:
+
+```javascript
+const pub = sel.publication || src?.publication;
+const pubId = pub?.id || null;
+const pubName = pub?.name || null;
+```
 
 ## Reactive object unwrapping
 

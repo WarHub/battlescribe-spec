@@ -58,6 +58,12 @@ var engine = await NewRecruitRosterEngine.CreateFrozenAsync(
 HAR replay intercepts all network requests via `Page.RouteFromHARAsync()`.
 No internet needed. Deterministic results.
 
+**Important**: The HAR is a single snapshot of the entire NR web application
+(JS bundles, CSS, assets) — NOT per-spec recordings. All specs run against the
+same HAR. New specs work immediately against the existing HAR without any
+recording step. The HAR is versioned by NR client version (pinned in
+`testdata.json`), not by spec content.
+
 ## Playwright browser setup
 
 ### Pinia store access
@@ -141,11 +147,71 @@ State reader sorts by `__bsspec_seq`, with catalogue entry order as tiebreaker.
 
 | Limitation | Impact | Workaround |
 |-----------|--------|-----------|
-| No `page` on selections | `SelectionState.Page` always null | Use engine-specific override to omit page assertion |
-| No `getPage()` method | NR tracks page on forces only, not selections | None — architectural limitation |
+| InfoLink publication override | NR uses infoLink's own pub, not target's | Per-engine `expectedState` overrides in specs |
+| InfoLink page override | NR uses infoLink's own page, not target's | Per-engine `expectedState` overrides in specs |
+| Page modifier not applied | `type: set, field: page` doesn't update selection page | Per-engine `expectedState` override |
+| `setAmount()` requires two args | `setAmount(n)` with one arg corrupts: sets `ctx=n, n=undefined` | Always use `sel.setAmount({}, count)` |
+| `setSelectionCount` rejects root selections | Protocol validates `selectionPath.Length >= 2` | Use `selectEntry`/`deselectSelection` for roots |
+| `calcTotalCosts()` omits hidden cost types | Roster cost totals exclude hidden cost types | Uniform manual summation for all types |
 | costIndex not auto-populated | Child cost calculations return 0 | Manual population in setup (see above) |
 | Child nodes pre-created with amount=0 | selectChildEntry must increment, not addInstance | Increment existing node amount |
+| autocheck ignores defaultSelectionEntryId | Selects alphabetically first entry in groups | Use single-option groups for deterministic auto-selection |
 | NetworkIdle hangs | Persistent connections prevent WaitUntilState.NetworkIdle | Use WaitUntilState.Load |
+| Publication scope resolution | ForceEntry in gameSystem can't resolve catalogue-only publications | Define publications in same file as referencing entries |
+
+## Selection mechanics
+
+NR's roster tree uses **selectors** (templates) and **instances** (selections).
+Three distinct APIs exist for changing selection counts:
+
+### setAmount(ctx, n) — Counter Mutation
+
+Called on an existing **instance** to change its count. **This is what NR's
+UI spinbutton uses.** The `ctx` arg is a tracker context (pass `{}` for empty).
+
+```javascript
+// ✅ NR UI's approach: single node, correct cost propagation
+node.setAmount({}, 3);  // sets amount=3, triggers full cost cascade
+```
+
+**Warning**: Two args required. `setAmount(3)` with one arg sets `ctx=3, n=undefined`
+→ silently corrupts the node's amount to `undefined`.
+
+The adapter's `SetSelectionCountAsync` uses `sel.setAmount({}, count)` which matches
+NR's own UI spinbutton behavior. Protocol validation rejects root selections
+(`selectionPath.Length < 2`) — use `selectEntry`/`deselectSelection` for those.
+
+### addInstance()
+
+Called on a **selector** to create a new instance (selection). Used for
+force-level entry selectors — these have an `addInstance` method and create
+a fresh child node each time. After creation, the new instance starts with
+`amount=0` and child selectors/instances are not yet fully materialized.
+
+**Used by NR UI for**: "Duplicate Unit", "Create Unit (+)", structural operations.
+**NOT used by NR UI for** changing child counts (that's `setAmount`).
+
+### incrementAmount()
+
+Called on an existing **instance** (child node) to increment its count.
+Used for child entries that already exist as pre-created nodes with
+`amount=0` under a parent selection. Unlike `addInstance`, this doesn't
+create a new node — it bumps the count on an existing one.
+
+### autocheck — cascading auto-selection
+
+After `addInstance()`, the new instance's children with `min` constraints remain at
+`amount=0`. Calling **`autocheck()`** on the new instance triggers recursive
+auto-selection: it walks child selectors, finds `min>=1` entries, and selects them.
+
+All 5 selection methods in `NewRecruitActions.cs` call `autocheck()` after creating
+an instance. Without it, nested min-constraint children aren't populated.
+
+**Caveat:** `autocheck()` ignores `defaultSelectionEntryId` — it picks entries
+alphabetically. Specs must use single-option groups for deterministic auto-selection.
+
+See [NR-INTERNALS.md](../nr-adhoc-probing/references/NR-INTERNALS.md) for the full
+deobfuscated behavior reference.
 
 ## HAR recording and replay
 

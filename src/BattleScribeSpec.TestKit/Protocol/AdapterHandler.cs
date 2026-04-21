@@ -97,31 +97,30 @@ public static class AdapterHandler
             switch (cmd.Action)
             {
                 case "addForce":
-                    if (cmd.ForceEntryName is { Length: > 0 })
-                        engine.AddForceByName(forcePath, cmd.ForceEntryName, cmd.CatalogueName, cmd.CatalogueIndex ?? 0);
-                    else
-                        engine.AddForce(forcePath, cmd.ForceEntryIndex ?? 0, cmd.CatalogueIndex ?? 0);
+                    engine.AddForce(forcePath, cmd.ForceEntryIndex ?? 0, cmd.CatalogueIndex ?? 0);
                     break;
                 case "removeForce":
                     engine.RemoveForce(forcePath);
                     break;
                 case "selectEntry":
-                    if (cmd.EntryName is { Length: > 0 })
-                        engine.SelectEntryByName(forcePath, cmd.EntryName);
-                    else
-                        engine.SelectEntry(forcePath, cmd.EntryIndex ?? 0);
+                    engine.SelectEntry(forcePath, cmd.EntryIndex ?? 0);
                     break;
                 case "selectChildEntry":
-                    if (cmd.ChildEntryName is { Length: > 0 })
-                        engine.SelectChildEntryByName(forcePath, selectionPath, cmd.ChildEntryName);
-                    else
-                        engine.SelectChildEntry(forcePath, selectionPath, cmd.ChildEntryIndex ?? 0);
+                    engine.SelectChildEntry(forcePath, selectionPath, cmd.ChildEntryIndex ?? 0);
                     break;
                 case "deselectSelection":
                     engine.DeselectSelection(forcePath, selectionPath);
                     break;
                 case "setSelectionCount":
-                    engine.SetSelectionCount(forcePath, cmd.EntryIndex ?? 0, cmd.Count ?? 1);
+                    if (selectionPath.Length < 2)
+                        return new ActionResult
+                        {
+                            Ok = false,
+                            Error = "Invalid protocol message: setSelectionCount targets child selections only " +
+                                    "(selectionPath must have at least 2 elements). " +
+                                    "Use selectEntry/deselectEntry for root selections."
+                        };
+                    engine.SetSelectionCount(forcePath, selectionPath, cmd.Count ?? 1);
                     break;
                 case "duplicateSelection":
                     engine.DuplicateSelection(forcePath, selectionPath);

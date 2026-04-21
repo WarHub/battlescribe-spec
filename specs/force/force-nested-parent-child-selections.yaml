@@ -2,9 +2,6 @@ id: force-nested-parent-child-selections
 category: force
 description: Parent and child forces each maintain independent selection lists
 tags: [childForce]
-engines:
-  battlescribe: fail
-  newrecruit: fail
 
 setup:
   gameSystem:

@@ -194,12 +194,22 @@ See [ERROR-ASSERTIONS.md](references/ERROR-ASSERTIONS.md) for error matching det
 
 ## Debugging workflow
 
-1. **Isolate:** Run single spec with `--filter "DisplayName~{id}"`
-2. **Read:** Parse the `Step N: path: expected X but got Y` messages
-3. **Check matching:** Is it index vs name? Is ordering correct?
-4. **Check defaults:** Is zero-errors implicit check triggering?
-5. **Compare engines:** Does it fail for one engine only? Use `engines:` overrides.
-6. **Iterate:** Fix and re-run. Lint after: `pwsh -File tools/format-specs.ps1`
+1. **Quick dump:** Run the spec with `bs-spec-debug` to see full roster state:
+   ```bash
+   dotnet run --project src/BattleScribeSpec.Debugger -- {category/id}
+   dotnet run --project src/BattleScribeSpec.Debugger -- --dump {category/id}   # after every step
+   dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr {id}       # against NR
+   dotnet run --project src/BattleScribeSpec.Debugger -- --json {id}            # JSON output
+   ```
+   Default dumps after the last step. Use `--dump` to see state progression.
+   Use `action: dump` in spec YAML for explicit dump points.
+2. **Isolate:** Run single spec with `--filter "DisplayName~{id}"`
+3. **Read:** Parse the `Step N: path: expected X but got Y` messages
+4. **Check matching:** Is it index vs name? Is ordering correct?
+5. **Check defaults:** Is zero-errors implicit check triggering?
+6. **Compare engines:** Does it fail for one engine only? Use `engines:` overrides.
+7. **Verify NR frozen:** Run `dotnet test -p:TestProfile=nr-frozen` — catches NR-specific regressions quickly.
+8. **Iterate:** Fix and re-run. Lint after: `pwsh -File tools/format-specs.ps1`
 
 ## Reference files
 

@@ -2,9 +2,6 @@ id: force-nested-multi-level
 category: force
 description: Force entries can be nested multiple levels deep (grandchild forces via forcePath)
 tags: [childForce, nested]
-engines:
-  battlescribe: fail
-  newrecruit: fail
 
 setup:
   gameSystem:

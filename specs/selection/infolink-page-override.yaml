@@ -54,3 +54,4 @@ steps:
                   rules:
                     - name: Fearless
                       description: Immune to morale
+                      page: "99"

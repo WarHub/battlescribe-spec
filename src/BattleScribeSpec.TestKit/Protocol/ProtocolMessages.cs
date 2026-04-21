@@ -133,24 +133,6 @@ public sealed class ActionCommand : ProtocolCommand
     [JsonPropertyName("value")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Value { get; set; }
-
-    // Name-based fields for DataSource specs
-
-    [JsonPropertyName("forceEntryName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ForceEntryName { get; set; }
-
-    [JsonPropertyName("catalogueName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? CatalogueName { get; set; }
-
-    [JsonPropertyName("entryName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? EntryName { get; set; }
-
-    [JsonPropertyName("childEntryName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ChildEntryName { get; set; }
 }
 
 public sealed class GetStateCommand : ProtocolCommand

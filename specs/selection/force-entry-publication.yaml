@@ -1,14 +1,16 @@
 id: force-entry-publication
 category: selection
-tags: [forceEntry, publication, newrecruit-missing-feature]
+tags: [forceEntry, publication]
 description: >
   ForceEntry with publicationId carries publication metadata on force.
-  NR does not expose publicationId/page on force roster elements.
 
 setup:
   gameSystem:
     id: test-gs
     name: Test GS
+    publications:
+      - id: pub-1
+        name: Core Rulebook
     forceEntries:
       - id: fe-1
         name: Battalion
@@ -18,9 +20,6 @@ setup:
     - id: cat-1
       name: Cat
       gameSystemId: test-gs
-      publications:
-        - id: pub-1
-          name: Core Rulebook
       selectionEntries:
         - id: se-1
           name: Marine
@@ -41,9 +40,3 @@ steps:
           page: "42"
           selections:
             - name: Marine
-      engines:
-        newrecruit:
-          forces:
-            - name: Battalion
-              selections:
-                - name: Marine

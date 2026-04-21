@@ -42,3 +42,4 @@ steps:
           forces:
             - selections:
                 - name: Marine
+                  page: "42"

@@ -44,18 +44,7 @@ public static class NewRecruitStateReader
 
     private static RosterState MapToRosterState(NrRosterSnapshot snapshot)
     {
-        var forces = snapshot.Forces.Select(f => new ForceState(
-            f.Name,
-            f.CatalogueId,
-            f.Selections.Select(MapSelection).ToList(),
-            Profiles: f.Profiles.Select(p => new ProfileState(
-                p.Name, p.TypeId, p.TypeName, p.Hidden,
-                p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
-                p.Page, p.PublicationId)).ToList(),
-            Rules: f.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
-            PublicationId: f.PublicationId,
-            Page: f.Page
-        )).ToList();
+        var forces = snapshot.Forces.Select(MapForce).ToList();
 
         var costs = snapshot.Costs.Select(c =>
             new CostState(c.Name, c.TypeId, c.Value)).ToList();
@@ -71,6 +60,23 @@ public static class NewRecruitStateReader
                 OwnerEntryId: e.OwnerEntryId,
                 EntryId: e.EntryId,
                 ConstraintId: e.ConstraintId)).ToList());
+    }
+
+    private static ForceState MapForce(NrForceSnapshot f)
+    {
+        return new ForceState(
+            f.Name,
+            f.CatalogueId,
+            f.Selections.Select(MapSelection).ToList(),
+            ChildForces: f.ChildForces.Select(MapForce).ToList(),
+            Profiles: f.Profiles.Select(p => new ProfileState(
+                p.Name, p.TypeId, p.TypeName, p.Hidden,
+                p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
+                p.Page, p.PublicationId)).ToList(),
+            Rules: f.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
+            PublicationId: f.PublicationId,
+            Page: f.Page
+        );
     }
 
     private static SelectionState MapSelection(NrSelectionSnapshot sel)
@@ -102,7 +108,9 @@ public static class NewRecruitStateReader
                 Rules: c.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
                 PublicationId: c.PublicationId,
                 Page: c.Page)).ToList(),
-            Page: sel.Page);
+            Page: sel.Page,
+            PublicationId: sel.PublicationId,
+            PublicationName: sel.PublicationName);
     }
 
     // JSON-serializable snapshot types for page.EvaluateAsync deserialization
@@ -129,6 +137,7 @@ public static class NewRecruitStateReader
         public string Name { get; init; } = "";
         public string? CatalogueId { get; init; }
         public List<NrSelectionSnapshot> Selections { get; init; } = [];
+        public List<NrForceSnapshot> ChildForces { get; init; } = [];
         public List<NrProfileSnapshot> Profiles { get; init; } = [];
         public List<NrRuleSnapshot> Rules { get; init; } = [];
         public string? PublicationId { get; init; }
@@ -148,6 +157,8 @@ public static class NewRecruitStateReader
         public List<NrRuleSnapshot> Rules { get; init; } = [];
         public List<NrCategorySnapshot> Categories { get; init; } = [];
         public string? Page { get; init; }
+        public string? PublicationId { get; init; }
+        public string? PublicationName { get; init; }
     }
 
     internal record NrCostSnapshot

@@ -4,8 +4,6 @@ description: >
   Comprehensive smoke test exercising all Protocol types, all action types,
   and all state assertion fields for adapter protocol adherence.
 tags: []
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:
@@ -411,7 +409,7 @@ steps:
   - action: selectChildEntry
     forceIndex: 0
     selectionIndex: 1
-    childEntryName: Trooper
+    childEntryIndex: 0
 
   - expectedState:
       forces:
@@ -489,15 +487,24 @@ steps:
                   entryId: cat-hq
                   primary: true
 
-  # Step 5: setSelectionCount — exercise the action (no-op for root entries)
+  # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
   - action: setSelectionCount
     forceIndex: 0
-    entryIndex: 0
-    count: 3
+    selectionPath: [1, 0]
+    count: 2
 
   - expectedState:
       forces:
-        - selectionCount: 3
+        - selections:
+            - name: Required Unit
+            - name: Infantry Squad
+              children:
+                - name: Trooper
+                  number: 2
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 20
 
   # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
   #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)

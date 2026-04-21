@@ -59,3 +59,4 @@ steps:
                   rules:
                     - name: Fearless
                       description: Immune to morale
+                      publicationId: pub-faq

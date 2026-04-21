@@ -7,11 +7,11 @@
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
 | [Import ordering](#1-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#2-missing-features) | 11 | Low | Page numbers, publicationId on selections/rules/profiles, unset-primary |
+| [Missing features](#2-missing-features) | 4 | Low | InfoLink pub/page override, page modifier, unset-primary |
 | [Scope/condition evaluation](#3-scopecondition-evaluation) | 4 | Medium | NR evaluates child-force scope, ancestor scope, and null-childId conditions differently |
 | [instanceOf scope limits](#instanceof-scope-limitations-both-engines) | 12 | Info | instanceOf only works with self/parent/ancestor scope — both engines agree |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
-| [Other behavioral differences](#5-other-behavioral-differences) | 5 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
+| [Other behavioral differences](#5-other-behavioral-differences) | 4 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
 
 ---
 
@@ -32,40 +32,45 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ## 2. Missing Features
 
-**11 specs** — NR doesn't implement or expose certain BattleScribe features.
+**4 specs** — NR doesn't implement or expose certain BattleScribe features.
 
-### Selection-level publication/page (4 specs)
-
-| Spec | Feature | Detail |
-|------|---------|--------|
-| `modifier/modifier-entry-page` | Page numbers | NR doesn't expose `page` on selections |
-| `selection/selection-page` | Page numbers | NR doesn't expose `page` on selections |
-| `selection/selection-publication` | PublicationId | NR doesn't expose `publicationId` on selections |
-| `selection/selection-publication-and-page` | PublicationId + Page | NR doesn't expose `publicationId` or `page` on selections |
-
-### Rule/profile publication and page (6 specs)
+### InfoLink publication/page override behavior (2 specs)
 
 | Spec | Feature | Detail |
 |------|---------|--------|
-| `selection/rule-publication` | Rule publicationId | Rule on a selection should preserve its publicationId |
-| `selection/profile-publication` | Profile publicationId | Profile on a selection should preserve its publicationId |
-| `selection/infolink-profile-publication` | InfoLink profile publicationId | Profile linked via InfoLink should preserve target's publicationId |
-| `selection/infolink-publication-override` | InfoLink publication non-override | InfoLink publicationId should NOT override linked target's own publicationId |
-| `gamesystem/gamesystem-publication` | GameSystem publication | Publication defined at GameSystem level should be resolved — asserts publicationName on selection |
-| `selection/infolink-page-override` | InfoLink page non-override | InfoLink page should NOT override linked rule's own page |
+| `selection/infolink-publication-override` | InfoLink publication non-override | BattleScribe preserves target's `publicationId`; NR uses the infoLink's own publication instead |
+| `selection/infolink-page-override` | InfoLink page non-override | BattleScribe preserves target's `page`; NR uses the infoLink's own page instead |
 
-**Root cause**: NR's data model doesn't fully wire publication resolution
-through the InfoLink chain. While NR does expose `publicationId` and `page` on
-some profiles and rules, it fails when: (a) the publication is defined at the
-GameSystem level rather than catalogue level, (b) an InfoLink references a
-shared rule/profile that has its own publicationId — NR loses the target's
-publication during link resolution.
+**Root cause**: NR resolves InfoLink publication/page from the link itself, not
+the linked target. BattleScribe preserves the target entry's values. This is a
+genuine behavioral difference in link resolution semantics.
+
+### Page modifier not applied (1 spec)
+
+| Spec | Feature | Detail |
+|------|---------|--------|
+| `modifier/modifier-entry-page` | Page modifier | NR doesn't apply `type: set, field: page` modifiers to selections |
 
 ### Unset-primary modifier (1 spec)
 
 | Spec | Feature | Detail |
 |------|---------|--------|
 | `modifier/modifier-category-unset-primary` | Unset-primary modifier | NR ignores the `unset-primary` category modifier |
+
+### Previously missing, now resolved
+
+The following features were previously listed as missing but are now working
+after discovering NR's publication object model (April 2026):
+
+- **Selection publication/page** — NR stores these on `sel.source` (not `sel`
+  directly). Reading `sel.source?.publication?.id` and `String(sel.source?.page)`
+  now returns correct values.
+- **Rule/profile publication** — NR resolves `publicationId` into a
+  `.publication` object. Using `rule.publication?.id` works correctly.
+- **GameSystem-level publication** — Resolved when publication is defined in the
+  same scope as the entry. See [Publication Scope Resolution](#publication-scope-resolution).
+- **Force publication/page** — Accessed via `f.source?.publication?.id` and
+  `String(f.source?.page)`.
 
 ---
 
@@ -150,7 +155,7 @@ on entry groups, so child selections don't appear under the expected categories.
 
 ## 5. Other Behavioral Differences
 
-**5 specs** with distinct NR behavioral differences:
+**4 specs** with distinct NR behavioral differences:
 
 ### Auto-Select with `field=forces` Constraint
 | Spec | Issue |
@@ -201,6 +206,26 @@ based on any `min>=1` regardless of field type.
 |------|-------|
 | `selection/selection-number-with-min` | NR returns different number/amount for min-constrained selections |
 
+### setSelectionCount on Child Entries — Fixed
+
+> **Previously**: The adapter used `addInstance()` in a loop, creating N separate
+> instances instead of one node with number=N. This was an adapter bug, not an NR
+> engine limitation.
+>
+> **Now fixed**: The adapter uses NR's native `sel.setAmount({}, count)` which
+> correctly sets `amount=N` on a single node with proper cost propagation.
+> Both engines now produce identical results for child count changes.
+
+| Spec | Status |
+|------|--------|
+| `selection/selection-set-child-count-instance-model` | ✅ Both engines agree |
+| `selection/selection-set-child-count-collective` | ✅ Both engines agree |
+
+**Protocol validation**: `setSelectionCount` now rejects `selectionPath` with fewer
+than 2 elements (root selections). Root selection count is managed via
+`selectEntry`/`deselectSelection`. A lint rule (`SetSelectionCountTargetsChildOnly`)
+enforces this in specs.
+
 ---
 
 ## Discoveries
@@ -226,10 +251,59 @@ linked target's values. When an InfoLink references a shared rule with
 the resulting rule on the selection has `publicationId: pub-core` (the target's
 value, not the link's).
 
-**NR behavior**:
-- Selections: NR does not expose `publicationId` or `page`
-- Profiles: NR preserves `publicationId` and `page` from the data definition
-- Rules: NR preserves `publicationId` and `page` from the data definition
+**NR behavior** (updated April 2026 — major discovery):
+- NR resolves `publicationId` XML attributes into `.publication` object references
+  at catalogue parse time. The raw `.publicationId` property is always `undefined`.
+- **Selections**: Page and publication live on `sel.source` (not `sel` directly).
+  Access via `sel.source?.publication?.id` and `String(sel.source?.page)`.
+- **Profiles**: `profile.publication?.id` and `String(profile.page)` work directly.
+- **Rules**: `rule.publication?.id` and `String(rule.page)` work directly.
+- **Forces**: `f.source?.publication?.id` and `String(f.source?.page)`.
+- **Categories**: `cat.publication?.id` works directly.
+- **InfoLinks**: NR uses the infoLink's own publication, NOT the target's (differs
+  from BattleScribe). This is the remaining behavioral difference.
+- **Page type**: NR stores page as a number (BattleScribe XML stores it as a
+  string). Must stringify: `obj.page != null ? String(obj.page) : null`.
+
+### Publication Scope Resolution
+
+NR resolves `publicationId` references **within the same scope** at parse time.
+A forceEntry in the gameSystem referencing a publication defined only in a
+catalogue will NOT resolve — the `.publication` object will be `undefined`.
+Oracle (BattleScribe) resolves cross-scope publication references.
+
+**Rule**: Define publications in the same file (gameSystem or catalogue) as the
+entries that reference them. A forceEntry in a gameSystem must reference a
+publication also defined in that gameSystem.
+
+### NR `setAmount()` — Signature Gotcha
+
+> **Previously documented as corruption bugs**: The issues below were discovered
+> using `setAmount(n)` with one arg, which silently corrupts state (`ctx=n,
+> n=undefined`). With the correct two-arg form `setAmount({}, n)`, NR's UI
+> uses this on all entry types without issues. The "corruption" was caused by
+> the wrong calling convention, not by setAmount itself.
+
+**Two args required**: `setAmount(ctx, n)` where `ctx` = checker context (pass `{}`).
+`setAmount(5)` with one arg sets `ctx=5, n=undefined` → silent corruption.
+
+**Protocol validation**: `setSelectionCount` now rejects root selections
+(`selectionPath < 2`). Root selection lifecycle is managed via
+`selectEntry`/`deselectSelection` only.
+
+### NR Hidden Cost Types
+
+NR's `army.calcTotalCosts()` method omits hidden cost types from its results.
+The adapter uses **uniform manual summation** for all cost types (hidden and
+visible alike), walking the selection tree and multiplying `getCosts()` by
+`getAmount()` per selection. This is simpler and produces correct totals for
+all types regardless of visibility.
+
+NR's `createRoster(costs)` sets cost limits to 0 (from `costs[].value`, which
+is the starting total, not the limit). The adapter explicitly applies
+`defaultCostLimit` via `setMaxCosts()` after roster creation so that NR's
+native `checkConstraints()` correctly validates limits for both visible and
+hidden cost types.
 
 ### NR Selection Ordering
 
@@ -360,6 +434,109 @@ Three methods for loading game data:
 2. **`addGithubSystem()`** — downloads from BSData GitHub repos
 3. **Mock `showDirectoryPicker()`** — intercepts folder upload UI
 
+### `setAmount()` vs `addInstance()` Deep Dive
+
+**Discovered April 2026 via live Playwright UI replay and method tracing.**
+
+These are two fundamentally different operations in NR's selection tree:
+
+| | `node.setAmount(ctx, n)` | `selector.addInstance()` |
+|---|---|---|
+| **What it does** | Changes `amount` property on an **existing** node | Creates a **new sibling node** (amount=0) |
+| **Tree effect** | No structural change (property mutation) | Structural change (new node) |
+| **Cost recalculation** | Full scope propagation via queue (correct) | New node doesn't trigger parent cost update (stale) |
+| **Used by NR UI** | ✅ Spinbutton count changes | ✅ "Duplicate Unit", "Create Unit (+)" |
+
+#### `setAmount(ctx, n)` — Signature Gotcha
+
+**Two args required**: `ctx` = checker context object, `n` = new amount value.
+
+```javascript
+// ✅ Correct — NR UI passes {} as context
+node.setAmount({}, 5);
+
+// ❌ WRONG — sets ctx=5, n=undefined → amount becomes undefined (silent corruption)
+node.setAmount(5);
+```
+
+The NR UI spinbutton calls `this.opt.setAmount({}, newValue)` where `this.opt`
+is the tree node. The `{}` is an empty tracker context (normally contains
+`{currentDepth, errorStack, warningStack, modStack, autofixUnit}`).
+
+#### `setAmount` internal call chain (traced via method proxies)
+
+When amount changes from 3→4 on a child "Trooper" node (323 total method calls):
+
+```
+DOM input/change event
+  → setAmount({}, 4)
+    → guard checks: isConstantRecursive, isHidden, isConstant
+    → setLastChecked("add", tracker)
+    → enable(4)                          // sets internal amount
+      → state.setSelections(4)
+      → scope.updateMultipliers(4, 4)    // propagates cost deltas UP
+      → onTotalCostChanged("pts")        // notify cost system
+      → scope.getQueue().empty()         // drain priority queue
+        → Squad.state.onTotalCostChanged // parent listener fires
+        → Force.state.onTotalCostChanged // grandparent fires
+    → eachParent → Squad.onChildAmountChanged()
+    → refreshErrors
+    → initializeChilds
+    → unsetLastChecked
+  → Squad.applyModifications(tracker)
+    → checkConstraints (×3 nodes)
+    → fixReactivity (×6 calls)           // trigger Vue computed updates
+    → updateDisplayStatus
+    → calcTotalUnitSize
+    → calcTotalCosts (×5 passes)         // NOT a loop — see below
+    → autocheck
+    → toJsonObject                       // serialize for save
+  → lists.saveListLocally()              // persist to IndexedDB
+  → lists.doSaveList()                   // queue server save
+```
+
+#### Why `calcTotalCosts` is called 5+ times (NOT a loop)
+
+Three distinct phases, each reading the (already-updated) cost data:
+
+1. **Scope propagation** (synchronous, bottom-up): `onTotalCostChanged` fires
+   from child → parent → root via priority queue. Queue uses `Map<callback, args>`
+   for deduplication — same listener can only be queued once.
+
+2. **Vue re-rendering** (async): Vue computed properties (`totalCost`, `cost`,
+   `displayedCost`) are dirtied by `vueCostsKey++`. Each UI location that
+   displays costs triggers a `calcTotalCosts()` read.
+
+3. **Auto-save**: `doSaveList` calls `getPointsCost()` which reads
+   `calcTotalCosts()`.
+
+**Stop guarantee** is structural (not convergence-based):
+- Upward-only propagation: parent → parent → root (never back down)
+- Queue deduplication: `Map<callback, args>` — re-enqueue replaces, doesn't accumulate
+- Finite tree depth: O(depth) steps guaranteed
+- `autocheck` guard: `!state.autochecked` ensures single execution per node
+
+#### Where NR uses each method
+
+| NR UI action | API called | Effect |
+|-------------|-----------|--------|
+| Spinbutton count change (±) | `node.setAmount({}, n)` | Mutates amount on existing node |
+| "Duplicate Unit" button | `selector.addInstance()` + copy state | Creates new sibling |
+| "Create Unit" (+) in catalogue panel | `force.insertUnit()` → `selector.addInstance()` | New selection node |
+| `addSubUnit()`, `splitDown/Up` | `selector.addInstance()` | Structural operations |
+| Mobile +/- buttons | `incrementAmount({})` / `decrementAmount({})` | Alternative path (0 call sites in bundle) |
+
+#### Adapter fix (applied)
+
+`NewRecruitActions.cs` `SetSelectionCountAsync` now uses `setAmount({}, count)`:
+```javascript
+sel.setAmount({}, count);
+```
+
+This produces the correct single-node-with-count behavior matching both
+NR's own UI and BattleScribe Oracle's behavior. The old `addInstance()` loop
+approach has been removed.
+
 ---
 
 ## Architecture Notes
@@ -416,3 +593,9 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 | Force-catalogue map state leak | `_forceCatalogueMap.Clear()` in Setup prevents cross-test contamination | 1 |
 | NR cost limit false positives | Parse NR error messages + compare vs configured `defaultCostLimit` from spec | ~65 |
 | NR generic hidden errors | Suppress "cannot be selected while hidden" without `constraint.id` | 4 |
+| Publication field extraction | Use `.publication?.id` object pattern instead of `.publicationId` string | 7 |
+| Selection page/pub on source | Read from `sel.source?.page` / `sel.source?.publication` instead of `sel` directly | 4 |
+| Force page/pub on source | Read from `f.source?.page` / `f.source?.publication` | 1 |
+| Hidden cost types omitted | Always use manual summation instead of `calcTotalCosts()` | 1 |
+| setAmount corrupts NR state | Remove `setSelectionCount` on entries with children/min constraints | 1 |
+| Publication scope in forceEntry | Move publication to gameSystem (same scope as forceEntry) | 1 |

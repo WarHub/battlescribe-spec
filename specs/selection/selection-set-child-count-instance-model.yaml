@@ -1,0 +1,85 @@
+id: selection-set-child-count-instance-model
+category: selection
+description: >
+  setSelectionCount on a child selection sets number=N on a single selection
+  and scales costs accordingly (N × per-unit cost).
+tags:
+  - selection
+  - number
+  - cost
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 10
+
+steps:
+  - action: addForce
+    forceEntryIndex: 0
+
+  - action: selectEntry
+    forceIndex: 0
+    entryIndex: 0
+
+  - action: selectChildEntry
+    forceIndex: 0
+    selectionIndex: 0
+    childEntryIndex: 0
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 10
+      costs:
+        - typeId: pts
+          value: 10
+
+  # setSelectionCount to 3
+  - action: setSelectionCount
+    forceIndex: 0
+    selectionPath: [0, 0]
+    count: 3
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 30
+      costs:
+        - typeId: pts
+          value: 30
