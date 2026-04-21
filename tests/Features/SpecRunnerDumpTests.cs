@@ -71,7 +71,7 @@ public class SpecRunnerDumpTests
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
-                new StepDef { Action = "addForce" },
+                new StepDef { Action = "addForce", ForceEntryId = "fe-1" },
                 new StepDef
                 {
                     ExpectedState = new ExpectedStateDef { ForceCount = 1 }
@@ -107,9 +107,9 @@ public class SpecRunnerDumpTests
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
-                new StepDef { Action = "addForce" },
+                new StepDef { Action = "addForce", ForceEntryId = "fe-1", Id = "af" },
                 new StepDef { Action = "dump" },
-                new StepDef { Action = "selectEntry" }
+                new StepDef { Action = "selectEntry", ForceId = "${{ steps.af.forceId }}", EntryId = "se-1" }
             ]
         };
 
@@ -134,9 +134,9 @@ public class SpecRunnerDumpTests
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
-                new StepDef { Action = "addForce" },
+                new StepDef { Action = "addForce", ForceEntryId = "fe-1", Id = "af2" },
                 new StepDef { Action = "dump" },
-                new StepDef { Action = "selectEntry" },
+                new StepDef { Action = "selectEntry", ForceId = "${{ steps.af2.forceId }}", EntryId = "se-1" },
                 new StepDef
                 {
                     ExpectedState = new ExpectedStateDef
@@ -174,8 +174,8 @@ public class SpecRunnerDumpTests
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
-                new StepDef { Action = "addForce" },
-                new StepDef { Action = "selectEntry" }
+                new StepDef { Action = "addForce", ForceEntryId = "fe-1", Id = "af3" },
+                new StepDef { Action = "selectEntry", ForceId = "${{ steps.af3.forceId }}", EntryId = "se-1" }
             ]
         };
 
@@ -185,4 +185,8 @@ public class SpecRunnerDumpTests
         Assert.Equal("dump-gs", capturedState!.GameSystemId);
         Assert.Single(capturedState.Forces);
         Assert.Single(capturedState.Forces[0].Selections);
-        Assert.Equal("Unit", capturedState.Forces[0].Selections[0].Na
+        Assert.Equal("Unit", capturedState.Forces[0].Selections[0].Name);
+        Assert.NotNull(capturedErrors);
+        Assert.Empty(capturedErrors!);
+    }
+}
