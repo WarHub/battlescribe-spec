@@ -24,7 +24,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-1
 
   # No entries have min constraints, so nothing is auto-selected
   - expectedState:

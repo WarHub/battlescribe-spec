@@ -27,7 +27,7 @@ setup:
 steps:
   # Only 1 force entry should be available (the non-hidden one)
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   - expectedState:
       forceCount: 1

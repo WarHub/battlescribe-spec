@@ -43,11 +43,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
   # Multiple repeats are additive: n=1+1=2, increment 5×2=10 → 50+10=60
   - expectedState:
       forces:

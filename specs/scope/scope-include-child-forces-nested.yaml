@@ -34,11 +34,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-army
+    forceEntryId: fe-army
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-1
   # includeChildForces=true traverses nested forces when counting.
   # With only the top-level Army force and no child forces selected,
   # the condition does not find matching selections. Name unchanged.

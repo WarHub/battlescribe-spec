@@ -20,7 +20,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   - expectedState:
       forces:

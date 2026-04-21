@@ -46,11 +46,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-shared
   # The entryLink resolves se-shared, so selecting entryIndex 0 creates
   # a selection with the target's profile inherited.
   - expectedState:

@@ -29,15 +29,16 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-army
+    forceEntryId: fe-army
 
-  - action: addForce
-    forcePath: [0]
-    forceEntryIndex: 0
+  - action: addChildForce
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-army
 
-  - action: addForce
-    forcePath: [0]
-    forceEntryIndex: 1
+  - action: addChildForce
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: UNKNOWN_FE_1
 
   - expectedState:
       forceCount: 1
@@ -50,13 +51,13 @@ steps:
 
   # Select into first child force
   - action: selectEntry
-    forcePath: [0, 0]
-    entryIndex: 0
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-1
 
   # Select into second child force
   - action: selectEntry
-    forcePath: [0, 1]
-    entryIndex: 1
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-2
 
   - expectedState:
       forces:

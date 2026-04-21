@@ -24,12 +24,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 0
+    id: add-patrol
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-base-1
 
   - expectedState:
       forces:
@@ -40,8 +40,8 @@ steps:
               type: unit
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-base-2
 
   - expectedState:
       forces:

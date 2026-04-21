@@ -26,19 +26,20 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 2
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-upgrade
 
   - expectedState:
       forces:

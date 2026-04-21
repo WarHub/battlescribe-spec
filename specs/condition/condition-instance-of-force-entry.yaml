@@ -39,11 +39,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-detector
   # instanceOf with scope=roster always returns false in BS engine
   # (c.java:1196-1197 hardcodes return false for roster scope on instanceOf).
   # Both engines agree — condition never fires.

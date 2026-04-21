@@ -330,7 +330,8 @@ setup:
 steps:
   # Step 1: addForce — auto-selects Required Unit (min=1)
   - action: addForce
-    forceEntryIndex: 0
+    id: add-battalion
+    forceEntryId: fe-battalion
 
   - expectedState:
       forceCount: 1
@@ -350,8 +351,8 @@ steps:
 
   # Step 2: selectEntry Infantry Squad — assert ALL selection fields
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-battalion.forceId }}
+    entryId: se-infantry
 
   - expectedState:
       forces:
@@ -407,9 +408,9 @@ steps:
 
   # Step 3: selectChildEntry — add Trooper model to Infantry Squad
   - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 1
-    childEntryIndex: 0
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-commander.selectionId }}
+    entryId: CHILD_0
 
   - expectedState:
       forces:
@@ -427,8 +428,9 @@ steps:
 
   # Step 4: selectEntry Commander — assert infoGroup profiles/rules, infoLink data
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    id: select-commander
+    forceId: ${{ steps.add-battalion.forceId }}
+    entryId: se-commander
 
   - expectedState:
       forces:
@@ -489,8 +491,8 @@ steps:
 
   # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
   - action: setSelectionCount
-    forceIndex: 0
-    selectionPath: [1, 0]
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-commander.selectionId }}
     count: 2
 
   - expectedState:
@@ -509,8 +511,8 @@ steps:
   # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
   #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-battalion.forceId }}
+    entryId: se-infantry
 
   - expectedState:
       forces:
@@ -530,8 +532,9 @@ steps:
 
   # Step 7: duplicateSelection — duplicate Infantry Squad #2
   - action: duplicateSelection
-    forceIndex: 0
-    selectionIndex: 3
+    id: select-entry
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-entry.selectionId }}
 
   - expectedState:
       forces:
@@ -539,8 +542,7 @@ steps:
 
   # Step 8: deselectSelection — remove duplicated copy
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 4
+    forceId: ${{ steps.add-battalion.forceId }}
 
   - expectedState:
       forces:

@@ -30,11 +30,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   # With 1 selection, atMost(1) is true → modifier applied
   - expectedState:
@@ -44,8 +45,8 @@ steps:
 
   # Add second selection → atMost(1) is now false → modifier not applied
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState:
       forces:

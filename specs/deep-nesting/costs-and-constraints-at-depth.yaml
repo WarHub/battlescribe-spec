@@ -68,11 +68,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
 
   # First Devastator Squad selected →
   # Heavy Bolter auto-selects (min=1 on link) →
@@ -95,8 +96,8 @@ steps:
           value: 98
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
 
   # Second Devastator Squad → second Heavy Bolter + Ammo auto-select.
   # Costs: 2 × (80 + 15 + 3) = 196

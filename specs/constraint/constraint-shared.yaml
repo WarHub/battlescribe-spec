@@ -37,7 +37,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - expectedState:
       forces:
@@ -45,12 +46,12 @@ steps:
 
   # Select one of each — shared max=5 counts across both entries
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-2
 
   - expectedState:
       forces:

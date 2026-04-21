@@ -37,7 +37,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-1
 
   # Parent Unit is auto-selected (min=1). Its child Mandatory Upgrade
   # is also auto-selected because it has min=1.

@@ -38,11 +38,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-blocker
 
   # After selecting Blocker Unit, the Special Detachment should become hidden
   # This spec verifies that modifiers on force entries are processed

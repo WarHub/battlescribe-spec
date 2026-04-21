@@ -37,16 +37,18 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
 
   - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 0
-    childEntryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: CHILD_0
 
   - expectedState:
       forces:
@@ -65,8 +67,8 @@ steps:
 
   # setSelectionCount to 3
   - action: setSelectionCount
-    forceIndex: 0
-    selectionPath: [0, 0]
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
     count: 3
 
   - expectedState:

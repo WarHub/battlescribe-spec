@@ -46,7 +46,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Auto-select creates 1 Unit A (min=1), min satisfied, below max=2
   - expectedState:
@@ -57,8 +58,8 @@ steps:
 
   # 2 total (at max=2 limit), both constraints satisfied
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState:
       forces:
@@ -66,8 +67,8 @@ steps:
 
   # 3 total (exceeds max=2), max constraint violated
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState:
       forces:

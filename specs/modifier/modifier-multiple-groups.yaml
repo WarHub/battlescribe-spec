@@ -48,11 +48,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
   # Both modifier groups' conditions met (1 selection ≥ 1).
   # Group 1: set name to "Active Agent". Group 2: increment pts by 25 → 125.
   - expectedState:

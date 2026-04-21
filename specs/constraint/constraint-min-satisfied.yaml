@@ -38,7 +38,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   # Auto-select creates 1 Unit A (min=1), constraint satisfied immediately
   - expectedState:

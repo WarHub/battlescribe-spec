@@ -32,11 +32,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-army
+    forceEntryId: fe-army
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-watcher
   # childId references ForceEntry fe-detach but we only added fe-army.
   # Condition is false → name stays "Watcher".
   - expectedState:

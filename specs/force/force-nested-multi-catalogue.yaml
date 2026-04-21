@@ -33,13 +33,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 0
+    id: add-army
+    forceEntryId: fe-army
 
-  - action: addForce
-    forcePath: [0]
-    forceEntryIndex: 0
-    catalogueIndex: 1
+  - action: addChildForce
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-army
 
   - expectedState:
       forceCount: 1
@@ -50,12 +49,12 @@ steps:
             - name: Detachment
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-a1
 
   - action: selectEntry
-    forcePath: [0, 0]
-    entryIndex: 0
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-a1
 
   - expectedState:
       forces:

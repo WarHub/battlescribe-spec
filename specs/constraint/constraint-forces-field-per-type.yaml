@@ -38,28 +38,28 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   # 1 Patrol (max 2), 0 Battalion (max 1) → valid
   - expectedState:
       forceCount: 1
 
   - action: addForce
-    forceEntryIndex: 1
+    forceEntryId: fe-battalion
 
   # 1 Patrol, 1 Battalion → valid
   - expectedState:
       forceCount: 2
 
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   # 2 Patrol (max 2), 1 Battalion (max 1) → valid
   - expectedState:
       forceCount: 3
 
   - action: addForce
-    forceEntryIndex: 1
+    forceEntryId: fe-battalion
 
   # 2 Patrol (max 2), 2 Battalion (max 1) → error on Battalion
   # Each Battalion force instance evaluates the constraint independently

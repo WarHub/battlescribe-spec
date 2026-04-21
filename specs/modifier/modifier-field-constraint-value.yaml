@@ -33,11 +33,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:
@@ -45,8 +46,8 @@ steps:
 
   # Select a second time — at original max=2 limit
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:
@@ -55,8 +56,8 @@ steps:
   # Select a third time — would exceed original max=2 but modifier changed
   # it to max=5. If modifier works, no validation error at 3 selections.
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:

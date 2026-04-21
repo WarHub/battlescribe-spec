@@ -44,7 +44,7 @@ public class SpecRunnerDumpTests
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
-                new StepDef { Action = "addForce" }
+                new StepDef { Action = "addForce", ForceEntryId = "fe-1" }
             ]
         };
 
@@ -185,8 +185,4 @@ public class SpecRunnerDumpTests
         Assert.Equal("dump-gs", capturedState!.GameSystemId);
         Assert.Single(capturedState.Forces);
         Assert.Single(capturedState.Forces[0].Selections);
-        Assert.Equal("Unit", capturedState.Forces[0].Selections[0].Name);
-        Assert.NotNull(capturedErrors);
-        Assert.Empty(capturedErrors!);
-    }
-}
+        Assert.Equal("Unit", capturedState.Forces[0].Selections[0].Na

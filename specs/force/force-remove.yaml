@@ -16,13 +16,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - expectedState:
       forceCount: 1
 
   - action: removeForce
-    forceIndex: 0
 
   - expectedState:
       forceCount: 0

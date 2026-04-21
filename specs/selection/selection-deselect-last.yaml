@@ -27,11 +27,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-lone-unit
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:
@@ -41,8 +43,8 @@ steps:
           value: 50
 
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-lone-unit.selectionId }}
 
   - expectedState:
       forces:

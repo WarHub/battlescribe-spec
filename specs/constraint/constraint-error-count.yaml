@@ -38,7 +38,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Auto-select creates 1 Unit A, constraint satisfied
   - expectedState:
@@ -46,8 +47,7 @@ steps:
 
   # Remove to trigger min violation
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
 
   - expectedState:
       forces:

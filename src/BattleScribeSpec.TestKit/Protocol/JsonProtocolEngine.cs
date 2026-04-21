@@ -51,60 +51,65 @@ public sealed class JsonProtocolEngine : IRosterEngine
         };
     }
 
-    public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
+    public ActionOutputs AddForce(string forceEntryId, string? catalogueId = null)
     {
-        SendAction(new ActionCommand { Action = "addForce", ForcePath = forcePath, ForceEntryIndex = forceEntryIndex, CatalogueIndex = catalogueIndex });
+        return SendAction(new ActionCommand { Action = "addForce", ForceEntryId = forceEntryId, CatalogueId = catalogueId });
     }
 
-    public void RemoveForce(int[] forcePath)
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId)
     {
-        SendAction(new ActionCommand { Action = "removeForce", ForcePath = forcePath });
+        return SendAction(new ActionCommand { Action = "addChildForce", ForceId = parentForceId, ForceEntryId = forceEntryId });
     }
 
-    public void SelectEntry(int[] forcePath, int entryIndex)
+    public void RemoveForce(string forceId)
     {
-        SendAction(new ActionCommand { Action = "selectEntry", ForcePath = forcePath, EntryIndex = entryIndex });
+        SendAction(new ActionCommand { Action = "removeForce", ForceId = forceId });
     }
 
-    public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex)
+    public ActionOutputs SelectEntry(string forceId, string entryId)
     {
-        SendAction(new ActionCommand
+        return SendAction(new ActionCommand { Action = "selectEntry", ForceId = forceId, EntryId = entryId });
+    }
+
+    public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
+    {
+        return SendAction(new ActionCommand
         {
             Action = "selectChildEntry",
-            ForcePath = forcePath,
-            SelectionPath = selectionPath,
-            ChildEntryIndex = childEntryIndex,
+            ForceId = forceId,
+            SelectionId = parentSelectionId,
+            EntryId = entryId,
         });
     }
 
-    public void DeselectSelection(int[] forcePath, int[] selectionPath)
+    public void DeselectSelection(string forceId, string selectionId)
     {
         SendAction(new ActionCommand
         {
             Action = "deselectSelection",
-            ForcePath = forcePath,
-            SelectionPath = selectionPath,
+            ForceId = forceId,
+            SelectionId = selectionId,
         });
     }
 
-    public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count)
+    public void SetSelectionCount(string forceId, string selectionId, int count)
     {
         SendAction(new ActionCommand
         {
             Action = "setSelectionCount",
-            ForcePath = forcePath,
-            SelectionPath = selectionPath,
+            ForceId = forceId,
+            SelectionId = selectionId,
             Count = count,
         });
     }
 
-    public void DuplicateSelection(int[] forcePath, int[] selectionPath)
+    public ActionOutputs DuplicateSelection(string forceId, string selectionId)
     {
-        SendAction(new ActionCommand
+        return SendAction(new ActionCommand
         {
             Action = "duplicateSelection",
-            ForcePath = forcePath,
-            SelectionPath = selectionPath,
+            ForceId = forceId,
+            SelectionId = selectionId,
         });
     }
 
@@ -157,13 +162,13 @@ public sealed class JsonProtocolEngine : IRosterEngine
         }
     }
 
-    private void SendAction(ActionCommand cmd)
+    private ActionOutputs SendAction(ActionCommand cmd)
     {
         var response = SendCommand(cmd);
         switch (response)
         {
-            case ActionResult { Ok: true }:
-                return;
+            case ActionResult { Ok: true } ar:
+                return ar.Outputs ?? new ActionOutputs();
             case ActionResult { Ok: false, Error: var error }:
                 throw new InvalidOperationException($"Action '{cmd.Action}' failed: {error}");
             case ProtocolError pe:

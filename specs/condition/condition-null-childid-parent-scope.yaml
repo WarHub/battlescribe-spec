@@ -33,11 +33,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit
 
   # BattleScribe: missing childId → condition false → modifier doesn't fire → name unchanged
   # NR: missing childId on parent scope → counts "self" → atLeast 1 → true → modifier fires

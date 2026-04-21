@@ -81,6 +81,8 @@ public sealed class ProtocolDataFile
 
 /// <summary>
 /// Execute a roster editing action.
+/// All addressing is ID-based: definition references use BattleScribe IDs,
+/// instance references use IDs from prior action outputs.
 /// </summary>
 public sealed class ActionCommand : ProtocolCommand
 {
@@ -90,37 +92,25 @@ public sealed class ActionCommand : ProtocolCommand
     [JsonPropertyName("action")]
     public string Action { get; set; } = "";
 
-    [JsonPropertyName("forceEntryIndex")]
+    [JsonPropertyName("forceEntryId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? ForceEntryIndex { get; set; }
+    public string? ForceEntryId { get; set; }
 
-    [JsonPropertyName("forceIndex")]
+    [JsonPropertyName("entryId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? ForceIndex { get; set; }
+    public string? EntryId { get; set; }
 
-    [JsonPropertyName("entryIndex")]
+    [JsonPropertyName("catalogueId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? EntryIndex { get; set; }
+    public string? CatalogueId { get; set; }
 
-    [JsonPropertyName("selectionIndex")]
+    [JsonPropertyName("forceId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? SelectionIndex { get; set; }
+    public string? ForceId { get; set; }
 
-    [JsonPropertyName("childEntryIndex")]
+    [JsonPropertyName("selectionId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? ChildEntryIndex { get; set; }
-
-    [JsonPropertyName("forcePath")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int[]? ForcePath { get; set; }
-
-    [JsonPropertyName("selectionPath")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int[]? SelectionPath { get; set; }
-
-    [JsonPropertyName("catalogueIndex")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? CatalogueIndex { get; set; }
+    public string? SelectionId { get; set; }
 
     [JsonPropertyName("costTypeId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -175,6 +165,10 @@ public sealed class ActionResult : ProtocolResponse
     [JsonPropertyName("error")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Error { get; set; }
+
+    [JsonPropertyName("outputs")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ActionOutputs? Outputs { get; set; }
 }
 
 public sealed class StateResponse : ProtocolResponse

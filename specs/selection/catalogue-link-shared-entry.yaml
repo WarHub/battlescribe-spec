@@ -31,12 +31,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 1
+    id: add-patrol
+    forceEntryId: fe-1
+    catalogueId: cat-faction
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: UNKNOWN_ENTRY_0
 
   - expectedState:
       forces:

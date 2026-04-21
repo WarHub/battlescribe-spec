@@ -47,16 +47,18 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-parent-unit
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-parent
 
   - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 0
-    childEntryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-parent-unit.selectionId }}
+    entryId: CHILD_0
 
   # Ancestor scope should resolve upward — parent IS selected, so the
   # condition "atLeast 1 selection in ancestor" should be true, and the

@@ -112,32 +112,50 @@ public class CatalogueDef : ProtocolCatalogue { }
 /// </summary>
 public sealed class StepDef
 {
+    /// <summary>
+    /// Optional step ID for referencing this step's outputs in later steps.
+    /// Convention: verb-noun kebab-case (add-hq, select-captain).
+    /// Required only when outputs are referenced via ${{ steps.xxx.yyy }}.
+    /// </summary>
+    [YamlMember(Alias = "id")]
+    public string? Id { get; set; }
+
     [YamlMember(Alias = "action")]
     public string? Action { get; set; }
 
-    [YamlMember(Alias = "forceEntryIndex")]
-    public int? ForceEntryIndex { get; set; }
+    /// <summary>
+    /// Force entry definition ID (for addForce, addChildForce).
+    /// References a forceEntry in the setup data by its BattleScribe ID.
+    /// </summary>
+    [YamlMember(Alias = "forceEntryId")]
+    public string? ForceEntryId { get; set; }
 
-    [YamlMember(Alias = "forceIndex")]
-    public int? ForceIndex { get; set; }
+    /// <summary>
+    /// Entry definition ID (for selectEntry, selectChildEntry).
+    /// References a selectionEntry/entryLink in the setup data by its BattleScribe ID.
+    /// </summary>
+    [YamlMember(Alias = "entryId")]
+    public string? EntryId { get; set; }
 
-    [YamlMember(Alias = "entryIndex")]
-    public int? EntryIndex { get; set; }
+    /// <summary>
+    /// Catalogue definition ID (for addForce when multiple catalogues exist).
+    /// </summary>
+    [YamlMember(Alias = "catalogueId")]
+    public string? CatalogueId { get; set; }
 
-    [YamlMember(Alias = "selectionIndex")]
-    public int? SelectionIndex { get; set; }
+    /// <summary>
+    /// Force instance ID (references a force created by a prior step).
+    /// May contain a ${{ steps.xxx.forceId }} expression.
+    /// </summary>
+    [YamlMember(Alias = "forceId")]
+    public string? ForceId { get; set; }
 
-    [YamlMember(Alias = "childEntryIndex")]
-    public int? ChildEntryIndex { get; set; }
-
-    [YamlMember(Alias = "forcePath")]
-    public List<int>? ForcePath { get; set; }
-
-    [YamlMember(Alias = "selectionPath")]
-    public List<int>? SelectionPath { get; set; }
-
-    [YamlMember(Alias = "catalogueIndex")]
-    public int? CatalogueIndex { get; set; }
+    /// <summary>
+    /// Selection instance ID (references a selection created by a prior step).
+    /// May contain a ${{ steps.xxx.selectionId }} expression.
+    /// </summary>
+    [YamlMember(Alias = "selectionId")]
+    public string? SelectionId { get; set; }
 
     [YamlMember(Alias = "costTypeId")]
     public string? CostTypeId { get; set; }

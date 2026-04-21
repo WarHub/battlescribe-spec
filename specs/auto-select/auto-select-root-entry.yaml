@@ -30,7 +30,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-1
 
   # Mandatory Unit (min=1, field=selections) is auto-selected;
   # Optional Unit (no min constraint) is not.

@@ -29,15 +29,16 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-army
 
   - action: selectEntry
-    entryIndex: 0
+    id: select-squad
+    entryId: se-squad
 
   # Add "Weapon" as child of "Squad" (selection 0)
   - action: selectChildEntry
-    selectionIndex: 0
-    childEntryIndex: 0
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: CHILD_0
 
   - expectedState:
       forces:
@@ -49,8 +50,8 @@ steps:
 
   # Add "Scope" as child of "Weapon" using selectionPath to target the nested selection
   - action: selectChildEntry
-    selectionPath: [0, 0]
-    childEntryIndex: 0
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: CHILD_0
 
   - expectedState:
       forces:

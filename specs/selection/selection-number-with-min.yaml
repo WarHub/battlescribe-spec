@@ -36,11 +36,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-parent
 
   # When Parent Unit is selected, Trooper (child with min=3) should be
   # auto-selected with number=3 to satisfy the min constraint.

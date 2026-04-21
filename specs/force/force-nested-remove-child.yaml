@@ -24,11 +24,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-army
+    forceEntryId: fe-army
 
-  - action: addForce
-    forcePath: [0]
-    forceEntryIndex: 0
+  - action: addChildForce
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-army
 
   - expectedState:
       forces:
@@ -39,7 +40,6 @@ steps:
 
   # Remove the child force using forcePath targeting it directly
   - action: removeForce
-    forcePath: [0, 0]
 
   - expectedState:
       forceCount: 1

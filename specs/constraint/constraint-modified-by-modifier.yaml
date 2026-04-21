@@ -37,7 +37,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - expectedState:
       forces:
@@ -46,8 +47,8 @@ steps:
   # First selection: triggers the modifier condition (atLeast 1 selection)
   # which increments max from 1 to 3
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit
 
   - expectedState:
       forces:
@@ -55,8 +56,8 @@ steps:
 
   # Second selection: allowed because modifier changed max to 3
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit
 
   - expectedState:
       forces:

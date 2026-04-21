@@ -41,7 +41,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Auto-select creates 1 Unit A (min=1), no errors
   - expectedState:
@@ -52,8 +53,7 @@ steps:
 
   # Remove auto-selected entry to trigger structured min violation error
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
 
   - expectedState:
       forces:

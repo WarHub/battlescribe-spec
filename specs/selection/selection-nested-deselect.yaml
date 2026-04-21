@@ -25,14 +25,15 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-army
 
   - action: selectEntry
-    entryIndex: 0
+    id: select-squad
+    entryId: se-squad
 
   - action: selectChildEntry
-    selectionIndex: 0
-    childEntryIndex: 0
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: CHILD_0
 
   - expectedState:
       forces:
@@ -44,7 +45,7 @@ steps:
 
   # Deselect the nested "Weapon" using selectionPath
   - action: deselectSelection
-    selectionPath: [0, 0]
+    selectionId: ${{ steps.select-squad.selectionId }}
 
   - expectedState:
       forces:

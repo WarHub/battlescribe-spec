@@ -34,12 +34,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Add target first
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-target
 
   # 0 triggers / 1 total → threshold = 1/100*50 = 0.5 → 0 >= 0.5 → false
   - expectedState:
@@ -49,8 +50,8 @@ steps:
 
   # Add trigger
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-trigger
 
   # 1 trigger / 2 total → threshold = 2/100*50 = 1.0 → 1 >= 1.0 → true
   - expectedState:

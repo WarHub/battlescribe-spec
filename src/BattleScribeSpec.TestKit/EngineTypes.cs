@@ -24,6 +24,7 @@ public record RosterState(
     [property: JsonPropertyName("validationErrors")] IReadOnlyList<ValidationErrorState> ValidationErrors);
 
 public record ForceState(
+    [property: JsonPropertyName("id"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("catalogueId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CatalogueId,
     [property: JsonPropertyName("selections")] IReadOnlyList<SelectionState> Selections,
@@ -43,6 +44,7 @@ public record ForceState(
 }
 
 public record SelectionState(
+    [property: JsonPropertyName("id"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("entryId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EntryId,
     [property: JsonPropertyName("type"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Type,

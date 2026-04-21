@@ -61,11 +61,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   # 1 Elite of 1 total = 100% > 50% → error
   - expectedState:
@@ -76,8 +77,8 @@ steps:
           from: se-1/c1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-2
 
   # 1 Elite of 2 total = 50%. Threshold = 50% of 2 = 1.0. Count = 1 ≤ 1.0 → no error
   - expectedState:

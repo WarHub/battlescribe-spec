@@ -75,17 +75,19 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-heavy-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit
 
   # Select the linked Weapon Bay child under Heavy Trooper.
   - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 0
-    childEntryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-heavy-trooper.selectionId }}
+    entryId: CHILD_0
 
   # Heavy Trooper → Weapon Bay → Combat Blade (min=1) + Special Ammo (min=1, via link).
   # Costs: Trooper 20 + Bay 5 + Blade 2 + Ammo 3 = 30

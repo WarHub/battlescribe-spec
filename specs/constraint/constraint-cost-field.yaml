@@ -33,15 +33,16 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - expectedState:
       forces:
         - selectionCount: 0
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   # 200 pts < max 500 pts — cost constraint satisfied
   - expectedState:

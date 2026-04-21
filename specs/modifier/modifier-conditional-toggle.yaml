@@ -30,11 +30,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
   # Select Alpha - modifier condition met (atLeast 1 selection of self)
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-alpha
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:
@@ -43,8 +45,8 @@ steps:
             - name: Active Alpha
   # Deselect Alpha
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-alpha.selectionId }}
 
   - expectedState:
       forces:

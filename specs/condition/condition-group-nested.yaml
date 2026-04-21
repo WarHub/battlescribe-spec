@@ -45,11 +45,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
   # Nested logic: AND(atLeast 1, OR(greaterThan 5, lessThan 2))
   # With 1 selection: atLeast 1 = true, OR(1>5=false, 1<2=true) = true → AND = true
   - expectedState:
@@ -59,8 +60,8 @@ steps:
 
   # Add 2nd selection: OR(2>5=false, 2<2=false) = false → AND = false → modifier reverts
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:

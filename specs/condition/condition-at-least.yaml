@@ -33,12 +33,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Before trigger: target keeps original name
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-target
 
   - expectedState:
       forces:
@@ -47,8 +48,8 @@ steps:
 
   # Add trigger
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-trigger
 
   # After trigger: condition met, modifier applied
   - expectedState:

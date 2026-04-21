@@ -39,11 +39,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
   # Nested ModifierGroup: outer group condition met (1 selection ≥ 1),
   # inner group unconditional → increment pts by 10 → 100 + 10 = 110
   - expectedState:

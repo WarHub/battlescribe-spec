@@ -31,7 +31,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - expectedState:
       forces:
@@ -39,8 +40,8 @@ steps:
 
   # includeChildSelections=true means the max counts parent + child selections
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-parent
 
   - expectedState:
       forces:

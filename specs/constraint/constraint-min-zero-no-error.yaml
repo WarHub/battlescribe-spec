@@ -26,7 +26,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   # min=0 means entry is optional — no auto-select, no error
   - expectedState:

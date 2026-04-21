@@ -27,19 +27,21 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-squad-alpha
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:
         - selectionCount: 1
 
   - action: duplicateSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad-alpha.selectionId }}
 
   - expectedState:
       forces:

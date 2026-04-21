@@ -817,7 +817,7 @@ public sealed class BattleScribeOracle : IDisposable
     /// <summary>
     /// Recursively search for a ForceEntry by ID in the setup force entries tree.
     /// </summary>
-    private ForceEntry? FindForceEntryById(string? id)
+    internal ForceEntry? FindForceEntryById(string? id)
     {
         if (id is null) return null;
         foreach (var fe in _setupForceEntries)
@@ -843,7 +843,7 @@ public sealed class BattleScribeOracle : IDisposable
     /// Resolve linked catalogues for a catalogue by reading its CatalogueLink elements
     /// and looking up target catalogue IDs in the loaded catalogue dictionary.
     /// </summary>
-    private Dictionary<string, Catalogue> ResolveLinkedCatalogues(Catalogue catalogue)
+    internal Dictionary<string, Catalogue> ResolveLinkedCatalogues(Catalogue catalogue)
     {
         var linked = new Dictionary<string, Catalogue>();
         var linkIter = catalogue.getCatalogueLinks().iterator();
@@ -1834,6 +1834,58 @@ public sealed class BattleScribeOracle : IDisposable
         EnsureInitialized();
         var selections = GetAllSelections();
         return selections.Count > 0 ? selections[0].getName() : null;
+    }
+
+    /// <summary>
+    /// Resolve a catalogue by ID, or return the default catalogue if null.
+    /// Returns the catalogue and its index in the setup catalogues list.
+    /// </summary>
+    internal (Catalogue Catalogue, int Index) ResolveCatalogue(string? catalogueId)
+    {
+        if (catalogueId != null)
+        {
+            for (int i = 0; i < _setupCatalogues.Count; i++)
+            {
+                if (_setupCatalogues[i].getId() == catalogueId)
+                    return (_setupCatalogues[i], i);
+            }
+            throw new InvalidOperationException($"Catalogue '{catalogueId}' not found.");
+        }
+        var idx = _setupCatalogue != null ? _setupCatalogues.IndexOf(_setupCatalogue) : 0;
+        if (idx < 0) idx = 0;
+        return (_setupCatalogues[idx], idx);
+    }
+
+    /// <summary>
+    /// Track the catalogue index for a newly created force.
+    /// </summary>
+    internal void TrackForceCatalogue(Force force, int catalogueIndex) =>
+        _forceCatalogueMap[force] = catalogueIndex;
+
+    /// <summary>
+    /// Create a child force under a parent using a ForceEntry object.
+    /// </summary>
+    internal Force CreateChildForce(Force parentForce, ForceEntry childForceEntry, int catalogueIndex)
+    {
+        EnsureInitialized();
+        if (catalogueIndex < 0 || catalogueIndex >= _setupCatalogues.Count)
+            throw new ArgumentOutOfRangeException(nameof(catalogueIndex));
+        var catalogue = _setupCatalogues[catalogueIndex];
+        var linked = ResolveLinkedCatalogues(catalogue);
+
+        var linkedCatMap = new JavaHashMap();
+        foreach (var kvp in linked)
+            linkedCatMap.put(kvp.Key, kvp.Value);
+
+        var favourites = new JavaArrayList();
+        var errors = new JavaArrayList();
+        var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors);
+
+        if (childForce is null)
+            throw new InvalidOperationException("Java engine returned null when creating child force.");
+
+        _forceCatalogueMap[childForce] = catalogueIndex;
+        return childForce;
     }
 
     public void Dispose()

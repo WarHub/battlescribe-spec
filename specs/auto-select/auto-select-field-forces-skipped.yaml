@@ -38,7 +38,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-1
 
   # Only Selections Min Unit is auto-selected.
   # Forces Min Unit is NOT auto-selected because its constraint uses field=forces.

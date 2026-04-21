@@ -26,7 +26,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   # Auto-select creates 1 Unit A (min=1 still triggers auto-select even without categories).
   # With no category wiring, entry resolves to "(No Category)" which is skipped

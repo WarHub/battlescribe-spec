@@ -24,7 +24,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   # After adding force, the entry should be hidden via modifier
   # The engine applies modifiers during refresh

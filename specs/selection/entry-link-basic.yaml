@@ -26,11 +26,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-shared
   # EntryLink el-1 references se-shared. The engine resolves the link
   # during expansion and makes the target entry selectable.
   # Selecting entryIndex 0 selects the first catalogue entry (se-shared).

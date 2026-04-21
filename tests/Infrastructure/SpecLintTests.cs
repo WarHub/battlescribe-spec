@@ -129,9 +129,12 @@ public sealed class SpecLintTests
 
     // ── Valid actions ─────────────────────────────────────────────────
 
+    // ── addChildForce is a known action ─────────────────────────────
+    // (added as part of the ID-based protocol redesign)
+
     private static readonly HashSet<string> KnownActions =
     [
-        "addForce", "removeForce",
+        "addForce", "addChildForce", "removeForce",
         "selectEntry", "selectChildEntry",
         "deselectSelection", "setSelectionCount",
         "duplicateSelection", "setCostLimit",
@@ -228,11 +231,11 @@ public sealed class SpecLintTests
         }
     }
 
-    // ── setSelectionCount must target child selections ─────────────
+    // ── setSelectionCount must specify selectionId ─────────────────
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void SetSelectionCountTargetsChildOnly(string specPath, string specName)
+    public void SetSelectionCountHasSelectionId(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
         if (spec.Steps is null) return;
@@ -242,16 +245,11 @@ public sealed class SpecLintTests
             var step = spec.Steps[i];
             if (step.Action != "setSelectionCount") continue;
 
-            // selectionPath explicitly provided — must have 2+ elements
-            if (step.SelectionPath is { Count: < 2 })
-                violations.Add($"step {i + 1}: selectionPath has {step.SelectionPath.Count} element(s), needs at least 2");
-
-            // selectionIndex (legacy shorthand) resolves to a single-element path — always invalid
-            if (step.SelectionPath is null && step.SelectionIndex is not null)
-                violations.Add($"step {i + 1}: selectionIndex targets a root selection; use selectionPath with 2+ elements");
+            if (step.SelectionId is null or { Length: 0 })
+                violations.Add($"step {i + 1}: setSelectionCount requires selectionId");
         }
         Assert.True(violations.Count == 0,
-            $"{specName}: setSelectionCount must target child selections (not root):\n  {string.Join("\n  ", violations)}");
+            $"{specName}: setSelectionCount issues:\n  {string.Join("\n  ", violations)}");
     }
 
     // ── No trailing whitespace ───────────────────────────────────────
