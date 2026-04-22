@@ -1,12 +1,8 @@
 id: modifier-set-hidden-true
 category: modifier
-tags: [battlescribe-bug]
 description: >
   A boolean SET modifier on hidden field hides the entry.
   The entry can be selected but reports as hidden, and engines should show an error.
-  BattleScribe bug: Oracle produces no hidden validation error for this selection
-  because the spec has no categoryLinks — the hidden error generator only runs
-  inside category validation (see docs/hidden-validation-analysis.md).
 
 setup:
   gameSystem:
@@ -15,14 +11,24 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
+        categoryLinks:
+          - id: cl-troops
+            targetId: ce-troops
   catalogues:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: test-gs
+      categoryEntries:
+        - id: ce-troops
+          name: Troops
       selectionEntries:
         - id: se-hidden
           name: Hidden Unit
           type: unit
+          categoryLinks:
+            - id: cl-hidden-troops
+              targetId: ce-troops
+              primary: true
           modifiers:
             - type: set
               field: hidden
@@ -30,6 +36,10 @@ setup:
         - id: se-normal
           name: Normal Unit
           type: unit
+          categoryLinks:
+            - id: cl-normal-troops
+              targetId: ce-troops
+              primary: true
 
 steps:
   - action: addForce
@@ -55,6 +65,3 @@ steps:
       errors:
         - on: selection se-hidden
           from: se-hidden/hidden
-      engines:
-        battlescribe:
-          errors: []
