@@ -106,8 +106,11 @@ use BattleScribe data model IDs from the setup data. Instance references (e.g., 
 
 #### Action outputs
 
-Mutating actions return an `outputs` object with IDs of created elements. These can be
-referenced in later steps using `${{ steps.<stepId>.<field> }}` expressions.
+Mutating actions return an `outputs` object with IDs of created elements. The spec runner
+flattens `outputs` onto the `steps.<stepId>` namespace, so if an adapter returns
+`{"type":"actionResult","outputs":{"forceId":"f1"}}` for a step with `id: add-patrol`,
+later steps reference that value as `${{ steps.add-patrol.forceId }}` (not
+`${{ steps.add-patrol.outputs.forceId }}`).
 
 | Output Field | Type | Returned by |
 |-------------|------|-------------|
@@ -174,7 +177,9 @@ Sent after each spec test completes. The adapter should reset its state.
 ```
 
 The `outputs` field is present on success for mutating actions that create elements.
-It contains the IDs described in [Action outputs](#action-outputs) above.
+It contains the IDs described in [Action outputs](#action-outputs) above. The spec runner
+flattens each `outputs` property onto the step's expression namespace — e.g.,
+`outputs.forceId` becomes `${{ steps.<stepId>.forceId }}`.
 
 ### `state` — Full Roster State
 

@@ -212,15 +212,19 @@ that wraps the BattleScribe oracle engine. It's only ~10 lines of code thanks to
 ## DataSource Specs
 
 Some specs use `dataSource` in their setup (e.g., `github:BSData/wh40k-10e@v10.6.0`) instead
-of inline game system/catalogue XML. These specs load real-world BattleScribe data files and
-use name-based actions (`forceEntryName`, `entryName`, `catalogueName`) instead of ID-based.
+of inline game system/catalogue XML. These specs load real-world BattleScribe data files.
+Actions in dataSource specs use the same **ID-based** parameters (`forceEntryId`, `entryId`,
+`catalogueId`, etc.) as inline specs — the IDs come from the BattleScribe XML data files.
+
+Name-based actions (`forceEntryName`, `entryName`, `catalogueName`) are also supported as
+an alternative for readability when exact IDs are not convenient.
 
 DataSource specs are resolved by the test runner using `DataSourceResolver` and are supported
 by engines that implement the `IRosterEngine` file-based interface methods:
 
 - `SetupFromFiles(files)` — load raw `.gst`/`.cat` XML files
-- `AddForceByName(forceEntryName, catalogueName = null)` — add a force, optionally selecting the faction catalogue by name
-- `SelectEntryByName(forceId, entryName)` — select an entry by name
+- `AddForceByName(forceEntryName, catalogueName = null)` — add a force by name (alternative to ID-based)
+- `SelectEntryByName(forceId, entryName)` — select an entry by name (alternative to ID-based)
 - `SelectChildEntryByName(forceId, selectionId, childEntryName)` — select a child entry by name
 
 The protocol adapter does not need to support DataSource specs — they are handled internally
