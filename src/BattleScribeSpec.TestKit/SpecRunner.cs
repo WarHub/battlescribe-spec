@@ -422,6 +422,9 @@ public sealed class SpecRunner
         if (ef.AvailableEntryCount is { } aec && af.AvailableEntryCount is { } actualAec)
             AssertEqual(stepIndex, $"{prefix}.availableEntryCount", aec, actualAec);
 
+        if (ef.Hidden is { } expectedHidden)
+            AssertEqual(stepIndex, $"{prefix}.hidden", expectedHidden, af.Hidden);
+
         if (ef.ChildForceCount is { } cfc)
             AssertEqual(stepIndex, $"{prefix}.childForceCount", cfc, af.ChildForces.Count);
 

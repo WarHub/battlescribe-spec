@@ -420,6 +420,8 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forceRules = JavaListToList<net.battlescribe.model.data.Rule>(f.getRules());
         var childForces = JavaListToList<net.battlescribe.model.roster.Force>(f.getForces());
         var pubId = f.getPublicationId();
+        var forceEntry = _oracle.FindForceEntryById(f.getEntryId());
+        var hidden = forceEntry?.isHidden() ?? false;
         return new ForceState(
             f.getId(),
             f.getName() ?? "",
@@ -432,6 +434,7 @@ public sealed class OracleRosterEngine : IRosterEngine
             Profiles: forceProfiles.Select(CaptureProfile).ToList(),
             Rules: forceRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
                 string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
+            Hidden: hidden,
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
             Page: f.getPage());
     }

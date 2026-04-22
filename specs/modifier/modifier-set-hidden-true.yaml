@@ -1,6 +1,8 @@
 id: modifier-set-hidden-true
 category: modifier
-description: A boolean SET modifier on hidden field hides the entry
+description: >
+  A boolean SET modifier on hidden field hides the entry.
+  The entry can be selected but reports as hidden, and NR shows an error.
 
 setup:
   gameSystem:
@@ -14,19 +16,45 @@ setup:
       name: Test Catalogue
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-unit-a
+        - id: se-hidden
           name: Hidden Unit
           type: unit
           modifiers:
             - type: set
               field: hidden
               value: "true"
+        - id: se-normal
+          name: Normal Unit
+          type: unit
 
 steps:
   - action: addForce
+    id: add-force
     forceEntryId: fe-patrol
 
-  # After adding force, the entry should be hidden via modifier
-  # The engine applies modifiers during refresh
-  # We verify the entry's hidden status affects the model
-  - expectedState: {}
+  - action: selectEntry
+    forceId: ${{ steps.add-force.forceId }}
+    entryId: se-hidden
+
+  - action: selectEntry
+    forceId: ${{ steps.add-force.forceId }}
+    entryId: se-normal
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Hidden Unit
+            - name: Normal Unit
+              hidden: false
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Hidden Unit
+                  hidden: true
+                - name: Normal Unit
+                  hidden: false
+          errors:
+            - on: selection se-hidden
+              from: se-hidden/hidden

@@ -27,12 +27,22 @@ steps:
 
   - expectedState:
       forceCount: 2
+      forces:
+        - name: Patrol
+        - name: Battalion
+      engines:
+        newrecruit:
+          forces:
+            - name: Battalion
+            - name: Patrol
 
   - action: removeForce
     forceId: ${{ steps.add-patrol.forceId }}
 
   - expectedState:
       forceCount: 1
+      forces:
+        - name: Battalion
 
   - action: removeForce
     forceId: ${{ steps.add-battalion.forceId }}

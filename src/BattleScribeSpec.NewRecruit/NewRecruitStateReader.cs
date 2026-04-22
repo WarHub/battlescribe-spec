@@ -75,6 +75,7 @@ public static class NewRecruitStateReader
                 p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
                 p.Page, p.PublicationId)).ToList(),
             Rules: f.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
+            Hidden: f.Hidden,
             PublicationId: f.PublicationId,
             Page: f.Page
         );
@@ -139,6 +140,7 @@ public static class NewRecruitStateReader
         public string? Id { get; init; }
         public string Name { get; init; } = "";
         public string? CatalogueId { get; init; }
+        public bool Hidden { get; init; }
         public List<NrSelectionSnapshot> Selections { get; init; } = [];
         public List<NrForceSnapshot> ChildForces { get; init; } = [];
         public List<NrProfileSnapshot> Profiles { get; init; } = [];

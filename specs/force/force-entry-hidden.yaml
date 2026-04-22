@@ -1,8 +1,7 @@
 id: force-entry-hidden
 category: force
 description: >
-  ForceEntry with hidden=true is not visible or selectable.
-  A modifier can change hidden state based on conditions.
+  ForceEntry with hidden=true can be added but is reported as hidden in state.
 
 setup:
   gameSystem:
@@ -25,9 +24,23 @@ setup:
           type: unit
 
 steps:
-  # Only 1 force entry should be available (the non-hidden one)
   - action: addForce
     forceEntryId: fe-patrol
 
+  - action: addForce
+    forceEntryId: fe-hidden
+
   - expectedState:
-      forceCount: 1
+      forceCount: 2
+      forces:
+        - name: Patrol
+          hidden: false
+        - name: Hidden Detachment
+          hidden: true
+      engines:
+        newrecruit:
+          forces:
+            - name: Hidden Detachment
+              hidden: true
+            - name: Patrol
+              hidden: false

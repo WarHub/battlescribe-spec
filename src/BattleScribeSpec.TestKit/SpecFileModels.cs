@@ -295,6 +295,9 @@ public sealed class ExpectedForceDef
     [YamlMember(Alias = "availableEntryCount")]
     public int? AvailableEntryCount { get; set; }
 
+    [YamlMember(Alias = "hidden")]
+    public bool? Hidden { get; set; }
+
     [YamlMember(Alias = "childForceCount")]
     public int? ChildForceCount { get; set; }
 

@@ -41,11 +41,33 @@ steps:
     id: add-patrol
     forceEntryId: fe-patrol
 
+  - action: addForce
+    id: add-special
+    forceEntryId: fe-special
+
+  # Before selecting blocker: both forces visible
+  - expectedState:
+      forceCount: 2
+      forces:
+        - name: Patrol
+          hidden: false
+        - name: Special Detachment
+          hidden: false
+
   - action: selectEntry
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-blocker
 
-  # After selecting Blocker Unit, the Special Detachment should become hidden
-  # This spec verifies that modifiers on force entries are processed
+  # After selecting blocker: Special Detachment becomes hidden
+  # Oracle limitation: Force object lacks isHidden(), reads static ForceEntry
   - expectedState:
-      forceCount: 1
+      forceCount: 2
+      forces:
+        - name: Patrol
+        - name: Special Detachment
+      engines:
+        newrecruit:
+          forces:
+            - name: Patrol
+            - name: Special Detachment
+              hidden: true

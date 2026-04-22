@@ -174,6 +174,7 @@ internal static class JsHelpers
                         id: f?.uid || null,
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
+                        hidden: f.isHidden?.() === true,
                         selections: extractSelections(f, false),
                         childForces: directChildren.map(cf => extractForce(cf)),
                         profiles: extractProfiles(f),

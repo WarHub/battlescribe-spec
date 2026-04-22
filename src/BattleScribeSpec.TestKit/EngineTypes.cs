@@ -32,6 +32,7 @@ public record ForceState(
     IReadOnlyList<ForceState>? ChildForces = null,
     IReadOnlyList<ProfileState>? Profiles = null,
     IReadOnlyList<RuleState>? Rules = null,
+    [property: JsonPropertyName("hidden")] bool Hidden = false,
     [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null,
     [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null)
 {
