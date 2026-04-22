@@ -1,7 +1,11 @@
 id: force-entry-hidden
 category: force
+tags: [battlescribe-bug]
 description: >
   ForceEntry with hidden=true can be added but is reported as hidden in state.
+  BattleScribe bug: the engine never validates hidden ForceEntries — no "(hidden)"
+  error is produced, unlike for hidden SelectionEntries/CategoryEntries.
+  See docs/hidden-validation-analysis.md for decompiled source analysis.
 
 setup:
   gameSystem:
