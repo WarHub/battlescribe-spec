@@ -1,0 +1,177 @@
+id: protocol-duplicate-force
+category: protocol
+description: >
+  Tests duplicateForce action: duplicating a force creates a deep copy
+  with all selections and children preserved.
+tags: []
+engines:
+  battlescribe: skip
+
+setup:
+  gameSystem:
+    id: gs-df
+    name: Duplicate Force GS
+    costTypes:
+      - id: ct-pts
+        name: pts
+    profileTypes:
+      - id: pt-unit
+        name: Unit
+        characteristicTypes:
+          - id: char-m
+            name: M
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-hq
+            targetId: cat-hq
+            name: HQ
+          - id: cl-troops
+            targetId: cat-troops
+            name: Troops
+    categoryEntries:
+      - id: cat-hq
+        name: HQ
+      - id: cat-troops
+        name: Troops
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-df
+      selectionEntries:
+        - id: se-captain
+          name: Captain
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 80
+          categoryLinks:
+            - id: cl-cap-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
+          profiles:
+            - id: prof-cap
+              name: Captain
+              typeId: pt-unit
+              typeName: Unit
+              characteristics:
+                - name: M
+                  typeId: char-m
+                  value: "6"
+          selectionEntries:
+            - id: se-cap-sword
+              name: Power Sword
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 60
+          categoryLinks:
+            - id: cl-sq-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+
+steps:
+  # Step 1: Add a Patrol force
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - expectedState:
+      forceCount: 1
+
+  # Step 2: Select Captain (has child selection entry Power Sword)
+  - action: selectEntry
+    id: select-captain
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-captain
+
+  # Step 3: Add child Power Sword to Captain
+  - action: selectChildEntry
+    id: select-sword
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-captain.selectionId }}
+    entryId: se-cap-sword
+
+  # Step 4: Select a Squad
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-squad
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Patrol
+          selectionCount: 2
+          selections:
+            - name: Captain
+              type: unit
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 80
+              children:
+                - name: Power Sword
+                  type: upgrade
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 10
+            - name: Squad
+              type: unit
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 60
+
+  # Step 5: Duplicate the entire force — deep copy with all selections
+  - action: duplicateForce
+    id: dupe-patrol
+    forceId: ${{ steps.add-patrol.forceId }}
+
+  - expectedState:
+      forceCount: 2
+      forces:
+        - name: Patrol
+          selectionCount: 2
+          selections:
+            - name: Captain
+              children:
+                - name: Power Sword
+            - name: Squad
+        - name: Patrol
+          selectionCount: 2
+          selections:
+            - name: Captain
+              children:
+                - name: Power Sword
+            - name: Squad
+      costs:
+        - typeId: ct-pts
+          value: 300
+
+  # Step 6: Remove the duplicated force
+  - action: removeForce
+    forceId: ${{ steps.dupe-patrol.forceId }}
+
+  - expectedState:
+      forceCount: 1
+      forces:
+        - name: Patrol
+          selectionCount: 2
+      costs:
+        - typeId: ct-pts
+          value: 150

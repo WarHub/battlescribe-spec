@@ -131,6 +131,10 @@ public static class AdapterHandler
                         cmd.ForceId ?? throw new InvalidOperationException("duplicateSelection requires forceId"),
                         cmd.SelectionId ?? throw new InvalidOperationException("duplicateSelection requires selectionId"));
                     break;
+                case "duplicateForce":
+                    outputs = engine.DuplicateForce(
+                        cmd.ForceId ?? throw new InvalidOperationException("duplicateForce requires forceId"));
+                    break;
                 case "setCostLimit":
                     engine.SetCostLimit(cmd.CostTypeId ?? "", cmd.Value ?? 0);
                     break;

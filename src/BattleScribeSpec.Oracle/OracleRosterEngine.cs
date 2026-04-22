@@ -161,6 +161,12 @@ public sealed class OracleRosterEngine : IRosterEngine
         };
     }
 
+    public ActionOutputs DuplicateForce(string forceId)
+    {
+        throw new NotSupportedException(
+            "DuplicateForce is not supported by the BattleScribe Java engine (no public API).");
+    }
+
     public void SetCostLimit(string costTypeId, double value)
     {
         var costType = _oracle.GetCostTypeById(costTypeId)

@@ -204,6 +204,11 @@ public sealed class SpecRunner
                     selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: duplicateSelection requires selectionId"));
                 break;
 
+            case "duplicateForce":
+                outputs = _engine.DuplicateForce(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: duplicateForce requires forceId"));
+                break;
+
             case "setCostLimit":
                 _engine.SetCostLimit(step.CostTypeId ?? "", step.Value ?? 0);
                 break;

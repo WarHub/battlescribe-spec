@@ -268,6 +268,12 @@ public class RunnerAndProtocolRegressionTests
             return new ActionOutputs { SelectionId = "dup-sel-1" };
         }
 
+        public ActionOutputs DuplicateForce(string forceId)
+        {
+            ActionCalls++;
+            return new ActionOutputs { ForceId = "dup-force-1" };
+        }
+
         public void SetCostLimit(string costTypeId, double value) => ActionCalls++;
 
         public RosterState GetRosterState()

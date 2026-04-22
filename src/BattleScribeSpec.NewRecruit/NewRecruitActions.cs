@@ -392,6 +392,49 @@ public static class NewRecruitActions
     }
 
     /// <summary>
+    /// Duplicate a force using dupe().
+    /// Returns the uid of the duplicated force.
+    /// </summary>
+    public static async Task<string?> DuplicateForceAsync(IPage page, string forceUid)
+    {
+        var result = await page.EvaluateAsync<string?>("""
+            async ({forceUid}) => {
+                try {
+                    const army = window.__bsspec?.army;
+                    if (!army) return 'ERROR:No current roster';
+
+                    const before = new Set(
+                        (army.getForces?.() || []).map(f => f?.uid || ''));
+
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
+
+                    if (typeof force.dupe === 'function') {
+                        await force.dupe();
+                    } else {
+                        return 'ERROR:dupe() method not available on force';
+                    }
+
+                    // Find the duplicated force by comparing before/after uid sets
+                    const after = army.getForces?.() || [];
+                    let newUid = null;
+                    for (const f of after) {
+                        if (f && !before.has(f.uid || '')) {
+                            newUid = f.uid || null;
+                            break;
+                        }
+                    }
+
+                    return newUid;
+                } catch(e) {
+                    return 'ERROR:DuplicateForce error: ' + e.message;
+                }
+            }
+            """, new { forceUid });
+        return HandleCreateResult(result);
+    }
+
+    /// <summary>
     /// Set cost limit for a cost type using army.setMaxCosts().
     /// </summary>
     public static async Task SetCostLimitAsync(IPage page, string costTypeId, double value)

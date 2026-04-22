@@ -113,6 +113,15 @@ public sealed class JsonProtocolEngine : IRosterEngine
         });
     }
 
+    public ActionOutputs DuplicateForce(string forceId)
+    {
+        return SendAction(new ActionCommand
+        {
+            Action = "duplicateForce",
+            ForceId = forceId,
+        });
+    }
+
     public void SetCostLimit(string costTypeId, double value)
     {
         SendAction(new ActionCommand

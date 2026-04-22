@@ -10,7 +10,7 @@ namespace BattleScribeSpec;
 public sealed class ActionOutputs
 {
     /// <summary>
-    /// ID of the created force (returned by addForce, addChildForce).
+    /// ID of the created force (returned by addForce, addChildForce, duplicateForce).
     /// </summary>
     [JsonPropertyName("forceId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -90,6 +90,12 @@ public interface IRosterEngine : IDisposable
     /// Duplicate a selection within a force.
     /// </summary>
     ActionOutputs DuplicateSelection(string forceId, string selectionId);
+
+    /// <summary>
+    /// Duplicate a force, creating a deep copy with all selections.
+    /// Returns the ID of the newly created force.
+    /// </summary>
+    ActionOutputs DuplicateForce(string forceId);
 
     /// <summary>
     /// Set cost limit for a cost type by its ID.

@@ -469,6 +469,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return new ActionOutputs { SelectionId = newSelectionId };
     }
 
+    public ActionOutputs DuplicateForce(string forceId)
+    {
+        var newForceId = NewRecruitActions.DuplicateForceAsync(_browser.Page, forceId)
+            .GetAwaiter().GetResult();
+        return new ActionOutputs { ForceId = newForceId };
+    }
+
     public void SetCostLimit(string costTypeId, double value)
     {
         NewRecruitActions.SetCostLimitAsync(_browser.Page, costTypeId, value)
