@@ -1,9 +1,7 @@
 id: wh40k-10e-space-marines-army
 category: real-world
 description: Build a Space Marines army — verify auto-selections, unit types, and points costs
-tags: [wh40k-10e, real-world, space-marines, cost, profile]
-engines:
-  newrecruit: skip
+tags: [wh40k-10e, real-world, space-marines, cost, profile, design-difference]
 
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
@@ -15,6 +13,7 @@ steps:
     catalogueId: e0af-67df-9d63-8fb7
 
   # After force creation, mandatory entries are auto-selected
+  # NR orders auto-selections differently: Battle Size, Detachment, Show/Hide Options
   - expectedState:
       forceCount: 1
       forces:
@@ -27,6 +26,16 @@ steps:
               type: upgrade
             - name: "Battle Size"
               type: upgrade
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: "Battle Size"
+                  type: upgrade
+                - name: "Detachment"
+                  type: upgrade
+                - name: "Show/Hide Options"
+                  type: upgrade
 
   - action: selectEntry
     forceId: ${{ steps.add-force.forceId }}
@@ -48,6 +57,18 @@ steps:
               type: upgrade
             - name: "Captain"
               type: model
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: "Battle Size"
+                  type: upgrade
+                - name: "Detachment"
+                  type: upgrade
+                - name: "Show/Hide Options"
+                  type: upgrade
+                - name: "Captain"
+                  type: model
 
   - action: selectEntry
     forceId: ${{ steps.add-force.forceId }}
@@ -71,6 +92,20 @@ steps:
               type: model
             - name: "Intercessor Squad"
               type: unit
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: "Battle Size"
+                  type: upgrade
+                - name: "Detachment"
+                  type: upgrade
+                - name: "Show/Hide Options"
+                  type: upgrade
+                - name: "Captain"
+                  type: model
+                - name: "Intercessor Squad"
+                  type: unit
 
   - action: selectEntry
     forceId: ${{ steps.add-force.forceId }}

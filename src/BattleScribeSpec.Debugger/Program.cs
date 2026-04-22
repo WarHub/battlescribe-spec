@@ -14,7 +14,11 @@ for (var i = 0; i < args.Length; i++)
     switch (args[i])
     {
         case "--engine" when i + 1 < args.Length:
-            engineName = args[++i].ToLowerInvariant();
+            engineName = args[++i].ToLowerInvariant() switch
+            {
+                "nr" => "newrecruit",
+                var name => name
+            };
             break;
         case "--dump":
             dumpAll = true;
@@ -116,7 +120,7 @@ catch (Exception ex)
 using (engine)
 {
     var dumpOptions = new DumpOptions(Json: json, Enricher: enricher);
-    var runner = new SpecRunner(engine, engineName: engineName);
+    var runner = new SpecRunner(engine, new DataSourceResolver(), engineName);
 
     var stepCount = spec.Steps.Count;
     var lastStepIndex = stepCount - 1;
