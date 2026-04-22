@@ -233,7 +233,7 @@ forces and selections.
 | Hidden selection error | ✅ "(hidden)" | ✅ "while hidden" | ✅ via error text | ✅ via error text |
 | Hidden category error | ✅ "(hidden)" | ❓ Unknown | ✅ via error text | ✅ via error text |
 | Hidden force error | ❌ Not implemented | ❌ Not implemented | ❌ Not generated | ❌ Not generated |
-| Constraint skip for hidden | ✅ | ✅ (assumed) | ✅ | ✅ |
+| Constraint skip for hidden | ✅ | ❓ Assumed from matching outcomes; not directly confirmed | ✅ | ✅ |
 | Force hidden state read | N/A | `inst.isHidden()` (resolved) | `_engine.a()` copy (resolved) | `inst.isHidden()` (resolved) |
 | Selection hidden state read | N/A | `inst.isHidden()` (resolved) | `_engine.a()` copy (resolved) | `inst.isHidden()` (resolved) |
 

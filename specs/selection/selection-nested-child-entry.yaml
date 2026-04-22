@@ -47,6 +47,10 @@ steps:
   - expectedState:
       forces:
         - name: Army
+          selections:
+            - name: Squad
+              children:
+                - name: Weapon
 
   # Add "Scope" as child of "Weapon" using selectionId to target the nested selection
   - action: selectChildEntry
