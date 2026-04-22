@@ -348,7 +348,7 @@ public static class NewRecruitActions
     public static async Task<string?> DuplicateSelectionAsync(IPage page, string forceUid, string selectionUid)
     {
         var result = await page.EvaluateAsync<string?>("""
-            ({forceUid, selectionUid}) => {
+            async ({forceUid, selectionUid}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'ERROR:No current roster';
@@ -363,7 +363,7 @@ public static class NewRecruitActions
                     if (!sel) return `ERROR:Selection not found with uid '${selectionUid}'`;
 
                     if (typeof sel.dupe === 'function') {
-                        sel.dupe();
+                        await sel.dupe();
                     } else {
                         return 'ERROR:dupe() method not available on selection';
                     }

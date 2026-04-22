@@ -4,9 +4,6 @@ description: >
   Comprehensive smoke test exercising all Protocol types, all action types,
   and all state assertion fields for adapter protocol adherence.
 tags: []
-# NR: deselectSelection after duplicateSelection fails — uid lookup can't find duplicated selection
-engines:
-  newrecruit: fail
 
 setup:
   gameSystem:
