@@ -1,10 +1,8 @@
 id: force-entry-with-modifier
 category: force
-tags: [battlescribe-bug]
 description: >
   ForceEntry with a modifier that sets hidden=true based on a condition.
   When the condition is met, the force entry becomes hidden.
-  BattleScribe bug: no engine validates hidden forces (see docs/hidden-validation-analysis.md).
 
 setup:
   gameSystem:
@@ -65,5 +63,6 @@ steps:
       forceCount: 2
       forces:
         - name: Patrol
+          hidden: false
         - name: Special Detachment
           hidden: true
