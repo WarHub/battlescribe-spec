@@ -138,35 +138,93 @@ but not to forces.
 
 ## NewRecruit Behavior
 
-NR independently synthesizes its own hidden-selection errors (separate from the
-BattleScribe engine):
-- **Message format**: `"{name} cannot be selected while hidden"` (differs from BS
-  engine's `"cannot have any selections of {name} (hidden)"`)
-- **Scope**: Only fires for `ownerType === 'selection'` — forces are explicitly
-  not covered
-- **Resolution**: NR's `f.isHidden()` on force roster objects correctly reflects
-  modifier-applied hidden state (unlike static `f.source?.hidden`)
+### Live UI Investigation (Playwright, 2025-04)
 
-NR does **not** produce errors for hidden forces.
+Verified with synthetic data loaded into NR at newrecruit.eu. Scenario: two forces
+(Visible Force, Hideable Force), with a "Hide Trigger" upgrade that hides the
+force and a selection via modifier. After adding Hide Trigger in Visible Force:
+
+**NR internal tree state** (via Pinia store and instance method calls):
+
+```
+FORCE: Hideable Force
+  isHidden(): true           ← modifier correctly applied
+  getErrors(): 1             ← propagated from child, NOT own error
+    -> "Hideable Unit cannot be selected while hidden"
+  selector.hidden: 0         ← static value, NOT modifier-applied
+  vueHiddenKey: 1            ← Vue reactivity counter, signals state change
+
+  General (category) isHidden=false errors=1 (propagated)
+    Hideable Unit isHidden=true errors=1
+      -> "Hideable Unit cannot be selected while hidden"
+
+FORCE: Visible Force
+  isHidden(): false
+  getErrors(): 0
+  vueHiddenKey: 0
+
+  General isHidden=false errors=0
+    Hide Trigger isHidden=false errors=0
+    Visible Unit isHidden=false errors=0
+```
+
+**Key findings:**
+
+1. **`isHidden()` on instances** works correctly — reflects modifier-applied state.
+   Available on force/category/selection instances via prototype chain.
+2. **`selector.hidden`** is the STATIC definition value (always 0/false for these
+   entries) — NOT the dynamic modifier-applied state.
+3. **`vueHiddenKey`** is a Vue reactivity counter incremented when hidden state
+   changes. Used by Vue components to trigger re-render of hidden indicators.
+4. **Error format**: `"<span class='optName'>Hideable Unit</span> cannot be selected while hidden"`
+   (HTML spans in the message, stripped by our adapter).
+5. **`getErrors()`** on parent nodes aggregates ALL descendant errors — the red
+   error icon on the force header in the UI is child error propagation, NOT a
+   force-level hidden error.
+6. **NR does NOT produce errors for hidden forces** — only for hidden selections.
+   The force's own `errors` array is empty; `getErrors()` includes only propagated
+   child selection errors.
+
+### NR Architecture Notes
+
+NR uses a dual-tree structure:
+- **Selector tree** (`selectors[]`): catalogue-level definitions with `hidden`
+  (static), `source` (with modifiers), and `instances[]`
+- **Instance tree** (`instances[]`): roster-level objects with `isHidden()` (dynamic),
+  `getErrors()` (aggregated), and full prototype methods
+
+The instance prototype has ~200 methods including `isHidden`, `getErrors`,
+`isForce`, `isCategory`, `getName`, `applyModifications`, `checkConstraints`,
+`refreshErrors`, etc.
 
 ## Adapter Compensation
 
 Since neither the BattleScribe engine nor NR natively validates hidden forces,
 the spec adapters do not currently synthesize hidden-force errors.
 
-### Oracle Adapter Limitations
+### Oracle Adapter
 
-The Oracle adapter reads force hidden state from `ForceEntry.isHidden()` which
-returns the **static** value only (from the setup data). Modifier-applied hidden
-state is not accessible because:
-1. `Force` (roster object) has no `isHidden()` method
-2. The internal resolution context (`d2`) is not exposed through IKVM
+The Oracle adapter reads modifier-applied hidden state by calling the engine's
+internal modifier-application method:
 
-### NR Adapter Capabilities
+```csharp
+// Creates a COPY of the entry with modifiers applied
+(SelectionEntry)_engine.a(forceContext, selection, originalEntry, true)
+(ForceEntry)_engine.a(forceContext, force, originalForceEntry, true)
+```
 
-The NR adapter can read modifier-applied hidden state via `f.isHidden()` on
-force roster objects. This correctly reflects modifiers, making it possible to
-detect dynamically hidden forces.
+This correctly returns the dynamic hidden state for both force entries and
+selection entries. The `_engine.a(d, BaseSelectable, T, boolean)` method at
+`c.java:1109-1134` creates a temporary copy with modifiers applied.
+
+**Note**: The engine's entry map (`a.i(entryId)`) returns ORIGINAL entries —
+modifiers are never applied to them. Always use the copy-creating method above.
+
+### NR Adapter
+
+The NR adapter reads modifier-applied hidden state via `f.isHidden()` on
+force/selection instance objects. This correctly reflects modifiers for both
+forces and selections.
 
 ## Summary Table
 
@@ -174,9 +232,10 @@ detect dynamically hidden forces.
 |---|---|---|---|---|
 | Hidden selection error | ✅ "(hidden)" | ✅ "while hidden" | ✅ via error text | ✅ via error text |
 | Hidden category error | ✅ "(hidden)" | ❓ Unknown | ✅ via error text | ✅ via error text |
-| Hidden force error | ❌ Not implemented | ❌ Not implemented | ❌ Static only | ⚠️ Detectable via `isHidden()` |
+| Hidden force error | ❌ Not implemented | ❌ Not implemented | ❌ Not generated | ❌ Not generated |
 | Constraint skip for hidden | ✅ | ✅ (assumed) | ✅ | ✅ |
-| Force hidden state read | N/A | `f.isHidden()` (resolved) | `ForceEntry.isHidden()` (static) | `f.isHidden()` (resolved) |
+| Force hidden state read | N/A | `inst.isHidden()` (resolved) | `_engine.a()` copy (resolved) | `inst.isHidden()` (resolved) |
+| Selection hidden state read | N/A | `inst.isHidden()` (resolved) | `_engine.a()` copy (resolved) | `inst.isHidden()` (resolved) |
 
 ## References
 
