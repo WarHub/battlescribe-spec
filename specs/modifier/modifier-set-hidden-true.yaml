@@ -4,8 +4,9 @@ tags: [battlescribe-bug]
 description: >
   A boolean SET modifier on hidden field hides the entry.
   The entry can be selected but reports as hidden, and engines should show an error.
-  BattleScribe bug: Oracle cannot read modifier-applied hidden state on selections
-  (only static hidden), so it reports hidden=false and produces no error.
+  BattleScribe bug: Oracle produces no hidden validation error for this selection
+  because the spec has no categoryLinks — the hidden error generator only runs
+  inside category validation (see docs/hidden-validation-analysis.md).
 
 setup:
   gameSystem:
@@ -56,10 +57,4 @@ steps:
           from: se-hidden/hidden
       engines:
         battlescribe:
-          forces:
-            - selectionCount: 2
-              selections:
-                - name: Hidden Unit
-                - name: Normal Unit
-                  hidden: false
           errors: []

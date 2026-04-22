@@ -420,13 +420,16 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forceRules = JavaListToList<net.battlescribe.model.data.Rule>(f.getRules());
         var childForces = JavaListToList<net.battlescribe.model.roster.Force>(f.getForces());
         var pubId = f.getPublicationId();
-        var forceEntry = _oracle.FindForceEntryById(f.getEntryId());
-        var hidden = forceEntry?.isHidden() ?? false;
+        // Use engine-resolved ForceEntry (modifiers applied) for hidden state
+        var resolvedForceEntry = _oracle.GetResolvedForceEntry(f);
+        var hidden = resolvedForceEntry?.isHidden()
+            ?? _oracle.FindForceEntryById(f.getEntryId())?.isHidden()
+            ?? false;
         return new ForceState(
             f.getId(),
             f.getName() ?? "",
             f.getCatalogueId(),
-            selections.Select(CaptureSelection).ToList(),
+            selections.Select(s => CaptureSelection(s, f)).ToList(),
             rootForceIndex is { } rfi ? _oracle.GetAvailableEntryCountForForce(rfi) : null,
             ChildForces: childForces.Count > 0
                 ? childForces.Select(cf => CaptureForce(cf)).ToList()
@@ -439,14 +442,18 @@ public sealed class OracleRosterEngine : IRosterEngine
             Page: f.getPage());
     }
 
-    private SelectionState CaptureSelection(net.battlescribe.model.roster.Selection sel)
+    private SelectionState CaptureSelection(net.battlescribe.model.roster.Selection sel, net.battlescribe.model.roster.Force force)
     {
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
         var profiles = JavaListToList<net.battlescribe.model.data.Profile>(sel.getProfiles());
         var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());
         var categories = JavaListToList<net.battlescribe.model.roster.Category>(sel.getCategories());
-        var hidden = _oracle.GetEntryById(sel.getEntryId())?.isHidden() ?? false;
+        // Use engine's modifier-application to get resolved hidden state
+        var resolvedEntry = _oracle.GetResolvedEntry(force, sel);
+        var hidden = resolvedEntry?.isHidden()
+            ?? _oracle.GetEntryById(sel.getEntryId())?.isHidden()
+            ?? false;
         var pubId = sel.getPublicationId();
         return new SelectionState(
             sel.getId(),
@@ -456,7 +463,7 @@ public sealed class OracleRosterEngine : IRosterEngine
             sel.getNumber(),
             hidden,
             costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList(),
-            children.Select(CaptureSelection).ToList(),
+            children.Select(c => CaptureSelection(c, force)).ToList(),
             Profiles: profiles.Select(CaptureProfile).ToList(),
             Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
                 string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),

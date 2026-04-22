@@ -1801,6 +1801,53 @@ public sealed class BattleScribeOracle : IDisposable
 
     internal GameSystem? GetGameSystem() => _gameSystem;
 
+    /// <summary>
+    /// Resolve a SelectionEntry by applying modifiers within the force context.
+    /// The engine's <c>q</c> map stores ORIGINAL entries (modifiers not applied).
+    /// We call the engine's public <c>c.a(d, BaseSelectable, T, bool)</c> method
+    /// which creates a copy and applies all conditional modifiers to it.
+    /// </summary>
+    internal SelectionEntry? GetResolvedEntry(Force force, Selection selection)
+    {
+        try
+        {
+            var forceContext = _engine.e(force);
+            if (forceContext is null)
+                return null;
+            var originalEntry = forceContext.i(selection.getEntryId());
+            if (originalEntry is null)
+                return null;
+            // c.a(d, BaseSelectable, T extends BaseModifyableData, bool) creates a copy with modifiers applied
+            return (SelectionEntry)_engine.a(forceContext, selection, originalEntry, true);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolve a ForceEntry by applying modifiers within the force context.
+    /// Same principle as GetResolvedEntry — the static entry is copied and modifiers applied.
+    /// </summary>
+    internal ForceEntry? GetResolvedForceEntry(Force force)
+    {
+        try
+        {
+            var forceContext = _engine.e(force);
+            if (forceContext is null)
+                return null;
+            var originalEntry = forceContext.e(force.getEntryId());
+            if (originalEntry is null)
+                return null;
+            return (ForceEntry)_engine.a(forceContext, force, originalEntry, true);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     internal string? GetPublicationName(string? publicationId)
     {
         if (string.IsNullOrEmpty(publicationId) || _gameSystem is null)

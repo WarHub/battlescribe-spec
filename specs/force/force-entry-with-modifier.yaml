@@ -4,8 +4,7 @@ tags: [battlescribe-bug]
 description: >
   ForceEntry with a modifier that sets hidden=true based on a condition.
   When the condition is met, the force entry becomes hidden.
-  BattleScribe bug: Oracle cannot read modifier-applied hidden state on forces
-  (Force object lacks isHidden()), so it reports hidden=false after the trigger.
+  BattleScribe bug: no engine validates hidden forces (see docs/hidden-validation-analysis.md).
 
 setup:
   gameSystem:
@@ -62,15 +61,9 @@ steps:
     entryId: se-blocker
 
   # After selecting blocker: Special Detachment becomes hidden
-  # BattleScribe bug: Force object lacks isHidden(), reads static ForceEntry only
   - expectedState:
       forceCount: 2
       forces:
         - name: Patrol
         - name: Special Detachment
           hidden: true
-      engines:
-        battlescribe:
-          forces:
-            - name: Patrol
-            - name: Special Detachment
