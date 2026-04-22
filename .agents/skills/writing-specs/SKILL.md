@@ -37,8 +37,13 @@ setup:
       gameSystemId: test-gs
 
 steps:
-  - action: addForce
-    forceEntryIndex: 0
+  - id: add-patrol
+    action: addForce
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-1
 
   - expectedState:           # MUST be the last step
       forces:
@@ -62,41 +67,53 @@ If the roster has validation errors at that point, the step fails. Use `errorsCo
 
 ## Actions
 
-| Action | Key params |
-|--------|-----------|
-| `addForce` | `forceEntryIndex` or `forceEntryName`. Optional: `forcePath` (parent), `catalogueIndex` |
-| `selectEntry` | `forceIndex` or `forcePath`, `entryIndex` or `entryName` |
-| `selectChildEntry` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath`, `childEntryIndex` or `childEntryName` |
-| `deselectSelection` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath` |
-| `setSelectionCount` | `forceIndex`/`forcePath`, `selectionPath` (≥2 elements), `count`. Rejects root selections (selectionPath < 2) — lint rule enforced |
-| `duplicateSelection` | `forceIndex`/`forcePath`, `selectionIndex`/`selectionPath` |
-| `setCostLimit` | `costTypeId`, `value` |
-| `removeForce` | `forceIndex` or `forcePath` |
-| `dump` | (none) — triggers state dump in debugger; no-op in test runner |
+All addressing is **ID-based**. Definition IDs (e.g., `forceEntryId`, `entryId`) come from
+setup data. Instance IDs (e.g., `forceId`, `selectionId`) are returned as step outputs
+and referenced via `${{ steps.<id>.<field> }}`.
 
-### Path-based addressing (nested forces/selections)
+| Action | Key params | Outputs |
+|--------|-----------|---------|
+| `addForce` | `forceEntryId`. Optional: `catalogueId` | `forceId`, `selections` |
+| `addChildForce` | `forceId`, `forceEntryId`. Optional: `catalogueId` | `forceId`, `selections` |
+| `removeForce` | `forceId` | — |
+| `selectEntry` | `forceId`, `entryId` | `selectionId`, `selections` |
+| `selectChildEntry` | `forceId`, `selectionId`, `entryId` | `selectionId`, `selections` |
+| `deselectSelection` | `forceId`, `selectionId` | — |
+| `setSelectionCount` | `forceId`, `selectionId`, `count` | — |
+| `duplicateSelection` | `forceId`, `selectionId` | `selectionId` |
+| `duplicateForce` | `forceId` | `forceId` |
+| `setCostLimit` | `costTypeId`, `value` | — |
+| `dump` | (none) — triggers state dump in debugger; no-op in test runner | — |
 
-Use `forcePath` and `selectionPath` (integer arrays) instead of `forceIndex`/`selectionIndex`
-to target nested forces or selections:
+### Step ID and output expressions
+
+Steps that need their outputs referenced must have an `id` field. Later steps use
+`${{ steps.<id>.<field> }}` to refer to outputs like `forceId`, `selectionId`, or
+entries in the `selections` map (e.g., `${{ steps.add-patrol.selections.se-required }}`).
 
 ```yaml
-# Add a child force under force 0
-- action: addForce
-  forcePath: [0]
-  forceEntryIndex: 0
+# Add a force and name the step
+- id: add-patrol
+  action: addForce
+  forceEntryId: fe-patrol
 
-# Select into a child force (child 0 of force 0)
-- action: selectEntry
-  forcePath: [0, 0]
-  entryIndex: 0
+# Use the force ID from the previous step
+- id: select-unit
+  action: selectEntry
+  forceId: ${{ steps.add-patrol.forceId }}
+  entryId: se-infantry
 
-# Deselect a nested selection (child 1 of selection 0)
-- action: deselectSelection
-  forcePath: [0]
-  selectionPath: [0, 1]
+# Use auto-selected child's selection ID
+- action: setSelectionCount
+  forceId: ${{ steps.add-patrol.forceId }}
+  selectionId: ${{ steps.select-unit.selections.se-trooper }}
+  count: 3
+
+# Add a child force under the first force
+- action: addChildForce
+  forceId: ${{ steps.add-patrol.forceId }}
+  forceEntryId: fe-vanguard
 ```
-
-Legacy `forceIndex: N` / `selectionIndex: N` are converted to `[N]` automatically.
 
 ## Error assertions
 

@@ -87,39 +87,52 @@ Sent once at the start of each spec test. Provides game system and catalogues da
 
 ### `action` — Execute Roster Action
 
-| Action | Required Fields | Description |
-|--------|----------------|-------------|
-| `addForce` | `forceEntryIndex` | Add a force. Optional: `forcePath` (parent, default `[]` = top-level) or legacy `forceIndex` (equivalent to `forcePath: [N]`), `catalogueIndex` (default 0) |
-| `removeForce` | `forcePath` or `forceIndex` | Remove a force identified by path |
-| `selectEntry` | `entryIndex`, `forcePath` or `forceIndex` | Add a selection to a force |
-| `selectChildEntry` | `childEntryIndex`, `forcePath`/`forceIndex`, `selectionPath`/`selectionIndex` | Add a child selection |
-| `deselectSelection` | `forcePath`/`forceIndex`, `selectionPath`/`selectionIndex` | Remove a selection |
-| `setSelectionCount` | `entryIndex`, `count`, `forcePath`/`forceIndex` | Set selection quantity |
-| `duplicateSelection` | `forcePath`/`forceIndex`, `selectionPath`/`selectionIndex` | Duplicate a selection |
-| `setCostLimit` | `costTypeId`, `value` | Set cost limit for a cost type |
+All addressing is **ID-based**. Definition references (e.g., `forceEntryId`, `entryId`)
+use BattleScribe data model IDs from the setup data. Instance references (e.g., `forceId`,
+`selectionId`) use IDs returned as `outputs` from previous mutating actions.
 
-#### Path-based addressing
+| Action | Required Fields | Outputs | Description |
+|--------|----------------|---------|-------------|
+| `addForce` | `forceEntryId` | `forceId`, `selections` | Add a top-level force. Optional: `catalogueId` |
+| `addChildForce` | `forceId`, `forceEntryId` | `forceId`, `selections` | Add a child force under an existing force. Optional: `catalogueId` |
+| `removeForce` | `forceId` | — | Remove a force by instance ID |
+| `selectEntry` | `forceId`, `entryId` | `selectionId`, `selections` | Add a selection to a force |
+| `selectChildEntry` | `forceId`, `selectionId`, `entryId` | `selectionId`, `selections` | Add a child selection under an existing selection |
+| `deselectSelection` | `forceId`, `selectionId` | — | Remove a selection |
+| `setSelectionCount` | `forceId`, `selectionId`, `count` | — | Set selection quantity |
+| `duplicateSelection` | `forceId`, `selectionId` | `selectionId` | Duplicate a selection |
+| `duplicateForce` | `forceId` | `forceId` | Duplicate a force (deep copy with all selections). Not supported by BattleScribe Java engine. |
+| `setCostLimit` | `costTypeId`, `value` | — | Set cost limit for a cost type |
 
-Actions that target forces accept either a legacy `forceIndex` (integer) or a `forcePath`
-(array of integers) for nested addressing. If both are provided, `forcePath` wins and
-`forceIndex` is ignored. For non-`addForce` actions, if neither is provided, the target
-force defaults to `[0]`. Similarly, selection-targeting actions accept `selectionIndex`
-(integer) or `selectionPath` (array of integers); if both are provided, `selectionPath`
-wins and `selectionIndex` is ignored.
+#### Action outputs
+
+Mutating actions return an `outputs` object with IDs of created elements. These can be
+referenced in later steps using `${{ steps.<stepId>.<field> }}` expressions.
+
+| Output Field | Type | Returned by |
+|-------------|------|-------------|
+| `forceId` | string | `addForce`, `addChildForce`, `duplicateForce` |
+| `selectionId` | string | `selectEntry`, `selectChildEntry`, `duplicateSelection` |
+| `selections` | map(entryId → selectionId) | `addForce`, `addChildForce`, `selectEntry`, `selectChildEntry` — auto-selected child entries |
+
+#### ID-based addressing
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `forcePath` | `int[]` | Path to a force in the hierarchy. For `addForce`: identifies the parent (empty `[]` = top-level). For all other actions: identifies the target force. |
-| `selectionPath` | `int[]` | Path to a selection in the hierarchy. `[0]` = first selection, `[0, 2]` = third child of first selection. |
-| `forceIndex` | `int` | Legacy shorthand for `forcePath: [N]`. Used only when `forcePath` is not provided. |
-| `selectionIndex` | `int` | Legacy shorthand for `selectionPath: [N]`. Used only when `selectionPath` is not provided. |
+| `forceEntryId` | string | BattleScribe force entry definition ID (from setup data) |
+| `entryId` | string | BattleScribe selection entry definition ID (from setup data) |
+| `catalogueId` | string | Catalogue definition ID (when multiple catalogues exist) |
+| `forceId` | string | Force instance ID (from a prior action's `outputs.forceId`) |
+| `selectionId` | string | Selection instance ID (from a prior action's `outputs.selectionId`) |
+| `costTypeId` | string | Cost type definition ID (from setup data) |
 
 Example:
 ```json
-{"type":"action","action":"addForce","forceEntryIndex":0}
-{"type":"action","action":"addForce","forcePath":[0],"forceEntryIndex":0}
-{"type":"action","action":"selectEntry","forceIndex":0,"entryIndex":0}
-{"type":"action","action":"selectEntry","forcePath":[0,1],"entryIndex":0}
+{"type":"action","action":"addForce","forceEntryId":"fe-battalion"}
+{"type":"action","action":"selectEntry","forceId":"abc-123","entryId":"se-infantry"}
+{"type":"action","action":"selectChildEntry","forceId":"abc-123","selectionId":"sel-456","entryId":"se-trooper"}
+{"type":"action","action":"duplicateSelection","forceId":"abc-123","selectionId":"sel-456"}
+{"type":"action","action":"duplicateForce","forceId":"abc-123"}
 {"type":"action","action":"setCostLimit","costTypeId":"ct-pts","value":500}
 ```
 
@@ -154,9 +167,14 @@ Sent after each spec test completes. The adapter should reset its state.
 ### `actionResult`
 
 ```json
+{"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123","selections":{"se-required":"sel-789"}}}
+{"type":"actionResult","ok":true,"outputs":{"selectionId":"sel-456"}}
 {"type":"actionResult","ok":true}
-{"type":"actionResult","ok":false,"error":"Force index out of range"}
+{"type":"actionResult","ok":false,"error":"Force not found with id 'xyz'"}
 ```
+
+The `outputs` field is present on success for mutating actions that create elements.
+It contains the IDs described in [Action outputs](#action-outputs) above.
 
 ### `state` — Full Roster State
 

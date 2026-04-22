@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **ID-based protocol** — all action addressing now uses definition IDs (`forceEntryId`,
+  `entryId`, `catalogueId`) and instance IDs (`forceId`, `selectionId`) instead of
+  array indices. Actions return `outputs` with created element IDs. Step expressions
+  (`${{ steps.<id>.<field> }}`) allow chaining action results across steps.
+- **`addChildForce` action** — add a child force under an existing force.
+- **`duplicateForce` action** — deep-copy a force with all selections (NR only;
+  BattleScribe Java engine throws NotSupportedException).
+- **`duplicateSelection` await fix** — NR's `dupe()` is `async`; now properly awaited
+  to get the stable MongoDB ObjectId uid instead of the temporary one.
+- **`ForceState.Hidden` field** — both engines now expose the modifier-applied hidden
+  state of forces. Oracle uses `_engine.a(forceContext, selection, entry, true)` for
+  modifier-applied copies.
+- **314 specs migrated** to ID-based protocol format.
+- **`protocol-duplicate-force` spec** — tests force duplication (NR only).
+- **`protocol-kitchen-sink` expansion** — now exercises deep selection duplication,
+  original removal, and comprehensive final state assertions.
+- **Hidden validation analysis** — documented in `docs/hidden-validation-analysis.md`.
+  Deep-dive into BattleScribe's Java engine (f.java) and live NR Playwright investigation.
 - **Visual debug mode** (`NR_VISUAL=true`) — after setup, navigates the browser to the
   roster editor page so the NR UI visually reflects roster state. Invaluable for debugging
   spec failures and demoing the conformance suite with `NR_HEADLESS=false`.

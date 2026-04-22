@@ -221,8 +221,8 @@ based on any `min>=1` regardless of field type.
 | `selection/selection-set-child-count-instance-model` | ✅ Both engines agree |
 | `selection/selection-set-child-count-collective` | ✅ Both engines agree |
 
-**Protocol validation**: `setSelectionCount` now rejects `selectionPath` with fewer
-than 2 elements (root selections). Root selection count is managed via
+**Protocol validation**: `setSelectionCount` now rejects root selections (target must be
+a child selection). Root selection count is managed via
 `selectEntry`/`deselectSelection`. A lint rule (`SetSelectionCountTargetsChildOnly`)
 enforces this in specs.
 
@@ -288,7 +288,7 @@ publication also defined in that gameSystem.
 `setAmount(5)` with one arg sets `ctx=5, n=undefined` → silent corruption.
 
 **Protocol validation**: `setSelectionCount` now rejects root selections
-(`selectionPath < 2`). Root selection lifecycle is managed via
+(target must be a child selection). Root selection lifecycle is managed via
 `selectEntry`/`deselectSelection` only.
 
 ### NR Hidden Cost Types
