@@ -29,11 +29,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-covert
   # Hidden rules are filtered from state; only non-hidden rule appears
   - expectedState:
       forces:

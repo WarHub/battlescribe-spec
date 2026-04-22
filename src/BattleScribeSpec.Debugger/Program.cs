@@ -14,7 +14,11 @@ for (var i = 0; i < args.Length; i++)
     switch (args[i])
     {
         case "--engine" when i + 1 < args.Length:
-            engineName = args[++i].ToLowerInvariant();
+            engineName = args[++i].ToLowerInvariant() switch
+            {
+                "nr" => "newrecruit",
+                var name => name
+            };
             break;
         case "--dump":
             dumpAll = true;
@@ -116,7 +120,7 @@ catch (Exception ex)
 using (engine)
 {
     var dumpOptions = new DumpOptions(Json: json, Enricher: enricher);
-    var runner = new SpecRunner(engine, engineName: engineName);
+    var runner = new SpecRunner(engine, new DataSourceResolver(), engineName);
 
     var stepCount = spec.Steps.Count;
     var lastStepIndex = stepCount - 1;
@@ -243,11 +247,12 @@ static string DescribeStep(StepDef step)
     if (step.Action is { } action)
     {
         var parts = new List<string> { action };
-        if (step.ForceEntryIndex is { } fei) parts.Add($"forceEntryIndex={fei}");
-        if (step.EntryIndex is { } ei) parts.Add($"entryIndex={ei}");
-        if (step.ChildEntryIndex is { } cei) parts.Add($"childEntryIndex={cei}");
-        if (step.SelectionPath is { } sp) parts.Add($"selectionPath=[{string.Join(",", sp)}]");
-        if (step.ForcePath is { } fp) parts.Add($"forcePath=[{string.Join(",", fp)}]");
+        if (step.Id is { Length: > 0 } sid) parts.Add($"id={sid}");
+        if (step.ForceEntryId is { } feid) parts.Add($"forceEntryId={feid}");
+        if (step.EntryId is { } eid) parts.Add($"entryId={eid}");
+        if (step.CatalogueId is { } catid) parts.Add($"catalogueId={catid}");
+        if (step.ForceId is { } fid) parts.Add($"forceId={fid}");
+        if (step.SelectionId is { } selid) parts.Add($"selectionId={selid}");
         if (step.Count is { } cnt) parts.Add($"count={cnt}");
         if (step.CostTypeId is { } ctid) parts.Add($"costTypeId={ctid}");
         if (step.Value is { } val) parts.Add($"value={val}");

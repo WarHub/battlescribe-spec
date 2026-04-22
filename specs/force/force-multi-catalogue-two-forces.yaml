@@ -27,12 +27,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 1
+    id: add-patrol-2
+    forceEntryId: fe-patrol
+    catalogueId: cat-b
 
   - expectedState:
       forceCount: 2
@@ -41,8 +42,8 @@ steps:
         - name: Patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-a1
 
   - expectedState:
       forces:
@@ -51,8 +52,8 @@ steps:
             - name: Alpha Unit
 
   - action: selectEntry
-    forceIndex: 1
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol-2.forceId }}
+    entryId: se-b1
 
   - expectedState:
       forces:

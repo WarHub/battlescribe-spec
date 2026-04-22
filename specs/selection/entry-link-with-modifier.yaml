@@ -37,11 +37,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-shared
   # The entry link has its own modifier that sets the name.
   # The engine deep-copies the target and applies the link's modifiers.
   # Selecting entryIndex 0 selects the base entry directly.

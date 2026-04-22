@@ -18,22 +18,34 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-1
 
   - action: addForce
-    forceEntryIndex: 1
+    id: add-battalion
+    forceEntryId: fe-2
 
   - expectedState:
       forceCount: 2
+      forces:
+        - name: Patrol
+        - name: Battalion
+      engines:
+        newrecruit:
+          forces:
+            - name: Battalion
+            - name: Patrol
 
   - action: removeForce
-    forceIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
 
   - expectedState:
       forceCount: 1
+      forces:
+        - name: Battalion
 
   - action: removeForce
-    forceIndex: 0
+    forceId: ${{ steps.add-battalion.forceId }}
 
   - expectedState:
       forceCount: 0

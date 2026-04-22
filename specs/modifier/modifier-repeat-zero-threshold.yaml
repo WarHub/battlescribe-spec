@@ -36,11 +36,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
   # Repeat with value=0 → engine skips repeat calculation (division by zero guard).
   # The modifier's repeat count is 0, so the increment is NOT applied.
   # Cost remains at base value 50.

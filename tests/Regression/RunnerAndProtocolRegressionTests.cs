@@ -19,7 +19,7 @@ public class RunnerAndProtocolRegressionTests
             Category = "runner",
             Description = "setup errors should stop execution",
             Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
-            Steps = [new StepDef { Action = "addForce", ForceEntryIndex = 0 }]
+            Steps = [new StepDef { Action = "addForce", ForceEntryId = "fe-1" }]
         };
 
         var result = runner.Run(spec);
@@ -42,7 +42,7 @@ public class RunnerAndProtocolRegressionTests
             Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
             Steps =
             [
-                new StepDef { Action = "addForce", ForceEntryIndex = 0 },
+                new StepDef { Action = "addForce", ForceEntryId = "fe-1" },
                 new StepDef { ExpectedState = new ExpectedStateDef { ForceCount = 1 } }
             ]
         };
@@ -63,7 +63,7 @@ public class RunnerAndProtocolRegressionTests
             State = new RosterState(
                 "roster",
                 "gs",
-                [new ForceState("force", "cat", [new SelectionState("Hidden Squad", "se-1", "unit", 1, Hidden: false, Costs: [], Children: [])])],
+                [new ForceState(Id: null, "force", "cat", [new SelectionState(Id: null, "Hidden Squad", "se-1", "unit", 1, Hidden: false, Costs: [], Children: [])])],
                 [],
                 [])
         };
@@ -131,7 +131,7 @@ public class RunnerAndProtocolRegressionTests
             Category = "runner",
             Description = "cleanup should be called even after action failure",
             Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
-            Steps = [new StepDef { Action = "addForce", ForceEntryIndex = 0 }]
+            Steps = [new StepDef { Action = "addForce", ForceEntryId = "fe-1" }]
         };
 
         runner.Run(spec);
@@ -150,7 +150,7 @@ public class RunnerAndProtocolRegressionTests
             Category = "runner",
             Description = "cleanup should be called even after setup errors",
             Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
-            Steps = [new StepDef { Action = "addForce", ForceEntryIndex = 0 }]
+            Steps = [new StepDef { Action = "addForce", ForceEntryId = "fe-1" }]
         };
 
         runner.Run(spec);
@@ -230,24 +230,49 @@ public class RunnerAndProtocolRegressionTests
             return SetupErrors;
         }
 
-        public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
+        public ActionOutputs AddForce(string forceEntryId, string? catalogueId = null)
         {
             ActionCalls++;
             if (ThrowOnAddForce)
                 throw new InvalidOperationException("boom");
+            return new ActionOutputs { ForceId = "force-1" };
         }
 
-        public void RemoveForce(int[] forcePath) => ActionCalls++;
+        public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
+        {
+            ActionCalls++;
+            return new ActionOutputs { ForceId = "child-force-1" };
+        }
 
-        public void SelectEntry(int[] forcePath, int entryIndex) => ActionCalls++;
+        public void RemoveForce(string forceId) => ActionCalls++;
 
-        public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex) => ActionCalls++;
+        public ActionOutputs SelectEntry(string forceId, string entryId)
+        {
+            ActionCalls++;
+            return new ActionOutputs { SelectionId = "sel-1" };
+        }
 
-        public void DeselectSelection(int[] forcePath, int[] selectionPath) => ActionCalls++;
+        public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
+        {
+            ActionCalls++;
+            return new ActionOutputs { SelectionId = "child-sel-1" };
+        }
 
-        public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count) => ActionCalls++;
+        public void DeselectSelection(string forceId, string selectionId) => ActionCalls++;
 
-        public void DuplicateSelection(int[] forcePath, int[] selectionPath) => ActionCalls++;
+        public void SetSelectionCount(string forceId, string selectionId, int count) => ActionCalls++;
+
+        public ActionOutputs DuplicateSelection(string forceId, string selectionId)
+        {
+            ActionCalls++;
+            return new ActionOutputs { SelectionId = "dup-sel-1" };
+        }
+
+        public ActionOutputs DuplicateForce(string forceId)
+        {
+            ActionCalls++;
+            return new ActionOutputs { ForceId = "dup-force-1" };
+        }
 
         public void SetCostLimit(string costTypeId, double value) => ActionCalls++;
 

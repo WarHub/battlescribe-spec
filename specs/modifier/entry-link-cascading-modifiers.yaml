@@ -30,11 +30,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-base-unit
   # Selecting entryIndex 0 picks the selectionEntry "Warrior" directly.
   # The entryLink's modifier applies only when selecting through the link.
   - expectedState:

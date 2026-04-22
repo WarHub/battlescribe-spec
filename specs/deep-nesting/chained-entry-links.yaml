@@ -67,11 +67,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit
 
   # Mech Warrior selected → Weapon System auto-selects (min=1 on link) →
   # Power Core auto-selects (min=1 on inner link).

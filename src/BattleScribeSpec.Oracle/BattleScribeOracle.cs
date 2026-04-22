@@ -678,8 +678,8 @@ public sealed class BattleScribeOracle : IDisposable
     private readonly Dictionary<string, string> _linkTargetMap = new();
     // Per-catalogue entry lists for multi-catalogue support
     private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
-    // Maps force object identity to catalogue index (avoids positional corruption on removal)
-    private readonly Dictionary<Force, int> _forceCatalogueMap = new(ReferenceEqualityComparer.Instance);
+    // Maps force object identity to catalogue (avoids positional corruption on removal)
+    private readonly Dictionary<Force, Catalogue> _forceCatalogueMap = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
     /// Set up the oracle with a Patrol force entry (no units).
@@ -763,7 +763,7 @@ public sealed class BattleScribeOracle : IDisposable
         foreach (var force in GetForces())
         {
             if (!forcesBefore.Contains(force))
-                _forceCatalogueMap[force] = catalogueIndex;
+                _forceCatalogueMap[force] = catalogue;
         }
         return errors;
     }
@@ -811,13 +811,13 @@ public sealed class BattleScribeOracle : IDisposable
         if (childForce is null)
             throw new InvalidOperationException("Java engine returned null when creating child force.");
 
-        _forceCatalogueMap[childForce] = catalogueIndex;
+        _forceCatalogueMap[childForce] = catalogue;
     }
 
     /// <summary>
     /// Recursively search for a ForceEntry by ID in the setup force entries tree.
     /// </summary>
-    private ForceEntry? FindForceEntryById(string? id)
+    internal ForceEntry? FindForceEntryById(string? id)
     {
         if (id is null) return null;
         foreach (var fe in _setupForceEntries)
@@ -843,7 +843,7 @@ public sealed class BattleScribeOracle : IDisposable
     /// Resolve linked catalogues for a catalogue by reading its CatalogueLink elements
     /// and looking up target catalogue IDs in the loaded catalogue dictionary.
     /// </summary>
-    private Dictionary<string, Catalogue> ResolveLinkedCatalogues(Catalogue catalogue)
+    internal Dictionary<string, Catalogue> ResolveLinkedCatalogues(Catalogue catalogue)
     {
         var linked = new Dictionary<string, Catalogue>();
         var linkIter = catalogue.getCatalogueLinks().iterator();
@@ -930,10 +930,11 @@ public sealed class BattleScribeOracle : IDisposable
             // Fall through to legacy path
         }
 
-        if (_forceCatalogueMap.TryGetValue(force, out var catIdx)
-            && catIdx < _perCatalogueEntries.Count)
+        if (_forceCatalogueMap.TryGetValue(force, out var catalogue))
         {
-            return _perCatalogueEntries[catIdx];
+            var catIdx = _setupCatalogues.IndexOf(catalogue);
+            if (catIdx >= 0 && catIdx < _perCatalogueEntries.Count)
+                return _perCatalogueEntries[catIdx];
         }
         throw new InvalidOperationException(
             "No catalogue mapping found for force. Force must be added via AddForceByIndex.");
@@ -1800,6 +1801,53 @@ public sealed class BattleScribeOracle : IDisposable
 
     internal GameSystem? GetGameSystem() => _gameSystem;
 
+    /// <summary>
+    /// Resolve a SelectionEntry by applying modifiers within the force context.
+    /// The engine's <c>q</c> map stores ORIGINAL entries (modifiers not applied).
+    /// We call the engine's public <c>c.a(d, BaseSelectable, T, bool)</c> method
+    /// which creates a copy and applies all conditional modifiers to it.
+    /// </summary>
+    internal SelectionEntry? GetResolvedEntry(Force force, Selection selection)
+    {
+        try
+        {
+            var forceContext = _engine.e(force);
+            if (forceContext is null)
+                return null;
+            var originalEntry = forceContext.i(selection.getEntryId());
+            if (originalEntry is null)
+                return null;
+            // c.a(d, BaseSelectable, T extends BaseModifyableData, bool) creates a copy with modifiers applied
+            return (SelectionEntry)_engine.a(forceContext, selection, originalEntry, true);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolve a ForceEntry by applying modifiers within the force context.
+    /// Same principle as GetResolvedEntry — the static entry is copied and modifiers applied.
+    /// </summary>
+    internal ForceEntry? GetResolvedForceEntry(Force force)
+    {
+        try
+        {
+            var forceContext = _engine.e(force);
+            if (forceContext is null)
+                return null;
+            var originalEntry = forceContext.e(force.getEntryId());
+            if (originalEntry is null)
+                return null;
+            return (ForceEntry)_engine.a(forceContext, force, originalEntry, true);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     internal string? GetPublicationName(string? publicationId)
     {
         if (string.IsNullOrEmpty(publicationId) || _gameSystem is null)
@@ -1834,6 +1882,63 @@ public sealed class BattleScribeOracle : IDisposable
         EnsureInitialized();
         var selections = GetAllSelections();
         return selections.Count > 0 ? selections[0].getName() : null;
+    }
+
+    /// <summary>
+    /// Resolve a catalogue by ID, or return the default catalogue if null.
+    /// </summary>
+    internal Catalogue ResolveCatalogue(string? catalogueId)
+    {
+        if (catalogueId != null)
+        {
+            for (int i = 0; i < _setupCatalogues.Count; i++)
+            {
+                if (_setupCatalogues[i].getId() == catalogueId)
+                    return _setupCatalogues[i];
+            }
+            throw new InvalidOperationException($"Catalogue '{catalogueId}' not found.");
+        }
+        if (_setupCatalogue != null)
+        {
+            var idx = _setupCatalogues.IndexOf(_setupCatalogue);
+            return idx >= 0 ? _setupCatalogues[idx] : _setupCatalogues[0];
+        }
+        return _setupCatalogues[0];
+    }
+
+    /// <summary>
+    /// Track the catalogue for a newly created force.
+    /// </summary>
+    internal void TrackForceCatalogue(Force force, Catalogue catalogue) =>
+        _forceCatalogueMap[force] = catalogue;
+
+    /// <summary>
+    /// Get the tracked catalogue for a force.
+    /// </summary>
+    internal Catalogue GetForceCatalogue(Force force) =>
+        _forceCatalogueMap.TryGetValue(force, out var cat) ? cat : _setupCatalogues[0];
+
+    /// <summary>
+    /// Create a child force under a parent using a ForceEntry object.
+    /// </summary>
+    internal Force CreateChildForce(Force parentForce, ForceEntry childForceEntry, Catalogue catalogue)
+    {
+        EnsureInitialized();
+        var linked = ResolveLinkedCatalogues(catalogue);
+
+        var linkedCatMap = new JavaHashMap();
+        foreach (var kvp in linked)
+            linkedCatMap.put(kvp.Key, kvp.Value);
+
+        var favourites = new JavaArrayList();
+        var errors = new JavaArrayList();
+        var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors);
+
+        if (childForce is null)
+            throw new InvalidOperationException("Java engine returned null when creating child force.");
+
+        _forceCatalogueMap[childForce] = catalogue;
+        return childForce;
     }
 
     public void Dispose()

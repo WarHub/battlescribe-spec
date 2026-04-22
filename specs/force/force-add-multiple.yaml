@@ -16,10 +16,10 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   - expectedState:
       forceCount: 2

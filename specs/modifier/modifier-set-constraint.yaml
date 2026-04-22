@@ -30,15 +30,16 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Select 2 - would violate max=1, but modifier changed it to max=3
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState: {}

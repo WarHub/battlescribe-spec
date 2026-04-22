@@ -36,11 +36,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-battalion
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-battalion.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:

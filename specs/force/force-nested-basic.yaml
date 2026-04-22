@@ -24,7 +24,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-army
+    forceEntryId: fe-army
   # Adding the top-level "Army" force. It has a nested "Detachment" force entry.
   - expectedState:
       forceCount: 1
@@ -33,9 +34,9 @@ steps:
           childForceCount: 0
 
   # Add a child force under force 0 using forcePath
-  - action: addForce
-    forcePath: [0]
-    forceEntryIndex: 0
+  - action: addChildForce
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-detach
 
   - expectedState:
       forceCount: 1

@@ -32,7 +32,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-1
 
   # Entry with min=3 is auto-selected; the engine creates 3 separate
   # selections, each with number=1.

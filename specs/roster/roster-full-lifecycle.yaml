@@ -38,14 +38,16 @@ steps:
       forceCount: 0
 
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-1
 
   - expectedState:
       forceCount: 1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-scout
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-1
 
   - expectedState:
       costs:
@@ -53,8 +55,9 @@ steps:
           value: 30
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    id: select-heavy
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-2
 
   - expectedState:
       costs:
@@ -62,8 +65,8 @@ steps:
           value: 120
 
   - action: duplicateSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-scout.selectionId }}
 
   - expectedState:
       forces:
@@ -73,8 +76,8 @@ steps:
           value: 150
 
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-heavy.selectionId }}
 
   - expectedState:
       forces:
@@ -84,7 +87,7 @@ steps:
           value: 60
 
   - action: removeForce
-    forceIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
 
   - expectedState:
       forceCount: 0

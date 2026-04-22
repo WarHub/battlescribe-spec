@@ -33,11 +33,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   # 1 selection in force, atLeast 2 → false on both engines
   - expectedState:
@@ -48,8 +49,8 @@ steps:
 
   # Add second instance — now 2 selections in force
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   # BattleScribe: null childId → condition always false → name stays "Unit A"
   # NR: null childId on force scope → counts all → atLeast 2 → true → "Triggered"

@@ -27,11 +27,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-marine
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       costs:
@@ -39,8 +41,8 @@ steps:
           value: 75
 
   - action: duplicateSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-marine.selectionId }}
 
   - expectedState:
       costs:
@@ -48,8 +50,8 @@ steps:
           value: 150
 
   - action: duplicateSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-marine.selectionId }}
 
   - expectedState:
       costs:

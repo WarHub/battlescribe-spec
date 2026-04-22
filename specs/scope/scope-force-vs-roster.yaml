@@ -33,20 +33,22 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol-2
+    forceEntryId: fe-patrol
 
   # Select target in force 1
   - action: selectEntry
-    forceIndex: 1
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol-2.forceId }}
+    entryId: se-target
 
   # Select trigger in force 0 — different force, so force scope doesn't see it
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-trigger
 
   - expectedState:
       forces:

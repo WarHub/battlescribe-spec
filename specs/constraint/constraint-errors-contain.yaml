@@ -57,16 +57,17 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Auto-select satisfies min constraints. Remove all to trigger violations.
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-hq }}
 
   # errorsContain: assert only one of the two errors, ignoring the other
   - expectedState:

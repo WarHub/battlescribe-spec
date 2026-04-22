@@ -350,10 +350,11 @@ public class ConstraintOracleTests
             }],
         };
         engine.Setup(gs, [cat]);
-        engine.AddForce([], 0);
-        engine.SelectEntry([0], 0);
-        engine.SelectEntry([0], 0);
-        engine.SelectEntry([0], 0);
+        var addForceOut = engine.AddForce("fe-1");
+        var fId = addForceOut.ForceId!;
+        engine.SelectEntry(fId, "shared-unit");
+        engine.SelectEntry(fId, "shared-unit");
+        engine.SelectEntry(fId, "shared-unit");
 
         var errors = engine.GetValidationErrors();
         Assert.Single(errors);

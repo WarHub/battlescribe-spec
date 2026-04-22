@@ -21,6 +21,7 @@ public static class ModelConverter
         {
             var selections = JavaListToList<net.battlescribe.model.roster.Selection>(f.getSelections());
             return new ForceState(
+                Id: f.getId(),
                 f.getName(),
                 f.getCatalogueId(),
                 selections.Select(CaptureSelection).ToList());
@@ -43,6 +44,7 @@ public static class ModelConverter
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
         return new SelectionState(
+            Id: sel.getId(),
             sel.getName(),
             EntryId: null,
             sel.getType(),
@@ -59,6 +61,7 @@ public static class ModelConverter
     {
         var forces = roster.Forces.Select(f =>
             new ForceState(
+                Id: null,
                 f.Name ?? "",
                 f.CatalogueId,
                 f.Selections.Select(CaptureWhamSelection).ToList())).ToList();
@@ -83,6 +86,7 @@ public static class ModelConverter
             new CostState(c.Name ?? "", c.TypeId ?? "", (double)c.Value)).ToList();
         var children = sel.Selections.Select(CaptureWhamSelection).ToList();
         return new SelectionState(
+            Id: null,
             sel.Name ?? "",
             EntryId: null,
             sel.Type.ToString(),

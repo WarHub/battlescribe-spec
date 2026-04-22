@@ -24,11 +24,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 1
+    id: add-catalogue-detachment
+    forceEntryId: fe-cat
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-catalogue-detachment.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:

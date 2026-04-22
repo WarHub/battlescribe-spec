@@ -7,6 +7,8 @@ namespace BattleScribeSpec;
 /// <summary>
 /// IRosterEngine implementation backed by the BattleScribe Java engine via IKVM.
 /// Serves as the reference oracle for conformance testing.
+/// All addressing is ID-based: definition IDs for data references,
+/// instance IDs (from previous action outputs) for roster element references.
 /// </summary>
 public sealed class OracleRosterEngine : IRosterEngine
 {
@@ -21,116 +23,148 @@ public sealed class OracleRosterEngine : IRosterEngine
         return _oracle.SetupFromProtocol(gameSystem, catalogues);
     }
 
-    public void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0)
+    public ActionOutputs AddForce(string forceEntryId, string? catalogueId = null)
     {
-        if (forcePath.Length == 0)
+        var forceEntry = _oracle.FindForceEntryById(forceEntryId)
+            ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
+
+        var catalogue = _oracle.ResolveCatalogue(catalogueId);
+        var linked = _oracle.ResolveLinkedCatalogues(catalogue);
+        var forcesBefore = new HashSet<net.battlescribe.model.roster.Force>(
+            _oracle.GetForces(), ReferenceEqualityComparer.Instance);
+
+        var (force, _) = _oracle.AddForce(catalogue, forceEntry, linked);
+
+        if (force is null)
+            throw new InvalidOperationException("Java engine returned null force for AddForce.");
+
+        foreach (var f in _oracle.GetForces())
         {
-            _oracle.AddForceByIndex(forceEntryIndex, catalogueIndex);
-            return;
+            if (!forcesBefore.Contains(f))
+                _oracle.TrackForceCatalogue(f, catalogue);
         }
-        // Nested: navigate to parent force and add a child force
-        var parentForce = NavigateForce(forcePath);
-        _oracle.AddChildForce(parentForce, forceEntryIndex, catalogueIndex);
+
+        // Re-read force from roster to capture auto-selected entries (from constraints)
+        var rosterForce = FindForceById(force.getId());
+        var selections = CollectForceSelectionIds(rosterForce);
+        return new ActionOutputs { ForceId = force.getId(), Selections = selections };
     }
 
-    public void RemoveForce(int[] forcePath)
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
     {
-        if (forcePath.Length == 0)
-            throw new ArgumentException("forcePath cannot be empty for RemoveForce.");
-        if (forcePath.Length == 1)
-        {
-            var forceIndex = forcePath[0];
-            var forces = _oracle.GetForces();
-            if (forceIndex < 0 || forceIndex >= forces.Count)
-                throw new ArgumentOutOfRangeException(nameof(forcePath));
-            _oracle.RemoveForce(forces[forceIndex]);
-            return;
-        }
-        // Nested: navigate to the parent, then remove child at last index
-        var parentPath = forcePath[..^1];
-        var childIndex = forcePath[^1];
-        var parent = NavigateForce(parentPath);
-        var childForces = JavaListToList<net.battlescribe.model.roster.Force>(parent.getForces());
-        if (childIndex < 0 || childIndex >= childForces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forcePath), $"Child force index {childIndex} out of range ({childForces.Count} children).");
-        _oracle.RemoveForce(childForces[childIndex]);
+        var parentForce = FindForceById(parentForceId);
+        var forceEntry = _oracle.FindForceEntryById(forceEntryId)
+            ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
+
+        var catalogue = catalogueId is not null
+            ? _oracle.ResolveCatalogue(catalogueId)
+            : _oracle.GetForceCatalogue(parentForce);
+
+        var childForce = _oracle.CreateChildForce(parentForce, forceEntry, catalogue);
+        return new ActionOutputs { ForceId = childForce.getId() };
     }
 
-    public void SelectEntry(int[] forcePath, int entryIndex)
+    public void RemoveForce(string forceId)
     {
-        if (forcePath.Length == 0)
-            throw new ArgumentException("forcePath cannot be empty for SelectEntry.");
-        if (forcePath.Length == 1)
-        {
-            _oracle.SelectEntryByIndex(forcePath[0], entryIndex);
-            return;
-        }
-        // Nested: navigate to the target force, get entries, select
-        var force = NavigateForce(forcePath);
+        var force = FindForceById(forceId);
+        _oracle.RemoveForce(force);
+    }
+
+    public ActionOutputs SelectEntry(string forceId, string entryId)
+    {
+        var force = FindForceById(forceId);
         var entries = _oracle.GetEntriesForForce(force);
-        if (entryIndex < 0 || entryIndex >= entries.Count)
-            throw new ArgumentOutOfRangeException(nameof(entryIndex),
-                $"Entry index {entryIndex} out of range (have {entries.Count} entries)");
-        _oracle.SelectEntry(force, entries[entryIndex]);
+        var entry = FindEntryById(entries, entryId)
+            ?? throw new InvalidOperationException(
+                $"Entry '{entryId}' not found in force '{forceId}' " +
+                $"(have {entries.Count} entries: [{string.Join(", ", entries.Select(e => $"{e.getId()}/{e.getName()}"))}]).");
+
+        var createdSelections = _oracle.SelectEntry(force, entry);
+
+        // The primary created selection
+        var primarySelection = createdSelections.Count > 0 ? createdSelections[0] : null;
+
+        // Build the output
+        var outputs = new ActionOutputs
+        {
+            SelectionId = primarySelection?.getId()
+        };
+
+        // Populate Selections map with all child selections (auto-selected defaults)
+        if (primarySelection != null)
+        {
+            outputs.Selections = CollectChildSelectionIds(primarySelection);
+        }
+
+        return outputs;
     }
 
-    public void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex)
+    public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
     {
-        if (forcePath.Length == 0)
-            throw new ArgumentException("forcePath cannot be empty for SelectChildEntry.");
-        if (selectionPath.Length == 0)
-            throw new ArgumentException("selectionPath cannot be empty for SelectChildEntry.");
-        var force = NavigateForce(forcePath);
-        var parentSelection = NavigateSelection(force, selectionPath);
+        var force = FindForceById(forceId);
+        var parentSelection = FindSelectionById(force, parentSelectionId);
         var parentEntryId = parentSelection.getEntryId();
         var parentEntry = _oracle.GetEntryById(parentEntryId)
             ?? _oracle.GetEntryByCompositeId(parentEntryId)
             ?? throw new InvalidOperationException($"Parent entry '{parentEntryId}' not found in entry lookup.");
+
         var childEntries = FlattenChildEntries(parentEntry);
-        if (childEntryIndex < 0 || childEntryIndex >= childEntries.Count)
-            throw new ArgumentOutOfRangeException(nameof(childEntryIndex));
-        _oracle.SelectEntry(parentSelection, childEntries[childEntryIndex]);
+        var childEntry = FindEntryById(childEntries, entryId)
+            ?? throw new InvalidOperationException(
+                $"Child entry '{entryId}' not found under parent selection '{parentSelectionId}'.");
+
+        var createdSelections = _oracle.SelectEntry(parentSelection, childEntry);
+        var primarySelection = createdSelections.Count > 0 ? createdSelections[0] : null;
+
+        var outputs = new ActionOutputs
+        {
+            SelectionId = primarySelection?.getId()
+        };
+
+        if (primarySelection != null)
+        {
+            outputs.Selections = CollectChildSelectionIds(primarySelection);
+        }
+
+        return outputs;
     }
 
-    public void DeselectSelection(int[] forcePath, int[] selectionPath)
+    public void DeselectSelection(string forceId, string selectionId)
     {
-        if (forcePath.Length == 0)
-            throw new ArgumentException("forcePath cannot be empty for DeselectSelection.");
-        if (selectionPath.Length == 0)
-            throw new ArgumentException("selectionPath cannot be empty for DeselectSelection.");
-        var force = NavigateForce(forcePath);
-        var selection = NavigateSelection(force, selectionPath);
+        var force = FindForceById(forceId);
+        var selection = FindSelectionById(force, selectionId);
         _oracle.DeselectEntry(selection);
     }
 
-    public void SetSelectionCount(int[] forcePath, int[] selectionPath, int count)
+    public void SetSelectionCount(string forceId, string selectionId, int count)
     {
-        if (forcePath.Length == 0)
-            throw new ArgumentException("forcePath cannot be empty for SetSelectionCount.");
-        if (selectionPath.Length < 2)
-            throw new ArgumentException(
-                "selectionPath must have at least 2 elements for SetSelectionCount " +
-                "(targets child selections only; use SelectEntry/DeselectSelection for root selections).");
-        var force = NavigateForce(forcePath);
-        var targetSelection = NavigateSelection(force, selectionPath);
-        var entryId = targetSelection.getEntryId();
+        var force = FindForceById(forceId);
+        var selection = FindSelectionById(force, selectionId);
+        var entryId = selection.getEntryId();
         var dataEntry = _oracle.GetEntryById(entryId)
             ?? _oracle.GetEntryByCompositeId(entryId)
-            ?? throw new InvalidOperationException($"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
-        // Parent is always a selection (path has 2+ elements, so [..^1] is non-empty)
-        var parent = NavigateSelection(force, selectionPath[..^1]);
+            ?? throw new InvalidOperationException(
+                $"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
+        // Find the parent of this selection (the container that holds it)
+        var parent = FindSelectionParent(force, selectionId);
         _oracle.SetNumSelections(parent, dataEntry, count);
     }
 
-    public void DuplicateSelection(int[] forcePath, int[] selectionPath)
+    public ActionOutputs DuplicateSelection(string forceId, string selectionId)
     {
-        if (forcePath.Length == 0)
-            throw new ArgumentException("forcePath cannot be empty for DuplicateSelection.");
-        if (selectionPath.Length == 0)
-            throw new ArgumentException("selectionPath cannot be empty for DuplicateSelection.");
-        var force = NavigateForce(forcePath);
-        var selection = NavigateSelection(force, selectionPath);
-        _oracle.DuplicateSelection(selection);
+        var force = FindForceById(forceId);
+        var selection = FindSelectionById(force, selectionId);
+        var duplicated = _oracle.DuplicateSelection(selection);
+        return new ActionOutputs
+        {
+            SelectionId = duplicated?.getId()
+        };
+    }
+
+    public ActionOutputs DuplicateForce(string forceId)
+    {
+        throw new NotSupportedException(
+            "DuplicateForce is not supported by the BattleScribe Java engine (no public API).");
     }
 
     public void SetCostLimit(string costTypeId, double value)
@@ -205,53 +239,152 @@ public sealed class OracleRosterEngine : IRosterEngine
         }
     }
 
+    // ===== ID-based navigation helpers =====
+
     /// <summary>
-    /// Navigate the force tree using a path of indices.
-    /// <c>[0]</c> = top-level force 0; <c>[0, 1]</c> = child 1 of top-level force 0; etc.
+    /// Find a force by its instance ID, searching all forces recursively.
     /// </summary>
-    private net.battlescribe.model.roster.Force NavigateForce(int[] forcePath)
+    private net.battlescribe.model.roster.Force FindForceById(string forceId)
     {
-        if (forcePath.Length == 0)
-            throw new ArgumentException("forcePath cannot be empty.");
-        var forces = _oracle.GetForces();
-        if (forcePath[0] < 0 || forcePath[0] >= forces.Count)
-            throw new ArgumentOutOfRangeException(nameof(forcePath),
-                $"Force index {forcePath[0]} out of range ({forces.Count} top-level forces).");
-        var current = forces[forcePath[0]];
-        for (int i = 1; i < forcePath.Length; i++)
+        foreach (var force in _oracle.GetForces())
         {
-            var childForces = JavaListToList<net.battlescribe.model.roster.Force>(current.getForces());
-            if (forcePath[i] < 0 || forcePath[i] >= childForces.Count)
-                throw new ArgumentOutOfRangeException(nameof(forcePath),
-                    $"Force path index [{i}]={forcePath[i]} out of range ({childForces.Count} child forces at depth {i}).");
-            current = childForces[forcePath[i]];
+            var found = FindForceByIdRecursive(force, forceId);
+            if (found is not null) return found;
         }
-        return current;
+        throw new InvalidOperationException(
+            $"Force with ID '{forceId}' not found in roster " +
+            $"({_oracle.GetForces().Count} top-level forces).");
+    }
+
+    private static net.battlescribe.model.roster.Force? FindForceByIdRecursive(
+        net.battlescribe.model.roster.Force force, string forceId)
+    {
+        if (force.getId() == forceId) return force;
+        foreach (var child in JavaListToList<net.battlescribe.model.roster.Force>(force.getForces()))
+        {
+            var found = FindForceByIdRecursive(child, forceId);
+            if (found is not null) return found;
+        }
+        return null;
     }
 
     /// <summary>
-    /// Navigate the selection tree within a force using a path of indices.
-    /// <c>[0]</c> = selection 0 of the force; <c>[0, 2]</c> = child 2 of selection 0; etc.
+    /// Find a selection by its instance ID within a force, searching recursively.
     /// </summary>
-    private static net.battlescribe.model.roster.Selection NavigateSelection(
-        net.battlescribe.model.roster.Force force, int[] selectionPath)
+    private static net.battlescribe.model.roster.Selection FindSelectionById(
+        net.battlescribe.model.roster.Force force, string selectionId)
     {
-        if (selectionPath.Length == 0)
-            throw new ArgumentException("selectionPath cannot be empty.");
-        var selections = JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections());
-        if (selectionPath[0] < 0 || selectionPath[0] >= selections.Count)
-            throw new ArgumentOutOfRangeException(nameof(selectionPath),
-                $"Selection index {selectionPath[0]} out of range ({selections.Count} selections).");
-        var current = selections[selectionPath[0]];
-        for (int i = 1; i < selectionPath.Length; i++)
+        foreach (var sel in JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections()))
         {
-            var children = JavaListToList<net.battlescribe.model.roster.Selection>(current.getSelections());
-            if (selectionPath[i] < 0 || selectionPath[i] >= children.Count)
-                throw new ArgumentOutOfRangeException(nameof(selectionPath),
-                    $"Selection path index [{i}]={selectionPath[i]} out of range ({children.Count} child selections at depth {i}).");
-            current = children[selectionPath[i]];
+            var found = FindSelectionByIdRecursive(sel, selectionId);
+            if (found is not null) return found;
         }
-        return current;
+        throw new InvalidOperationException(
+            $"Selection with ID '{selectionId}' not found in force '{force.getId()}'.");
+    }
+
+    private static net.battlescribe.model.roster.Selection? FindSelectionByIdRecursive(
+        net.battlescribe.model.roster.Selection sel, string selectionId)
+    {
+        if (sel.getId() == selectionId) return sel;
+        foreach (var child in JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections()))
+        {
+            var found = FindSelectionByIdRecursive(child, selectionId);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Find the parent (Force or Selection) that directly contains the selection with the given ID.
+    /// Needed for SetSelectionCount which operates on parent + entry.
+    /// </summary>
+    private static net.battlescribe.model.roster.BaseSelectionParent FindSelectionParent(
+        net.battlescribe.model.roster.Force force, string selectionId)
+    {
+        foreach (var sel in JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections()))
+        {
+            if (sel.getId() == selectionId) return force;
+            var parent = FindSelectionParentRecursive(sel, selectionId);
+            if (parent is not null) return parent;
+        }
+        throw new InvalidOperationException(
+            $"Selection '{selectionId}' not found when looking for parent in force '{force.getId()}'.");
+    }
+
+    private static net.battlescribe.model.roster.BaseSelectionParent? FindSelectionParentRecursive(
+        net.battlescribe.model.roster.Selection sel, string selectionId)
+    {
+        foreach (var child in JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections()))
+        {
+            if (child.getId() == selectionId) return sel;
+            var parent = FindSelectionParentRecursive(child, selectionId);
+            if (parent is not null) return parent;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Find a SelectionEntry by its ID in a list of entries.
+    /// Handles composite IDs created by entry links (e.g., "link-1::shared-unit").
+    /// </summary>
+    private static net.battlescribe.model.data.SelectionEntry? FindEntryById(
+        List<net.battlescribe.model.data.SelectionEntry> entries, string entryId)
+    {
+        // Exact match first
+        var exact = entries.FirstOrDefault(e => e.getId() == entryId);
+        if (exact != null) return exact;
+        // Composite ID match: entry links create IDs like "linkId::targetId"
+        return entries.FirstOrDefault(e =>
+        {
+            var id = e.getId();
+            if (id is null) return false;
+            if (id.Contains("::"))
+            {
+                var parts = id.Split("::");
+                return parts.Any(p => p == entryId);
+            }
+            return false;
+        });
+    }
+
+    /// <summary>
+    /// Collect entryId → selectionId map for all child selections (auto-selected defaults).
+    /// </summary>
+    private static Dictionary<string, string>? CollectChildSelectionIds(
+        net.battlescribe.model.roster.Selection selection)
+    {
+        var children = JavaListToList<net.battlescribe.model.roster.Selection>(selection.getSelections());
+        if (children.Count == 0) return null;
+        var map = new Dictionary<string, string>();
+        foreach (var child in children)
+            CollectSelectionIdsRecursive(child, map);
+        return map.Count > 0 ? map : null;
+    }
+
+    private static void CollectSelectionIdsRecursive(
+        net.battlescribe.model.roster.Selection sel, Dictionary<string, string> map)
+    {
+        var entryId = sel.getEntryId();
+        if (entryId is not null)
+            map[entryId] = sel.getId();
+        foreach (var child in JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections()))
+            CollectSelectionIdsRecursive(child, map);
+    }
+
+    /// <summary>
+    /// Collect entryId → selectionId map for all selections in a force (top-level + nested).
+    /// Used to expose auto-selected entries after AddForce.
+    /// </summary>
+    private static Dictionary<string, string>? CollectForceSelectionIds(
+        net.battlescribe.model.roster.Force force)
+    {
+        var selections = JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections());
+        if (selections.Count == 0) return null;
+        var map = new Dictionary<string, string>();
+        foreach (var sel in selections)
+            CollectSelectionIdsRecursive(sel, map);
+        return map.Count > 0 ? map : null;
     }
 
     /// <summary>
@@ -293,10 +426,16 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forceRules = JavaListToList<net.battlescribe.model.data.Rule>(f.getRules());
         var childForces = JavaListToList<net.battlescribe.model.roster.Force>(f.getForces());
         var pubId = f.getPublicationId();
+        // Use engine-resolved ForceEntry (modifiers applied) for hidden state
+        var resolvedForceEntry = _oracle.GetResolvedForceEntry(f);
+        var hidden = resolvedForceEntry?.isHidden()
+            ?? _oracle.FindForceEntryById(f.getEntryId())?.isHidden()
+            ?? false;
         return new ForceState(
+            f.getId(),
             f.getName() ?? "",
             f.getCatalogueId(),
-            selections.Select(CaptureSelection).ToList(),
+            selections.Select(s => CaptureSelection(s, f)).ToList(),
             rootForceIndex is { } rfi ? _oracle.GetAvailableEntryCountForForce(rfi) : null,
             ChildForces: childForces.Count > 0
                 ? childForces.Select(cf => CaptureForce(cf)).ToList()
@@ -304,27 +443,33 @@ public sealed class OracleRosterEngine : IRosterEngine
             Profiles: forceProfiles.Select(CaptureProfile).ToList(),
             Rules: forceRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
                 string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
+            Hidden: hidden,
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
             Page: f.getPage());
     }
 
-    private SelectionState CaptureSelection(net.battlescribe.model.roster.Selection sel)
+    private SelectionState CaptureSelection(net.battlescribe.model.roster.Selection sel, net.battlescribe.model.roster.Force force)
     {
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
         var profiles = JavaListToList<net.battlescribe.model.data.Profile>(sel.getProfiles());
         var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());
         var categories = JavaListToList<net.battlescribe.model.roster.Category>(sel.getCategories());
-        var hidden = _oracle.GetEntryById(sel.getEntryId())?.isHidden() ?? false;
+        // Use engine's modifier-application to get resolved hidden state
+        var resolvedEntry = _oracle.GetResolvedEntry(force, sel);
+        var hidden = resolvedEntry?.isHidden()
+            ?? _oracle.GetEntryById(sel.getEntryId())?.isHidden()
+            ?? false;
         var pubId = sel.getPublicationId();
         return new SelectionState(
+            sel.getId(),
             sel.getName() ?? "",
             sel.getEntryId(),
             sel.getType(),
             sel.getNumber(),
             hidden,
             costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList(),
-            children.Select(CaptureSelection).ToList(),
+            children.Select(c => CaptureSelection(c, force)).ToList(),
             Profiles: profiles.Select(CaptureProfile).ToList(),
             Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
                 string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),

@@ -22,21 +22,23 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: addForce
-    forceEntryIndex: 1
+    id: add-battalion
+    forceEntryId: fe-battalion
 
   - expectedState:
       forceCount: 2
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit
 
   - action: selectEntry
-    forceIndex: 1
-    entryIndex: 0
+    forceId: ${{ steps.add-battalion.forceId }}
+    entryId: se-unit
 
   - expectedState:
       forces:

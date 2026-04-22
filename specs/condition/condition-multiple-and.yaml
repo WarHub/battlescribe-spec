@@ -41,11 +41,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 2
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-target
 
   # Only target, neither trigger → no change
   - expectedState:
@@ -54,8 +55,8 @@ steps:
             - name: Target
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-trigger-a
 
   - expectedState:
       forces:
@@ -63,8 +64,8 @@ steps:
             - name: Target
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-trigger-b
 
   - expectedState:
       forces:

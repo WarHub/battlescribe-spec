@@ -330,7 +330,8 @@ setup:
 steps:
   # Step 1: addForce — auto-selects Required Unit (min=1)
   - action: addForce
-    forceEntryIndex: 0
+    id: add-battalion
+    forceEntryId: fe-battalion
 
   - expectedState:
       forceCount: 1
@@ -350,8 +351,9 @@ steps:
 
   # Step 2: selectEntry Infantry Squad — assert ALL selection fields
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-infantry
+    forceId: ${{ steps.add-battalion.forceId }}
+    entryId: se-infantry
 
   - expectedState:
       forces:
@@ -407,9 +409,10 @@ steps:
 
   # Step 3: selectChildEntry — add Trooper model to Infantry Squad
   - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 1
-    childEntryIndex: 0
+    id: select-trooper
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-infantry.selectionId }}
+    entryId: se-inf-trooper
 
   - expectedState:
       forces:
@@ -427,8 +430,9 @@ steps:
 
   # Step 4: selectEntry Commander — assert infoGroup profiles/rules, infoLink data
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    id: select-commander
+    forceId: ${{ steps.add-battalion.forceId }}
+    entryId: se-commander
 
   - expectedState:
       forces:
@@ -489,8 +493,8 @@ steps:
 
   # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
   - action: setSelectionCount
-    forceIndex: 0
-    selectionPath: [1, 0]
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
     count: 2
 
   - expectedState:
@@ -509,8 +513,9 @@ steps:
   # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
   #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-infantry-2
+    forceId: ${{ steps.add-battalion.forceId }}
+    entryId: se-infantry
 
   - expectedState:
       forces:
@@ -528,19 +533,34 @@ steps:
                   value: 4
             - name: Infantry Squad
 
-  # Step 7: duplicateSelection — duplicate Infantry Squad #2
+  # Step 7: duplicateSelection — duplicate Infantry Squad #1 (has Trooper x2 children)
+  #   Verifies deep duplication preserves child selections and their state.
   - action: duplicateSelection
-    forceIndex: 0
-    selectionIndex: 3
+    id: duplicate-infantry
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-infantry.selectionId }}
 
   - expectedState:
       forces:
         - selectionCount: 5
+          selections:
+            - name: Required Unit
+            - name: Infantry Squad
+              children:
+                - name: Trooper
+                  number: 2
+            - name: Commander
+            - name: Infantry Squad
+            - name: Infantry Squad
+              children:
+                - name: Trooper
+                  number: 2
 
-  # Step 8: deselectSelection — remove duplicated copy
+  # Step 8: deselectSelection — remove the ORIGINAL Infantry Squad #1
+  #   Keeps the duplicate while removing the original.
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 4
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-infantry.selectionId }}
 
   - expectedState:
       forces:
@@ -551,15 +571,109 @@ steps:
     costTypeId: ct-pts
     value: 200
 
-  # Step 10: final assertion — roster costs, cost limit error
+  # Step 10: comprehensive final assertion — full roster state
+  #   After steps above, the roster has:
+  #   - Battalion force with: Required Unit, Commander (100pts+4pw), Infantry Squad #2 (100pts+5pw),
+  #     and Infantry Squad (duplicated from #1, 120pts+5pw with Trooper x2 at 20pts)
+  #   - Commander still has +25pts from conditional (2+ Infantry: #2 + dupe = 2)
+  #   - Total pts: 0 + 100 + 100 + 120 = 320 (Required=0, Commander=100, Inf#2=100, Inf-dupe=120)
+  #   - Total power: 0 + 4 + 5 + 5 = 14
+  #   - Cost limit at 200pts → cost limit error
   - expectedState:
+      forceCount: 1
       forces:
         - name: Battalion
+          hidden: false
+          selectionCount: 4
           selections:
             - name: Required Unit
-            - name: Infantry Squad
+              type: unit
+              number: 1
+              hidden: false
+              profiles:
+                - name: Boltgun
+                  typeName: Weapon
+                  hidden: false
+                  characteristics:
+                    - name: Range
+                      value: "24"
+                    - name: Str
+                      value: "4"
+                    - name: AP
+                      value: "0"
+                    - name: D
+                      value: "1"
+              rules:
+                - name: Rapid Fire
+                  description: Double shots at half range
+                  hidden: false
+              categories:
+                - name: Elites
+                  entryId: cat-elites
+                  primary: true
             - name: Commander
+              entryId: se-commander
+              type: unit
+              number: 1
+              hidden: false
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 100
+                - name: power
+                  typeId: ct-power
+                  value: 4
+              profiles:
+                - name: Power Sword
+                  typeName: Weapon
+                  hidden: false
+                - name: Power Armor
+                  typeName: Unit Stats
+                  hidden: false
+              rules:
+                - name: Inspiring Leader
+                  hidden: false
+                - name: Fearless
+                  hidden: false
+              categories:
+                - name: HQ
+                  entryId: cat-hq
+                  primary: true
             - name: Infantry Squad
+              type: unit
+              number: 1
+              hidden: false
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 100
+                - name: power
+                  typeId: ct-power
+                  value: 5
+              categories:
+                - name: Troops
+                  entryId: cat-troops
+                  primary: true
+            - name: Infantry Squad
+              type: unit
+              number: 1
+              hidden: false
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 100
+                - name: power
+                  typeId: ct-power
+                  value: 5
+              children:
+                - name: Trooper
+                  type: model
+                  number: 2
+                  hidden: false
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 20
       costs:
         - typeId: ct-pts
         - typeId: ct-power

@@ -20,21 +20,23 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol-2
+    forceEntryId: fe-patrol
 
   - expectedState:
       forceCount: 2
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   # Remove second (empty) force
   - action: removeForce
-    forceIndex: 1
+    forceId: ${{ steps.add-patrol-2.forceId }}
 
   - expectedState:
       forceCount: 1

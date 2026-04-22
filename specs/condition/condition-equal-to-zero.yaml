@@ -33,13 +33,14 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Select Unit A - equalTo 0 checks for se-other in force scope
   # Since se-other hasn't been added, count is 0 → condition true
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit
 
   - expectedState:
       forces:
@@ -49,8 +50,8 @@ steps:
 
   # Add Unit B → equalTo 0 for se-other is now false → modifier not applied
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-other
 
   - expectedState:
       forces:

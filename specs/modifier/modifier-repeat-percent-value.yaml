@@ -38,11 +38,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
   # percentValue=true: raw count = 1 selection. Percentage = 1/50*100 = 2%.
   # Round: floor(0.02) = 0 repeats. Modifier not applied → pts stays 100.
   # (percentValue divides the count by the value and multiplies by 100,

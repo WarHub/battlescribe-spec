@@ -5,95 +5,154 @@ namespace BattleScribeSpec.NewRecruit;
 /// <summary>
 /// Translates IRosterEngine action calls to NR roster tree operations.
 ///
-/// NR's roster tree for locally-loaded systems:
-///   army → selectors[catIdx].first() → selectors[forceIdx] → instances[n] (= forces)
-///   force → selectors[catIdx].first() → selectors[entryIdx] (entry selectors)
+/// All actions use ID-based addressing:
+///   - Force/selection instances are identified by NR's internal uid
+///   - Entry definitions use BattleScribe data model IDs
 ///
-/// Key API patterns (verified via Playwright exploration):
-///   - army.getForces() returns force instances (NOT getChildren which returns [])
-///   - force.getSelections() returns selected entries
-///   - army.insertForce(book, forceId) adds a force by ID
-///   - entrySelector.addInstance() selects an entry (increments from 0→1)
-///   - selection.delete() removes a selection
-///   - army.calcTotalCosts() returns [{name, value}]
+/// JS helper functions (getForces, getSelections, getForceByUid,
+/// getSelectionByUid, findSelectorById) are registered as page init scripts
+/// via NewRecruitBrowser.RegisterHelpersOnPageAsync() and are automatically
+/// available as window globals after every navigation.
 /// </summary>
 public static class NewRecruitActions
 {
-    // JS helper functions (getForces, getSelections, getSortedSelections,
-    // findSelectorById) are registered as page init scripts
-    // via NewRecruitBrowser.RegisterHelpersOnPageAsync() and are automatically
-    // available as window globals after every navigation. Action methods
-    // reference them by name — no inline definitions needed.
+    private const string ErrorPrefix = "ERROR:";
 
     /// <summary>
-    /// Add a force to the roster by force entry ID, using the specified catalogue book.
+    /// For create actions: returns uid on success, throws on error.
+    /// JS returns uid string, null (success without uid), or "ERROR:message".
     /// </summary>
-    public static async Task AddForceByIdAsync(IPage page, string forceId, int catalogueIndex = 0)
+    internal static string? HandleCreateResult(string? result)
     {
-        var error = await page.EvaluateAsync<string?>("""
-            ({forceId, catalogueIndex}) => {
+        if (result?.StartsWith(ErrorPrefix) == true)
+            throw new InvalidOperationException(result[ErrorPrefix.Length..]);
+        return result;
+    }
+
+    /// <summary>
+    /// Add a force to the roster by force entry ID.
+    /// Returns the uid of the created force.
+    /// </summary>
+    public static async Task<string?> AddForceByIdAsync(IPage page, string forceEntryId, string? catalogueId = null)
+    {
+        var result = await page.EvaluateAsync<string?>("""
+            ({forceEntryId, catalogueId}) => {
                 try {
                     const spec = window.__bsspec;
-                    if (!spec) return 'No spec state — was Setup called?';
+                    if (!spec) return 'ERROR:No spec state — was Setup called?';
                     const army = spec.army;
                     const books = spec.books || [spec.book];
-                    const book = books[catalogueIndex] || books[0];
-                    if (!army || !book) return 'No army or book';
+                    const catIds = spec.bookCatalogueIds || [];
+                    const book = catalogueId
+                        ? (books[catIds.indexOf(catalogueId)] || books[0])
+                        : books[0];
+                    if (!army || !book) return 'ERROR:No army or book';
 
-                    army.insertForce(book, forceId);
+                    const beforeUids = new Set(
+                        (army.getForces?.() || []).map(f => f?.uid || ''));
+
+                    army.insertForce(book, forceEntryId);
+
+                    for (const f of (army.getForces?.() || [])) {
+                        if (f?.uid && !beforeUids.has(f.uid)) return f.uid;
+                    }
                     return null;
                 } catch(e) {
-                    return 'AddForce error: ' + e.message;
+                    return 'ERROR:AddForce error: ' + e.message;
                 }
             }
-            """, new { forceId, catalogueIndex });
-        if (error != null) throw new InvalidOperationException(error);
+            """, new { forceEntryId, catalogueId });
+        return HandleCreateResult(result);
+    }
+
+    /// <summary>
+    /// Collect auto-selected root selections for a force after addForce.
+    /// Returns a map of entryId → selection uid, or null if no selections.
+    /// </summary>
+    public static async Task<Dictionary<string, string>?> GetForceAutoSelectionsAsync(IPage page, string forceUid)
+    {
+        var json = await page.EvaluateAsync<string?>("""
+            (forceUid) => {
+                try {
+                    const army = window.__bsspec?.army;
+                    if (!army) return null;
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return null;
+                    const sels = getSelections(force);
+                    if (!sels || sels.length === 0) return null;
+                    const map = {};
+                    for (const s of sels) {
+                        const raw = s;
+                        const entryId = s.getId?.() || null;
+                        const uid = raw?.uid || null;
+                        if (entryId && uid) map[entryId] = uid;
+                    }
+                    return Object.keys(map).length > 0 ? JSON.stringify(map) : null;
+                } catch(e) {
+                    return null;
+                }
+            }
+            """, forceUid);
+        if (json is null) return null;
+        return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
     }
 
     /// <summary>
     /// Add a child force under an existing force by child force entry ID.
+    /// Returns the uid of the created child force.
     /// </summary>
-    public static async Task AddChildForceByIdAsync(IPage page, int[] parentForcePath, string childForceId, int catalogueIndex = 0)
+    public static async Task<string?> AddChildForceByIdAsync(IPage page, string parentForceUid, string childForceEntryId, string? catalogueId = null)
     {
-        var error = await page.EvaluateAsync<string?>("""
-            ({parentForcePath, childForceId, catalogueIndex}) => {
+        var result = await page.EvaluateAsync<string?>("""
+            ({parentForceUid, childForceEntryId, catalogueId}) => {
                 try {
                     const spec = window.__bsspec;
-                    if (!spec) return 'No spec state — was Setup called?';
+                    if (!spec) return 'ERROR:No spec state — was Setup called?';
                     const army = spec.army;
                     const books = spec.books || [spec.book];
-                    const book = books[catalogueIndex] || books[0];
-                    if (!army || !book) return 'No army or book';
+                    const catIds = spec.bookCatalogueIds || [];
+                    const book = catalogueId
+                        ? (books[catIds.indexOf(catalogueId)] || books[0])
+                        : books[0];
+                    if (!army || !book) return 'ERROR:No army or book';
 
-                    const parentForce = getForceAtPath(army, parentForcePath);
-                    if (!parentForce) return `Parent force not found at path [${parentForcePath}]`;
+                    const parentForce = getForceByUid(army, parentForceUid);
+                    if (!parentForce) return `ERROR:Parent force not found with uid '${parentForceUid}'`;
+
+                    const beforeUids = new Set(
+                        (army.getForces?.() || []).map(f => f?.uid || ''));
 
                     if (typeof parentForce.insertForce === 'function') {
-                        parentForce.insertForce(book, childForceId);
+                        parentForce.insertForce(book, childForceEntryId);
                     } else {
-                        return 'insertForce() not available on force object';
+                        return 'ERROR:insertForce() not available on force object';
+                    }
+
+                    for (const f of (army.getForces?.() || [])) {
+                        if (f?.uid && !beforeUids.has(f.uid)) return f.uid;
                     }
                     return null;
                 } catch(e) {
-                    return 'AddChildForce error: ' + e.message;
+                    return 'ERROR:AddChildForce error: ' + e.message;
                 }
             }
-            """, new { parentForcePath, childForceId, catalogueIndex });
-        if (error != null) throw new InvalidOperationException(error);
+            """, new { parentForceUid, childForceEntryId, catalogueId });
+        return HandleCreateResult(result);
     }
 
     /// <summary>
+    /// Remove a force from the roster by its uid.
     /// </summary>
-    public static async Task RemoveForceAsync(IPage page, int[] forcePath)
+    public static async Task RemoveForceAsync(IPage page, string forceUid)
     {
         var error = await page.EvaluateAsync<string?>("""
-            (forcePath) => {
+            (forceUid) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const force = getForceAtPath(army, forcePath);
-                    if (!force) return `Force not found at path [${forcePath}]`;
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return `Force not found with uid '${forceUid}'`;
 
                     force.delete();
                     return null;
@@ -101,32 +160,30 @@ public static class NewRecruitActions
                     return 'RemoveForce error: ' + e.message;
                 }
             }
-            """, forcePath);
+            """, forceUid);
         if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
     /// Select an entry in the specified force by entry ID.
-    /// Traverses the force's selector tree to find the entry selector, then calls addInstance().
+    /// Returns the uid of the created selection.
     /// </summary>
-    public static async Task SelectEntryByIdAsync(IPage page, int[] forcePath, string entryId)
+    public static async Task<string?> SelectEntryByIdAsync(IPage page, string forceUid, string entryId)
     {
-        var error = await page.EvaluateAsync<string?>("""
-            ({forcePath, entryId}) => {
+        var result = await page.EvaluateAsync<string?>("""
+            ({forceUid, entryId}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
+                    if (!army) return 'ERROR:No current roster';
 
-                    const force = getForceAtPath(army, forcePath);
-                    if (!force) return `Force not found at path [${forcePath}]`;
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
 
-                    // Record existing selections before adding
                     const before = new Set(
-                        getSelections(force).map(s => (s?.__v_raw || s)?.uid || '')
-                    );
+                        getSelections(force).map(s => s?.uid || ''));
 
                     const selector = findSelectorById(force, entryId);
-                    if (!selector) return `Entry '${entryId}' not found in force selector tree`;
+                    if (!selector) return `ERROR:Entry '${entryId}' not found in force selector tree`;
 
                     if (typeof selector.addInstance === 'function') {
                         selector.addInstance();
@@ -138,92 +195,46 @@ public static class NewRecruitActions
                         selector.setAmount?.((selector.getAmount?.() || 0) + 1);
                     }
 
-                    // Tag the new selection with insertion sequence number.
+                    // Tag and find the new selection
                     window.__bsspec._selSeq = (window.__bsspec._selSeq || 0) + 1;
                     const after = getSelections(force);
+                    let newUid = null;
                     for (const s of after) {
-                        const raw = s?.__v_raw || s;
-                        if (raw && !before.has(raw.uid || '') && raw.__bsspec_seq === undefined) {
-                            raw.__bsspec_seq = window.__bsspec._selSeq;
+                        const raw = s;
+                        if (raw && !before.has(raw.uid || '')) {
+                            if (raw.__bsspec_seq === undefined) {
+                                raw.__bsspec_seq = window.__bsspec._selSeq;
+                            }
+                            if (!newUid) newUid = raw.uid || null;
                         }
                     }
 
-                    return null;
+                    return newUid;
                 } catch(e) {
-                    return 'SelectEntry error: ' + e.message;
+                    return 'ERROR:SelectEntry error: ' + e.message;
                 }
             }
-            """, new { forcePath, entryId });
-        if (error != null) throw new InvalidOperationException(error);
-    }
-
-    /// <summary>
-    /// Select an entry in the specified force by flat index across all categories.
-    /// Iterates the force's selector tree to find the Nth non-force entry selector.
-    /// </summary>
-    public static async Task SelectEntryByIndexAsync(IPage page, int[] forcePath, int entryIndex)
-    {
-        var error = await page.EvaluateAsync<string?>("""
-            ({forcePath, entryIndex}) => {
-                try {
-                    const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
-
-                    const force = getForceAtPath(army, forcePath);
-                    if (!force) return `Force not found at path [${forcePath}]`;
-
-                    // Collect all entry selectors from all categories in the force
-                    const allEntrySelectors = [];
-                    for (const catSel of force.selectors || []) {
-                        const catInst = typeof catSel.first === 'function' ? catSel.first() : null;
-                        if (!catInst) continue;
-                        for (const entrySel of catInst.selectors || []) {
-                            if (entrySel.isForce) continue;
-                            allEntrySelectors.push(entrySel);
-                        }
-                    }
-
-                    if (entryIndex >= allEntrySelectors.length)
-                        return `Entry index ${entryIndex} out of range (${allEntrySelectors.length} entry selectors in force)`;
-
-                    const sel = allEntrySelectors[entryIndex];
-                    if (typeof sel.addInstance === 'function') {
-                        sel.addInstance();
-                        const insts = sel.instances || [];
-                        insts[insts.length - 1]?.autocheck?.();
-                    } else if (sel.getAmount?.() === 0 && typeof sel.incrementAmount === 'function') {
-                        sel.incrementAmount();
-                    } else {
-                        sel.setAmount?.((sel.getAmount?.() || 0) + 1);
-                    }
-                    return null;
-                } catch(e) {
-                    return 'SelectEntry error: ' + e.message;
-                }
-            }
-            """, new { forcePath, entryIndex });
-        if (error != null) throw new InvalidOperationException(error);
+            """, new { forceUid, entryId });
+        return HandleCreateResult(result);
     }
 
     /// <summary>
     /// Select a child entry under an existing selection.
-    /// In NR, child entries already exist as nodes with amount=0 when the parent
-    /// is selected. To "select" a child, we call incrementAmount() on the
-    /// existing child node (not addInstance() on the selector template).
+    /// Returns the uid of the created/activated child selection.
     /// </summary>
-    public static async Task SelectChildEntryByIdAsync(IPage page, int[] forcePath, int[] selectionPath, string childEntryId)
+    public static async Task<string?> SelectChildEntryByIdAsync(IPage page, string forceUid, string selectionUid, string childEntryId)
     {
-        var error = await page.EvaluateAsync<string?>("""
-            ({forcePath, selectionPath, childEntryId}) => {
+        var result = await page.EvaluateAsync<string?>("""
+            ({forceUid, selectionUid, childEntryId}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
+                    if (!army) return 'ERROR:No current roster';
 
-                    const force = getForceAtPath(army, forcePath);
-                    if (!force) return `Force not found at path [${forcePath}]`;
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
 
-                    const sel = getSelectionAtPath(force, selectionPath);
-                    if (!sel) return `Selection not found at path [${selectionPath}]`;
+                    const sel = getSelectionByUid(force, selectionUid);
+                    if (!sel) return `ERROR:Selection not found with uid '${selectionUid}'`;
 
                     // NR pre-creates child nodes with amount=0 for all child entries.
                     const children = sel.getSelections?.() || sel.getChildren?.() || [];
@@ -236,18 +247,20 @@ public static class NewRecruitActions
                             child.setAmount((child.getAmount?.() || 0) + 1);
                         }
                         child.autocheck?.();
-                        return null;
+                        return child?.uid || null;
                     }
 
                     // Fallback: search the selector tree
                     const selector = sel.selector ? findSelectorById(sel.selector, childEntryId) : null;
                     const found = selector || findSelectorById(sel, childEntryId);
-                    if (!found) return `Child entry '${childEntryId}' not found under selection`;
+                    if (!found) return `ERROR:Child entry '${childEntryId}' not found under selection`;
 
                     if (typeof found.addInstance === 'function') {
                         found.addInstance();
                         const insts = found.instances || [];
-                        insts[insts.length - 1]?.autocheck?.();
+                        const last = insts[insts.length - 1];
+                        last?.autocheck?.();
+                        return last?.uid || null;
                     } else if (typeof found.incrementAmount === 'function') {
                         found.incrementAmount();
                     } else {
@@ -255,29 +268,29 @@ public static class NewRecruitActions
                     }
                     return null;
                 } catch(e) {
-                    return 'SelectChildEntry error: ' + e.message;
+                    return 'ERROR:SelectChildEntry error: ' + e.message;
                 }
             }
-            """, new { forcePath, selectionPath, childEntryId });
-        if (error != null) throw new InvalidOperationException(error);
+            """, new { forceUid, selectionUid, childEntryId });
+        return HandleCreateResult(result);
     }
 
     /// <summary>
-    /// Deselect (remove) a selection by calling delete() or setting amount to 0.
+    /// Deselect (remove) a selection by uid.
     /// </summary>
-    public static async Task DeselectSelectionAsync(IPage page, int[] forcePath, int[] selectionPath)
+    public static async Task DeselectSelectionAsync(IPage page, string forceUid, string selectionUid)
     {
         var error = await page.EvaluateAsync<string?>("""
-            ({forcePath, selectionPath}) => {
+            ({forceUid, selectionUid}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const force = getForceAtPath(army, forcePath);
-                    if (!force) return `Force not found at path [${forcePath}]`;
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return `Force not found with uid '${forceUid}'`;
 
-                    const sel = getSelectionAtPath(force, selectionPath);
-                    if (!sel) return `Selection not found at path [${selectionPath}]`;
+                    const sel = getSelectionByUid(force, selectionUid);
+                    if (!sel) return `Selection not found with uid '${selectionUid}'`;
 
                     if (typeof sel.delete === 'function') {
                         sel.delete();
@@ -289,39 +302,31 @@ public static class NewRecruitActions
                     return 'DeselectSelection error: ' + e.message;
                 }
             }
-            """, new { forcePath, selectionPath });
+            """, new { forceUid, selectionUid });
         if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
-    /// Set the number of instances for a child selection.
+    /// Set the number of instances for a selection.
     /// Uses NR's native setAmount({}, count) — matches the UI spinbutton behavior.
-    /// Root-level selections (selectionPath length &lt; 2) are rejected — use selectEntry/deselectEntry instead.
     /// </summary>
-    public static async Task SetSelectionCountAsync(IPage page, int[] forcePath, int[] selectionPath, int count)
+    public static async Task SetSelectionCountAsync(IPage page, string forceUid, string selectionUid, int count)
     {
-        if (selectionPath.Length < 2)
-            throw new ArgumentException(
-                "selectionPath must have at least 2 elements for SetSelectionCount " +
-                "(targets child selections only; use SelectEntry/DeselectSelection for root selections).");
-
         var error = await page.EvaluateAsync<string?>("""
-            ({forcePath, selectionPath, count}) => {
+            ({forceUid, selectionUid, count}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
 
-                    const force = getForceAtPath(army, forcePath);
-                    if (!force) return `Force not found at path [${forcePath}]`;
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return `Force not found with uid '${forceUid}'`;
 
-                    const sel = getSelectionAtPath(force, selectionPath);
-                    if (!sel) return `Selection not found at path [${selectionPath}]`;
+                    const sel = getSelectionByUid(force, selectionUid);
+                    if (!sel) return `Selection not found with uid '${selectionUid}'`;
 
                     const current = sel.getAmount?.() ?? 1;
                     if (current === count) return null;
 
-                    // Use setAmount — matches NR's own UI spinbutton behavior.
-                    // Two args required: context object + new amount value.
                     if (typeof sel.setAmount === 'function') {
                         sel.setAmount({}, count);
                         return null;
@@ -332,55 +337,101 @@ public static class NewRecruitActions
                     return 'SetSelectionCount error: ' + e.message;
                 }
             }
-            """, new { forcePath, selectionPath, count });
+            """, new { forceUid, selectionUid, count });
         if (error != null) throw new InvalidOperationException(error);
     }
 
     /// <summary>
     /// Duplicate a selection within a force using dupe().
+    /// Returns the uid of the duplicated selection.
     /// </summary>
-    public static async Task DuplicateSelectionAsync(IPage page, int[] forcePath, int[] selectionPath)
+    public static async Task<string?> DuplicateSelectionAsync(IPage page, string forceUid, string selectionUid)
     {
-        var error = await page.EvaluateAsync<string?>("""
-            ({forcePath, selectionPath}) => {
+        var result = await page.EvaluateAsync<string?>("""
+            async ({forceUid, selectionUid}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
+                    if (!army) return 'ERROR:No current roster';
 
-                    const force = getForceAtPath(army, forcePath);
-                    if (!force) return `Force not found at path [${forcePath}]`;
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
 
-                    // Record existing selections before duplicating
                     const before = new Set(
-                        getSelections(force).map(s => (s?.__v_raw || s)?.uid || '')
-                    );
+                        getSelections(force).map(s => s?.uid || ''));
 
-                    const sel = getSelectionAtPath(force, selectionPath);
-                    if (!sel) return `Selection not found at path [${selectionPath}]`;
+                    const sel = getSelectionByUid(force, selectionUid);
+                    if (!sel) return `ERROR:Selection not found with uid '${selectionUid}'`;
 
                     if (typeof sel.dupe === 'function') {
-                        sel.dupe();
+                        await sel.dupe();
                     } else {
-                        return 'dupe() method not available on selection';
+                        return 'ERROR:dupe() method not available on selection';
                     }
 
-                    // Tag the duplicated selection with insertion sequence
+                    // Tag and find the duplicated selection
                     window.__bsspec._selSeq = (window.__bsspec._selSeq || 0) + 1;
                     const after = getSelections(force);
+                    let newUid = null;
                     for (const s of after) {
-                        const raw = s?.__v_raw || s;
-                        if (raw && !before.has(raw.uid || '') && raw.__bsspec_seq === undefined) {
-                            raw.__bsspec_seq = window.__bsspec._selSeq;
+                        const raw = s;
+                        if (raw && !before.has(raw.uid || '')) {
+                            if (raw.__bsspec_seq === undefined) {
+                                raw.__bsspec_seq = window.__bsspec._selSeq;
+                            }
+                            if (!newUid) newUid = raw.uid || null;
                         }
                     }
 
-                    return null;
+                    return newUid;
                 } catch(e) {
-                    return 'DuplicateSelection error: ' + e.message;
+                    return 'ERROR:DuplicateSelection error: ' + e.message;
                 }
             }
-            """, new { forcePath, selectionPath });
-        if (error != null) throw new InvalidOperationException(error);
+            """, new { forceUid, selectionUid });
+        return HandleCreateResult(result);
+    }
+
+    /// <summary>
+    /// Duplicate a force using dupe().
+    /// Returns the uid of the duplicated force.
+    /// </summary>
+    public static async Task<string?> DuplicateForceAsync(IPage page, string forceUid)
+    {
+        var result = await page.EvaluateAsync<string?>("""
+            async ({forceUid}) => {
+                try {
+                    const army = window.__bsspec?.army;
+                    if (!army) return 'ERROR:No current roster';
+
+                    const before = new Set(
+                        (army.getForces?.() || []).map(f => f?.uid || ''));
+
+                    const force = getForceByUid(army, forceUid);
+                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
+
+                    if (typeof force.dupe === 'function') {
+                        await force.dupe();
+                    } else {
+                        return 'ERROR:dupe() method not available on force';
+                    }
+
+                    // Find the duplicated force by comparing before/after uid sets
+                    const after = army.getForces?.() || [];
+                    let newUid = null;
+                    for (const f of after) {
+                        if (f && !before.has(f.uid || '')) {
+                            newUid = f.uid || null;
+                            break;
+                        }
+                    }
+
+                    return newUid;
+                } catch(e) {
+                    return 'ERROR:DuplicateForce error: ' + e.message;
+                }
+            }
+            """, new { forceUid });
+        return HandleCreateResult(result);
     }
 
     /// <summary>

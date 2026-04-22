@@ -30,7 +30,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-army
+    forceEntryId: fe-army
 
   - expectedState:
       forceCount: 1
@@ -40,8 +41,8 @@ steps:
 
   # includeChildForces=true means the max limit counts across parent and child forces
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-1
 
   - expectedState:
       forces:

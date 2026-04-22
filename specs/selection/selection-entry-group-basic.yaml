@@ -31,11 +31,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-parent
   # Parent unit is created with its entry group children available.
   # Group children can be selected independently as child selections.
   - expectedState:

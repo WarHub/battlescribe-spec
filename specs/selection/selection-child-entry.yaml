@@ -27,20 +27,22 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-command-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-parent
 
   - expectedState:
       forces:
         - selectionCount: 1
 
   - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 0
-    childEntryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-command-squad.selectionId }}
+    entryId: se-child-1
 
   - expectedState:
       forces:

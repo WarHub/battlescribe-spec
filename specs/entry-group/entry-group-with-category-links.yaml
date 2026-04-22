@@ -47,16 +47,18 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-squad
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-squad
 
   - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 0
-    childEntryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-sword
 
   - expectedState:
       forces:

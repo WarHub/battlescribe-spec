@@ -1,19 +1,45 @@
+using System.Text.Json.Serialization;
 using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec;
+
+/// <summary>
+/// Structured outputs from mutating roster actions.
+/// Contains IDs of created elements so that later steps can reference them.
+/// </summary>
+public sealed class ActionOutputs
+{
+    /// <summary>
+    /// ID of the created force (returned by addForce, addChildForce, duplicateForce).
+    /// </summary>
+    [JsonPropertyName("forceId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ForceId { get; set; }
+
+    /// <summary>
+    /// ID of the primary created selection (returned by selectEntry, selectChildEntry, duplicateSelection).
+    /// </summary>
+    [JsonPropertyName("selectionId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectionId { get; set; }
+
+    /// <summary>
+    /// Map of entryId → selectionId for auto-selected child selections.
+    /// Populated when selectEntry/selectChildEntry creates children via defaults.
+    /// </summary>
+    [JsonPropertyName("selections")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? Selections { get; set; }
+}
 
 /// <summary>
 /// Abstraction for a BattleScribe-compatible roster editing engine.
 /// Any engine conforming to BattleScribe v2.03 behavior should implement this interface.
 /// The spec runner executes declarative YAML tests against implementations of this interface.
 /// <para>
-/// All force-targeting methods use <c>int[] forcePath</c> to address forces at any depth.
-/// For <c>AddForce</c>, forcePath identifies the parent (empty = top-level).
-/// For all other actions, forcePath identifies the target force.
-/// </para>
-/// <para>
-/// Selection-targeting methods additionally use <c>int[] selectionPath</c> to address
-/// selections at any depth within the target force.
+/// All addressing is ID-based. Definition references (forceEntryId, entryId) use
+/// BattleScribe data model IDs. Instance references (forceId, selectionId) use
+/// IDs returned as outputs from previous mutating actions.
 /// </para>
 /// </summary>
 public interface IRosterEngine : IDisposable
@@ -26,54 +52,50 @@ public interface IRosterEngine : IDisposable
     IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues);
 
     /// <summary>
-    /// Add a force to the roster.
-    /// <paramref name="forcePath"/> identifies the parent force: empty array adds a top-level force,
-    /// <c>[0]</c> adds a child under force 0, <c>[0, 1]</c> adds under force 0's child 1, etc.
-    /// <paramref name="forceEntryIndex"/> indexes force entries at the target level.
+    /// Add a top-level force to the roster by force entry ID.
     /// </summary>
-    void AddForce(int[] forcePath, int forceEntryIndex, int catalogueIndex = 0);
+    ActionOutputs AddForce(string forceEntryId, string? catalogueId = null);
 
     /// <summary>
-    /// Remove a force from the roster.
-    /// <paramref name="forcePath"/> identifies the target force to remove:
-    /// <c>[0]</c> removes top-level force 0, <c>[0, 1]</c> removes child 1 of force 0, etc.
+    /// Add a child force under an existing parent force.
     /// </summary>
-    void RemoveForce(int[] forcePath);
+    ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null);
+
+    /// <summary>
+    /// Remove a force from the roster by its instance ID.
+    /// </summary>
+    void RemoveForce(string forceId);
 
     /// <summary>
     /// Select (add) an entry in the specified force, creating a new selection.
-    /// <paramref name="forcePath"/> identifies the target force.
     /// </summary>
-    void SelectEntry(int[] forcePath, int entryIndex);
+    ActionOutputs SelectEntry(string forceId, string entryId);
 
     /// <summary>
     /// Select a child entry under an existing selection.
-    /// <paramref name="forcePath"/> identifies the target force.
-    /// <paramref name="selectionPath"/> identifies the parent selection within the force.
     /// </summary>
-    void SelectChildEntry(int[] forcePath, int[] selectionPath, int childEntryIndex);
+    ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId);
 
     /// <summary>
-    /// Deselect (remove) a selection.
-    /// <paramref name="forcePath"/> identifies the target force.
-    /// <paramref name="selectionPath"/> identifies the selection to remove.
+    /// Deselect (remove) a selection by its instance ID.
     /// </summary>
-    void DeselectSelection(int[] forcePath, int[] selectionPath);
+    void DeselectSelection(string forceId, string selectionId);
 
     /// <summary>
-    /// Set the number of instances for a child selection.
-    /// <paramref name="forcePath"/> identifies the target force.
-    /// <paramref name="selectionPath"/> identifies the child selection within the force (must have at least 2 elements).
-    /// Root selections are managed via <see cref="SelectEntry"/>/<see cref="DeselectSelection"/>, not count changes.
+    /// Set the number of instances for a selection.
     /// </summary>
-    void SetSelectionCount(int[] forcePath, int[] selectionPath, int count);
+    void SetSelectionCount(string forceId, string selectionId, int count);
 
     /// <summary>
     /// Duplicate a selection within a force.
-    /// <paramref name="forcePath"/> identifies the target force.
-    /// <paramref name="selectionPath"/> identifies the selection to duplicate.
     /// </summary>
-    void DuplicateSelection(int[] forcePath, int[] selectionPath);
+    ActionOutputs DuplicateSelection(string forceId, string selectionId);
+
+    /// <summary>
+    /// Duplicate a force, creating a deep copy with all selections.
+    /// Returns the ID of the newly created force.
+    /// </summary>
+    ActionOutputs DuplicateForce(string forceId);
 
     /// <summary>
     /// Set cost limit for a cost type by its ID.
@@ -101,15 +123,7 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Clean up engine state after a spec run completes.
-    /// Called by the SpecRunner in a finally block after each spec, including
-    /// when <see cref="Setup(ProtocolGameSystem, ProtocolCatalogue[])"/> fails,
-    /// throws, or the spec aborts before setup fully completes.
-    /// Implementations must therefore be safe to call when the engine is only
-    /// partially initialized and should be written to be idempotent/best-effort.
-    /// Engines that maintain state across Setup() calls (e.g. browser-based)
-    /// should override this to release resources like rosters.
-    /// Cleanup should not throw; implementations should swallow or internally
-    /// handle cleanup failures where possible.
+    /// Implementations must be safe to call when partially initialized.
     /// </summary>
     void Cleanup() { }
 

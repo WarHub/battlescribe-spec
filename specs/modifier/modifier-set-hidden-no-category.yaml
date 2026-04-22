@@ -1,0 +1,50 @@
+id: modifier-set-hidden-no-category
+category: modifier
+tags: [battlescribe-bug]
+description: >
+  A hidden selection without categoryLinks gets no validation error in BattleScribe.
+  The hidden error generator only runs inside category validation (f.java L444),
+  so selections not assigned to any category are never checked.
+  See docs/hidden-validation-analysis.md for decompiled source analysis.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-hidden
+          name: Hidden Unit
+          type: unit
+          modifiers:
+            - type: set
+              field: hidden
+              value: "true"
+
+steps:
+  - action: addForce
+    id: add-force
+    forceEntryId: fe-patrol
+
+  - action: selectEntry
+    forceId: ${{ steps.add-force.forceId }}
+    entryId: se-hidden
+
+  - expectedState:
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Hidden Unit
+              hidden: true
+      errors:
+        - on: selection se-hidden
+          from: se-hidden/hidden
+      engines:
+        battlescribe:
+          errors: []

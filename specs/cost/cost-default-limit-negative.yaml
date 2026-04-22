@@ -40,11 +40,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   # All three cost types have negative defaultCostLimit (omitted=-1, -2, -9999).
   # Any negative value means "no limit" — no validation errors despite high cost.

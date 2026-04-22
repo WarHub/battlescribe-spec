@@ -23,7 +23,7 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    forceEntryId: fe-patrol
 
   # Before any selections, force has zero selections
   - expectedState:

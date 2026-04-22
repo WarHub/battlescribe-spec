@@ -38,11 +38,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
   # ModifierGroup repeat: parent scope, childId se-1, 1 selection / value 1 = 1 repeat.
   # Contained modifier increments pts by 5 once → 50 + 5 = 55.
   - expectedState:

@@ -60,7 +60,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Auto-select creates Unit A (min=1) and HQ Leader (min=1), both satisfied
   - expectedState:
@@ -72,12 +73,12 @@ steps:
 
   # Remove both auto-selected entries to trigger both min violations
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-hq }}
 
   - expectedState:
       forces:

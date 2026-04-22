@@ -59,7 +59,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Auto-select creates Unit A and Unit B (each has shared min=1), satisfied
   - expectedState:
@@ -71,12 +72,12 @@ steps:
 
   # Remove both auto-selected entries to trigger shared constraint violation
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - action: deselectSelection
-    forceIndex: 0
-    selectionIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-b }}
 
   - expectedState:
       forces:

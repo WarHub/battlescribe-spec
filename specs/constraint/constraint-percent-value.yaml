@@ -51,15 +51,16 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - expectedState:
       forces:
         - selectionCount: 0
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
 
   # percentValue=true: max = 50% of parent selections.
   # With 1 total selection: threshold = 1/100*50 = 0.5.

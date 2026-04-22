@@ -31,7 +31,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   # Hidden Unit auto-selected (min=1 constraint) — hidden from user but enforced by engine
   - expectedState:
@@ -47,8 +48,8 @@ steps:
 
   # Manually add Visible Unit
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-visible
 
   - expectedState:
       forces:

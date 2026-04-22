@@ -11,6 +11,7 @@ public sealed class SpecRunner
     private readonly DataSourceResolver? _dataSourceResolver;
     private readonly string? _engineName;
     private readonly List<string> _errors = [];
+    private readonly ExpressionResolver _exprResolver = new();
     private bool _isDataSourceMode;
 
     /// <summary>
@@ -133,7 +134,7 @@ public sealed class SpecRunner
             .Where(f => f.EndsWith(".gst", StringComparison.OrdinalIgnoreCase)
                      || f.EndsWith(".cat", StringComparison.OrdinalIgnoreCase)))
         {
-            files.Add((Path.GetFileName(file), File.ReadAllText(file)));
+            files.Add((System.IO.Path.GetFileName(file), File.ReadAllText(file)));
         }
 
         if (files.Count == 0)
@@ -147,48 +148,65 @@ public sealed class SpecRunner
 
     private void ExecuteAction(StepDef step, int stepIndex)
     {
-        // Resolve paths from step fields
-        var forcePath = ResolveForcePath(step);
-        var selectionPath = ResolveSelectionPath(step);
+        // Resolve expressions in instance ID fields
+        var forceId = _exprResolver.Resolve(step.ForceId);
+        var selectionId = _exprResolver.Resolve(step.SelectionId);
 
+        ActionOutputs? outputs = null;
         switch (step.Action)
         {
             case "addForce":
-                _engine.AddForce(forcePath, step.ForceEntryIndex ?? 0, step.CatalogueIndex ?? 0);
+                outputs = _engine.AddForce(
+                    step.ForceEntryId ?? throw new InvalidOperationException($"Step {stepIndex}: addForce requires forceEntryId"),
+                    step.CatalogueId);
+                break;
+
+            case "addChildForce":
+                outputs = _engine.AddChildForce(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceId"),
+                    step.ForceEntryId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceEntryId"));
                 break;
 
             case "removeForce":
-                _engine.RemoveForce(forcePath);
+                _engine.RemoveForce(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: removeForce requires forceId"));
                 break;
 
             case "selectEntry":
-                _engine.SelectEntry(forcePath, step.EntryIndex ?? 0);
+                outputs = _engine.SelectEntry(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: selectEntry requires forceId"),
+                    step.EntryId ?? throw new InvalidOperationException($"Step {stepIndex}: selectEntry requires entryId"));
                 break;
 
             case "selectChildEntry":
-                _engine.SelectChildEntry(
-                    forcePath,
-                    selectionPath,
-                    step.ChildEntryIndex ?? 0);
+                outputs = _engine.SelectChildEntry(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: selectChildEntry requires forceId"),
+                    selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: selectChildEntry requires selectionId"),
+                    step.EntryId ?? throw new InvalidOperationException($"Step {stepIndex}: selectChildEntry requires entryId"));
                 break;
 
             case "deselectSelection":
-                _engine.DeselectSelection(forcePath, selectionPath);
+                _engine.DeselectSelection(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: deselectSelection requires forceId"),
+                    selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: deselectSelection requires selectionId"));
                 break;
 
             case "setSelectionCount":
-                if (selectionPath.Length < 2)
-                    throw new InvalidOperationException(
-                        "setSelectionCount targets child selections only (selectionPath must have at least 2 elements). " +
-                        "Use selectEntry/deselectEntry for root selections.");
                 _engine.SetSelectionCount(
-                    forcePath,
-                    selectionPath,
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: setSelectionCount requires forceId"),
+                    selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: setSelectionCount requires selectionId"),
                     step.Count ?? 1);
                 break;
 
             case "duplicateSelection":
-                _engine.DuplicateSelection(forcePath, selectionPath);
+                outputs = _engine.DuplicateSelection(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: duplicateSelection requires forceId"),
+                    selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: duplicateSelection requires selectionId"));
+                break;
+
+            case "duplicateForce":
+                outputs = _engine.DuplicateForce(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: duplicateForce requires forceId"));
                 break;
 
             case "setCostLimit":
@@ -199,29 +217,10 @@ public sealed class SpecRunner
                 _errors.Add($"Step {stepIndex}: unknown action '{step.Action}'");
                 break;
         }
-    }
 
-    /// <summary>
-    /// Resolve forcePath from step: explicit forcePath, or derived from forceIndex.
-    /// For addForce: absent means top-level (empty path). For others: absent means [forceIndex ?? 0].
-    /// </summary>
-    private static int[] ResolveForcePath(StepDef step)
-    {
-        if (step.ForcePath is { } fp)
-            return [.. fp];
-        if (step.Action == "addForce")
-            return [];
-        return [step.ForceIndex ?? 0];
-    }
-
-    /// <summary>
-    /// Resolve selectionPath from step: explicit selectionPath, or [selectionIndex ?? 0].
-    /// </summary>
-    private static int[] ResolveSelectionPath(StepDef step)
-    {
-        if (step.SelectionPath is { } sp)
-            return [.. sp];
-        return [step.SelectionIndex ?? 0];
+        // Store outputs for expression resolution in later steps
+        if (step.Id is { Length: > 0 } stepId && outputs is not null)
+            _exprResolver.StoreOutputs(stepId, outputs);
     }
 
     private void ExecuteAssertion(StepDef step, int stepIndex)
@@ -427,6 +426,9 @@ public sealed class SpecRunner
 
         if (ef.AvailableEntryCount is { } aec && af.AvailableEntryCount is { } actualAec)
             AssertEqual(stepIndex, $"{prefix}.availableEntryCount", aec, actualAec);
+
+        if (ef.Hidden is { } expectedHidden)
+            AssertEqual(stepIndex, $"{prefix}.hidden", expectedHidden, af.Hidden);
 
         if (ef.ChildForceCount is { } cfc)
             AssertEqual(stepIndex, $"{prefix}.childForceCount", cfc, af.ChildForces.Count);

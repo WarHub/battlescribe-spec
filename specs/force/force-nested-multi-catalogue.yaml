@@ -3,7 +3,10 @@ category: force
 description: >
   Child forces can use different catalogues than their parent.
   Each force gets selections from its own catalogue.
-tags: [childForce, catalogue]
+tags: [childForce, catalogue, engine-limitation]
+engines:
+  battlescribe: fail
+  newrecruit: fail
 
 setup:
   gameSystem:
@@ -33,13 +36,14 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 0
+    id: add-army
+    forceEntryId: fe-army
 
-  - action: addForce
-    forcePath: [0]
-    forceEntryIndex: 0
-    catalogueIndex: 1
+  - action: addChildForce
+    id: add-detachment
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-detach
+    catalogueId: cat-b
 
   - expectedState:
       forceCount: 1
@@ -49,13 +53,14 @@ steps:
           childForces:
             - name: Detachment
 
-  - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
 
   - action: selectEntry
-    forcePath: [0, 0]
-    entryIndex: 0
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-a1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-b1
 
   - expectedState:
       forces:

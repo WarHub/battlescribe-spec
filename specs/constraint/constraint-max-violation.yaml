@@ -33,7 +33,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - expectedState:
       forces:
@@ -41,8 +42,8 @@ steps:
 
   # 1 selection — at max=1 limit
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState:
       forces:
@@ -54,8 +55,8 @@ steps:
   # The same constraint WITH categories works correctly — see
   # constraint-max-violation-linked which passes on both engines.
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState:
       forces:

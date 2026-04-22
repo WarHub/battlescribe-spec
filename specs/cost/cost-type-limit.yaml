@@ -29,11 +29,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
   # With a cost limit set on the cost type, the roster tracks the cost.
   # Limit-type cost types are used in query resolution to check against caps.
   - expectedState:

@@ -35,7 +35,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - expectedState:
       forces:
@@ -43,16 +44,16 @@ steps:
 
   # Select entries up to their independent limits (A max=2, B max=1)
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-b
 
   - expectedState:
       forces:

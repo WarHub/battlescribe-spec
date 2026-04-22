@@ -31,19 +31,20 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 0
+    id: add-patrol-a
+    forceEntryId: fe-patrol
 
   - action: addForce
-    forceEntryIndex: 0
-    catalogueIndex: 1
+    id: add-patrol-b
+    forceEntryId: fe-patrol
+    catalogueId: cat-b
 
   - expectedState:
       forceCount: 2
 
   # Remove first force (catalogue A)
   - action: removeForce
-    forceIndex: 0
+    forceId: ${{ steps.add-patrol-a.forceId }}
 
   - expectedState:
       forceCount: 1
@@ -52,8 +53,8 @@ steps:
 
   # Select on remaining force — should use catalogue B (Beta), not A (Alpha)
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol-b.forceId }}
+    entryId: se-beta
 
   - expectedState:
       forces:

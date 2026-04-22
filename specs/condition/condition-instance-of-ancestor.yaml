@@ -37,17 +37,19 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    id: select-parent-unit
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-parent
 
   # Select the child entry so its modifier condition evaluates.
   - action: selectChildEntry
-    forceIndex: 0
-    selectionIndex: 0
-    childEntryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-parent-unit.selectionId }}
+    entryId: se-child
 
   # scope=ancestor walks the parent chain from the child. The parent
   # selection was created from se-parent → instanceOf matches → name set.

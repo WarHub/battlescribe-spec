@@ -86,44 +86,54 @@ public static class AdapterHandler
 
         try
         {
-            var forcePath = cmd.ForcePath
-                ?? (cmd.ForceIndex is { } fi
-                    ? [fi]
-                    : cmd.Action == "addForce"
-                        ? []
-                        : [0]);
-            var selectionPath = cmd.SelectionPath ?? (cmd.SelectionIndex is { } si ? [si] : [0]);
-
+            ActionOutputs? outputs = null;
             switch (cmd.Action)
             {
                 case "addForce":
-                    engine.AddForce(forcePath, cmd.ForceEntryIndex ?? 0, cmd.CatalogueIndex ?? 0);
+                    outputs = engine.AddForce(
+                        cmd.ForceEntryId ?? throw new InvalidOperationException("addForce requires forceEntryId"),
+                        cmd.CatalogueId);
+                    break;
+                case "addChildForce":
+                    outputs = engine.AddChildForce(
+                        cmd.ForceId ?? throw new InvalidOperationException("addChildForce requires forceId"),
+                        cmd.ForceEntryId ?? throw new InvalidOperationException("addChildForce requires forceEntryId"),
+                        cmd.CatalogueId);
                     break;
                 case "removeForce":
-                    engine.RemoveForce(forcePath);
+                    engine.RemoveForce(
+                        cmd.ForceId ?? throw new InvalidOperationException("removeForce requires forceId"));
                     break;
                 case "selectEntry":
-                    engine.SelectEntry(forcePath, cmd.EntryIndex ?? 0);
+                    outputs = engine.SelectEntry(
+                        cmd.ForceId ?? throw new InvalidOperationException("selectEntry requires forceId"),
+                        cmd.EntryId ?? throw new InvalidOperationException("selectEntry requires entryId"));
                     break;
                 case "selectChildEntry":
-                    engine.SelectChildEntry(forcePath, selectionPath, cmd.ChildEntryIndex ?? 0);
+                    outputs = engine.SelectChildEntry(
+                        cmd.ForceId ?? throw new InvalidOperationException("selectChildEntry requires forceId"),
+                        cmd.SelectionId ?? throw new InvalidOperationException("selectChildEntry requires selectionId"),
+                        cmd.EntryId ?? throw new InvalidOperationException("selectChildEntry requires entryId"));
                     break;
                 case "deselectSelection":
-                    engine.DeselectSelection(forcePath, selectionPath);
+                    engine.DeselectSelection(
+                        cmd.ForceId ?? throw new InvalidOperationException("deselectSelection requires forceId"),
+                        cmd.SelectionId ?? throw new InvalidOperationException("deselectSelection requires selectionId"));
                     break;
                 case "setSelectionCount":
-                    if (selectionPath.Length < 2)
-                        return new ActionResult
-                        {
-                            Ok = false,
-                            Error = "Invalid protocol message: setSelectionCount targets child selections only " +
-                                    "(selectionPath must have at least 2 elements). " +
-                                    "Use selectEntry/deselectEntry for root selections."
-                        };
-                    engine.SetSelectionCount(forcePath, selectionPath, cmd.Count ?? 1);
+                    engine.SetSelectionCount(
+                        cmd.ForceId ?? throw new InvalidOperationException("setSelectionCount requires forceId"),
+                        cmd.SelectionId ?? throw new InvalidOperationException("setSelectionCount requires selectionId"),
+                        cmd.Count ?? 1);
                     break;
                 case "duplicateSelection":
-                    engine.DuplicateSelection(forcePath, selectionPath);
+                    outputs = engine.DuplicateSelection(
+                        cmd.ForceId ?? throw new InvalidOperationException("duplicateSelection requires forceId"),
+                        cmd.SelectionId ?? throw new InvalidOperationException("duplicateSelection requires selectionId"));
+                    break;
+                case "duplicateForce":
+                    outputs = engine.DuplicateForce(
+                        cmd.ForceId ?? throw new InvalidOperationException("duplicateForce requires forceId"));
                     break;
                 case "setCostLimit":
                     engine.SetCostLimit(cmd.CostTypeId ?? "", cmd.Value ?? 0);
@@ -132,7 +142,7 @@ public static class AdapterHandler
                     return new ActionResult { Ok = false, Error = $"Unknown action: {cmd.Action}" };
             }
 
-            return new ActionResult { Ok = true };
+            return new ActionResult { Ok = true, Outputs = outputs };
         }
         catch (Exception ex)
         {

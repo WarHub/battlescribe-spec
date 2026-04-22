@@ -43,11 +43,12 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-parent
 
   # Parent Unit selected → Armor auto-selected (outer default) →
   # Light Armor auto-selected (inner default).

@@ -31,10 +31,10 @@ public class MultiCatalogueProtocolTests(ITestOutputHelper output)
         output.WriteLine($"Setup errors: {string.Join(", ", errors)}");
         Assert.Empty(errors);
 
-        engine.AddForce([], 0, 0);
+        var force0 = engine.AddForce("fe-patrol", "cat-a");
         output.WriteLine("AddForce(0,0) done");
 
-        engine.AddForce([], 0, 1);
+        var force1 = engine.AddForce("fe-patrol", "cat-b");
         output.WriteLine("AddForce(0,1) done");
 
         var state1 = engine.GetRosterState();
@@ -44,7 +44,7 @@ public class MultiCatalogueProtocolTests(ITestOutputHelper output)
 
         try
         {
-            engine.SelectEntry([0], 0);
+            engine.SelectEntry(force0.ForceId!, "se-a1");
             output.WriteLine("SelectEntry(0,0) OK");
         }
         catch (Exception ex)
@@ -55,7 +55,7 @@ public class MultiCatalogueProtocolTests(ITestOutputHelper output)
 
         try
         {
-            engine.SelectEntry([1], 0);
+            engine.SelectEntry(force1.ForceId!, "se-b1");
             output.WriteLine("SelectEntry(1,0) OK");
         }
         catch (Exception ex)

@@ -48,16 +48,17 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-1
 
   # Select 2 from first entry link (link-alpha = entryIndex 0)
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
 
   # 2 selections via link-alpha — below shared max=3
   - expectedState:
@@ -66,8 +67,8 @@ steps:
 
   # Select 1 from second entry link (link-beta = entryIndex 1)
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
 
   # 3 total (2 from alpha + 1 from beta) — at shared limit, no errors
   - expectedState:
@@ -76,8 +77,8 @@ steps:
 
   # Select 1 more from second entry link
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
 
   # 4 total — shared counting exceeds max=3, constraint fires
   - expectedState:

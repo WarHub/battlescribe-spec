@@ -32,12 +32,13 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-detachment
+    forceEntryId: fe-1
 
   # Select the costed entry first to establish cost baseline
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-costed
 
   - expectedState:
       costs:
@@ -46,8 +47,8 @@ steps:
 
   # Select the free entry — total cost should remain 50
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 1
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-free
 
   - expectedState:
       costs:

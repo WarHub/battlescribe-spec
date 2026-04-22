@@ -70,30 +70,36 @@ adapters may use it to name the roster for debugging/observability.
 
 ### 3. Handle `action` Commands
 
-Action commands trigger mutations on the roster. The action type determines
-what to do:
+Action commands trigger mutations on the roster. All addressing is **ID-based**:
+definition IDs (e.g., `forceEntryId`, `entryId`) come from the setup data;
+instance IDs (e.g., `forceId`, `selectionId`) are returned in action outputs.
 
 | Action | Description |
 |--------|-------------|
-| `addForce` | Add a force with `forceEntryIndex` and optional `catalogueIndex`. Use `forcePath` for nested parent targeting. |
-| `removeForce` | Remove the force at the given `forcePath` or `forceIndex` |
-| `selectEntry` | Select an entry in the given force using `entryIndex` |
-| `selectChildEntry` | Select a child entry using `childEntryIndex` |
-| `deselectSelection` | Deselect a selection by `forcePath`/`forceIndex` and `selectionPath`/`selectionIndex` |
-| `setSelectionCount` | Change quantity by `entryIndex` + `count` |
-| `duplicateSelection` | Duplicate a selection |
-| `setCostLimit` | Set a cost limit value |
+| `addForce` | Add a force by `forceEntryId`. Optional: `catalogueId`. Returns `forceId` and auto-selected `selections`. |
+| `addChildForce` | Add a child force under `forceId` by `forceEntryId`. Returns `forceId`. |
+| `removeForce` | Remove the force identified by `forceId` |
+| `selectEntry` | Select an entry by `entryId` in the force `forceId`. Returns `selectionId`. |
+| `selectChildEntry` | Select a child entry by `entryId` under `selectionId` in `forceId`. Returns `selectionId`. |
+| `deselectSelection` | Deselect a selection by `forceId` and `selectionId` |
+| `setSelectionCount` | Set quantity on `selectionId` in `forceId` with `count` |
+| `duplicateSelection` | Duplicate a selection. Returns new `selectionId`. |
+| `duplicateForce` | Duplicate a force (deep copy). Returns new `forceId`. Not supported by BattleScribe Java engine. |
+| `setCostLimit` | Set a cost limit by `costTypeId` and `value` |
 
-All force-targeting actions accept either `forceIndex` (integer, targets `[N]`) or `forcePath`
-(integer array, for nested forces). Selection-targeting actions similarly accept `selectionIndex`
-or `selectionPath`. See [adapter-protocol.md](adapter-protocol.md#path-based-addressing) for details.
+See [adapter-protocol.md](adapter-protocol.md#action--execute-roster-action) for the
+full parameter reference and output fields.
 
 ```json
-// Input
-{"type":"action","action":"selectEntry","forceIndex":0,"entryIndex":0}
+// Input — add a force, then select an entry using the returned forceId
+{"type":"action","action":"addForce","forceEntryId":"fe-battalion"}
+// Output — includes the force instance ID for use in subsequent actions
+{"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123"}}
 
-// Output
-{"type":"actionResult","ok":true}
+// Input — use the returned forceId to select an entry
+{"type":"action","action":"selectEntry","forceId":"abc-123","entryId":"se-infantry"}
+// Output — includes the selection instance ID
+{"type":"actionResult","ok":true,"outputs":{"selectionId":"sel-456"}}
 ```
 
 ### 4. Handle `getState` Command
@@ -206,16 +212,20 @@ that wraps the BattleScribe oracle engine. It's only ~10 lines of code thanks to
 ## DataSource Specs
 
 Some specs use `dataSource` in their setup (e.g., `github:BSData/wh40k-10e@v10.6.0`) instead
-of inline game system/catalogue XML. These specs load real-world BattleScribe data files and
-use name-based actions (`forceEntryName`, `entryName`, `catalogueName`) instead of index-based.
+of inline game system/catalogue XML. These specs load real-world BattleScribe data files.
+Actions in dataSource specs use the same **ID-based** parameters (`forceEntryId`, `entryId`,
+`catalogueId`, etc.) as inline specs — the IDs come from the BattleScribe XML data files.
+
+Name-based actions (`forceEntryName`, `entryName`, `catalogueName`) are also supported as
+an alternative for readability when exact IDs are not convenient.
 
 DataSource specs are resolved by the test runner using `DataSourceResolver` and are supported
 by engines that implement the `IRosterEngine` file-based interface methods:
 
 - `SetupFromFiles(files)` — load raw `.gst`/`.cat` XML files
-- `AddForceByName(forcePath, forceName, catalogueName = null, catalogueIndex = 0)` — add a force, optionally selecting the faction catalogue by name or index
-- `SelectEntryByName(forcePath, entryName)` — select an entry by name
-- `SelectChildEntryByName(forcePath, selectionPath, childEntryName)` — select a child entry by name
+- `AddForceByName(forceEntryName, catalogueName = null)` — add a force by name (alternative to ID-based)
+- `SelectEntryByName(forceId, entryName)` — select an entry by name (alternative to ID-based)
+- `SelectChildEntryByName(forceId, selectionId, childEntryName)` — select a child entry by name
 
 The protocol adapter does not need to support DataSource specs — they are handled internally
 by the spec runner and the `IRosterEngine` implementation.

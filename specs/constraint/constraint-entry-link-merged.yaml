@@ -43,15 +43,16 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-1
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-1
 
   # At entry link max=2, below shared max=4 — no errors
   - expectedState:
@@ -62,8 +63,8 @@ steps:
             - name: Heavy Support
 
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-1
 
   # Exceeds entry link max=2 (scope=force) — link's constraint fires
   # even though the shared entry's max=4 is not yet reached

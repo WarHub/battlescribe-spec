@@ -41,7 +41,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - expectedState:
       forces:
@@ -49,8 +50,8 @@ steps:
 
   # 1 selection — at max=1 limit, no error
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState:
       forces:
@@ -58,8 +59,8 @@ steps:
 
   # 2 selections — exceeds max=1, structured error
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState:
       forces:

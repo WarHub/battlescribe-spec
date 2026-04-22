@@ -49,7 +49,8 @@ setup:
 
 steps:
   - action: addForce
-    forceEntryIndex: 0
+    id: add-patrol
+    forceEntryId: fe-patrol
 
   - expectedState:
       forces:
@@ -57,8 +58,8 @@ steps:
 
   # Unit A costs 100 pts, exceeding max cost constraint of 50
   - action: selectEntry
-    forceIndex: 0
-    entryIndex: 0
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
 
   - expectedState:
       forces:

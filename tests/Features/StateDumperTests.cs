@@ -15,14 +15,14 @@ public class StateDumperTests
         string name = "Detachment",
         string? catalogueId = "cat-1",
         IReadOnlyList<SelectionState>? selections = null) =>
-        new(name, catalogueId, selections ?? []);
+        new(Id: null, name, catalogueId, selections ?? []);
 
     private static SelectionState SimpleSelection(
         string name = "Marine",
         string? entryId = "se-1",
         string type = "unit",
         int number = 1) =>
-        new(name, entryId, type, number, Hidden: false, Costs: [], Children: []);
+        new(Id: null, name, entryId, type, number, Hidden: false, Costs: [], Children: []);
 
     [Fact]
     public void DumpTree_MinimalRoster_WritesRosterHeader()
@@ -65,7 +65,7 @@ public class StateDumperTests
     [Fact]
     public void DumpTree_WithPublication_WritesPublicationFields()
     {
-        var sel = new SelectionState("Marine", "se-1", "unit", 1, false, [], [],
+        var sel = new SelectionState(Id: null, "Marine", "se-1", "unit", 1, false, [], [],
             PublicationId: "pub-1", PublicationName: "Core Rulebook", Page: "42");
         var force = SimpleForce(selections: [sel]);
         var state = MinimalRoster(forces: [force]);
@@ -82,7 +82,7 @@ public class StateDumperTests
     {
         var chars = new List<CharacteristicState> { new("WS", null, "3+"), new("BS", null, "4+") };
         var profile = new ProfileState("Power Armor", "pt-1", "Unit Stats", false, chars);
-        var sel = new SelectionState("Marine", "se-1", "unit", 1, false, [], [],
+        var sel = new SelectionState(Id: null, "Marine", "se-1", "unit", 1, false, [], [],
             Profiles: [profile]);
         var force = SimpleForce(selections: [sel]);
         var state = MinimalRoster(forces: [force]);
@@ -97,7 +97,7 @@ public class StateDumperTests
     public void DumpTree_WithRules_WritesRuleAndDescription()
     {
         var rule = new RuleState("Rapid Fire", "Double shots at half range", false);
-        var sel = new SelectionState("Marine", "se-1", "unit", 1, false, [], [],
+        var sel = new SelectionState(Id: null, "Marine", "se-1", "unit", 1, false, [], [],
             Rules: [rule]);
         var force = SimpleForce(selections: [sel]);
         var state = MinimalRoster(forces: [force]);
@@ -116,7 +116,7 @@ public class StateDumperTests
             new("Troops", "ce-1", Primary: true),
             new("Infantry", "ce-2", Primary: false)
         };
-        var sel = new SelectionState("Marine", "se-1", "unit", 1, false, [], [],
+        var sel = new SelectionState(Id: null, "Marine", "se-1", "unit", 1, false, [], [],
             Categories: cats);
         var force = SimpleForce(selections: [sel]);
         var state = MinimalRoster(forces: [force]);
@@ -130,7 +130,7 @@ public class StateDumperTests
     public void DumpTree_NestedChildren_WritesRecursively()
     {
         var child = SimpleSelection(name: "Weapon", entryId: "se-weapon", type: "upgrade");
-        var parent = new SelectionState("Marine", "se-1", "unit", 1, false, [], [child]);
+        var parent = new SelectionState(Id: null, "Marine", "se-1", "unit", 1, false, [], [child]);
         var force = SimpleForce(selections: [parent]);
         var state = MinimalRoster(forces: [force]);
 
@@ -143,7 +143,7 @@ public class StateDumperTests
     [Fact]
     public void DumpTree_HiddenSelection_ShowsHiddenTag()
     {
-        var sel = new SelectionState("Secret", "se-1", "unit", 1, Hidden: true, Costs: [], Children: []);
+        var sel = new SelectionState(Id: null, "Secret", "se-1", "unit", 1, Hidden: true, Costs: [], Children: []);
         var force = SimpleForce(selections: [sel]);
         var state = MinimalRoster(forces: [force]);
 
@@ -181,7 +181,7 @@ public class StateDumperTests
     [Fact]
     public void DumpTree_ForcePublication_WritesForcePublicationFields()
     {
-        var force = new ForceState("Battalion", "cat-1", [],
+        var force = new ForceState(Id: null, "Battalion", "cat-1", [],
             PublicationId: "pub-1", Page: "10");
         var state = MinimalRoster(forces: [force]);
 
@@ -194,8 +194,8 @@ public class StateDumperTests
     [Fact]
     public void DumpTree_ChildForces_WritesRecursively()
     {
-        var child = new ForceState("Patrol", "cat-1", []);
-        var parent = new ForceState("Battalion", "cat-1", [], ChildForces: [child]);
+        var child = new ForceState(Id: null, "Patrol", "cat-1", []);
+        var parent = new ForceState(Id: null, "Battalion", "cat-1", [], ChildForces: [child]);
         var state = MinimalRoster(forces: [parent]);
 
         var output = DumpToString(state);
