@@ -54,35 +54,6 @@ internal static class JsHelpers
                 return null;
             };
 
-            // Navigate to a selection at a given path within a force.
-            // path=[0] → first selection; path=[0,2] → third child of first selection.
-            window.getSelectionAtPath = function(force, path) {
-                let parent = force;
-                for (let i = 0; i < path.length; i++) {
-                    const sels = getSortedSelections(parent);
-                    if (path[i] >= sels.length) return null;
-                    parent = sels[path[i]];
-                }
-                return parent === force ? null : parent;
-            };
-
-            window.getSortedSelections = function(force) {
-                const sels = getSelections(force);
-                const entryOrder = window.__bsspec?.entryOrder || [];
-                const orderMap = {};
-                entryOrder.forEach((id, i) => { orderMap[id] = i; });
-                return [...sels].sort((a, b) => {
-                    const ra = a;
-                    const rb = b;
-                    const seqA = ra?.__bsspec_seq ?? -1;
-                    const seqB = rb?.__bsspec_seq ?? -1;
-                    if (seqA !== seqB) return seqA - seqB;
-                    const idA = ra?.selector?.source?.id || ra?.source?.id;
-                    const idB = rb?.selector?.source?.id || rb?.source?.id;
-                    return (orderMap[idA] ?? 999) - (orderMap[idB] ?? 999);
-                });
-            };
-
             // Find a force anywhere in the army tree by its uid.
             window.getForceByUid = function(army, uid) {
                 for (const f of (army.getForces?.() || [])) {
@@ -175,7 +146,7 @@ internal static class JsHelpers
                         name: f.getName?.() || '',
                         catalogueId: f.catalogueId || f.getId?.() || null,
                         hidden: f.isHidden?.() === true,
-                        selections: extractSelections(f, false),
+                        selections: extractSelections(f),
                         childForces: directChildren.map(cf => extractForce(cf)),
                         profiles: extractProfiles(f),
                         rules: extractRules(f),
@@ -184,45 +155,12 @@ internal static class JsHelpers
                     };
                 }
 
-                function extractSelections(parent, sortByEntryOrder) {
+                function extractSelections(parent) {
                     let selections = parent.getSelections?.();
                     if (!selections?.length) selections = parent.getChildren?.();
                     if (!selections?.length) selections = [];
-
-                    const entryOrder = window.__bsspec?.entryOrder || [];
-                    const orderMap = {};
-                    entryOrder.forEach((id, i) => { orderMap[id] = i; });
-
-                    if (!sortByEntryOrder) {
-                        const sorted = [...selections].sort((a, b) => {
-                            const ra = a;
-                            const rb = b;
-                            const seqA = ra?.__bsspec_seq ?? -1;
-                            const seqB = rb?.__bsspec_seq ?? -1;
-                            if (seqA !== seqB) return seqA - seqB;
-                            const idA = ra?.selector?.source?.id || ra?.source?.id;
-                            const idB = rb?.selector?.source?.id || rb?.source?.id;
-                            const oA = orderMap[idA] ?? 999;
-                            const oB = orderMap[idB] ?? 999;
-                            return oA - oB;
-                        });
-                        return sorted.map(s => extractSelection(s));
-                    }
-
-                    const sorted = [...selections].sort((a, b) => {
-                        const ra = a;
-                        const rb = b;
-                        const idA = ra?.selector?.source?.id || ra?.source?.id;
-                        const idB = rb?.selector?.source?.id || rb?.source?.id;
-                        const orderA = orderMap[idA] ?? 999;
-                        const orderB = orderMap[idB] ?? 999;
-                        if (orderA !== orderB) return orderA - orderB;
-                        const nameA = ra?.getName?.() || ra?.source?.name || '';
-                        const nameB = rb?.getName?.() || rb?.source?.name || '';
-                        return nameA.localeCompare(nameB);
-                    });
-
-                    return sorted.map(s => extractSelection(s));
+                    // Use NR's native selector order.
+                    return [...selections].map(s => extractSelection(s));
                 }
 
                 function extractSelection(sel) {
@@ -247,7 +185,7 @@ internal static class JsHelpers
                             typeId: c.typeId || '',
                             value: (c.value || 0) * (sel.getAmount?.() || 1)
                         })),
-                        children: extractSelections(sel, true),
+                        children: extractSelections(sel),
                         profiles: profiles.map(p => ({
                             name: p.name || p.getName?.() || '',
                             typeId: p.typeId || null,

@@ -63,4 +63,5 @@ steps:
       forces:
         - selectionCount: 2
           selections:
+            - name: Basic Model
             - name: Detector

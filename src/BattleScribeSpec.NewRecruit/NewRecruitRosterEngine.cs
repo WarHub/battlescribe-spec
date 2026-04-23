@@ -115,22 +115,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
             });
 
-            // Build entry order from catalogue-defined selection entries
-            List<string>? entryOrder = null;
-            if (catalogues.Length > 0)
-            {
-                entryOrder = new List<string>();
-                foreach (var cat in catalogues)
-                    CollectEntryIds(cat.SelectionEntries, entryOrder);
-            }
-
             // Build files array and catalogue name list for multi-catalogue support
             var catFiles = allCatXml.Select(c => new { name = c.FileName, path = $"/spec/{c.FileName}", data = c.Xml }).ToArray();
             var catNames = catalogues.Select(c => c.Name).ToArray();
 
-            // Single consolidated EvaluateAsync: setup + entryOrder
+            // Single consolidated EvaluateAsync: setup
             var setupResult = await Timings.TimeAsync("SetupJsEval", () => _browser.Page.EvaluateAsync<string?>("""
-                async ([gstXml, catFiles, systemId, catNames, entryOrder, rosterName]) => {
+                async ([gstXml, catFiles, systemId, catNames, rosterName]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                         if (!pinia) return 'Pinia store not found';
@@ -228,8 +219,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             book: primaryBook,
                             books: allBooks.map(b => b.bookData),
                             bookCatalogueIds: allBooks.map(b => b.bookRef.bsid || ''),
-                            row,
-                            entryOrder: entryOrder || null
+                            row
                         };
 
                         return null; // success
@@ -238,7 +228,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                     }
                 }
                 """, new object[] { gstXml, catFiles, gameSystem.Id, catNames,
-                    entryOrder?.ToArray() ?? (object)Array.Empty<string>(),
                     _rosterName }));
 
             if (setupResult != null)
@@ -368,26 +357,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             bookCatalogueIds: allBooks.map(b => b.bookRef.bsid || ''),
                             row
                         };
-
-                        // Populate entryOrder from catalogues so the state
-                        // reader can sort selections to match BS ordering.
-                        const entryOrder = [];
-                        function collectEntryIds(entries) {
-                            if (!entries) return;
-                            for (const e of entries) {
-                                if (e.id) entryOrder.push(e.id);
-                                collectEntryIds(e.selectionEntries);
-                                collectEntryIds(e.selectionEntryGroups);
-                            }
-                        }
-                        for (const b of allBooks) {
-                            const cat = b.bookData?.catalogue;
-                            if (cat) {
-                                collectEntryIds(cat.selectionEntries);
-                                collectEntryIds(cat.sharedSelectionEntries);
-                            }
-                        }
-                        window.__bsspec.entryOrder = entryOrder;
 
                         return null; // success
                     } catch(e) {
@@ -580,17 +549,4 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         }
     }
 
-    /// <summary>
-    /// Recursively collect entry IDs from selection entries in catalogue-defined order.
-    /// Used to preserve XML ordering for state reader sorting.
-    /// </summary>
-    private static void CollectEntryIds(List<ProtocolSelectionEntry>? entries, List<string> ids)
-    {
-        if (entries is null) return;
-        foreach (var entry in entries)
-        {
-            ids.Add(entry.Id);
-            CollectEntryIds(entry.SelectionEntries, ids);
-        }
-    }
 }

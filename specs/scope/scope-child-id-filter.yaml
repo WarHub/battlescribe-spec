@@ -50,3 +50,11 @@ steps:
           selections:
             - name: Target Unit
             - name: Active Watcher
+      engines:
+        # BS render layer sorts by modified name: Active Watcher < Target Unit.
+        # NR sorts by original pre-modifier name: Target Unit < Watcher.
+        battlescribe:
+          forces:
+            - selections:
+                - name: Active Watcher
+                - name: Target Unit

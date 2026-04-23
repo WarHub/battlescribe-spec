@@ -180,6 +180,12 @@ public sealed class OracleRosterEngine : IRosterEngine
         var forces = _oracle.GetForces();
         var errors = _oracle.GetValidationErrors();
 
+        // Sort forces alphabetically by name to match BS render layer behavior.
+        // BS's own RenderRoster sorts forces via Collections.sort(new f()) which uses
+        // case-insensitive alphabetical order. This matches BattleScribe's rendered order
+        // and usually matches NR for simple names, but NR may differ in documented cases
+        // such as numeric-aware comparisons, category grouping, or explicit sort indices.
+        forces = forces.OrderBy(f => f.getName(), StringComparer.OrdinalIgnoreCase).ToList();
         var forceStates = forces.Select((f, i) => CaptureForce(f, i)).ToList();
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
@@ -431,6 +437,9 @@ public sealed class OracleRosterEngine : IRosterEngine
         var hidden = resolvedForceEntry?.isHidden()
             ?? _oracle.FindForceEntryById(f.getEntryId())?.isHidden()
             ?? false;
+        // Sort selections and child forces alphabetically to match BattleScribe render-layer ordering.
+        selections = selections.OrderBy(s => s.getName(), StringComparer.OrdinalIgnoreCase).ToList();
+        childForces = childForces.OrderBy(cf => cf.getName(), StringComparer.OrdinalIgnoreCase).ToList();
         return new ForceState(
             f.getId(),
             f.getName() ?? "",
@@ -452,6 +461,8 @@ public sealed class OracleRosterEngine : IRosterEngine
     {
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
+        // Sort children alphabetically to match BattleScribe render-layer ordering.
+        children = children.OrderBy(c => c.getName(), StringComparer.OrdinalIgnoreCase).ToList();
         var profiles = JavaListToList<net.battlescribe.model.data.Profile>(sel.getProfiles());
         var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());
         var categories = JavaListToList<net.battlescribe.model.roster.Category>(sel.getCategories());

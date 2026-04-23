@@ -1,0 +1,64 @@
+id: selection-ordering-numeric
+category: selection
+tags: [design-difference]
+description: >
+  NewRecruit uses locale-aware numeric sorting (localeCompare with numeric:true),
+  so "Unit 2" sorts before "Unit 10". BattleScribe uses Java lexicographic
+  compareToIgnoreCase where "Unit 10" sorts before "Unit 2" (character-by-character).
+  Both engines agree on alphabetical ordering for names without embedded numbers.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit-2
+          name: Unit 2
+          type: unit
+        - id: se-unit-10
+          name: Unit 10
+          type: unit
+        - id: se-unit-1
+          name: Unit 1
+          type: unit
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-2
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-10
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-1
+
+  # NR: numeric-aware sort → Unit 1, Unit 2, Unit 10
+  # BS: lexicographic sort → Unit 1, Unit 10, Unit 2
+  - expectedState:
+      forces:
+        - selections:
+            - name: Unit 1
+            - name: Unit 2
+            - name: Unit 10
+      engines:
+        battlescribe:
+          forces:
+            - selections:
+                - name: Unit 1
+                - name: Unit 10
+                - name: Unit 2

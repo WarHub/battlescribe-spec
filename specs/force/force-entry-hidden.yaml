@@ -37,14 +37,7 @@ steps:
   - expectedState:
       forceCount: 2
       forces:
-        - name: Patrol
-          hidden: false
         - name: Hidden Detachment
           hidden: true
-      engines:
-        newrecruit:
-          forces:
-            - name: Hidden Detachment
-              hidden: true
-            - name: Patrol
-              hidden: false
+        - name: Patrol
+          hidden: false

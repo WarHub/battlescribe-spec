@@ -2,6 +2,9 @@
 
 > Based on conformance testing against [newrecruit.eu](https://newrecruit.eu)
 > using the battlescribe-spec test suite.
+>
+> See also: [NR Ordering Analysis](nr-ordering-analysis.md) for a deep-dive into
+> NR's native selection and force ordering algorithm.
 
 
 | Category | Count | Severity | Description |
