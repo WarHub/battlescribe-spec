@@ -49,12 +49,12 @@ public static class NewRecruitActions
                     if (!army || !book) return 'ERROR:No army or book';
 
                     const beforeUids = new Set(
-                        (army.getForces?.() || []).map(f => f?.uid || ''));
+                        (army.getForces?.() || []).map(f => f.uid));
 
                     army.insertForce(book, forceEntryId);
 
                     for (const f of (army.getForces?.() || [])) {
-                        if (f?.uid && !beforeUids.has(f.uid)) return f.uid;
+                        if (f.uid && !beforeUids.has(f.uid)) return f.uid;
                     }
                     return null;
                 } catch(e) {
@@ -75,25 +75,25 @@ public static class NewRecruitActions
             (forceUid) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return null;
+                    if (!army) return 'ERROR:No current roster';
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return null;
+                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
                     const sels = getSelections(force);
                     if (!sels || sels.length === 0) return null;
                     const map = {};
                     for (const s of sels) {
-                        const raw = s;
-                        const entryId = s.getId?.() || null;
-                        const uid = raw?.uid || null;
+                        const entryId = s.getId();
+                        const uid = s.uid;
                         if (entryId && uid) map[entryId] = uid;
                     }
                     return Object.keys(map).length > 0 ? JSON.stringify(map) : null;
                 } catch(e) {
-                    return null;
+                    return 'ERROR:GetForceAutoSelections error: ' + e.message;
                 }
             }
             """, forceUid);
         if (json is null) return null;
+        HandleCreateResult(json);
         return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
     }
 
@@ -120,7 +120,7 @@ public static class NewRecruitActions
                     if (!parentForce) return `ERROR:Parent force not found with uid '${parentForceUid}'`;
 
                     const beforeUids = new Set(
-                        (army.getForces?.() || []).map(f => f?.uid || ''));
+                        (army.getForces?.() || []).map(f => f.uid));
 
                     if (typeof parentForce.insertForce === 'function') {
                         parentForce.insertForce(book, childForceEntryId);
@@ -129,7 +129,7 @@ public static class NewRecruitActions
                     }
 
                     for (const f of (army.getForces?.() || [])) {
-                        if (f?.uid && !beforeUids.has(f.uid)) return f.uid;
+                        if (f.uid && !beforeUids.has(f.uid)) return f.uid;
                     }
                     return null;
                 } catch(e) {
@@ -154,6 +154,8 @@ public static class NewRecruitActions
                     const force = getForceByUid(army, forceUid);
                     if (!force) return `Force not found with uid '${forceUid}'`;
 
+                    if (typeof force.delete !== 'function')
+                        return `Force '${forceUid}' has no delete method (unexpected node type)`;
                     force.delete();
                     return null;
                 } catch(e) {
@@ -180,32 +182,31 @@ public static class NewRecruitActions
                     if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
 
                     const before = new Set(
-                        getSelections(force).map(s => s?.uid || ''));
+                        getSelections(force).map(s => s.uid));
 
                     const selector = findSelectorById(force, entryId);
                     if (!selector) return `ERROR:Entry '${entryId}' not found in force selector tree`;
 
-                    if (typeof selector.addInstance === 'function') {
-                        selector.addInstance();
-                        const insts = selector.instances || [];
-                        insts[insts.length - 1]?.autocheck?.();
-                    } else if (selector.getAmount?.() === 0 && typeof selector.incrementAmount === 'function') {
-                        selector.incrementAmount();
-                    } else {
-                        selector.setAmount?.((selector.getAmount?.() || 0) + 1);
-                    }
+                    // Selectors have addInstance; instances have incrementAmount/setAmount.
+                    // findSelectorById returns a selector node — it must have addInstance.
+                    if (typeof selector.addInstance !== 'function')
+                        return `ERROR:Selector for '${entryId}' has no addInstance (unexpected node type)`;
 
-                    // Find the new selection
+                    selector.addInstance();
+
+                    // When an entry has categoryLinks, NR creates the instance under the
+                    // correct category selector, not under the one findSelectorById found
+                    // (which may be in the (Illegal Units) fallback category).
+                    // Use before/after uid diff to find the new instance reliably.
                     const after = getSelections(force);
-                    let newUid = null;
                     for (const s of after) {
-                        const raw = s;
-                        if (raw && !before.has(raw.uid || '')) {
-                            if (!newUid) newUid = raw.uid || null;
+                        if (s.uid && !before.has(s.uid)) {
+                            s.autocheck();
+                            return s.uid;
                         }
                     }
 
-                    return newUid;
+                    return `ERROR:addInstance on '${entryId}' did not produce a new selection`;
                 } catch(e) {
                     return 'ERROR:SelectEntry error: ' + e.message;
                 }
@@ -235,17 +236,21 @@ public static class NewRecruitActions
                     // Try to find an existing pre-created instance in getSelections().
                     // For entryLinks, getId() returns the target ID, not the link ID.
                     // Also check source.id and selector.ids for link ID matching.
-                    const children = sel.getSelections?.() || sel.getChildren?.() || [];
+                    // sel is an instance node — getSelections always exists.
+                    const children = sel.getSelections();
                     const child = children.find(c =>
-                        c.getId?.() === childEntryId
+                        c.getId() === childEntryId
                         || c.source?.id === childEntryId
                         || c.selector?.ids?.includes?.(childEntryId));
 
                     if (child) {
                         // Found existing instance — activate via incrementAmount.
+                        // Instance nodes always have incrementAmount (not addInstance).
+                        if (typeof child.incrementAmount !== 'function')
+                            return `ERROR:Child instance '${childEntryId}' has no incrementAmount (unexpected node type)`;
                         child.incrementAmount();
-                        child.autocheck?.();
-                        return child?.uid || null;
+                        child.autocheck();
+                        return child.uid;
                     }
 
                     // Entry not pre-created as instance. Search the selector tree
@@ -273,11 +278,22 @@ public static class NewRecruitActions
                         return `ERROR:Child entry '${childEntryId}' not found under selection (selectors: [${ids}], children: ${childCount} [${childIds}])`;
                     }
 
+                    // Selector nodes have addInstance; instance nodes do not.
+                    if (typeof targetSelector.addInstance !== 'function')
+                        return `ERROR:Selector for '${childEntryId}' has no addInstance (unexpected node type)`;
+
                     targetSelector.addInstance();
-                    const insts = targetSelector.instances || [];
-                    const last = insts[insts.length - 1];
-                    last?.autocheck?.();
-                    return last?.uid || null;
+                    // Find the new child instance via getSelections diff.
+                    const afterChildren = sel.getSelections();
+                    const newChild = afterChildren.find(c =>
+                        (c.getId() === childEntryId
+                        || c.source?.id === childEntryId
+                        || c.selector?.ids?.includes?.(childEntryId))
+                        && c.getAmount() > 0);
+                    if (!newChild)
+                        return `ERROR:addInstance on '${childEntryId}' did not produce a child selection`;
+                    newChild.autocheck();
+                    return newChild.uid;
                 } catch(e) {
                     return 'ERROR:SelectChildEntry error: ' + e.message;
                 }
@@ -303,11 +319,10 @@ public static class NewRecruitActions
                     const sel = getSelectionByUid(force, selectionUid);
                     if (!sel) return `Selection not found with uid '${selectionUid}'`;
 
-                    if (typeof sel.delete === 'function') {
-                        sel.delete();
-                    } else {
-                        sel.setAmount(0);
-                    }
+                    // Instance nodes always have delete(). Using setAmount with 1 arg corrupts state.
+                    if (typeof sel.delete !== 'function')
+                        return `Selection '${selectionUid}' has no delete method (unexpected node type)`;
+                    sel.delete();
                     return null;
                 } catch(e) {
                     return 'DeselectSelection error: ' + e.message;
@@ -335,15 +350,16 @@ public static class NewRecruitActions
                     const sel = getSelectionByUid(force, selectionUid);
                     if (!sel) return `Selection not found with uid '${selectionUid}'`;
 
-                    const current = sel.getAmount?.() ?? 1;
+                    if (typeof sel.getAmount !== 'function')
+                        return `Selection '${selectionUid}' has no getAmount (unexpected node type)`;
+                    if (typeof sel.setAmount !== 'function')
+                        return `Selection '${selectionUid}' has no setAmount (unexpected node type)`;
+
+                    const current = sel.getAmount();
                     if (current === count) return null;
 
-                    if (typeof sel.setAmount === 'function') {
-                        sel.setAmount({}, count);
-                        return null;
-                    }
-
-                    return `Selection has no setAmount method — cannot change count`;
+                    sel.setAmount({}, count);
+                    return null;
                 } catch(e) {
                     return 'SetSelectionCount error: ' + e.message;
                 }
@@ -368,28 +384,25 @@ public static class NewRecruitActions
                     if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
 
                     const before = new Set(
-                        getSelections(force).map(s => s?.uid || ''));
+                        getSelections(force).map(s => s.uid));
 
                     const sel = getSelectionByUid(force, selectionUid);
                     if (!sel) return `ERROR:Selection not found with uid '${selectionUid}'`;
 
-                    if (typeof sel.dupe === 'function') {
-                        await sel.dupe();
-                    } else {
+                    if (typeof sel.dupe !== 'function')
                         return 'ERROR:dupe() method not available on selection';
-                    }
+
+                    await sel.dupe();
 
                     // Find the duplicated selection
                     const after = getSelections(force);
-                    let newUid = null;
                     for (const s of after) {
-                        const raw = s;
-                        if (raw && !before.has(raw.uid || '')) {
-                            if (!newUid) newUid = raw.uid || null;
+                        if (s.uid && !before.has(s.uid)) {
+                            return s.uid;
                         }
                     }
 
-                    return newUid;
+                    return null;
                 } catch(e) {
                     return 'ERROR:DuplicateSelection error: ' + e.message;
                 }
@@ -411,28 +424,24 @@ public static class NewRecruitActions
                     if (!army) return 'ERROR:No current roster';
 
                     const before = new Set(
-                        (army.getForces?.() || []).map(f => f?.uid || ''));
+                        (army.getForces?.() || []).map(f => f.uid));
 
                     const force = getForceByUid(army, forceUid);
                     if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
 
-                    if (typeof force.dupe === 'function') {
-                        await force.dupe();
-                    } else {
+                    if (typeof force.dupe !== 'function')
                         return 'ERROR:dupe() method not available on force';
-                    }
+
+                    await force.dupe();
 
                     // Find the duplicated force by comparing before/after uid sets
-                    const after = army.getForces?.() || [];
-                    let newUid = null;
-                    for (const f of after) {
-                        if (f && !before.has(f.uid || '')) {
-                            newUid = f.uid || null;
-                            break;
+                    for (const f of (army.getForces?.() || [])) {
+                        if (f.uid && !before.has(f.uid)) {
+                            return f.uid;
                         }
                     }
 
-                    return newUid;
+                    return null;
                 } catch(e) {
                     return 'ERROR:DuplicateForce error: ' + e.message;
                 }
