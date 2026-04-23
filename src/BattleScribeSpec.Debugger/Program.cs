@@ -213,7 +213,7 @@ async Task<(IRosterEngine Engine, IDumpEnricher? Enricher)> CreateEngine(string 
 {
     switch (name)
     {
-        case "bs" or "battlescribe" or "oracle":
+        case "bs" or "battlescribe":
             return (new BattleScribeRosterEngine(), null);
 
         case "nr" or "newrecruit":
