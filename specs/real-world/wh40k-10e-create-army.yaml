@@ -9,6 +9,7 @@ setup:
 steps:
   - action: addForce
     forceEntryId: bb9d-299a-ed60-2d8a
+    catalogueId: e0af-67df-9d63-8fb7
 
   - expectedState:
       forceCount: 1

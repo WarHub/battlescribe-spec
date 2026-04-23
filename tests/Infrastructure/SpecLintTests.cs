@@ -260,7 +260,9 @@ public sealed class SpecLintTests
     {
         var spec = SpecLoader.Load(specPath);
         var catalogueCount = spec.Setup.Catalogues?.Count ?? 0;
-        if (catalogueCount < 2) return;
+        // For DataSource specs, catalogueId is always required (protocol can't auto-resolve)
+        var isDataSource = spec.Setup.DataSource is { Length: > 0 };
+        if (catalogueCount < 2 && !isDataSource) return;
         if (spec.Steps is null) return;
         var violations = new List<string>();
         for (var i = 0; i < spec.Steps.Count; i++)
@@ -268,7 +270,12 @@ public sealed class SpecLintTests
             var step = spec.Steps[i];
             if (step.Action is not ("addForce" or "addChildForce")) continue;
             if (step.CatalogueId is null or { Length: 0 })
-                violations.Add($"step {i + 1}: {step.Action} requires catalogueId (setup has {catalogueCount} catalogues)");
+            {
+                var reason = isDataSource
+                    ? "dataSource specs always require catalogueId"
+                    : $"setup has {catalogueCount} catalogues";
+                violations.Add($"step {i + 1}: {step.Action} requires catalogueId ({reason})");
+            }
         }
         Assert.True(violations.Count == 0,
             $"{specName}: missing catalogueId on force actions:\n  {string.Join("\n  ", violations)}");

@@ -33,7 +33,7 @@ public static class NewRecruitActions
     /// Add a force to the roster by force entry ID.
     /// Returns the uid of the created force.
     /// </summary>
-    public static async Task<string?> AddForceByIdAsync(IPage page, string forceEntryId, string? catalogueId = null)
+    public static async Task<string?> AddForceByIdAsync(IPage page, string forceEntryId, string catalogueId)
     {
         var result = await page.EvaluateAsync<string?>("""
             ({forceEntryId, catalogueId}) => {
@@ -101,7 +101,7 @@ public static class NewRecruitActions
     /// Add a child force under an existing force by child force entry ID.
     /// Returns the uid of the created child force.
     /// </summary>
-    public static async Task<string?> AddChildForceByIdAsync(IPage page, string parentForceUid, string childForceEntryId, string? catalogueId = null)
+    public static async Task<string?> AddChildForceByIdAsync(IPage page, string parentForceUid, string childForceEntryId, string catalogueId)
     {
         var result = await page.EvaluateAsync<string?>("""
             ({parentForceUid, childForceEntryId, catalogueId}) => {

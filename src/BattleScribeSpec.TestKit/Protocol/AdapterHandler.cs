@@ -18,6 +18,7 @@ public static class AdapterHandler
         CancellationToken ct = default)
     {
         IRosterEngine? engine = null;
+        IReadOnlyList<string> catalogueIds = [];
 
         try
         {
@@ -32,9 +33,9 @@ public static class AdapterHandler
                     var command = ProtocolSerializer.DeserializeCommand(line);
                     response = command switch
                     {
-                        SetupCommand setup => HandleSetup(setup, engineFactory, ref engine),
-                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, ref engine),
-                        ActionCommand action => HandleAction(action, engine),
+                        SetupCommand setup => HandleSetup(setup, engineFactory, ref engine, out catalogueIds),
+                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, ref engine, out catalogueIds),
+                        ActionCommand action => HandleAction(action, engine, catalogueIds),
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
                         TeardownCommand => HandleTeardown(ref engine),
@@ -57,10 +58,11 @@ public static class AdapterHandler
     }
 
     private static ProtocolResponse HandleSetup(
-        SetupCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine)
+        SetupCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
     {
         engine?.Dispose();
         engine = factory();
+        catalogueIds = cmd.Catalogues.Select(c => c.Id).ToArray();
         if (cmd.SpecId is { Length: > 0 })
             engine.SetTestContext(cmd.SpecId);
         var errors = engine.Setup(cmd.GameSystem, cmd.Catalogues.ToArray());
@@ -68,10 +70,12 @@ public static class AdapterHandler
     }
 
     private static ProtocolResponse HandleSetupFromFiles(
-        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine)
+        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
     {
         engine?.Dispose();
         engine = factory();
+        // File-based setup: catalogue IDs unknown — actions must provide catalogueId explicitly
+        catalogueIds = [];
         if (cmd.SpecId is { Length: > 0 })
             engine.SetTestContext(cmd.SpecId);
         var files = cmd.Files.Select(f => (f.FileName, f.Content)).ToList();
@@ -79,7 +83,7 @@ public static class AdapterHandler
         return new SetupResult { Errors = errors.ToList() };
     }
 
-    private static ProtocolResponse HandleAction(ActionCommand cmd, IRosterEngine? engine)
+    private static ProtocolResponse HandleAction(ActionCommand cmd, IRosterEngine? engine, IReadOnlyList<string> catalogueIds)
     {
         if (engine is null)
             return new ActionResult { Ok = false, Error = "Engine not initialized (call setup first)" };
@@ -92,13 +96,13 @@ public static class AdapterHandler
                 case "addForce":
                     outputs = engine.AddForce(
                         cmd.ForceEntryId ?? throw new InvalidOperationException("addForce requires forceEntryId"),
-                        cmd.CatalogueId);
+                        ProtocolValidator.ResolveCatalogueId(cmd.CatalogueId, catalogueIds));
                     break;
                 case "addChildForce":
                     outputs = engine.AddChildForce(
                         cmd.ForceId ?? throw new InvalidOperationException("addChildForce requires forceId"),
                         cmd.ForceEntryId ?? throw new InvalidOperationException("addChildForce requires forceEntryId"),
-                        cmd.CatalogueId);
+                        ProtocolValidator.ResolveCatalogueId(cmd.CatalogueId, catalogueIds));
                     break;
                 case "removeForce":
                     engine.RemoveForce(

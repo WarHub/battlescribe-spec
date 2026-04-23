@@ -23,7 +23,7 @@ public sealed class OracleRosterEngine : IRosterEngine
         return _oracle.SetupFromProtocol(gameSystem, catalogues);
     }
 
-    public ActionOutputs AddForce(string forceEntryId, string? catalogueId = null)
+    public ActionOutputs AddForce(string forceEntryId, string catalogueId)
     {
         var forceEntry = _oracle.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
@@ -50,15 +50,13 @@ public sealed class OracleRosterEngine : IRosterEngine
         return new ActionOutputs { ForceId = force.getId(), Selections = selections };
     }
 
-    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
     {
         var parentForce = FindForceById(parentForceId);
         var forceEntry = _oracle.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
 
-        var catalogue = catalogueId is not null
-            ? _oracle.ResolveCatalogue(catalogueId)
-            : _oracle.GetForceCatalogue(parentForce);
+        var catalogue = _oracle.ResolveCatalogue(catalogueId);
 
         var childForce = _oracle.CreateChildForce(parentForce, forceEntry, catalogue);
         return new ActionOutputs { ForceId = childForce.getId() };

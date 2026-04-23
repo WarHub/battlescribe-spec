@@ -380,7 +380,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return errors;
     }
 
-    public ActionOutputs AddForce(string forceEntryId, string? catalogueId = null)
+    public ActionOutputs AddForce(string forceEntryId, string catalogueId)
     {
         var forceId = NewRecruitActions.AddForceByIdAsync(_browser.Page, forceEntryId, catalogueId)
             .GetAwaiter().GetResult();
@@ -392,7 +392,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return new ActionOutputs { ForceId = forceId, Selections = selections };
     }
 
-    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
     {
         var forceId = NewRecruitActions.AddChildForceByIdAsync(_browser.Page, parentForceId, forceEntryId, catalogueId)
             .GetAwaiter().GetResult();

@@ -13,6 +13,7 @@ public sealed class SpecRunner
     private readonly List<string> _errors = [];
     private readonly ExpressionResolver _exprResolver = new();
     private bool _isDataSourceMode;
+    private IReadOnlyList<string> _catalogueIds = [];
 
     /// <summary>
     /// Called after each step (action, assertion, or dump) completes.
@@ -35,6 +36,7 @@ public sealed class SpecRunner
     {
         _errors.Clear();
         _isDataSourceMode = false;
+        _catalogueIds = [];
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -47,6 +49,7 @@ public sealed class SpecRunner
             else
             {
                 var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+                _catalogueIds = catalogues.Select(c => c.Id).ToArray();
                 var setupErrors = _engine.Setup(gameSystem, catalogues);
                 if (setupErrors.Count > 0)
                 {
@@ -158,14 +161,14 @@ public sealed class SpecRunner
             case "addForce":
                 outputs = _engine.AddForce(
                     step.ForceEntryId ?? throw new InvalidOperationException($"Step {stepIndex}: addForce requires forceEntryId"),
-                    step.CatalogueId);
+                    ProtocolValidator.ResolveCatalogueId(step.CatalogueId, _catalogueIds));
                 break;
 
             case "addChildForce":
                 outputs = _engine.AddChildForce(
                     forceId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceId"),
                     step.ForceEntryId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceEntryId"),
-                    step.CatalogueId);
+                    ProtocolValidator.ResolveCatalogueId(step.CatalogueId, _catalogueIds));
                 break;
 
             case "removeForce":

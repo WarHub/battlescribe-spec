@@ -126,7 +126,7 @@ public sealed class LiveNewRecruitSmokeTests
         Assert.Empty(errors);
 
         _output.WriteLine("Adding force...");
-        _fixture.Engine.AddForce("fe-1");
+        _fixture.Engine.AddForce("fe-1", "smoke-cat2");
 
         _output.WriteLine("Reading roster state...");
         var state = _fixture.Engine.GetRosterState();

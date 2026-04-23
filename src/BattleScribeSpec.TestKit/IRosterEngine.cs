@@ -54,12 +54,12 @@ public interface IRosterEngine : IDisposable
     /// <summary>
     /// Add a top-level force to the roster by force entry ID.
     /// </summary>
-    ActionOutputs AddForce(string forceEntryId, string? catalogueId = null);
+    ActionOutputs AddForce(string forceEntryId, string catalogueId);
 
     /// <summary>
     /// Add a child force under an existing parent force.
     /// </summary>
-    ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null);
+    ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId);
 
     /// <summary>
     /// Remove a force from the roster by its instance ID.
