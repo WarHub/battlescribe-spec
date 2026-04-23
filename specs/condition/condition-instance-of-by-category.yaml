@@ -1,10 +1,12 @@
 id: condition-instance-of-by-category
 category: condition
+tags: [battlescribe-bug, newrecruit-bug]
 description: >
-  instanceOf with scope=force and childId=CategoryEntry ID. scope=force
-  resolves to the Force element which is not a Selection — instanceOf
-  returns false. See condition-instance-of-self-category for the working
-  version using scope=self.
+  instanceOf with scope=force and childId=CategoryEntry ID should detect
+  selections with the given category in the force and rename Detector to
+  "HQ Found". Both engines fail: scope=force resolves to the Force element
+  which is not a Selection, so instanceOf returns false. See
+  condition-instance-of-self-category for the working version using scope=self.
 
 setup:
   gameSystem:
@@ -63,7 +65,7 @@ steps:
           selections:
             - name: Detector
 
-  # Select Commander (has HQ category link) — instanceOf by category still returns false in engine
+  # Select Commander (has HQ category link) — should trigger instanceOf, renaming Detector to "HQ Found"
   - action: selectEntry
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-commander
@@ -72,13 +74,20 @@ steps:
       forces:
         - selectionCount: 2
           selections:
-            - name: Detector
+            - name: HQ Found
             - name: Commander
       engines:
-        # BS render layer sorts by modified name alphabetically: Commander < Detector.
-        # NR places uncategorised selections before categorised ones.
+        # Both engines fail: scope=force resolves to the Force, not its selections,
+        # so instanceOf returns false and the rename modifier never fires.
+        # BS alphabetical: Commander < Detector.
         battlescribe:
           forces:
             - selections:
                 - name: Commander
                 - name: Detector
+        # NR uncategorised before categorised: Detector < Commander.
+        newrecruit:
+          forces:
+            - selections:
+                - name: Detector
+                - name: Commander
