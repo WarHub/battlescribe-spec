@@ -46,7 +46,8 @@ public sealed class SpecLintTests
     {
         var spec = SpecLoader.Load(specPath);
         var filename = Path.GetFileNameWithoutExtension(specPath);
-        Assert.Equal(filename, spec.Id);
+        Assert.True(filename == spec.Id,
+            $"{specName}: expected id '{filename}' but got '{spec.Id}'");
     }
 
     [Theory]
@@ -55,7 +56,8 @@ public sealed class SpecLintTests
     {
         var spec = SpecLoader.Load(specPath);
         var dirName = Path.GetFileName(Path.GetDirectoryName(specPath));
-        Assert.Equal(dirName, spec.Category);
+        Assert.True(dirName == spec.Category,
+            $"{specName}: expected category '{dirName}' but got '{spec.Category}'");
     }
 
     // ── No duplicate IDs ─────────────────────────────────────────────
