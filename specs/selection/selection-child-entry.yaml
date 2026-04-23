@@ -50,16 +50,5 @@ steps:
           selections:
             - name: Command Squad
               children:
-                - name: Medic
                 - name: Sergeant
                   type: model
-      engines:
-        # BS only returns explicitly selected children (Sergeant).
-        # NR creates instances for all child entries and sorts alphabetically.
-        battlescribe:
-          forces:
-            - selections:
-                - name: Command Squad
-                  children:
-                    - name: Sergeant
-                      type: model

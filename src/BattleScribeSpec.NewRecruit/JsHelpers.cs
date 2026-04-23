@@ -159,8 +159,12 @@ internal static class JsHelpers
                     let selections = parent.getSelections?.();
                     if (!selections?.length) selections = parent.getChildren?.();
                     if (!selections?.length) selections = [];
-                    // Use NR's native selector order.
-                    return [...selections].map(s => extractSelection(s));
+                    // NR pre-creates template instances (amount=0) for all possible child entries.
+                    // Only include selections that are actually activated (amount > 0).
+                    // This matches NR's own getSelectedEntries() which filters by u.amount.
+                    return [...selections]
+                        .filter(s => (s.getAmount?.() ?? 0) > 0)
+                        .map(s => extractSelection(s));
                 }
 
                 function extractSelection(sel) {
@@ -178,12 +182,12 @@ internal static class JsHelpers
                         name: sel.getName?.() || '',
                         entryId: sel.getId?.() || null,
                         type: sel.getType?.() || null,
-                        number: sel.getAmount?.() || 1,
+                        number: sel.getAmount?.() ?? 1,
                         hidden: sel.isHidden?.() || false,
                         costs: costs.map(c => ({
                             name: c.name || '',
                             typeId: c.typeId || '',
-                            value: (c.value || 0) * (sel.getAmount?.() || 1)
+                            value: (c.value || 0) * (sel.getAmount?.() ?? 1)
                         })),
                         children: extractSelections(sel),
                         profiles: profiles.map(p => ({

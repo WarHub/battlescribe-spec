@@ -232,37 +232,52 @@ public static class NewRecruitActions
                     const sel = getSelectionByUid(force, selectionUid);
                     if (!sel) return `ERROR:Selection not found with uid '${selectionUid}'`;
 
-                    // NR pre-creates child nodes with amount=0 for all child entries.
+                    // Try to find an existing pre-created instance in getSelections().
+                    // For entryLinks, getId() returns the target ID, not the link ID.
+                    // Also check source.id and selector.ids for link ID matching.
                     const children = sel.getSelections?.() || sel.getChildren?.() || [];
-                    let child = children.find(c => c.getId?.() === childEntryId);
+                    const child = children.find(c =>
+                        c.getId?.() === childEntryId
+                        || c.source?.id === childEntryId
+                        || c.selector?.ids?.includes?.(childEntryId));
 
                     if (child) {
-                        if (typeof child.incrementAmount === 'function') {
-                            child.incrementAmount();
-                        } else if (typeof child.setAmount === 'function') {
-                            child.setAmount((child.getAmount?.() || 0) + 1);
-                        }
+                        // Found existing instance — activate via incrementAmount.
+                        child.incrementAmount();
                         child.autocheck?.();
                         return child?.uid || null;
                     }
 
-                    // Fallback: search the selector tree
-                    const selector = sel.selector ? findSelectorById(sel.selector, childEntryId) : null;
-                    const found = selector || findSelectorById(sel, childEntryId);
-                    if (!found) return `ERROR:Child entry '${childEntryId}' not found under selection`;
-
-                    if (typeof found.addInstance === 'function') {
-                        found.addInstance();
-                        const insts = found.instances || [];
-                        const last = insts[insts.length - 1];
-                        last?.autocheck?.();
-                        return last?.uid || null;
-                    } else if (typeof found.incrementAmount === 'function') {
-                        found.incrementAmount();
-                    } else {
-                        found.setAmount?.((found.getAmount?.() || 0) + 1);
+                    // Entry not pre-created as instance. Search the selector tree
+                    // and use addInstance() to create the first instance.
+                    // This is correct for first activation only (not for duplicates).
+                    function findSelector(selectors, id) {
+                        for (const s of selectors) {
+                            if (s.id === id || s.ids?.includes(id)) return s;
+                            const found = findSelector(s.selectors || [], id);
+                            if (found) return found;
+                        }
+                        return null;
                     }
-                    return null;
+                    // Search under the selection's own selector, and also under
+                    // the instance itself (some NR versions store selectors on instances).
+                    const selectorSources = [
+                        ...(sel.selector?.selectors || []),
+                        ...(sel.selectors || [])
+                    ];
+                    const targetSelector = findSelector(selectorSources, childEntryId);
+                    if (!targetSelector) {
+                        const ids = selectorSources.map(s => s.id).join(', ');
+                        const childCount = children.length;
+                        const childIds = children.map(c => c.getId?.()).join(', ');
+                        return `ERROR:Child entry '${childEntryId}' not found under selection (selectors: [${ids}], children: ${childCount} [${childIds}])`;
+                    }
+
+                    targetSelector.addInstance();
+                    const insts = targetSelector.instances || [];
+                    const last = insts[insts.length - 1];
+                    last?.autocheck?.();
+                    return last?.uid || null;
                 } catch(e) {
                     return 'ERROR:SelectChildEntry error: ' + e.message;
                 }
