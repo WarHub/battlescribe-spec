@@ -81,7 +81,13 @@ obj.page != null ? String(obj.page) : null  // page (number → string)
 ## Selection mechanics: addInstance, incrementAmount, autocheck
 
 NR's roster tree uses **selectors** (templates) and **instances** (materialized
-selections). Understanding the three key operations is critical for the adapter:
+selections). These have **completely disjoint** method sets:
+
+**Selector methods:** `addInstance`, `delete`, `getSelections`, `getName`, `getId`
+**Instance methods:** `incrementAmount`, `setAmount`, `getAmount`, `delete`,
+`getSelections`, `getSelectedEntries`, `getName`, `getId`, `autocheck`, `dupe`
+
+> Full API reference: [docs/nr-dual-tree-api.md](../../../docs/nr-dual-tree-api.md)
 
 ### addInstance()
 
@@ -89,6 +95,12 @@ Called on a **selector** to create a new instance (selection). Used for
 force-level entry selectors — these have an `addInstance` method and create
 a fresh child node each time. After creation, the new instance starts with
 `amount=0` and child selectors/instances are not yet fully materialized.
+
+**Category relocation:** When the entry has `categoryLinks`, `addInstance()`
+creates the instance under the **correct category selector**, NOT under the
+selector `findSelectorById` found (which may be in the `(Illegal Units)` staging
+category). Always use before/after uid diff to find the new instance — never
+check `selector.instances` directly.
 
 ### incrementAmount()
 
@@ -116,21 +128,25 @@ as unselected despite the constraint.
 - All 5 selection methods in `NewRecruitActions.cs` call `autocheck()` after
   `addInstance()` to match Oracle's auto-selection behavior
 
-**Adapter pattern:**
+**Strict adapter pattern:**
 
 ```javascript
 // Force-level entry selection (adding a new unit)
-if (typeof selector.addInstance === 'function') {
-    selector.addInstance();
-    // MUST call autocheck to cascade min-constraint auto-selection
-    const insts = selector.instances || [];
-    insts[insts.length - 1]?.autocheck?.();
-}
+if (typeof selector.addInstance !== 'function')
+    return 'ERROR: not a selector node';
+const before = new Set(getSelections(force).map(s => s.uid));
+selector.addInstance();
+// Find via uid diff — instance may be under a different category selector
+const newSel = getSelections(force).find(s => s.uid && !before.has(s.uid));
+if (!newSel) return 'ERROR: addInstance did not produce a new selection';
+newSel.autocheck();
+return newSel.uid;
+
 // Child entry increment (already materialized, amount=0→1)
-else if (selector.getAmount?.() === 0) {
-    selector.incrementAmount();
-    selector.autocheck?.(); // also triggers cascade on children
-}
+if (typeof child.incrementAmount !== 'function')
+    return 'ERROR: not an instance node';
+child.incrementAmount();
+child.autocheck();
 
 // Changing count on existing selection (e.g. 1→3)
 // ✅ Use setAmount — matches NR UI behavior, proper cost propagation
