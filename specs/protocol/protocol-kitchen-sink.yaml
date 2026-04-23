@@ -491,7 +491,7 @@ steps:
             - name: Infantry Squad
             - name: Required Unit
 
-  # Step 5: setSelectionCount— set Trooper child count to 2 via selectionPath
+  # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
   - action: setSelectionCount
     forceId: ${{ steps.add-battalion.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}

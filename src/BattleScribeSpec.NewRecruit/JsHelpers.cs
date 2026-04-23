@@ -159,7 +159,7 @@ internal static class JsHelpers
                     let selections = parent.getSelections?.();
                     if (!selections?.length) selections = parent.getChildren?.();
                     if (!selections?.length) selections = [];
-                    // Use NR's native order (alphabetical via initializeChilds sort).
+                    // Use NR's native selector order.
                     return [...selections].map(s => extractSelection(s));
                 }
 

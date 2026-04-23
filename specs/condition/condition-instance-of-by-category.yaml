@@ -75,9 +75,8 @@ steps:
             - name: Commander
             - name: Detector
       engines:
-        # NR groups by primary category: HQ entries first, then Uncategorised.
-        # Detector (no category) sorts into Uncategorised after Commander's HQ group.
-        # But NR actually places Uncategorised entries before categorised ones.
+        # NR places uncategorised selections before categorised ones.
+        # Detector has no category, so it appears before the HQ-category Commander here.
         newrecruit:
           forces:
             - selections:
