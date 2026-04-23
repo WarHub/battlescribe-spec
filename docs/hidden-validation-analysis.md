@@ -202,9 +202,9 @@ The instance prototype has ~200 methods including `isHidden`, `getErrors`,
 Since neither the BattleScribe engine nor NR natively validates hidden forces,
 the spec adapters do not currently synthesize hidden-force errors.
 
-### Oracle Adapter
+### BattleScribe adapter
 
-The Oracle adapter reads modifier-applied hidden state by calling the engine's
+the BattleScribe engine adapter reads modifier-applied hidden state by calling the engine's
 internal modifier-application method:
 
 ```csharp
@@ -228,7 +228,7 @@ forces and selections.
 
 ## Summary Table
 
-| Validation | BattleScribe Engine | NR Native | Oracle Adapter | NR Adapter |
+| Validation | BattleScribe Engine | NR Native | BattleScribe adapter | NR Adapter |
 |---|---|---|---|---|
 | Hidden selection error | ✅ "(hidden)" | ✅ "while hidden" | ✅ via error text | ✅ via error text |
 | Hidden category error | ✅ "(hidden)" | ❓ Unknown | ✅ via error text | ✅ via error text |
@@ -244,4 +244,4 @@ forces and selections.
   - Hidden error generation at line 617–625
   - Constraint skipping at line 485
 - NR error synthesis: `JsHelpers.cs` lines 453–459
-- Oracle error detection: `BattleScribeOracle.cs` lines 560–573
+- BattleScribe error detection: `BattleScribeEngine.cs` lines 560–573

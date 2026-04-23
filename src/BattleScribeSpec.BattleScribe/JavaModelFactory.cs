@@ -4,7 +4,7 @@ using net.battlescribe.model.roster;
 namespace BattleScribeSpec;
 
 /// <summary>
-/// Factory for creating Java BattleScribe model objects (via IKVM) for use in oracle tests.
+/// Factory for creating Java BattleScribe model objects (via IKVM) for use in engine tests.
 /// Java model uses mutable lists accessed via getXxx() methods.
 /// </summary>
 public static class JavaModelFactory

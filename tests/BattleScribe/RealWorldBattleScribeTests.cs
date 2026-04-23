@@ -5,13 +5,13 @@ using Xunit.Abstractions;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Oracle tests against real wh40k-9e data.
+/// engine tests against real wh40k-9e data.
 /// Loads actual game system and catalogue files via the BattleScribe Java deserializer,
 /// initializes the engine, and exercises real roster operations.
 /// Skipped if data is not present.
 /// </summary>
 [Trait("Category", "Integration")]
-public class RealWorldOracleTests(ITestOutputHelper output)
+public class RealWorldBattleScribeTests(ITestOutputHelper output)
 {
     private static string Wh40kDataDir => TestPaths.Wh40kDataDir!;
 
@@ -22,16 +22,16 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     {
         Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
-        oracle.LoadGameSystemFile(gstFile);
-        var errors = oracle.InitializeFromLoadedData();
+        engine.LoadGameSystemFile(gstFile);
+        var errors = engine.InitializeFromLoadedData();
 
         output.WriteLine($"Init errors: {errors.Count}");
         foreach (var e in errors.Take(5))
             output.WriteLine($"  - {e}");
 
-        var forceEntries = oracle.GetAvailableForceEntryNames();
+        var forceEntries = engine.GetAvailableForceEntryNames();
         output.WriteLine($"Force entries: {string.Join(", ", forceEntries)}");
         Assert.NotEmpty(forceEntries);
     }
@@ -41,28 +41,28 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     {
         Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
-        oracle.LoadGameSystemFile(gstFile);
+        engine.LoadGameSystemFile(gstFile);
 
         var catFiles = Directory.GetFiles(Wh40kDataDir, "*.cat");
         var smCat = catFiles.FirstOrDefault(f => f.Contains("Space Marines", StringComparison.OrdinalIgnoreCase))
             ?? catFiles.First();
-        oracle.LoadCatalogueFile(smCat);
+        engine.LoadCatalogueFile(smCat);
 
-        oracle.InitializeFromLoadedData();
+        engine.InitializeFromLoadedData();
 
         // Add first force
-        var forceErrors = oracle.AddForceByIndex(0);
+        var forceErrors = engine.AddForceByIndex(0);
         output.WriteLine($"Force errors: {forceErrors.Count}");
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
         output.WriteLine($"Forces: {snapshot.Forces.Count}");
         Assert.Single(snapshot.Forces);
         output.WriteLine($"Force name: {snapshot.Forces[0].Name}");
 
         // Check validation
-        var valErrors = oracle.GetValidationErrors();
+        var valErrors = engine.GetValidationErrors();
         output.WriteLine($"Validation errors: {valErrors.Count}");
         foreach (var e in valErrors.Take(10))
             output.WriteLine($"  - {e}");
@@ -73,9 +73,9 @@ public class RealWorldOracleTests(ITestOutputHelper output)
     {
         Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
-        oracle.LoadGameSystemFile(gstFile);
+        engine.LoadGameSystemFile(gstFile);
 
         var catFiles = Directory.GetFiles(Wh40kDataDir, "*.cat");
         var loaded = 0;
@@ -85,7 +85,7 @@ public class RealWorldOracleTests(ITestOutputHelper output)
         {
             try
             {
-                oracle.LoadCatalogueFile(catFile);
+                engine.LoadCatalogueFile(catFile);
                 loaded++;
             }
             catch (Exception ex)
@@ -114,12 +114,12 @@ public class RealWorldOracleTests(ITestOutputHelper output)
         Assert.NotNull(whamGs);
 
         // Load via Java
-        using var oracle = new BattleScribeOracle();
-        oracle.LoadGameSystemFile(gstFile);
-        oracle.InitializeFromLoadedData();
+        using var engine = new BattleScribeEngine();
+        engine.LoadGameSystemFile(gstFile);
+        engine.InitializeFromLoadedData();
 
         var whamForceNames = whamGs.ForceEntries.Select(fe => fe.Name).OrderBy(x => x).ToList();
-        var javaForceNames = oracle.GetAvailableForceEntryNames().OrderBy(x => x).ToList();
+        var javaForceNames = engine.GetAvailableForceEntryNames().OrderBy(x => x).ToList();
 
         output.WriteLine($"wham force entries ({whamForceNames.Count}): {string.Join(", ", whamForceNames)}");
         output.WriteLine($"Java force entries ({javaForceNames.Count}): {string.Join(", ", javaForceNames)}");

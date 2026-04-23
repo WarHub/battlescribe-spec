@@ -16,6 +16,6 @@ AssemblyLoadContext.Default.Resolving += (context, name) =>
 };
 
 await AdapterHandler.RunAsync(
-    engineFactory: () => new OracleRosterEngine(),
+    engineFactory: () => new BattleScribeRosterEngine(),
     input: Console.In,
     output: Console.Out);

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Minimum validation: lint + Oracle + NR frozen. Run before every push. -->
+<!-- Minimum validation: lint + BattleScribe + NR frozen. Run before every push. -->
 <RunSettings>
   <RunConfiguration>
     <TestCaseFilter>FullyQualifiedName~SpecLintTests|FullyQualifiedName~SpecStructureTests|FullyQualifiedName~SetupIdValidatorTests|FullyQualifiedName~SpecConformanceTests|FullyQualifiedName~FrozenNewRecruitConformanceTests</TestCaseFilter>

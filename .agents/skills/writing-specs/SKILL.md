@@ -12,7 +12,7 @@ description: >
 
 1. Create `specs/{category}/{spec-id}.yaml`
 2. Run: `dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~{spec-id}"`
-3. Fix failures and re-run until Oracle passes
+3. Fix failures and re-run until BattleScribe passes
 4. Run: `pwsh -File tools/format-specs.ps1`
 5. Run: `dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~SpecLint"`
 

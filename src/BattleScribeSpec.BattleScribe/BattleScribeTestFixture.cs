@@ -3,12 +3,12 @@ using WarHub.ArmouryModel.Source;
 namespace BattleScribeSpec;
 
 /// <summary>
-/// Test fixture that initializes both the BattleScribe Java engine (oracle) and
-/// the wham data model with the same data, enabling oracle comparison tests.
+/// Test fixture that initializes both the BattleScribe Java engine (engine) and
+/// the wham data model with the same data, enabling engine comparison tests.
 /// </summary>
-public sealed class OracleTestFixture : IDisposable
+public sealed class BattleScribeTestFixture : IDisposable
 {
-    public BattleScribeOracle Oracle { get; }
+    public BattleScribeEngine Engine { get; }
 
     // wham-side data
     public GamesystemNode? Gamesystem { get; private set; }
@@ -21,9 +21,9 @@ public sealed class OracleTestFixture : IDisposable
     private readonly List<net.battlescribe.model.data.ForceEntry> _javaForceEntries = [];
     private readonly List<net.battlescribe.model.data.SelectionEntry> _javaSelectionEntries = [];
 
-    public OracleTestFixture()
+    public BattleScribeTestFixture()
     {
-        Oracle = new BattleScribeOracle();
+        Engine = new BattleScribeEngine();
     }
 
     /// <summary>
@@ -33,7 +33,7 @@ public sealed class OracleTestFixture : IDisposable
     {
         // Java side
         _javaGameSystem = JavaModelFactory.CreateGameSystem(id: id, name: name);
-        Oracle.Initialize(_javaGameSystem, _javaCatalogues);
+        Engine.Initialize(_javaGameSystem, _javaCatalogues);
 
         // wham side
         Gamesystem = new GamesystemCore
@@ -47,7 +47,7 @@ public sealed class OracleTestFixture : IDisposable
         Roster = new RosterCore
         {
             Id = System.Guid.NewGuid().ToString(),
-            Name = "Oracle Roster",
+            Name = "Test Roster",
             GameSystemId = id,
             GameSystemName = name,
             GameSystemRevision = 1,
@@ -85,7 +85,7 @@ public sealed class OracleTestFixture : IDisposable
         _javaSelectionEntries.Clear();
         _javaSelectionEntries.Add(javaUnit);
 
-        Oracle.Initialize(_javaGameSystem, _javaCatalogues);
+        Engine.Initialize(_javaGameSystem, _javaCatalogues);
 
         // --- wham side ---
         Gamesystem = new GamesystemCore
@@ -122,7 +122,7 @@ public sealed class OracleTestFixture : IDisposable
         Roster = new RosterCore
         {
             Id = System.Guid.NewGuid().ToString(),
-            Name = "Oracle Roster",
+            Name = "Test Roster",
             GameSystemId = gsId,
             GameSystemName = "Test Game System",
             GameSystemRevision = 1,
@@ -137,7 +137,7 @@ public sealed class OracleTestFixture : IDisposable
         if (_javaGameSystem is null || _javaCatalogues.Count == 0)
             throw new InvalidOperationException("Call SetupWithUnit first.");
         var cat = _javaCatalogues.Values.First();
-        var (_, errors) = Oracle.AddForce(cat, _javaForceEntries[forceIndex]);
+        var (_, errors) = Engine.AddForce(cat, _javaForceEntries[forceIndex]);
         return errors;
     }
 
@@ -146,17 +146,17 @@ public sealed class OracleTestFixture : IDisposable
     /// </summary>
     public int SelectEntry(int entryIndex = 0)
     {
-        var forces = Oracle.GetForces();
+        var forces = Engine.GetForces();
         if (forces.Count == 0) throw new InvalidOperationException("No forces. Call AddForce first.");
-        var selections = Oracle.SelectEntry(forces[0], _javaSelectionEntries[entryIndex]);
+        var selections = Engine.SelectEntry(forces[0], _javaSelectionEntries[entryIndex]);
         return selections.Count;
     }
 
     /// <summary>
     /// Capture the current Java engine state as a snapshot for comparison.
     /// </summary>
-    public RosterState CaptureOracleSnapshot()
-        => ModelConverter.CaptureOracleSnapshot(Oracle);
+    public RosterState CaptureEngineSnapshot()
+        => ModelConverter.CaptureEngineSnapshot(Engine);
 
     /// <summary>
     /// Capture the wham roster state as a snapshot for comparison.
@@ -169,6 +169,6 @@ public sealed class OracleTestFixture : IDisposable
 
     public void Dispose()
     {
-        Oracle.Dispose();
+        Engine.Dispose();
     }
 }

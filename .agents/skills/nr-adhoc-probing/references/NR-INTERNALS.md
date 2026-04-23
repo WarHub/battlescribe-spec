@@ -40,7 +40,7 @@ createRoster(costs) {
 - `createRoster` **requires** at least one force entry or it throws
   "couldn't find any force inside main_catalogue"
 - This is a NR UX convenience, not a BattleScribe data model behavior
-- The Oracle engine never auto-adds forces — `new Roster()` starts empty
+- The BattleScribe engine never auto-adds forces — `new Roster()` starts empty
 
 ## createRoster requires force entries
 
@@ -126,7 +126,7 @@ as unselected despite the constraint.
 - The cascade is recursive: autocheck on a parent triggers autocheck on
   auto-selected children, which triggers autocheck on their children, etc.
 - All 5 selection methods in `NewRecruitActions.cs` call `autocheck()` after
-  `addInstance()` to match Oracle's auto-selection behavior
+  `addInstance()` to match BattleScribe's auto-selection behavior
 
 **Strict adapter pattern:**
 
@@ -196,7 +196,7 @@ f.source?.publication?.id  // → "pub-1" ✅
 ```
 
 **Rule**: Publications must be defined in the same file as entries that reference them.
-Oracle (BattleScribe) resolves cross-scope, but NR's behavior is arguably more correct.
+BattleScribe (BattleScribe) resolves cross-scope, but NR's behavior is arguably more correct.
 
 ## `setAmount()` corruption bugs
 

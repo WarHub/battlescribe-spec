@@ -11,7 +11,7 @@ public class MultiCatalogueProtocolTests(ITestOutputHelper output)
     [Fact]
     public void Direct_MultiCatalogue_Diagnose()
     {
-        // Run the exact multi-catalogue scenario through OracleRosterEngine
+        // Run the exact multi-catalogue scenario through BattleScribeRosterEngine
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -26,7 +26,7 @@ public class MultiCatalogueProtocolTests(ITestOutputHelper output)
                 SelectionEntries = [new ProtocolSelectionEntry { Id = "se-b1", Name = "Beta Unit", Type = "unit" }] },
         };
 
-        using var engine = new OracleRosterEngine();
+        using var engine = new BattleScribeRosterEngine();
         var errors = engine.Setup(gs, catalogues);
         output.WriteLine($"Setup errors: {string.Join(", ", errors)}");
         Assert.Empty(errors);

@@ -163,7 +163,7 @@ Conditions (`field=forces`) use a different child resolution path:
 
 ## Conformance Specs
 
-All confirmed against BattleScribe Oracle engine:
+All confirmed against BattleScribe BattleScribe engine:
 
 | Spec | Tests |
 |---|---|

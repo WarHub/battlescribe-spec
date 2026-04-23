@@ -242,7 +242,7 @@ BattleScribe's Java engine distributes validation errors across the roster tree
 based on the constraint's scope (roster/force/category/selection). NewRecruit
 consistently attributes errors to the selection that violates the constraint.
 
-The BS Oracle adapter includes remapping logic (`RemapRosterErrorsToSelection`,
+The BS BattleScribe adapter includes remapping logic (`RemapRosterErrorsToSelection`,
 `RemapForceErrorsToSelection`, `RemapCategoryErrorsToSelection`) that moves
 higher-level errors down to selection level where possible, aligning with NR.
 After remapping, the following differences remain.

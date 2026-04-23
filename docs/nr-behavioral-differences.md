@@ -273,7 +273,7 @@ value, not the link's).
 NR resolves `publicationId` references **within the same scope** at parse time.
 A forceEntry in the gameSystem referencing a publication defined only in a
 catalogue will NOT resolve — the `.publication` object will be `undefined`.
-Oracle (BattleScribe) resolves cross-scope publication references.
+BattleScribe (BattleScribe) resolves cross-scope publication references.
 
 **Rule**: Define publications in the same file (gameSystem or catalogue) as the
 entries that reference them. A forceEntry in a gameSystem must reference a
@@ -342,7 +342,7 @@ Decompiled from `engine.a.f` (BattleScribe Java engine):
 - Iterates all forces, auto-selects entries where `getDefaultAmount >= 1`
 - `getDefaultAmount` returns the entry's `min` constraint value
 
-The Oracle adapter replicates this via reflection: `_autoSelectMethod.Invoke()`.
+the BattleScribe engine adapter replicates this via reflection: `_autoSelectMethod.Invoke()`.
 
 ### NR Error Extraction
 
@@ -355,7 +355,7 @@ roster node, then reading the node's error arrays. Key findings:
 - Error structure: `{message, constraintId?, ownerType, ownerEntryId}`
 - ConstraintId format: NR now maps cost limit errors to the `costLimits/`
   pseudo-entry convention (matching BattleScribe's format)
-- Max constraint errors go on the selection (both BS Oracle adapter and NR now agree)
+- Max constraint errors go on the selection (both BS BattleScribe adapter and NR now agree)
 
 ### Catalogue Expansion and Entry Links
 
@@ -537,7 +537,7 @@ sel.setAmount({}, count);
 ```
 
 This produces the correct single-node-with-count behavior matching both
-NR's own UI and BattleScribe Oracle's behavior. The old `addInstance()` loop
+NR's own UI and BattleScribe BattleScribe's behavior. The old `addInstance()` loop
 approach has been removed.
 
 ---
@@ -575,7 +575,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   `engines: {engineName: fail}` — the override describes the actual engine
   behavior, keeping both engines passing. Only 1 real-world spec still uses
   `newrecruit: fail` due to fundamental data incompatibilities.
-- **Oracle (BattleScribe)**: All specs expected to pass except 2 NR-specific
+- **BattleScribe (BattleScribe)**: All specs expected to pass except 2 NR-specific
   null-childId condition behavior specs. DataSource specs (real-world wh40k-10e)
   are fully supported via IKVM engine with DataUtils XML loading.
 
@@ -583,13 +583,13 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 
 | Issue | Fix | Specs Fixed |
 |-------|-----|-------------|
-| Error placement mismatch | BS Oracle adapter remaps category-level max/cost/hidden errors to selection-level (matching NR) | 4 |
+| Error placement mismatch | BS BattleScribe adapter remaps category-level max/cost/hidden errors to selection-level (matching NR) | 4 |
 | Selection ordering | Insertion-order tracking via `__bsspec_seq` tags | ~15 |
 | Action/state index mismatch | `getSortedSelections()` helper for all action methods | 3 |
 | Child cost aggregation | `incrementAmount()` instead of `addInstance()` | 8 |
 | Error extraction | Tree-walking `checkConstraints()` with structured error parsing | ~10 |
-| Entry link resolution | Oracle queries `_engine.e(force).R()` for expanded entries | 4 |
-| Auto-select replication | Oracle adapter calls `x()` via reflection | ~15 |
+| Entry link resolution | BattleScribe queries `_engine.e(force).R()` for expanded entries | 4 |
+| Auto-select replication | BattleScribe adapter calls `x()` via reflection | ~15 |
 | GameSystem entry resolution | `SelectEntry` now includes GS-level SelectionEntries and EntryLinks | 2 |
 | SelectChildEntry flattening | `FlattenChildEntries` resolves EntryLinks and nested SelectionEntryGroups | 6 |
 | FindEntryById scope | `FindEntryById` now searches GameSystem entries in addition to catalogue | 2 |

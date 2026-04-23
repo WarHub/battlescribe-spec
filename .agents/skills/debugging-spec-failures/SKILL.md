@@ -1,7 +1,7 @@
 ---
 name: debugging-spec-failures
 description: >
-  Debug BattleScribe spec test failures. Use when a spec fails against the Oracle or
+  Debug BattleScribe spec test failures. Use when a spec fails against the BattleScribe engine or
   NewRecruit engine, when assertion errors are unclear, or when diagnosing why expected
   state doesn't match actual roster state. Covers SpecRunner error interpretation,
   assertion matching rules, and common failure patterns.
@@ -140,7 +140,7 @@ real roster state, then adjust `expectedState` accordingly.
 
 ### 5. Engine-specific differences
 
-**Symptom:** Spec passes for Oracle but fails for NewRecruit (or vice versa).
+**Symptom:** Spec passes for BattleScribe but fails for NewRecruit (or vice versa).
 
 **Cause:** Engines may differ in behavior. Use engine-specific overrides:
 

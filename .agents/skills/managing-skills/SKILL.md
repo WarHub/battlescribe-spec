@@ -30,8 +30,8 @@ All skills live in `.agents/skills/{skill-name}/`. Each is a self-contained dire
 - Max 64 characters
 - Directory name **must** match the `name` field in frontmatter
 
-Good: `debugging-spec-failures`, `oracle-engine`, `changing-protocol-types`
-Bad: `DebugSpecs`, `--oracle`, `my_skill`
+Good: `debugging-spec-failures`, `battlescribe-engine`, `changing-protocol-types`
+Bad: `DebugSpecs`, `--BattleScribe`, `my_skill`
 
 ### 2. Gather domain knowledge
 
@@ -162,7 +162,7 @@ are for deep dives, not prerequisites.
 | `writing-specs` | Spec YAML authoring | PROTOCOL-TYPES.md, KNOWN-TAGS.md |
 | `debugging-spec-failures` | SpecRunner error diagnosis | ERROR-ASSERTIONS.md |
 | `changing-protocol-types` | Protocol type file sync | COMMON-MISTAKES.md, FILE-MAP.md |
-| `oracle-engine` | IKVM Java interop engine | JAVA-MODEL-FACTORY.md |
+| `battlescribe-engine` | IKVM Java interop engine | JAVA-MODEL-FACTORY.md |
 | `newrecruit-adapter` | Playwright browser adapter | STATE-EXTRACTION.md |
 | `managing-skills` | This skill — creating/updating skills | SKILL-TEMPLATE.md |
 | `managing-backlog` | Issue triage, labels, hierarchy, grooming | ISSUE-HIERARCHY.md, LABEL-TAXONOMY.md |

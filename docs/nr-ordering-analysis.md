@@ -57,11 +57,11 @@ to first instance of same type.
 
 ### Auto-selections (min≥1 constraints)
 
-Follow the same category→alphabetical ordering. May differ from Oracle which uses
+Follow the same category→alphabetical ordering. May differ from BattleScribe which uses
 constraint processing order.
 
 *Example*: wh40k auto-selects Battle Size → Detachment → Show/Hide Options (NR, alphabetical
-within Configuration category) vs Detachment → Show/Hide Options → Battle Size (Oracle).
+within Configuration category) vs Detachment → Show/Hide Options → Battle Size (BattleScribe).
 
 ## The Algorithm (decompiled pseudocode)
 
@@ -121,7 +121,7 @@ Both iterate the pre-built selector tree in existing order:
 The sort happens in `initializeChilds` **after** creating `_p` selectors from
 `selectionsIterator()`, at tree-building time.
 
-## BattleScribe (Oracle) Engine Ordering
+## BattleScribe (BattleScribe) Engine Ordering
 
 BattleScribe's Java engine has **two layers** with different ordering:
 
@@ -132,7 +132,7 @@ The data model stores all collections in `java.util.ArrayList`:
 - `Roster.forces` / `Force.forces` — `ArrayList<Force>`
 - Selections are appended via `ArrayList.add()` — no sorting on add.
 
-The Oracle adapter reads from this layer directly:
+the BattleScribe engine adapter reads from this layer directly:
 - `roster.getForces()` → insertion order (explicitly chosen over `HashMap.values()`)
 - `force.getSelections()` → insertion order
 - `sel.getSelections()` → insertion order
@@ -171,7 +171,7 @@ public static List<Force> a(Roster roster) {
 
 ### Key insight
 
-**Both engines sort alphabetically in their display layers.** The Oracle adapter's
+**Both engines sort alphabetically in their display layers.** the BattleScribe engine adapter's
 "definition order" output is an artifact of reading from the raw data layer, bypassing
 BattleScribe's own render-layer sorting.
 
@@ -194,9 +194,9 @@ so the effective sort is usually just alphabetical — same as BS render layer.
 
 ## Adapter Workarounds (legacy)
 
-These workarounds exist because the Oracle adapter reads BS's data layer (insertion order)
+These workarounds exist because the BattleScribe engine adapter reads BS's data layer (insertion order)
 while NR returns display-layer order (alphabetical). Since both engines' display layers
-sort the same way, these workarounds can be replaced by sorting the Oracle adapter's
+sort the same way, these workarounds can be replaced by sorting the BattleScribe engine adapter's
 output alphabetically.
 
 | Workaround | Location | Purpose |

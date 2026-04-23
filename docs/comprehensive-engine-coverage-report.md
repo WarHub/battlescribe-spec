@@ -233,7 +233,7 @@ To directly observe import filtering (import=false entry removed, import=true en
 - Finding an engine method that returns the full merged entry list for a force (including entries from linked catalogues)
 - Extending the IKVM bridge to expose CatalogueManager internals
 
-This is documented here as an architectural limitation of the current oracle bridge, not a gap in the spec's data model.
+This is documented here as an architectural limitation of the current BattleScribe bridge, not a gap in the spec's data model.
 
 ---
 

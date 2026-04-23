@@ -61,8 +61,8 @@ from YAML but never checked. The field will be silently ignored.
 
 ## 6. Not updating JavaModelFactory
 
-The Oracle engine creates Java model objects from protocol types. If a new field
-isn't set in the factory, Oracle tests will use default/null values.
+The BattleScribe engine creates Java model objects from protocol types. If a new field
+isn't set in the factory, BattleScribe tests will use default/null values.
 
 **Pattern:** All factory methods use optional parameters with defaults:
 ```csharp

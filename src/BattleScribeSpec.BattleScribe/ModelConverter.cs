@@ -4,18 +4,18 @@ namespace BattleScribeSpec;
 
 /// <summary>
 /// Converts Java BattleScribe model state to wham-compatible types for comparison.
-/// Used in oracle tests to compare engine output against wham data model.
+/// Used in engine tests to compare engine output against wham data model.
 /// </summary>
 public static class ModelConverter
 {
     /// <summary>
-    /// Capture the current state of the oracle's roster as a snapshot for comparison.
+    /// Capture the current state of the engine's roster as a snapshot for comparison.
     /// </summary>
-    public static RosterState CaptureOracleSnapshot(BattleScribeOracle oracle)
+    public static RosterState CaptureEngineSnapshot(BattleScribeEngine engine)
     {
-        var roster = oracle.GetRoster();
-        var forces = oracle.GetForces();
-        var errors = oracle.GetValidationErrors();
+        var roster = engine.GetRoster();
+        var forces = engine.GetForces();
+        var errors = engine.GetValidationErrors();
 
         var forceSnapshots = forces.Select(f =>
         {

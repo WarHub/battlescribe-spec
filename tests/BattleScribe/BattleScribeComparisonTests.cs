@@ -10,17 +10,17 @@ namespace BattleScribeSpec.Tests;
 /// behavior specification that any conforming implementation must match.
 /// </summary>
 [Trait("Category", "Unit")]
-public class OracleComparisonTests(ITestOutputHelper output)
+public class BattleScribeComparisonTests(ITestOutputHelper output)
 {
     [Fact]
     public void EmptyRoster_HasExpectedState()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupMinimalGameSystem();
 
-        var snapshot = fixture.CaptureOracleSnapshot();
+        var snapshot = fixture.CaptureEngineSnapshot();
 
-        Assert.Equal("Oracle Roster", snapshot.Name);
+        Assert.Equal("Test Roster", snapshot.Name);
         Assert.Equal("test-gs", snapshot.GameSystemId);
         Assert.Empty(snapshot.Forces);
         output.WriteLine($"Empty roster: {snapshot.Forces.Count} forces, {snapshot.Costs.Count} costs, {snapshot.ValidationErrors.Count} errors");
@@ -29,15 +29,15 @@ public class OracleComparisonTests(ITestOutputHelper output)
     [Fact]
     public void AddForce_IncreasesForceCount()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupWithUnit();
 
-        var before = fixture.CaptureOracleSnapshot();
+        var before = fixture.CaptureEngineSnapshot();
         Assert.Empty(before.Forces);
 
         fixture.AddForce();
 
-        var after = fixture.CaptureOracleSnapshot();
+        var after = fixture.CaptureEngineSnapshot();
         Assert.Single(after.Forces);
         output.WriteLine($"Force added: {after.Forces[0].Name}");
     }
@@ -45,12 +45,12 @@ public class OracleComparisonTests(ITestOutputHelper output)
     [Fact]
     public void SelectEntry_CreatesSelectionInForce()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupWithUnit("Marine Squad", 100.0);
         fixture.AddForce();
         fixture.SelectEntry();
 
-        var snapshot = fixture.CaptureOracleSnapshot();
+        var snapshot = fixture.CaptureEngineSnapshot();
         Assert.Single(snapshot.Forces);
 
         var force = snapshot.Forces[0];
@@ -62,12 +62,12 @@ public class OracleComparisonTests(ITestOutputHelper output)
     [Fact]
     public void SelectEntry_CostIsTracked()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupWithUnit("Marine Squad", 100.0);
         fixture.AddForce();
         fixture.SelectEntry();
 
-        var snapshot = fixture.CaptureOracleSnapshot();
+        var snapshot = fixture.CaptureEngineSnapshot();
         var force = snapshot.Forces[0];
         var selection = force.Selections[0];
 
@@ -85,50 +85,50 @@ public class OracleComparisonTests(ITestOutputHelper output)
     [Fact]
     public void DeselectEntry_RemovesSelection()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupWithUnit();
         fixture.AddForce();
         fixture.SelectEntry();
 
-        var beforeDeselect = fixture.CaptureOracleSnapshot();
+        var beforeDeselect = fixture.CaptureEngineSnapshot();
         Assert.NotEmpty(beforeDeselect.Forces[0].Selections);
 
-        fixture.Oracle.DeselectFirstSelection();
+        fixture.Engine.DeselectFirstSelection();
 
-        var afterDeselect = fixture.CaptureOracleSnapshot();
+        var afterDeselect = fixture.CaptureEngineSnapshot();
         Assert.Empty(afterDeselect.Forces[0].Selections);
     }
 
     [Fact]
     public void RemoveForce_RemovesAllSelections()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupWithUnit();
         fixture.AddForce();
         fixture.SelectEntry();
 
-        var before = fixture.CaptureOracleSnapshot();
+        var before = fixture.CaptureEngineSnapshot();
         Assert.Single(before.Forces);
         Assert.NotEmpty(before.Forces[0].Selections);
 
-        fixture.Oracle.RemoveFirstForce();
+        fixture.Engine.RemoveFirstForce();
 
-        var after = fixture.CaptureOracleSnapshot();
+        var after = fixture.CaptureEngineSnapshot();
         Assert.Empty(after.Forces);
     }
 
     [Fact]
     public void MultipleSelections_CostsAccumulate()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupWithUnit("Marine Squad", 50.0);
         fixture.AddForce();
 
         fixture.SelectEntry();
-        var after1 = fixture.CaptureOracleSnapshot();
+        var after1 = fixture.CaptureEngineSnapshot();
 
         fixture.SelectEntry();
-        var after2 = fixture.CaptureOracleSnapshot();
+        var after2 = fixture.CaptureEngineSnapshot();
 
         output.WriteLine($"After 1 selection: {after1.Forces[0].Selections.Count} selections");
         output.WriteLine($"After 2 selections: {after2.Forces[0].Selections.Count} selections");
@@ -140,10 +140,10 @@ public class OracleComparisonTests(ITestOutputHelper output)
     [Fact]
     public void ValidationErrors_OnEmptyRoster()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupMinimalGameSystem();
 
-        var errors = fixture.Oracle.GetValidationErrors();
+        var errors = fixture.Engine.GetValidationErrors();
         output.WriteLine($"Validation errors on empty roster: {errors.Count}");
         foreach (var err in errors)
             output.WriteLine($"  - {err}");
@@ -152,16 +152,16 @@ public class OracleComparisonTests(ITestOutputHelper output)
     [Fact]
     public void EngineState_ConsistentAfterMultipleOperations()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupWithUnit("Marine Squad", 75.0);
 
         // Add force, select entry, take snapshot
         fixture.AddForce();
         fixture.SelectEntry();
-        var snapshot1 = fixture.CaptureOracleSnapshot();
+        var snapshot1 = fixture.CaptureEngineSnapshot();
 
         // Capture again — should be identical (no mutations happened)
-        var snapshot2 = fixture.CaptureOracleSnapshot();
+        var snapshot2 = fixture.CaptureEngineSnapshot();
 
         Assert.Equal(snapshot1.Forces.Count, snapshot2.Forces.Count);
         Assert.Equal(snapshot1.Forces[0].Selections.Count, snapshot2.Forces[0].Selections.Count);
@@ -173,12 +173,12 @@ public class OracleComparisonTests(ITestOutputHelper output)
     [Fact]
     public void Snapshot_CapturesAllDetails()
     {
-        using var fixture = new OracleTestFixture();
+        using var fixture = new BattleScribeTestFixture();
         fixture.SetupWithUnit("Tactical Marines", 65.0, "pts");
         fixture.AddForce();
         fixture.SelectEntry();
 
-        var snapshot = fixture.CaptureOracleSnapshot();
+        var snapshot = fixture.CaptureEngineSnapshot();
 
         // Log full snapshot for debugging
         output.WriteLine($"Roster: name={snapshot.Name}, gs={snapshot.GameSystemId}");

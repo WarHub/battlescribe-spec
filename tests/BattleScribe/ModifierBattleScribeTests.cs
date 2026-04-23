@@ -6,13 +6,13 @@ using Xunit.Abstractions;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Oracle tests for modifier evaluation behavior.
+/// engine tests for modifier evaluation behavior.
 /// Tests how the BattleScribe engine applies modifiers (set, increment, decrement, append)
 /// to different field types (string, number, boolean, category).
 /// These define the canonical modifier behavior that conforming implementations must match.
 /// </summary>
 [Trait("Category", "Unit")]
-public class ModifierOracleTests(ITestOutputHelper output)
+public class ModifierBattleScribeTests(ITestOutputHelper output)
 {
     private static (ProtocolGameSystem gs, ProtocolCatalogue[] cats) MakeScenario(
         ProtocolSelectionEntry[] entries,
@@ -32,17 +32,17 @@ public class ModifierOracleTests(ITestOutputHelper output)
     [Fact]
     public void Modifier_SetName_ChangesSelectionName()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Modifiers = [new ProtocolModifier { Type = "set", Field = "name", Value = "Veterans" }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
-        oracle.SelectFirstAvailableEntry();
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
+        engine.SelectFirstAvailableEntry();
 
-        var name = oracle.GetFirstSelectionName();
+        var name = engine.GetFirstSelectionName();
         output.WriteLine($"Selection name after 'set' modifier: '{name}'");
         Assert.Equal("Veterans", name);
     }
@@ -50,17 +50,17 @@ public class ModifierOracleTests(ITestOutputHelper output)
     [Fact]
     public void Modifier_AppendName_AppendsToSelectionName()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Modifiers = [new ProtocolModifier { Type = "append", Field = "name", Value = "(Elite)" }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
-        oracle.SelectFirstAvailableEntry();
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
+        engine.SelectFirstAvailableEntry();
 
-        var name = oracle.GetFirstSelectionName();
+        var name = engine.GetFirstSelectionName();
         output.WriteLine($"Selection name after 'append' modifier: '{name}'");
         // Append adds " " prefix before value (per decompiled engine)
         Assert.Contains("(Elite)", name);
@@ -69,23 +69,23 @@ public class ModifierOracleTests(ITestOutputHelper output)
     [Fact]
     public void Modifier_SetHidden_HidesEntry()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Modifiers = [new ProtocolModifier { Type = "set", Field = "hidden", Value = "true" }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
         output.WriteLine($"Force selections after hidden modifier: {snapshot.Forces[0].Selections.Count}");
     }
 
     [Fact]
     public void Modifier_IncrementCost_IncreasesCostValue()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeScenario(
             entries: [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
@@ -94,11 +94,11 @@ public class ModifierOracleTests(ITestOutputHelper output)
             ],
             costTypes: [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
-        oracle.SelectFirstAvailableEntry();
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
+        engine.SelectFirstAvailableEntry();
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
         var selCosts = snapshot.Forces[0].Selections[0].Costs;
         output.WriteLine($"Selection costs: {string.Join(", ", selCosts.Select(c => $"{c.Name}={c.Value}"))}");
 
@@ -111,7 +111,7 @@ public class ModifierOracleTests(ITestOutputHelper output)
     [Fact]
     public void Modifier_DecrementCost_DecreasesCostValue()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeScenario(
             entries: [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
@@ -120,11 +120,11 @@ public class ModifierOracleTests(ITestOutputHelper output)
             ],
             costTypes: [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
-        oracle.SelectFirstAvailableEntry();
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
+        engine.SelectFirstAvailableEntry();
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
         var ptsCost = snapshot.Forces[0].Selections[0].Costs.FirstOrDefault(c => c.TypeId == "pts");
         Assert.NotNull(ptsCost);
         output.WriteLine($"Expected 70 (100 base - 30 decrement), got {ptsCost.Value}");
@@ -134,7 +134,7 @@ public class ModifierOracleTests(ITestOutputHelper output)
     [Fact]
     public void Modifier_SetCharacteristicValue_ChangesProfileCharacteristic()
     {
-        using var engine = new OracleRosterEngine();
+        using var engine = new BattleScribeRosterEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -170,7 +170,7 @@ public class ModifierOracleTests(ITestOutputHelper output)
     [Fact]
     public void Modifier_RuleDescription_ChangesRuleOnSelection()
     {
-        using var engine = new OracleRosterEngine();
+        using var engine = new BattleScribeRosterEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -202,18 +202,18 @@ public class ModifierOracleTests(ITestOutputHelper output)
     [Fact]
     public void Modifier_WithCondition_OnlyAppliesWhenConditionMet()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Modifiers = [new ProtocolModifier { Type = "set", Field = "name", Value = "Veterans",
                     Conditions = [new ProtocolCondition { Type = "atLeast", Value = 1, Field = "selections", Scope = "self", ChildId = "nonexistent-child" }] }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
-        oracle.SelectFirstAvailableEntry();
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
+        engine.SelectFirstAvailableEntry();
 
-        var name = oracle.GetFirstSelectionName();
+        var name = engine.GetFirstSelectionName();
         output.WriteLine($"Selection name (condition not met, should remain 'Marine Squad'): '{name}'");
         // Condition references nonexistent child, so it should NOT be met
         Assert.Equal("Marine Squad", name);

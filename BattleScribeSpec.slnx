@@ -1,7 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/BattleScribeSpec.TestKit/BattleScribeSpec.TestKit.csproj" />
-    <Project Path="src/BattleScribeSpec.Oracle/BattleScribeSpec.Oracle.csproj" />
+    <Project Path="src/BattleScribeSpec.BattleScribe/BattleScribeSpec.BattleScribe.csproj" />
     <Project Path="src/BattleScribeSpec.Runner/BattleScribeSpec.Runner.csproj" />
     <Project Path="src/BattleScribeSpec.ReferenceAdapter/BattleScribeSpec.ReferenceAdapter.csproj" />
     <Project Path="src/BattleScribeSpec.NewRecruit/BattleScribeSpec.NewRecruit.csproj" />
