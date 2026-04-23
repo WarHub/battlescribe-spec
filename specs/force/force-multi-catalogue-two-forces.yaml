@@ -29,6 +29,7 @@ steps:
   - action: addForce
     id: add-patrol
     forceEntryId: fe-patrol
+    catalogueId: cat-a
 
   - action: addForce
     id: add-patrol-2

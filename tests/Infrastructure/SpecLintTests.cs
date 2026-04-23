@@ -252,6 +252,28 @@ public sealed class SpecLintTests
             $"{specName}: setSelectionCount issues:\n  {string.Join("\n  ", violations)}");
     }
 
+    // ── addForce/addChildForce require catalogueId when multi-catalogue ──
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void AddForceRequiresCatalogueIdWhenMultiCatalogue(string specPath, string specName)
+    {
+        var spec = SpecLoader.Load(specPath);
+        var catalogueCount = spec.Setup.Catalogues?.Count ?? 0;
+        if (catalogueCount < 2) return;
+        if (spec.Steps is null) return;
+        var violations = new List<string>();
+        for (var i = 0; i < spec.Steps.Count; i++)
+        {
+            var step = spec.Steps[i];
+            if (step.Action is not ("addForce" or "addChildForce")) continue;
+            if (step.CatalogueId is null or { Length: 0 })
+                violations.Add($"step {i + 1}: {step.Action} requires catalogueId (setup has {catalogueCount} catalogues)");
+        }
+        Assert.True(violations.Count == 0,
+            $"{specName}: missing catalogueId on force actions:\n  {string.Join("\n  ", violations)}");
+    }
+
     // ── No trailing whitespace ───────────────────────────────────────
 
     [Theory]

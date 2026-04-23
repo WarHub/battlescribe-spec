@@ -164,7 +164,8 @@ public sealed class SpecRunner
             case "addChildForce":
                 outputs = _engine.AddChildForce(
                     forceId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceId"),
-                    step.ForceEntryId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceEntryId"));
+                    step.ForceEntryId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceEntryId"),
+                    step.CatalogueId);
                 break;
 
             case "removeForce":
