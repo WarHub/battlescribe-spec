@@ -15,12 +15,12 @@ incremental workarounds. When in doubt, choose the cleaner design.
 
 ```bash
 dotnet restore && dotnet build                                                     # first time
-dotnet test -p:TestProfile=pre-push                                                # lint + Oracle + NR frozen (~40s)
+dotnet test -p:TestProfile=pre-push                                                # lint + BS + NR frozen (~40s)
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
 ```
 
-**Always run `pre-push` before pushing.** It covers lint, Oracle conformance, and NR frozen
-(offline HAR replay) in one fast command. Other profiles: `lint`, `oracle`, `nr-frozen`,
+**Always run `pre-push` before pushing.** It covers lint, BattleScribe conformance, and NR frozen
+(offline HAR replay) in one fast command. Other profiles: `lint`, `bs`, `nr-frozen`,
 `nr-live`, `nr-live-visible`.
 
 ## NR frozen tests and HAR
@@ -42,7 +42,7 @@ dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr --json spec.ya
 dotnet run --project src/BattleScribeSpec.Debugger -- --export-xml ./out/ cost/cost-hidden-limit-validation
 ```
 
-Options: `--dump` (all steps), `--json`, `--engine oracle|nr`, `--no-headless`,
+Options: `--dump` (all steps), `--json`, `--engine bs|nr`, `--no-headless`,
 `--export-xml <dir>` (generate .gst/.cat XML files from spec setup and exit).
 Specs can include `action: dump` steps for explicit dump points.
 

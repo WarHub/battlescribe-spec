@@ -690,7 +690,7 @@ Comparison of the BattleScribe XSD/Java model against our
 ### Engine-relevant field coverage
 
 These fields exist in the XSD schema and Java engine model. They are present
-in protocol types, XML generators, Java model factory, and Oracle build methods,
+in protocol types, XML generators, Java model factory, and BattleScribe build methods,
 with conformance specs.
 
 | Protocol Type | Fields | Notes |

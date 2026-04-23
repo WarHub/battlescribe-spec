@@ -76,4 +76,4 @@ These types define what specs can assert on in `expectedState`.
 1. `ProtocolMessages.cs` — add fields to ActionCommand
 2. `Protocol/AdapterHandler.cs` — add case to HandleAction switch
 3. `IRosterEngine.cs` — add method to interface
-4. All engine implementations (Oracle, NR, JsonProtocol)
+4. All engine implementations (BattleScribe, NR, JsonProtocol)

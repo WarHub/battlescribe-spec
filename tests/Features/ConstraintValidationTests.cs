@@ -7,7 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// Tests that constraint data structures are correctly constructed for min/max enforcement
 /// via TestDataFactory.
 /// Note: These verify structure only, NOT runtime constraint enforcement.
-/// See ConstraintOracleTests for runtime enforcement tests.
+/// See ConstraintBattleScribeTests for runtime enforcement tests.
 /// </summary>
 [Trait("Category", "Unit")]
 public class ConstraintStructureTests

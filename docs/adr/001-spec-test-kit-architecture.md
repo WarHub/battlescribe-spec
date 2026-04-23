@@ -7,8 +7,8 @@
 ## Context
 
 The BattleScribe conformance spec suite (`battlescribe-spec`) validates roster-editing engine
-behavior against 179 declarative YAML specs using the original Java BattleScribe engine as an
-oracle (via IKVM.NET). The current architecture requires every engine under test to implement
+behavior against 179 declarative YAML specs using the original Java BattleScribe engine
+(via IKVM.NET). The current architecture requires every engine under test to implement
 `IRosterEngine` **in C#** and run inside the same .NET process. This limits the spec suite to
 .NET engines only.
 
@@ -211,7 +211,7 @@ Define engine protocol in Protobuf, communicate via gRPC.
 3. **Build CLI runner** — New `BattleScribeSpec.Runner` console project. Launches adapter
    process, communicates via JSON lines, runs all specs, reports results.
 
-4. **Build reference .NET adapter** — Console app wrapping `OracleRosterEngine` with JSON-line
+4. **Build reference .NET adapter** — Console app wrapping `BattleScribeRosterEngine` with JSON-line
    protocol. Serves as reference implementation and protocol test.
 
 5. **Containerize** — Dockerfile for runner + reference adapter. Publish to GitHub Container

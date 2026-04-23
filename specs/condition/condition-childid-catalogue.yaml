@@ -42,7 +42,7 @@ steps:
     entryId: se-watcher
   # childId=cat-1 references a Catalogue ID used as a count filter for atLeast.
   # Neither engine resolves catalogue IDs as childId filters — the condition
-  # returns false on both BS Oracle and NR.
+  # returns false on both BS and NR.
   - expectedState:
       forces:
         - selectionCount: 1

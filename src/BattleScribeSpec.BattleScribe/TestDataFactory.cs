@@ -11,7 +11,7 @@ namespace BattleScribeSpec;
 /// <remarks>
 /// TODO: Consider moving to the test project (BattleScribeSpec.Tests) since this is
 /// test infrastructure that doesn't need to ship with the main library. Currently in
-/// src/ because both OracleTestFixture and test project depend on it.
+/// src/ because both BattleScribeTestFixture and test project depend on it.
 /// </remarks>
 public static class TestDataFactory
 {

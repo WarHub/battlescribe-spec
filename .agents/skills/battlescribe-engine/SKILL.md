@@ -1,16 +1,16 @@
 ---
-name: oracle-engine
+name: battlescribe-engine
 description: >
-  Work with the BattleScribe Oracle engine — the IKVM-based Java interop reference
-  engine. Use when debugging Oracle test failures, understanding Java reflection quirks,
+  Work with the BattleScribe (BS) engine adapter — the IKVM-based Java interop engine.
+  Use when debugging BS engine test failures, understanding Java reflection quirks,
   modifying JavaModelFactory, or troubleshooting XML loading and composite entry IDs.
 ---
 
-# Oracle Engine
+# BattleScribe engine
 
-The Oracle wraps the original BattleScribe Java engine (v2.3.21) via IKVM.NET, compiling
-Java bytecode to .NET assemblies. It serves as the reference implementation for spec
-conformance testing.
+The BattleScribe engine wraps the original BattleScribe desktop Java engine (v2.3.21) via IKVM.NET, compiling
+Java bytecode to .NET assemblies. It is one of the two conformance engines under test
+(alongside NewRecruit).
 
 ## Architecture
 
@@ -18,9 +18,9 @@ conformance testing.
 ProtocolMessages (spec YAML)
     ↓ JavaModelFactory
 Java model objects (GameSystem, Catalogue, ...)
-    ↓ BattleScribeOracle.Initialize()
+    ↓ BattleScribeEngine.Initialize()
 JavaEngine (_engine) — obfuscated net.battlescribe.engine.a.f
-    ↓ OracleRosterEngine
+    ↓ BattleScribeRosterEngine
 IRosterEngine interface (shared with NR adapter)
 ```
 
@@ -28,10 +28,10 @@ IRosterEngine interface (shared with NR adapter)
 
 | File | Purpose |
 |------|---------|
-| `src/BattleScribeSpec.Oracle/BattleScribeOracle.cs` | Core engine wrapper |
-| `src/BattleScribeSpec.Oracle/OracleRosterEngine.cs` | IRosterEngine adapter |
-| `src/BattleScribeSpec.Oracle/JavaModelFactory.cs` | Protocol → Java object factory |
-| `src/BattleScribeSpec.Oracle/BattleScribeSpec.Oracle.csproj` | JAR dependencies |
+| `src/BattleScribeSpec.BattleScribe/BattleScribeEngine.cs` | Core engine wrapper |
+| `src/BattleScribeSpec.BattleScribe/BattleScribeRosterEngine.cs` | IRosterEngine adapter |
+| `src/BattleScribeSpec.BattleScribe/JavaModelFactory.cs` | Protocol → Java object factory |
+| `src/BattleScribeSpec.BattleScribe/BattleScribeSpec.BattleScribe.csproj` | JAR dependencies |
 
 ## IKVM Java interop
 
@@ -60,9 +60,9 @@ using JavaCatalogueManager = net.battlescribe.engine.a.d;
 
 ### 1. Auto-select via reflection (x() method)
 
-The private `x()` method auto-selects entries with `min≥1` constraints. The Oracle
+The private `x()` method auto-selects entries with `min≥1` constraints. the BattleScribe engine
 invokes it via reflection because the desktop app calls it during `setRoster(bl=true)`,
-but the Oracle creates forces separately via `b()` which doesn't trigger auto-select.
+but the BS engine creates forces separately via `b()` which doesn't trigger auto-select.
 
 ```csharp
 var method = _engine.GetType().GetMethod("x",
@@ -123,13 +123,13 @@ find the 4th value (desktop), since the order is: android, android-debug, ios, d
 
 ### 7. Not thread-safe
 
-The Oracle wrapper is **not thread-safe**. All methods must be called from a single
+The BattleScribe engine wrapper is **not thread-safe**. All methods must be called from a single
 thread, even though the `threadCount` parameter controls Java engine internals.
 
 ### 8. Error remapping
 
 Validation errors are distributed across roster elements (roster/force/category/selection).
-The Oracle remaps errors using English message string matching ("too many", "too much").
+The BS engine remaps errors using English message string matching ("too many", "too much").
 This is accepted because the Java engine is EOL (v2.3.21) with stable messages.
 
 ## JAR dependencies

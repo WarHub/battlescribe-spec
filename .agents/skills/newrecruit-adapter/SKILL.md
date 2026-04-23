@@ -22,7 +22,7 @@ BattleScribe XML (.gst/.cat)
     ↓ loadSystemFromFs (Pinia store)
 NR Vue app (Playwright browser)
     ↓ NewRecruitStateReader (JavaScript evaluation)
-IRosterEngine state (shared with Oracle)
+IRosterEngine state (shared with BattleScribe)
 ```
 
 **Key files:**

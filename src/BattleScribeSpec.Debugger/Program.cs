@@ -3,7 +3,7 @@ using BattleScribeSpec.NewRecruit;
 
 // ===== Parse arguments =====
 string? specInput = null;
-var engineName = "oracle";
+var engineName = "battlescribe";
 var dumpAll = false;
 var json = false;
 var headless = true;
@@ -16,6 +16,7 @@ for (var i = 0; i < args.Length; i++)
         case "--engine" when i + 1 < args.Length:
             engineName = args[++i].ToLowerInvariant() switch
             {
+                "bs" => "battlescribe",
                 "nr" => "newrecruit",
                 var name => name
             };
@@ -213,8 +214,8 @@ async Task<(IRosterEngine Engine, IDumpEnricher? Enricher)> CreateEngine(string 
 {
     switch (name)
     {
-        case "oracle" or "battlescribe":
-            return (new OracleRosterEngine(), null);
+        case "bs" or "battlescribe":
+            return (new BattleScribeRosterEngine(), null);
 
         case "nr" or "newrecruit":
         {
@@ -238,7 +239,7 @@ async Task<(IRosterEngine Engine, IDumpEnricher? Enricher)> CreateEngine(string 
         }
 
         default:
-            throw new ArgumentException($"Unknown engine: '{name}'. Use 'oracle' or 'nr'.");
+            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs' or 'nr'.");
     }
 }
 
@@ -275,7 +276,7 @@ static void PrintUsage()
                           or "-" for stdin
 
         Options:
-          --engine <name> Engine to use: oracle (default), nr
+          --engine <name> Engine to use: bs (default), nr
           --dump          Dump state after every step (default: after last step only)
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)

@@ -94,16 +94,16 @@ battlescribe-spec/
 ├── specs/                          # 246 YAML spec files
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
-│   ├── BattleScribeSpec.Oracle/    # Oracle engine (IKVM + BattleScribe JARs)
+│   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)
 │   ├── BattleScribeSpec.Debugger/ # Spec debugger (bs-spec-debug)
 │   ├── BattleScribeSpec.Runner/   # CLI runner (bs-spec-runner)
-│   ├── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps oracle)
+│   ├── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps BattleScribe)
 │   ├── BattleScribeSpec.NewRecruit/        # New Recruit adapter (Playwright)
 │   └── BattleScribeSpec.NewRecruit.HarTool/  # HAR recording console tool
 ├── tests/
 │   ├── Infrastructure/             # Test fixtures and helpers
 │   ├── Conformance/                # YAML spec-driven conformance tests
-│   ├── Oracle/                     # Reference oracle engine tests
+│   ├── BattleScribe/                     # BattleScribe engine tests
 │   ├── Features/                   # Domain feature tests
 │   ├── Integration/                # End-to-end and real-world data tests
 │   └── Regression/                 # Regression and protocol tests
@@ -132,7 +132,7 @@ battlescribe-spec/
 ### Setup
 
 ```powershell
-# Clone data repositories (needed for real-world oracle tests)
+# Clone data repositories (needed for real-world BattleScribe tests)
 ./setup.ps1
 ```
 
@@ -151,7 +151,7 @@ Use test profiles for one-command test runs:
 dotnet test -p:TestProfile=nr-live          # live NR conformance + integration (sets NR_ENGINE_URL automatically)
 dotnet test -p:TestProfile=nr-live-visible   # same, with visible browser window
 dotnet test -p:TestProfile=nr-frozen         # frozen NR conformance (offline, needs ./setup.ps1)
-dotnet test -p:TestProfile=oracle            # Oracle engine conformance
+dotnet test -p:TestProfile=bs            # BattleScribe engine conformance
 dotnet test -p:TestProfile=lint              # spec lint and structure checks
 ```
 
@@ -160,7 +160,7 @@ filters automatically. You can also run suites manually with `--filter`:
 
 | Suite | Command | Notes |
 |-------|---------|-------|
-| Oracle conformance | `dotnet test --filter "SpecConformanceTests"` | Always available |
+| BattleScribe conformance | `dotnet test --filter "SpecConformanceTests"` | Always available |
 | Frozen NR conformance | `dotnet test --filter "FrozenNewRecruitConformanceTests"` | Requires `./setup.ps1` (downloads HAR snapshot) |
 | Live NR conformance | `dotnet test --filter "LiveNewRecruitConformanceTests"` | Requires `NR_ENGINE_URL` env var + `./setup.ps1` (installs Playwright) |
 | Lint/formatting | `dotnet test --filter "SpecLintTests"` | Always available |

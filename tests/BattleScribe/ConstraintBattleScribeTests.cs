@@ -5,7 +5,7 @@ using Xunit;
 namespace BattleScribeSpec.Tests;
 
 [Trait("Category", "Unit")]
-public class ConstraintOracleTests
+public class ConstraintBattleScribeTests
 {
     private static (ProtocolGameSystem gs, ProtocolCatalogue[] cats) MakeUncategorisedScenario(ProtocolSelectionEntry[] entries)
     {
@@ -52,45 +52,45 @@ public class ConstraintOracleTests
     [Fact]
     public void MinConstraint_ViolatedWhenNotEnoughSelections()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeCategorisedScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Constraints = [new ProtocolConstraint { Id = "c-min", Type = "min", Value = 1, Field = "selections", Scope = "parent" }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
 
         // Auto-select satisfies min=1 — no error yet
-        Assert.False(oracle.HasValidationErrors(), "Min=1 constraint should be satisfied by auto-selection.");
+        Assert.False(engine.HasValidationErrors(), "Min=1 constraint should be satisfied by auto-selection.");
 
         // Remove the auto-selected entry to trigger violation
-        oracle.DeselectFirstSelection();
-        var errors = oracle.GetValidationErrors();
-        Assert.True(oracle.HasValidationErrors(), "Expected a min-constraint validation error after deselecting.");
+        engine.DeselectFirstSelection();
+        var errors = engine.GetValidationErrors();
+        Assert.True(engine.HasValidationErrors(), "Expected a min-constraint validation error after deselecting.");
         Assert.NotEmpty(errors);
     }
 
     [Fact]
     public void MaxConstraint_ViolatedWhenTooManySelections()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeCategorisedScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Constraints = [new ProtocolConstraint { Id = "c-max", Type = "max", Value = 1, Field = "selections", Scope = "parent" }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
 
-        oracle.SelectFirstAvailableEntry();
-        var errorsAfter1 = oracle.GetValidationErrors();
-        Assert.False(oracle.HasValidationErrors());
+        engine.SelectFirstAvailableEntry();
+        var errorsAfter1 = engine.GetValidationErrors();
+        Assert.False(engine.HasValidationErrors());
         Assert.Empty(errorsAfter1);
 
-        oracle.SelectFirstAvailableEntry();
-        var errorsAfter2 = oracle.GetValidationErrors();
-        Assert.True(oracle.HasValidationErrors(), "Expected a max-constraint validation error after selecting twice.");
+        engine.SelectFirstAvailableEntry();
+        var errorsAfter2 = engine.GetValidationErrors();
+        Assert.True(engine.HasValidationErrors(), "Expected a max-constraint validation error after selecting twice.");
         Assert.NotEmpty(errorsAfter2);
         Assert.True(errorsAfter2.Count >= errorsAfter1.Count,
             $"Expected error count to stay the same or increase after exceeding max (before={errorsAfter1.Count}, after={errorsAfter2.Count}).");
@@ -99,7 +99,7 @@ public class ConstraintOracleTests
     [Fact]
     public void MinAndMax_ConstraintsSatisfied()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeCategorisedScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Constraints = [
@@ -108,49 +108,49 @@ public class ConstraintOracleTests
                 ] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
 
-        oracle.SelectFirstAvailableEntry();
-        var errors = oracle.GetValidationErrors();
-        Assert.False(oracle.HasValidationErrors());
+        engine.SelectFirstAvailableEntry();
+        var errors = engine.GetValidationErrors();
+        Assert.False(engine.HasValidationErrors());
         Assert.Empty(errors);
     }
 
     [Fact]
     public void MaxUnlimited_NoViolation()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeCategorisedScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Constraints = [new ProtocolConstraint { Id = "c-max", Type = "max", Value = -1, Field = "selections", Scope = "parent" }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
 
         for (int i = 0; i < 5; i++)
-            oracle.SelectFirstAvailableEntry();
+            engine.SelectFirstAvailableEntry();
 
-        var errors = oracle.GetValidationErrors();
-        Assert.False(oracle.HasValidationErrors());
+        var errors = engine.GetValidationErrors();
+        Assert.False(engine.HasValidationErrors());
         Assert.Empty(errors);
     }
 
     [Fact]
     public void MinConstraint_UncategorisedParentScope_IsSkipped()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeUncategorisedScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Constraints = [new ProtocolConstraint { Id = "c-min", Type = "min", Value = 1, Field = "selections", Scope = "parent" }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
 
-        var errors = oracle.GetValidationErrors();
-        Assert.False(oracle.HasValidationErrors());
+        var errors = engine.GetValidationErrors();
+        Assert.False(engine.HasValidationErrors());
         Assert.Empty(errors);
     }
 
@@ -158,26 +158,26 @@ public class ConstraintOracleTests
     public void MaxConstraint_TripleViolation_ErrorMultiplicity()
     {
         // Diagnostic: 3 selections of max=1 — verify exact error count and placement
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var (gs, cats) = MakeCategorisedScenario([
             new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                 Constraints = [new ProtocolConstraint { Id = "c-max", Type = "max", Value = 1, Field = "selections", Scope = "parent" }] }
         ]);
 
-        oracle.SetupFromProtocol(gs, cats);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, cats);
+        engine.AddForceByIndex(0);
 
         // 1st selection — at limit
-        oracle.SelectFirstAvailableEntry();
-        var errorsAt1 = oracle.GetValidationErrors();
+        engine.SelectFirstAvailableEntry();
+        var errorsAt1 = engine.GetValidationErrors();
 
         // 2nd selection — 1 over limit
-        oracle.SelectFirstAvailableEntry();
-        var errorsAt2 = oracle.GetValidationErrors();
+        engine.SelectFirstAvailableEntry();
+        var errorsAt2 = engine.GetValidationErrors();
 
         // 3rd selection — 2 over limit
-        oracle.SelectFirstAvailableEntry();
-        var errorsAt3 = oracle.GetValidationErrors();
+        engine.SelectFirstAvailableEntry();
+        var errorsAt3 = engine.GetValidationErrors();
 
         Assert.Empty(errorsAt1);
         Assert.NotEmpty(errorsAt2);
@@ -199,7 +199,7 @@ public class ConstraintOracleTests
     public void ForceEntryMaxConstraint_ResolvesEntryAndConstraintIds()
     {
         // Dump actual errors for force-field constraints on ForceEntry (max=2, 3 forces)
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -212,12 +212,12 @@ public class ConstraintOracleTests
             }],
         };
         var cat = new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs" };
-        oracle.SetupFromProtocol(gs, [cat]);
-        oracle.AddForceByIndex(0);
-        oracle.AddForceByIndex(0);
-        oracle.AddForceByIndex(0); // 3 forces, max=2
+        engine.SetupFromProtocol(gs, [cat]);
+        engine.AddForceByIndex(0);
+        engine.AddForceByIndex(0);
+        engine.AddForceByIndex(0); // 3 forces, max=2
 
-        var errors = oracle.GetValidationErrors();
+        var errors = engine.GetValidationErrors();
         // Each error should have entryId=fe-patrol, constraintId=con-max-forces
         Assert.NotEmpty(errors);
         foreach (var e in errors)
@@ -232,7 +232,7 @@ public class ConstraintOracleTests
     public void SharedEntryConstraint_ResolvesEntryAndConstraintIds()
     {
         // Dump actual errors for shared entry with scope=roster, shared=true
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -266,13 +266,13 @@ public class ConstraintOracleTests
                 Type = "selectionEntry",
             }],
         };
-        oracle.SetupFromProtocol(gs, [cat]);
-        oracle.AddForceByIndex(0);
-        oracle.SelectFirstAvailableEntry();
-        oracle.SelectFirstAvailableEntry();
-        oracle.SelectFirstAvailableEntry(); // 3 selections, max=2
+        engine.SetupFromProtocol(gs, [cat]);
+        engine.AddForceByIndex(0);
+        engine.SelectFirstAvailableEntry();
+        engine.SelectFirstAvailableEntry();
+        engine.SelectFirstAvailableEntry(); // 3 selections, max=2
 
-        var errors = oracle.GetValidationErrors();
+        var errors = engine.GetValidationErrors();
         Assert.NotEmpty(errors);
         // Check that error has resolved entry/constraint IDs
         foreach (var e in errors)
@@ -286,7 +286,7 @@ public class ConstraintOracleTests
     public void SelectionEntryFieldForces_ResolvesEntryAndConstraintIds()
     {
         // field=forces on a SelectionEntry — always violated (force count is always 0)
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -306,10 +306,10 @@ public class ConstraintOracleTests
                 Constraints = [new ProtocolConstraint { Id = "con-force-field", Type = "min", Value = 1, Field = "forces", Scope = "roster" }],
             }],
         };
-        oracle.SetupFromProtocol(gs, [cat]);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, [cat]);
+        engine.AddForceByIndex(0);
 
-        var errors = oracle.GetValidationErrors();
+        var errors = engine.GetValidationErrors();
         Assert.NotEmpty(errors);
         foreach (var e in errors)
         {
@@ -322,7 +322,7 @@ public class ConstraintOracleTests
     [Fact]
     public void EntryLinkOwnConstraint_ResolvesFromLinkConstraint()
     {
-        var engine = new OracleRosterEngine();
+        var engine = new BattleScribeRosterEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",

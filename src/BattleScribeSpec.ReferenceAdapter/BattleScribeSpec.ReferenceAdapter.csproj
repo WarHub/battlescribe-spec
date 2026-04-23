@@ -12,15 +12,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BattleScribeSpec.Oracle\BattleScribeSpec.Oracle.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.BattleScribe\BattleScribeSpec.BattleScribe.csproj" />
   </ItemGroup>
 
   <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
     <PropertyGroup>
-      <_OracleBinPath>$(ArtifactsPath)\bin\BattleScribeSpec.Oracle\$(ArtifactsPivots)\</_OracleBinPath>
+      <_BattleScribeBinPath>$(ArtifactsPath)\bin\BattleScribeSpec.BattleScribe\$(ArtifactsPivots)\</_BattleScribeBinPath>
     </PropertyGroup>
     <ItemGroup>
-      <IkvmDlls Include="$(_OracleBinPath)DataUtils.dll;$(_OracleBinPath)CommonsIo.dll;$(_OracleBinPath)KotlinStdlib.dll;$(_OracleBinPath)KotlinStdlibCommon.dll;$(_OracleBinPath)Stax.dll;$(_OracleBinPath)StaxApi.dll" />
+      <IkvmDlls Include="$(_BattleScribeBinPath)DataUtils.dll;$(_BattleScribeBinPath)CommonsIo.dll;$(_BattleScribeBinPath)KotlinStdlib.dll;$(_BattleScribeBinPath)KotlinStdlibCommon.dll;$(_BattleScribeBinPath)Stax.dll;$(_BattleScribeBinPath)StaxApi.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>

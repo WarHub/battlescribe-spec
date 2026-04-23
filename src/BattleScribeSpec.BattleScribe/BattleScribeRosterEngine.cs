@@ -6,42 +6,42 @@ namespace BattleScribeSpec;
 
 /// <summary>
 /// IRosterEngine implementation backed by the BattleScribe Java engine via IKVM.
-/// Serves as the reference oracle for conformance testing.
+/// One of the conformance engines under test (alongside NewRecruit).
 /// All addressing is ID-based: definition IDs for data references,
 /// instance IDs (from previous action outputs) for roster element references.
 /// </summary>
-public sealed class OracleRosterEngine : IRosterEngine
+public sealed class BattleScribeRosterEngine : IRosterEngine
 {
-    private readonly BattleScribeOracle _oracle = new();
+    private readonly BattleScribeEngine _engine = new();
     private string? _specId;
 
     public void SetTestContext(string specId) => _specId = specId;
 
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
-        _oracle.RosterName = _specId;
-        return _oracle.SetupFromProtocol(gameSystem, catalogues);
+        _engine.RosterName = _specId;
+        return _engine.SetupFromProtocol(gameSystem, catalogues);
     }
 
     public ActionOutputs AddForce(string forceEntryId, string catalogueId)
     {
-        var forceEntry = _oracle.FindForceEntryById(forceEntryId)
+        var forceEntry = _engine.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
 
-        var catalogue = _oracle.ResolveCatalogue(catalogueId);
-        var linked = _oracle.ResolveLinkedCatalogues(catalogue);
+        var catalogue = _engine.ResolveCatalogue(catalogueId);
+        var linked = _engine.ResolveLinkedCatalogues(catalogue);
         var forcesBefore = new HashSet<net.battlescribe.model.roster.Force>(
-            _oracle.GetForces(), ReferenceEqualityComparer.Instance);
+            _engine.GetForces(), ReferenceEqualityComparer.Instance);
 
-        var (force, _) = _oracle.AddForce(catalogue, forceEntry, linked);
+        var (force, _) = _engine.AddForce(catalogue, forceEntry, linked);
 
         if (force is null)
             throw new InvalidOperationException("Java engine returned null force for AddForce.");
 
-        foreach (var f in _oracle.GetForces())
+        foreach (var f in _engine.GetForces())
         {
             if (!forcesBefore.Contains(f))
-                _oracle.TrackForceCatalogue(f, catalogue);
+                _engine.TrackForceCatalogue(f, catalogue);
         }
 
         // Re-read force from roster to capture auto-selected entries (from constraints)
@@ -53,31 +53,31 @@ public sealed class OracleRosterEngine : IRosterEngine
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
     {
         var parentForce = FindForceById(parentForceId);
-        var forceEntry = _oracle.FindForceEntryById(forceEntryId)
+        var forceEntry = _engine.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
 
-        var catalogue = _oracle.ResolveCatalogue(catalogueId);
+        var catalogue = _engine.ResolveCatalogue(catalogueId);
 
-        var childForce = _oracle.CreateChildForce(parentForce, forceEntry, catalogue);
+        var childForce = _engine.CreateChildForce(parentForce, forceEntry, catalogue);
         return new ActionOutputs { ForceId = childForce.getId() };
     }
 
     public void RemoveForce(string forceId)
     {
         var force = FindForceById(forceId);
-        _oracle.RemoveForce(force);
+        _engine.RemoveForce(force);
     }
 
     public ActionOutputs SelectEntry(string forceId, string entryId)
     {
         var force = FindForceById(forceId);
-        var entries = _oracle.GetEntriesForForce(force);
+        var entries = _engine.GetEntriesForForce(force);
         var entry = FindEntryById(entries, entryId)
             ?? throw new InvalidOperationException(
                 $"Entry '{entryId}' not found in force '{forceId}' " +
                 $"(have {entries.Count} entries: [{string.Join(", ", entries.Select(e => $"{e.getId()}/{e.getName()}"))}]).");
 
-        var createdSelections = _oracle.SelectEntry(force, entry);
+        var createdSelections = _engine.SelectEntry(force, entry);
 
         // The primary created selection
         var primarySelection = createdSelections.Count > 0 ? createdSelections[0] : null;
@@ -102,8 +102,8 @@ public sealed class OracleRosterEngine : IRosterEngine
         var force = FindForceById(forceId);
         var parentSelection = FindSelectionById(force, parentSelectionId);
         var parentEntryId = parentSelection.getEntryId();
-        var parentEntry = _oracle.GetEntryById(parentEntryId)
-            ?? _oracle.GetEntryByCompositeId(parentEntryId)
+        var parentEntry = _engine.GetEntryById(parentEntryId)
+            ?? _engine.GetEntryByCompositeId(parentEntryId)
             ?? throw new InvalidOperationException($"Parent entry '{parentEntryId}' not found in entry lookup.");
 
         var childEntries = FlattenChildEntries(parentEntry);
@@ -111,7 +111,7 @@ public sealed class OracleRosterEngine : IRosterEngine
             ?? throw new InvalidOperationException(
                 $"Child entry '{entryId}' not found under parent selection '{parentSelectionId}'.");
 
-        var createdSelections = _oracle.SelectEntry(parentSelection, childEntry);
+        var createdSelections = _engine.SelectEntry(parentSelection, childEntry);
         var primarySelection = createdSelections.Count > 0 ? createdSelections[0] : null;
 
         var outputs = new ActionOutputs
@@ -131,7 +131,7 @@ public sealed class OracleRosterEngine : IRosterEngine
     {
         var force = FindForceById(forceId);
         var selection = FindSelectionById(force, selectionId);
-        _oracle.DeselectEntry(selection);
+        _engine.DeselectEntry(selection);
     }
 
     public void SetSelectionCount(string forceId, string selectionId, int count)
@@ -139,20 +139,20 @@ public sealed class OracleRosterEngine : IRosterEngine
         var force = FindForceById(forceId);
         var selection = FindSelectionById(force, selectionId);
         var entryId = selection.getEntryId();
-        var dataEntry = _oracle.GetEntryById(entryId)
-            ?? _oracle.GetEntryByCompositeId(entryId)
+        var dataEntry = _engine.GetEntryById(entryId)
+            ?? _engine.GetEntryByCompositeId(entryId)
             ?? throw new InvalidOperationException(
                 $"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
         // Find the parent of this selection (the container that holds it)
         var parent = FindSelectionParent(force, selectionId);
-        _oracle.SetNumSelections(parent, dataEntry, count);
+        _engine.SetNumSelections(parent, dataEntry, count);
     }
 
     public ActionOutputs DuplicateSelection(string forceId, string selectionId)
     {
         var force = FindForceById(forceId);
         var selection = FindSelectionById(force, selectionId);
-        var duplicated = _oracle.DuplicateSelection(selection);
+        var duplicated = _engine.DuplicateSelection(selection);
         return new ActionOutputs
         {
             SelectionId = duplicated?.getId()
@@ -167,16 +167,16 @@ public sealed class OracleRosterEngine : IRosterEngine
 
     public void SetCostLimit(string costTypeId, double value)
     {
-        var costType = _oracle.GetCostTypeById(costTypeId)
+        var costType = _engine.GetCostTypeById(costTypeId)
             ?? throw new InvalidOperationException($"Cost type '{costTypeId}' not found.");
-        _oracle.SetCostLimit(costType, value);
+        _engine.SetCostLimit(costType, value);
     }
 
     public RosterState GetRosterState()
     {
-        var roster = _oracle.GetRoster();
-        var forces = _oracle.GetForces();
-        var errors = _oracle.GetValidationErrors();
+        var roster = _engine.GetRoster();
+        var forces = _engine.GetForces();
+        var errors = _engine.GetValidationErrors();
 
         // Sort forces alphabetically by name to match BS render layer behavior.
         // BS's own RenderRoster sorts forces via Collections.sort(new f()) which uses
@@ -198,15 +198,15 @@ public sealed class OracleRosterEngine : IRosterEngine
             errors);
     }
 
-    public IReadOnlyList<ValidationErrorState> GetValidationErrors() => _oracle.GetValidationErrors();
+    public IReadOnlyList<ValidationErrorState> GetValidationErrors() => _engine.GetValidationErrors();
 
     // ===== DataSource support (file-based setup + name-based actions) =====
 
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
     {
-        _oracle.RosterName = _specId;
-        // Write files to a temp directory so the oracle can load them via SimpleXML
-        var tempDir = Path.Combine(Path.GetTempPath(), "bsspec-oracle-" + Guid.NewGuid().ToString("N")[..8]);
+        _engine.RosterName = _specId;
+        // Write files to a temp directory so the engine can load them via SimpleXML
+        var tempDir = Path.Combine(Path.GetTempPath(), "bsspec-engine-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -222,23 +222,23 @@ public sealed class OracleRosterEngine : IRosterEngine
                 return ["No .gst (game system) file found in data source files."];
             if (gstFiles.Length > 1)
                 return [$"Expected exactly one .gst file, found {gstFiles.Length}."];
-            _oracle.LoadGameSystemFile(gstFiles[0]);
+            _engine.LoadGameSystemFile(gstFiles[0]);
 
             // Load all .cat files with dependency resolution
             var catFiles = Directory.GetFiles(tempDir, "*.cat");
             foreach (var catFile in catFiles)
             {
-                _oracle.LoadCatalogueWithDependencies(catFile, tempDir);
+                _engine.LoadCatalogueWithDependencies(catFile, tempDir);
             }
 
-            return _oracle.InitializeFromLoadedData();
+            return _engine.InitializeFromLoadedData();
         }
         finally
         {
             try { Directory.Delete(tempDir, recursive: true); }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[OracleRosterEngine] Failed to clean up temp dir '{tempDir}': {ex.Message}");
+                Console.Error.WriteLine($"[BattleScribeRosterEngine] Failed to clean up temp dir '{tempDir}': {ex.Message}");
             }
         }
     }
@@ -250,14 +250,14 @@ public sealed class OracleRosterEngine : IRosterEngine
     /// </summary>
     private net.battlescribe.model.roster.Force FindForceById(string forceId)
     {
-        foreach (var force in _oracle.GetForces())
+        foreach (var force in _engine.GetForces())
         {
             var found = FindForceByIdRecursive(force, forceId);
             if (found is not null) return found;
         }
         throw new InvalidOperationException(
             $"Force with ID '{forceId}' not found in roster " +
-            $"({_oracle.GetForces().Count} top-level forces).");
+            $"({_engine.GetForces().Count} top-level forces).");
     }
 
     private static net.battlescribe.model.roster.Force? FindForceByIdRecursive(
@@ -418,10 +418,10 @@ public sealed class OracleRosterEngine : IRosterEngine
         }
     }
 
-    public void Dispose() => _oracle.Dispose();
+    public void Dispose() => _engine.Dispose();
 
-    // Expose oracle for advanced operations in existing tests
-    internal BattleScribeOracle Oracle => _oracle;
+    // Expose engine for advanced operations in existing tests
+    internal BattleScribeEngine Engine => _engine;
 
     private ForceState CaptureForce(net.battlescribe.model.roster.Force f, int? rootForceIndex = null)
     {
@@ -431,9 +431,9 @@ public sealed class OracleRosterEngine : IRosterEngine
         var childForces = JavaListToList<net.battlescribe.model.roster.Force>(f.getForces());
         var pubId = f.getPublicationId();
         // Use engine-resolved ForceEntry (modifiers applied) for hidden state
-        var resolvedForceEntry = _oracle.GetResolvedForceEntry(f);
+        var resolvedForceEntry = _engine.GetResolvedForceEntry(f);
         var hidden = resolvedForceEntry?.isHidden()
-            ?? _oracle.FindForceEntryById(f.getEntryId())?.isHidden()
+            ?? _engine.FindForceEntryById(f.getEntryId())?.isHidden()
             ?? false;
         // Sort selections and child forces alphabetically to match BattleScribe render-layer ordering.
         selections = selections.OrderBy(s => s.getName(), StringComparer.OrdinalIgnoreCase).ToList();
@@ -443,7 +443,7 @@ public sealed class OracleRosterEngine : IRosterEngine
             f.getName() ?? "",
             f.getCatalogueId(),
             selections.Select(s => CaptureSelection(s, f)).ToList(),
-            rootForceIndex is { } rfi ? _oracle.GetAvailableEntryCountForForce(rfi) : null,
+            rootForceIndex is { } rfi ? _engine.GetAvailableEntryCountForForce(rfi) : null,
             ChildForces: childForces.Count > 0
                 ? childForces.Select(cf => CaptureForce(cf)).ToList()
                 : null,
@@ -465,9 +465,9 @@ public sealed class OracleRosterEngine : IRosterEngine
         var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());
         var categories = JavaListToList<net.battlescribe.model.roster.Category>(sel.getCategories());
         // Use engine's modifier-application to get resolved hidden state
-        var resolvedEntry = _oracle.GetResolvedEntry(force, sel);
+        var resolvedEntry = _engine.GetResolvedEntry(force, sel);
         var hidden = resolvedEntry?.isHidden()
-            ?? _oracle.GetEntryById(sel.getEntryId())?.isHidden()
+            ?? _engine.GetEntryById(sel.getEntryId())?.isHidden()
             ?? false;
         var pubId = sel.getPublicationId();
         return new SelectionState(
@@ -497,7 +497,7 @@ public sealed class OracleRosterEngine : IRosterEngine
             }).ToList(),
             Page: sel.getPage(),
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
-            PublicationName: _oracle.GetPublicationName(pubId));
+            PublicationName: _engine.GetPublicationName(pubId));
     }
 
     private static ProfileState CaptureProfile(net.battlescribe.model.data.Profile prof)

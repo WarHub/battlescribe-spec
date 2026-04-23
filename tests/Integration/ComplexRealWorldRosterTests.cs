@@ -7,7 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// 10 complex real-world roster tests using wh40k-9e data.
 /// Each test loads actual game system and catalogue files, builds a multi-unit roster,
-/// and validates costs, selections, and validation state against the oracle engine.
+/// and validates costs, selections, and validation state against the BattleScribe engine.
 /// Tests skip when wh40k-9e data is not available.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -18,53 +18,53 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     private const string SkipMessage = "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.";
 
     /// <summary>
-    /// Helper: load game system + primary catalogue with all linked dependencies, initialize oracle.
+    /// Helper: load game system + primary catalogue with all linked dependencies, initialize engine.
     /// The primary catalogue should be a playable (non-library) catalogue.
     /// Linked catalogues are discovered and loaded automatically.
     /// </summary>
-    private BattleScribeOracle LoadCatalogue(string primaryCatalogueName)
+    private BattleScribeEngine LoadCatalogue(string primaryCatalogueName)
     {
-        var oracle = new BattleScribeOracle();
+        var engine = new BattleScribeEngine();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
-        oracle.LoadGameSystemFile(gstFile);
+        engine.LoadGameSystemFile(gstFile);
 
         var catFile = Path.Combine(Wh40kDataDir, primaryCatalogueName + ".cat");
         Assert.True(File.Exists(catFile), $"Catalogue '{primaryCatalogueName}.cat' not found in {Wh40kDataDir}");
 
-        oracle.LoadCatalogueWithDependencies(catFile, Wh40kDataDir);
+        engine.LoadCatalogueWithDependencies(catFile, Wh40kDataDir);
         output.WriteLine($"Loaded primary: {primaryCatalogueName}");
 
-        var cats = oracle.GetLoadedCatalogues();
+        var cats = engine.GetLoadedCatalogues();
         foreach (var (id, name) in cats)
             output.WriteLine($"  Loaded catalogue: {name} ({id})");
 
         // Set the primary (non-library) catalogue as active
-        oracle.SetActiveCatalogue(cats.First(c => c.Name.Contains(primaryCatalogueName.Split(" - ").Last().Split(" ").First())).Id);
+        engine.SetActiveCatalogue(cats.First(c => c.Name.Contains(primaryCatalogueName.Split(" - ").Last().Split(" ").First())).Id);
 
-        var errors = oracle.InitializeFromLoadedData();
+        var errors = engine.InitializeFromLoadedData();
         output.WriteLine($"Init errors: {errors.Count}");
         foreach (var e in errors.Take(5))
             output.WriteLine($"  - {e}");
 
-        return oracle;
+        return engine;
     }
 
     /// <summary>
-    /// Helper: load game system + multiple catalogues (each with dependencies), initialize oracle.
+    /// Helper: load game system + multiple catalogues (each with dependencies), initialize engine.
     /// The first catalogue listed becomes the active catalogue.
     /// </summary>
-    private BattleScribeOracle LoadCatalogues(params string[] catalogueNames)
+    private BattleScribeEngine LoadCatalogues(params string[] catalogueNames)
     {
-        var oracle = new BattleScribeOracle();
+        var engine = new BattleScribeEngine();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
-        oracle.LoadGameSystemFile(gstFile);
+        engine.LoadGameSystemFile(gstFile);
 
         foreach (var name in catalogueNames)
         {
             var catFile = Path.Combine(Wh40kDataDir, name + ".cat");
             if (File.Exists(catFile))
             {
-                oracle.LoadCatalogueWithDependencies(catFile, Wh40kDataDir);
+                engine.LoadCatalogueWithDependencies(catFile, Wh40kDataDir);
                 output.WriteLine($"Loaded: {Path.GetFileName(catFile)}");
             }
             else
@@ -76,37 +76,37 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         // Set first catalogue as active
         if (catalogueNames.Length > 0)
         {
-            var cats = oracle.GetLoadedCatalogues();
+            var cats = engine.GetLoadedCatalogues();
             // Try to find the first catalogue by partial name match
             var firstName = catalogueNames[0].Split(" - ").Last();
             var match = cats.FirstOrDefault(c => c.Name.Contains(firstName, StringComparison.OrdinalIgnoreCase));
             if (match != default)
-                oracle.SetActiveCatalogue(match.Id);
+                engine.SetActiveCatalogue(match.Id);
         }
 
-        var errors = oracle.InitializeFromLoadedData();
+        var errors = engine.InitializeFromLoadedData();
         output.WriteLine($"Init errors: {errors.Count}");
         foreach (var e in errors.Take(5))
             output.WriteLine($"  - {e}");
 
-        return oracle;
+        return engine;
     }
 
     /// <summary>
     /// Helper: add force by index (typically 0 for the first/only force entry), log results.
     /// </summary>
-    private void AddForce(BattleScribeOracle oracle, string forceName, int forceEntryIndex = 0)
+    private void AddForce(BattleScribeEngine engine, string forceName, int forceEntryIndex = 0)
     {
-        oracle.AddForceByIndex(forceEntryIndex);
+        engine.AddForceByIndex(forceEntryIndex);
         output.WriteLine($"Added force: {forceName} (index {forceEntryIndex})");
     }
 
     /// <summary>
     /// Helper: select entry by name on force, log results.
     /// </summary>
-    private void SelectEntry(BattleScribeOracle oracle, string entryName, int forceIndex = 0)
+    private void SelectEntry(BattleScribeEngine engine, string entryName, int forceIndex = 0)
     {
-        var idx = oracle.SelectEntryByName(forceIndex, entryName);
+        var idx = engine.SelectEntryByName(forceIndex, entryName);
         Assert.True(idx >= 0, $"Entry '{entryName}' not found on force {forceIndex}");
         output.WriteLine($"  Selected: {entryName} (index {idx} on force {forceIndex})");
     }
@@ -114,9 +114,9 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     /// <summary>
     /// Helper: dump current roster state for debugging.
     /// </summary>
-    private void DumpState(BattleScribeOracle oracle)
+    private void DumpState(BattleScribeEngine engine)
     {
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
         output.WriteLine($"\n--- Roster State ---");
         output.WriteLine($"Forces: {snapshot.Forces.Count}");
         foreach (var cost in snapshot.Costs)
@@ -128,7 +128,7 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
             foreach (var sel in f.Selections)
                 output.WriteLine($"    - {sel.Name} ({sel.Type}, x{sel.Number}) [{string.Join(", ", sel.Costs.Select(c => $"{c.Name}={c.Value}"))}]");
         }
-        var valErrors = oracle.GetValidationErrors();
+        var valErrors = engine.GetValidationErrors();
         output.WriteLine($"Validation errors: {valErrors.Count}");
         foreach (var e in valErrors.Take(10))
             output.WriteLine($"  ! {e}");
@@ -143,28 +143,28 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     {
         Skip.IfNot(DataAvailable, SkipMessage);
         // Ultramarines is a playable chapter catalogue that links to SM library
-        using var oracle = LoadCatalogue("Imperium - Ultramarines");
+        using var engine = LoadCatalogue("Imperium - Ultramarines");
 
-        AddForce(oracle, "Battalion");
+        AddForce(engine, "Battalion");
 
         // HQ choices
-        SelectEntry(oracle, "Captain");
-        SelectEntry(oracle, "Librarian");
+        SelectEntry(engine, "Captain");
+        SelectEntry(engine, "Librarian");
 
         // Troops
-        SelectEntry(oracle, "Tactical Squad");
-        SelectEntry(oracle, "Intercessor Squad");
-        SelectEntry(oracle, "Assault Intercessor Squad");
+        SelectEntry(engine, "Tactical Squad");
+        SelectEntry(engine, "Intercessor Squad");
+        SelectEntry(engine, "Assault Intercessor Squad");
 
         // Elites
-        SelectEntry(oracle, "Bladeguard Veteran Squad");
+        SelectEntry(engine, "Bladeguard Veteran Squad");
 
         // Heavy Support
-        SelectEntry(oracle, "Eradicator Squad");
+        SelectEntry(engine, "Eradicator Squad");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         // Should have 1 force with 7+ selections (some units create sub-models)
         Assert.Single(snapshot.Forces);
@@ -198,21 +198,21 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     public void Roster02_ImperialKnightsSuperHeavy()
     {
         Skip.IfNot(DataAvailable, SkipMessage);
-        using var oracle = LoadCatalogue("Imperium - Imperial Knights");
+        using var engine = LoadCatalogue("Imperium - Imperial Knights");
 
-        AddForce(oracle, "Super-Heavy");
+        AddForce(engine, "Super-Heavy");
 
         // Big Knights (Questoris class)
-        SelectEntry(oracle, "Knight Paladin");
-        SelectEntry(oracle, "Knight Errant");
-        SelectEntry(oracle, "Knight Crusader");
+        SelectEntry(engine, "Knight Paladin");
+        SelectEntry(engine, "Knight Errant");
+        SelectEntry(engine, "Knight Crusader");
 
         // Armiger support
-        SelectEntry(oracle, "Armiger Warglaives");
+        SelectEntry(engine, "Armiger Warglaives");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Count >= 4,
@@ -237,27 +237,27 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     public void Roster03_ChaosDaemonsMultiGod()
     {
         Skip.IfNot(DataAvailable, SkipMessage);
-        using var oracle = LoadCatalogue("Chaos - Daemons");
+        using var engine = LoadCatalogue("Chaos - Daemons");
 
-        AddForce(oracle, "Battalion");
+        AddForce(engine, "Battalion");
 
         // Khorne units
-        SelectEntry(oracle, "Bloodletters");
-        SelectEntry(oracle, "Bloodmaster");
+        SelectEntry(engine, "Bloodletters");
+        SelectEntry(engine, "Bloodmaster");
 
         // Nurgle units
-        SelectEntry(oracle, "Plaguebearers");
-        SelectEntry(oracle, "Beasts of Nurgle");
+        SelectEntry(engine, "Plaguebearers");
+        SelectEntry(engine, "Beasts of Nurgle");
 
         // Tzeentch units
-        SelectEntry(oracle, "Pink Horrors");
+        SelectEntry(engine, "Pink Horrors");
 
         // Slaanesh units
-        SelectEntry(oracle, "Daemonettes");
+        SelectEntry(engine, "Daemonettes");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Count >= 6,
@@ -284,26 +284,26 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     public void Roster04_ThousandSonsPsychic()
     {
         Skip.IfNot(DataAvailable, SkipMessage);
-        using var oracle = LoadCatalogue("Chaos - Thousand Sons");
+        using var engine = LoadCatalogue("Chaos - Thousand Sons");
 
-        AddForce(oracle, "Battalion");
+        AddForce(engine, "Battalion");
 
         // HQ: sorcerer characters
-        SelectEntry(oracle, "Ahriman");
-        SelectEntry(oracle, "Exalted Sorcerer");
-        SelectEntry(oracle, "Infernal Master");
+        SelectEntry(engine, "Ahriman");
+        SelectEntry(engine, "Exalted Sorcerer");
+        SelectEntry(engine, "Infernal Master");
 
         // Troops
-        SelectEntry(oracle, "Rubric Marines");
-        SelectEntry(oracle, "Rubric Marines");
-        SelectEntry(oracle, "Thousand Sons Cultists");
+        SelectEntry(engine, "Rubric Marines");
+        SelectEntry(engine, "Rubric Marines");
+        SelectEntry(engine, "Thousand Sons Cultists");
 
         // Elite
-        SelectEntry(oracle, "Scarab Occult Terminators");
+        SelectEntry(engine, "Scarab Occult Terminators");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Count >= 7,
@@ -329,27 +329,27 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     {
         Skip.IfNot(DataAvailable, SkipMessage);
         // Astra Militarum (playable) links to AM Library, Elysians, DKoK, Assassinorum
-        using var oracle = LoadCatalogue("Imperium - Astra Militarum");
+        using var engine = LoadCatalogue("Imperium - Astra Militarum");
 
-        AddForce(oracle, "Battalion");
+        AddForce(engine, "Battalion");
 
         // HQ
-        SelectEntry(oracle, "Cadian Castellan");
-        SelectEntry(oracle, "Cadian Castellan");
+        SelectEntry(engine, "Cadian Castellan");
+        SelectEntry(engine, "Cadian Castellan");
 
         // Troops (large infantry)
-        SelectEntry(oracle, "Cadian Shock Troops");
-        SelectEntry(oracle, "Cadian Shock Troops");
-        SelectEntry(oracle, "Cadian Shock Troops");
-        SelectEntry(oracle, "Catachan Jungle Fighters");
+        SelectEntry(engine, "Cadian Shock Troops");
+        SelectEntry(engine, "Cadian Shock Troops");
+        SelectEntry(engine, "Cadian Shock Troops");
+        SelectEntry(engine, "Catachan Jungle Fighters");
 
         // Vehicles
-        SelectEntry(oracle, "Leman Russ Battle Tanks");
-        SelectEntry(oracle, "Basilisk");
+        SelectEntry(engine, "Leman Russ Battle Tanks");
+        SelectEntry(engine, "Basilisk");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Count >= 8,
@@ -369,29 +369,29 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     public void Roster06_NecronsDynasty()
     {
         Skip.IfNot(DataAvailable, SkipMessage);
-        using var oracle = LoadCatalogue("Necrons");
+        using var engine = LoadCatalogue("Necrons");
 
-        AddForce(oracle, "Battalion");
+        AddForce(engine, "Battalion");
 
         // HQ
-        SelectEntry(oracle, "Overlord");
-        SelectEntry(oracle, "Royal Warden");
+        SelectEntry(engine, "Overlord");
+        SelectEntry(engine, "Royal Warden");
 
         // Troops
-        SelectEntry(oracle, "Necron Warriors");
-        SelectEntry(oracle, "Necron Warriors");
-        SelectEntry(oracle, "Immortals");
+        SelectEntry(engine, "Necron Warriors");
+        SelectEntry(engine, "Necron Warriors");
+        SelectEntry(engine, "Immortals");
 
         // Elite
-        SelectEntry(oracle, "Lychguard");
-        SelectEntry(oracle, "Canoptek Wraiths");
+        SelectEntry(engine, "Lychguard");
+        SelectEntry(engine, "Canoptek Wraiths");
 
         // Heavy
-        SelectEntry(oracle, "Lokhust Heavy Destroyers");
+        SelectEntry(engine, "Lokhust Heavy Destroyers");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Count >= 8,
@@ -415,30 +415,30 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     public void Roster07_TyranidsSwarm()
     {
         Skip.IfNot(DataAvailable, SkipMessage);
-        using var oracle = LoadCatalogue("Tyranids");
+        using var engine = LoadCatalogue("Tyranids");
 
-        AddForce(oracle, "Battalion");
+        AddForce(engine, "Battalion");
 
         // HQ
-        SelectEntry(oracle, "Hive Tyrant");
-        SelectEntry(oracle, "Broodlord");
+        SelectEntry(engine, "Hive Tyrant");
+        SelectEntry(engine, "Broodlord");
 
         // Troops — swarm units
-        SelectEntry(oracle, "Termagants");
-        SelectEntry(oracle, "Termagants");
-        SelectEntry(oracle, "Hormagaunts");
-        SelectEntry(oracle, "Hormagaunts");
-        SelectEntry(oracle, "Genestealers");
+        SelectEntry(engine, "Termagants");
+        SelectEntry(engine, "Termagants");
+        SelectEntry(engine, "Hormagaunts");
+        SelectEntry(engine, "Hormagaunts");
+        SelectEntry(engine, "Genestealers");
 
         // Fast Attack
-        SelectEntry(oracle, "Gargoyles");
+        SelectEntry(engine, "Gargoyles");
 
         // Heavy Support
-        SelectEntry(oracle, "Carnifexes");
+        SelectEntry(engine, "Carnifexes");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Count >= 9,
@@ -462,27 +462,27 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     {
         Skip.IfNot(DataAvailable, SkipMessage);
         // Dark Angels is playable; auto-loads linked SM, Assassinorum, Inquisition, FW
-        using var oracle = LoadCatalogue("Imperium - Dark Angels");
+        using var engine = LoadCatalogue("Imperium - Dark Angels");
 
-        AddForce(oracle, "Vanguard");
+        AddForce(engine, "Vanguard");
 
         // DA-specific HQ (Deathwing Strikemaster is DA-unique)
-        SelectEntry(oracle, "Deathwing Strikemaster");
+        SelectEntry(engine, "Deathwing Strikemaster");
 
         // DA-specific chaplain variant
-        SelectEntry(oracle, "Interrogator-Chaplain in Terminator Armor");
+        SelectEntry(engine, "Interrogator-Chaplain in Terminator Armor");
 
         // Deathwing units (DA-specific terminators)
-        SelectEntry(oracle, "Deathwing Terminator Squad");
-        SelectEntry(oracle, "Deathwing Knights");
-        SelectEntry(oracle, "Deathwing Command Squad");
+        SelectEntry(engine, "Deathwing Terminator Squad");
+        SelectEntry(engine, "Deathwing Knights");
+        SelectEntry(engine, "Deathwing Command Squad");
 
         // Inherited from Space Marines (proves catalogue chain works)
-        SelectEntry(oracle, "Bladeguard Veteran Squad");
+        SelectEntry(engine, "Bladeguard Veteran Squad");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Count >= 6,
@@ -505,26 +505,26 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     public void Roster09_AdeptusCustodesElite()
     {
         Skip.IfNot(DataAvailable, SkipMessage);
-        using var oracle = LoadCatalogue("Imperium - Adeptus Custodes");
+        using var engine = LoadCatalogue("Imperium - Adeptus Custodes");
 
-        AddForce(oracle, "Patrol");
+        AddForce(engine, "Patrol");
 
         // HQ — Shield-Captain
-        SelectEntry(oracle, "Shield-Captain");
+        SelectEntry(engine, "Shield-Captain");
 
         // Troops
-        SelectEntry(oracle, "Custodian Guard Squad");
+        SelectEntry(engine, "Custodian Guard Squad");
 
         // Elites (the core of Custodes armies)
-        SelectEntry(oracle, "Allarus Custodians");
-        SelectEntry(oracle, "Custodian Wardens");
+        SelectEntry(engine, "Allarus Custodians");
+        SelectEntry(engine, "Custodian Wardens");
 
         // Fast Attack
-        SelectEntry(oracle, "Vertus Praetors");
+        SelectEntry(engine, "Vertus Praetors");
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         Assert.Single(snapshot.Forces);
         Assert.True(snapshot.Forces[0].Selections.Count >= 5,
@@ -547,37 +547,37 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         Skip.IfNot(DataAvailable, SkipMessage);
         // Craftworlds + Harlequins: both link to Aeldari Library
         // LoadCatalogues loads both with all dependencies
-        using var oracle = LoadCatalogues("Aeldari - Craftworlds", "Aeldari - Harlequins");
+        using var engine = LoadCatalogues("Aeldari - Craftworlds", "Aeldari - Harlequins");
 
-        var cats = oracle.GetLoadedCatalogues();
+        var cats = engine.GetLoadedCatalogues();
         output.WriteLine($"Loaded catalogues: {string.Join(", ", cats.Select(c => c.Name))}");
 
         // Find the Craftworlds catalogue to set as active for first force
         var cwCat = cats.FirstOrDefault(c => c.Name.Contains("Craftworld"));
         if (cwCat != default)
-            oracle.SetActiveCatalogue(cwCat.Id);
+            engine.SetActiveCatalogue(cwCat.Id);
 
-        AddForce(oracle, "Patrol");
+        AddForce(engine, "Patrol");
 
         // Craftworlds units from Aeldari Library
-        SelectEntry(oracle, "Farseer");
-        SelectEntry(oracle, "Dire Avengers");
-        SelectEntry(oracle, "Wraithguard");
+        SelectEntry(engine, "Farseer");
+        SelectEntry(engine, "Dire Avengers");
+        SelectEntry(engine, "Wraithguard");
 
         // Add a second Patrol for Harlequins
         var harleCat = cats.FirstOrDefault(c => c.Name.Contains("Harlequin"));
         if (harleCat != default)
-            oracle.SetActiveCatalogue(harleCat.Id);
+            engine.SetActiveCatalogue(harleCat.Id);
 
-        AddForce(oracle, "Patrol");
+        AddForce(engine, "Patrol");
 
         // Harlequin units from Aeldari Library
-        SelectEntry(oracle, "Troupe", forceIndex: 1);
-        SelectEntry(oracle, "Shadowseer", forceIndex: 1);
+        SelectEntry(engine, "Troupe", forceIndex: 1);
+        SelectEntry(engine, "Shadowseer", forceIndex: 1);
 
-        DumpState(oracle);
+        DumpState(engine);
 
-        var snapshot = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snapshot = ModelConverter.CaptureEngineSnapshot(engine);
 
         // Should have 2 forces
         Assert.Equal(2, snapshot.Forces.Count);

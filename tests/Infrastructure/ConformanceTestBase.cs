@@ -5,7 +5,7 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared base class for running declarative YAML spec files against any IRosterEngine.
-/// Eliminates duplication between Oracle, NewRecruit, and FrozenNewRecruit conformance tests.
+/// Eliminates duplication between BattleScribe, NewRecruit, and FrozenNewRecruit conformance tests.
 /// </summary>
 public abstract class ConformanceTestBase
 {

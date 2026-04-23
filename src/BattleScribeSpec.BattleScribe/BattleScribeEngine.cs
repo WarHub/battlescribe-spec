@@ -15,7 +15,7 @@ namespace BattleScribeSpec;
 
 /// <summary>
 /// Wraps the BattleScribe Java engine (via IKVM) to provide a C#-friendly API
-/// for oracle testing. Enables running the same operations in both the original
+/// for engine testing. Enables running the same operations in both the original
 /// BattleScribe engine and the wham/.NET implementation, then comparing results.
 /// </summary>
 /// <remarks>
@@ -23,7 +23,7 @@ namespace BattleScribeSpec;
 /// The <c>threadCount</c> constructor parameter controls the Java engine's internal
 /// thread pool, not the thread-safety of this wrapper.
 /// </remarks>
-public sealed class BattleScribeOracle : IDisposable
+public sealed class BattleScribeEngine : IDisposable
 {
     private readonly JavaEngine _engine;
     private GameSystem? _gameSystem;
@@ -31,7 +31,7 @@ public sealed class BattleScribeOracle : IDisposable
     private bool _initialized;
     private bool _autoSelectDone;
 
-    public BattleScribeOracle(int threadCount = 1)
+    public BattleScribeEngine(int threadCount = 1)
     {
         var logger = new SilentLogger();
         var perfMetrics = new JavaPerfMetrics();
@@ -70,7 +70,7 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Optional roster name set before Initialize. If null, defaults to "Oracle Roster".
+    /// Optional roster name set before Initialize. If null, defaults to "Test Roster".
     /// </summary>
     public string? RosterName { get; set; }
 
@@ -87,7 +87,7 @@ public sealed class BattleScribeOracle : IDisposable
 
         var roster = new Roster();
         roster.setId(java.util.UUID.randomUUID().toString());
-        roster.setName(RosterName ?? "Oracle Roster");
+        roster.setName(RosterName ?? "Test Roster");
         roster.setGameSystemId(gameSystem.getId());
         roster.setGameSystemName(gameSystem.getName());
         roster.setGameSystemRevision(gameSystem.getRevision());
@@ -682,7 +682,7 @@ public sealed class BattleScribeOracle : IDisposable
     private readonly Dictionary<Force, Catalogue> _forceCatalogueMap = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
-    /// Set up the oracle with a Patrol force entry (no units).
+    /// Set up the engine with a Patrol force entry (no units).
     /// </summary>
     public void SetupWithPatrolForce()
     {
@@ -703,7 +703,7 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Set up the oracle with a Patrol force and a unit entry.
+    /// Set up the engine with a Patrol force and a unit entry.
     /// </summary>
     public void SetupWithPatrolAndUnit(bool withCosts = false)
     {
@@ -1282,7 +1282,7 @@ public sealed class BattleScribeOracle : IDisposable
     // ===== Protocol-based API (primary setup path) =====
 
     /// <summary>
-    /// Set up the oracle from Protocol types. Returns initialization errors.
+    /// Set up the engine from Protocol types. Returns initialization errors.
     /// </summary>
     public List<string> SetupFromProtocol(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
@@ -1758,7 +1758,7 @@ public sealed class BattleScribeOracle : IDisposable
     }
 
     /// <summary>
-    /// Get a setup selection entry by index (for OracleRosterEngine).
+    /// Get a setup selection entry by index (for BattleScribeRosterEngine).
     /// </summary>
     internal SelectionEntry GetSetupSelectionEntry(int index) => _setupSelectionEntries[index];
 
@@ -1962,7 +1962,7 @@ public sealed class BattleScribeOracle : IDisposable
     /// In the BattleScribe desktop UI, this is triggered during setRoster(bl=true)
     /// which runs when loading or creating a new roster. It auto-selects entries
     /// that have a minimum constraint >= 1 on the force's root entries.
-    /// Since our Oracle creates forces via selectRootForce (which doesn't call x()),
+    /// Since our engine creates forces via selectRootForce (which doesn't call x()),
     /// we must invoke it separately to match the desktop behavior.
     /// </summary>
     /// <remarks>
@@ -1987,7 +1987,7 @@ public sealed class BattleScribeOracle : IDisposable
     private void EnsureInitialized()
     {
         if (!_initialized || _gameSystem is null)
-            throw new InvalidOperationException("Oracle not initialized. Call Initialize() first.");
+            throw new InvalidOperationException("Engine not initialized. Call Initialize() first.");
     }
 
     private static List<T> JavaListToList<T>(JavaList? javaList)

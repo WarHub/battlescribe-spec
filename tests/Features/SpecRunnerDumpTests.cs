@@ -28,7 +28,7 @@ public class SpecRunnerDumpTests
     [Fact]
     public void OnStepCompleted_CalledAfterAction()
     {
-        using var engine = new OracleRosterEngine();
+        using var engine = new BattleScribeRosterEngine();
         var runner = new SpecRunner(engine, engineName: "battlescribe");
 
         var callbackSteps = new List<(int Index, string? Action)>();
@@ -58,7 +58,7 @@ public class SpecRunnerDumpTests
     [Fact]
     public void OnStepCompleted_CalledAfterAssertion()
     {
-        using var engine = new OracleRosterEngine();
+        using var engine = new BattleScribeRosterEngine();
         var runner = new SpecRunner(engine, engineName: "battlescribe");
 
         var states = new List<RosterState>();
@@ -91,7 +91,7 @@ public class SpecRunnerDumpTests
     [Fact]
     public void DumpAction_IsNoOp_ButTriggersCallback()
     {
-        using var engine = new OracleRosterEngine();
+        using var engine = new BattleScribeRosterEngine();
         var runner = new SpecRunner(engine, engineName: "battlescribe");
 
         var dumpCalls = new List<int>();
@@ -124,7 +124,7 @@ public class SpecRunnerDumpTests
     [Fact]
     public void DumpAction_DoesNotBreakSpecExecution()
     {
-        using var engine = new OracleRosterEngine();
+        using var engine = new BattleScribeRosterEngine();
         var runner = new SpecRunner(engine, engineName: "battlescribe");
 
         var spec = new SpecFile
@@ -156,7 +156,7 @@ public class SpecRunnerDumpTests
     [Fact]
     public void OnStepCompleted_ReceivesValidState()
     {
-        using var engine = new OracleRosterEngine();
+        using var engine = new BattleScribeRosterEngine();
         var runner = new SpecRunner(engine, engineName: "battlescribe");
 
         RosterState? capturedState = null;

@@ -11,7 +11,7 @@ description: >
 ## Overview
 
 Protocol types define the data contract between spec YAML files, the SpecRunner assertion
-engine, and the engine adapters (Oracle, NewRecruit). Changes to protocol types cascade
+engine, and the engine adapters (BattleScribe, NewRecruit). Changes to protocol types cascade
 across multiple files that must stay synchronized.
 
 ## Synchronized file set
@@ -24,11 +24,11 @@ Every protocol type change must update **all applicable** files:
 | 2 | `EngineTypes.cs` | Runtime state records — *State types | If field appears in roster state |
 | 3 | `SpecFileModels.cs` | YAML assertion models — Expected* types | If specs need to assert on it |
 | 4 | `SpecRunner.cs` | Assertion logic — Assert* methods | If specs need to assert on it |
-| 5 | `JavaModelFactory.cs` (Oracle project) | Java object creation from protocol | If Oracle needs to produce it |
+| 5 | `JavaModelFactory.cs` (BattleScribe project) | Java object creation from protocol | If BattleScribe needs to produce it |
 | 6 | `JsonProtocolEngine.cs` | Protocol JSON engine adapter | If adding new commands/responses |
 
 All paths are relative to `src/BattleScribeSpec.TestKit/` except `JavaModelFactory.cs`
-which is in `src/BattleScribeSpec.Oracle/`.
+which is in `src/BattleScribeSpec.BattleScribe/`.
 
 ## Step-by-step: Adding a new field
 
@@ -110,7 +110,7 @@ Use this checklist for every protocol type change:
 - [ ] **SpecFileModels.cs**: Updated Expected* class (if field is assertable)
 - [ ] **SpecFileModels.cs**: Used `[YamlMember(Alias = "...")]` for YAML mapping
 - [ ] **SpecRunner.cs**: Added assertion logic in relevant Assert* method
-- [ ] **JavaModelFactory.cs**: Updated factory method (if Oracle needs it)
+- [ ] **JavaModelFactory.cs**: Updated factory method (if BattleScribe needs it)
 - [ ] **Build passes**: `dotnet build --no-restore`
 - [ ] **Tests pass**: `dotnet test --no-restore`
 

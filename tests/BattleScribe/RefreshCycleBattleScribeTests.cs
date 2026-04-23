@@ -6,18 +6,18 @@ using Xunit.Abstractions;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Oracle tests for the full refresh cycle and complex scenarios.
+/// engine tests for the full refresh cycle and complex scenarios.
 /// Tests how the engine behaves across multiple operations: add forces,
 /// select entries, deselect, modify costs, and verify the complete state
 /// after each operation (modifiers re-evaluated, constraints re-checked, costs recalculated).
 /// </summary>
 [Trait("Category", "Unit")]
-public class RefreshCycleOracleTests(ITestOutputHelper output)
+public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
 {
     [Fact]
     public void FullCycle_AddForce_SelectUnit_VerifyCost()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -34,18 +34,18 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             ],
         };
 
-        oracle.SetupFromProtocol(gs, [cat]);
+        engine.SetupFromProtocol(gs, [cat]);
 
         // Step 1: Add force
-        oracle.AddForceByIndex(0);
-        var snap1 = ModelConverter.CaptureOracleSnapshot(oracle);
+        engine.AddForceByIndex(0);
+        var snap1 = ModelConverter.CaptureEngineSnapshot(engine);
         output.WriteLine($"After AddForce: forces={snap1.Forces.Count}, selections=0");
         Assert.Single(snap1.Forces);
         Assert.Empty(snap1.Forces[0].Selections);
 
         // Step 2: Select unit
-        oracle.SelectFirstAvailableEntry();
-        var snap2 = ModelConverter.CaptureOracleSnapshot(oracle);
+        engine.SelectFirstAvailableEntry();
+        var snap2 = ModelConverter.CaptureEngineSnapshot(engine);
         output.WriteLine($"After SelectEntry: selections={snap2.Forces[0].Selections.Count}");
         Assert.Single(snap2.Forces[0].Selections);
         Assert.Equal("Tactical Squad", snap2.Forces[0].Selections[0].Name);
@@ -60,7 +60,7 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
     [Fact]
     public void FullCycle_SelectAndDeselect_RestoredToEmpty()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -75,23 +75,23 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             ],
         };
 
-        oracle.SetupFromProtocol(gs, [cat]);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, [cat]);
+        engine.AddForceByIndex(0);
 
         // Select
-        oracle.SelectFirstAvailableEntry();
-        Assert.Equal(1, oracle.GetAllSelectionCount());
+        engine.SelectFirstAvailableEntry();
+        Assert.Equal(1, engine.GetAllSelectionCount());
 
         // Deselect
-        oracle.DeselectFirstSelection();
-        Assert.Equal(0, oracle.GetAllSelectionCount());
+        engine.DeselectFirstSelection();
+        Assert.Equal(0, engine.GetAllSelectionCount());
         output.WriteLine("Select + Deselect cycle verified: back to 0 selections");
     }
 
     [Fact]
     public void FullCycle_MultipleSelectionsAccumulateCost()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -108,14 +108,14 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             ],
         };
 
-        oracle.SetupFromProtocol(gs, [cat]);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, [cat]);
+        engine.AddForceByIndex(0);
 
         // Select 3 times
         for (int i = 0; i < 3; i++)
-            oracle.SelectFirstAvailableEntry();
+            engine.SelectFirstAvailableEntry();
 
-        var snap = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snap = ModelConverter.CaptureEngineSnapshot(engine);
         output.WriteLine($"Selections: {snap.Forces[0].Selections.Count}");
         Assert.Equal(3, snap.Forces[0].Selections.Count);
 
@@ -129,7 +129,7 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
     [Fact]
     public void FullCycle_RemoveForce_ClearsEverything()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -144,24 +144,24 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             ],
         };
 
-        oracle.SetupFromProtocol(gs, [cat]);
-        oracle.AddForceByIndex(0);
-        oracle.SelectFirstAvailableEntry();
+        engine.SetupFromProtocol(gs, [cat]);
+        engine.AddForceByIndex(0);
+        engine.SelectFirstAvailableEntry();
 
-        Assert.Equal(1, oracle.GetForceCount());
-        Assert.Equal(1, oracle.GetAllSelectionCount());
+        Assert.Equal(1, engine.GetForceCount());
+        Assert.Equal(1, engine.GetAllSelectionCount());
 
         // Remove the force
-        oracle.RemoveFirstForce();
-        Assert.Equal(0, oracle.GetForceCount());
-        Assert.Equal(0, oracle.GetAllSelectionCount());
+        engine.RemoveFirstForce();
+        Assert.Equal(0, engine.GetForceCount());
+        Assert.Equal(0, engine.GetAllSelectionCount());
         output.WriteLine("RemoveForce verified: 0 forces, 0 selections");
     }
 
     [Fact]
     public void FullCycle_ModifierAndConstraint_Together()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
         var gs = new ProtocolGameSystem
         {
             Id = "test-gs",
@@ -183,20 +183,20 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
             ],
         };
 
-        oracle.SetupFromProtocol(gs, [cat]);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, [cat]);
+        engine.AddForceByIndex(0);
 
         // Before selecting: min constraint should report something
-        var errorsBefore = oracle.GetValidationErrors();
+        var errorsBefore = engine.GetValidationErrors();
         output.WriteLine($"Errors before selection: {errorsBefore.Count}");
 
         // Select 1
-        oracle.SelectFirstAvailableEntry();
-        var errorsAfter1 = oracle.GetValidationErrors();
+        engine.SelectFirstAvailableEntry();
+        var errorsAfter1 = engine.GetValidationErrors();
         output.WriteLine($"Errors after 1 selection: {errorsAfter1.Count}");
 
         // Cost should be 60 (50 base + 10 increment)
-        var snap = ModelConverter.CaptureOracleSnapshot(oracle);
+        var snap = ModelConverter.CaptureEngineSnapshot(engine);
         var ptsCost = snap.Forces[0].Selections[0].Costs.FirstOrDefault(c => c.TypeId == "pts");
         output.WriteLine($"Unit cost: {ptsCost?.Value ?? -1} (expected 60)");
         if (ptsCost != null)
@@ -206,7 +206,7 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
     [Fact]
     public void FullCycle_TwoUnits_IndependentCosts()
     {
-        using var oracle = new BattleScribeOracle();
+        using var engine = new BattleScribeEngine();
 
         // Use SetupFromSpec with a custom scenario that has two entries
         var gs = new ProtocolGameSystem
@@ -226,12 +226,12 @@ public class RefreshCycleOracleTests(ITestOutputHelper output)
                     Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 80.0 }] },
             ],
         };
-        oracle.SetupFromProtocol(gs, [cat]);
-        oracle.AddForceByIndex(0);
+        engine.SetupFromProtocol(gs, [cat]);
+        engine.AddForceByIndex(0);
 
         // Select the first entry (index 0)
-        oracle.SelectFirstAvailableEntry();
-        var snap = ModelConverter.CaptureOracleSnapshot(oracle);
+        engine.SelectFirstAvailableEntry();
+        var snap = ModelConverter.CaptureEngineSnapshot(engine);
         output.WriteLine($"After first entry: {snap.Forces[0].Selections.Count} selection(s)");
         Assert.Single(snap.Forces[0].Selections);
         Assert.Equal("Tactical Squad", snap.Forces[0].Selections[0].Name);
