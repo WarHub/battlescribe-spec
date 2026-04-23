@@ -1,0 +1,49 @@
+id: category-uncategorized-fallback
+category: category
+description: >
+  When a selection has no category links, BattleScribe reports zero categories
+  while NewRecruit synthesizes an "Uncategorized" fallback category
+  (entryId "(No Category)", primary=true). This ensures every NR selection
+  always has at least one category — used for force org chart grouping.
+tags: [design-difference]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Plain Unit
+          type: unit
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit
+
+  # BattleScribe: no categories. NR: Uncategorized fallback.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Plain Unit
+              categories: []
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Plain Unit
+                  categories:
+                    - name: Uncategorized
+                      entryId: (No Category)
+                      primary: true
