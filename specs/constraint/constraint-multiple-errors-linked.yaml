@@ -68,16 +68,17 @@ steps:
       forces:
         - selectionCount: 2
           selections:
-            - name: HQ Leader
             - name: Unit A
+            - name: HQ Leader
       engines:
+        # BS render layer sorts purely alphabetically: HQ Leader < Unit A.
         # NR groups by primary category (forceEntry categoryLink XML order):
         # Troops before HQ → Unit A before HQ Leader.
-        newrecruit:
+        battlescribe:
           forces:
             - selections:
-                - name: Unit A
                 - name: HQ Leader
+                - name: Unit A
 
   # Remove both auto-selected entries to trigger both min violations
   - action: deselectSelection

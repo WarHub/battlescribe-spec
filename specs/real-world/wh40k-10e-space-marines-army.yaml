@@ -40,26 +40,27 @@ steps:
           selections:
             - name: "Battle Size"
               type: upgrade
-            - name: "Captain"
-              type: model
             - name: "Detachment"
               type: upgrade
             - name: "Show/Hide Options"
               type: upgrade
+            - name: "Captain"
+              type: model
       engines:
+        # BS render layer sorts purely alphabetically: Captain before Detachment.
         # NR groups by primary category (forceEntry categoryLink order):
         # Configuration entries before Character entries.
-        newrecruit:
+        battlescribe:
           forces:
             - selections:
                 - name: "Battle Size"
                   type: upgrade
+                - name: "Captain"
+                  type: model
                 - name: "Detachment"
                   type: upgrade
                 - name: "Show/Hide Options"
                   type: upgrade
-                - name: "Captain"
-                  type: model
 
   - action: selectEntry
     forceId: ${{ steps.add-force.forceId }}
@@ -75,28 +76,28 @@ steps:
           selections:
             - name: "Battle Size"
               type: upgrade
-            - name: "Captain"
-              type: model
             - name: "Detachment"
               type: upgrade
-            - name: "Intercessor Squad"
-              type: unit
             - name: "Show/Hide Options"
               type: upgrade
+            - name: "Captain"
+              type: model
+            - name: "Intercessor Squad"
+              type: unit
       engines:
-        newrecruit:
+        battlescribe:
           forces:
             - selections:
                 - name: "Battle Size"
                   type: upgrade
-                - name: "Detachment"
-                  type: upgrade
-                - name: "Show/Hide Options"
-                  type: upgrade
                 - name: "Captain"
                   type: model
+                - name: "Detachment"
+                  type: upgrade
                 - name: "Intercessor Squad"
                   type: unit
+                - name: "Show/Hide Options"
+                  type: upgrade
 
   - action: selectEntry
     forceId: ${{ steps.add-force.forceId }}
