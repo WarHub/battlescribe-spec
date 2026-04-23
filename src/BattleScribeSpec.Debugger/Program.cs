@@ -3,7 +3,7 @@ using BattleScribeSpec.NewRecruit;
 
 // ===== Parse arguments =====
 string? specInput = null;
-var engineName = "bs";
+var engineName = "battlescribe";
 var dumpAll = false;
 var json = false;
 var headless = true;
@@ -16,6 +16,7 @@ for (var i = 0; i < args.Length; i++)
         case "--engine" when i + 1 < args.Length:
             engineName = args[++i].ToLowerInvariant() switch
             {
+                "bs" => "battlescribe",
                 "nr" => "newrecruit",
                 var name => name
             };

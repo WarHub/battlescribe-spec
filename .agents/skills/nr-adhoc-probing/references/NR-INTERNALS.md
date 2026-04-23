@@ -196,7 +196,7 @@ f.source?.publication?.id  // → "pub-1" ✅
 ```
 
 **Rule**: Publications must be defined in the same file as entries that reference them.
-BattleScribe (BattleScribe) resolves cross-scope, but NR's behavior is arguably more correct.
+BattleScribe resolves cross-scope, but NR's behavior is arguably more correct.
 
 ## `setAmount()` corruption bugs
 

@@ -198,7 +198,7 @@ dotnet bs-spec-runner.dll --adapter "dotnet:your-adapter.dll" --specs specs
 ## Reference Implementation
 
 See `src/BattleScribeSpec.ReferenceAdapter/` for a complete .NET adapter implementation
-that wraps the BattleScribe BattleScribe engine. It's only ~10 lines of code thanks to the
+that wraps the BattleScribe engine. It's only ~10 lines of code thanks to the
 `AdapterHandler` helper class from the TestKit.
 
 ## Tips

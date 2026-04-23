@@ -273,7 +273,7 @@ value, not the link's).
 NR resolves `publicationId` references **within the same scope** at parse time.
 A forceEntry in the gameSystem referencing a publication defined only in a
 catalogue will NOT resolve — the `.publication` object will be `undefined`.
-BattleScribe (BattleScribe) resolves cross-scope publication references.
+BattleScribe resolves cross-scope publication references.
 
 **Rule**: Define publications in the same file (gameSystem or catalogue) as the
 entries that reference them. A forceEntry in a gameSystem must reference a
@@ -537,7 +537,7 @@ sel.setAmount({}, count);
 ```
 
 This produces the correct single-node-with-count behavior matching both
-NR's own UI and BattleScribe BattleScribe's behavior. The old `addInstance()` loop
+NR's own UI and BattleScribe's behavior. The old `addInstance()` loop
 approach has been removed.
 
 ---
@@ -575,7 +575,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
   `engines: {engineName: fail}` — the override describes the actual engine
   behavior, keeping both engines passing. Only 1 real-world spec still uses
   `newrecruit: fail` due to fundamental data incompatibilities.
-- **BattleScribe (BattleScribe)**: All specs expected to pass except 2 NR-specific
+- **BattleScribe**: All specs expected to pass except 2 NR-specific
   null-childId condition behavior specs. DataSource specs (real-world wh40k-10e)
   are fully supported via IKVM engine with DataUtils XML loading.
 

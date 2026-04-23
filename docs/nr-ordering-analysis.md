@@ -121,7 +121,7 @@ Both iterate the pre-built selector tree in existing order:
 The sort happens in `initializeChilds` **after** creating `_p` selectors from
 `selectionsIterator()`, at tree-building time.
 
-## BattleScribe (BattleScribe) Engine Ordering
+## BattleScribe Engine Ordering
 
 BattleScribe's Java engine has **two layers** with different ordering:
 
