@@ -56,3 +56,4 @@ steps:
       forces:
         - selections:
             - name: Activated
+            - name: Trigger Unit

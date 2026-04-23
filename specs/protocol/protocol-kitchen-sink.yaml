@@ -509,6 +509,7 @@ steps:
                     - name: pts
                       typeId: ct-pts
                       value: 20
+            - name: Required Unit
 
   # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
   #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)

@@ -1,7 +1,7 @@
 id: modifier-category-remove
 category: modifier
 description: Category remove modifier removes a category link from a selection
-tags: []
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:
@@ -49,3 +49,12 @@ steps:
           selections:
             - name: Veteran Squad
               categories: []
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Veteran Squad
+                  categories:
+                    - name: Uncategorized
+                      entryId: (No Category)
+                      primary: true

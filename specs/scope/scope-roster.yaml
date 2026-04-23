@@ -53,3 +53,4 @@ steps:
       forces:
         - selections:
             - name: Roster Has Trigger
+            - name: Trigger

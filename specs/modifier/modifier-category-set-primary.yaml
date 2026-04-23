@@ -57,3 +57,4 @@ steps:
               categories:
                 - name: Elites
                   primary: true
+                - name: HQ

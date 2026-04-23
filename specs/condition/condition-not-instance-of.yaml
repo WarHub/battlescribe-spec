@@ -60,3 +60,4 @@ steps:
         - selectionCount: 2
           selections:
             - name: No B Exists
+            - name: Unit B
