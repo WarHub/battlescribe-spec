@@ -13,29 +13,18 @@ steps:
     catalogueId: e0af-67df-9d63-8fb7
 
   # After force creation, mandatory entries are auto-selected
-  # NR orders auto-selections differently: Battle Size, Detachment, Show/Hide Options
   - expectedState:
       forceCount: 1
       forces:
         - name: "Army Roster"
           selectionCount: 3
           selections:
+            - name: "Battle Size"
+              type: upgrade
             - name: "Detachment"
               type: upgrade
             - name: "Show/Hide Options"
               type: upgrade
-            - name: "Battle Size"
-              type: upgrade
-      engines:
-        newrecruit:
-          forces:
-            - selections:
-                - name: "Battle Size"
-                  type: upgrade
-                - name: "Detachment"
-                  type: upgrade
-                - name: "Show/Hide Options"
-                  type: upgrade
 
   - action: selectEntry
     forceId: ${{ steps.add-force.forceId }}
@@ -49,15 +38,17 @@ steps:
         - name: "Army Roster"
           selectionCount: 4
           selections:
-            - name: "Detachment"
-              type: upgrade
-            - name: "Show/Hide Options"
-              type: upgrade
             - name: "Battle Size"
               type: upgrade
             - name: "Captain"
               type: model
+            - name: "Detachment"
+              type: upgrade
+            - name: "Show/Hide Options"
+              type: upgrade
       engines:
+        # NR groups by primary category (forceEntry categoryLink order):
+        # Configuration entries before Character entries.
         newrecruit:
           forces:
             - selections:
@@ -82,16 +73,16 @@ steps:
         - name: "Army Roster"
           selectionCount: 5
           selections:
-            - name: "Detachment"
-              type: upgrade
-            - name: "Show/Hide Options"
-              type: upgrade
             - name: "Battle Size"
               type: upgrade
             - name: "Captain"
               type: model
+            - name: "Detachment"
+              type: upgrade
             - name: "Intercessor Squad"
               type: unit
+            - name: "Show/Hide Options"
+              type: upgrade
       engines:
         newrecruit:
           forces:

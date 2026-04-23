@@ -56,5 +56,5 @@ steps:
       forces:
         - selectionCount: 2
           selections:
-            - name: Trigger Unit
             - name: Target Unit
+            - name: Trigger Unit

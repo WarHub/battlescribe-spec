@@ -47,7 +47,7 @@ steps:
           selections:
             - name: Infantry Squad
               type: unit
-            - name: Sergeant
-              type: model
             - name: Power Sword
               type: upgrade
+            - name: Sergeant
+              type: model

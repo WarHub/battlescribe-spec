@@ -48,7 +48,7 @@ steps:
         - name: Patrol
           selectionCount: 2
           selections:
-            - name: Public Unit
-              type: unit
             - name: Internal Unit
+              type: unit
+            - name: Public Unit
               type: unit

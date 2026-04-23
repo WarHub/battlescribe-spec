@@ -359,7 +359,6 @@ steps:
       forces:
         - selectionCount: 2
           selections:
-            - name: Required Unit
             - name: Infantry Squad
               entryId: se-infantry
               type: unit
@@ -406,6 +405,7 @@ steps:
               page: "42"
               publicationId: pub-core
               publicationName: Core Rulebook
+            - name: Required Unit
 
   # Step 3: selectChildEntry — add Trooper model to Infantry Squad
   - action: selectChildEntry
@@ -417,7 +417,6 @@ steps:
   - expectedState:
       forces:
         - selections:
-            - name: Required Unit
             - name: Infantry Squad
               children:
                 - name: Trooper
@@ -427,6 +426,7 @@ steps:
                     - name: pts
                       typeId: ct-pts
                       value: 10
+            - name: Required Unit
 
   # Step 4: selectEntry Commander — assert infoGroup profiles/rules, infoLink data
   - action: selectEntry
@@ -438,8 +438,6 @@ steps:
       forces:
         - selectionCount: 3
           selections:
-            - name: Required Unit
-            - name: Infantry Squad
             - name: Commander
               entryId: se-commander
               type: unit
@@ -490,8 +488,10 @@ steps:
                 - name: HQ
                   entryId: cat-hq
                   primary: true
+            - name: Infantry Squad
+            - name: Required Unit
 
-  # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
+  # Step 5: setSelectionCount— set Trooper child count to 2 via selectionPath
   - action: setSelectionCount
     forceId: ${{ steps.add-battalion.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}
@@ -500,7 +500,7 @@ steps:
   - expectedState:
       forces:
         - selections:
-            - name: Required Unit
+            - name: Commander
             - name: Infantry Squad
               children:
                 - name: Trooper
@@ -521,8 +521,6 @@ steps:
       forces:
         - selectionCount: 4
           selections:
-            - name: Required Unit
-            - name: Infantry Squad
             - name: Commander
               costs:
                 - name: pts
@@ -532,6 +530,8 @@ steps:
                   typeId: ct-power
                   value: 4
             - name: Infantry Squad
+            - name: Infantry Squad
+            - name: Required Unit
 
   # Step 7: duplicateSelection — duplicate Infantry Squad #1 (has Trooper x2 children)
   #   Verifies deep duplication preserves child selections and their state.
@@ -544,17 +544,17 @@ steps:
       forces:
         - selectionCount: 5
           selections:
-            - name: Required Unit
-            - name: Infantry Squad
-              children:
-                - name: Trooper
-                  number: 2
             - name: Commander
             - name: Infantry Squad
+              children:
+                - name: Trooper
+                  number: 2
+            - name: Infantry Squad
             - name: Infantry Squad
               children:
                 - name: Trooper
                   number: 2
+            - name: Required Unit
 
   # Step 8: deselectSelection — remove the ORIGINAL Infantry Squad #1
   #   Keeps the duplicate while removing the original.
@@ -573,11 +573,11 @@ steps:
 
   # Step 10: comprehensive final assertion — full roster state
   #   After steps above, the roster has:
-  #   - Battalion force with: Required Unit, Commander (100pts+4pw), Infantry Squad #2 (100pts+5pw),
-  #     and Infantry Squad (duplicated from #1, 120pts+5pw with Trooper x2 at 20pts)
+  #   - Battalion force with: Commander (100pts+4pw), Infantry Squad #2 (100pts+5pw),
+  #     Infantry Squad (duplicated from #1, 120pts+5pw with Trooper x2 at 20pts), Required Unit
   #   - Commander still has +25pts from conditional (2+ Infantry: #2 + dupe = 2)
-  #   - Total pts: 0 + 100 + 100 + 120 = 320 (Required=0, Commander=100, Inf#2=100, Inf-dupe=120)
-  #   - Total power: 0 + 4 + 5 + 5 = 14
+  #   - Total pts: 100 + 100 + 120 + 0 = 320 (Commander=100, Inf#2=100, Inf-dupe=120, Required=0)
+  #   - Total power: 4 + 5 + 5 + 0 = 14
   #   - Cost limit at 200pts → cost limit error
   - expectedState:
       forceCount: 1
@@ -586,31 +586,6 @@ steps:
           hidden: false
           selectionCount: 4
           selections:
-            - name: Required Unit
-              type: unit
-              number: 1
-              hidden: false
-              profiles:
-                - name: Boltgun
-                  typeName: Weapon
-                  hidden: false
-                  characteristics:
-                    - name: Range
-                      value: "24"
-                    - name: Str
-                      value: "4"
-                    - name: AP
-                      value: "0"
-                    - name: D
-                      value: "1"
-              rules:
-                - name: Rapid Fire
-                  description: Double shots at half range
-                  hidden: false
-              categories:
-                - name: Elites
-                  entryId: cat-elites
-                  primary: true
             - name: Commander
               entryId: se-commander
               type: unit
@@ -674,6 +649,31 @@ steps:
                     - name: pts
                       typeId: ct-pts
                       value: 20
+            - name: Required Unit
+              type: unit
+              number: 1
+              hidden: false
+              profiles:
+                - name: Boltgun
+                  typeName: Weapon
+                  hidden: false
+                  characteristics:
+                    - name: Range
+                      value: "24"
+                    - name: Str
+                      value: "4"
+                    - name: AP
+                      value: "0"
+                    - name: D
+                      value: "1"
+              rules:
+                - name: Rapid Fire
+                  description: Double shots at half range
+                  hidden: false
+              categories:
+                - name: Elites
+                  entryId: cat-elites
+                  primary: true
       costs:
         - typeId: ct-pts
         - typeId: ct-power

@@ -52,3 +52,14 @@ steps:
               children:
                 - name: Sergeant
                   type: model
+      engines:
+        # NR creates instances for all child entries (including unselected) and
+        # sorts alphabetically → Medic appears before Sergeant.
+        newrecruit:
+          forces:
+            - selections:
+                - name: Command Squad
+                  children:
+                    - name: Medic
+                    - name: Sergeant
+                      type: model

@@ -195,16 +195,12 @@ public static class NewRecruitActions
                         selector.setAmount?.((selector.getAmount?.() || 0) + 1);
                     }
 
-                    // Tag and find the new selection
-                    window.__bsspec._selSeq = (window.__bsspec._selSeq || 0) + 1;
+                    // Find the new selection
                     const after = getSelections(force);
                     let newUid = null;
                     for (const s of after) {
                         const raw = s;
                         if (raw && !before.has(raw.uid || '')) {
-                            if (raw.__bsspec_seq === undefined) {
-                                raw.__bsspec_seq = window.__bsspec._selSeq;
-                            }
                             if (!newUid) newUid = raw.uid || null;
                         }
                     }
@@ -368,16 +364,12 @@ public static class NewRecruitActions
                         return 'ERROR:dupe() method not available on selection';
                     }
 
-                    // Tag and find the duplicated selection
-                    window.__bsspec._selSeq = (window.__bsspec._selSeq || 0) + 1;
+                    // Find the duplicated selection
                     const after = getSelections(force);
                     let newUid = null;
                     for (const s of after) {
                         const raw = s;
                         if (raw && !before.has(raw.uid || '')) {
-                            if (raw.__bsspec_seq === undefined) {
-                                raw.__bsspec_seq = window.__bsspec._selSeq;
-                            }
                             if (!newUid) newUid = raw.uid || null;
                         }
                     }

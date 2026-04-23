@@ -68,8 +68,16 @@ steps:
       forces:
         - selectionCount: 2
           selections:
-            - name: Unit A
             - name: HQ Leader
+            - name: Unit A
+      engines:
+        # NR groups by primary category (forceEntry categoryLink XML order):
+        # Troops before HQ → Unit A before HQ Leader.
+        newrecruit:
+          forces:
+            - selections:
+                - name: Unit A
+                - name: HQ Leader
 
   # Remove both auto-selected entries to trigger both min violations
   - action: deselectSelection
