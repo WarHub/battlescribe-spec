@@ -76,6 +76,9 @@ steps:
           selections:
             - name: HQ Found
             - name: Commander
+              categories:
+                - name: HQ
+                  primary: true
       engines:
         # Both engines fail: scope=force resolves to the Force, not its selections,
         # so instanceOf returns false and the rename modifier never fires.
@@ -84,6 +87,9 @@ steps:
           forces:
             - selections:
                 - name: Commander
+                  categories:
+                    - name: HQ
+                      primary: true
                 - name: Detector
         # NR uncategorised before categorised: Detector < Commander.
         newrecruit:
@@ -91,3 +97,6 @@ steps:
             - selections:
                 - name: Detector
                 - name: Commander
+                  categories:
+                    - name: HQ
+                      primary: true
