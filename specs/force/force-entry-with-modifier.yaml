@@ -50,9 +50,7 @@ steps:
       forceCount: 2
       forces:
         - name: Patrol
-          hidden: false
         - name: Special Detachment
-          hidden: false
 
   - action: selectEntry
     forceId: ${{ steps.add-patrol.forceId }}
@@ -63,6 +61,5 @@ steps:
       forceCount: 2
       forces:
         - name: Patrol
-          hidden: false
         - name: Special Detachment
           hidden: true

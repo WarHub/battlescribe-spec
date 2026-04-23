@@ -58,6 +58,12 @@ foreach ($file in $files) {
             $line = ''
         }
 
+        # Fix: remove redundant 'hidden: false' (defaults to false everywhere)
+        if ($stripped -eq 'hidden: false') {
+            $fixes += "line $($i+1): removed redundant hidden: false"
+            continue
+        }
+
         # Fix: blank line before setup:
         if ($stripped -eq 'setup:' -and $result.Count -gt 0) {
             $prev = $result[$result.Count - 1].Trim()

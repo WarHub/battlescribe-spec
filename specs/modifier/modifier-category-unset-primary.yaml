@@ -58,6 +58,7 @@ steps:
             - selectionCount: 1
               selections:
                 - name: Commander
+                  hidden: true
                   categories:
                     - name: HQ
                       primary: true

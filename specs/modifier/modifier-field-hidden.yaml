@@ -37,6 +37,7 @@ steps:
         - selectionCount: 1
           selections:
             - name: Stealth Unit
+              hidden: true
       engines:
         newrecruit:
           errors:

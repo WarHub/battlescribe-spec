@@ -44,6 +44,10 @@ steps:
             - name: Secret Agent
       engines:
         newrecruit:
+          forces:
+            - selections:
+                - name: Secret Agent
+                  hidden: true
           errors:
             - on: selection se-1
               from: se-1/hidden

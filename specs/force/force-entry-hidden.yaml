@@ -40,4 +40,3 @@ steps:
         - name: Hidden Detachment
           hidden: true
         - name: Patrol
-          hidden: false

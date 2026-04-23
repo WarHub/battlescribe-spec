@@ -343,7 +343,6 @@ steps:
             - name: Required Unit
               type: unit
               number: 1
-              hidden: false
               categories:
                 - name: Elites
                   entryId: cat-elites
@@ -363,7 +362,6 @@ steps:
               entryId: se-infantry
               type: unit
               number: 1
-              hidden: false
               costs:
                 - name: pts
                   typeId: ct-pts
@@ -375,7 +373,6 @@ steps:
                 - name: Infantry
                   typeId: pt-unit
                   typeName: Unit Stats
-                  hidden: false
                   characteristics:
                     - name: WS
                       typeId: char-ws
@@ -395,7 +392,6 @@ steps:
               rules:
                 - name: Orders
                   description: Can receive orders from officers
-                  hidden: false
                   page: "43"
                   publicationId: pub-core
               categories:
@@ -442,7 +438,6 @@ steps:
               entryId: se-commander
               type: unit
               number: 1
-              hidden: false
               costs:
                 - name: pts
                   typeId: ct-pts
@@ -453,7 +448,6 @@ steps:
               profiles:
                 - name: Power Sword
                   typeName: Weapon
-                  hidden: false
                   characteristics:
                     - name: Range
                       value: Melee
@@ -465,7 +459,6 @@ steps:
                       value: "1"
                 - name: Power Armor
                   typeName: Unit Stats
-                  hidden: false
                   characteristics:
                     - name: WS
                       value: "3+"
@@ -480,10 +473,8 @@ steps:
               rules:
                 - name: Inspiring Leader
                   description: Friendly units within 6 inches re-roll morale
-                  hidden: false
                 - name: Fearless
                   description: This unit automatically passes morale tests
-                  hidden: false
               categories:
                 - name: HQ
                   entryId: cat-hq
@@ -584,14 +575,12 @@ steps:
       forceCount: 1
       forces:
         - name: Battalion
-          hidden: false
           selectionCount: 4
           selections:
             - name: Commander
               entryId: se-commander
               type: unit
               number: 1
-              hidden: false
               costs:
                 - name: pts
                   typeId: ct-pts
@@ -602,15 +591,11 @@ steps:
               profiles:
                 - name: Power Sword
                   typeName: Weapon
-                  hidden: false
                 - name: Power Armor
                   typeName: Unit Stats
-                  hidden: false
               rules:
                 - name: Inspiring Leader
-                  hidden: false
                 - name: Fearless
-                  hidden: false
               categories:
                 - name: HQ
                   entryId: cat-hq
@@ -618,7 +603,6 @@ steps:
             - name: Infantry Squad
               type: unit
               number: 1
-              hidden: false
               costs:
                 - name: pts
                   typeId: ct-pts
@@ -633,7 +617,6 @@ steps:
             - name: Infantry Squad
               type: unit
               number: 1
-              hidden: false
               costs:
                 - name: pts
                   typeId: ct-pts
@@ -645,7 +628,6 @@ steps:
                 - name: Trooper
                   type: model
                   number: 2
-                  hidden: false
                   costs:
                     - name: pts
                       typeId: ct-pts
@@ -653,11 +635,9 @@ steps:
             - name: Required Unit
               type: unit
               number: 1
-              hidden: false
               profiles:
                 - name: Boltgun
                   typeName: Weapon
-                  hidden: false
                   characteristics:
                     - name: Range
                       value: "24"
@@ -670,7 +650,6 @@ steps:
               rules:
                 - name: Rapid Fire
                   description: Double shots at half range
-                  hidden: false
               categories:
                 - name: Elites
                   entryId: cat-elites
