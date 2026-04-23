@@ -49,6 +49,7 @@ steps:
       forces:
         - selections:
             - name: Target
+        - selections: []
 
   - action: selectEntry
     forceId: ${{ steps.add-patrol-2.forceId }}
@@ -58,3 +59,5 @@ steps:
       forces:
         - selections:
             - name: Cross Force Activated
+        - selections:
+            - name: Trigger

@@ -57,8 +57,7 @@ internal static class JsHelpers
             // Find a force anywhere in the army tree by its uid.
             window.getForceByUid = function(army, uid) {
                 for (const f of (army.getForces?.() || [])) {
-                    const raw = f;
-                    if (raw?.uid === uid) return f;
+                    if (f.uid === uid) return f;
                 }
                 return null;
             };
@@ -67,9 +66,8 @@ internal static class JsHelpers
             window.getSelectionByUid = function(parent, uid) {
                 function search(nodes) {
                     for (const s of nodes) {
-                        const raw = s;
-                        if (raw?.uid === uid) return s;
-                        const children = s.getSelections?.() || s.getChildren?.() || [];
+                        if (s.uid === uid) return s;
+                        const children = s.getSelections?.() || [];
                         const found = search(children);
                         if (found) return found;
                     }
@@ -138,12 +136,11 @@ internal static class JsHelpers
                     const allChildren = f.getForces?.() || [];
                     // NR flattens all descendants — filter to direct children only.
                     const directChildren = Array.isArray(allChildren)
-                        ? allChildren.filter(cf => cf.getParentForce?.() === f
-                            || cf.getParentForce?.() === f)
+                        ? allChildren.filter(cf => cf.getParentForce?.() === f)
                         : [];
                     return {
-                        id: f?.uid || null,
-                        name: f.getName?.() || '',
+                        id: f.uid,
+                        name: f.getName(),
                         catalogueId: f.catalogueId || f.getId?.() || null,
                         hidden: f.isHidden?.() === true,
                         selections: extractSelections(f),
@@ -156,11 +153,17 @@ internal static class JsHelpers
                 }
 
                 function extractSelections(parent) {
-                    let selections = parent.getSelections?.();
-                    if (!selections?.length) selections = parent.getChildren?.();
-                    if (!selections?.length) selections = [];
-                    // Use NR's native selector order.
-                    return [...selections].map(s => extractSelection(s));
+                    const selections = parent.getSelections?.() || [];
+                    // NR pre-creates template instances (amount=0) for all possible child entries.
+                    // Only include selections that are actually activated (amount > 0).
+                    // Instance nodes always have getAmount — error if missing (wrong node type).
+                    return [...selections]
+                        .filter(s => {
+                            if (typeof s.getAmount !== 'function')
+                                throw new Error(`Node ${s.getId?.() || s.uid || '?'} has no getAmount — not an instance node`);
+                            return s.getAmount() > 0;
+                        })
+                        .map(s => extractSelection(s));
                 }
 
                 function extractSelection(sel) {
@@ -173,17 +176,19 @@ internal static class JsHelpers
                     const selPubId = src?.publication?.id || null;
                     const selPubName = src?.publication?.name || null;
 
+                    // sel is an instance node (filtered by getAmount > 0 in extractSelections).
+                    // Instance nodes always have getName, getId, getAmount, getType, isHidden.
                     return {
-                        id: sel?.uid || null,
-                        name: sel.getName?.() || '',
-                        entryId: sel.getId?.() || null,
+                        id: sel.uid,
+                        name: sel.getName(),
+                        entryId: sel.getId(),
                         type: sel.getType?.() || null,
-                        number: sel.getAmount?.() || 1,
+                        number: sel.getAmount(),
                         hidden: sel.isHidden?.() || false,
                         costs: costs.map(c => ({
                             name: c.name || '',
                             typeId: c.typeId || '',
-                            value: (c.value || 0) * (sel.getAmount?.() || 1)
+                            value: (c.value || 0) * sel.getAmount()
                         })),
                         children: extractSelections(sel),
                         profiles: profiles.map(p => ({
@@ -257,8 +262,9 @@ internal static class JsHelpers
                         sumNode(force);
                     }
                     function sumNode(node) {
-                        for (const sel of (node.getSelections?.() || node.getChildren?.() || [])) {
-                            const amount = sel.getAmount?.() ?? 0;
+                        for (const sel of (node.getSelections?.() || [])) {
+                            if (typeof sel.getAmount !== 'function') continue;
+                            const amount = sel.getAmount();
                             if (amount <= 0) continue;
                             for (const c of (sel.getCosts?.() || [])) {
                                 const tid = c.typeId || '';

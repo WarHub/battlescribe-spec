@@ -54,6 +54,7 @@ steps:
       forces:
         - selections:
             - name: Target
+            - name: Trigger
 
   - action: selectEntry
     forceId: ${{ steps.add-patrol.forceId }}
@@ -63,3 +64,5 @@ steps:
       forces:
         - selections:
             - name: More Than One Trigger
+            - name: Trigger
+            - name: Trigger

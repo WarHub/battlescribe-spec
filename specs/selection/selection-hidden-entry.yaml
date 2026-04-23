@@ -34,6 +34,7 @@ steps:
         - selectionCount: 1
           selections:
             - name: Hidden Unit
+              hidden: true
       engines:
         newrecruit:
           errors:

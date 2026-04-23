@@ -286,9 +286,14 @@ public sealed class SpecLintTests
     [
         ("primary: false", "primary defaults to false"),
         ("defaultCostLimit: -1", "defaultCostLimit defaults to -1"),
-        ("hidden: false", "hidden defaults to false"),
         ("import: true", "import defaults to true"),
         ("importRootEntries: true", "importRootEntries defaults to true"),
+    ];
+
+    // Patterns that are redundant everywhere (setup AND expectedState).
+    private static readonly (string Pattern, string Description)[] GlobalDefaultPatterns =
+    [
+        ("hidden: false", "hidden defaults to false"),
     ];
 
     [Theory]
@@ -306,9 +311,17 @@ public sealed class SpecLintTests
             else if (stripped.StartsWith("- action:"))
                 inExpectedState = false;
 
+            // Global defaults are redundant everywhere.
+            foreach (var (pattern, description) in GlobalDefaultPatterns)
+            {
+                if (stripped == pattern)
+                    violations.Add($"line {i + 1}: '{pattern}' ({description})");
+            }
+
             if (inExpectedState)
                 continue;
 
+            // Setup-only defaults.
             foreach (var (pattern, description) in DefaultValuePatterns)
             {
                 if (stripped == pattern)
@@ -316,6 +329,6 @@ public sealed class SpecLintTests
             }
         }
         Assert.True(violations.Count == 0,
-            $"{specName}: explicit default values in setup (omit them):\n  {string.Join("\n  ", violations)}");
+            $"{specName}: explicit default values (omit them):\n  {string.Join("\n  ", violations)}");
     }
 }

@@ -1,7 +1,7 @@
 id: modifier-category-remove
 category: modifier
 description: Category remove modifier removes a category link from a selection
-tags: []
+tags: [design-difference]
 
 setup:
   gameSystem:
@@ -43,9 +43,21 @@ steps:
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
 
+  # NR override: the remove modifier works (Elites is gone), but NR always
+  # synthesizes an "Uncategorized" fallback when no categories remain.
+  # See category/category-uncategorized-fallback for this design difference.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Veteran Squad
               categories: []
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Veteran Squad
+                  categories:
+                    - name: Uncategorized
+                      entryId: (No Category)
+                      primary: true

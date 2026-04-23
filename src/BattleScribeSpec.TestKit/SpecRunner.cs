@@ -284,6 +284,8 @@ public sealed class SpecRunner
                 }
                 AssertForce(stepIndex, $"force[{fi}]", expectedForces[fi], state.Forces[fi]);
             }
+            if (state.Forces.Count > expectedForces.Count)
+                _errors.Add($"Step {stepIndex}: expected {expectedForces.Count} forces but got {state.Forces.Count}");
         }
 
         if (expected.SelectionCount is { } totalSelCount)
@@ -427,8 +429,7 @@ public sealed class SpecRunner
         if (ef.AvailableEntryCount is { } aec && af.AvailableEntryCount is { } actualAec)
             AssertEqual(stepIndex, $"{prefix}.availableEntryCount", aec, actualAec);
 
-        if (ef.Hidden is { } expectedHidden)
-            AssertEqual(stepIndex, $"{prefix}.hidden", expectedHidden, af.Hidden);
+        AssertEqual(stepIndex, $"{prefix}.hidden", ef.Hidden ?? false, af.Hidden);
 
         if (ef.ChildForceCount is { } cfc)
             AssertEqual(stepIndex, $"{prefix}.childForceCount", cfc, af.ChildForces.Count);
@@ -444,6 +445,8 @@ public sealed class SpecRunner
                 }
                 AssertForce(stepIndex, $"{prefix}.childForce[{ci}]", expectedChildForces[ci], af.ChildForces[ci]);
             }
+            if (af.ChildForces.Count > expectedChildForces.Count)
+                _errors.Add($"Step {stepIndex}: {prefix} expected {expectedChildForces.Count} child forces but got {af.ChildForces.Count}");
         }
 
         if (ef.Selections is { } expectedSels)
@@ -485,8 +488,7 @@ public sealed class SpecRunner
             if (es.Number is { } num)
                 AssertEqual(stepIndex, $"{selPrefix}.number", num, a.Number);
 
-            if (es.Hidden is { } hidden)
-                AssertEqual(stepIndex, $"{selPrefix}.hidden", hidden, a.Hidden);
+            AssertEqual(stepIndex, $"{selPrefix}.hidden", es.Hidden ?? false, a.Hidden);
 
             if (es.Page is not null)
                 AssertEqual(stepIndex, $"{selPrefix}.page", es.Page, a.Page);
@@ -526,6 +528,8 @@ public sealed class SpecRunner
             if (es.Children is { } expectedChildren)
                 AssertSelections(stepIndex, selPrefix, expectedChildren, a.Children);
         }
+        if (actual.Count > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} selections but got {actual.Count}");
     }
 
     private void AssertProfiles(int stepIndex, string prefix,
@@ -548,8 +552,7 @@ public sealed class SpecRunner
             if (ep.TypeName is not null)
                 AssertEqual(stepIndex, $"{profPrefix}.typeName", ep.TypeName, ap.TypeName);
 
-            if (ep.Hidden is { } h)
-                AssertEqual(stepIndex, $"{profPrefix}.hidden", h, ap.Hidden);
+            AssertEqual(stepIndex, $"{profPrefix}.hidden", ep.Hidden ?? false, ap.Hidden);
 
             if (ep.Page is not null)
                 AssertEqual(stepIndex, $"{profPrefix}.page", ep.Page, ap.Page ?? "");
@@ -574,6 +577,8 @@ public sealed class SpecRunner
                 }
             }
         }
+        if (actual.Count > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} profiles but got {actual.Count}");
     }
 
     private void AssertRules(int stepIndex, string prefix,
@@ -595,8 +600,7 @@ public sealed class SpecRunner
             if (er.Description is not null)
                 AssertEqual(stepIndex, $"{rulePrefix}.description", er.Description, ar.Description);
 
-            if (er.Hidden is { } h)
-                AssertEqual(stepIndex, $"{rulePrefix}.hidden", h, ar.Hidden);
+            AssertEqual(stepIndex, $"{rulePrefix}.hidden", er.Hidden ?? false, ar.Hidden);
 
             if (er.Page is not null)
                 AssertEqual(stepIndex, $"{rulePrefix}.page", er.Page, ar.Page ?? "");
@@ -604,6 +608,8 @@ public sealed class SpecRunner
             if (er.PublicationId is not null)
                 AssertEqual(stepIndex, $"{rulePrefix}.publicationId", er.PublicationId, ar.PublicationId ?? "");
         }
+        if (actual.Count > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} rules but got {actual.Count}");
     }
 
     private void AssertCategories(int stepIndex, string prefix,
@@ -637,6 +643,8 @@ public sealed class SpecRunner
             if (ec.Page is not null)
                 AssertEqual(stepIndex, $"{catPrefix}.page", ec.Page, ac.Page ?? "");
         }
+        if (actual.Count > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} categories but got {actual.Count}");
     }
 
     private void AssertEqual<T>(int stepIndex, string field, T expected, T actual)

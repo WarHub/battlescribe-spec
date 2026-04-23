@@ -55,3 +55,4 @@ steps:
       forces:
         - selections:
             - name: Force Has Trigger
+            - name: Trigger

@@ -50,6 +50,8 @@ steps:
         - name: Patrol
           selections:
             - name: Alpha Unit
+        - name: Patrol
+          selections: []
 
   - action: selectEntry
     forceId: ${{ steps.add-patrol-2.forceId }}

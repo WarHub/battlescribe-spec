@@ -58,3 +58,4 @@ steps:
       forces:
         - selections:
             - name: Percent Met
+            - name: Trigger Unit

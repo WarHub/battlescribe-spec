@@ -56,3 +56,4 @@ steps:
       forces:
         - selections:
             - name: Same Force Trigger
+            - name: Trigger

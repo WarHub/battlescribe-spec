@@ -61,7 +61,6 @@ steps:
             - name: Hidden Unit
               hidden: true
             - name: Normal Unit
-              hidden: false
       errors:
         - on: selection se-hidden
           from: se-hidden/hidden

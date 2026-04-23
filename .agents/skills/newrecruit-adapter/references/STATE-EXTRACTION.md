@@ -30,15 +30,18 @@ const row = bsspec.row;
 
 ## Selection state mapping
 
+> Instance nodes always have these methods — no optional chaining needed.
+> See [NR Dual-Tree API](../../../docs/nr-dual-tree-api.md) for full reference.
+
 | NR accessor | SelectionState field | Notes |
 |------------|---------------------|-------|
-| `sel.getName?.()` | Name | Optional chaining throughout |
-| `sel.getId?.()` | EntryId | May include link prefix |
-| `sel.getType?.()` | Type | "unit", "model", "upgrade" |
-| `sel.getAmount?.()` | Number | Integer count, fallback 1 |
+| `sel.getName()` | Name | Strict call — instances always have getName |
+| `sel.getId()` | EntryId | For entryLinks: returns **target** ID |
+| `sel.getType?.()` | Type | "unit", "model", "upgrade" — may not exist on all nodes |
+| `sel.getAmount()` | Number | Integer count; only called on filtered instances (amount > 0) |
 | `sel.isHidden?.()` | Hidden | Boolean, fallback false |
-| `sel.getCosts?.()` | Costs[] | Mapped via costIndex |
-| `sel.getSelections?.()` | Children[] | Recursive |
+| `sel.getCosts?.()` | Costs[] | Per-unit costs, multiply by getAmount() for totals |
+| `sel.getSelections()` | Children[] | All children including amount=0 templates; filtered in extractSelections |
 | `sel.getModifiedProfiles?.()` | Profiles[] | Includes modifier effects |
 | `sel.getModifiedRules?.()` | Rules[] | Includes modifier effects |
 | `sel.getSelectionCategories?.()` | Categories[] | Via category links |
@@ -48,26 +51,23 @@ const row = bsspec.row;
 
 ## Selection sorting
 
-Selections are sorted by:
-
-1. **`__bsspec_seq`** — insertion sequence number (set by SelectEntryByIdAsync)
-2. **Catalogue entry order** — `window.__bsspec.entryOrder` index as tiebreaker
-
-This replicates BattleScribe's insertion-order display, since NR internally sorts
-alphabetically.
+NR sorts selections alphabetically within each category. Root selections are
+ordered by primary category (in XML forceEntry categoryLinks order), then
+alphabetically within each category. Child selections follow XML definition
+order. See [NR Ordering Analysis](../../../docs/nr-ordering-analysis.md).
 
 ## Force state mapping
 
 | NR property | ForceState field | Notes |
 |------------|-----------------|-------|
-| `force.name` | Name | From force entry |
-| `force.catalogueId` | CatalogueId | Catalogue used for force |
-| `force.selections` | Selections[] | Sorted as above |
-| `force.availableEntries` | AvailableEntryCount | Count of selectable entries |
-| `force.profiles` | Profiles[] | Force-level profiles |
-| `force.rules` | Rules[] | Force-level rules |
+| `f.uid` | Id | Strict — forces always have uid |
+| `f.getName()` | Name | Strict call — forces always have getName |
+| `f.catalogueId` | CatalogueId | Catalogue used for force |
+| `f.isHidden?.()` | Hidden | Boolean |
+| extractSelections(f) | Selections[] | Filtered by getAmount() > 0 |
+| extractProfiles(f) | Profiles[] | Force-level profiles |
+| extractRules(f) | Rules[] | Force-level rules |
 | `f.source?.publication?.id` | PublicationId | Via resolved `.publication` object on source |
-| `f.source?.publication?.name` | PublicationName | Same `.publication` object on source |
 | `f.source?.page` | Page | Number in NR, must stringify |
 
 ## Cost state mapping
@@ -149,16 +149,13 @@ const pubId = pub?.id || null;
 const pubName = pub?.name || null;
 ```
 
-## Reactive object unwrapping
+## Reactive object handling
 
-NR uses Vue 3 reactivity. Raw objects are accessed via `__v_raw` to avoid
-reactive proxy overhead and ensure consistent property access:
+NR uses Vue 3 reactivity. Instance nodes are Vue reactive proxies, but this
+does **not** affect primitive property reads (`.uid`, `.id`, method calls).
+No `__v_raw` unwrapping is needed for state extraction — Vue's proxy is
+transparent for the accessor patterns used by the adapter.
 
-```javascript
-const raw = selection?.__v_raw || selection;
-```
-
-This is especially important for:
-- Setting `__bsspec_seq` tags (must be on raw object)
-- Reading `uid` for identity tracking
-- Avoiding Vue reactivity tracking during bulk reads
+Vue reactivity counters (`vueNameKey`, `vueCostsKey`, `vueAmountKey`, etc.)
+on instance nodes trigger re-renders when state changes. These are internal
+to NR and not read by the adapter.
