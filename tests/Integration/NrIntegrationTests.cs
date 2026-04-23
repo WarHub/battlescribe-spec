@@ -58,7 +58,7 @@ public sealed class NrIntegrationTests
         Assert.Empty(errors);
 
         // Setup creates a roster but removes auto-forces; add one explicitly
-        _fixture.Engine.AddForce("force-1");
+        _fixture.Engine.AddForce("force-1", "cat-1");
 
         // Allow Pinia store to settle after setup — polling the state reader
         // will capture the latest snapshot once stable.
@@ -82,7 +82,7 @@ public sealed class NrIntegrationTests
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
-        var addForceResult = _fixture.Engine.AddForce("force-1");
+        var addForceResult = _fixture.Engine.AddForce("force-1", "cat-1");
 
         var stateBefore = _fixture.Engine.GetRosterState();
         var selsBefore = stateBefore.Forces[0].Selections.Count;
@@ -121,7 +121,7 @@ public sealed class NrIntegrationTests
         var errors = _fixture.Engine!.Setup(gs, [cat]);
         Assert.Empty(errors);
 
-        var addForceResult = _fixture.Engine.AddForce("force-1");
+        var addForceResult = _fixture.Engine.AddForce("force-1", "cat-1");
 
         // Select an entry to have a non-default selection
         _fixture.Engine.SelectEntry(addForceResult.ForceId!, "entry-1");

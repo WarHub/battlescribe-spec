@@ -156,7 +156,7 @@ public class ModifierOracleTests(ITestOutputHelper output)
             ],
         };
         engine.Setup(gs, [cat]);
-        var addForceOut = engine.AddForce("fe-1");
+        var addForceOut = engine.AddForce("fe-1", "cat-1");
         engine.SelectEntry(addForceOut.ForceId!, "se-1");
         var state = engine.GetRosterState();
 
@@ -189,7 +189,7 @@ public class ModifierOracleTests(ITestOutputHelper output)
             ],
         };
         engine.Setup(gs, [cat]);
-        var addForceOut2 = engine.AddForce("fe-1");
+        var addForceOut2 = engine.AddForce("fe-1", "cat-1");
         engine.SelectEntry(addForceOut2.ForceId!, "se-1");
         var state = engine.GetRosterState();
 

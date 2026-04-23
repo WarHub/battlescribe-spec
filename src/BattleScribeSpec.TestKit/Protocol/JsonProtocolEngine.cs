@@ -51,12 +51,12 @@ public sealed class JsonProtocolEngine : IRosterEngine
         };
     }
 
-    public ActionOutputs AddForce(string forceEntryId, string? catalogueId = null)
+    public ActionOutputs AddForce(string forceEntryId, string catalogueId)
     {
         return SendAction(new ActionCommand { Action = "addForce", ForceEntryId = forceEntryId, CatalogueId = catalogueId });
     }
 
-    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
     {
         return SendAction(new ActionCommand { Action = "addChildForce", ForceId = parentForceId, ForceEntryId = forceEntryId, CatalogueId = catalogueId });
     }

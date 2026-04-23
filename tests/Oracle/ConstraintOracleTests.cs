@@ -350,7 +350,7 @@ public class ConstraintOracleTests
             }],
         };
         engine.Setup(gs, [cat]);
-        var addForceOut = engine.AddForce("fe-1");
+        var addForceOut = engine.AddForce("fe-1", "cat-1");
         var fId = addForceOut.ForceId!;
         engine.SelectEntry(fId, "shared-unit");
         engine.SelectEntry(fId, "shared-unit");

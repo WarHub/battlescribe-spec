@@ -230,7 +230,7 @@ public class RunnerAndProtocolRegressionTests
             return SetupErrors;
         }
 
-        public ActionOutputs AddForce(string forceEntryId, string? catalogueId = null)
+        public ActionOutputs AddForce(string forceEntryId, string catalogueId)
         {
             ActionCalls++;
             if (ThrowOnAddForce)
@@ -238,7 +238,7 @@ public class RunnerAndProtocolRegressionTests
             return new ActionOutputs { ForceId = "force-1" };
         }
 
-        public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string? catalogueId = null)
+        public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
         {
             ActionCalls++;
             return new ActionOutputs { ForceId = "child-force-1" };
