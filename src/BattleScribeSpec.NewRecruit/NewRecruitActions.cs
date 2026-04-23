@@ -255,27 +255,28 @@ public static class NewRecruitActions
 
                     // Entry not pre-created as instance. Search the selector tree
                     // and use addInstance() to create the first instance.
-                    // This is correct for first activation only (not for duplicates).
-                    function findSelector(selectors, id) {
+                    // NR's dual-tree alternates: instance→selectors→instances→selectors.
+                    // Selector nodes DON'T have 'selectors'; only instances do.
+                    // We must traverse selector→instances→selectors to find nested entries.
+                    function findSelectorDeep(selectors, id) {
                         for (const s of selectors) {
                             if (s.id === id || s.ids?.includes(id)) return s;
-                            const found = findSelector(s.selectors || [], id);
-                            if (found) return found;
+                            // Recurse through each instance's child selectors
+                            for (const inst of (s.instances || [])) {
+                                const found = findSelectorDeep(inst.selectors || [], id);
+                                if (found) return found;
+                            }
                         }
                         return null;
                     }
-                    // Search under the selection's own selector, and also under
-                    // the instance itself (some NR versions store selectors on instances).
-                    const selectorSources = [
-                        ...(sel.selector?.selectors || []),
-                        ...(sel.selectors || [])
-                    ];
-                    const targetSelector = findSelector(selectorSources, childEntryId);
+                    // Instance nodes own the 'selectors' array (always present).
+                    // sel.selector is a selector node — it never has 'selectors'.
+                    const targetSelector = findSelectorDeep(sel.selectors || [], childEntryId);
                     if (!targetSelector) {
-                        const ids = selectorSources.map(s => s.id).join(', ');
+                        const selectorIds = (sel.selectors || []).map(s => s.id).join(', ');
                         const childCount = children.length;
                         const childIds = children.map(c => c.getId?.()).join(', ');
-                        return `ERROR:Child entry '${childEntryId}' not found under selection (selectors: [${ids}], children: ${childCount} [${childIds}])`;
+                        return `ERROR:Child entry '${childEntryId}' not found under selection (selectors: [${selectorIds}], children: ${childCount} [${childIds}])`;
                     }
 
                     // Selector nodes have addInstance; instance nodes do not.

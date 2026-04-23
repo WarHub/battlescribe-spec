@@ -12,6 +12,12 @@ exists as both a **selector** (static template from catalogue data) and zero or
 more **instances** (dynamic materialized selections). The two node types have
 completely **disjoint** method sets — code must always know which type it holds.
 
+The tree **strictly alternates** between instances and selectors:
+- **Instance** nodes own `selectors[]` (child selector nodes)
+- **Selector** nodes own `instances[]` (child instance nodes)
+- Selector nodes **never** have a `selectors` property
+- Instance nodes **never** have an `instances` property
+
 ```
 Force
  └─ selectors[]                          ← category selectors
@@ -22,7 +28,7 @@ Force
      │           │   └─ instances[]      ← entry instances (0 = unselected)
      │           │       └─ [instance]   ← materialized selection
      │           │           ├─ selectors[]    ← child entry selectors
-     │           │           │   └─ se-child
+     │           │           │   └─ se-child  [selector]
      │           │           │       └─ instances[]
      │           │           └─ getSelections() → all child instances
      │           └─ se-unit-b  [selector]
@@ -32,6 +38,24 @@ Force
              └─ selectors[]
                  └─ se-categorized  [selector]
                      └─ instances[]
+```
+
+To search for a nested selector by ID, traverse the alternating tree:
+
+```javascript
+function findSelectorDeep(selectors, id) {
+    for (const s of selectors) {
+        if (s.id === id || s.ids?.includes(id)) return s;
+        // Selectors have instances, instances have selectors
+        for (const inst of (s.instances || [])) {
+            const found = findSelectorDeep(inst.selectors || [], id);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+// Always start from the instance's selectors — never from selector.selectors
+findSelectorDeep(instance.selectors, targetId);
 ```
 
 ## Node Types
