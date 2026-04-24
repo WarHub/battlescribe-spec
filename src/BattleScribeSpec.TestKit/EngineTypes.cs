@@ -21,7 +21,13 @@ public record RosterState(
     [property: JsonPropertyName("gameSystemId")] string GameSystemId,
     [property: JsonPropertyName("forces")] IReadOnlyList<ForceState> Forces,
     [property: JsonPropertyName("costs")] IReadOnlyList<CostState> Costs,
-    [property: JsonPropertyName("validationErrors")] IReadOnlyList<ValidationErrorState> ValidationErrors);
+    [property: JsonPropertyName("validationErrors")] IReadOnlyList<ValidationErrorState> ValidationErrors,
+    IReadOnlyList<CostState>? CostLimits = null,
+    [property: JsonPropertyName("gameSystemName"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? GameSystemName = null)
+{
+    [JsonPropertyName("costLimits"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CostState> CostLimits { get; init; } = CostLimits ?? [];
+}
 
 public record ForceState(
     [property: JsonPropertyName("id"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Id,
@@ -34,7 +40,13 @@ public record ForceState(
     IReadOnlyList<RuleState>? Rules = null,
     [property: JsonPropertyName("hidden")] bool Hidden = false,
     [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null,
-    [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null)
+    [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null,
+    [property: JsonPropertyName("entryId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EntryId = null,
+    IReadOnlyList<CategoryState>? Categories = null,
+    IReadOnlyList<PublicationState>? Publications = null,
+    [property: JsonPropertyName("catalogueName"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CatalogueName = null,
+    [property: JsonPropertyName("customName"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomName = null,
+    [property: JsonPropertyName("customNotes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomNotes = null)
 {
     [JsonPropertyName("childForces"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ForceState> ChildForces { get; init; } = ChildForces ?? [];
@@ -42,6 +54,10 @@ public record ForceState(
     public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
     [JsonPropertyName("rules"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<RuleState> Rules { get; init; } = Rules ?? [];
+    [JsonPropertyName("categories"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CategoryState> Categories { get; init; } = Categories ?? [];
+    [JsonPropertyName("publications"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<PublicationState> Publications { get; init; } = Publications ?? [];
 }
 
 public record SelectionState(
@@ -58,7 +74,10 @@ public record SelectionState(
     IReadOnlyList<CategoryState>? Categories = null,
     [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null,
     [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null,
-    [property: JsonPropertyName("publicationName"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationName = null)
+    [property: JsonPropertyName("publicationName"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationName = null,
+    [property: JsonPropertyName("entryGroupId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EntryGroupId = null,
+    [property: JsonPropertyName("customName"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomName = null,
+    [property: JsonPropertyName("customNotes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomNotes = null)
 {
     [JsonPropertyName("profiles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
@@ -101,10 +120,15 @@ public record CategoryState(
     IReadOnlyList<ProfileState>? Profiles = null,
     IReadOnlyList<RuleState>? Rules = null,
     [property: JsonPropertyName("publicationId"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicationId = null,
-    [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null)
+    [property: JsonPropertyName("page"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Page = null,
+    [property: JsonPropertyName("customNotes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomNotes = null)
 {
     [JsonPropertyName("profiles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
     [JsonPropertyName("rules"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<RuleState> Rules { get; init; } = Rules ?? [];
 }
+
+public record PublicationState(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name);

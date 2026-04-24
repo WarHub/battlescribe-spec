@@ -399,6 +399,7 @@ public static class JavaModelFactory
         string gameSystemId,
         int revision = 1,
         string bsVersion = "2.03",
+        bool library = false,
         IEnumerable<SelectionEntry>? selectionEntries = null,
         IEnumerable<EntryLink>? entryLinks = null,
         IEnumerable<SelectionEntry>? sharedSelectionEntries = null,
@@ -419,6 +420,7 @@ public static class JavaModelFactory
         cat.setRevision(revision);
         cat.setBattleScribeVersion(bsVersion);
         cat.setAuthorName("Test");
+        cat.setLibrary(library);
 
         if (selectionEntries != null)
             foreach (var se in selectionEntries)
@@ -933,13 +935,15 @@ public static class JavaModelFactory
     }
 
     public static CatalogueLink CreateCatalogueLink(
-        string id, string name, string targetId, bool importRootEntries = true)
+        string id, string name, string targetId, bool importRootEntries = true, string? type = null)
     {
         var cl = new CatalogueLink();
         cl.setId(id);
         cl.setName(name);
         cl.setTargetId(targetId);
         cl.setImportRootEntries(importRootEntries);
+        if (!string.IsNullOrEmpty(type))
+            cl.setType(type);
         return cl;
     }
 

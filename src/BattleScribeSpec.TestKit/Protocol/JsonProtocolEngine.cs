@@ -142,7 +142,9 @@ public sealed class JsonProtocolEngine : IRosterEngine
                 sr.GameSystemId,
                 sr.Forces,
                 sr.Costs,
-                sr.ValidationErrors),
+                sr.ValidationErrors,
+                CostLimits: sr.CostLimits,
+                GameSystemName: sr.GameSystemName),
             ProtocolError pe => throw new InvalidOperationException($"Adapter error: {pe.Message}"),
             _ => throw new InvalidOperationException($"Unexpected response type: {response.Type}"),
         };

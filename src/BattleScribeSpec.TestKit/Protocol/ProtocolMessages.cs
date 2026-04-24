@@ -182,11 +182,19 @@ public sealed class StateResponse : ProtocolResponse
     [JsonPropertyName("gameSystemId")]
     public string GameSystemId { get; set; } = "";
 
+    [JsonPropertyName("gameSystemName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GameSystemName { get; set; }
+
     [JsonPropertyName("forces")]
     public List<ForceState> Forces { get; set; } = [];
 
     [JsonPropertyName("costs")]
     public List<CostState> Costs { get; set; } = [];
+
+    [JsonPropertyName("costLimits")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CostState>? CostLimits { get; set; }
 
     [JsonPropertyName("validationErrors")]
     public List<ValidationErrorState> ValidationErrors { get; set; } = [];
@@ -284,6 +292,10 @@ public class ProtocolGameSystem
     [JsonPropertyName("sharedInfoGroups")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolInfoGroup>? SharedInfoGroups { get; set; }
+
+    [JsonPropertyName("selectionEntryGroups")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProtocolSelectionEntryGroup>? SelectionEntryGroups { get; set; }
 }
 
 public class ProtocolCatalogue
@@ -296,6 +308,9 @@ public class ProtocolCatalogue
 
     [JsonPropertyName("gameSystemId")]
     public string GameSystemId { get; set; } = "";
+
+    [JsonPropertyName("library")]
+    public bool Library { get; set; }
 
     [JsonPropertyName("selectionEntries")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -1130,6 +1145,10 @@ public sealed class ProtocolCatalogueLink
 
     [JsonPropertyName("targetId")]
     public string TargetId { get; set; } = "";
+
+    [JsonPropertyName("type")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Type { get; set; }
 
     [JsonPropertyName("importRootEntries")]
     public bool ImportRootEntries { get; set; } = true;

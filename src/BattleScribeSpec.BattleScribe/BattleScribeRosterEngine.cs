@@ -190,12 +190,20 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var costStates = costs.Select(c =>
             new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList();
 
+        var rawCostLimits = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCostLimits());
+        var costLimitStates = rawCostLimits.Count > 0
+            ? rawCostLimits.Select(c =>
+                new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList()
+            : null;
+
         return new RosterState(
             roster.getName() ?? "",
             roster.getGameSystemId() ?? "",
             forceStates,
             costStates,
-            errors);
+            errors,
+            CostLimits: costLimitStates,
+            GameSystemName: roster.getGameSystemName());
     }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors() => _engine.GetValidationErrors();
@@ -429,6 +437,8 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var forceProfiles = JavaListToList<net.battlescribe.model.data.Profile>(f.getProfiles());
         var forceRules = JavaListToList<net.battlescribe.model.data.Rule>(f.getRules());
         var childForces = JavaListToList<net.battlescribe.model.roster.Force>(f.getForces());
+        var forceCategories = JavaListToList<net.battlescribe.model.roster.Category>(f.getCategories());
+        var forcePublications = JavaListToList<net.battlescribe.model.data.Publication>(f.getPublications());
         var pubId = f.getPublicationId();
         // Use engine-resolved ForceEntry (modifiers applied) for hidden state
         var resolvedForceEntry = _engine.GetResolvedForceEntry(f);
@@ -438,6 +448,8 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         // Sort selections and child forces alphabetically to match BattleScribe render-layer ordering.
         selections = selections.OrderBy(s => s.getName(), StringComparer.OrdinalIgnoreCase).ToList();
         childForces = childForces.OrderBy(cf => cf.getName(), StringComparer.OrdinalIgnoreCase).ToList();
+        var customName = f.getCustomName();
+        var customNotes = f.getCustomNotes();
         return new ForceState(
             f.getId(),
             f.getName() ?? "",
@@ -452,7 +464,22 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
             Hidden: hidden,
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
-            Page: f.getPage());
+            Page: f.getPage(),
+            EntryId: f.getEntryId(),
+            Categories: forceCategories.Select(c =>
+            {
+                var catPubId = c.getPublicationId();
+                return new CategoryState(
+                    c.getName() ?? "", c.getEntryId(), c.isPrimary(),
+                    PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
+                    Page: c.getPage());
+            }).ToList(),
+            Publications: forcePublications.Count > 0
+                ? forcePublications.Select(p => new PublicationState(p.getId() ?? "", p.getName() ?? "")).ToList()
+                : null,
+            CatalogueName: f.getCatalogueName(),
+            CustomName: string.IsNullOrEmpty(customName) ? null : customName,
+            CustomNotes: string.IsNullOrEmpty(customNotes) ? null : customNotes);
     }
 
     private SelectionState CaptureSelection(net.battlescribe.model.roster.Selection sel, net.battlescribe.model.roster.Force force)
@@ -470,6 +497,8 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             ?? _engine.GetEntryById(sel.getEntryId())?.isHidden()
             ?? false;
         var pubId = sel.getPublicationId();
+        var selCustomName = sel.getCustomName();
+        var selCustomNotes = sel.getCustomNotes();
         return new SelectionState(
             sel.getId(),
             sel.getName() ?? "",
@@ -497,7 +526,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             }).ToList(),
             Page: sel.getPage(),
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
-            PublicationName: _engine.GetPublicationName(pubId));
+            PublicationName: _engine.GetPublicationName(pubId),
+            EntryGroupId: sel.getEntryGroupId(),
+            CustomName: string.IsNullOrEmpty(selCustomName) ? null : selCustomName,
+            CustomNotes: string.IsNullOrEmpty(selCustomNotes) ? null : selCustomNotes);
     }
 
     private static ProfileState CaptureProfile(net.battlescribe.model.data.Profile prof)
