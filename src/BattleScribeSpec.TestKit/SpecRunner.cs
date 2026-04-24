@@ -309,6 +309,9 @@ public sealed class SpecRunner
             }
         }
 
+        if (expected.GameSystemName is { } gsName)
+            AssertEqual(stepIndex, "gameSystemName", gsName, state.GameSystemName ?? "");
+
         if (expected.Forces is { } expectedForces)
         {
             for (var fi = 0; fi < expectedForces.Count; fi++)

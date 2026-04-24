@@ -302,6 +302,13 @@ setup:
                   field: selections
                   scope: force
                   childId: se-infantry
+          selectionEntryGroups:
+            - id: seg-cmd-traits
+              name: Command Traits
+              selectionEntries:
+                - id: se-cmd-trait-bold
+                  name: Bold
+                  type: upgrade
         - id: se-required
           name: Required Unit
           type: unit
@@ -334,10 +341,28 @@ steps:
     forceEntryId: fe-battalion
 
   - expectedState:
+      gameSystemName: Kitchen Sink GS
       forceCount: 1
       forces:
         - name: Battalion
+          entryId: fe-battalion
           catalogueId: cat-1
+          catalogueName: Test Catalogue
+          categoryCount: 4
+          categories:
+            - name: Uncategorised
+              entryId: "(No Category)"
+            - name: HQ
+              entryId: cat-hq
+            - name: Troops
+              entryId: cat-troops
+            - name: Elites
+              entryId: cat-elites
+          publications:
+            - id: pub-supplement
+              name: Supplement
+            - id: pub-core
+              name: Core Rulebook
           selectionCount: 1
           selections:
             - name: Required Unit
@@ -347,6 +372,21 @@ steps:
                 - name: Elites
                   entryId: cat-elites
                   primary: true
+      engines:
+        newrecruit:
+          forces:
+            - name: Battalion
+              entryId: fe-battalion
+              catalogueId: cat-1
+              selectionCount: 1
+              selections:
+                - name: Required Unit
+                  type: unit
+                  number: 1
+                  categories:
+                    - name: Elites
+                      entryId: cat-elites
+                      primary: true
 
   # Step 2: selectEntry Infantry Squad — assert ALL selection fields
   - action: selectEntry
@@ -482,6 +522,40 @@ steps:
             - name: Infantry Squad
             - name: Required Unit
 
+  # Step 4b: selectChildEntry — add Bold trait to Commander (exercises entryGroupId)
+  - action: selectChildEntry
+    id: select-bold
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-commander.selectionId }}
+    entryId: se-cmd-trait-bold
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Commander
+              children:
+                - name: Bold
+                  type: upgrade
+                  number: 1
+                  entryId: se-cmd-trait-bold
+                  entryGroupId: seg-cmd-traits
+
+            - name: Infantry Squad
+            - name: Required Unit
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Commander
+                  children:
+                    - name: Bold
+                      type: upgrade
+                      number: 1
+                      entryId: se-cmd-trait-bold
+
+                - name: Infantry Squad
+                - name: Required Unit
+
   # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
   - action: setSelectionCount
     forceId: ${{ steps.add-battalion.forceId }}
@@ -572,9 +646,17 @@ steps:
   #   - Total power: 4 + 5 + 5 + 0 = 14
   #   - Cost limit at 200pts → cost limit error
   - expectedState:
+      gameSystemName: Kitchen Sink GS
+      costLimitCount: 1
+      costLimits:
+        - typeId: ct-pts
+          name: pts
+          value: 200
       forceCount: 1
       forces:
         - name: Battalion
+          entryId: fe-battalion
+          catalogueName: Test Catalogue
           selectionCount: 4
           selections:
             - name: Commander
@@ -600,6 +682,10 @@ steps:
                 - name: HQ
                   entryId: cat-hq
                   primary: true
+              children:
+                - name: Bold
+                  type: upgrade
+                  entryGroupId: seg-cmd-traits
             - name: Infantry Squad
               type: unit
               number: 1
@@ -660,3 +746,20 @@ steps:
       errorsContain:
         - on: roster
           from: costLimits/ct-pts
+      engines:
+        newrecruit:
+          forces:
+            - name: Battalion
+              entryId: fe-battalion
+              catalogueName: Test Catalogue
+              selectionCount: 4
+              selections:
+                - name: Commander
+                  children:
+                    - name: Bold
+                      type: upgrade
+                - name: Infantry Squad
+                - name: Infantry Squad
+                  children:
+                    - name: Trooper
+                - name: Required Unit

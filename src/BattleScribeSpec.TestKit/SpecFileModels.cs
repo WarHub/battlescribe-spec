@@ -200,6 +200,9 @@ public sealed class ExpectedStateDef
     [YamlMember(Alias = "costLimitCount")]
     public int? CostLimitCount { get; set; }
 
+    [YamlMember(Alias = "gameSystemName")]
+    public string? GameSystemName { get; set; }
+
     /// <summary>
     /// Structured error assertions using "on"/"from" format.
     /// Requires an exact-set match: every assertion must match an actual error,
@@ -249,6 +252,7 @@ public sealed class ExpectedStateDef
             Costs = over.Costs ?? Costs,
             CostLimits = over.CostLimits ?? CostLimits,
             CostLimitCount = over.CostLimitCount ?? CostLimitCount,
+            GameSystemName = over.GameSystemName ?? GameSystemName,
             Errors = over.Errors ?? Errors,
             ErrorsContain = over.ErrorsContain ?? ErrorsContain,
             ErrorCount = over.ErrorCount ?? ErrorCount,
