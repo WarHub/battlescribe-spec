@@ -51,7 +51,7 @@ public sealed class SpecStructureTests
         // that no YAML has 'assert:' keys (they would be silently ignored).
         // We check the raw YAML text instead.
         var text = File.ReadAllText(specPath);
-        Assert.False(System.Text.RegularExpressions.Regex.IsMatch(text, @"^\s*- assert:", System.Text.RegularExpressions.RegexOptions.Multiline),
+        Assert.False(System.Text.RegularExpressions.Regex.IsMatch(text, @"^[ \t]*- assert:", System.Text.RegularExpressions.RegexOptions.Multiline),
             $"{specName}: contains legacy 'assert:' step (use 'expectedState:' instead)");
     }
 
@@ -122,7 +122,7 @@ public sealed class SpecStructureTests
         var legacyFields = new[] { "validationErrors", "validationErrorCount", "hasValidationErrors", "noValidationErrors" };
         foreach (var field in legacyFields)
         {
-            Assert.False(System.Text.RegularExpressions.Regex.IsMatch(text, $@"^\s+{field}:", System.Text.RegularExpressions.RegexOptions.Multiline),
+            Assert.False(System.Text.RegularExpressions.Regex.IsMatch(text, $@"^[ \t]+{field}:", System.Text.RegularExpressions.RegexOptions.Multiline),
                 $"{specName}: contains legacy field '{field}:' (use 'errors:' instead)");
         }
     }
