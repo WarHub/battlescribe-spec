@@ -219,7 +219,7 @@ public class StateDumperTests
 
         // Should be valid JSON
         var doc = System.Text.Json.JsonDocument.Parse(output);
-        Assert.NotNull(doc.RootElement.GetProperty("roster"));
+        Assert.True(doc.RootElement.TryGetProperty("roster", out _), "JSON output missing 'roster' property");
     }
 
     [Fact]

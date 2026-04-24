@@ -26,7 +26,7 @@ public sealed class SpecStructureTests
     public void EverySpecHasSetup(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        Assert.NotNull(spec.Setup);
+        Assert.True(spec.Setup is not null, $"{specName}: missing 'setup' section");
     }
 
     [Theory]
@@ -34,10 +34,11 @@ public sealed class SpecStructureTests
     public void LastStepIsExpectedState(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        Assert.NotNull(spec.Steps);
-        Assert.NotEmpty(spec.Steps);
+        Assert.True(spec.Steps is not null, $"{specName}: missing 'steps' section");
+        Assert.True(spec.Steps.Count > 0, $"{specName}: 'steps' is empty");
         var lastStep = spec.Steps[^1];
-        Assert.NotNull(lastStep.ExpectedState);
+        Assert.True(lastStep.ExpectedState is not null,
+            $"{specName}: last step must be 'expectedState'");
     }
 
     [Theory]
@@ -50,7 +51,8 @@ public sealed class SpecStructureTests
         // that no YAML has 'assert:' keys (they would be silently ignored).
         // We check the raw YAML text instead.
         var text = File.ReadAllText(specPath);
-        Assert.DoesNotMatch(@"^\s*- assert:", text);
+        Assert.False(System.Text.RegularExpressions.Regex.IsMatch(text, @"^[ \t]*- assert:", System.Text.RegularExpressions.RegexOptions.Multiline),
+            $"{specName}: contains legacy 'assert:' step (use 'expectedState:' instead)");
     }
 
     [Theory]
@@ -117,9 +119,11 @@ public sealed class SpecStructureTests
     public void NoLegacyErrorFields(string specPath, string specName)
     {
         var text = File.ReadAllText(specPath);
-        Assert.DoesNotMatch(@"^\s+validationErrors:", text);
-        Assert.DoesNotMatch(@"^\s+validationErrorCount:", text);
-        Assert.DoesNotMatch(@"^\s+hasValidationErrors:", text);
-        Assert.DoesNotMatch(@"^\s+noValidationErrors:", text);
+        var legacyFields = new[] { "validationErrors", "validationErrorCount", "hasValidationErrors", "noValidationErrors" };
+        foreach (var field in legacyFields)
+        {
+            Assert.False(System.Text.RegularExpressions.Regex.IsMatch(text, $@"^[ \t]+{field}:", System.Text.RegularExpressions.RegexOptions.Multiline),
+                $"{specName}: contains legacy field '{field}:' (use 'errors:' instead)");
+        }
     }
 }
