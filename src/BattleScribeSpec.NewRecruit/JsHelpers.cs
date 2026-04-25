@@ -318,7 +318,7 @@ internal static class JsHelpers
                     const cats = f.getCategories?.() || [];
                     return cats.map(c => ({
                         name: c.getName?.() || c.name || '',
-                        entryId: c.source?.id || c.getId?.() || null,
+                        entryId: c.source?.targetId || c.source?.id || c.getId?.() || null,
                         primary: c.isPrimary?.() === true,
                         publicationId: c.publication?.id || c.source?.publication?.id || null,
                         page: (c.page ?? c.source?.page) != null ? String(c.page ?? c.source?.page) : null

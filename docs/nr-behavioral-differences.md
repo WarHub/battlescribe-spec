@@ -15,6 +15,7 @@
 | [instanceOf scope limits](#instanceof-scope-limitations-both-engines) | 12 | Info | instanceOf only works with self/parent/ancestor scope — both engines agree |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
 | [Other behavioral differences](#5-other-behavioral-differences) | 4 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
+| [Naming/spelling](#6-namingspelling) | 3 | Info | Default category name spelling, force category entryId path, selection entryGroupId unavailable |
 
 ---
 
@@ -462,83 +463,41 @@ node.setAmount({}, 5);
 node.setAmount(5);
 ```
 
-The NR UI spinbutton calls `this.opt.setAmount({}, newValue)` where `this.opt`
-is the tree node. The `{}` is an empty tracker context (normally contains
-`{currentDepth, errorStack, warningStack, modStack, autofixUnit}`).
+---
 
-#### `setAmount` internal call chain (traced via method proxies)
+## 6. Naming/Spelling
 
-When amount changes from 3→4 on a child "Trooper" node (323 total method calls):
+### Default category name: "Uncategorised" vs "Uncategorized"
 
-```
-DOM input/change event
-  → setAmount({}, 4)
-    → guard checks: isConstantRecursive, isHidden, isConstant
-    → setLastChecked("add", tracker)
-    → enable(4)                          // sets internal amount
-      → state.setSelections(4)
-      → scope.updateMultipliers(4, 4)    // propagates cost deltas UP
-      → onTotalCostChanged("pts")        // notify cost system
-      → scope.getQueue().empty()         // drain priority queue
-        → Squad.state.onTotalCostChanged // parent listener fires
-        → Force.state.onTotalCostChanged // grandparent fires
-    → eachParent → Squad.onChildAmountChanged()
-    → refreshErrors
-    → initializeChilds
-    → unsetLastChecked
-  → Squad.applyModifications(tracker)
-    → checkConstraints (×3 nodes)
-    → fixReactivity (×6 calls)           // trigger Vue computed updates
-    → updateDisplayStatus
-    → calcTotalUnitSize
-    → calcTotalCosts (×5 passes)         // NOT a loop — see below
-    → autocheck
-    → toJsonObject                       // serialize for save
-  → lists.saveListLocally()              // persist to IndexedDB
-  → lists.doSaveList()                   // queue server save
-```
+BattleScribe uses the British spelling **"Uncategorised"** for the default/fallback
+category. NewRecruit uses the American spelling **"Uncategorized"**.
 
-#### Why `calcTotalCosts` is called 5+ times (NOT a loop)
+This affects any assertion that references the default category by name. Use NR engine
+overrides in specs to provide the American spelling when asserting on force categories.
 
-Three distinct phases, each reading the (already-updated) cost data:
+### Force category `entryId`: Available via `source.targetId`
 
-1. **Scope propagation** (synchronous, bottom-up): `onTotalCostChanged` fires
-   from child → parent → root via priority queue. Queue uses `Map<callback, args>`
-   for deduplication — same listener can only be queued once.
+NR force categories (from `force.getCategories()`) DO expose the target category entry
+ID, but via a different property than expected:
 
-2. **Vue re-rendering** (async): Vue computed properties (`totalCost`, `cost`,
-   `displayedCost`) are dirtied by `vueCostsKey++`. Each UI location that
-   displays costs triggers a `calcTotalCosts()` read.
+| Property | Value | What it is |
+|----------|-------|-----------|
+| `c.source?.id` | `"cl-hq"` | The **categoryLink** ID (link, not target) |
+| `c.source?.targetId` | `"cat-hq"` | The **category entry** ID ✅ |
+| `c.source?.entryId` | `undefined` | Not available |
+| `c.entryId` | `undefined` | Not available on instance |
 
-3. **Auto-save**: `doSaveList` calls `getPointsCost()` which reads
-   `calcTotalCosts()`.
+The adapter reads `entryId` from `source.targetId` (falling back to `source.id`).
 
-**Stop guarantee** is structural (not convergence-based):
-- Upward-only propagation: parent → parent → root (never back down)
-- Queue deduplication: `Map<callback, args>` — re-enqueue replaces, doesn't accumulate
-- Finite tree depth: O(depth) steps guaranteed
-- `autocheck` guard: `!state.autochecked` ensures single execution per node
+### Selection `entryGroupId`: Not available
 
-#### Where NR uses each method
+NR does **not** expose `entryGroupId` on selections. Neither the instance nor its
+`source` object has this property. Selections that are children of a
+`selectionEntryGroup` in BattleScribe will have `entryGroupId: null` in NR.
 
-| NR UI action | API called | Effect |
-|-------------|-----------|--------|
-| Spinbutton count change (±) | `node.setAmount({}, n)` | Mutates amount on existing node |
-| "Duplicate Unit" button | `selector.addInstance()` + copy state | Creates new sibling |
-| "Create Unit" (+) in catalogue panel | `force.insertUnit()` → `selector.addInstance()` | New selection node |
-| `addSubUnit()`, `splitDown/Up` | `selector.addInstance()` | Structural operations |
-| Mobile +/- buttons | `incrementAmount({})` / `decrementAmount({})` | Alternative path (0 call sites in bundle) |
-
-#### Adapter fix (applied)
-
-`NewRecruitActions.cs` `SetSelectionCountAsync` now uses `setAmount({}, count)`:
-```javascript
-sel.setAmount({}, count);
-```
-
-This produces the correct single-node-with-count behavior matching both
-NR's own UI and BattleScribe's behavior. The old `addInstance()` loop
-approach has been removed.
+Confirmed via live Playwright probing: `source.entryGroupId` is `undefined` on child
+entries (Bold, Cunning) within a selection entry group (Traits), both before and after
+selection via `addInstance()`.
 
 ---
 

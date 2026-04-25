@@ -641,6 +641,7 @@ steps:
             - categories:
                 - name: Uncategorized
                 - name: HQ
+                  entryId: cat-hq
                 - name: Troops
                 - name: Elites
 
@@ -857,8 +858,11 @@ steps:
               categories:
                 - name: Uncategorized
                 - name: HQ
+                  entryId: cat-hq
                 - name: Troops
+                  entryId: cat-troops
                 - name: Elites
+                  entryId: cat-elites
               selections:
                 - name: Commander
                   customName: The General
