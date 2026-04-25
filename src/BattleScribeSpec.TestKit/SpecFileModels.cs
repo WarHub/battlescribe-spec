@@ -166,6 +166,24 @@ public sealed class StepDef
     [YamlMember(Alias = "value")]
     public double? Value { get; set; }
 
+    /// <summary>
+    /// Custom name to set (for setCustomization).
+    /// </summary>
+    [YamlMember(Alias = "customName")]
+    public string? CustomName { get; set; }
+
+    /// <summary>
+    /// Custom notes to set (for setCustomization).
+    /// </summary>
+    [YamlMember(Alias = "customNotes")]
+    public string? CustomNotes { get; set; }
+
+    /// <summary>
+    /// Category entry ID for targeting a specific category (for setCustomization).
+    /// </summary>
+    [YamlMember(Alias = "categoryEntryId")]
+    public string? CategoryEntryId { get; set; }
+
     [YamlMember(Alias = "path")]
     public string? Path { get; set; }
 
@@ -193,6 +211,15 @@ public sealed class ExpectedStateDef
 
     [YamlMember(Alias = "costs")]
     public List<ExpectedCostDef>? Costs { get; set; }
+
+    [YamlMember(Alias = "costLimits")]
+    public List<ExpectedCostDef>? CostLimits { get; set; }
+
+    [YamlMember(Alias = "costLimitCount")]
+    public int? CostLimitCount { get; set; }
+
+    [YamlMember(Alias = "gameSystemName")]
+    public string? GameSystemName { get; set; }
 
     /// <summary>
     /// Structured error assertions using "on"/"from" format.
@@ -241,6 +268,9 @@ public sealed class ExpectedStateDef
             Forces = over.Forces ?? Forces,
             CostCount = over.CostCount ?? CostCount,
             Costs = over.Costs ?? Costs,
+            CostLimits = over.CostLimits ?? CostLimits,
+            CostLimitCount = over.CostLimitCount ?? CostLimitCount,
+            GameSystemName = over.GameSystemName ?? GameSystemName,
             Errors = over.Errors ?? Errors,
             ErrorsContain = over.ErrorsContain ?? ErrorsContain,
             ErrorCount = over.ErrorCount ?? ErrorCount,
@@ -318,6 +348,27 @@ public sealed class ExpectedForceDef
 
     [YamlMember(Alias = "page")]
     public string? Page { get; set; }
+
+    [YamlMember(Alias = "entryId")]
+    public string? EntryId { get; set; }
+
+    [YamlMember(Alias = "categoryCount")]
+    public int? CategoryCount { get; set; }
+
+    [YamlMember(Alias = "categories")]
+    public List<ExpectedCategoryDef>? Categories { get; set; }
+
+    [YamlMember(Alias = "publications")]
+    public List<ExpectedPublicationDef>? Publications { get; set; }
+
+    [YamlMember(Alias = "catalogueName")]
+    public string? CatalogueName { get; set; }
+
+    [YamlMember(Alias = "customName")]
+    public string? CustomName { get; set; }
+
+    [YamlMember(Alias = "customNotes")]
+    public string? CustomNotes { get; set; }
 }
 
 public sealed class ExpectedSelectionDef
@@ -357,6 +408,18 @@ public sealed class ExpectedSelectionDef
 
     [YamlMember(Alias = "publicationName")]
     public string? PublicationName { get; set; }
+
+    [YamlMember(Alias = "entryGroupId")]
+    public string? EntryGroupId { get; set; }
+
+    [YamlMember(Alias = "entryId")]
+    public string? EntryId { get; set; }
+
+    [YamlMember(Alias = "customName")]
+    public string? CustomName { get; set; }
+
+    [YamlMember(Alias = "customNotes")]
+    public string? CustomNotes { get; set; }
 }
 
 public sealed class ExpectedCostDef
@@ -447,6 +510,17 @@ public sealed class ExpectedCategoryDef
 
     [YamlMember(Alias = "page")]
     public string? Page { get; set; }
+
+    [YamlMember(Alias = "customNotes")]
+    public string? CustomNotes { get; set; }
 }
 
 
+public sealed class ExpectedPublicationDef
+{
+    [YamlMember(Alias = "id")]
+    public string? Id { get; set; }
+
+    [YamlMember(Alias = "name")]
+    public string? Name { get; set; }
+}

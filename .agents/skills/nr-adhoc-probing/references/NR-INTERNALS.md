@@ -354,6 +354,26 @@ Creates a **new sibling node** with `amount=0`. Used by NR UI for:
 | Add second Squad to force | `selector.addInstance()` | ~~`setAmount({}, 2)`~~ |
 | Duplicate a unit | `selector.addInstance()` + copy | ~~`setAmount`~~ |
 
+## Custom Name & Notes — Premium Feature
+
+NR supports `customName` and `note` on instance nodes. These are premium
+(supporter-only) features. See [docs/nr-custom-name-notes.md](../../../docs/nr-custom-name-notes.md)
+for the full investigation.
+
+**Key facts:**
+- NR uses `.note`, NOT `.customNotes` — the adapter maps `note` → `customNotes`
+- Default value is `undefined` (not null, not "")
+- `getName()` returns the definition name, NOT the custom name
+- UI renders as "CustomName - OriginalName"
+- Selection notes visible in expanded detail panel; force notes NOT visible in UI
+
+**Paywall bypass** for testing:
+```javascript
+const userStore = pinia._s.get('userStore');
+userStore.user = { supporter: true, name: 'Test', _id: 'fake' };
+userStore.isSupporter(); // → true — paywall bypassed
+```
+
 ## Cost Recalculation Cascade — Not a Loop
 
 When `setAmount` changes a count, `calcTotalCosts()` is called 5+ times.

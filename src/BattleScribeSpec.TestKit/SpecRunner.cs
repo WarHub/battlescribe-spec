@@ -217,6 +217,15 @@ public sealed class SpecRunner
                 _engine.SetCostLimit(step.CostTypeId ?? "", step.Value ?? 0);
                 break;
 
+            case "setCustomization":
+                _engine.SetCustomization(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: setCustomization requires forceId"),
+                    selectionId,
+                    step.CategoryEntryId,
+                    step.CustomName,
+                    step.CustomNotes);
+                break;
+
             default:
                 _errors.Add($"Step {stepIndex}: unknown action '{step.Action}'");
                 break;
@@ -276,6 +285,41 @@ public sealed class SpecRunner
                     AssertEqual(stepIndex, $"cost[{matchKey}].value", v, actual.Value);
             }
         }
+
+        if (expected.CostLimitCount is { } clc)
+            AssertEqual(stepIndex, "costLimitCount", clc, state.CostLimits.Count);
+
+        if (expected.CostLimits is { } expectedCostLimits)
+        {
+            foreach (var ecl in expectedCostLimits)
+            {
+                CostState? actual;
+                string matchKey;
+                if (ecl.TypeId is { Length: > 0 } typeId)
+                {
+                    matchKey = typeId;
+                    actual = state.CostLimits.FirstOrDefault(c => c.TypeId == typeId);
+                }
+                else if (ecl.Name is { Length: > 0 } name)
+                {
+                    matchKey = name;
+                    actual = state.CostLimits.FirstOrDefault(c => c.Name == name);
+                }
+                else
+                {
+                    _errors.Add($"Step {stepIndex}: costLimit assertion has neither typeId nor name");
+                    continue;
+                }
+
+                if (actual is null)
+                    _errors.Add($"Step {stepIndex}: costLimit type '{matchKey}' not found in roster");
+                else if (ecl.Value is { } v)
+                    AssertEqual(stepIndex, $"costLimit[{matchKey}].value", v, actual.Value);
+            }
+        }
+
+        if (expected.GameSystemName is { } gsName)
+            AssertEqual(stepIndex, "gameSystemName", gsName, state.GameSystemName ?? "");
 
         if (expected.Forces is { } expectedForces)
         {
@@ -427,6 +471,9 @@ public sealed class SpecRunner
         if (ef.Name is not null)
             AssertEqual(stepIndex, $"{prefix}.name", ef.Name, af.Name);
 
+        if (ef.EntryId is not null)
+            AssertEqual(stepIndex, $"{prefix}.entryId", ef.EntryId, af.EntryId ?? "");
+
         if (ef.SelectionCount is { } sc)
             AssertEqual(stepIndex, $"{prefix}.selectionCount", sc, af.Selections.Count);
 
@@ -462,11 +509,29 @@ public sealed class SpecRunner
         if (ef.Rules is { } forceRules)
             AssertRules(stepIndex, prefix, forceRules, af.Rules);
 
+        if (ef.CategoryCount is { } catCount)
+            AssertEqual(stepIndex, $"{prefix}.categoryCount", catCount, af.Categories.Count);
+
+        if (ef.Categories is { } forceCats)
+            AssertCategories(stepIndex, prefix, forceCats, af.Categories);
+
+        if (ef.Publications is { } forcePubs)
+            AssertPublications(stepIndex, prefix, forcePubs, af.Publications);
+
         if (ef.PublicationId is not null)
             AssertEqual(stepIndex, $"{prefix}.publicationId", ef.PublicationId, af.PublicationId ?? "");
 
         if (ef.Page is not null)
             AssertEqual(stepIndex, $"{prefix}.page", ef.Page, af.Page ?? "");
+
+        if (ef.CatalogueName is not null)
+            AssertEqual(stepIndex, $"{prefix}.catalogueName", ef.CatalogueName, af.CatalogueName ?? "");
+
+        if (ef.CustomName is not null)
+            AssertEqual(stepIndex, $"{prefix}.customName", ef.CustomName, af.CustomName ?? "");
+
+        if (ef.CustomNotes is not null)
+            AssertEqual(stepIndex, $"{prefix}.customNotes", ef.CustomNotes, af.CustomNotes ?? "");
     }
 
     private void AssertSelections(int stepIndex, string prefix,
@@ -494,6 +559,9 @@ public sealed class SpecRunner
 
             AssertEqual(stepIndex, $"{selPrefix}.hidden", es.Hidden ?? false, a.Hidden);
 
+            if (es.EntryId is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.entryId", es.EntryId, a.EntryId ?? "");
+
             if (es.Page is not null)
                 AssertEqual(stepIndex, $"{selPrefix}.page", es.Page, a.Page);
 
@@ -502,6 +570,15 @@ public sealed class SpecRunner
 
             if (es.PublicationName is not null)
                 AssertEqual(stepIndex, $"{selPrefix}.publicationName", es.PublicationName, a.PublicationName ?? "");
+
+            if (es.EntryGroupId is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.entryGroupId", es.EntryGroupId, a.EntryGroupId ?? "");
+
+            if (es.CustomName is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.customName", es.CustomName, a.CustomName ?? "");
+
+            if (es.CustomNotes is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.customNotes", es.CustomNotes, a.CustomNotes ?? "");
 
             if (es.Costs is { } eCosts)
             {
@@ -556,6 +633,9 @@ public sealed class SpecRunner
             if (ep.TypeName is not null)
                 AssertEqual(stepIndex, $"{profPrefix}.typeName", ep.TypeName, ap.TypeName);
 
+            if (ep.TypeId is not null)
+                AssertEqual(stepIndex, $"{profPrefix}.typeId", ep.TypeId, ap.TypeId);
+
             AssertEqual(stepIndex, $"{profPrefix}.hidden", ep.Hidden ?? false, ap.Hidden);
 
             if (ep.Page is not null)
@@ -578,6 +658,8 @@ public sealed class SpecRunner
                     }
                     if (ec.Value is not null)
                         AssertEqual(stepIndex, $"{profPrefix}.characteristic[{ec.Name}].value", ec.Value, ac.Value);
+                    if (ec.TypeId is not null)
+                        AssertEqual(stepIndex, $"{profPrefix}.characteristic[{ec.Name}].typeId", ec.TypeId, ac.TypeId);
                 }
             }
         }
@@ -622,15 +704,22 @@ public sealed class SpecRunner
         for (var ci = 0; ci < expected.Count; ci++)
         {
             var ec = expected[ci];
-            var ac = ec.Name is not null
-                ? actual.FirstOrDefault(c => c.Name == ec.Name)
-                : ci < actual.Count ? actual[ci] : null;
+            // Match by entryId first, then name, then index
+            var ac = ec.EntryId is not null
+                ? actual.FirstOrDefault(c => c.EntryId == ec.EntryId)
+                : ec.Name is not null
+                    ? actual.FirstOrDefault(c => c.Name == ec.Name)
+                    : ci < actual.Count ? actual[ci] : null;
             if (ac is null)
             {
-                _errors.Add($"Step {stepIndex}: {prefix}.category[{ec.Name ?? ci.ToString()}] not found (have {actual.Count} categories)");
+                var matchKey = ec.EntryId ?? ec.Name ?? ci.ToString();
+                _errors.Add($"Step {stepIndex}: {prefix}.category[{matchKey}] not found (have {actual.Count} categories)");
                 continue;
             }
-            var catPrefix = $"{prefix}.category[{ec.Name ?? ci.ToString()}]";
+            var catPrefix = $"{prefix}.category[{ec.EntryId ?? ec.Name ?? ci.ToString()}]";
+
+            if (ec.Name is not null && ec.EntryId is not null)
+                AssertEqual(stepIndex, $"{catPrefix}.name", ec.Name, ac.Name);
 
             if (ec.Primary is { } p)
                 AssertEqual(stepIndex, $"{catPrefix}.primary", p, ac.Primary);
@@ -646,9 +735,38 @@ public sealed class SpecRunner
 
             if (ec.Page is not null)
                 AssertEqual(stepIndex, $"{catPrefix}.page", ec.Page, ac.Page ?? "");
+
+            if (ec.CustomNotes is not null)
+                AssertEqual(stepIndex, $"{catPrefix}.customNotes", ec.CustomNotes, ac.CustomNotes ?? "");
         }
         if (actual.Count > expected.Count)
             _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} categories but got {actual.Count}");
+    }
+
+    private void AssertPublications(int stepIndex, string prefix,
+        List<ExpectedPublicationDef> expected, IReadOnlyList<PublicationState> actual)
+    {
+        for (var pi = 0; pi < expected.Count; pi++)
+        {
+            var ep = expected[pi];
+            var ap = ep.Id is not null
+                ? actual.FirstOrDefault(p => p.Id == ep.Id)
+                : ep.Name is not null
+                    ? actual.FirstOrDefault(p => p.Name == ep.Name)
+                    : pi < actual.Count ? actual[pi] : null;
+            if (ap is null)
+            {
+                var matchKey = ep.Id ?? ep.Name ?? pi.ToString();
+                _errors.Add($"Step {stepIndex}: {prefix}.publication[{matchKey}] not found (have {actual.Count} publications)");
+                continue;
+            }
+            var pubPrefix = $"{prefix}.publication[{ep.Id ?? ep.Name ?? pi.ToString()}]";
+
+            if (ep.Name is not null && ep.Id is not null)
+                AssertEqual(stepIndex, $"{pubPrefix}.name", ep.Name, ap.Name);
+        }
+        if (actual.Count > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} publications but got {actual.Count}");
     }
 
     private void AssertEqual<T>(int stepIndex, string field, T expected, T actual)

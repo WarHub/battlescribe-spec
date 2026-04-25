@@ -142,6 +142,14 @@ public static class AdapterHandler
                 case "setCostLimit":
                     engine.SetCostLimit(cmd.CostTypeId ?? "", cmd.Value ?? 0);
                     break;
+                case "setCustomization":
+                    engine.SetCustomization(
+                        cmd.ForceId ?? throw new InvalidOperationException("setCustomization requires forceId"),
+                        cmd.SelectionId,
+                        cmd.CategoryEntryId,
+                        cmd.CustomName,
+                        cmd.CustomNotes);
+                    break;
                 default:
                     return new ActionResult { Ok = false, Error = $"Unknown action: {cmd.Action}" };
             }
@@ -164,8 +172,10 @@ public static class AdapterHandler
         {
             Name = state.Name,
             GameSystemId = state.GameSystemId,
+            GameSystemName = state.GameSystemName,
             Forces = state.Forces.ToList(),
             Costs = state.Costs.ToList(),
+            CostLimits = state.CostLimits?.ToList(),
             ValidationErrors = state.ValidationErrors.ToList(),
         };
     }

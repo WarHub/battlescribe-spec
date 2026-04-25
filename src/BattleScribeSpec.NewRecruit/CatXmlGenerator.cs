@@ -103,11 +103,6 @@ public static class CatXmlGenerator
             node = node.AddSelectionEntries(MapSelectionEntry(selectionEntry));
         }
 
-        foreach (var selectionEntryGroup in catalogue.SelectionEntryGroups ?? [])
-        {
-            node = node.AddSharedSelectionEntryGroups(MapSelectionEntryGroup(selectionEntryGroup));
-        }
-
         foreach (var entryLink in catalogue.EntryLinks ?? [])
         {
             node = node.AddEntryLinks(MapEntryLink(entryLink));

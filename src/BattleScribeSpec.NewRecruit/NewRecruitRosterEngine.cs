@@ -451,6 +451,12 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             .GetAwaiter().GetResult();
     }
 
+    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
+    {
+        NewRecruitActions.SetCustomizationAsync(_browser.Page, forceId, selectionId, categoryEntryId, customName, customNotes)
+            .GetAwaiter().GetResult();
+    }
+
     public RosterState GetRosterState()
     {
         Timings.StartPhase("GetRosterState");

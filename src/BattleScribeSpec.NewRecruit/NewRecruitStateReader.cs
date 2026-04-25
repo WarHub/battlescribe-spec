@@ -49,6 +49,9 @@ public static class NewRecruitStateReader
         var costs = snapshot.Costs.Select(c =>
             new CostState(c.Name, c.TypeId, c.Value)).ToList();
 
+        var costLimits = snapshot.CostLimits?.Select(c =>
+            new CostState(c.Name, c.TypeId, c.Value)).ToList();
+
         return new RosterState(
             snapshot.Name,
             snapshot.GameSystemId,
@@ -59,7 +62,9 @@ public static class NewRecruitStateReader
                 OwnerType: e.OwnerType,
                 OwnerEntryId: e.OwnerEntryId,
                 EntryId: e.EntryId,
-                ConstraintId: e.ConstraintId)).ToList());
+                ConstraintId: e.ConstraintId)).ToList(),
+            CostLimits: costLimits,
+            GameSystemName: snapshot.GameSystemName);
     }
 
     private static ForceState MapForce(NrForceSnapshot f)
@@ -77,7 +82,16 @@ public static class NewRecruitStateReader
             Rules: f.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
             Hidden: f.Hidden,
             PublicationId: f.PublicationId,
-            Page: f.Page
+            Page: f.Page,
+            EntryId: f.EntryId,
+            Categories: f.Categories.Select(c => new CategoryState(
+                c.Name, c.EntryId, c.Primary,
+                PublicationId: c.PublicationId,
+                Page: c.Page)).ToList(),
+            Publications: f.Publications?.Select(p => new PublicationState(p.Id, p.Name)).ToList(),
+            CatalogueName: f.CatalogueName,
+            CustomName: f.CustomName,
+            CustomNotes: f.CustomNotes
         );
     }
 
@@ -113,7 +127,10 @@ public static class NewRecruitStateReader
                 Page: c.Page)).ToList(),
             Page: sel.Page,
             PublicationId: sel.PublicationId,
-            PublicationName: sel.PublicationName);
+            PublicationName: sel.PublicationName,
+            EntryGroupId: sel.EntryGroupId,
+            CustomName: sel.CustomName,
+            CustomNotes: sel.CustomNotes);
     }
 
     // JSON-serializable snapshot types for page.EvaluateAsync deserialization
@@ -121,8 +138,10 @@ public static class NewRecruitStateReader
     {
         public string Name { get; init; } = "";
         public string GameSystemId { get; init; } = "";
+        public string? GameSystemName { get; init; }
         public List<NrForceSnapshot> Forces { get; init; } = [];
         public List<NrCostSnapshot> Costs { get; init; } = [];
+        public List<NrCostSnapshot>? CostLimits { get; init; }
         public List<NrErrorSnapshot> ValidationErrors { get; init; } = [];
     }
 
@@ -147,6 +166,12 @@ public static class NewRecruitStateReader
         public List<NrRuleSnapshot> Rules { get; init; } = [];
         public string? PublicationId { get; init; }
         public string? Page { get; init; }
+        public string? EntryId { get; init; }
+        public List<NrCategorySnapshot> Categories { get; init; } = [];
+        public List<NrPublicationSnapshot>? Publications { get; init; }
+        public string? CatalogueName { get; init; }
+        public string? CustomName { get; init; }
+        public string? CustomNotes { get; init; }
     }
 
     internal record NrSelectionSnapshot
@@ -165,6 +190,9 @@ public static class NewRecruitStateReader
         public string? Page { get; init; }
         public string? PublicationId { get; init; }
         public string? PublicationName { get; init; }
+        public string? EntryGroupId { get; init; }
+        public string? CustomName { get; init; }
+        public string? CustomNotes { get; init; }
     }
 
     internal record NrCostSnapshot
@@ -210,5 +238,11 @@ public static class NewRecruitStateReader
         public List<NrRuleSnapshot> Rules { get; init; } = [];
         public string? PublicationId { get; init; }
         public string? Page { get; init; }
+    }
+
+    internal record NrPublicationSnapshot
+    {
+        public string Id { get; init; } = "";
+        public string Name { get; init; } = "";
     }
 }

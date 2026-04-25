@@ -123,8 +123,15 @@ selection in the roster with a count, costs, modifiers applied, etc.
 | `getModifiedRules()` | Rules with modifiers applied |
 | `getSelectionCategories()` | Category links |
 | `checkConstraints()` | Run constraint validation |
+| `getCustomName()` | Returns customName when set (premium feature) |
 
 **Does NOT have:** `addInstance`
+
+**Custom Name & Notes** (own properties, premium feature):
+- `customName` — custom display name, default `undefined`. UI renders as "CustomName - OriginalName"
+- `note` — custom notes text, default `undefined`. Visible in expanded selection detail panel
+- `getName()` always returns the **definition** name, NOT the custom name
+- See [nr-custom-name-notes.md](nr-custom-name-notes.md) for full investigation
 
 ## addInstance() Category Relocation
 

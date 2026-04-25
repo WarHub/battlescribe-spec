@@ -1358,6 +1358,7 @@ public sealed class BattleScribeEngine : IDisposable
 
             var cat = JavaModelFactory.CreateCatalogue(
                 catSpec.Id, catSpec.Name, catSpec.GameSystemId,
+                library: catSpec.Library,
                 selectionEntries: selectionEntries,
                 entryLinks: entryLinks,
                 sharedSelectionEntries: sharedSelectionEntries,
@@ -1396,7 +1397,7 @@ public sealed class BattleScribeEngine : IDisposable
             if (catSpec.CatalogueLinks != null)
                 foreach (var clSpec in catSpec.CatalogueLinks)
                     cat.getCatalogueLinks().add(
-                        JavaModelFactory.CreateCatalogueLink(clSpec.Id, clSpec.Name, clSpec.TargetId, clSpec.ImportRootEntries));
+                        JavaModelFactory.CreateCatalogueLink(clSpec.Id, clSpec.Name, clSpec.TargetId, clSpec.ImportRootEntries, clSpec.Type));
 
             if (catSpec.Publications != null)
                 foreach (var pubSpec in catSpec.Publications)

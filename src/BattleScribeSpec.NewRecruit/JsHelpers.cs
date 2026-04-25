@@ -113,8 +113,10 @@ internal static class JsHelpers
                     const result = {
                         name: army.getCustomName?.() || army.getName?.() || spec.row?.name || '',
                         gameSystemId: spec.row?.bsid_system || '',
+                        gameSystemName: spec.row?.system_name || spec.book?.catalogue?.gameSystem?.name || null,
                         forces: extractForces(army),
                         costs: extractTotalCosts(army),
+                        costLimits: extractCostLimits(army),
                         validationErrors: extractErrors(army)
                     };
                     return JSON.stringify(result);
@@ -148,7 +150,13 @@ internal static class JsHelpers
                         profiles: extractProfiles(f),
                         rules: extractRules(f),
                         publicationId: f.publication?.id || f.source?.publication?.id || null,
-                        page: (f.page ?? f.source?.page) != null ? String(f.page ?? f.source?.page) : null
+                        page: (f.page ?? f.source?.page) != null ? String(f.page ?? f.source?.page) : null,
+                        entryId: f.source?.id || null,
+                        categories: extractForceCategories(f),
+                        publications: extractForcePublications(f),
+                        catalogueName: f.catalogueName || f.source?.catalogueName || null,
+                        customName: f.customName || null,
+                        customNotes: f.note || null
                     };
                 }
 
@@ -221,7 +229,10 @@ internal static class JsHelpers
                         })),
                         page: selPage != null ? String(selPage) : null,
                         publicationId: selPubId,
-                        publicationName: selPubName
+                        publicationName: selPubName,
+                        entryGroupId: src?.entryGroupId || null,
+                        customName: sel.customName || null,
+                        customNotes: sel.note || null
                     };
                 }
 
@@ -289,6 +300,38 @@ internal static class JsHelpers
                         }));
                     }
                     return [];
+                }
+
+                function extractCostLimits(army) {
+                    const maxCosts = army.getMaxCosts?.();
+                    if (!maxCosts || !Array.isArray(maxCosts)) return null;
+                    const limits = [];
+                    for (const c of maxCosts) {
+                        const value = c.value ?? c.defaultCostLimit ?? -1;
+                        if (value < 0) continue;
+                        limits.push({ name: c.name || '', typeId: c.typeId || '', value: value });
+                    }
+                    return limits.length > 0 ? limits : null;
+                }
+
+                function extractForceCategories(f) {
+                    const cats = f.getCategories?.() || [];
+                    return cats.map(c => ({
+                        name: c.getName?.() || c.name || '',
+                        entryId: c.source?.targetId || c.source?.id || c.getId?.() || null,
+                        primary: c.isPrimary?.() === true,
+                        publicationId: c.publication?.id || c.source?.publication?.id || null,
+                        page: (c.page ?? c.source?.page) != null ? String(c.page ?? c.source?.page) : null
+                    }));
+                }
+
+                function extractForcePublications(f) {
+                    const pubs = f.getPublications?.() || f.source?.publications || [];
+                    if (!pubs || pubs.length === 0) return null;
+                    return pubs.map(p => ({
+                        id: p.id || p.getId?.() || '',
+                        name: p.name || p.getName?.() || ''
+                    }));
                 }
 
                 function extractErrors(army) {

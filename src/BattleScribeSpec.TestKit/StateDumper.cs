@@ -70,12 +70,21 @@ public static class StateDumper
         DumpOptions options)
     {
         writer.WriteLine($"Roster: {state.Name}  (gameSystemId: {state.GameSystemId})");
+        if (!string.IsNullOrWhiteSpace(state.GameSystemName))
+            writer.WriteLine($"  gameSystemName: {state.GameSystemName}");
 
         // Costs
         if (state.Costs.Count > 0)
         {
             var costStr = string.Join(", ", state.Costs.Select(c => $"{c.Name}={c.Value}"));
             writer.WriteLine($"Costs: {costStr}");
+        }
+
+        // Cost limits
+        if (state.CostLimits.Count > 0)
+        {
+            var limitStr = string.Join(", ", state.CostLimits.Select(c => $"{c.Name}={c.Value}"));
+            writer.WriteLine($"CostLimits: {limitStr}");
         }
 
         // Forces
@@ -125,10 +134,31 @@ public static class StateDumper
     private static void DumpForce(ForceState force, TextWriter writer, string indent, int index)
     {
         writer.Write($"{indent}Force[{index}]: \"{force.Name}\"");
+        if (force.EntryId is { } entryId) writer.Write($"  entryId={entryId}");
         if (force.CatalogueId is { } catId) writer.Write($"  catalogueId={catId}");
+        if (force.CatalogueName is { } catName) writer.Write($"  catalogueName={catName}");
         if (force.PublicationId is { } pubId) writer.Write($"  pub={pubId}");
         if (force.Page is { } page) writer.Write($"  p.{page}");
+        if (force.Hidden) writer.Write(" [hidden]");
+        if (force.CustomName is { } cn) writer.Write($"  customName=\"{cn}\"");
+        if (force.CustomNotes is { } cno) writer.Write($"  customNotes=\"{cno}\"");
         writer.WriteLine();
+
+        // Force categories
+        if (force.Categories.Count > 0)
+        {
+            var catStr = string.Join(", ",
+                force.Categories.Select(c => c.Primary ? $"*{c.Name}" : c.Name));
+            writer.WriteLine($"{indent}  Categories: [{catStr}]");
+        }
+
+        // Force publications
+        if (force.Publications.Count > 0)
+        {
+            writer.WriteLine($"{indent}  Publications: {force.Publications.Count}");
+            foreach (var p in force.Publications)
+                writer.WriteLine($"{indent}    - \"{p.Name}\" (id={p.Id})");
+        }
 
         // Force profiles
         if (force.Profiles.Count > 0)
@@ -167,6 +197,9 @@ public static class StateDumper
         writer.Write($" ×{sel.Number}");
         if (sel.Hidden) writer.Write(" [hidden]");
         if (sel.EntryId is { } eid) writer.Write($"  entryId={eid}");
+        if (sel.EntryGroupId is { } egid) writer.Write($"  entryGroupId={egid}");
+        if (sel.CustomName is { } cn) writer.Write($"  customName=\"{cn}\"");
+        if (sel.CustomNotes is { } cno) writer.Write($"  customNotes=\"{cno}\"");
         writer.WriteLine();
 
         // Costs

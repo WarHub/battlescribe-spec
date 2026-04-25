@@ -132,6 +132,19 @@ public sealed class JsonProtocolEngine : IRosterEngine
         });
     }
 
+    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
+    {
+        SendAction(new ActionCommand
+        {
+            Action = "setCustomization",
+            ForceId = forceId,
+            SelectionId = selectionId,
+            CategoryEntryId = categoryEntryId,
+            CustomName = customName,
+            CustomNotes = customNotes,
+        });
+    }
+
     public RosterState GetRosterState()
     {
         var response = SendCommand(new GetStateCommand());
@@ -142,7 +155,9 @@ public sealed class JsonProtocolEngine : IRosterEngine
                 sr.GameSystemId,
                 sr.Forces,
                 sr.Costs,
-                sr.ValidationErrors),
+                sr.ValidationErrors,
+                CostLimits: sr.CostLimits,
+                GameSystemName: sr.GameSystemName),
             ProtocolError pe => throw new InvalidOperationException($"Adapter error: {pe.Message}"),
             _ => throw new InvalidOperationException($"Unexpected response type: {response.Type}"),
         };

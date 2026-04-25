@@ -140,6 +140,7 @@ public sealed class SpecLintTests
         "selectEntry", "selectChildEntry",
         "deselectSelection", "setSelectionCount",
         "duplicateSelection", "duplicateForce", "setCostLimit",
+        "setCustomization",
         "dump"
     ];
 

@@ -159,3 +159,24 @@ transparent for the accessor patterns used by the adapter.
 Vue reactivity counters (`vueNameKey`, `vueCostsKey`, `vueAmountKey`, etc.)
 on instance nodes trigger re-renders when state changes. These are internal
 to NR and not read by the adapter.
+
+## Custom Name & Notes mapping
+
+See [docs/nr-custom-name-notes.md](../../../docs/nr-custom-name-notes.md) for
+the full investigation (premium paywall, UI behavior, serialization format).
+
+| NR accessor | State field | Notes |
+|------------|-------------|-------|
+| `f.customName` | `ForceState.CustomName` | Own property on instance, `undefined` when not set |
+| `f.note` | `ForceState.CustomNotes` | NR uses `note`, BS XML uses `customNotes` |
+| `sel.customName` | `SelectionState.CustomName` | Own property on instance |
+| `sel.note` | `SelectionState.CustomNotes` | NR uses `note`, BS XML uses `customNotes` |
+
+**Adapter pattern** (in `JsHelpers.cs`):
+```javascript
+customName: f.customName || null,
+customNotes: f.note || null       // note → customNotes
+```
+
+**Key:** `getName()` always returns the definition name, NOT the custom name.
+NR UI renders custom names as "CustomName - OriginalName".
