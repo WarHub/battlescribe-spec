@@ -89,7 +89,9 @@ public static class NewRecruitStateReader
                 PublicationId: c.PublicationId,
                 Page: c.Page)).ToList(),
             Publications: f.Publications?.Select(p => new PublicationState(p.Id, p.Name)).ToList(),
-            CatalogueName: f.CatalogueName
+            CatalogueName: f.CatalogueName,
+            CustomName: f.CustomName,
+            CustomNotes: f.CustomNotes
         );
     }
 
@@ -126,7 +128,9 @@ public static class NewRecruitStateReader
             Page: sel.Page,
             PublicationId: sel.PublicationId,
             PublicationName: sel.PublicationName,
-            EntryGroupId: sel.EntryGroupId);
+            EntryGroupId: sel.EntryGroupId,
+            CustomName: sel.CustomName,
+            CustomNotes: sel.CustomNotes);
     }
 
     // JSON-serializable snapshot types for page.EvaluateAsync deserialization
@@ -166,6 +170,8 @@ public static class NewRecruitStateReader
         public List<NrCategorySnapshot> Categories { get; init; } = [];
         public List<NrPublicationSnapshot>? Publications { get; init; }
         public string? CatalogueName { get; init; }
+        public string? CustomName { get; init; }
+        public string? CustomNotes { get; init; }
     }
 
     internal record NrSelectionSnapshot
@@ -185,6 +191,8 @@ public static class NewRecruitStateReader
         public string? PublicationId { get; init; }
         public string? PublicationName { get; init; }
         public string? EntryGroupId { get; init; }
+        public string? CustomName { get; init; }
+        public string? CustomNotes { get; init; }
     }
 
     internal record NrCostSnapshot

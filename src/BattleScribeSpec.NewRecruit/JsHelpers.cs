@@ -151,10 +151,12 @@ internal static class JsHelpers
                         rules: extractRules(f),
                         publicationId: f.publication?.id || f.source?.publication?.id || null,
                         page: (f.page ?? f.source?.page) != null ? String(f.page ?? f.source?.page) : null,
-                        entryId: f.source?.id || f.getId?.() || null,
+                        entryId: f.source?.id || null,
                         categories: extractForceCategories(f),
                         publications: extractForcePublications(f),
-                        catalogueName: f.catalogueName || f.source?.catalogueName || null
+                        catalogueName: f.catalogueName || f.source?.catalogueName || null,
+                        customName: f.customName || null,
+                        customNotes: f.note || null
                     };
                 }
 
@@ -228,7 +230,9 @@ internal static class JsHelpers
                         page: selPage != null ? String(selPage) : null,
                         publicationId: selPubId,
                         publicationName: selPubName,
-                        entryGroupId: src?.entryGroupId || null
+                        entryGroupId: src?.entryGroupId || null,
+                        customName: sel.customName || null,
+                        customNotes: sel.note || null
                     };
                 }
 

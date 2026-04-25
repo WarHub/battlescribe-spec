@@ -469,10 +469,12 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             Categories: forceCategories.Select(c =>
             {
                 var catPubId = c.getPublicationId();
+                var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
                     c.getName() ?? "", c.getEntryId(), c.isPrimary(),
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
-                    Page: c.getPage());
+                    Page: c.getPage(),
+                    CustomNotes: string.IsNullOrEmpty(catCustomNotes) ? null : catCustomNotes);
             }).ToList(),
             Publications: forcePublications.Count > 0
                 ? forcePublications.Select(p => new PublicationState(p.getId() ?? "", p.getName() ?? "")).ToList()
@@ -516,13 +518,15 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 var catProfiles = JavaListToList<net.battlescribe.model.data.Profile>(c.getProfiles());
                 var catRules = JavaListToList<net.battlescribe.model.data.Rule>(c.getRules());
                 var catPubId = c.getPublicationId();
+                var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
                     c.getName() ?? "", c.getEntryId(), c.isPrimary(),
                     Profiles: catProfiles.Select(CaptureProfile).ToList(),
                     Rules: catRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
                         string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
-                    Page: c.getPage());
+                    Page: c.getPage(),
+                    CustomNotes: string.IsNullOrEmpty(catCustomNotes) ? null : catCustomNotes);
             }).ToList(),
             Page: sel.getPage(),
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
