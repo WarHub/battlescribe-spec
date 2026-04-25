@@ -559,6 +559,9 @@ public sealed class SpecRunner
 
             AssertEqual(stepIndex, $"{selPrefix}.hidden", es.Hidden ?? false, a.Hidden);
 
+            if (es.EntryId is not null)
+                AssertEqual(stepIndex, $"{selPrefix}.entryId", es.EntryId, a.EntryId ?? "");
+
             if (es.Page is not null)
                 AssertEqual(stepIndex, $"{selPrefix}.page", es.Page, a.Page);
 
@@ -630,6 +633,9 @@ public sealed class SpecRunner
             if (ep.TypeName is not null)
                 AssertEqual(stepIndex, $"{profPrefix}.typeName", ep.TypeName, ap.TypeName);
 
+            if (ep.TypeId is not null)
+                AssertEqual(stepIndex, $"{profPrefix}.typeId", ep.TypeId, ap.TypeId);
+
             AssertEqual(stepIndex, $"{profPrefix}.hidden", ep.Hidden ?? false, ap.Hidden);
 
             if (ep.Page is not null)
@@ -652,6 +658,8 @@ public sealed class SpecRunner
                     }
                     if (ec.Value is not null)
                         AssertEqual(stepIndex, $"{profPrefix}.characteristic[{ec.Name}].value", ec.Value, ac.Value);
+                    if (ec.TypeId is not null)
+                        AssertEqual(stepIndex, $"{profPrefix}.characteristic[{ec.Name}].typeId", ec.TypeId, ac.TypeId);
                 }
             }
         }

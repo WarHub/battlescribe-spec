@@ -412,6 +412,9 @@ public sealed class ExpectedSelectionDef
     [YamlMember(Alias = "entryGroupId")]
     public string? EntryGroupId { get; set; }
 
+    [YamlMember(Alias = "entryId")]
+    public string? EntryId { get; set; }
+
     [YamlMember(Alias = "customName")]
     public string? CustomName { get; set; }
 
