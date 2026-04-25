@@ -164,8 +164,10 @@ public static class AdapterHandler
         {
             Name = state.Name,
             GameSystemId = state.GameSystemId,
+            GameSystemName = state.GameSystemName,
             Forces = state.Forces.ToList(),
             Costs = state.Costs.ToList(),
+            CostLimits = state.CostLimits?.ToList(),
             ValidationErrors = state.ValidationErrors.ToList(),
         };
     }
