@@ -135,6 +135,16 @@ setup:
           - id: rule-ig-rapidfire
             name: Rapid Fire
             description: Double shots at half range
+    selectionEntryGroups:
+      - id: seg-gs-doctrines
+        name: Doctrines
+        selectionEntries:
+          - id: se-gs-doctrine-assault
+            name: Assault Doctrine
+            type: upgrade
+          - id: se-gs-doctrine-tactical
+            name: Tactical Doctrine
+            type: upgrade
     rules:
       - id: rule-gs-battleforged
         name: Battle-forged
@@ -143,9 +153,26 @@ setup:
         publicationId: pub-core
 
   catalogues:
+    - id: cat-lib
+      name: Library Catalogue
+      gameSystemId: ks-gs
+      library: true
+      sharedSelectionEntries:
+        - id: se-lib-relic
+          name: Library Relic
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 30
     - id: cat-1
       name: Test Catalogue
       gameSystemId: ks-gs
+      catalogueLinks:
+        - id: cl-lib
+          name: Library Catalogue
+          targetId: cat-lib
+          type: catalogue
       publications:
         - id: pub-supplement
           name: Supplement
@@ -333,12 +360,21 @@ setup:
           name: Ancient Relic
           targetId: se-shared-relic
           type: selectionEntry
+        - id: el-lib-relic
+          name: Library Relic
+          targetId: se-lib-relic
+          type: selectionEntry
+        - id: el-gs-doctrines
+          name: Doctrines
+          targetId: seg-gs-doctrines
+          type: selectionEntryGroup
 
 steps:
   # Step 1: addForce — auto-selects Required Unit (min=1)
   - action: addForce
     id: add-battalion
     forceEntryId: fe-battalion
+    catalogueId: cat-1
 
   - expectedState:
       gameSystemName: Kitchen Sink GS
@@ -556,7 +592,59 @@ steps:
                 - name: Infantry Squad
                 - name: Required Unit
 
-  # Step 5: setSelectionCount — set Trooper child count to 2 via selectionPath
+  # Step 4c: setCustomization — set custom name/notes on Commander
+  - action: setCustomization
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-commander.selectionId }}
+    customName: The General
+    customNotes: Veteran commander
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Commander
+              customName: The General
+              customNotes: Veteran commander
+            - name: Infantry Squad
+            - name: Required Unit
+
+  # Step 4d: setCustomization — set custom name/notes on force
+  - action: setCustomization
+    forceId: ${{ steps.add-battalion.forceId }}
+    customName: Alpha Strike Force
+    customNotes: Main battle group
+
+  - expectedState:
+      forces:
+        - customName: Alpha Strike Force
+          customNotes: Main battle group
+
+  # Step 4e: setCustomization — set custom notes on force HQ category
+  #   NR silently ignores category-level customNotes (not supported)
+  - action: setCustomization
+    forceId: ${{ steps.add-battalion.forceId }}
+    categoryEntryId: cat-hq
+    customNotes: HQ deployment notes
+
+  - expectedState:
+      forces:
+        - categories:
+            - name: Uncategorised
+            - name: HQ
+              entryId: cat-hq
+              customNotes: HQ deployment notes
+            - name: Troops
+            - name: Elites
+      engines:
+        newrecruit:
+          forces:
+            - categories:
+                - name: Uncategorized
+                - name: HQ
+                - name: Troops
+                - name: Elites
+
+  # Step 5: setSelectionCount— set Trooper child count to 2 via selectionPath
   - action: setSelectionCount
     forceId: ${{ steps.add-battalion.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}
@@ -657,12 +745,23 @@ steps:
         - name: Battalion
           entryId: fe-battalion
           catalogueName: Test Catalogue
+          customName: Alpha Strike Force
+          customNotes: Main battle group
           selectionCount: 4
+          categories:
+            - name: Uncategorised
+            - name: HQ
+              entryId: cat-hq
+              customNotes: HQ deployment notes
+            - name: Troops
+            - name: Elites
           selections:
             - name: Commander
               entryId: se-commander
               type: unit
               number: 1
+              customName: The General
+              customNotes: Veteran commander
               costs:
                 - name: pts
                   typeId: ct-pts
@@ -752,9 +851,18 @@ steps:
             - name: Battalion
               entryId: fe-battalion
               catalogueName: Test Catalogue
+              customName: Alpha Strike Force
+              customNotes: Main battle group
               selectionCount: 4
+              categories:
+                - name: Uncategorized
+                - name: HQ
+                - name: Troops
+                - name: Elites
               selections:
                 - name: Commander
+                  customName: The General
+                  customNotes: Veteran commander
                   children:
                     - name: Bold
                       type: upgrade

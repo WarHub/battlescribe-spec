@@ -103,6 +103,13 @@ public interface IRosterEngine : IDisposable
     void SetCostLimit(string costTypeId, double value);
 
     /// <summary>
+    /// Set custom name and/or notes on a force, selection, or category.
+    /// Targeting: if categoryEntryId → category; if selectionId → selection; else → force.
+    /// </summary>
+    void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
+        => throw new NotSupportedException("This engine does not support setCustomization.");
+
+    /// <summary>
     /// Get the current roster state as an immutable snapshot.
     /// </summary>
     RosterState GetRosterState();

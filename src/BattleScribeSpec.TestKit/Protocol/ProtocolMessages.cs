@@ -123,6 +123,18 @@ public sealed class ActionCommand : ProtocolCommand
     [JsonPropertyName("value")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Value { get; set; }
+
+    [JsonPropertyName("customName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CustomName { get; set; }
+
+    [JsonPropertyName("customNotes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CustomNotes { get; set; }
+
+    [JsonPropertyName("categoryEntryId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CategoryEntryId { get; set; }
 }
 
 public sealed class GetStateCommand : ProtocolCommand

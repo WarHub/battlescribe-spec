@@ -217,6 +217,15 @@ public sealed class SpecRunner
                 _engine.SetCostLimit(step.CostTypeId ?? "", step.Value ?? 0);
                 break;
 
+            case "setCustomization":
+                _engine.SetCustomization(
+                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: setCustomization requires forceId"),
+                    selectionId,
+                    step.CategoryEntryId,
+                    step.CustomName,
+                    step.CustomNotes);
+                break;
+
             default:
                 _errors.Add($"Step {stepIndex}: unknown action '{step.Action}'");
                 break;

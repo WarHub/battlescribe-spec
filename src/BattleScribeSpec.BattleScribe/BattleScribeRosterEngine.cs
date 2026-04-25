@@ -172,6 +172,32 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         _engine.SetCostLimit(costType, value);
     }
 
+    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
+    {
+        var force = FindForceById(forceId);
+        if (categoryEntryId is not null)
+        {
+            // Target a category on the force or selection
+            var categories = selectionId is not null
+                ? JavaListToList<net.battlescribe.model.roster.Category>(FindSelectionById(force, selectionId).getCategories())
+                : JavaListToList<net.battlescribe.model.roster.Category>(force.getCategories());
+            var cat = categories.FirstOrDefault(c => c.getEntryId() == categoryEntryId)
+                ?? throw new InvalidOperationException($"Category with entryId '{categoryEntryId}' not found.");
+            if (customNotes is not null) cat.setCustomNotes(customNotes);
+        }
+        else if (selectionId is not null)
+        {
+            var selection = FindSelectionById(force, selectionId);
+            if (customName is not null) selection.setCustomName(customName);
+            if (customNotes is not null) selection.setCustomNotes(customNotes);
+        }
+        else
+        {
+            if (customName is not null) force.setCustomName(customName);
+            if (customNotes is not null) force.setCustomNotes(customNotes);
+        }
+    }
+
     public RosterState GetRosterState()
     {
         var roster = _engine.GetRoster();

@@ -166,6 +166,24 @@ public sealed class StepDef
     [YamlMember(Alias = "value")]
     public double? Value { get; set; }
 
+    /// <summary>
+    /// Custom name to set (for setCustomization).
+    /// </summary>
+    [YamlMember(Alias = "customName")]
+    public string? CustomName { get; set; }
+
+    /// <summary>
+    /// Custom notes to set (for setCustomization).
+    /// </summary>
+    [YamlMember(Alias = "customNotes")]
+    public string? CustomNotes { get; set; }
+
+    /// <summary>
+    /// Category entry ID for targeting a specific category (for setCustomization).
+    /// </summary>
+    [YamlMember(Alias = "categoryEntryId")]
+    public string? CategoryEntryId { get; set; }
+
     [YamlMember(Alias = "path")]
     public string? Path { get; set; }
 

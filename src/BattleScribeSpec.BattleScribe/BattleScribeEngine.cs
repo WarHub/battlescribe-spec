@@ -1309,7 +1309,9 @@ public sealed class BattleScribeEngine : IDisposable
         var gsRules = gameSystem.Rules?.Select(BuildRule).ToArray();
         var gsInfoLinks = gameSystem.InfoLinks?.Select(BuildInfoLink).ToArray();
         var gsSharedSelectionEntries = gameSystem.SharedSelectionEntries?.Select(BuildSelectionEntry).ToArray();
-        var gsSharedSelectionEntryGroups = gameSystem.SharedSelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var gsSharedSelectionEntryGroups = (gameSystem.SharedSelectionEntryGroups ?? [])
+            .Concat(gameSystem.SelectionEntryGroups ?? [])
+            .Select(BuildSelectionEntryGroup).ToArray();
         var gsSharedRules = gameSystem.SharedRules?.Select(BuildRule).ToArray();
         var gsSharedProfiles = gameSystem.SharedProfiles?.Select(BuildProfile).ToArray();
         var gsSharedInfoGroups = gameSystem.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();

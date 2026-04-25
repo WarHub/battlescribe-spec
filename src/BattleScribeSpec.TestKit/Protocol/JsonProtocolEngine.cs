@@ -132,6 +132,19 @@ public sealed class JsonProtocolEngine : IRosterEngine
         });
     }
 
+    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
+    {
+        SendAction(new ActionCommand
+        {
+            Action = "setCustomization",
+            ForceId = forceId,
+            SelectionId = selectionId,
+            CategoryEntryId = categoryEntryId,
+            CustomName = customName,
+            CustomNotes = customNotes,
+        });
+    }
+
     public RosterState GetRosterState()
     {
         var response = SendCommand(new GetStateCommand());
