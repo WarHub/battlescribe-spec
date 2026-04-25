@@ -82,9 +82,6 @@ public static class CatXmlGenerator
         foreach (var seg in gameSystem.SharedSelectionEntryGroups ?? [])
             node = node.AddSharedSelectionEntryGroups(MapSelectionEntryGroup(seg));
 
-        foreach (var seg in gameSystem.SelectionEntryGroups ?? [])
-            node = node.AddSharedSelectionEntryGroups(MapSelectionEntryGroup(seg));
-
         foreach (var rule in gameSystem.SharedRules ?? [])
             node = node.AddSharedRules(MapRule(rule));
 
@@ -104,11 +101,6 @@ public static class CatXmlGenerator
         foreach (var selectionEntry in catalogue.SelectionEntries ?? [])
         {
             node = node.AddSelectionEntries(MapSelectionEntry(selectionEntry));
-        }
-
-        foreach (var selectionEntryGroup in catalogue.SelectionEntryGroups ?? [])
-        {
-            node = node.AddSharedSelectionEntryGroups(MapSelectionEntryGroup(selectionEntryGroup));
         }
 
         foreach (var entryLink in catalogue.EntryLinks ?? [])

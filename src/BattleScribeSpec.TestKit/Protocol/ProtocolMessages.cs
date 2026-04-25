@@ -304,10 +304,6 @@ public class ProtocolGameSystem
     [JsonPropertyName("sharedInfoGroups")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolInfoGroup>? SharedInfoGroups { get; set; }
-
-    [JsonPropertyName("selectionEntryGroups")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<ProtocolSelectionEntryGroup>? SelectionEntryGroups { get; set; }
 }
 
 public class ProtocolCatalogue
@@ -327,10 +323,6 @@ public class ProtocolCatalogue
     [JsonPropertyName("selectionEntries")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ProtocolSelectionEntry>? SelectionEntries { get; set; }
-
-    [JsonPropertyName("selectionEntryGroups")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<ProtocolSelectionEntryGroup>? SelectionEntryGroups { get; set; }
 
     [JsonPropertyName("entryLinks")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

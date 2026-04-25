@@ -135,7 +135,7 @@ setup:
           - id: rule-ig-rapidfire
             name: Rapid Fire
             description: Double shots at half range
-    selectionEntryGroups:
+    sharedSelectionEntryGroups:
       - id: seg-gs-doctrines
         name: Doctrines
         selectionEntries:
