@@ -203,7 +203,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             costStates,
             errors,
             CostLimits: costLimitStates,
-            GameSystemName: roster.getGameSystemName());
+            GameSystemName: string.IsNullOrEmpty(roster.getGameSystemName()) ? null : roster.getGameSystemName());
     }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors() => _engine.GetValidationErrors();
@@ -465,7 +465,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             Hidden: hidden,
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
             Page: f.getPage(),
-            EntryId: f.getEntryId(),
+            EntryId: string.IsNullOrEmpty(f.getEntryId()) ? null : f.getEntryId(),
             Categories: forceCategories.Select(c =>
             {
                 var catPubId = c.getPublicationId();
@@ -477,7 +477,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             Publications: forcePublications.Count > 0
                 ? forcePublications.Select(p => new PublicationState(p.getId() ?? "", p.getName() ?? "")).ToList()
                 : null,
-            CatalogueName: f.getCatalogueName(),
+            CatalogueName: string.IsNullOrEmpty(f.getCatalogueName()) ? null : f.getCatalogueName(),
             CustomName: string.IsNullOrEmpty(customName) ? null : customName,
             CustomNotes: string.IsNullOrEmpty(customNotes) ? null : customNotes);
     }
@@ -527,7 +527,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             Page: sel.getPage(),
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
             PublicationName: _engine.GetPublicationName(pubId),
-            EntryGroupId: sel.getEntryGroupId(),
+            EntryGroupId: string.IsNullOrEmpty(sel.getEntryGroupId()) ? null : sel.getEntryGroupId(),
             CustomName: string.IsNullOrEmpty(selCustomName) ? null : selCustomName,
             CustomNotes: string.IsNullOrEmpty(selCustomNotes) ? null : selCustomNotes);
     }

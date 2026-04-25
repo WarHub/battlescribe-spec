@@ -70,8 +70,8 @@ public static class StateDumper
         DumpOptions options)
     {
         writer.WriteLine($"Roster: {state.Name}  (gameSystemId: {state.GameSystemId})");
-        if (state.GameSystemName is { } gsName)
-            writer.WriteLine($"  gameSystemName: {gsName}");
+        if (!string.IsNullOrWhiteSpace(state.GameSystemName))
+            writer.WriteLine($"  gameSystemName: {state.GameSystemName}");
 
         // Costs
         if (state.Costs.Count > 0)

@@ -113,7 +113,7 @@ internal static class JsHelpers
                     const result = {
                         name: army.getCustomName?.() || army.getName?.() || spec.row?.name || '',
                         gameSystemId: spec.row?.bsid_system || '',
-                        gameSystemName: spec.row?.system_name || spec.book?.catalogue?.gameSystem?.name || '',
+                        gameSystemName: spec.row?.system_name || spec.book?.catalogue?.gameSystem?.name || null,
                         forces: extractForces(army),
                         costs: extractTotalCosts(army),
                         costLimits: extractCostLimits(army),
