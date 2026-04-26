@@ -38,7 +38,10 @@ public sealed class SpecSchemaTests
     {
         var yamlText = File.ReadAllText(specPath);
         var jsonNode = YamlToJsonNode(yamlText);
-        var jsonString = jsonNode?.ToJsonString() ?? "null";
+        var jsonString = jsonNode?.ToJsonString(new JsonSerializerOptions
+        {
+            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
+        }) ?? "null";
         using var jsonDoc = JsonDocument.Parse(jsonString);
         var result = Schema.Value.Evaluate(jsonDoc.RootElement, new EvaluationOptions
         {
