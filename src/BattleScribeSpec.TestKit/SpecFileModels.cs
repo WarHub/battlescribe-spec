@@ -364,6 +364,9 @@ public sealed class ExpectedForceDef
     [YamlMember(Alias = "catalogueName")]
     public string? CatalogueName { get; set; }
 
+    [YamlMember(Alias = "catalogueId")]
+    public string? CatalogueId { get; set; }
+
     [YamlMember(Alias = "customName")]
     public string? CustomName { get; set; }
 
@@ -420,6 +423,9 @@ public sealed class ExpectedSelectionDef
 
     [YamlMember(Alias = "customNotes")]
     public string? CustomNotes { get; set; }
+
+    [YamlMember(Alias = "childCount")]
+    public int? ChildCount { get; set; }
 }
 
 public sealed class ExpectedCostDef

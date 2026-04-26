@@ -2,6 +2,6 @@
 <!-- Minimum validation: lint + BattleScribe + NR frozen. Run before every push. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>FullyQualifiedName~SpecLintTests|FullyQualifiedName~SpecStructureTests|FullyQualifiedName~SetupIdValidatorTests|FullyQualifiedName~SpecConformanceTests|FullyQualifiedName~FrozenNewRecruitConformanceTests</TestCaseFilter>
+    <TestCaseFilter>FullyQualifiedName~SpecLintTests|FullyQualifiedName~SpecStructureTests|FullyQualifiedName~SetupIdValidatorTests|FullyQualifiedName~SpecSchemaTests|FullyQualifiedName~SpecConformanceTests|FullyQualifiedName~FrozenNewRecruitConformanceTests</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

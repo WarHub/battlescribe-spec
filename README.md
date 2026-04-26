@@ -114,6 +114,7 @@ battlescribe-spec/
 
 ## Documentation
 
+- [Spec YAML Schema](docs/spec-schema.json) — JSON Schema for spec YAML files (enables IDE validation and autocompletion)
 - [Adapter Protocol Specification](docs/adapter-protocol.md) — JSON-line protocol reference
 - [Adapter Implementation Guide](docs/adapter-guide.md) — Step-by-step adapter writing guide
 - [Engine-Filtered Expected State](docs/engine-filtered-expected-state.md) — Per-engine assertion overrides

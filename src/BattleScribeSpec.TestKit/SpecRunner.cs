@@ -527,6 +527,9 @@ public sealed class SpecRunner
         if (ef.CatalogueName is not null)
             AssertEqual(stepIndex, $"{prefix}.catalogueName", ef.CatalogueName, af.CatalogueName ?? "");
 
+        if (ef.CatalogueId is not null)
+            AssertEqual(stepIndex, $"{prefix}.catalogueId", ef.CatalogueId, af.CatalogueId ?? "");
+
         if (ef.CustomName is not null)
             AssertEqual(stepIndex, $"{prefix}.customName", ef.CustomName, af.CustomName ?? "");
 
@@ -608,6 +611,9 @@ public sealed class SpecRunner
 
             if (es.Children is { } expectedChildren)
                 AssertSelections(stepIndex, selPrefix, expectedChildren, a.Children);
+
+            if (es.ChildCount is { } childCount)
+                AssertEqual(stepIndex, $"{selPrefix}.childCount", childCount, a.Children.Count);
         }
         if (actual.Count > expected.Count)
             _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} selections but got {actual.Count}");
