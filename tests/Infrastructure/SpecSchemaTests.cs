@@ -38,6 +38,10 @@ public sealed class SpecSchemaTests
         var yamlText = File.ReadAllText(specPath);
         var stream = new YamlStream();
         stream.Load(new StringReader(yamlText));
+        if (stream.Documents.Count == 0)
+        {
+            Assert.Fail($"{specName} failed schema validation: YAML stream contains no documents.");
+        }
         var jsonNode = stream.Documents[0].ToJsonNode();
         var jsonString = jsonNode?.ToJsonString() ?? "null";
         using var jsonDoc = JsonDocument.Parse(jsonString);
