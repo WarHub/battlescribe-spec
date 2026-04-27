@@ -13,7 +13,7 @@ public sealed class FrozenNewRecruitFixture : IAsyncLifetime
     public NewRecruitEnginePool? EnginePool { get; private set; }
     public bool Available => EnginePool is not null;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         if (Environment.GetEnvironmentVariable("NR_FROZEN_SKIP") == "true")
             return;
@@ -33,7 +33,7 @@ public sealed class FrozenNewRecruitFixture : IAsyncLifetime
         EnginePool = await NewRecruitEnginePool.CreateFrozenAsync(harFile, concurrency, headless: headless, visual: visual, slowMo: slowMo);
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (EnginePool is not null)
             await EnginePool.DisposeAsync();

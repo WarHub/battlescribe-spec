@@ -1,6 +1,5 @@
 using BattleScribeSpec;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -138,10 +137,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 1: Space Marines Battalion — "Ultramarines Strike Force"
     // Exercises: cost aggregation, min HQ/Troops constraints, child models
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster01_SpaceMarinesBattalion()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         // Ultramarines is a playable chapter catalogue that links to SM library
         using var engine = LoadCatalogue("Imperium - Ultramarines");
 
@@ -194,10 +193,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 2: Imperial Knights Super-Heavy — "Knight Household"
     // Exercises: non-standard force org, expensive models, 1900 conditionGroups
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster02_ImperialKnightsSuperHeavy()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         using var engine = LoadCatalogue("Imperium - Imperial Knights");
 
         AddForce(engine, "Super-Heavy");
@@ -233,10 +232,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 3: Chaos Daemons Multi-God — "Pandemonium Host"
     // Exercises: god-faction conditions, 788 conditionGroups, cross-faction
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster03_ChaosDaemonsMultiGod()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         using var engine = LoadCatalogue("Chaos - Daemons");
 
         AddForce(engine, "Battalion");
@@ -280,10 +279,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 4: Thousand Sons Psychic — "Cabal of Sorcerers"
     // Exercises: 3 catalogue imports, psychic powers, modifier chains
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster04_ThousandSonsPsychic()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         using var engine = LoadCatalogue("Chaos - Thousand Sons");
 
         AddForce(engine, "Battalion");
@@ -324,10 +323,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 5: Astra Militarum Combined Arms — "Cadian Shock Force"
     // Exercises: library imports, large selection count, multi-force
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster05_AstraMilitarumCombinedArms()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         // Astra Militarum (playable) links to AM Library, Elysians, DKoK, Assassinorum
         using var engine = LoadCatalogue("Imperium - Astra Militarum");
 
@@ -365,10 +364,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 6: Necrons Dynasty — "Szarekhan Phalanx"
     // Exercises: dynasty keyword modifiers, 658 conditionGroups
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster06_NecronsDynasty()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         using var engine = LoadCatalogue("Necrons");
 
         AddForce(engine, "Battalion");
@@ -411,10 +410,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 7: Tyranids Swarm — "Hive Fleet Leviathan"
     // Exercises: high model counts, many cheap units, swarm mechanics
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster07_TyranidsSwarm()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         using var engine = LoadCatalogue("Tyranids");
 
         AddForce(engine, "Battalion");
@@ -457,10 +456,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 8: Dark Angels — "Deathwing Assault"
     // Exercises: catalogue chain (DA→SM→GST), chapter-specific entries
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster08_DarkAngelsDeathwing()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         // Dark Angels is playable; auto-loads linked SM, Assassinorum, Inquisition, FW
         using var engine = LoadCatalogue("Imperium - Dark Angels");
 
@@ -501,10 +500,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 9: Adeptus Custodes Elite — "Shield Host"
     // Exercises: 4 catalogue imports, tight constraints, expensive models
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster09_AdeptusCustodesElite()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         using var engine = LoadCatalogue("Imperium - Adeptus Custodes");
 
         AddForce(engine, "Patrol");
@@ -541,10 +540,10 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
     // Roster 10: Craftworlds + Harlequins Allied — "Aeldari Warhost"
     // Exercises: multi-catalogue roster, shared Aeldari Library, 2 forces
     // =========================================================================
-    [SkippableFact]
+    [Fact]
     public void Roster10_AeldariAlliedWarhost()
     {
-        Skip.IfNot(DataAvailable, SkipMessage);
+        Assert.SkipUnless(DataAvailable, SkipMessage);
         // Craftworlds + Harlequins: both link to Aeldari Library
         // LoadCatalogues loads both with all dependencies
         using var engine = LoadCatalogues("Aeldari - Craftworlds", "Aeldari - Harlequins");

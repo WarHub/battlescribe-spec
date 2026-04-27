@@ -1,6 +1,5 @@
 using BattleScribeSpec.NewRecruit;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -28,14 +27,14 @@ public sealed class SequentialFrozenNewRecruitConformanceTests : ConformanceTest
 
     protected override IRosterEngine? GetEngine()
     {
-        Skip.If(Environment.GetEnvironmentVariable("NR_SEQUENTIAL") is not "true",
+        Assert.SkipWhen(Environment.GetEnvironmentVariable("NR_SEQUENTIAL") is not "true",
             "Sequential tests skipped by default — set NR_SEQUENTIAL=true to run");
-        Skip.If(!_fixture.Available,
+        Assert.SkipWhen(!_fixture.Available,
             "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
         return _fixture.Engine!;
     }
 
-    [SkippableTheory]
+    [Theory]
     [MemberData(nameof(AllSpecs))]
     public void FrozenNewRecruitEngine(string specPath, string specName) => RunSpec(specPath, specName);
 }

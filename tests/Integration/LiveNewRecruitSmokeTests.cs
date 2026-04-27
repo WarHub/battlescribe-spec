@@ -2,7 +2,6 @@ using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -24,10 +23,10 @@ public sealed class LiveNewRecruitSmokeTests
         _fixture = fixture;
     }
 
-    [SkippableFact]
+    [Fact]
     public void Smoke_Setup_CreatesRosterWithNoErrors()
     {
-        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
+        Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = new ProtocolGameSystem
         {
@@ -80,10 +79,10 @@ public sealed class LiveNewRecruitSmokeTests
         _output.WriteLine("Setup succeeded with no errors.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void Smoke_AddForceAndReadState()
     {
-        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
+        Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = new ProtocolGameSystem
         {
@@ -142,14 +141,14 @@ public sealed class LiveNewRecruitSmokeTests
         Assert.True(state.Forces.Count >= 1, $"Expected at least 1 force, got {state.Forces.Count}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void Smoke_RunSimpleSpec()
     {
-        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
+        Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set");
 
         // Run the simplest existing spec against NR to validate the full pipeline
         var specsDir = SpecLoader.FindSpecsDirectory();
-        Skip.If(specsDir is null, "Specs directory not found");
+        Assert.SkipWhen(specsDir is null, "Specs directory not found");
 
         // Find a basic spec to run
         var specFiles = SpecLoader.DiscoverSpecs(specsDir!)
@@ -157,7 +156,7 @@ public sealed class LiveNewRecruitSmokeTests
             .Take(3)
             .ToList();
 
-        Skip.If(specFiles.Count == 0, "No basic/simple specs found");
+        Assert.SkipWhen(specFiles.Count == 0, "No basic/simple specs found");
 
         foreach (var (path, id, category) in specFiles)
         {
@@ -179,7 +178,7 @@ public sealed class LiveNewRecruitSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void Smoke_CatXmlGeneratorProducesValidXml()
     {
         // This test doesn't need NR, but validates the XML generation pipeline

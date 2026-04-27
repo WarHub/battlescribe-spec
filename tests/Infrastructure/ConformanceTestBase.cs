@@ -1,5 +1,4 @@
 using Xunit;
-using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -24,19 +23,46 @@ public abstract class ConformanceTestBase
 
     /// <summary>
     /// Return the engine to run the spec against, or null to skip the test.
-    /// Implementations should call Skip.If() for environment-gated engines.
+    /// Implementations should call Assert.SkipWhen() for environment-gated engines.
     /// </summary>
     protected abstract IRosterEngine? GetEngine();
 
-    public static IEnumerable<object[]> AllSpecs()
+    public static TheoryDataRow<string, string>[] AllSpecs()
     {
         var specsDir = SpecLoader.FindSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
-            yield break;
-        foreach (var (path, id, category) in SpecLoader.DiscoverSpecs(specsDir))
+            return [];
+
+        return SpecLoader.DiscoverSpecs(specsDir).Select(s =>
         {
-            yield return [path, $"{category}/{id}"];
-        }
+            var row = new TheoryDataRow<string, string>(s.Path, $"{s.Category}/{s.Id}");
+            try
+            {
+                var spec = SpecLoader.Load(s.Path);
+                if (spec.Tags is { Count: > 0 })
+                    row.Traits.Add("Tag", [.. spec.Tags]);
+            }
+            catch
+            {
+                // Spec load failure during discovery — emit untagged row
+                // so execution reports the load error normally.
+            }
+            return row;
+        }).ToArray();
+    }
+
+    /// <summary>
+    /// Returns spec discovery data as simple tuples for use outside xUnit theory data.
+    /// Used by parallel NR test runners.
+    /// </summary>
+    public static List<(string Path, string Name)> AllSpecPaths()
+    {
+        var specsDir = SpecLoader.FindSpecsDirectory();
+        if (specsDir is null || !Directory.Exists(specsDir))
+            return [];
+        return SpecLoader.DiscoverSpecs(specsDir)
+            .Select(s => (s.Path, Name: $"{s.Category}/{s.Id}"))
+            .ToList();
     }
 
     protected void RunSpec(string specPath, string specName)

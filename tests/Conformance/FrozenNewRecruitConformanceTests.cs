@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using BattleScribeSpec.NewRecruit;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -26,13 +25,13 @@ public sealed class FrozenNewRecruitConformanceTests
         _fixture = fixture;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AllSpecs()
     {
-        Skip.If(!_fixture.Available,
+        Assert.SkipWhen(!_fixture.Available,
             "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
 
-        var allSpecs = ConformanceTestBase.AllSpecs().ToList();
+        var allSpecs = ConformanceTestBase.AllSpecPaths();
         var pool = _fixture.EnginePool!;
         var failures = new ConcurrentBag<string>();
         var passed = 0;
@@ -41,10 +40,10 @@ public sealed class FrozenNewRecruitConformanceTests
 
         // Load all specs upfront and pre-resolve datasources before parallel execution
         var resolver = new DataSourceResolver();
-        var loadedSpecs = allSpecs.Select(args => (
-            specPath: (string)args[0],
-            specName: (string)args[1],
-            spec: SpecLoader.Load((string)args[0])
+        var loadedSpecs = allSpecs.Select(s => (
+            s.Path,
+            s.Name,
+            spec: SpecLoader.Load(s.Path)
         )).ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
