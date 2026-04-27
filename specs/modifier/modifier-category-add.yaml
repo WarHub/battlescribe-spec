@@ -1,17 +1,26 @@
 id: modifier-category-add
 category: modifier
-description: Category modifier adds a category to a selection
+description: Category add modifier adds a category to a selection
 
 setup:
   gameSystem:
     id: test-gs
     name: Test GS
     categoryEntries:
+      - id: cat-hq
+        name: HQ
       - id: cat-elite
         name: Elites
     forceEntries:
       - id: fe-1
         name: Detachment
+        categoryLinks:
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+          - id: cl-fe-elite
+            targetId: cat-elite
+            name: Elites
   catalogues:
     - id: cat-1
       name: Cat
@@ -20,6 +29,15 @@ setup:
         - id: se-1
           name: Veteran Squad
           type: unit
+          categoryLinks:
+            - id: cl-1
+              targetId: cat-hq
+              name: HQ
+              primary: true
+          modifiers:
+            - type: add
+              field: category
+              value: cat-elite
 
 steps:
   - action: addForce
@@ -35,3 +53,7 @@ steps:
         - selectionCount: 1
           selections:
             - name: Veteran Squad
+              categories:
+                - name: Elites
+                - name: HQ
+                  primary: true
