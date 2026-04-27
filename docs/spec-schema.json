@@ -59,7 +59,7 @@
     },
     "modifierType": {
       "type": "string",
-      "enum": ["set", "increment", "decrement", "append", "remove", "set-primary", "unset-primary"]
+      "enum": ["set", "add", "increment", "decrement", "append", "remove", "set-primary", "unset-primary"]
     },
     "scopeValue": {
       "type": "string",
