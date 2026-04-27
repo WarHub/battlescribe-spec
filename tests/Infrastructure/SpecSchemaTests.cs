@@ -1,7 +1,6 @@
-using System.Globalization;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Json.Schema;
+using Yaml2JsonNode;
 using YamlDotNet.RepresentationModel;
 
 namespace BattleScribeSpec.Tests;
@@ -37,11 +36,14 @@ public sealed class SpecSchemaTests
     public void SpecValidatesAgainstSchema(string specPath, string specName)
     {
         var yamlText = File.ReadAllText(specPath);
-        var jsonNode = YamlToJsonNode(yamlText);
-        var jsonString = jsonNode?.ToJsonString(new JsonSerializerOptions
+        var stream = new YamlStream();
+        stream.Load(new StringReader(yamlText));
+        if (stream.Documents.Count == 0)
         {
-            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
-        }) ?? "null";
+            Assert.Fail($"{specName} failed schema validation: YAML stream contains no documents.");
+        }
+        var jsonNode = stream.Documents[0].ToJsonNode();
+        var jsonString = jsonNode?.ToJsonString() ?? "null";
         using var jsonDoc = JsonDocument.Parse(jsonString);
         var result = Schema.Value.Evaluate(jsonDoc.RootElement, new EvaluationOptions
         {
@@ -56,75 +58,5 @@ public sealed class SpecSchemaTests
                 .ToList();
             Assert.Fail($"{specName} failed schema validation:\n{string.Join("\n", errors)}");
         }
-    }
-
-    private static JsonNode? YamlToJsonNode(string yaml)
-    {
-        var stream = new YamlStream();
-        stream.Load(new StringReader(yaml));
-        if (stream.Documents.Count == 0)
-            return null;
-        return ConvertNode(stream.Documents[0].RootNode);
-    }
-
-    private static JsonNode? ConvertNode(YamlNode node)
-    {
-        return node switch
-        {
-            YamlMappingNode mapping => new JsonObject(
-                mapping.Children.Select(kv =>
-                    KeyValuePair.Create(
-                        ((YamlScalarNode)kv.Key).Value!,
-                        ConvertNode(kv.Value)))),
-            YamlSequenceNode sequence =>
-                new JsonArray(sequence.Children.Select(ConvertNode).ToArray()),
-            YamlScalarNode scalar => ConvertScalar(scalar),
-            _ => null
-        };
-    }
-
-    private static JsonNode? ConvertScalar(YamlScalarNode scalar)
-    {
-        var value = scalar.Value;
-        if (value is null)
-            return null;
-
-        // Quoted strings stay as strings
-        if (scalar.Style is YamlDotNet.Core.ScalarStyle.SingleQuoted
-            or YamlDotNet.Core.ScalarStyle.DoubleQuoted
-            or YamlDotNet.Core.ScalarStyle.Literal
-            or YamlDotNet.Core.ScalarStyle.Folded)
-            return JsonValue.Create(value);
-
-        // Null
-        if (value is "" or "~" or "null" or "Null" or "NULL")
-            return null;
-
-        // Boolean (YAML 1.1)
-        if (value is "true" or "True" or "TRUE" or "yes" or "Yes" or "YES"
-            or "on" or "On" or "ON")
-            return JsonValue.Create(true);
-        if (value is "false" or "False" or "FALSE" or "no" or "No" or "NO"
-            or "off" or "Off" or "OFF")
-            return JsonValue.Create(false);
-
-        // Integer
-        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l))
-            return JsonValue.Create(l);
-
-        // Float
-        if (double.TryParse(value, NumberStyles.Float | NumberStyles.AllowLeadingSign,
-            CultureInfo.InvariantCulture, out var d))
-            return JsonValue.Create(d);
-
-        // Special floats
-        if (value is ".inf" or ".Inf" or ".INF")
-            return JsonValue.Create(double.PositiveInfinity);
-        if (value is "-.inf" or "-.Inf" or "-.INF")
-            return JsonValue.Create(double.NegativeInfinity);
-        if (value is ".nan" or ".NaN" or ".NAN")
-            return JsonValue.Create(double.NaN);
-
-        return JsonValue.Create(value);
     }
 }
