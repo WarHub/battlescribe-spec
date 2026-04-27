@@ -128,7 +128,7 @@ public static class AdapterHandler
                     engine.SetSelectionCount(
                         cmd.ForceId ?? throw new InvalidOperationException("setSelectionCount requires forceId"),
                         cmd.SelectionId ?? throw new InvalidOperationException("setSelectionCount requires selectionId"),
-                        cmd.Count ?? 1);
+                        cmd.Count ?? throw new InvalidOperationException("setSelectionCount requires count"));
                     break;
                 case "duplicateSelection":
                     outputs = engine.DuplicateSelection(
@@ -140,7 +140,9 @@ public static class AdapterHandler
                         cmd.ForceId ?? throw new InvalidOperationException("duplicateForce requires forceId"));
                     break;
                 case "setCostLimit":
-                    engine.SetCostLimit(cmd.CostTypeId ?? "", cmd.Value ?? 0);
+                    engine.SetCostLimit(
+                        cmd.CostTypeId ?? throw new InvalidOperationException("setCostLimit requires costTypeId"),
+                        cmd.Value ?? throw new InvalidOperationException("setCostLimit requires value"));
                     break;
                 case "setCustomization":
                     engine.SetCustomization(

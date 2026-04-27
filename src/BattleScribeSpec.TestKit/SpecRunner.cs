@@ -199,7 +199,7 @@ public sealed class SpecRunner
                 _engine.SetSelectionCount(
                     forceId ?? throw new InvalidOperationException($"Step {stepIndex}: setSelectionCount requires forceId"),
                     selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: setSelectionCount requires selectionId"),
-                    step.Count ?? 1);
+                    step.Count ?? throw new InvalidOperationException($"Step {stepIndex}: setSelectionCount requires count"));
                 break;
 
             case "duplicateSelection":
@@ -214,7 +214,9 @@ public sealed class SpecRunner
                 break;
 
             case "setCostLimit":
-                _engine.SetCostLimit(step.CostTypeId ?? "", step.Value ?? 0);
+                _engine.SetCostLimit(
+                    step.CostTypeId ?? throw new InvalidOperationException($"Step {stepIndex}: setCostLimit requires costTypeId"),
+                    step.Value ?? throw new InvalidOperationException($"Step {stepIndex}: setCostLimit requires value"));
                 break;
 
             case "setCustomization":

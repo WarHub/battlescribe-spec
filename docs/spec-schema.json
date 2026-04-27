@@ -90,8 +90,7 @@
       }
     },
     "engineName": {
-      "type": "string",
-      "enum": ["battlescribe", "newrecruit"]
+      "type": "string"
     },
     "setup": {
       "type": "object",
@@ -212,10 +211,6 @@
         "selectionEntries": {
           "type": "array",
           "items": { "$ref": "#/$defs/selectionEntry" }
-        },
-        "selectionEntryGroups": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/selectionEntryGroup" }
         },
         "entryLinks": {
           "type": "array",

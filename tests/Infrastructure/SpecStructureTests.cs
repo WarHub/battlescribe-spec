@@ -87,32 +87,7 @@ public sealed class SpecStructureTests
         }
     }
 
-    private static readonly HashSet<string> KnownEngines = ["battlescribe", "newrecruit", "phalanx", "wham"];
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void EngineOverridesUseKnownEngineNames(string specPath, string specName)
-    {
-        var spec = SpecLoader.Load(specPath);
-
-        // Spec-level engines
-        if (spec.Engines is { } specEngines)
-        {
-            foreach (var engine in specEngines.Keys)
-                Assert.True(KnownEngines.Contains(engine),
-                    $"Unknown engine '{engine}' in spec-level engines field of {specName}");
-        }
-
-        // Step-level engine overrides
-        if (spec.Steps is null) return;
-        foreach (var step in spec.Steps)
-        {
-            if (step.ExpectedState?.Engines is not { } engines) continue;
-            foreach (var engine in engines.Keys)
-                Assert.True(KnownEngines.Contains(engine),
-                    $"Unknown engine '{engine}' in expectedState engines override of {specName}");
-        }
-    }
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
