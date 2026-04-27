@@ -23,6 +23,10 @@ public static class SpecValidator
         "costTypeId",
         "count",
         "value",
+        "customName",
+        "customNotes",
+        "categoryEntryId",
+        "path",
     ];
 
     /// <summary>
@@ -91,7 +95,7 @@ public static class SpecValidator
 
         if (!ActionParams.TryGetValue(action, out var paramDef))
         {
-            // Unknown action — let SpecRunner handle the error at runtime.
+            errors.Add($"{stepLabel}: unknown action '{action}'");
             return;
         }
 
