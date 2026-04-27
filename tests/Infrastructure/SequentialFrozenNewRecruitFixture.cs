@@ -15,7 +15,7 @@ public sealed class SequentialFrozenNewRecruitFixture : IAsyncLifetime
     public bool Available => Engine is not null;
     public string? HarFilePath { get; private set; }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         if (Environment.GetEnvironmentVariable("NR_SEQUENTIAL") is not "true")
             return;
@@ -34,7 +34,7 @@ public sealed class SequentialFrozenNewRecruitFixture : IAsyncLifetime
         Engine.Visual = visual;
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         if (Engine is not null)
         {
@@ -42,7 +42,7 @@ public sealed class SequentialFrozenNewRecruitFixture : IAsyncLifetime
         }
         Engine?.Dispose();
         Engine = null;
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 }
 

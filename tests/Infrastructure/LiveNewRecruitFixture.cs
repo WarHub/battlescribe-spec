@@ -13,7 +13,7 @@ public sealed class LiveNewRecruitFixture : IAsyncLifetime
     public NewRecruitEnginePool? EnginePool { get; private set; }
     public bool Available => EnginePool is not null;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         var baseUrl = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
         if (string.IsNullOrEmpty(baseUrl))
@@ -30,7 +30,7 @@ public sealed class LiveNewRecruitFixture : IAsyncLifetime
         EnginePool = await NewRecruitEnginePool.CreateLiveAsync(concurrency, baseUrl, headless, visual, slowMo);
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (EnginePool is not null)
             await EnginePool.DisposeAsync();

@@ -14,7 +14,7 @@ public sealed class SequentialLiveNewRecruitFixture : IAsyncLifetime
     public NewRecruitRosterEngine? Engine { get; private set; }
     public bool Available => Engine is not null;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         var baseUrl = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
         if (string.IsNullOrEmpty(baseUrl))
@@ -27,11 +27,11 @@ public sealed class SequentialLiveNewRecruitFixture : IAsyncLifetime
         Engine.Visual = visual;
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         Engine?.Dispose();
         Engine = null;
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 }
 

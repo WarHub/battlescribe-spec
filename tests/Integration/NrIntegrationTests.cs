@@ -2,7 +2,6 @@ using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -45,10 +44,10 @@ public sealed class NrIntegrationTests
         ]
     };
 
-    [SkippableFact]
+    [Fact]
     public void Setup_CreatesRosterWithForce()
     {
-        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
+        Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = CreateTestGameSystem();
         var cat = CreateTestCatalogue();
@@ -72,10 +71,10 @@ public sealed class NrIntegrationTests
         Assert.True(state.Forces.Count >= 1, $"Should have at least 1 force after setup. Name='{state.Name}', Forces={state.Forces.Count}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectEntry_AddsSelection()
     {
-        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
+        Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = CreateTestGameSystem();
         var cat = CreateTestCatalogue();
@@ -111,10 +110,10 @@ public sealed class NrIntegrationTests
         Assert.True(stateAfter.Forces.Count >= 1);
     }
 
-    [SkippableFact]
+    [Fact]
     public void GetRosterState_ReturnsSelectionDetails()
     {
-        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
+        Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = CreateTestGameSystem();
         var cat = CreateTestCatalogue();
@@ -143,10 +142,10 @@ public sealed class NrIntegrationTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void GetValidationErrors_ReturnsErrors()
     {
-        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
+        Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set");
 
         var gs = CreateTestGameSystem();
         var cat = CreateTestCatalogue();

@@ -105,17 +105,46 @@ The runner supports three output formats via `--output`:
 
 ## Filtering Specs
 
-Run a subset of specs using `--filter` and `--tag`:
+Run a subset of specs using `--filter` or `--tags`:
 
 ```bash
-# Run only cost-related specs
+# Run only cost-related specs (by path pattern)
 --filter "cost/"
 
 # Run specs tagged with a specific tag
---tag "modifier"
+--tags "cost"
 
-# Combine filters
---filter "constraint/" --tag "validation"
+# Run specs with any of several tags (OR semantics)
+--tags "cost,constraint"
+
+# Exclude specs with a tag
+--tags "-undefined-behavior"
+
+# Combine include and exclude (include cost OR constraint, exclude undefined-behavior)
+--tags "cost,constraint,-undefined-behavior"
+
+# Use + prefix explicitly for includes (equivalent to no prefix)
+--tags "+cost,+constraint,-undefined-behavior"
+```
+
+Tags use **OR** semantics for includes (spec matches if it has *any* included tag)
+and **AND** semantics for excludes (spec excluded if it has *any* excluded tag).
+Exclude overrides include.
+
+### Filtering in xUnit
+
+The BattleScribe conformance tests expose spec tags as xUnit traits. Filter by tag
+with `dotnet test --filter`:
+
+```bash
+# Run only cost-tagged specs
+dotnet test --filter "Tag=cost"
+
+# Run specs tagged with either cost or constraint
+dotnet test --filter "Tag=cost|Tag=constraint"
+
+# Combine tag filter with engine filter
+dotnet test --filter "Tag=cost&Category=Conformance"
 ```
 
 ## Exit Codes

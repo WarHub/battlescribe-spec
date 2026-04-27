@@ -1,6 +1,5 @@
 using BattleScribeSpec;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 

@@ -8,7 +8,7 @@ var adapter = "";
 string? specsDir = null;
 var output = "summary";
 string? filter = null;
-string? tag = null;
+string? tagsExpr = null;
 string? engineFilter = null;
 string? reportPath = null;
 string? matrixDir = null;
@@ -32,8 +32,8 @@ for (var i = 0; i < args.Length; i++)
         case "--filter" when i + 1 < args.Length:
             filter = args[++i];
             break;
-        case "--tag" when i + 1 < args.Length:
-            tag = args[++i];
+        case "--tags" when i + 1 < args.Length:
+            tagsExpr = args[++i];
             break;
         case "--engine" when i + 1 < args.Length:
             engineFilter = args[++i];
@@ -86,6 +86,9 @@ if (!string.IsNullOrEmpty(matrixDir))
     Console.WriteLine(CompatibilityMatrix.GenerateMarkdown(reports));
     return 0;
 }
+
+// Parse --tags into a TagFilter
+var tagFilter = TagFilter.Parse(tagsExpr);
 
 if (string.IsNullOrEmpty(adapter))
 {
@@ -187,17 +190,19 @@ foreach (var (_, id, category, loader) in specSources)
         continue;
     }
 
-    if (tag is not null && !(spec.Tags?.Contains(tag, StringComparer.OrdinalIgnoreCase) ?? false))
+    if (tagFilter is not null && !tagFilter.Matches(spec.Tags))
     {
         skipped++;
-        reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped", [$"Skipped by tag '{tag}'"]));
+        reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
+            [$"Skipped by tag filter '{tagFilter}'"], spec.Tags));
         continue;
     }
 
     if (engineFilter is not null && !spec.IsApplicableTo(engineFilter))
     {
         skipped++;
-        reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped", [$"Skipped by engine filter '{engineFilter}'"]));
+        reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
+            [$"Skipped by engine filter '{engineFilter}'"], spec.Tags));
         continue;
     }
 
@@ -255,7 +260,7 @@ if (workers > 1)
     {
         results.Add(result);
         specsByResult[result] = spec;
-        reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures]));
+        reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags));
     }
 
     // Dispose adapter processes
@@ -282,7 +287,7 @@ else
             else if (result.Passed && isExpectedFail) status = "unexpected-pass";
         }
 
-        reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures]));
+        reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags));
     }
 }
 
@@ -364,13 +369,18 @@ void OutputJson(List<SpecResult> results, TimeSpan elapsed)
         failed,
         total = results.Count,
         elapsedSeconds = elapsed.TotalSeconds,
-        specs = results.Select(r => new
+        specs = results.Select(r =>
         {
-            id = r.SpecId,
-            category = r.Category,
-            description = r.Description,
-            passed = r.Passed,
-            failures = r.Failures,
+            var spec = specsByResult.TryGetValue(r, out var s) ? s : null;
+            return new
+            {
+                id = r.SpecId,
+                category = r.Category,
+                description = r.Description,
+                passed = r.Passed,
+                failures = r.Failures,
+                tags = spec?.Tags ?? [],
+            };
         }),
     };
     Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
@@ -426,9 +436,12 @@ void PrintUsage()
           --specs <dir>       Path to specs directory (default: embedded specs)
           --output <format>   Output format: summary (default), json, github-actions
           --filter <pattern>  Only run specs matching pattern
-          --tag <tag>         Only run specs with this tag
+          --tags <expr>       Tag filter expression (comma-separated, +/- prefix)
+                              Include: "cost,constraint" (OR — matches any)
+                              Exclude: "-undefined-behavior"
+                              Combined: "cost,constraint,-undefined-behavior"
           --engine <name>     Only run specs applicable to this engine
-                              (battlescribe, newrecruit, phalanx)
+                              (battlescribe, newrecruit, phalanx, wham)
           --report <path>     Write conformance report JSON to file
           --expected-failures <engine>
                               Engine name for spec-level expected failures (from engines YAML field)

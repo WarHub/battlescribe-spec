@@ -1,6 +1,5 @@
 using BattleScribeSpec;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -17,10 +16,10 @@ public class RealWorldBattleScribeTests(ITestOutputHelper output)
 
     private static bool DataAvailable => TestPaths.Wh40kDataAvailable;
 
-    [SkippableFact]
+    [Fact]
     public void LoadGameSystem_ViaJavaDeserializer()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
+        Assert.SkipUnless(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         using var engine = new BattleScribeEngine();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
@@ -36,10 +35,10 @@ public class RealWorldBattleScribeTests(ITestOutputHelper output)
         Assert.NotEmpty(forceEntries);
     }
 
-    [SkippableFact]
+    [Fact]
     public void AddForce_WithRealData()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
+        Assert.SkipUnless(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         using var engine = new BattleScribeEngine();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
@@ -68,10 +67,10 @@ public class RealWorldBattleScribeTests(ITestOutputHelper output)
             output.WriteLine($"  - {e}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void LoadAllCatalogues_ViaJavaDeserializer()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
+        Assert.SkipUnless(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         using var engine = new BattleScribeEngine();
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
@@ -102,10 +101,10 @@ public class RealWorldBattleScribeTests(ITestOutputHelper output)
         Assert.Empty(failed);
     }
 
-    [SkippableFact]
+    [Fact]
     public void CompareForceEntries_JavaVsWham()
     {
-        Skip.IfNot(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
+        Assert.SkipUnless(DataAvailable, "wh40k-9e data not found. Run ./setup.ps1 to clone required repositories.");
 
         var gstFile = Directory.GetFiles(Wh40kDataDir, "*.gst").First();
 

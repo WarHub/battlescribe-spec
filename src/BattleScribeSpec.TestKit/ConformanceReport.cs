@@ -16,4 +16,6 @@ public record SpecResultSummary(
     string Category,
     string Description,
     string Status,
-    List<string> Failures);
+    List<string> Failures,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    List<string>? Tags = null);
