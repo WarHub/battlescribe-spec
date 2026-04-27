@@ -175,6 +175,7 @@ public sealed class SpecLintTests
         "defaultSelectionEntryId", "entryLink",
         "edge-case",
         "duplicate-ids",
+        "invalid-data",
         "validation-errors", "structured-errors",
         "modifierGroup", "infoGroup", "infoLink",
         "forceEntry", "categoryEntry", "categoryLink",

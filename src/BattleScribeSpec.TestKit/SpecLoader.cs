@@ -11,7 +11,6 @@ public static class SpecLoader
 {
     private static readonly IDeserializer Deserializer = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
-        .IgnoreUnmatchedProperties()
         .Build();
 
     /// <summary>
@@ -29,6 +28,7 @@ public static class SpecLoader
         if (string.IsNullOrEmpty(spec.Id))
             spec.Id = Path.GetFileNameWithoutExtension(yamlPath);
         ValidateIdUniqueness(spec);
+        SpecValidator.Validate(spec);
         return spec;
     }
 
@@ -61,6 +61,7 @@ public static class SpecLoader
         if (string.IsNullOrEmpty(spec.Id) && defaultId is not null)
             spec.Id = defaultId;
         ValidateIdUniqueness(spec);
+        SpecValidator.Validate(spec);
         return spec;
     }
 
