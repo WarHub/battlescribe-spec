@@ -663,8 +663,8 @@
         "type": { "$ref": "#/$defs/modifierType" },
         "field": { "type": "string" },
         "value": {
-          "description": "Modifier value — string in C# but YAML 1.2 may deserialize as boolean (true/false) or number.",
-          "type": ["string", "number", "boolean"]
+          "description": "Modifier value — always a string. Quote numeric and boolean values in YAML.",
+          "type": "string"
         },
         "conditions": {
           "type": "array",
