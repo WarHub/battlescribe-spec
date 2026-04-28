@@ -1,7 +1,7 @@
 # BattleScribe Data Model Reference
 
 This document describes the BattleScribe v2.03 data model as defined by the
-[official XSD schema](.deps/wham/src/dataformat/xml/schema/v2_03/Catalogue.xsd),
+[official XSD schema](../.deps/wham/src/dataformat/xml/schema/v2_03/Catalogue.xsd),
 cross-referenced with the Java engine implementation and our spec protocol types.
 
 ## Class Diagram
@@ -747,7 +747,7 @@ calculations, validation, or roster state.
 
 ## Sources
 
-- XSD schema: `.deps/wham/src/dataformat/xml/schema/v2_03/Catalogue.xsd`
+- XSD schema: `../.deps/wham/src/dataformat/xml/schema/v2_03/Catalogue.xsd`
 - Java model: decompiled `BattleScribeEngine.jar` (v2.3.21) in `battlescribe-decompiled/`
 - Protocol types: `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs`
 - XML generator: `src/BattleScribeSpec.NewRecruit/CatXmlGenerator.cs`
