@@ -3,8 +3,7 @@
     Sets up external dependencies needed for the full test suite.
 
 .DESCRIPTION
-    Clones sibling repositories required by battlescribe-spec:
-    - wham (WarHub ArmouryModel) — build dependency, referenced via ProjectReference
+    Initializes git submodules (wham — build dependency at .deps/wham).
 
     Downloads external test data into .testdata/:
     - wh40k-9e (BSData) — real-world test data for integration tests (git clone)
@@ -12,7 +11,6 @@
 
     Installs Playwright browsers needed for New Recruit adapter tests.
 
-    Sibling repos are cloned next to the battlescribe-spec repo root.
     Test data is downloaded/cloned into .testdata/<key>/.
     Already-present items are skipped.
 
@@ -42,25 +40,17 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = $PSScriptRoot
-$parentDir = Split-Path $repoRoot -Parent
 
 Write-Host "Setting up battlescribe-spec dependencies..." -ForegroundColor Cyan
-Write-Host "  Repo root:  $repoRoot"
-Write-Host "  Parent dir: $parentDir"
+Write-Host "  Repo root: $repoRoot"
 Write-Host ""
 
-# --- Sibling repositories ---
+# --- Git submodules ---
 
-# wham — build dependency (ProjectReference)
-$whamDir = Join-Path $parentDir "wham"
-if (Test-Path $whamDir) {
-    Write-Host "[OK] wham already exists at $whamDir" -ForegroundColor Green
-} else {
-    Write-Host "Cloning wham..." -ForegroundColor Yellow
-    git clone https://github.com/WarHub/wham.git $whamDir
-    if ($LASTEXITCODE -ne 0) { throw "Failed to clone wham" }
-    Write-Host "[OK] wham cloned to $whamDir" -ForegroundColor Green
-}
+Write-Host "Initializing git submodules (wham)..." -ForegroundColor Cyan
+git -C $repoRoot submodule update --init --recursive
+if ($LASTEXITCODE -ne 0) { throw "Failed to initialize git submodules" }
+Write-Host "[OK] Git submodules initialized" -ForegroundColor Green
 
 # --- Test data (.testdata/) ---
 
