@@ -1,7 +1,12 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace BattleScribeSpec;
+
+[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(ConformanceReport))]
+internal partial class ConformanceReportJsonContext : JsonSerializerContext;
 
 public static class CompatibilityMatrix
 {
@@ -109,10 +114,7 @@ public static class CompatibilityMatrix
     public static ConformanceReport LoadReport(string jsonPath)
     {
         var json = File.ReadAllText(jsonPath);
-        var report = JsonSerializer.Deserialize<ConformanceReport>(json, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-        });
+        var report = JsonSerializer.Deserialize(json, ConformanceReportJsonContext.Default.ConformanceReport);
 
         return report ?? throw new InvalidDataException($"Failed to deserialize conformance report: {jsonPath}");
     }

@@ -3,10 +3,12 @@
   <PropertyGroup>
     <RootNamespace>BattleScribeSpec</RootNamespace>
     <Description>BattleScribe conformance spec test kit — run declarative YAML specs against any roster editing engine.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

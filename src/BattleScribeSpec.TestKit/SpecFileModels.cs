@@ -90,7 +90,7 @@ public sealed class SetupDef
     public ProtocolGameSystem GameSystem { get; set; } = new();
 
     [YamlMember(Alias = "dataSource")]
-    public string? DataSource { get; init; }
+    public string? DataSource { get; set; }
 
     /// <summary>
     /// Multiple catalogues for multi-catalogue scenarios.

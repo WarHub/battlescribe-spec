@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace BattleScribeSpec;
 
@@ -6,8 +7,21 @@ namespace BattleScribeSpec;
 /// Options controlling state dump output format.
 /// </summary>
 public record DumpOptions(
-    bool Json = false,
-    IDumpEnricher? Enricher = null);
+    bool Json = false);
+
+/// <summary>
+/// Typed wrapper for JSON dump output, enabling AOT-compatible source-gen serialization.
+/// </summary>
+public record DumpJsonOutput(
+    RosterState Roster,
+    IReadOnlyList<ValidationErrorState> ValidationErrors);
+
+[JsonSourceGenerationOptions(
+    WriteIndented = true,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(DumpJsonOutput))]
+internal partial class DumpJsonContext : JsonSerializerContext;
 
 /// <summary>
 /// Pretty-prints roster state as a human-readable tree or JSON.
@@ -15,11 +29,6 @@ public record DumpOptions(
 /// </summary>
 public static class StateDumper
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    };
 
     /// <summary>
     /// Dump roster state and validation errors to the given writer.
@@ -34,40 +43,26 @@ public static class StateDumper
 
         if (options.Json)
         {
-            DumpJson(state, errors, writer, options);
+            DumpJson(state, errors, writer);
             return;
         }
 
-        DumpTree(state, errors, writer, options);
+        DumpTree(state, errors, writer);
     }
 
     private static void DumpJson(
         RosterState state,
         IReadOnlyList<ValidationErrorState> errors,
-        TextWriter writer,
-        DumpOptions options)
+        TextWriter writer)
     {
-        var dump = new Dictionary<string, object?>
-        {
-            ["roster"] = state,
-            ["validationErrors"] = errors
-        };
-
-        if (options.Enricher is { } enricher)
-        {
-            var extra = enricher.EnrichDump(new DumpContext(state, errors));
-            foreach (var (key, value) in extra)
-                dump[key] = value;
-        }
-
-        writer.WriteLine(JsonSerializer.Serialize(dump, JsonOpts));
+        var dump = new DumpJsonOutput(state, errors);
+        writer.WriteLine(JsonSerializer.Serialize(dump, DumpJsonContext.Default.DumpJsonOutput));
     }
 
     private static void DumpTree(
         RosterState state,
         IReadOnlyList<ValidationErrorState> errors,
-        TextWriter writer,
-        DumpOptions options)
+        TextWriter writer)
     {
         writer.WriteLine($"Roster: {state.Name}  (gameSystemId: {state.GameSystemId})");
         if (!string.IsNullOrWhiteSpace(state.GameSystemName))
@@ -109,24 +104,6 @@ public static class StateDumper
                 if (err.EntryId is { } eid) parts.Add($"entryId={eid}");
                 if (err.ConstraintId is { } cid) parts.Add($"constraintId={cid}");
                 writer.WriteLine($"  - {string.Join("  ", parts)}");
-            }
-        }
-
-        // Engine enrichment
-        if (options.Enricher is { } enricher)
-        {
-            var extra = enricher.EnrichDump(new DumpContext(state, errors));
-            if (extra.Count > 0)
-            {
-                writer.WriteLine();
-                writer.WriteLine("Engine-specific:");
-                foreach (var (key, value) in extra)
-                {
-                    writer.WriteLine($"  [{key}]");
-                    var valueStr = value?.ToString() ?? "(null)";
-                    foreach (var line in valueStr.Split('\n'))
-                        writer.WriteLine($"    {line.TrimEnd('\r')}");
-                }
             }
         }
     }

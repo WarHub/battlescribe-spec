@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using BattleScribeSpec;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Runner;
 
 // ===== Parse arguments =====
 var adapter = "";
@@ -362,28 +363,28 @@ void OutputSummary(List<SpecResult> results, TimeSpan elapsed)
 
 void OutputJson(List<SpecResult> results, TimeSpan elapsed)
 {
-    var report = new
+    var report = new JsonRunReport
     {
-        engine = engineFilter,
-        passed,
-        failed,
-        total = results.Count,
-        elapsedSeconds = elapsed.TotalSeconds,
-        specs = results.Select(r =>
+        Engine = engineFilter,
+        Passed = passed,
+        Failed = failed,
+        Total = results.Count,
+        ElapsedSeconds = elapsed.TotalSeconds,
+        Specs = results.Select(r =>
         {
             var spec = specsByResult.TryGetValue(r, out var s) ? s : null;
-            return new
+            return new JsonSpecEntry
             {
-                id = r.SpecId,
-                category = r.Category,
-                description = r.Description,
-                passed = r.Passed,
-                failures = r.Failures,
-                tags = spec?.Tags ?? [],
+                Id = r.SpecId,
+                Category = r.Category,
+                Description = r.Description,
+                Passed = r.Passed,
+                Failures = r.Failures,
+                Tags = spec?.Tags ?? [],
             };
-        }),
+        }).ToList(),
     };
-    Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine(JsonSerializer.Serialize(report, RunnerJsonContext.Default.JsonRunReport));
 }
 
 void OutputGitHubActions(List<SpecResult> results, TimeSpan elapsed)
@@ -477,7 +478,7 @@ void OutputConformanceReport(string path, List<SpecResultSummary> results)
     if (!string.IsNullOrEmpty(directory))
         Directory.CreateDirectory(directory);
 
-    File.WriteAllText(path, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+    File.WriteAllText(path, JsonSerializer.Serialize(report, RunnerJsonContext.Default.ConformanceReport));
 
     Console.WriteLine();
     Console.WriteLine($"Conformance report: {path}");

@@ -107,10 +107,9 @@ if (exportXmlDir is not null)
 // ===== Create engine =====
 Console.Error.WriteLine($"Engine: {engineName}");
 IRosterEngine engine;
-IDumpEnricher? enricher = null;
 try
 {
-    (engine, enricher) = await CreateEngine(engineName, headless);
+    engine = await CreateEngine(engineName, headless);
 }
 catch (Exception ex)
 {
@@ -120,7 +119,7 @@ catch (Exception ex)
 
 using (engine)
 {
-    var dumpOptions = new DumpOptions(Json: json, Enricher: enricher);
+    var dumpOptions = new DumpOptions(Json: json);
     var runner = new SpecRunner(engine, new DataSourceResolver(), engineName);
 
     var stepCount = spec.Steps.Count;
@@ -210,12 +209,12 @@ SpecFile LoadSpec(string input)
     throw new FileNotFoundException($"Spec not found: '{input}'. Provide a file path, category/id, or id.");
 }
 
-async Task<(IRosterEngine Engine, IDumpEnricher? Enricher)> CreateEngine(string name, bool headless)
+async Task<IRosterEngine> CreateEngine(string name, bool headless)
 {
     switch (name)
     {
         case "bs" or "battlescribe":
-            return (new BattleScribeRosterEngine(), null);
+            return new BattleScribeRosterEngine();
 
         case "nr" or "newrecruit":
         {
@@ -235,7 +234,7 @@ async Task<(IRosterEngine Engine, IDumpEnricher? Enricher)> CreateEngine(string 
                 Console.Error.WriteLine($"NR frozen mode: {harFile}");
                 nrEngine = await NewRecruitRosterEngine.CreateFrozenAsync(harFile, headless: headless);
             }
-            return (nrEngine, null);
+            return nrEngine;
         }
 
         default:
