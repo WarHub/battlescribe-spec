@@ -9,7 +9,7 @@ namespace BattleScribeSpec;
 /// </summary>
 public static class SpecLoader
 {
-    private static readonly IDeserializer Deserializer = new DeserializerBuilder()
+    private static readonly IDeserializer Deserializer = new StaticDeserializerBuilder(new SpecYamlStaticContext())
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .Build();
 

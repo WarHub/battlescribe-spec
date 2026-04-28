@@ -1,4 +1,6 @@
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using BattleScribeSpec.Protocol;
 
@@ -43,11 +45,11 @@ public static class SetupIdValidator
     /// <summary>
     /// Cache of reflected type metadata to avoid repeated reflection per type.
     /// </summary>
-    private static readonly Dictionary<Type, TypeInfo> TypeInfoCache = [];
+    private static readonly ConcurrentDictionary<Type, TypeInfo> TypeInfoCache = [];
 
     private sealed record TypeInfo(PropertyInfo? IdProperty, (PropertyInfo Property, string Name)[] ListProperties);
 
-    private static TypeInfo GetTypeInfo(Type type)
+    private static TypeInfo GetTypeInfo([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type)
     {
         if (TypeInfoCache.TryGetValue(type, out var cached))
             return cached;
@@ -70,8 +72,7 @@ public static class SetupIdValidator
         }
 
         var info = new TypeInfo(idProp, listProps.ToArray());
-        TypeInfoCache[type] = info;
-        return info;
+        return TypeInfoCache.GetOrAdd(type, info);
     }
 
     private static bool IsWalkableType(Type type)
@@ -81,6 +82,8 @@ public static class SetupIdValidator
             || type == typeof(SetupDef);
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072",
+        Justification = "Protocol types are preserved — they're used directly in strongly-typed code throughout the codebase.")]
     private static void CollectIds(object obj, string path, Dictionary<string, List<string>> idLocations)
     {
         var typeInfo = GetTypeInfo(obj.GetType());

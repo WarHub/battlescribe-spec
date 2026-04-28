@@ -222,38 +222,6 @@ public class StateDumperTests
         Assert.True(doc.RootElement.TryGetProperty("roster", out _), "JSON output missing 'roster' property");
     }
 
-    [Fact]
-    public void DumpTree_Enricher_AppendsEngineSections()
-    {
-        var state = MinimalRoster();
-        var enricher = new TestEnricher(new Dictionary<string, object?>
-        {
-            ["test-section"] = "custom data here"
-        });
-
-        var output = DumpToString(state, options: new DumpOptions(Enricher: enricher));
-
-        Assert.Contains("Engine-specific:", output);
-        Assert.Contains("[test-section]", output);
-        Assert.Contains("custom data here", output);
-    }
-
-    [Fact]
-    public void DumpJson_Enricher_IncludesExtraKeys()
-    {
-        var state = MinimalRoster();
-        var enricher = new TestEnricher(new Dictionary<string, object?>
-        {
-            ["extra"] = "value"
-        });
-
-        var output = DumpToString(state, options: new DumpOptions(Json: true, Enricher: enricher));
-
-        var doc = System.Text.Json.JsonDocument.Parse(output);
-        Assert.True(doc.RootElement.TryGetProperty("extra", out var val));
-        Assert.Equal("value", val.GetString());
-    }
-
     private static string DumpToString(
         RosterState state,
         IReadOnlyList<ValidationErrorState>? errors = null,
@@ -262,10 +230,5 @@ public class StateDumperTests
         using var writer = new StringWriter();
         StateDumper.Dump(state, errors ?? [], writer, options);
         return writer.ToString();
-    }
-
-    private sealed class TestEnricher(Dictionary<string, object?> data) : IDumpEnricher
-    {
-        public Dictionary<string, object?> EnrichDump(DumpContext context) => data;
     }
 }

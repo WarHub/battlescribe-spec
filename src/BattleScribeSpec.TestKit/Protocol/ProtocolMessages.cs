@@ -1186,23 +1186,39 @@ public sealed class ProtocolPublication
 // ===== Serialization helpers =====
 
 /// <summary>
-/// Shared JSON serialization options for the protocol.
-/// Uses manual type dispatch since the "type" discriminator is a semantic property.
+/// Shared JSON serialization for the protocol.
+/// Uses source-generated <see cref="ProtocolJsonContext"/> for reflection-free serialization
+/// and manual type dispatch since the "type" discriminator is a semantic property.
 /// </summary>
 public static class ProtocolSerializer
 {
-    public static readonly JsonSerializerOptions Options = new()
+    /// <summary>
+    /// JSON serializer options matching the source-generated context.
+    /// Prefer using <see cref="ProtocolJsonContext.Default"/> directly for type-safe serialization.
+    /// </summary>
+    public static JsonSerializerOptions Options => ProtocolJsonContext.Default.Options;
+
+    public static string SerializeCommand(ProtocolCommand command) => command switch
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false,
+        SetupCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.SetupCommand),
+        SetupFromFilesCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.SetupFromFilesCommand),
+        ActionCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.ActionCommand),
+        GetStateCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.GetStateCommand),
+        GetErrorsCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.GetErrorsCommand),
+        TeardownCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.TeardownCommand),
+        _ => throw new JsonException($"Unknown command type: '{command.Type}'"),
     };
 
-    public static string SerializeCommand(ProtocolCommand command) =>
-        JsonSerializer.Serialize(command, command.GetType(), Options);
-
-    public static string SerializeResponse(ProtocolResponse response) =>
-        JsonSerializer.Serialize(response, response.GetType(), Options);
+    public static string SerializeResponse(ProtocolResponse response) => response switch
+    {
+        SetupResult r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.SetupResult),
+        ActionResult r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.ActionResult),
+        StateResponse r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.StateResponse),
+        ErrorsResponse r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.ErrorsResponse),
+        TeardownResult r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.TeardownResult),
+        ProtocolError r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.ProtocolError),
+        _ => throw new JsonException($"Unknown response type: '{response.Type}'"),
+    };
 
     public static ProtocolResponse? DeserializeResponse(string json)
     {
@@ -1213,12 +1229,12 @@ public static class ProtocolSerializer
             ?? throw new JsonException("Protocol response 'type' field is null");
         return type switch
         {
-            "setupResult" => JsonSerializer.Deserialize<SetupResult>(json, Options),
-            "actionResult" => JsonSerializer.Deserialize<ActionResult>(json, Options),
-            "state" => JsonSerializer.Deserialize<StateResponse>(json, Options),
-            "errors" => JsonSerializer.Deserialize<ErrorsResponse>(json, Options),
-            "teardownResult" => JsonSerializer.Deserialize<TeardownResult>(json, Options),
-            "error" => JsonSerializer.Deserialize<ProtocolError>(json, Options),
+            "setupResult" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.SetupResult),
+            "actionResult" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ActionResult),
+            "state" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.StateResponse),
+            "errors" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ErrorsResponse),
+            "teardownResult" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.TeardownResult),
+            "error" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ProtocolError),
             _ => throw new JsonException($"Unknown response type: '{type}'"),
         };
     }
@@ -1232,12 +1248,12 @@ public static class ProtocolSerializer
             ?? throw new JsonException("Protocol command 'type' field is null");
         return type switch
         {
-            "setup" => JsonSerializer.Deserialize<SetupCommand>(json, Options),
-            "setupFromFiles" => JsonSerializer.Deserialize<SetupFromFilesCommand>(json, Options),
-            "action" => JsonSerializer.Deserialize<ActionCommand>(json, Options),
-            "getState" => JsonSerializer.Deserialize<GetStateCommand>(json, Options),
-            "getErrors" => JsonSerializer.Deserialize<GetErrorsCommand>(json, Options),
-            "teardown" => JsonSerializer.Deserialize<TeardownCommand>(json, Options),
+            "setup" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.SetupCommand),
+            "setupFromFiles" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.SetupFromFilesCommand),
+            "action" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ActionCommand),
+            "getState" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.GetStateCommand),
+            "getErrors" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.GetErrorsCommand),
+            "teardown" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.TeardownCommand),
             _ => throw new JsonException($"Unknown command type: '{type}'"),
         };
     }
