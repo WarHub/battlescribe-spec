@@ -1,10 +1,9 @@
-using BattleScribeSpec;
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Category 3 & 4: Roster Creation and Selection Operations
+/// Category 3 and 4: Roster Creation and Selection Operations.
 /// Tests the roster node construction and selection tree structure.
 /// </summary>
 [Trait("Category", "Unit")]

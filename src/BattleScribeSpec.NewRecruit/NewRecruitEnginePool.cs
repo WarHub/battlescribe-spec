@@ -1,4 +1,4 @@
-using Microsoft.Playwright;
+﻿using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
 
@@ -19,7 +19,6 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
     private readonly IPlaywright _playwright;
     private readonly IBrowser _browser;
     private readonly List<IBrowserContext> _contexts;
-    private readonly EnginePool<NewRecruitRosterEngine> _pool;
     private bool _disposed;
 
     private NewRecruitEnginePool(
@@ -31,18 +30,18 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         _playwright = playwright;
         _browser = browser;
         _contexts = contexts;
-        _pool = pool;
+        Pool = pool;
     }
 
     /// <summary>
     /// Number of parallel engine instances in the pool.
     /// </summary>
-    public int Size => _pool.Size;
+    public int Size => Pool.Size;
 
     /// <summary>
     /// The underlying generic engine pool. Use for acquiring/releasing engines.
     /// </summary>
-    public EnginePool<NewRecruitRosterEngine> Pool => _pool;
+    public EnginePool<NewRecruitRosterEngine> Pool { get; }
 
     /// <summary>
     /// Create a frozen (HAR replay) engine pool with the specified concurrency.
@@ -57,7 +56,9 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         float? slowMo = null)
     {
         if (!File.Exists(harFilePath))
+        {
             throw new FileNotFoundException($"HAR file not found: {harFilePath}", harFilePath);
+        }
 
         var playwright = await Playwright.CreateAsync();
         var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
@@ -69,7 +70,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         var contexts = new List<IBrowserContext>();
         var engines = new List<NewRecruitRosterEngine>();
 
-        for (int i = 0; i < concurrency; i++)
+        for (var i = 0; i < concurrency; i++)
         {
             var context = await browser.NewContextAsync();
             contexts.Add(context);
@@ -127,7 +128,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         var contexts = new List<IBrowserContext>();
         var engines = new List<NewRecruitRosterEngine>();
 
-        for (int i = 0; i < concurrency; i++)
+        for (var i = 0; i < concurrency; i++)
         {
             var context = await browser.NewContextAsync();
             contexts.Add(context);
@@ -154,18 +155,24 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
     /// Acquire an engine from the pool. Dispose the returned handle to release it.
     /// </summary>
     public ValueTask<PooledEngine<NewRecruitRosterEngine>> AcquireAsync(CancellationToken ct = default)
-        => _pool.AcquireAsync(ct);
+        => Pool.AcquireAsync(ct);
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
 
-        await _pool.DisposeAsync();
+        await Pool.DisposeAsync();
 
         foreach (var ctx in _contexts)
         {
-            try { await ctx.CloseAsync(); } catch { /* best effort */ }
+            try
+            { await ctx.CloseAsync(); }
+            catch { /* best effort */ }
         }
 
         await _browser.CloseAsync();

@@ -1,5 +1,4 @@
-using System.Reflection;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 
 namespace BattleScribeSpec.Tests;
@@ -19,7 +18,10 @@ internal static class IkvmAssemblyResolver
         {
             var path = Path.Combine(AppContext.BaseDirectory, name.Name + ".dll");
             if (File.Exists(path))
+            {
                 return context.LoadFromAssemblyPath(path);
+            }
+
             return null;
         };
     }

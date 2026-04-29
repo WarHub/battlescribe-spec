@@ -1,7 +1,4 @@
-using BattleScribeSpec;
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Tests for the BattleScribe Java engine (via IKVM).
@@ -66,7 +63,9 @@ public class BattleScribeEngineTests(ITestOutputHelper output)
         Assert.Equal(1, engine.GetForceCount());
         // AddForce may return non-fatal warnings; log them but verify no blocking errors
         foreach (var err in errors)
+        {
             output.WriteLine($"AddForce error: {err}");
+        }
     }
 
     [Fact]
@@ -99,7 +98,9 @@ public class BattleScribeEngineTests(ITestOutputHelper output)
         Assert.NotEmpty(costs);
         output.WriteLine($"Roster costs ({costs.Count} entries):");
         foreach (var (name, value) in costs)
+        {
             output.WriteLine($"  {name}: {value}");
+        }
     }
 
     [Fact]
@@ -123,7 +124,7 @@ public class BattleScribeEngineTests(ITestOutputHelper output)
 
     // --- Helpers that use the engine's encapsulated Java model API ---
 
-    private BattleScribeEngine CreateEngineWithPatrolForce(out List<string> errors)
+    private static BattleScribeEngine CreateEngineWithPatrolForce(out List<string> errors)
     {
         var engine = new BattleScribeEngine();
         engine.SetupWithPatrolForce();
@@ -131,7 +132,7 @@ public class BattleScribeEngineTests(ITestOutputHelper output)
         return engine;
     }
 
-    private BattleScribeEngine CreateEngineWithUnit(out int selectionCount, bool withCosts = false)
+    private static BattleScribeEngine CreateEngineWithUnit(out int selectionCount, bool withCosts = false)
     {
         var engine = new BattleScribeEngine();
         engine.SetupWithPatrolAndUnit(withCosts: withCosts);

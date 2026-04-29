@@ -1,7 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Protocol;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 [Trait("Category", "Unit")]
 public class StateDumperTests

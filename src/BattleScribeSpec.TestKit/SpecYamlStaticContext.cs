@@ -1,4 +1,4 @@
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 using YamlDotNet.Serialization;
 
 namespace BattleScribeSpec;

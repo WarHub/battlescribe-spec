@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Playwright;
 
@@ -34,7 +34,9 @@ public static class HarRecorder
     {
         var harDir = Path.GetDirectoryName(harFilePath);
         if (harDir is not null)
+        {
             Directory.CreateDirectory(harDir);
+        }
 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
@@ -121,7 +123,10 @@ public static class HarRecorder
         var json = await File.ReadAllTextAsync(harFilePath);
         var doc = JsonNode.Parse(json);
         var entries = doc?["log"]?["entries"]?.AsArray();
-        if (entries is null) return;
+        if (entries is null)
+        {
+            return;
+        }
 
         // First pass: mark indices to keep (allowed domain + dedup GETs by URL)
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -131,13 +136,17 @@ public static class HarRecorder
             var url = entries[i]?["request"]?["url"]?.GetValue<string>();
             var method = entries[i]?["request"]?["method"]?.GetValue<string>() ?? "GET";
             if (url is null || !IsAllowedUrl(url))
+            {
                 continue;
+            }
             // Keep all POSTs with unique bodies (may have different responses); dedup GETs/HEADs
             if (method is "POST" or "PUT" or "PATCH")
             {
                 var body = entries[i]?["request"]?["postData"]?["text"]?.GetValue<string>() ?? "";
                 if (seen.Add($"{method} {url} {body}"))
+                {
                     keep.Add(i);
+                }
             }
             else if (seen.Add($"{method} {url}"))
             {
@@ -149,7 +158,9 @@ public static class HarRecorder
         for (var i = entries.Count - 1; i >= 0; i--)
         {
             if (!keep.Contains(i))
+            {
                 entries.RemoveAt(i);
+            }
         }
 
         var options = new JsonSerializerOptions { WriteIndented = false };
@@ -177,13 +188,18 @@ public static class HarRecorder
     private static bool IsAllowedUrl(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
             return false;
+        }
+
         var host = uri.Host;
         foreach (var domain in AllowedDomains)
         {
             if (host.Equals(domain, StringComparison.OrdinalIgnoreCase)
                 || host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
         return false;
     }
@@ -197,14 +213,24 @@ public static class HarRecorder
         var json = File.ReadAllText(harFilePath);
         var doc = JsonNode.Parse(json);
         var entries = doc?["log"]?["entries"]?.AsArray();
-        if (entries is null) return null;
+        if (entries is null)
+        {
+            return null;
+        }
+
         foreach (var entry in entries)
         {
             var text = entry?["response"]?["content"]?["text"]?.GetValue<string>();
-            if (text is null) continue;
+            if (text is null)
+            {
+                continue;
+            }
+
             var match = System.Text.RegularExpressions.Regex.Match(text, @"clientVersion:""([^""]+)""");
             if (match.Success)
+            {
                 return match.Groups[1].Value;
+            }
         }
         return null;
     }
@@ -219,7 +245,10 @@ public static class HarRecorder
         {
             var candidate = Path.Combine(dir, ".testdata", "newrecruit-har", "newrecruit.har");
             if (File.Exists(candidate))
+            {
                 return candidate;
+            }
+
             dir = Path.GetDirectoryName(dir);
         }
         return null;

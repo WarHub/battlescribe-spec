@@ -1,7 +1,5 @@
-using BattleScribeSpec;
-using BattleScribeSpec.NewRecruit;
+﻿using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
-using Xunit;
 
 namespace BattleScribeSpec.Tests;
 
@@ -73,7 +71,9 @@ public sealed class LiveNewRecruitSmokeTests
         var errors = _fixture.Engine!.Setup(gs, [cat]);
 
         foreach (var err in errors)
+        {
             _output.WriteLine($"  Setup error: {err}");
+        }
 
         Assert.Empty(errors);
         _output.WriteLine("Setup succeeded with no errors.");
@@ -135,7 +135,9 @@ public sealed class LiveNewRecruitSmokeTests
         {
             _output.WriteLine($"  Force: '{force.Name}', selections={force.Selections.Count}");
             foreach (var sel in force.Selections)
+            {
                 _output.WriteLine($"    Selection: '{sel.Name}', type={sel.Type}, costs={sel.Costs.Count}");
+            }
         }
 
         Assert.True(state.Forces.Count >= 1, $"Expected at least 1 force, got {state.Forces.Count}");
@@ -174,7 +176,9 @@ public sealed class LiveNewRecruitSmokeTests
 
             _output.WriteLine($"  Result: {(result.Passed ? "PASS" : "FAIL")}");
             foreach (var failure in result.Failures)
+            {
                 _output.WriteLine($"    {failure}");
+            }
         }
     }
 

@@ -1,15 +1,13 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using BattleScribeSpec.Protocol;
 using net.battlescribe.model.data;
 using net.battlescribe.model.roster;
+using JavaArrayList = java.util.ArrayList;
 using JavaEngine = net.battlescribe.engine.a.f;
-using JavaCatalogueManager = net.battlescribe.engine.a.d;
-using JavaPerfMetrics = net.battlescribe.engine.b.e;
 using JavaHashMap = java.util.HashMap;
 using JavaList = java.util.List;
-using JavaArrayList = java.util.ArrayList;
+using JavaPerfMetrics = net.battlescribe.engine.b.e;
 
 namespace BattleScribeSpec;
 
@@ -27,7 +25,7 @@ public sealed class BattleScribeEngine : IDisposable
 {
     private readonly JavaEngine _engine;
     private GameSystem? _gameSystem;
-    private readonly Dictionary<string, Catalogue> _catalogues = new();
+    private readonly Dictionary<string, Catalogue> _catalogues = [];
     private bool _initialized;
     private bool _autoSelectDone;
 
@@ -54,7 +52,7 @@ public sealed class BattleScribeEngine : IDisposable
             | System.Reflection.BindingFlags.Static
             | System.Reflection.BindingFlags.NonPublic);
         // Find the field for "d" (desktop) — the 4th enum constant (a=android, b=android-debug, c=ios, d=desktop)
-        var desktopField = fields.FirstOrDefault(f => f.Name.EndsWith("d") && f.FieldType == platformType)
+        var desktopField = fields.FirstOrDefault(f => f.Name.EndsWith('d') && f.FieldType == platformType)
             ?? fields.Where(f => f.FieldType == platformType).Skip(3).FirstOrDefault()
             ?? throw new InvalidOperationException(
                 $"Desktop platform field not found. Available fields: {string.Join(", ", fields.Select(f => f.Name))}");
@@ -64,8 +62,11 @@ public sealed class BattleScribeEngine : IDisposable
         var isDesktop = string.Equals(enumName, "d", StringComparison.OrdinalIgnoreCase)
             || string.Equals(enumName, "DESKTOP", StringComparison.OrdinalIgnoreCase);
         if (!isDesktop)
+        {
             throw new InvalidOperationException(
                 $"Resolved platform enum is '{enumName ?? "<null>"}' instead of expected desktop.");
+        }
+
         return platformValue;
     }
 
@@ -83,7 +84,9 @@ public sealed class BattleScribeEngine : IDisposable
         _catalogues.Clear();
         _forceCatalogueMap.Clear();
         foreach (var kvp in catalogues)
+        {
             _catalogues[kvp.Key] = kvp.Value;
+        }
 
         var roster = new Roster();
         roster.setId(java.util.UUID.randomUUID().toString());
@@ -172,7 +175,9 @@ public sealed class BattleScribeEngine : IDisposable
         if (linkedCatalogues != null)
         {
             foreach (var kvp in linkedCatalogues)
+            {
                 linkedCatMap.put(kvp.Key, kvp.Value);
+            }
         }
 
         var favourites = new JavaArrayList();
@@ -254,7 +259,10 @@ public sealed class BattleScribeEngine : IDisposable
         EnsureInitialized();
         var removed = _engine.g(force);
         if (removed)
+        {
             _forceCatalogueMap.Remove(force);
+        }
+
         return removed;
     }
 
@@ -321,11 +329,13 @@ public sealed class BattleScribeEngine : IDisposable
     /// </summary>
     private static void RemapCategoryErrorsToSelection(List<ValidationErrorState> errors)
     {
-        for (int i = 0; i < errors.Count; i++)
+        for (var i = 0; i < errors.Count; i++)
         {
             var e = errors[i];
             if (e.OwnerType != "category" || e.EntryId is null)
+            {
                 continue;
+            }
 
             // Only remap over-limit and hidden errors (max constraints, cost-max, hidden entries).
             // Min constraints ("must have", "must spend") stay on category.
@@ -347,11 +357,13 @@ public sealed class BattleScribeEngine : IDisposable
     /// </summary>
     private static void RemapRosterErrorsToSelection(List<ValidationErrorState> errors)
     {
-        for (int i = 0; i < errors.Count; i++)
+        for (var i = 0; i < errors.Count; i++)
         {
             var e = errors[i];
             if (e.OwnerType != "roster" || e.EntryId is null || e.EntryId == "costLimits")
+            {
                 continue;
+            }
 
             if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
                 && !e.Message.Contains("forces"))
@@ -369,11 +381,13 @@ public sealed class BattleScribeEngine : IDisposable
     /// </summary>
     private void RemapForceErrorsToSelection(List<ValidationErrorState> errors)
     {
-        for (int i = 0; i < errors.Count; i++)
+        for (var i = 0; i < errors.Count; i++)
         {
             var e = errors[i];
             if (e.OwnerType != "force" || e.EntryId is null)
+            {
                 continue;
+            }
 
             if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
                 && !e.Message.Contains("forces"))
@@ -390,7 +404,10 @@ public sealed class BattleScribeEngine : IDisposable
     private void CollectRosterErrors(Roster roster, List<ValidationErrorState> result)
     {
         var errors = roster.getValidationErrors();
-        if (errors is null || errors.size() == 0) return;
+        if (errors is null || errors.size() == 0)
+        {
+            return;
+        }
 
         // Build cost limit lookup for resolving cost type IDs
         var costLimits = JavaListToList<Cost>(roster.getCostLimits());
@@ -404,7 +421,11 @@ public sealed class BattleScribeEngine : IDisposable
             while (idIter.hasNext())
             {
                 var errorId = idIter.next()?.ToString();
-                if (errorId is null) continue;
+                if (errorId is null)
+                {
+                    continue;
+                }
+
                 var parts = errorId.Split("::");
                 if (parts.Length >= 3)
                 {
@@ -482,7 +503,11 @@ public sealed class BattleScribeEngine : IDisposable
         foreach (var fe in _setupForceEntries)
         {
             var feName = fe.getName();
-            if (feName is null || !message.Contains(feName)) continue;
+            if (feName is null || !message.Contains(feName))
+            {
+                continue;
+            }
+
             var constraints = JavaListToList<Constraint>(fe.getConstraints());
             foreach (var c in constraints)
             {
@@ -502,7 +527,10 @@ public sealed class BattleScribeEngine : IDisposable
         List<ValidationErrorState> result)
     {
         var errors = element.getValidationErrors();
-        if (errors is null || errors.size() == 0) return;
+        if (errors is null || errors.size() == 0)
+        {
+            return;
+        }
 
         // Build a lookup of error IDs on this element (shared entries only)
         // Format: ownerId::entryId::constraintId
@@ -514,7 +542,11 @@ public sealed class BattleScribeEngine : IDisposable
             while (idIter.hasNext())
             {
                 var errorId = idIter.next()?.ToString();
-                if (errorId is null) continue;
+                if (errorId is null)
+                {
+                    continue;
+                }
+
                 var parts = errorId.Split("::");
                 if (parts.Length >= 3)
                 {
@@ -585,7 +617,11 @@ public sealed class BattleScribeEngine : IDisposable
         foreach (var (id, entry) in _entryLookup)
         {
             var entryName = entry.getName();
-            if (entryName is null || !message.Contains(entryName)) continue;
+            if (entryName is null || !message.Contains(entryName))
+            {
+                continue;
+            }
+
             var constraints = JavaListToList<Constraint>(entry.getConstraints());
             foreach (var c in constraints)
             {
@@ -671,11 +707,11 @@ public sealed class BattleScribeEngine : IDisposable
     private readonly List<ForceEntry> _setupForceEntries = [];
     private readonly List<SelectionEntry> _setupSelectionEntries = [];
     private readonly List<CostType> _setupCostTypes = [];
-    private readonly Dictionary<string, SelectionEntry> _entryLookup = new();
+    private readonly Dictionary<string, SelectionEntry> _entryLookup = [];
     // Entry link constraints indexed by target entry ID: targetId → [(linkId, constraintId, constraintType)]
-    private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType)>> _linkConstraintLookup = new();
+    private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType)>> _linkConstraintLookup = [];
     // Entry link target resolution: linkId → targetId
-    private readonly Dictionary<string, string> _linkTargetMap = new();
+    private readonly Dictionary<string, string> _linkTargetMap = [];
     // Per-catalogue entry lists for multi-catalogue support
     private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
     // Maps force object identity to catalogue (avoids positional corruption on removal)
@@ -742,20 +778,28 @@ public sealed class BattleScribeEngine : IDisposable
     {
         EnsureInitialized();
         if (_setupCatalogues.Count == 0)
+        {
             throw new InvalidOperationException("Call SetupWith* or SetupFromSpec before AddForceByIndex.");
+        }
         // Use active catalogue when no explicit index given
         if (catalogueIndex < 0 && _setupCatalogue != null)
         {
             catalogueIndex = _setupCatalogues.IndexOf(_setupCatalogue);
-            if (catalogueIndex < 0) catalogueIndex = 0;
+            if (catalogueIndex < 0)
+            {
+                catalogueIndex = 0;
+            }
         }
         else if (catalogueIndex < 0)
         {
             catalogueIndex = 0;
         }
         if (catalogueIndex >= _setupCatalogues.Count)
+        {
             throw new ArgumentOutOfRangeException(nameof(catalogueIndex),
                 $"Catalogue index {catalogueIndex} out of range (have {_setupCatalogues.Count})");
+        }
+
         var catalogue = _setupCatalogues[catalogueIndex];
         var linked = ResolveLinkedCatalogues(catalogue);
         var forcesBefore = new HashSet<Force>(GetForces(), ReferenceEqualityComparer.Instance);
@@ -763,7 +807,9 @@ public sealed class BattleScribeEngine : IDisposable
         foreach (var force in GetForces())
         {
             if (!forcesBefore.Contains(force))
+            {
                 _forceCatalogueMap[force] = catalogue;
+            }
         }
         return errors;
     }
@@ -778,21 +824,25 @@ public sealed class BattleScribeEngine : IDisposable
         EnsureInitialized();
         // Get the parent force's ForceEntry to find child force entries
         var parentForceEntryId = parentForce.getEntryId();
-        var parentForceEntry = FindForceEntryById(parentForceEntryId);
-        if (parentForceEntry is null)
-            throw new InvalidOperationException(
+        var parentForceEntry = FindForceEntryById(parentForceEntryId) ?? throw new InvalidOperationException(
                 $"Could not find ForceEntry '{parentForceEntryId}' for parent force '{parentForce.getName()}'.");
 
         var childForceEntries = JavaListToList<ForceEntry>(parentForceEntry.getForceEntries());
         if (childForceEntryIndex < 0 || childForceEntryIndex >= childForceEntries.Count)
+        {
             throw new ArgumentOutOfRangeException(nameof(childForceEntryIndex),
                 $"Child force entry index {childForceEntryIndex} out of range ({childForceEntries.Count} available).");
+        }
 
         var childForceEntry = childForceEntries[childForceEntryIndex];
 
-        if (catalogueIndex < 0) catalogueIndex = 0;
-        if (catalogueIndex >= _setupCatalogues.Count)
-            throw new ArgumentOutOfRangeException(nameof(catalogueIndex));
+        if (catalogueIndex < 0)
+        {
+            catalogueIndex = 0;
+        }
+
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(catalogueIndex, _setupCatalogues.Count);
+
         var catalogue = _setupCatalogues[catalogueIndex];
         var linked = ResolveLinkedCatalogues(catalogue);
 
@@ -800,16 +850,15 @@ public sealed class BattleScribeEngine : IDisposable
         if (linked.Count > 0)
         {
             foreach (var kvp in linked)
+            {
                 linkedCatMap.put(kvp.Key, kvp.Value);
+            }
         }
 
         var favourites = new JavaArrayList();
         var errors = new JavaArrayList();
         // Use the engine's native selectForce(parentForce, ...) to properly add as child
-        var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors);
-
-        if (childForce is null)
-            throw new InvalidOperationException("Java engine returned null when creating child force.");
+        var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors) ?? throw new InvalidOperationException("Java engine returned null when creating child force.");
 
         _forceCatalogueMap[childForce] = catalogue;
     }
@@ -819,22 +868,36 @@ public sealed class BattleScribeEngine : IDisposable
     /// </summary>
     internal ForceEntry? FindForceEntryById(string? id)
     {
-        if (id is null) return null;
+        if (id is null)
+        {
+            return null;
+        }
+
         foreach (var fe in _setupForceEntries)
         {
             var found = FindForceEntryRecursive(fe, id);
-            if (found is not null) return found;
+            if (found is not null)
+            {
+                return found;
+            }
         }
         return null;
     }
 
     private static ForceEntry? FindForceEntryRecursive(ForceEntry entry, string id)
     {
-        if (entry.getId() == id) return entry;
+        if (entry.getId() == id)
+        {
+            return entry;
+        }
+
         foreach (var child in JavaListToList<ForceEntry>(entry.getForceEntries()))
         {
             var found = FindForceEntryRecursive(child, id);
-            if (found is not null) return found;
+            if (found is not null)
+            {
+                return found;
+            }
         }
         return null;
     }
@@ -852,7 +915,9 @@ public sealed class BattleScribeEngine : IDisposable
             var link = (CatalogueLink)linkIter.next();
             var targetId = link.getTargetId();
             if (targetId != null && _catalogues.TryGetValue(targetId, out var targetCat))
+            {
                 linked[targetId] = targetCat;
+            }
         }
         return linked;
     }
@@ -866,10 +931,16 @@ public sealed class BattleScribeEngine : IDisposable
         EnsureInitialized();
         var forces = GetForces();
         if (forces.Count == 0)
+        {
             throw new InvalidOperationException("No forces available. Call AddForceByIndex first.");
+        }
+
         var entries = GetEntriesForForce(0);
         if (entries.Count == 0)
+        {
             throw new InvalidOperationException("No selection entries available for the force.");
+        }
+
         var selections = SelectEntry(forces[0], entries[0]);
         return selections.Count;
     }
@@ -883,19 +954,30 @@ public sealed class BattleScribeEngine : IDisposable
         EnsureInitialized();
         var forces = GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
+        {
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        }
 
         // Resolve entries from the force's catalogue
         var entries = GetEntriesForForce(forceIndex);
         if (entryIndex < 0 || entryIndex >= entries.Count)
+        {
             throw new ArgumentOutOfRangeException(nameof(entryIndex),
                 $"Entry index {entryIndex} out of range (have {entries.Count} entries for force {forceIndex})");
+        }
+
         var force = forces[forceIndex];
         var entry = entries[entryIndex];
         if (force is null)
+        {
             throw new InvalidOperationException($"Force at index {forceIndex} is null");
+        }
+
         if (entry is null)
+        {
             throw new InvalidOperationException($"Entry at index {entryIndex} for force {forceIndex} is null");
+        }
+
         return SelectEntry(force, entry);
     }
 
@@ -908,7 +990,10 @@ public sealed class BattleScribeEngine : IDisposable
     {
         var forces = GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
+        {
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        }
+
         return GetEntriesForForce(forces[forceIndex]);
     }
 
@@ -934,7 +1019,9 @@ public sealed class BattleScribeEngine : IDisposable
         {
             var catIdx = _setupCatalogues.IndexOf(catalogue);
             if (catIdx >= 0 && catIdx < _perCatalogueEntries.Count)
+            {
                 return _perCatalogueEntries[catIdx];
+            }
         }
         throw new InvalidOperationException(
             "No catalogue mapping found for force. Force must be added via AddForceByIndex.");
@@ -958,7 +1045,10 @@ public sealed class BattleScribeEngine : IDisposable
         EnsureInitialized();
         var forces = GetForces();
         if (forceIndex < 0 || forceIndex >= forces.Count)
+        {
             throw new ArgumentOutOfRangeException(nameof(forceIndex));
+        }
+
         var force = forces[forceIndex];
         var entryNames = new HashSet<string>();
         var categories = JavaListToList<Category>(force.getCategories());
@@ -966,7 +1056,9 @@ public sealed class BattleScribeEngine : IDisposable
         {
             var entries = JavaListToList<SelectionEntry>(_engine.a(category));
             foreach (var entry in entries)
+            {
                 entryNames.Add(entry.getName() ?? entry.getId());
+            }
         }
         return entryNames.Count;
     }
@@ -1006,7 +1098,10 @@ public sealed class BattleScribeEngine : IDisposable
         EnsureInitialized();
         var selections = GetAllSelections();
         if (selections.Count == 0)
+        {
             throw new InvalidOperationException("No selections to deselect.");
+        }
+
         DeselectEntry(selections[0]);
     }
 
@@ -1018,7 +1113,10 @@ public sealed class BattleScribeEngine : IDisposable
         EnsureInitialized();
         var forces = GetForces();
         if (forces.Count == 0)
+        {
             throw new InvalidOperationException("No forces to remove.");
+        }
+
         return RemoveForce(forces[0]);
     }
 
@@ -1028,9 +1126,7 @@ public sealed class BattleScribeEngine : IDisposable
     public List<(string Name, double Value)> GetRosterCostsSummary()
     {
         EnsureInitialized();
-        return GetRosterCosts()
-            .Select(c => (c.getName() ?? "?", c.getValue()))
-            .ToList();
+        return [.. GetRosterCosts().Select(c => (c.getName() ?? "?", c.getValue()))];
     }
 
     // ===== File-loading API (loads real XML data via DataUtils) =====
@@ -1149,7 +1245,10 @@ public sealed class BattleScribeEngine : IDisposable
                 var link = (CatalogueLink)linkIter.next();
                 var targetId = link.getTargetId();
                 if (targetId == null || loaded.Contains(targetId))
+                {
                     continue;
+                }
+
                 if (idToFile.TryGetValue(targetId, out var linkedFile))
                 {
                     LoadCatalogueFile(linkedFile);
@@ -1173,7 +1272,10 @@ public sealed class BattleScribeEngine : IDisposable
         while (reader.Read())
         {
             if (reader.NodeType != System.Xml.XmlNodeType.Element)
+            {
                 continue;
+            }
+
             return reader.GetAttribute("id");
         }
         return null;
@@ -1185,13 +1287,17 @@ public sealed class BattleScribeEngine : IDisposable
     public List<string> InitializeFromLoadedData()
     {
         if (_gameSystem is null)
+        {
             throw new InvalidOperationException("Load a game system file first.");
+        }
 
         // Populate force entries from loaded data
         _setupForceEntries.Clear();
         var feIter = _gameSystem.getForceEntries().iterator();
         while (feIter.hasNext())
+        {
             _setupForceEntries.Add((ForceEntry)feIter.next());
+        }
 
         // Set up catalogue references for AddForceByIndex
         _setupCatalogues.Clear();
@@ -1206,7 +1312,10 @@ public sealed class BattleScribeEngine : IDisposable
                 var entries = new List<SelectionEntry>();
                 var seIter = cat.getSelectionEntries().iterator();
                 while (seIter.hasNext())
+                {
                     entries.Add((SelectionEntry)seIter.next());
+                }
+
                 _perCatalogueEntries.Add(entries);
             }
         }
@@ -1219,7 +1328,7 @@ public sealed class BattleScribeEngine : IDisposable
     /// </summary>
     public List<string> GetAvailableForceEntryNames()
     {
-        return _setupForceEntries.Select(fe => fe.getName() ?? "?").ToList();
+        return [.. _setupForceEntries.Select(fe => fe.getName() ?? "?")];
     }
 
     /// <summary>
@@ -1228,9 +1337,13 @@ public sealed class BattleScribeEngine : IDisposable
     public void SetActiveCatalogue(string catalogueId)
     {
         if (_catalogues.TryGetValue(catalogueId, out var cat))
+        {
             _setupCatalogue = cat;
+        }
         else
+        {
             throw new InvalidOperationException($"Catalogue '{catalogueId}' not loaded.");
+        }
     }
 
     /// <summary>
@@ -1238,7 +1351,7 @@ public sealed class BattleScribeEngine : IDisposable
     /// </summary>
     public List<(string Id, string Name)> GetLoadedCatalogues()
     {
-        return _catalogues.Select(kvp => (kvp.Key, kvp.Value.getName() ?? "?")).ToList();
+        return [.. _catalogues.Select(kvp => (kvp.Key, kvp.Value.getName() ?? "?"))];
     }
 
     /// <summary>
@@ -1253,7 +1366,10 @@ public sealed class BattleScribeEngine : IDisposable
             while (sharedIter.hasNext())
             {
                 var se = (SelectionEntry)sharedIter.next();
-                if (se.getId() == id) return se;
+                if (se.getId() == id)
+                {
+                    return se;
+                }
             }
 
             // Direct entries
@@ -1261,7 +1377,10 @@ public sealed class BattleScribeEngine : IDisposable
             while (seIter.hasNext())
             {
                 var se = (SelectionEntry)seIter.next();
-                if (se.getId() == id) return se;
+                if (se.getId() == id)
+                {
+                    return se;
+                }
             }
         }
 
@@ -1272,7 +1391,10 @@ public sealed class BattleScribeEngine : IDisposable
             while (gsSharedIter.hasNext())
             {
                 var se = (SelectionEntry)gsSharedIter.next();
-                if (se.getId() == id) return se;
+                if (se.getId() == id)
+                {
+                    return se;
+                }
             }
         }
 
@@ -1391,19 +1513,31 @@ public sealed class BattleScribeEngine : IDisposable
                 forceEntries: catSpec.ForceEntries?.Select(BuildForceEntry).ToArray());
 
             if (catSpec.InfoLinks != null)
+            {
                 foreach (var il in catSpec.InfoLinks)
+                {
                     cat.getInfoLinks().add(BuildInfoLink(il));
+                }
+            }
 
             if (catSpec.CatalogueLinks != null)
+            {
                 foreach (var clSpec in catSpec.CatalogueLinks)
+                {
                     cat.getCatalogueLinks().add(
                         JavaModelFactory.CreateCatalogueLink(clSpec.Id, clSpec.Name, clSpec.TargetId, clSpec.ImportRootEntries, clSpec.Type));
+                }
+            }
 
             if (catSpec.Publications != null)
+            {
                 foreach (var pubSpec in catSpec.Publications)
+                {
                     cat.getPublications().add(
                         JavaModelFactory.CreatePublication(pubSpec.Id, pubSpec.Name, pubSpec.ShortName ?? "",
                             pubSpec.Publisher ?? "", pubSpec.PublicationDate ?? "", pubSpec.PublisherUrl ?? ""));
+                }
+            }
 
             catalogueDict[catSpec.Id] = cat;
             _setupCatalogues.Add(cat);
@@ -1411,32 +1545,50 @@ public sealed class BattleScribeEngine : IDisposable
             // Build shared entry lookup for resolving entry links
             var sharedEntryLookup = new Dictionary<string, SelectionEntry>();
             if (sharedSelectionEntries != null)
+            {
                 foreach (var se in sharedSelectionEntries)
+                {
                     sharedEntryLookup[se.getId()] = se;
+                }
+            }
 
             // Track per-catalogue entries (direct entries + entry link targets)
             var catEntries = new List<SelectionEntry>();
             if (selectionEntries != null)
+            {
                 catEntries.AddRange(selectionEntries);
+            }
+
             if (entryLinks != null)
+            {
                 foreach (var el in entryLinks)
                 {
                     var targetId = el.getTargetId();
                     if (targetId != null && sharedEntryLookup.TryGetValue(targetId, out var target)
                         && !catEntries.Contains(target))
+                    {
                         catEntries.Add(target);
+                    }
                 }
+            }
+
             _perCatalogueEntries.Add(catEntries);
 
             // Index direct entries and shared entries for lookup by ID.
             if (selectionEntries != null)
             {
                 foreach (var se in selectionEntries)
+                {
                     IndexEntries(se);
+                }
             }
             if (sharedSelectionEntries != null)
+            {
                 foreach (var se in sharedSelectionEntries)
+                {
                     IndexEntries(se);
+                }
+            }
 
             // Index entry link constraints and targets for error resolution.
             if (catSpec.EntryLinks != null)
@@ -1444,7 +1596,10 @@ public sealed class BattleScribeEngine : IDisposable
                 foreach (var elSpec in catSpec.EntryLinks)
                 {
                     if (elSpec.TargetId is not null)
+                    {
                         _linkTargetMap[elSpec.Id] = elSpec.TargetId;
+                    }
+
                     if (elSpec.Constraints is { Count: > 0 } && elSpec.TargetId is not null)
                     {
                         if (!_linkConstraintLookup.TryGetValue(elSpec.TargetId, out var list))
@@ -1466,16 +1621,22 @@ public sealed class BattleScribeEngine : IDisposable
 
         _setupForceEntries.Clear();
         if (forceEntries != null)
+        {
             _setupForceEntries.AddRange(forceEntries);
+        }
         // Include force entries defined in catalogues
         foreach (var catSpec in catalogues)
         {
             if (catSpec.ForceEntries is { Count: > 0 })
+            {
                 _setupForceEntries.AddRange(catSpec.ForceEntries.Select(BuildForceEntry));
+            }
         }
         _setupCostTypes.Clear();
         if (costTypes != null)
+        {
             _setupCostTypes.AddRange(costTypes);
+        }
 
         var initErrors = Initialize(gs, catalogueDict);
         return initErrors;
@@ -1523,35 +1684,65 @@ public sealed class BattleScribeEngine : IDisposable
             publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
 
         if (spec.ModifierGroups != null)
+        {
             foreach (var mg in spec.ModifierGroups)
+            {
                 entry.getModifierGroups().add(BuildModifierGroup(mg));
+            }
+        }
 
         if (spec.SelectionEntryGroups != null)
+        {
             foreach (var seg in spec.SelectionEntryGroups)
+            {
                 entry.getSelectionEntryGroups().add(BuildSelectionEntryGroup(seg));
+            }
+        }
 
         if (spec.Rules != null)
+        {
             foreach (var ruleSpec in spec.Rules)
+            {
                 entry.getRules().add(BuildRule(ruleSpec));
+            }
+        }
 
         if (spec.Profiles != null)
+        {
             foreach (var profileSpec in spec.Profiles)
+            {
                 entry.getProfiles().add(BuildProfile(profileSpec));
+            }
+        }
 
         if (spec.InfoGroups != null)
+        {
             foreach (var igSpec in spec.InfoGroups)
+            {
                 entry.getInfoGroups().add(BuildInfoGroup(igSpec));
+            }
+        }
 
         if (spec.EntryLinks != null)
+        {
             foreach (var el in spec.EntryLinks)
+            {
                 entry.getEntryLinks().add(BuildEntryLink(el));
+            }
+        }
 
         if (spec.InfoLinks != null)
+        {
             foreach (var il in spec.InfoLinks)
+            {
                 entry.getInfoLinks().add(BuildInfoLink(il));
+            }
+        }
 
         if (!string.IsNullOrEmpty(spec.Page))
+        {
             entry.setPage(spec.Page);
+        }
 
         return entry;
     }
@@ -1628,8 +1819,13 @@ public sealed class BattleScribeEngine : IDisposable
         var ig = JavaModelFactory.CreateInfoGroup(spec.Id, spec.Name, spec.Hidden, profiles, rules, modifiers, pubId, page,
             modifierGroups, childInfoGroups);
         if (spec.InfoLinks != null)
+        {
             foreach (var il in spec.InfoLinks)
+            {
                 ig.getInfoLinks().add(BuildInfoLink(il));
+            }
+        }
+
         return ig;
     }
 
@@ -1706,8 +1902,12 @@ public sealed class BattleScribeEngine : IDisposable
             conditions: conditions, repeats: repeats);
 
         if (conditionGroups != null)
+        {
             foreach (var cg in conditionGroups)
+            {
                 m.getConditionGroups().add(cg);
+            }
+        }
 
         return m;
     }
@@ -1738,8 +1938,13 @@ public sealed class BattleScribeEngine : IDisposable
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         var group = JavaModelFactory.CreateModifierGroup(conditions, conditionGroups, repeats, modifiers);
         if (spec.ModifierGroups != null)
+        {
             foreach (var nested in spec.ModifierGroups)
+            {
                 group.getModifierGroups().add(BuildModifierGroup(nested));
+            }
+        }
+
         return group;
     }
 
@@ -1748,13 +1953,18 @@ public sealed class BattleScribeEngine : IDisposable
         _entryLookup[entry.getId()] = entry;
         var children = JavaListToList<SelectionEntry>(entry.getSelectionEntries());
         foreach (var child in children)
+        {
             IndexEntries(child);
+        }
+
         var groups = JavaListToList<SelectionEntryGroup>(entry.getSelectionEntryGroups());
         foreach (var group in groups)
         {
             var groupEntries = JavaListToList<SelectionEntry>(group.getSelectionEntries());
             foreach (var ge in groupEntries)
+            {
                 IndexEntries(ge);
+            }
         }
     }
 
@@ -1767,8 +1977,11 @@ public sealed class BattleScribeEngine : IDisposable
     {
         var entries = GetEntriesForForce(forceIndex);
         if (entryIndex < 0 || entryIndex >= entries.Count)
+        {
             throw new ArgumentOutOfRangeException(nameof(entryIndex),
                 $"Entry index {entryIndex} out of range (have {entries.Count} entries for force {forceIndex})");
+        }
+
         return entries[entryIndex];
     }
 
@@ -1794,8 +2007,12 @@ public sealed class BattleScribeEngine : IDisposable
         {
             var parts = compositeId.Split("::");
             foreach (var part in parts)
+            {
                 if (_entryLookup.TryGetValue(part, out var entry))
+                {
                     return entry;
+                }
+            }
         }
         return null;
     }
@@ -1814,10 +2031,15 @@ public sealed class BattleScribeEngine : IDisposable
         {
             var forceContext = _engine.e(force);
             if (forceContext is null)
+            {
                 return null;
+            }
+
             var originalEntry = forceContext.i(selection.getEntryId());
             if (originalEntry is null)
+            {
                 return null;
+            }
             // c.a(d, BaseSelectable, T extends BaseModifyableData, bool) creates a copy with modifiers applied
             return (SelectionEntry)_engine.a(forceContext, selection, originalEntry, true);
         }
@@ -1837,10 +2059,16 @@ public sealed class BattleScribeEngine : IDisposable
         {
             var forceContext = _engine.e(force);
             if (forceContext is null)
+            {
                 return null;
+            }
+
             var originalEntry = forceContext.e(force.getEntryId());
             if (originalEntry is null)
+            {
                 return null;
+            }
+
             return (ForceEntry)_engine.a(forceContext, force, originalEntry, true);
         }
         catch
@@ -1852,14 +2080,18 @@ public sealed class BattleScribeEngine : IDisposable
     internal string? GetPublicationName(string? publicationId)
     {
         if (string.IsNullOrEmpty(publicationId) || _gameSystem is null)
+        {
             return null;
+        }
         // Search game system publications
         var iter = _gameSystem.getPublications().iterator();
         while (iter.hasNext())
         {
             var pub = (Publication)iter.next();
             if (pub.getId() == publicationId)
+            {
                 return pub.getName();
+            }
         }
         // Search catalogue publications
         foreach (var cat in _catalogues.Values)
@@ -1869,7 +2101,9 @@ public sealed class BattleScribeEngine : IDisposable
             {
                 var pub = (Publication)catIter.next();
                 if (pub.getId() == publicationId)
+                {
                     return pub.getName();
+                }
             }
         }
         return null;
@@ -1892,10 +2126,12 @@ public sealed class BattleScribeEngine : IDisposable
     {
         if (catalogueId != null)
         {
-            for (int i = 0; i < _setupCatalogues.Count; i++)
+            for (var i = 0; i < _setupCatalogues.Count; i++)
             {
                 if (_setupCatalogues[i].getId() == catalogueId)
+                {
                     return _setupCatalogues[i];
+                }
             }
             throw new InvalidOperationException($"Catalogue '{catalogueId}' not found.");
         }
@@ -1929,14 +2165,13 @@ public sealed class BattleScribeEngine : IDisposable
 
         var linkedCatMap = new JavaHashMap();
         foreach (var kvp in linked)
+        {
             linkedCatMap.put(kvp.Key, kvp.Value);
+        }
 
         var favourites = new JavaArrayList();
         var errors = new JavaArrayList();
-        var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors);
-
-        if (childForce is null)
-            throw new InvalidOperationException("Java engine returned null when creating child force.");
+        var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors) ?? throw new InvalidOperationException("Java engine returned null when creating child force.");
 
         _forceCatalogueMap[childForce] = catalogue;
         return childForce;
@@ -1977,10 +2212,9 @@ public sealed class BattleScribeEngine : IDisposable
         // x() is a private method on the engine (net.battlescribe.engine.a.f)
         var method = _engine.GetType().GetMethod("x",
             BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly,
-            binder: null, types: Type.EmptyTypes, modifiers: null);
-        if (method is null)
-            throw new InvalidOperationException(
+            binder: null, types: Type.EmptyTypes, modifiers: null) ?? throw new InvalidOperationException(
                 "Could not find engine method x() for auto-selecting default root entries.");
+
         method.Invoke(_engine, null);
     }
 
@@ -1988,22 +2222,32 @@ public sealed class BattleScribeEngine : IDisposable
     private void EnsureInitialized()
     {
         if (!_initialized || _gameSystem is null)
+        {
             throw new InvalidOperationException("Engine not initialized. Call Initialize() first.");
+        }
     }
 
     private static List<T> JavaListToList<T>(JavaList? javaList)
     {
-        if (javaList is null) return [];
+        if (javaList is null)
+        {
+            return [];
+        }
+
         var result = new List<T>(javaList.size());
         var iter = javaList.iterator();
         while (iter.hasNext())
         {
             var next = iter.next();
             if (next is T typed)
+            {
                 result.Add(typed);
+            }
             else
+            {
                 throw new InvalidCastException(
                     $"Java list element is {next?.GetType().Name ?? "null"}, expected {typeof(T).Name}");
+            }
         }
         return result;
     }
@@ -2011,7 +2255,11 @@ public sealed class BattleScribeEngine : IDisposable
 
     private static List<string> JavaListToStringErrors(JavaList? javaList)
     {
-        if (javaList is null) return [];
+        if (javaList is null)
+        {
+            return [];
+        }
+
         var result = new List<string>(javaList.size());
         var iter = javaList.iterator();
         while (iter.hasNext())

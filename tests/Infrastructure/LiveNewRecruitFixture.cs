@@ -1,5 +1,4 @@
-using BattleScribeSpec.NewRecruit;
-using Xunit;
+﻿using BattleScribeSpec.NewRecruit;
 
 namespace BattleScribeSpec.Tests;
 
@@ -17,7 +16,9 @@ public sealed class LiveNewRecruitFixture : IAsyncLifetime
     {
         var baseUrl = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
         if (string.IsNullOrEmpty(baseUrl))
+        {
             return;
+        }
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
@@ -25,7 +26,9 @@ public sealed class LiveNewRecruitFixture : IAsyncLifetime
 
         var concurrency = 10;
         if (int.TryParse(Environment.GetEnvironmentVariable("NR_PARALLEL"), out var envConcurrency) && envConcurrency > 0)
+        {
             concurrency = envConcurrency;
+        }
 
         EnginePool = await NewRecruitEnginePool.CreateLiveAsync(concurrency, baseUrl, headless, visual, slowMo);
     }
@@ -33,7 +36,10 @@ public sealed class LiveNewRecruitFixture : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         if (EnginePool is not null)
+        {
             await EnginePool.DisposeAsync();
+        }
+
         EnginePool = null;
     }
 }

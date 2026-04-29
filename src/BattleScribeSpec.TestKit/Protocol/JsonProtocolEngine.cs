@@ -1,4 +1,4 @@
-namespace BattleScribeSpec.Protocol;
+﻿namespace BattleScribeSpec.Protocol;
 
 /// <summary>
 /// IRosterEngine implementation that communicates with an external adapter process
@@ -24,7 +24,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
         {
             SpecId = _specId,
             GameSystem = gameSystem,
-            Catalogues = catalogues.ToList(),
+            Catalogues = [.. catalogues],
         };
         var response = SendCommand(cmd);
         return response switch
@@ -40,7 +40,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
         var cmd = new SetupFromFilesCommand
         {
             SpecId = _specId,
-            Files = files.Select(f => new ProtocolDataFile { FileName = f.FileName, Content = f.Content }).ToList()
+            Files = [.. files.Select(f => new ProtocolDataFile { FileName = f.FileName, Content = f.Content })]
         };
         var response = SendCommand(cmd, TimeSpan.FromMinutes(5));
         return response switch
@@ -189,17 +189,13 @@ public sealed class JsonProtocolEngine : IRosterEngine
     private ActionOutputs SendAction(ActionCommand cmd)
     {
         var response = SendCommand(cmd);
-        switch (response)
+        return response switch
         {
-            case ActionResult { Ok: true } ar:
-                return ar.Outputs ?? new ActionOutputs();
-            case ActionResult { Ok: false, Error: var error }:
-                throw new InvalidOperationException($"Action '{cmd.Action}' failed: {error}");
-            case ProtocolError pe:
-                throw new InvalidOperationException($"Adapter error: {pe.Message}");
-            default:
-                throw new InvalidOperationException($"Unexpected response type: {response.Type}");
-        }
+            ActionResult { Ok: true } ar => ar.Outputs ?? new ActionOutputs(),
+            ActionResult { Ok: false, Error: var error } => throw new InvalidOperationException($"Action '{cmd.Action}' failed: {error}"),
+            ProtocolError pe => throw new InvalidOperationException($"Adapter error: {pe.Message}"),
+            _ => throw new InvalidOperationException($"Unexpected response type: {response.Type}"),
+        };
     }
 
     private ProtocolResponse SendCommand(ProtocolCommand command, TimeSpan? timeout = null)

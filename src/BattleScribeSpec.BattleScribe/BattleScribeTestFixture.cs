@@ -1,4 +1,4 @@
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec;
 
@@ -13,11 +13,11 @@ public sealed class BattleScribeTestFixture : IDisposable
     // wham-side data
     public GamesystemNode? Gamesystem { get; private set; }
     public RosterNode? Roster { get; private set; }
-    public Dictionary<string, CatalogueNode> Catalogues { get; } = new();
+    public Dictionary<string, CatalogueNode> Catalogues { get; } = [];
 
     // Java-side data (kept for engine operations)
     private net.battlescribe.model.data.GameSystem? _javaGameSystem;
-    private readonly Dictionary<string, net.battlescribe.model.data.Catalogue> _javaCatalogues = new();
+    private readonly Dictionary<string, net.battlescribe.model.data.Catalogue> _javaCatalogues = [];
     private readonly List<net.battlescribe.model.data.ForceEntry> _javaForceEntries = [];
     private readonly List<net.battlescribe.model.data.SelectionEntry> _javaSelectionEntries = [];
 
@@ -135,7 +135,10 @@ public sealed class BattleScribeTestFixture : IDisposable
     public List<string> AddForce(int forceIndex = 0)
     {
         if (_javaGameSystem is null || _javaCatalogues.Count == 0)
+        {
             throw new InvalidOperationException("Call SetupWithUnit first.");
+        }
+
         var cat = _javaCatalogues.Values.First();
         var (_, errors) = Engine.AddForce(cat, _javaForceEntries[forceIndex]);
         return errors;
@@ -147,7 +150,11 @@ public sealed class BattleScribeTestFixture : IDisposable
     public int SelectEntry(int entryIndex = 0)
     {
         var forces = Engine.GetForces();
-        if (forces.Count == 0) throw new InvalidOperationException("No forces. Call AddForce first.");
+        if (forces.Count == 0)
+        {
+            throw new InvalidOperationException("No forces. Call AddForce first.");
+        }
+
         var selections = Engine.SelectEntry(forces[0], _javaSelectionEntries[entryIndex]);
         return selections.Count;
     }
@@ -163,7 +170,11 @@ public sealed class BattleScribeTestFixture : IDisposable
     /// </summary>
     public RosterState CaptureWhamSnapshot(IReadOnlyList<string>? errors = null)
     {
-        if (Roster is null) throw new InvalidOperationException("Roster not initialized.");
+        if (Roster is null)
+        {
+            throw new InvalidOperationException("Roster not initialized.");
+        }
+
         return ModelConverter.CaptureWhamSnapshot(Roster, errors);
     }
 

@@ -1,4 +1,4 @@
-namespace BattleScribeSpec.NewRecruit;
+﻿namespace BattleScribeSpec.NewRecruit;
 
 /// <summary>
 /// Consolidated JS helper functions and the state reader injection script.

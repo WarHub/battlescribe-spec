@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
 
 namespace BattleScribeSpec.Tests;

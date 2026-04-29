@@ -1,4 +1,4 @@
-namespace BattleScribeSpec;
+﻿namespace BattleScribeSpec;
 
 /// <summary>
 /// Parsed data source URI identifying game system data.
@@ -30,11 +30,15 @@ public sealed record DataSourceUri(
     public static DataSourceUri Parse(string uri)
     {
         if (string.IsNullOrWhiteSpace(uri))
+        {
             throw new FormatException("Data source URI cannot be empty.");
+        }
 
         var separatorIndex = uri.IndexOf(':');
         if (separatorIndex <= 0 || separatorIndex == uri.Length - 1)
+        {
             throw new FormatException("Data source URI must include provider and path.");
+        }
 
         var provider = uri[..separatorIndex];
         var path = uri[(separatorIndex + 1)..];
@@ -68,7 +72,9 @@ public sealed record DataSourceUri(
     {
         var slashIndex = path.IndexOf('/');
         if (slashIndex <= 0 || slashIndex == path.Length - 1)
+        {
             throw new FormatException("GitHub data source URI must be in the format github:{org}/{repo}[@{ref}].");
+        }
 
         var org = path[..slashIndex];
         var repoAndRef = path[(slashIndex + 1)..];
@@ -80,7 +86,9 @@ public sealed record DataSourceUri(
         if (atIndex >= 0)
         {
             if (atIndex == 0 || atIndex == repoAndRef.Length - 1)
+            {
                 throw new FormatException("GitHub data source URI has an invalid ref segment.");
+            }
 
             repo = repoAndRef[..atIndex];
             refName = repoAndRef[(atIndex + 1)..];
@@ -91,7 +99,9 @@ public sealed record DataSourceUri(
         }
 
         if (string.IsNullOrWhiteSpace(repo))
+        {
             throw new FormatException("GitHub data source URI must include a repository name.");
+        }
 
         return new DataSourceUri(provider, org, repo, refName) { Raw = uri };
     }
@@ -99,7 +109,9 @@ public sealed record DataSourceUri(
     private static DataSourceUri ParseLocal(string uri, string provider, string path)
     {
         if (string.IsNullOrWhiteSpace(path))
+        {
             throw new FormatException("Local data source URI must include a path.");
+        }
 
         return new DataSourceUri(provider, "", path, null) { Raw = uri };
     }

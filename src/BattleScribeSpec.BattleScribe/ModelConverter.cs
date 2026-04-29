@@ -1,4 +1,4 @@
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec;
 
@@ -24,7 +24,7 @@ public static class ModelConverter
                 Id: f.getId(),
                 f.getName(),
                 f.getCatalogueId(),
-                selections.Select(CaptureSelection).ToList());
+                [.. selections.Select(CaptureSelection)]);
         }).ToList();
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
@@ -50,8 +50,8 @@ public static class ModelConverter
             sel.getType(),
             sel.getNumber(),
             Hidden: false,
-            costs.Select(c => new CostState(c.getName(), c.getTypeId(), c.getValue())).ToList(),
-            children.Select(CaptureSelection).ToList());
+            [.. costs.Select(c => new CostState(c.getName(), c.getTypeId(), c.getValue()))],
+            [.. children.Select(CaptureSelection)]);
     }
 
     /// <summary>
@@ -64,13 +64,13 @@ public static class ModelConverter
                 Id: null,
                 f.Name ?? "",
                 f.CatalogueId,
-                f.Selections.Select(CaptureWhamSelection).ToList())).ToList();
+                [.. f.Selections.Select(CaptureWhamSelection)])).ToList();
 
         var costs = roster.Costs.Select(c =>
             new CostState(c.Name ?? "", c.TypeId ?? "", (double)c.Value)).ToList();
 
         var errors = validationErrors?.Select(e => new ValidationErrorState(e)).ToList()
-            ?? new List<ValidationErrorState>();
+            ?? [];
 
         return new RosterState(
             roster.Name ?? "",
@@ -98,11 +98,18 @@ public static class ModelConverter
 
     private static List<T> JavaListToList<T>(java.util.List? javaList)
     {
-        if (javaList is null) return [];
+        if (javaList is null)
+        {
+            return [];
+        }
+
         var result = new List<T>(javaList.size());
         var iter = javaList.iterator();
         while (iter.hasNext())
+        {
             result.Add((T)iter.next());
+        }
+
         return result;
     }
 }

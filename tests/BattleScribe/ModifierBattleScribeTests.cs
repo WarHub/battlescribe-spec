@@ -1,6 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Protocol;
-using Xunit;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Tests;
 
@@ -25,7 +23,7 @@ public class ModifierBattleScribeTests(ITestOutputHelper output)
                 ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
                 CostTypes = costTypes,
             },
-            [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs", SelectionEntries = [..entries] }]);
+            [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs", SelectionEntries = [.. entries] }]);
     }
 
     [Fact]

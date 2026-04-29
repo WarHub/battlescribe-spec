@@ -1,7 +1,4 @@
-using BattleScribeSpec.NewRecruit;
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Sequential version of live NR conformance tests (one spec at a time).

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace BattleScribeSpec;
@@ -49,7 +49,9 @@ public sealed class DataSourceResolver
         foreach (var spec in specs)
         {
             if (spec.Setup.DataSource is { Length: > 0 } uri && seen.Add(uri))
+            {
                 Resolve(uri);
+            }
         }
     }
 
@@ -62,19 +64,23 @@ public sealed class DataSourceResolver
         _ => throw new NotSupportedException($"Unsupported data source provider: {uri.Provider}")
     };
 
-    public string? FindGameSystem(string resolvedDir, string gameSystemName) =>
+    public static string? FindGameSystem(string resolvedDir, string gameSystemName) =>
         FindByName(resolvedDir, "*.gst", gameSystemName);
 
-    public string? FindCatalogue(string resolvedDir, string catalogueName) =>
+    public static string? FindCatalogue(string resolvedDir, string catalogueName) =>
         FindByName(resolvedDir, "*.cat", catalogueName);
 
-    private string ResolveLocal(DataSourceUri uri)
+    private static string ResolveLocal(DataSourceUri uri)
     {
         if (string.IsNullOrWhiteSpace(uri.Repo))
+        {
             throw new DirectoryNotFoundException("Local data source path is empty.");
+        }
 
         if (!Directory.Exists(uri.Repo))
+        {
             throw new DirectoryNotFoundException($"Local data source directory not found: {uri.Repo}");
+        }
 
         return uri.Repo;
     }
@@ -85,7 +91,9 @@ public sealed class DataSourceResolver
             [_cacheDir, .. uri.CacheKey.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)]);
 
         if (IsPopulatedCache(cachePath))
+        {
             return cachePath;
+        }
 
         // Serialize git clones to prevent races when parallel threads
         // resolve the same datasource (safety net — primary mechanism
@@ -93,23 +101,31 @@ public sealed class DataSourceResolver
         lock (GitLock)
         {
             if (IsPopulatedCache(cachePath))
+            {
                 return cachePath;
+            }
 
             // Clean up partial/corrupt directories before cloning
             try
             {
                 if (Directory.Exists(cachePath))
+                {
                     Directory.Delete(cachePath, recursive: true);
+                }
             }
             catch (IOException)
             {
                 if (IsPopulatedCache(cachePath))
+                {
                     return cachePath;
+                }
             }
 
             var parent = Path.GetDirectoryName(cachePath);
             if (!string.IsNullOrWhiteSpace(parent))
+            {
                 Directory.CreateDirectory(parent);
+            }
 
             var repoUrl = $"https://github.com/{uri.Org}/{uri.Repo}.git";
             if (uri.Ref is not null && ShaRegex.IsMatch(uri.Ref))
@@ -142,7 +158,9 @@ public sealed class DataSourceResolver
     private static string? FindByName(string resolvedDir, string pattern, string name)
     {
         if (!Directory.Exists(resolvedDir))
+        {
             throw new DirectoryNotFoundException($"Resolved directory not found: {resolvedDir}");
+        }
 
         return Directory
             .EnumerateFiles(resolvedDir, pattern, SearchOption.AllDirectories)
@@ -160,7 +178,9 @@ public sealed class DataSourceResolver
         };
 
         foreach (var argument in arguments)
+        {
             startInfo.ArgumentList.Add(argument);
+        }
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start git process.");
@@ -172,7 +192,9 @@ public sealed class DataSourceResolver
         var stdErr = stdErrTask.GetAwaiter().GetResult();
 
         if (process.ExitCode != 0)
+        {
             throw new InvalidOperationException(
                 $"git command failed ({process.ExitCode}):\nSTDERR: {stdErr}\nSTDOUT: {stdOut}");
+        }
     }
 }

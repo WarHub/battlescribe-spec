@@ -1,4 +1,4 @@
-using Microsoft.Playwright;
+﻿using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
 
@@ -16,7 +16,7 @@ namespace BattleScribeSpec.NewRecruit;
 /// </summary>
 public static class NewRecruitStateReader
 {
-    private static readonly System.Text.Json.JsonSerializerOptions _jsonOptions = new()
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
@@ -28,7 +28,7 @@ public static class NewRecruitStateReader
         // Call the pre-injected state reader function (defined in JsHelpers.InjectionScript)
         var json = await page.EvaluateAsync<string>("() => window.__bsspec_readState()");
 
-        var snapshot = System.Text.Json.JsonSerializer.Deserialize<NrRosterSnapshot>(json, _jsonOptions)
+        var snapshot = System.Text.Json.JsonSerializer.Deserialize<NrRosterSnapshot>(json, JsonOptions)
             ?? new NrRosterSnapshot();
         return MapToRosterState(snapshot);
     }
@@ -57,12 +57,12 @@ public static class NewRecruitStateReader
             snapshot.GameSystemId,
             forces,
             costs,
-            snapshot.ValidationErrors.Select(e => new ValidationErrorState(
+            [.. snapshot.ValidationErrors.Select(e => new ValidationErrorState(
                 e.Message,
                 OwnerType: e.OwnerType,
                 OwnerEntryId: e.OwnerEntryId,
                 EntryId: e.EntryId,
-                ConstraintId: e.ConstraintId)).ToList(),
+                ConstraintId: e.ConstraintId))],
             CostLimits: costLimits,
             GameSystemName: snapshot.GameSystemName);
     }
@@ -73,21 +73,21 @@ public static class NewRecruitStateReader
             Id: f.Id,
             f.Name,
             f.CatalogueId,
-            f.Selections.Select(MapSelection).ToList(),
-            ChildForces: f.ChildForces.Select(MapForce).ToList(),
-            Profiles: f.Profiles.Select(p => new ProfileState(
+            [.. f.Selections.Select(MapSelection)],
+            ChildForces: [.. f.ChildForces.Select(MapForce)],
+            Profiles: [.. f.Profiles.Select(p => new ProfileState(
                 p.Name, p.TypeId, p.TypeName, p.Hidden,
-                p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
-                p.Page, p.PublicationId)).ToList(),
-            Rules: f.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
+                [.. p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value))],
+                p.Page, p.PublicationId))],
+            Rules: [.. f.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId))],
             Hidden: f.Hidden,
             PublicationId: f.PublicationId,
             Page: f.Page,
             EntryId: f.EntryId,
-            Categories: f.Categories.Select(c => new CategoryState(
+            Categories: [.. f.Categories.Select(c => new CategoryState(
                 c.Name, c.EntryId, c.Primary,
                 PublicationId: c.PublicationId,
-                Page: c.Page)).ToList(),
+                Page: c.Page))],
             Publications: f.Publications?.Select(p => new PublicationState(p.Id, p.Name)).ToList(),
             CatalogueName: f.CatalogueName,
             CustomName: f.CustomName,
@@ -104,27 +104,27 @@ public static class NewRecruitStateReader
             sel.Type,
             sel.Number,
             sel.Hidden,
-            sel.Costs.Select(c => new CostState(c.Name, c.TypeId, c.Value)).ToList(),
-            sel.Children.Select(MapSelection).ToList(),
-            Profiles: sel.Profiles.Select(p => new ProfileState(
+            [.. sel.Costs.Select(c => new CostState(c.Name, c.TypeId, c.Value))],
+            [.. sel.Children.Select(MapSelection)],
+            Profiles: [.. sel.Profiles.Select(p => new ProfileState(
                 p.Name,
                 p.TypeId,
                 p.TypeName,
                 p.Hidden,
-                p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
+                [.. p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value))],
                 p.Page,
                 p.PublicationId
-            )).ToList(),
-            Rules: sel.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
-            Categories: sel.Categories.Select(c => new CategoryState(
+            ))],
+            Rules: [.. sel.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId))],
+            Categories: [.. sel.Categories.Select(c => new CategoryState(
                 c.Name, c.EntryId, c.Primary,
-                Profiles: c.Profiles.Select(p => new ProfileState(
+                Profiles: [.. c.Profiles.Select(p => new ProfileState(
                     p.Name, p.TypeId, p.TypeName, p.Hidden,
-                    p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value)).ToList(),
-                    p.Page, p.PublicationId)).ToList(),
-                Rules: c.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId)).ToList(),
+                    [.. p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value))],
+                    p.Page, p.PublicationId))],
+                Rules: [.. c.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId))],
                 PublicationId: c.PublicationId,
-                Page: c.Page)).ToList(),
+                Page: c.Page))],
             Page: sel.Page,
             PublicationId: sel.PublicationId,
             PublicationName: sel.PublicationName,

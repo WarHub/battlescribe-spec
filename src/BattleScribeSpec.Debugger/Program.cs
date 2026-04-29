@@ -1,4 +1,4 @@
-using BattleScribeSpec;
+﻿using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
 
 // ===== Parse arguments =====
@@ -55,7 +55,9 @@ if (specInput is null)
 {
     // Check if stdin has data
     if (Console.IsInputRedirected)
+    {
         specInput = "-";
+    }
     else
     {
         Console.Error.WriteLine("Error: no spec provided. Pass a file path, spec ID, or pipe YAML via stdin.");
@@ -132,7 +134,9 @@ using (engine)
         var shouldDump = isDumpAction || dumpAll || isLastStep;
 
         if (!shouldDump)
+        {
             return;
+        }
 
         Console.Out.Flush();
         Console.Error.WriteLine();
@@ -157,7 +161,9 @@ using (engine)
     {
         Console.Error.WriteLine($"✗ FAIL — {result.Failures.Count} failure(s):");
         foreach (var failure in result.Failures)
+        {
             Console.Error.WriteLine($"  {failure}");
+        }
     }
 
     return result.Failures.Count == 0 ? 0 : 1;
@@ -185,7 +191,9 @@ SpecFile LoadSpec(string input)
 
     // Try as file path first
     if (File.Exists(input))
+    {
         return SpecLoader.Load(input);
+    }
 
     // Try as spec ID: look in specs/ directory
     var specsDir = SpecLoader.FindSpecsDirectory();
@@ -194,7 +202,9 @@ SpecFile LoadSpec(string input)
         // Try exact path: specs/{input}.yaml
         var candidate = Path.Combine(specsDir, input + ".yaml");
         if (File.Exists(candidate))
+        {
             return SpecLoader.Load(candidate);
+        }
 
         // Try with category: specs/{category}/{id}.yaml
         foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
@@ -202,7 +212,9 @@ SpecFile LoadSpec(string input)
             var name = Path.GetFileNameWithoutExtension(file);
             var relative = Path.GetRelativePath(specsDir, file).Replace('\\', '/');
             if (name == input || relative == input || relative == input + ".yaml")
+            {
                 return SpecLoader.Load(file);
+            }
         }
     }
 
@@ -217,25 +229,24 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
             return new BattleScribeRosterEngine();
 
         case "nr" or "newrecruit":
-        {
-            var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
-            NewRecruitRosterEngine nrEngine;
-            if (url is { Length: > 0 })
             {
-                Console.Error.WriteLine($"NR live mode: {url}");
-                nrEngine = await NewRecruitRosterEngine.CreateAsync(url, headless);
+                var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
+                NewRecruitRosterEngine nrEngine;
+                if (url is { Length: > 0 })
+                {
+                    Console.Error.WriteLine($"NR live mode: {url}");
+                    nrEngine = await NewRecruitRosterEngine.CreateAsync(url, headless);
+                }
+                else
+                {
+                    var harFile = HarRecorder.FindFrozenHarFile() ?? throw new InvalidOperationException(
+                            "NR engine requires NR_ENGINE_URL env var (live mode) or .testdata/newrecruit-har/newrecruit.har (frozen mode).");
+
+                    Console.Error.WriteLine($"NR frozen mode: {harFile}");
+                    nrEngine = await NewRecruitRosterEngine.CreateFrozenAsync(harFile, headless: headless);
+                }
+                return nrEngine;
             }
-            else
-            {
-                var harFile = HarRecorder.FindFrozenHarFile();
-                if (harFile is null)
-                    throw new InvalidOperationException(
-                        "NR engine requires NR_ENGINE_URL env var (live mode) or .testdata/newrecruit-har/newrecruit.har (frozen mode).");
-                Console.Error.WriteLine($"NR frozen mode: {harFile}");
-                nrEngine = await NewRecruitRosterEngine.CreateFrozenAsync(harFile, headless: headless);
-            }
-            return nrEngine;
-        }
 
         default:
             throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs' or 'nr'.");
@@ -247,20 +258,58 @@ static string DescribeStep(StepDef step)
     if (step.Action is { } action)
     {
         var parts = new List<string> { action };
-        if (step.Id is { Length: > 0 } sid) parts.Add($"id={sid}");
-        if (step.ForceEntryId is { } feid) parts.Add($"forceEntryId={feid}");
-        if (step.EntryId is { } eid) parts.Add($"entryId={eid}");
-        if (step.CatalogueId is { } catid) parts.Add($"catalogueId={catid}");
-        if (step.ForceId is { } fid) parts.Add($"forceId={fid}");
-        if (step.SelectionId is { } selid) parts.Add($"selectionId={selid}");
-        if (step.Count is { } cnt) parts.Add($"count={cnt}");
-        if (step.CostTypeId is { } ctid) parts.Add($"costTypeId={ctid}");
-        if (step.Value is { } val) parts.Add($"value={val}");
+        if (step.Id is { Length: > 0 } sid)
+        {
+            parts.Add($"id={sid}");
+        }
+
+        if (step.ForceEntryId is { } feid)
+        {
+            parts.Add($"forceEntryId={feid}");
+        }
+
+        if (step.EntryId is { } eid)
+        {
+            parts.Add($"entryId={eid}");
+        }
+
+        if (step.CatalogueId is { } catid)
+        {
+            parts.Add($"catalogueId={catid}");
+        }
+
+        if (step.ForceId is { } fid)
+        {
+            parts.Add($"forceId={fid}");
+        }
+
+        if (step.SelectionId is { } selid)
+        {
+            parts.Add($"selectionId={selid}");
+        }
+
+        if (step.Count is { } cnt)
+        {
+            parts.Add($"count={cnt}");
+        }
+
+        if (step.CostTypeId is { } ctid)
+        {
+            parts.Add($"costTypeId={ctid}");
+        }
+
+        if (step.Value is { } val)
+        {
+            parts.Add($"value={val}");
+        }
+
         return string.Join(" ", parts);
     }
 
     if (step.ExpectedState is not null)
+    {
         return "expectedState (assertion)";
+    }
 
     return "(unknown)";
 }

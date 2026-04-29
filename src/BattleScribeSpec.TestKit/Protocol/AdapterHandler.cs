@@ -1,4 +1,4 @@
-namespace BattleScribeSpec.Protocol;
+﻿namespace BattleScribeSpec.Protocol;
 
 /// <summary>
 /// Handles the adapter side of the JSON-line protocol.
@@ -25,7 +25,10 @@ public static class AdapterHandler
             while (!ct.IsCancellationRequested)
             {
                 var line = await input.ReadLineAsync(ct);
-                if (line is null) break; // stdin closed
+                if (line is null)
+                {
+                    break; // stdin closed
+                }
 
                 ProtocolResponse response;
                 try
@@ -62,11 +65,14 @@ public static class AdapterHandler
     {
         engine?.Dispose();
         engine = factory();
-        catalogueIds = cmd.Catalogues.Select(c => c.Id).ToArray();
+        catalogueIds = [.. cmd.Catalogues.Select(c => c.Id)];
         if (cmd.SpecId is { Length: > 0 })
+        {
             engine.SetTestContext(cmd.SpecId);
-        var errors = engine.Setup(cmd.GameSystem, cmd.Catalogues.ToArray());
-        return new SetupResult { Errors = errors.ToList() };
+        }
+
+        var errors = engine.Setup(cmd.GameSystem, [.. cmd.Catalogues]);
+        return new SetupResult { Errors = [.. errors] };
     }
 
     private static ProtocolResponse HandleSetupFromFiles(
@@ -77,16 +83,21 @@ public static class AdapterHandler
         // File-based setup: catalogue IDs unknown — actions must provide catalogueId explicitly
         catalogueIds = [];
         if (cmd.SpecId is { Length: > 0 })
+        {
             engine.SetTestContext(cmd.SpecId);
+        }
+
         var files = cmd.Files.Select(f => (f.FileName, f.Content)).ToList();
         var errors = engine.SetupFromFiles(files);
-        return new SetupResult { Errors = errors.ToList() };
+        return new SetupResult { Errors = [.. errors] };
     }
 
     private static ProtocolResponse HandleAction(ActionCommand cmd, IRosterEngine? engine, IReadOnlyList<string> catalogueIds)
     {
         if (engine is null)
+        {
             return new ActionResult { Ok = false, Error = "Engine not initialized (call setup first)" };
+        }
 
         try
         {
@@ -167,7 +178,9 @@ public static class AdapterHandler
     private static ProtocolResponse HandleGetState(IRosterEngine? engine)
     {
         if (engine is null)
+        {
             return new ProtocolError { Message = "Engine not initialized" };
+        }
 
         var state = engine.GetRosterState();
         return new StateResponse
@@ -175,21 +188,23 @@ public static class AdapterHandler
             Name = state.Name,
             GameSystemId = state.GameSystemId,
             GameSystemName = state.GameSystemName,
-            Forces = state.Forces.ToList(),
-            Costs = state.Costs.ToList(),
+            Forces = [.. state.Forces],
+            Costs = [.. state.Costs],
             CostLimits = state.CostLimits?.ToList(),
-            ValidationErrors = state.ValidationErrors.ToList(),
+            ValidationErrors = [.. state.ValidationErrors],
         };
     }
 
     private static ProtocolResponse HandleGetErrors(IRosterEngine? engine)
     {
         if (engine is null)
+        {
             return new ProtocolError { Message = "Engine not initialized" };
+        }
 
         return new ErrorsResponse
         {
-            Errors = engine.GetValidationErrors().ToList()
+            Errors = [.. engine.GetValidationErrors()]
         };
     }
 

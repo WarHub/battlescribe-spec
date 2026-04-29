@@ -1,6 +1,4 @@
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Runs all declarative YAML spec files against the BattleScribe (Java) engine.

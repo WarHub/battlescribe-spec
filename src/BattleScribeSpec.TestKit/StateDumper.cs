@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace BattleScribeSpec;
@@ -66,7 +66,9 @@ public static class StateDumper
     {
         writer.WriteLine($"Roster: {state.Name}  (gameSystemId: {state.GameSystemId})");
         if (!string.IsNullOrWhiteSpace(state.GameSystemName))
+        {
             writer.WriteLine($"  gameSystemName: {state.GameSystemName}");
+        }
 
         // Costs
         if (state.Costs.Count > 0)
@@ -85,7 +87,9 @@ public static class StateDumper
         // Forces
         writer.WriteLine($"Forces: {state.Forces.Count}");
         for (var fi = 0; fi < state.Forces.Count; fi++)
+        {
             DumpForce(state.Forces[fi], writer, indent: "  ", index: fi);
+        }
 
         // Errors
         writer.WriteLine();
@@ -99,10 +103,26 @@ public static class StateDumper
             foreach (var err in errors)
             {
                 var parts = new List<string> { err.Message };
-                if (err.OwnerType is { } ot) parts.Add($"owner={ot}");
-                if (err.OwnerId is { } oid) parts.Add($"ownerId={oid}");
-                if (err.EntryId is { } eid) parts.Add($"entryId={eid}");
-                if (err.ConstraintId is { } cid) parts.Add($"constraintId={cid}");
+                if (err.OwnerType is { } ot)
+                {
+                    parts.Add($"owner={ot}");
+                }
+
+                if (err.OwnerId is { } oid)
+                {
+                    parts.Add($"ownerId={oid}");
+                }
+
+                if (err.EntryId is { } eid)
+                {
+                    parts.Add($"entryId={eid}");
+                }
+
+                if (err.ConstraintId is { } cid)
+                {
+                    parts.Add($"constraintId={cid}");
+                }
+
                 writer.WriteLine($"  - {string.Join("  ", parts)}");
             }
         }
@@ -111,14 +131,46 @@ public static class StateDumper
     private static void DumpForce(ForceState force, TextWriter writer, string indent, int index)
     {
         writer.Write($"{indent}Force[{index}]: \"{force.Name}\"");
-        if (force.EntryId is { } entryId) writer.Write($"  entryId={entryId}");
-        if (force.CatalogueId is { } catId) writer.Write($"  catalogueId={catId}");
-        if (force.CatalogueName is { } catName) writer.Write($"  catalogueName={catName}");
-        if (force.PublicationId is { } pubId) writer.Write($"  pub={pubId}");
-        if (force.Page is { } page) writer.Write($"  p.{page}");
-        if (force.Hidden) writer.Write(" [hidden]");
-        if (force.CustomName is { } cn) writer.Write($"  customName=\"{cn}\"");
-        if (force.CustomNotes is { } cno) writer.Write($"  customNotes=\"{cno}\"");
+        if (force.EntryId is { } entryId)
+        {
+            writer.Write($"  entryId={entryId}");
+        }
+
+        if (force.CatalogueId is { } catId)
+        {
+            writer.Write($"  catalogueId={catId}");
+        }
+
+        if (force.CatalogueName is { } catName)
+        {
+            writer.Write($"  catalogueName={catName}");
+        }
+
+        if (force.PublicationId is { } pubId)
+        {
+            writer.Write($"  pub={pubId}");
+        }
+
+        if (force.Page is { } page)
+        {
+            writer.Write($"  p.{page}");
+        }
+
+        if (force.Hidden)
+        {
+            writer.Write(" [hidden]");
+        }
+
+        if (force.CustomName is { } cn)
+        {
+            writer.Write($"  customName=\"{cn}\"");
+        }
+
+        if (force.CustomNotes is { } cno)
+        {
+            writer.Write($"  customNotes=\"{cno}\"");
+        }
+
         writer.WriteLine();
 
         // Force categories
@@ -134,7 +186,9 @@ public static class StateDumper
         {
             writer.WriteLine($"{indent}  Publications: {forcePubs.Count}");
             foreach (var p in forcePubs)
+            {
                 writer.WriteLine($"{indent}    - \"{p.Name}\" (id={p.Id})");
+            }
         }
 
         // Force profiles
@@ -142,7 +196,9 @@ public static class StateDumper
         {
             writer.WriteLine($"{indent}  Profiles: {forceProfiles.Count}");
             foreach (var p in forceProfiles)
+            {
                 DumpProfile(p, writer, indent + "    ");
+            }
         }
 
         // Force rules
@@ -150,33 +206,63 @@ public static class StateDumper
         {
             writer.WriteLine($"{indent}  Rules: {forceRules.Count}");
             foreach (var r in forceRules)
+            {
                 DumpRule(r, writer, indent + "    ");
+            }
         }
 
         // Selections
         writer.WriteLine($"{indent}  Selections: {force.Selections.Count}");
         for (var si = 0; si < force.Selections.Count; si++)
+        {
             DumpSelection(force.Selections[si], writer, indent + "    ", si);
+        }
 
         // Child forces
         if (force.ChildForces is [_, ..] childForces)
         {
             writer.WriteLine($"{indent}  ChildForces: {childForces.Count}");
             for (var ci = 0; ci < childForces.Count; ci++)
+            {
                 DumpForce(childForces[ci], writer, indent + "    ", ci);
+            }
         }
     }
 
     private static void DumpSelection(SelectionState sel, TextWriter writer, string indent, int index)
     {
         writer.Write($"{indent}[{index}] \"{sel.Name}\"");
-        if (sel.Type is { } type) writer.Write($" ({type})");
+        if (sel.Type is { } type)
+        {
+            writer.Write($" ({type})");
+        }
+
         writer.Write($" ×{sel.Number}");
-        if (sel.Hidden) writer.Write(" [hidden]");
-        if (sel.EntryId is { } eid) writer.Write($"  entryId={eid}");
-        if (sel.EntryGroupId is { } egid) writer.Write($"  entryGroupId={egid}");
-        if (sel.CustomName is { } cn) writer.Write($"  customName=\"{cn}\"");
-        if (sel.CustomNotes is { } cno) writer.Write($"  customNotes=\"{cno}\"");
+        if (sel.Hidden)
+        {
+            writer.Write(" [hidden]");
+        }
+
+        if (sel.EntryId is { } eid)
+        {
+            writer.Write($"  entryId={eid}");
+        }
+
+        if (sel.EntryGroupId is { } egid)
+        {
+            writer.Write($"  entryGroupId={egid}");
+        }
+
+        if (sel.CustomName is { } cn)
+        {
+            writer.Write($"  customName=\"{cn}\"");
+        }
+
+        if (sel.CustomNotes is { } cno)
+        {
+            writer.Write($"  customNotes=\"{cno}\"");
+        }
+
         writer.WriteLine();
 
         // Costs
@@ -190,9 +276,21 @@ public static class StateDumper
         if (sel.PublicationId is not null || sel.Page is not null || sel.PublicationName is not null)
         {
             var parts = new List<string>();
-            if (sel.PublicationName is { } pn) parts.Add($"pub=\"{pn}\"");
-            if (sel.PublicationId is { } pid) parts.Add($"pubId={pid}");
-            if (sel.Page is { } pg) parts.Add($"p.{pg}");
+            if (sel.PublicationName is { } pn)
+            {
+                parts.Add($"pub=\"{pn}\"");
+            }
+
+            if (sel.PublicationId is { } pid)
+            {
+                parts.Add($"pubId={pid}");
+            }
+
+            if (sel.Page is { } pg)
+            {
+                parts.Add($"p.{pg}");
+            }
+
             writer.WriteLine($"{indent}  {string.Join("  ", parts)}");
         }
 
@@ -209,7 +307,9 @@ public static class StateDumper
         {
             writer.WriteLine($"{indent}  Profiles: {selProfiles.Count}");
             foreach (var p in selProfiles)
+            {
                 DumpProfile(p, writer, indent + "    ");
+            }
         }
 
         // Rules
@@ -217,7 +317,9 @@ public static class StateDumper
         {
             writer.WriteLine($"{indent}  Rules: {selRules.Count}");
             foreach (var r in selRules)
+            {
                 DumpRule(r, writer, indent + "    ");
+            }
         }
 
         // Children (recursive)
@@ -225,17 +327,35 @@ public static class StateDumper
         {
             writer.WriteLine($"{indent}  Children: {sel.Children.Count}");
             for (var ci = 0; ci < sel.Children.Count; ci++)
+            {
                 DumpSelection(sel.Children[ci], writer, indent + "    ", ci);
+            }
         }
     }
 
     private static void DumpProfile(ProfileState p, TextWriter writer, string indent)
     {
         writer.Write($"{indent}- \"{p.Name}\"");
-        if (p.TypeName is { } tn) writer.Write($" [{tn}]");
-        if (p.Hidden) writer.Write(" [hidden]");
-        if (p.PublicationId is { } pid) writer.Write($"  pub={pid}");
-        if (p.Page is { } pg) writer.Write($"  p.{pg}");
+        if (p.TypeName is { } tn)
+        {
+            writer.Write($" [{tn}]");
+        }
+
+        if (p.Hidden)
+        {
+            writer.Write(" [hidden]");
+        }
+
+        if (p.PublicationId is { } pid)
+        {
+            writer.Write($"  pub={pid}");
+        }
+
+        if (p.Page is { } pg)
+        {
+            writer.Write($"  p.{pg}");
+        }
+
         writer.WriteLine();
 
         if (p.Characteristics.Count > 0)
@@ -248,12 +368,26 @@ public static class StateDumper
     private static void DumpRule(RuleState r, TextWriter writer, string indent)
     {
         writer.Write($"{indent}- \"{r.Name}\"");
-        if (r.Hidden) writer.Write(" [hidden]");
-        if (r.PublicationId is { } pid) writer.Write($"  pub={pid}");
-        if (r.Page is { } pg) writer.Write($"  p.{pg}");
+        if (r.Hidden)
+        {
+            writer.Write(" [hidden]");
+        }
+
+        if (r.PublicationId is { } pid)
+        {
+            writer.Write($"  pub={pid}");
+        }
+
+        if (r.Page is { } pg)
+        {
+            writer.Write($"  p.{pg}");
+        }
+
         writer.WriteLine();
 
         if (!string.IsNullOrEmpty(r.Description))
+        {
             writer.WriteLine($"{indent}  {r.Description}");
+        }
     }
 }

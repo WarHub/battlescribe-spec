@@ -1,7 +1,4 @@
-using BattleScribeSpec;
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Comparison tests that run the same operations on the BattleScribe Java engine
@@ -145,7 +142,9 @@ public class BattleScribeComparisonTests(ITestOutputHelper output)
         var errors = fixture.Engine.GetValidationErrors();
         output.WriteLine($"Validation errors on empty roster: {errors.Count}");
         foreach (var err in errors)
+        {
             output.WriteLine($"  - {err}");
+        }
     }
 
     [Fact]
@@ -189,7 +188,9 @@ public class BattleScribeComparisonTests(ITestOutputHelper output)
             {
                 output.WriteLine($"      Selection: {sel.Name} (type={sel.Type}, num={sel.Number})");
                 foreach (var cost in sel.Costs)
+                {
                     output.WriteLine($"        Cost: {cost.Name}={cost.Value} (typeId={cost.TypeId})");
+                }
             }
         }
         output.WriteLine($"  Roster costs: {string.Join(", ", snapshot.Costs.Select(c => $"{c.Name}={c.Value}"))}");

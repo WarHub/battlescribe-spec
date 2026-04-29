@@ -1,4 +1,4 @@
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec;
 
@@ -45,7 +45,10 @@ public sealed class SpecFile
     public bool ShouldSkip(string engineName)
     {
         if (Engines is null || Engines.Count == 0)
+        {
             return false;
+        }
+
         return Engines.TryGetValue(engineName, out var expectation)
             && string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase);
     }
@@ -56,7 +59,10 @@ public sealed class SpecFile
     public bool IsExpectedToFail(string engineName)
     {
         if (Engines is null || Engines.Count == 0)
+        {
             return false;
+        }
+
         return Engines.TryGetValue(engineName, out var expectation)
             && string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
     }
@@ -68,7 +74,10 @@ public sealed class SpecFile
     public string GetExpectation(string engineName)
     {
         if (Engines is null || Engines.Count == 0)
+        {
             return "pass";
+        }
+
         return Engines.TryGetValue(engineName, out var expectation) ? expectation : "pass";
     }
 }
@@ -222,7 +231,10 @@ public sealed class ExpectedStateDef
     public ExpectedStateDef ForEngine(string? engineName)
     {
         if (engineName is null || Engines is null || !Engines.TryGetValue(engineName, out var over))
+        {
             return this;
+        }
+
         return new ExpectedStateDef
         {
             ForceCount = over.ForceCount ?? ForceCount,

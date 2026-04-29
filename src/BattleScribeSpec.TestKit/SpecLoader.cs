@@ -1,4 +1,4 @@
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -26,7 +26,10 @@ public static class SpecLoader
         var yaml = File.ReadAllText(yamlPath);
         var spec = Deserializer.Deserialize<SpecFile>(yaml);
         if (string.IsNullOrEmpty(spec.Id))
+        {
             spec.Id = Path.GetFileNameWithoutExtension(yamlPath);
+        }
+
         ValidateIdUniqueness(spec);
         SpecValidator.Validate(spec);
         return spec;
@@ -38,14 +41,19 @@ public static class SpecLoader
     public static IEnumerable<(string Path, string Id, string Category)> DiscoverSpecs(string specsDir)
     {
         if (!Directory.Exists(specsDir))
+        {
             yield break;
+        }
 
         foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
         {
             var dir = Path.GetDirectoryName(file);
             // Skip files in the root specs directory
             if (string.Equals(Path.GetFullPath(dir!), Path.GetFullPath(specsDir), StringComparison.OrdinalIgnoreCase))
+            {
                 continue;
+            }
+
             var category = Path.GetFileName(dir) ?? "unknown";
             var id = Path.GetFileNameWithoutExtension(file);
             yield return (file, id, category);
@@ -59,7 +67,10 @@ public static class SpecLoader
     {
         var spec = Deserializer.Deserialize<SpecFile>(yaml);
         if (string.IsNullOrEmpty(spec.Id) && defaultId is not null)
+        {
             spec.Id = defaultId;
+        }
+
         ValidateIdUniqueness(spec);
         SpecValidator.Validate(spec);
         return spec;
@@ -75,9 +86,15 @@ public static class SpecLoader
         {
             var specsDir = Path.Combine(dir, "specs");
             if (Directory.Exists(specsDir))
+            {
                 return specsDir;
+            }
+
             if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
+            {
                 return Path.Combine(dir, "specs");
+            }
+
             dir = Path.GetDirectoryName(dir);
         }
         return null;
@@ -92,14 +109,18 @@ public static class SpecLoader
         foreach (var name in assembly.GetManifestResourceNames())
         {
             if (!name.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase))
+            {
                 continue;
+            }
 
             // Resource names look like: BattleScribeSpec.specs.category.file.yaml
             var parts = name.Split('.');
             // Find "specs" segment, category is next, then filename
             var specsIdx = Array.IndexOf(parts, "specs");
             if (specsIdx < 0 || specsIdx + 2 >= parts.Length)
+            {
                 continue;
+            }
 
             var category = parts[specsIdx + 1];
             // filename is everything between category and .yaml extension
@@ -131,7 +152,9 @@ public static class SpecLoader
             ?? throw new InvalidOperationException("Setup requires 'gameSystem'.");
         var catalogues = setup.Catalogues;
         if (catalogues is null || catalogues.Count == 0)
+        {
             throw new InvalidOperationException("Setup requires 'catalogues' with at least one catalogue.");
+        }
 
         return (gameSystem, catalogues.ToArray());
     }
@@ -139,7 +162,10 @@ public static class SpecLoader
     private static void ValidateIdUniqueness(SpecFile spec)
     {
         if (spec.Tags?.Contains(DuplicateIdsTag) == true)
+        {
             return;
+        }
+
         SetupIdValidator.Validate(spec.Setup, spec.Id);
     }
 }

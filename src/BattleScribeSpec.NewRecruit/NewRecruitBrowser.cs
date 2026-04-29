@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
@@ -11,12 +11,10 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
 {
     private IPlaywright? _playwright;
     private IBrowser? _browser;
-    private bool _isFrozen;
-    private bool _frozenReady;
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
-    public bool IsFrozen => _isFrozen;
+    public bool IsFrozen { get; private set; }
 
     /// <summary>
     /// True after the first successful frozen-mode setup. When set,
@@ -24,11 +22,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// can be skipped because we're already at /app with Pinia initialized
     /// and the setup JS blob handles cleanup of previous state.
     /// </summary>
-    public bool FrozenReady
-    {
-        get => _frozenReady;
-        set => _frozenReady = value;
-    }
+    public bool FrozenReady { get; set; }
 
     private NewRecruitBrowser(string baseUrl)
     {
@@ -59,7 +53,10 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         float? slowMo = null)
     {
         if (!File.Exists(harFilePath))
+        {
             throw new FileNotFoundException($"HAR file not found: {harFilePath}", harFilePath);
+        }
+
         var browser = new NewRecruitBrowser(baseUrl);
         await browser.InitializeAsync(headless, harFilePath, slowMo);
         return browser;
@@ -78,7 +75,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         var browser = new NewRecruitBrowser(baseUrl)
         {
             Page = page,
-            _isFrozen = isFrozen,
+            IsFrozen = isFrozen,
             // No _playwright or _browser — lifecycle owned by the pool
         };
         return browser;
@@ -86,7 +83,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
 
     private async Task InitializeAsync(bool headless, string? harFilePath, float? slowMo = null)
     {
-        _isFrozen = harFilePath is not null;
+        IsFrozen = harFilePath is not null;
         _playwright = await Playwright.CreateAsync();
         _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
@@ -107,7 +104,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         }
         // In frozen mode, go directly to /app since HAR replay has issues
         // re-serving JS resources across full page navigations to different URLs.
-        var initialUrl = _isFrozen ? $"{BaseUrl}/app" : BaseUrl;
+        var initialUrl = IsFrozen ? $"{BaseUrl}/app" : BaseUrl;
         // Use 'Load' for all modes — NetworkIdle can hang on persistent
         // connections (analytics, ads, WebSockets) in the live site.
         await Page.GotoAsync(initialUrl, new PageGotoOptions
@@ -115,8 +112,10 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             WaitUntil = WaitUntilState.Load,
             Timeout = 60_000,
         });
-        if (!_isFrozen)
+        if (!IsFrozen)
+        {
             await WaitForNetworkSettledAsync();
+        }
         // Dismiss cookie/consent dialogs if present
         await DismissDialogsAsync();
     }
@@ -169,8 +168,11 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     public static string PiniaStoreAccess(string storeId)
     {
         if (!SafeStoreIdPattern.IsMatch(storeId))
+        {
             throw new ArgumentException(
                 $"Invalid Pinia store ID '{storeId}'. Must match [a-zA-Z0-9_-]+.", nameof(storeId));
+        }
+
         return $"document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('{storeId}')";
     }
     /// <summary>
@@ -245,7 +247,9 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     {
         if (Page is not null)
         {
-            try { await Page.CloseAsync(); } catch { /* best effort */ }
+            try
+            { await Page.CloseAsync(); }
+            catch { /* best effort */ }
             Page = null!;
         }
         if (_browser is not null)

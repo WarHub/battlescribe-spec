@@ -1,6 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Protocol;
-using Xunit;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Tests;
 
@@ -26,7 +24,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         };
         var cat = new ProtocolCatalogue
         {
-            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Tactical Squad",
                     Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 65.0 }] }
@@ -68,7 +68,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         };
         var cat = new ProtocolCatalogue
         {
-            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad" }
             ],
@@ -100,7 +102,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         };
         var cat = new ProtocolCatalogue
         {
-            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                     Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100.0 }] }
@@ -111,8 +115,10 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         engine.AddForceByIndex(0);
 
         // Select 3 times
-        for (int i = 0; i < 3; i++)
+        for (var i = 0; i < 3; i++)
+        {
             engine.SelectFirstAvailableEntry();
+        }
 
         var snap = ModelConverter.CaptureEngineSnapshot(engine);
         output.WriteLine($"Selections: {snap.Forces[0].Selections.Count}");
@@ -122,7 +128,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         var rosterPts = snap.Costs.FirstOrDefault(c => c.TypeId == "pts");
         output.WriteLine($"Roster total pts: {rosterPts?.Value ?? -1} (expected 300)");
         if (rosterPts != null)
+        {
             Assert.Equal(300.0, rosterPts.Value);
+        }
     }
 
     [Fact]
@@ -137,7 +145,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         };
         var cat = new ProtocolCatalogue
         {
-            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad" }
             ],
@@ -170,7 +180,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         };
         var cat = new ProtocolCatalogue
         {
-            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
                     Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 50.0 }],
@@ -199,7 +211,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         var ptsCost = snap.Forces[0].Selections[0].Costs.FirstOrDefault(c => c.TypeId == "pts");
         output.WriteLine($"Unit cost: {ptsCost?.Value ?? -1} (expected 60)");
         if (ptsCost != null)
+        {
             Assert.Equal(60.0, ptsCost.Value);
+        }
     }
 
     [Fact]
@@ -217,7 +231,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         };
         var cat = new ProtocolCatalogue
         {
-            Id = "cat-1", Name = "Cat", GameSystemId = "test-gs",
+            Id = "cat-1",
+            Name = "Cat",
+            GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Tactical Squad",
                     Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 65.0 }] },

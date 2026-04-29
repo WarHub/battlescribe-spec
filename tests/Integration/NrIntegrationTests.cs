@@ -1,7 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.NewRecruit;
-using BattleScribeSpec.Protocol;
-using Xunit;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Tests;
 
@@ -66,7 +63,9 @@ public sealed class NrIntegrationTests
         var state = _fixture.Engine.GetRosterState();
         _output.WriteLine($"Roster: '{state.Name}', Forces: {state.Forces.Count}");
         foreach (var err in state.ValidationErrors)
+        {
             _output.WriteLine($"  Validation: {err}");
+        }
 
         Assert.True(state.Forces.Count >= 1, $"Should have at least 1 force after setup. Name='{state.Name}', Forces={state.Forces.Count}");
     }
@@ -87,7 +86,9 @@ public sealed class NrIntegrationTests
         var selsBefore = stateBefore.Forces[0].Selections.Count;
         _output.WriteLine($"Before SelectEntry: {selsBefore} selections");
         foreach (var sel in stateBefore.Forces[0].Selections)
+        {
             _output.WriteLine($"  [{sel.Type}] {sel.Name} (count={sel.Number})");
+        }
 
         // SelectEntry calls incrementAmount — for already-selected entries this increases count
         // For entries that don't accept more, it may have no effect
@@ -136,9 +137,14 @@ public sealed class NrIntegrationTests
         {
             _output.WriteLine($"  Selection: {sel.Name} (type={sel.Type}, count={sel.Number}, costs={sel.Costs.Count}, children={sel.Children.Count})");
             foreach (var cost in sel.Costs)
+            {
                 _output.WriteLine($"    Cost: {cost.Name}={cost.Value}");
+            }
+
             foreach (var child in sel.Children)
+            {
                 _output.WriteLine($"    Child: {child.Name} (type={child.Type}, count={child.Number})");
+            }
         }
     }
 
@@ -155,7 +161,9 @@ public sealed class NrIntegrationTests
         var validationErrors = _fixture.Engine.GetValidationErrors();
         _output.WriteLine($"Validation errors: {validationErrors.Count}");
         foreach (var err in validationErrors)
+        {
             _output.WriteLine($"  - {err}");
+        }
 
         // Just verify it doesn't throw — errors are expected for an empty roster
     }

@@ -1,6 +1,4 @@
-using System.Collections.Immutable;
-
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec;
 
@@ -12,36 +10,39 @@ namespace BattleScribeSpec;
 /// </summary>
 public sealed class BattleScribeRosterEngine : IRosterEngine
 {
-    private readonly BattleScribeEngine _engine = new();
     private string? _specId;
 
     public void SetTestContext(string specId) => _specId = specId;
 
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
-        _engine.RosterName = _specId;
-        return _engine.SetupFromProtocol(gameSystem, catalogues);
+        Engine.RosterName = _specId;
+        return Engine.SetupFromProtocol(gameSystem, catalogues);
     }
 
     public ActionOutputs AddForce(string forceEntryId, string catalogueId)
     {
-        var forceEntry = _engine.FindForceEntryById(forceEntryId)
+        var forceEntry = Engine.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
 
-        var catalogue = _engine.ResolveCatalogue(catalogueId);
-        var linked = _engine.ResolveLinkedCatalogues(catalogue);
+        var catalogue = Engine.ResolveCatalogue(catalogueId);
+        var linked = Engine.ResolveLinkedCatalogues(catalogue);
         var forcesBefore = new HashSet<net.battlescribe.model.roster.Force>(
-            _engine.GetForces(), ReferenceEqualityComparer.Instance);
+            Engine.GetForces(), ReferenceEqualityComparer.Instance);
 
-        var (force, _) = _engine.AddForce(catalogue, forceEntry, linked);
+        var (force, _) = Engine.AddForce(catalogue, forceEntry, linked);
 
         if (force is null)
+        {
             throw new InvalidOperationException("Java engine returned null force for AddForce.");
+        }
 
-        foreach (var f in _engine.GetForces())
+        foreach (var f in Engine.GetForces())
         {
             if (!forcesBefore.Contains(f))
-                _engine.TrackForceCatalogue(f, catalogue);
+            {
+                Engine.TrackForceCatalogue(f, catalogue);
+            }
         }
 
         // Re-read force from roster to capture auto-selected entries (from constraints)
@@ -53,31 +54,31 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
     {
         var parentForce = FindForceById(parentForceId);
-        var forceEntry = _engine.FindForceEntryById(forceEntryId)
+        var forceEntry = Engine.FindForceEntryById(forceEntryId)
             ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
 
-        var catalogue = _engine.ResolveCatalogue(catalogueId);
+        var catalogue = Engine.ResolveCatalogue(catalogueId);
 
-        var childForce = _engine.CreateChildForce(parentForce, forceEntry, catalogue);
+        var childForce = Engine.CreateChildForce(parentForce, forceEntry, catalogue);
         return new ActionOutputs { ForceId = childForce.getId() };
     }
 
     public void RemoveForce(string forceId)
     {
         var force = FindForceById(forceId);
-        _engine.RemoveForce(force);
+        Engine.RemoveForce(force);
     }
 
     public ActionOutputs SelectEntry(string forceId, string entryId)
     {
         var force = FindForceById(forceId);
-        var entries = _engine.GetEntriesForForce(force);
+        var entries = Engine.GetEntriesForForce(force);
         var entry = FindEntryById(entries, entryId)
             ?? throw new InvalidOperationException(
                 $"Entry '{entryId}' not found in force '{forceId}' " +
                 $"(have {entries.Count} entries: [{string.Join(", ", entries.Select(e => $"{e.getId()}/{e.getName()}"))}]).");
 
-        var createdSelections = _engine.SelectEntry(force, entry);
+        var createdSelections = Engine.SelectEntry(force, entry);
 
         // The primary created selection
         var primarySelection = createdSelections.Count > 0 ? createdSelections[0] : null;
@@ -102,8 +103,8 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var force = FindForceById(forceId);
         var parentSelection = FindSelectionById(force, parentSelectionId);
         var parentEntryId = parentSelection.getEntryId();
-        var parentEntry = _engine.GetEntryById(parentEntryId)
-            ?? _engine.GetEntryByCompositeId(parentEntryId)
+        var parentEntry = Engine.GetEntryById(parentEntryId)
+            ?? Engine.GetEntryByCompositeId(parentEntryId)
             ?? throw new InvalidOperationException($"Parent entry '{parentEntryId}' not found in entry lookup.");
 
         var childEntries = FlattenChildEntries(parentEntry);
@@ -111,7 +112,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             ?? throw new InvalidOperationException(
                 $"Child entry '{entryId}' not found under parent selection '{parentSelectionId}'.");
 
-        var createdSelections = _engine.SelectEntry(parentSelection, childEntry);
+        var createdSelections = Engine.SelectEntry(parentSelection, childEntry);
         var primarySelection = createdSelections.Count > 0 ? createdSelections[0] : null;
 
         var outputs = new ActionOutputs
@@ -131,7 +132,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     {
         var force = FindForceById(forceId);
         var selection = FindSelectionById(force, selectionId);
-        _engine.DeselectEntry(selection);
+        Engine.DeselectEntry(selection);
     }
 
     public void SetSelectionCount(string forceId, string selectionId, int count)
@@ -139,20 +140,20 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var force = FindForceById(forceId);
         var selection = FindSelectionById(force, selectionId);
         var entryId = selection.getEntryId();
-        var dataEntry = _engine.GetEntryById(entryId)
-            ?? _engine.GetEntryByCompositeId(entryId)
+        var dataEntry = Engine.GetEntryById(entryId)
+            ?? Engine.GetEntryByCompositeId(entryId)
             ?? throw new InvalidOperationException(
                 $"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
         // Find the parent of this selection (the container that holds it)
         var parent = FindSelectionParent(force, selectionId);
-        _engine.SetNumSelections(parent, dataEntry, count);
+        Engine.SetNumSelections(parent, dataEntry, count);
     }
 
     public ActionOutputs DuplicateSelection(string forceId, string selectionId)
     {
         var force = FindForceById(forceId);
         var selection = FindSelectionById(force, selectionId);
-        var duplicated = _engine.DuplicateSelection(selection);
+        var duplicated = Engine.DuplicateSelection(selection);
         return new ActionOutputs
         {
             SelectionId = duplicated?.getId()
@@ -167,9 +168,9 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
 
     public void SetCostLimit(string costTypeId, double value)
     {
-        var costType = _engine.GetCostTypeById(costTypeId)
+        var costType = Engine.GetCostTypeById(costTypeId)
             ?? throw new InvalidOperationException($"Cost type '{costTypeId}' not found.");
-        _engine.SetCostLimit(costType, value);
+        Engine.SetCostLimit(costType, value);
     }
 
     public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
@@ -183,33 +184,50 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 : JavaListToList<net.battlescribe.model.roster.Category>(force.getCategories());
             var cat = categories.FirstOrDefault(c => c.getEntryId() == categoryEntryId)
                 ?? throw new InvalidOperationException($"Category with entryId '{categoryEntryId}' not found.");
-            if (customNotes is not null) cat.setCustomNotes(customNotes);
+            if (customNotes is not null)
+            {
+                cat.setCustomNotes(customNotes);
+            }
         }
         else if (selectionId is not null)
         {
             var selection = FindSelectionById(force, selectionId);
-            if (customName is not null) selection.setCustomName(customName);
-            if (customNotes is not null) selection.setCustomNotes(customNotes);
+            if (customName is not null)
+            {
+                selection.setCustomName(customName);
+            }
+
+            if (customNotes is not null)
+            {
+                selection.setCustomNotes(customNotes);
+            }
         }
         else
         {
-            if (customName is not null) force.setCustomName(customName);
-            if (customNotes is not null) force.setCustomNotes(customNotes);
+            if (customName is not null)
+            {
+                force.setCustomName(customName);
+            }
+
+            if (customNotes is not null)
+            {
+                force.setCustomNotes(customNotes);
+            }
         }
     }
 
     public RosterState GetRosterState()
     {
-        var roster = _engine.GetRoster();
-        var forces = _engine.GetForces();
-        var errors = _engine.GetValidationErrors();
+        var roster = Engine.GetRoster();
+        var forces = Engine.GetForces();
+        var errors = Engine.GetValidationErrors();
 
         // Sort forces alphabetically by name to match BS render layer behavior.
         // BS's own RenderRoster sorts forces via Collections.sort(new f()) which uses
         // case-insensitive alphabetical order. This matches BattleScribe's rendered order
         // and usually matches NR for simple names, but NR may differ in documented cases
         // such as numeric-aware comparisons, category grouping, or explicit sort indices.
-        forces = forces.OrderBy(f => f.getName(), StringComparer.OrdinalIgnoreCase).ToList();
+        forces = [.. forces.OrderBy(f => f.getName(), StringComparer.OrdinalIgnoreCase)];
         var forceStates = forces.Select((f, i) => CaptureForce(f, i)).ToList();
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
@@ -232,13 +250,13 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             GameSystemName: string.IsNullOrEmpty(roster.getGameSystemName()) ? null : roster.getGameSystemName());
     }
 
-    public IReadOnlyList<ValidationErrorState> GetValidationErrors() => _engine.GetValidationErrors();
+    public IReadOnlyList<ValidationErrorState> GetValidationErrors() => Engine.GetValidationErrors();
 
     // ===== DataSource support (file-based setup + name-based actions) =====
 
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
     {
-        _engine.RosterName = _specId;
+        Engine.RosterName = _specId;
         // Write files to a temp directory so the engine can load them via SimpleXML
         var tempDir = Path.Combine(Path.GetTempPath(), "bsspec-engine-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(tempDir);
@@ -253,23 +271,30 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             // Load .gst file (game system)
             var gstFiles = Directory.GetFiles(tempDir, "*.gst");
             if (gstFiles.Length == 0)
+            {
                 return ["No .gst (game system) file found in data source files."];
+            }
+
             if (gstFiles.Length > 1)
+            {
                 return [$"Expected exactly one .gst file, found {gstFiles.Length}."];
-            _engine.LoadGameSystemFile(gstFiles[0]);
+            }
+
+            Engine.LoadGameSystemFile(gstFiles[0]);
 
             // Load all .cat files with dependency resolution
             var catFiles = Directory.GetFiles(tempDir, "*.cat");
             foreach (var catFile in catFiles)
             {
-                _engine.LoadCatalogueWithDependencies(catFile, tempDir);
+                Engine.LoadCatalogueWithDependencies(catFile, tempDir);
             }
 
-            return _engine.InitializeFromLoadedData();
+            return Engine.InitializeFromLoadedData();
         }
         finally
         {
-            try { Directory.Delete(tempDir, recursive: true); }
+            try
+            { Directory.Delete(tempDir, recursive: true); }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[BattleScribeRosterEngine] Failed to clean up temp dir '{tempDir}': {ex.Message}");
@@ -284,24 +309,34 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     /// </summary>
     private net.battlescribe.model.roster.Force FindForceById(string forceId)
     {
-        foreach (var force in _engine.GetForces())
+        foreach (var force in Engine.GetForces())
         {
             var found = FindForceByIdRecursive(force, forceId);
-            if (found is not null) return found;
+            if (found is not null)
+            {
+                return found;
+            }
         }
         throw new InvalidOperationException(
             $"Force with ID '{forceId}' not found in roster " +
-            $"({_engine.GetForces().Count} top-level forces).");
+            $"({Engine.GetForces().Count} top-level forces).");
     }
 
     private static net.battlescribe.model.roster.Force? FindForceByIdRecursive(
         net.battlescribe.model.roster.Force force, string forceId)
     {
-        if (force.getId() == forceId) return force;
+        if (force.getId() == forceId)
+        {
+            return force;
+        }
+
         foreach (var child in JavaListToList<net.battlescribe.model.roster.Force>(force.getForces()))
         {
             var found = FindForceByIdRecursive(child, forceId);
-            if (found is not null) return found;
+            if (found is not null)
+            {
+                return found;
+            }
         }
         return null;
     }
@@ -315,7 +350,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         foreach (var sel in JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections()))
         {
             var found = FindSelectionByIdRecursive(sel, selectionId);
-            if (found is not null) return found;
+            if (found is not null)
+            {
+                return found;
+            }
         }
         throw new InvalidOperationException(
             $"Selection with ID '{selectionId}' not found in force '{force.getId()}'.");
@@ -324,11 +362,18 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     private static net.battlescribe.model.roster.Selection? FindSelectionByIdRecursive(
         net.battlescribe.model.roster.Selection sel, string selectionId)
     {
-        if (sel.getId() == selectionId) return sel;
+        if (sel.getId() == selectionId)
+        {
+            return sel;
+        }
+
         foreach (var child in JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections()))
         {
             var found = FindSelectionByIdRecursive(child, selectionId);
-            if (found is not null) return found;
+            if (found is not null)
+            {
+                return found;
+            }
         }
         return null;
     }
@@ -342,9 +387,16 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     {
         foreach (var sel in JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections()))
         {
-            if (sel.getId() == selectionId) return force;
+            if (sel.getId() == selectionId)
+            {
+                return force;
+            }
+
             var parent = FindSelectionParentRecursive(sel, selectionId);
-            if (parent is not null) return parent;
+            if (parent is not null)
+            {
+                return parent;
+            }
         }
         throw new InvalidOperationException(
             $"Selection '{selectionId}' not found when looking for parent in force '{force.getId()}'.");
@@ -355,9 +407,16 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     {
         foreach (var child in JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections()))
         {
-            if (child.getId() == selectionId) return sel;
+            if (child.getId() == selectionId)
+            {
+                return sel;
+            }
+
             var parent = FindSelectionParentRecursive(child, selectionId);
-            if (parent is not null) return parent;
+            if (parent is not null)
+            {
+                return parent;
+            }
         }
         return null;
     }
@@ -371,12 +430,19 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     {
         // Exact match first
         var exact = entries.FirstOrDefault(e => e.getId() == entryId);
-        if (exact != null) return exact;
+        if (exact != null)
+        {
+            return exact;
+        }
         // Composite ID match: entry links create IDs like "linkId::targetId"
         return entries.FirstOrDefault(e =>
         {
             var id = e.getId();
-            if (id is null) return false;
+            if (id is null)
+            {
+                return false;
+            }
+
             if (id.Contains("::"))
             {
                 var parts = id.Split("::");
@@ -393,10 +459,17 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         net.battlescribe.model.roster.Selection selection)
     {
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(selection.getSelections());
-        if (children.Count == 0) return null;
+        if (children.Count == 0)
+        {
+            return null;
+        }
+
         var map = new Dictionary<string, string>();
         foreach (var child in children)
+        {
             CollectSelectionIdsRecursive(child, map);
+        }
+
         return map.Count > 0 ? map : null;
     }
 
@@ -405,9 +478,14 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     {
         var entryId = sel.getEntryId();
         if (entryId is not null)
+        {
             map[entryId] = sel.getId();
+        }
+
         foreach (var child in JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections()))
+        {
             CollectSelectionIdsRecursive(child, map);
+        }
     }
 
     /// <summary>
@@ -418,10 +496,17 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         net.battlescribe.model.roster.Force force)
     {
         var selections = JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections());
-        if (selections.Count == 0) return null;
+        if (selections.Count == 0)
+        {
+            return null;
+        }
+
         var map = new Dictionary<string, string>();
         foreach (var sel in selections)
+        {
             CollectSelectionIdsRecursive(sel, map);
+        }
+
         return map.Count > 0 ? map : null;
     }
 
@@ -434,7 +519,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var result = new List<net.battlescribe.model.data.SelectionEntry>();
         result.AddRange(JavaListToList<net.battlescribe.model.data.SelectionEntry>(entry.getSelectionEntries()));
         foreach (var group in JavaListToList<net.battlescribe.model.data.SelectionEntryGroup>(entry.getSelectionEntryGroups()))
+        {
             FlattenGroupEntries(group, result);
+        }
+
         return result;
     }
 
@@ -444,7 +532,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     {
         result.AddRange(JavaListToList<net.battlescribe.model.data.SelectionEntry>(group.getSelectionEntries()));
         foreach (var nested in JavaListToList<net.battlescribe.model.data.SelectionEntryGroup>(group.getSelectionEntryGroups()))
+        {
             FlattenGroupEntries(nested, result);
+        }
+
         foreach (var link in JavaListToList<net.battlescribe.model.data.EntryLink>(group.getEntryLinks()))
         {
             var resolved = JavaListToList<net.battlescribe.model.data.SelectionEntry>(link.getSelectionEntries());
@@ -452,10 +543,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         }
     }
 
-    public void Dispose() => _engine.Dispose();
+    public void Dispose() => Engine.Dispose();
 
     // Expose engine for advanced operations in existing tests
-    internal BattleScribeEngine Engine => _engine;
+    internal BattleScribeEngine Engine { get; } = new();
 
     private ForceState CaptureForce(net.battlescribe.model.roster.Force f, int? rootForceIndex = null)
     {
@@ -467,32 +558,32 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var forcePublications = JavaListToList<net.battlescribe.model.data.Publication>(f.getPublications());
         var pubId = f.getPublicationId();
         // Use engine-resolved ForceEntry (modifiers applied) for hidden state
-        var resolvedForceEntry = _engine.GetResolvedForceEntry(f);
+        var resolvedForceEntry = Engine.GetResolvedForceEntry(f);
         var hidden = resolvedForceEntry?.isHidden()
-            ?? _engine.FindForceEntryById(f.getEntryId())?.isHidden()
+            ?? Engine.FindForceEntryById(f.getEntryId())?.isHidden()
             ?? false;
         // Sort selections and child forces alphabetically to match BattleScribe render-layer ordering.
-        selections = selections.OrderBy(s => s.getName(), StringComparer.OrdinalIgnoreCase).ToList();
-        childForces = childForces.OrderBy(cf => cf.getName(), StringComparer.OrdinalIgnoreCase).ToList();
+        selections = [.. selections.OrderBy(s => s.getName(), StringComparer.OrdinalIgnoreCase)];
+        childForces = [.. childForces.OrderBy(cf => cf.getName(), StringComparer.OrdinalIgnoreCase)];
         var customName = f.getCustomName();
         var customNotes = f.getCustomNotes();
         return new ForceState(
             f.getId(),
             f.getName() ?? "",
             f.getCatalogueId(),
-            selections.Select(s => CaptureSelection(s, f)).ToList(),
-            rootForceIndex is { } rfi ? _engine.GetAvailableEntryCountForForce(rfi) : null,
+            [.. selections.Select(s => CaptureSelection(s, f))],
+            rootForceIndex is { } rfi ? Engine.GetAvailableEntryCountForForce(rfi) : null,
             ChildForces: childForces.Count > 0
                 ? childForces.Select(cf => CaptureForce(cf)).ToList()
                 : null,
-            Profiles: forceProfiles.Select(CaptureProfile).ToList(),
-            Rules: forceRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
-                string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
+            Profiles: [.. forceProfiles.Select(CaptureProfile)],
+            Rules: [.. forceRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
+                string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId()))],
             Hidden: hidden,
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
             Page: f.getPage(),
             EntryId: string.IsNullOrEmpty(f.getEntryId()) ? null : f.getEntryId(),
-            Categories: forceCategories.Select(c =>
+            Categories: [.. forceCategories.Select(c =>
             {
                 var catPubId = c.getPublicationId();
                 var catCustomNotes = c.getCustomNotes();
@@ -501,7 +592,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
                     Page: c.getPage(),
                     CustomNotes: string.IsNullOrEmpty(catCustomNotes) ? null : catCustomNotes);
-            }).ToList(),
+            })],
             Publications: forcePublications.Count > 0
                 ? forcePublications.Select(p => new PublicationState(p.getId() ?? "", p.getName() ?? "")).ToList()
                 : null,
@@ -515,14 +606,14 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
         // Sort children alphabetically to match BattleScribe render-layer ordering.
-        children = children.OrderBy(c => c.getName(), StringComparer.OrdinalIgnoreCase).ToList();
+        children = [.. children.OrderBy(c => c.getName(), StringComparer.OrdinalIgnoreCase)];
         var profiles = JavaListToList<net.battlescribe.model.data.Profile>(sel.getProfiles());
         var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());
         var categories = JavaListToList<net.battlescribe.model.roster.Category>(sel.getCategories());
         // Use engine's modifier-application to get resolved hidden state
-        var resolvedEntry = _engine.GetResolvedEntry(force, sel);
+        var resolvedEntry = Engine.GetResolvedEntry(force, sel);
         var hidden = resolvedEntry?.isHidden()
-            ?? _engine.GetEntryById(sel.getEntryId())?.isHidden()
+            ?? Engine.GetEntryById(sel.getEntryId())?.isHidden()
             ?? false;
         var pubId = sel.getPublicationId();
         var selCustomName = sel.getCustomName();
@@ -534,12 +625,12 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             sel.getType(),
             sel.getNumber(),
             hidden,
-            costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList(),
-            children.Select(c => CaptureSelection(c, force)).ToList(),
-            Profiles: profiles.Select(CaptureProfile).ToList(),
-            Rules: rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
-                string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
-            Categories: categories.Select(c =>
+            [.. costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue()))],
+            [.. children.Select(c => CaptureSelection(c, force))],
+            Profiles: [.. profiles.Select(CaptureProfile)],
+            Rules: [.. rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
+                string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId()))],
+            Categories: [.. categories.Select(c =>
             {
                 var catProfiles = JavaListToList<net.battlescribe.model.data.Profile>(c.getProfiles());
                 var catRules = JavaListToList<net.battlescribe.model.data.Rule>(c.getRules());
@@ -547,16 +638,16 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
                     c.getName() ?? "", c.getEntryId(), c.isPrimary(),
-                    Profiles: catProfiles.Select(CaptureProfile).ToList(),
-                    Rules: catRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
-                        string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId())).ToList(),
+                    Profiles: [.. catProfiles.Select(CaptureProfile)],
+                    Rules: [.. catRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
+                        string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId()))],
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
                     Page: c.getPage(),
                     CustomNotes: string.IsNullOrEmpty(catCustomNotes) ? null : catCustomNotes);
-            }).ToList(),
+            })],
             Page: sel.getPage(),
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,
-            PublicationName: _engine.GetPublicationName(pubId),
+            PublicationName: Engine.GetPublicationName(pubId),
             EntryGroupId: string.IsNullOrEmpty(sel.getEntryGroupId()) ? null : sel.getEntryGroupId(),
             CustomName: string.IsNullOrEmpty(selCustomName) ? null : selCustomName,
             CustomNotes: string.IsNullOrEmpty(selCustomNotes) ? null : selCustomNotes);
@@ -571,18 +662,25 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             prof.getTypeId(),
             prof.getTypeName(),
             prof.isHidden(),
-            chars.Select(c => new CharacteristicState(c.getName() ?? "", c.getTypeId(), c.getValue() ?? "")).ToList(),
+            [.. chars.Select(c => new CharacteristicState(c.getName() ?? "", c.getTypeId(), c.getValue() ?? ""))],
             prof.getPage(),
             string.IsNullOrEmpty(pubId) ? null : pubId);
     }
 
     private static List<T> JavaListToList<T>(java.util.List? javaList)
     {
-        if (javaList is null) return [];
+        if (javaList is null)
+        {
+            return [];
+        }
+
         var result = new List<T>(javaList.size());
         var iter = javaList.iterator();
         while (iter.hasNext())
+        {
             result.Add((T)iter.next());
+        }
+
         return result;
     }
 }

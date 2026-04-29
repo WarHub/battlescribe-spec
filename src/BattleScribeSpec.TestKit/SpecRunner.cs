@@ -1,4 +1,4 @@
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec;
 
@@ -49,12 +49,15 @@ public sealed class SpecRunner
             else
             {
                 var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
-                _catalogueIds = catalogues.Select(c => c.Id).ToArray();
+                _catalogueIds = [.. catalogues.Select(c => c.Id)];
                 var setupErrors = _engine.Setup(gameSystem, catalogues);
                 if (setupErrors.Count > 0)
                 {
                     foreach (var setupError in setupErrors)
+                    {
                         _errors.Add($"Setup error: {setupError}");
+                    }
+
                     return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
                 }
             }
@@ -70,11 +73,17 @@ public sealed class SpecRunner
                         // dump is a no-op in the runner itself; the callback does the work
                     }
                     else if (step.Action is not null)
+                    {
                         ExecuteAction(step, i);
+                    }
                     else if (step.ExpectedState is not null)
+                    {
                         ExecuteAssertion(step, i);
+                    }
                     else
+                    {
                         _errors.Add($"Step {i}: neither 'action' nor 'expectedState' defined");
+                    }
 
                     NotifyStepCompleted(i, step);
                 }
@@ -83,7 +92,9 @@ public sealed class SpecRunner
                     _errors.Add($"Step {i}: {ex.GetType().Name}: {ex.Message}");
                     NotifyStepCompleted(i, step);
                     if (step.Action is not null && step.Action != "dump")
+                    {
                         break;
+                    }
                 }
             }
         }
@@ -109,7 +120,10 @@ public sealed class SpecRunner
     private void NotifyStepCompleted(int stepIndex, StepDef step)
     {
         if (OnStepCompleted is not { } callback)
+        {
             return;
+        }
+
         try
         {
             var state = _engine.GetRosterState();
@@ -125,8 +139,10 @@ public sealed class SpecRunner
     private void SetupFromDataSource(string dataSourceUri)
     {
         if (_dataSourceResolver is null)
+        {
             throw new InvalidOperationException(
                 "DataSource specs require a DataSourceResolver. Pass one to the SpecRunner constructor.");
+        }
 
         _isDataSourceMode = true;
         var resolvedDir = _dataSourceResolver.Resolve(dataSourceUri);
@@ -141,12 +157,16 @@ public sealed class SpecRunner
         }
 
         if (files.Count == 0)
+        {
             throw new InvalidOperationException(
                 $"No .gst or .cat files found in resolved data source directory: {resolvedDir}");
+        }
 
         var setupErrors = _engine.SetupFromFiles(files);
         foreach (var err in setupErrors)
+        {
             _errors.Add($"Setup: {err}");
+        }
     }
 
     private void ExecuteAction(StepDef step, int stepIndex)
@@ -235,7 +255,9 @@ public sealed class SpecRunner
 
         // Store outputs for expression resolution in later steps
         if (step.Id is { Length: > 0 } stepId && outputs is not null)
+        {
             _exprResolver.StoreOutputs(stepId, outputs);
+        }
     }
 
     private void ExecuteAssertion(StepDef step, int stepIndex)
@@ -249,15 +271,22 @@ public sealed class SpecRunner
 
     private void AssertExpectedState(ExpectedStateDef? expected, int stepIndex)
     {
-        if (expected is null) return;
+        if (expected is null)
+        {
+            return;
+        }
 
         var state = _engine.GetRosterState();
 
         if (expected.ForceCount is { } fc)
+        {
             AssertEqual(stepIndex, "forceCount", fc, state.Forces.Count);
+        }
 
         if (expected.CostCount is { } cc)
+        {
             AssertEqual(stepIndex, "costCount", cc, state.Costs.Count);
+        }
 
         if (expected.Costs is { } expectedCosts)
         {
@@ -282,14 +311,20 @@ public sealed class SpecRunner
                 }
 
                 if (actual is null)
+                {
                     _errors.Add($"Step {stepIndex}: cost type '{matchKey}' not found in roster");
+                }
                 else if (ec.Value is { } v)
+                {
                     AssertEqual(stepIndex, $"cost[{matchKey}].value", v, actual.Value);
+                }
             }
         }
 
         if (expected.CostLimitCount is { } clc)
+        {
             AssertEqual(stepIndex, "costLimitCount", clc, state.CostLimits?.Count ?? 0);
+        }
 
         if (expected.CostLimits is { } expectedCostLimits)
         {
@@ -314,14 +349,20 @@ public sealed class SpecRunner
                 }
 
                 if (actual is null)
+                {
                     _errors.Add($"Step {stepIndex}: costLimit type '{matchKey}' not found in roster");
+                }
                 else if (ecl.Value is { } v)
+                {
                     AssertEqual(stepIndex, $"costLimit[{matchKey}].value", v, actual.Value);
+                }
             }
         }
 
         if (expected.GameSystemName is { } gsName)
+        {
             AssertEqual(stepIndex, "gameSystemName", gsName, state.GameSystemName ?? "");
+        }
 
         if (expected.Forces is { } expectedForces)
         {
@@ -335,7 +376,9 @@ public sealed class SpecRunner
                 AssertForce(stepIndex, $"force[{fi}]", expectedForces[fi], state.Forces[fi]);
             }
             if (state.Forces.Count > expectedForces.Count)
+            {
                 _errors.Add($"Step {stepIndex}: expected {expectedForces.Count} forces but got {state.Forces.Count}");
+            }
         }
 
         if (expected.SelectionCount is { } totalSelCount)
@@ -357,8 +400,10 @@ public sealed class SpecRunner
             {
                 // errors: [] means expect no errors
                 if (actualErrors.Count > 0)
+                {
                     _errors.Add($"Step {stepIndex}: expected no errors but got {actualErrors.Count}: " +
                         string.Join("; ", actualErrors.Select(FormatError)));
+                }
             }
             else
             {
@@ -410,11 +455,14 @@ public sealed class SpecRunner
             var (expectedOwnerType, expectedOwnerEntryId) = ParseOn(ea.On);
             var (expectedEntryId, expectedConstraintId) = ParseFrom(ea.From);
 
-            int matchIndex = -1;
-            for (int i = 0; i < actualErrors.Count; i++)
+            var matchIndex = -1;
+            for (var i = 0; i < actualErrors.Count; i++)
             {
                 if (consumed.Contains(i))
+                {
                     continue;
+                }
+
                 var ae = actualErrors[i];
                 if (ae.OwnerType == expectedOwnerType &&
                     (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
@@ -433,7 +481,11 @@ public sealed class SpecRunner
             else
             {
                 var desc = $"on='{ea.On}', from='{ea.From}'";
-                if (ea.MessageContains is not null) desc += $", messageContains='{ea.MessageContains}'";
+                if (ea.MessageContains is not null)
+                {
+                    desc += $", messageContains='{ea.MessageContains}'";
+                }
+
                 _errors.Add($"Step {stepIndex}: expected error [{desc}] not found in: [{string.Join("; ", actualErrors.Select(FormatError))}]");
             }
         }
@@ -449,7 +501,11 @@ public sealed class SpecRunner
     private static string FormatError(ValidationErrorState e)
     {
         var on = e.OwnerType ?? "?";
-        if (e.OwnerEntryId is not null) on += $" {e.OwnerEntryId}";
+        if (e.OwnerEntryId is not null)
+        {
+            on += $" {e.OwnerEntryId}";
+        }
+
         var from = e.EntryId is not null && e.ConstraintId is not null ? $"{e.EntryId}/{e.ConstraintId}" : null;
         return from is not null ? $"{on} <- {from}: {e.Message}" : $"{on}: {e.Message}";
     }
@@ -457,74 +513,118 @@ public sealed class SpecRunner
     private static (string ownerType, string? ownerEntryId) ParseOn(string on)
     {
         var spaceIdx = on.IndexOf(' ');
-        if (spaceIdx < 0) return (on, null);
+        if (spaceIdx < 0)
+        {
+            return (on, null);
+        }
+
         return (on[..spaceIdx], on[(spaceIdx + 1)..]);
     }
 
     private static (string entryId, string constraintId) ParseFrom(string from)
     {
         var slashIdx = from.IndexOf('/');
-        if (slashIdx < 0) return (from, "");
+        if (slashIdx < 0)
+        {
+            return (from, "");
+        }
+
         return (from[..slashIdx], from[(slashIdx + 1)..]);
     }
 
     private void AssertForce(int stepIndex, string prefix, ExpectedForceDef ef, ForceState af)
     {
         if (ef.Name is not null)
+        {
             AssertEqual(stepIndex, $"{prefix}.name", ef.Name, af.Name);
+        }
 
         if (ef.EntryId is not null)
+        {
             AssertEqual(stepIndex, $"{prefix}.entryId", ef.EntryId, af.EntryId ?? "");
+        }
 
         if (ef.SelectionCount is { } sc)
+        {
             AssertEqual(stepIndex, $"{prefix}.selectionCount", sc, af.Selections.Count);
+        }
 
         if (ef.AvailableEntryCount is { } aec && af.AvailableEntryCount is { } actualAec)
+        {
             AssertEqual(stepIndex, $"{prefix}.availableEntryCount", aec, actualAec);
+        }
 
         AssertEqual(stepIndex, $"{prefix}.hidden", ef.Hidden ?? false, af.Hidden);
 
         if (ef.ChildForceCount is { } cfc)
+        {
             AssertEqual(stepIndex, $"{prefix}.childForceCount", cfc, af.ChildForces?.Count ?? 0);
+        }
 
         if (ef.ChildForces is { } expectedChildForces)
+        {
             AssertChildForces(stepIndex, prefix, expectedChildForces, af.ChildForces);
+        }
 
         if (ef.Selections is { } expectedSels)
+        {
             AssertSelections(stepIndex, prefix, expectedSels, af.Selections);
+        }
 
         if (ef.Profiles is { } forceProfs)
+        {
             AssertProfiles(stepIndex, prefix, forceProfs, af.Profiles);
+        }
 
         if (ef.Rules is { } forceRules)
+        {
             AssertRules(stepIndex, prefix, forceRules, af.Rules);
+        }
 
         if (ef.CategoryCount is { } catCount)
+        {
             AssertEqual(stepIndex, $"{prefix}.categoryCount", catCount, af.Categories?.Count ?? 0);
+        }
 
         if (ef.Categories is { } forceCats)
+        {
             AssertCategories(stepIndex, prefix, forceCats, af.Categories);
+        }
 
         if (ef.Publications is { } forcePubs)
+        {
             AssertPublications(stepIndex, prefix, forcePubs, af.Publications);
+        }
 
         if (ef.PublicationId is not null)
+        {
             AssertEqual(stepIndex, $"{prefix}.publicationId", ef.PublicationId, af.PublicationId ?? "");
+        }
 
         if (ef.Page is not null)
+        {
             AssertEqual(stepIndex, $"{prefix}.page", ef.Page, af.Page ?? "");
+        }
 
         if (ef.CatalogueName is not null)
+        {
             AssertEqual(stepIndex, $"{prefix}.catalogueName", ef.CatalogueName, af.CatalogueName ?? "");
+        }
 
         if (ef.CatalogueId is not null)
+        {
             AssertEqual(stepIndex, $"{prefix}.catalogueId", ef.CatalogueId, af.CatalogueId ?? "");
+        }
 
         if (ef.CustomName is not null)
+        {
             AssertEqual(stepIndex, $"{prefix}.customName", ef.CustomName, af.CustomName ?? "");
+        }
 
         if (ef.CustomNotes is not null)
+        {
             AssertEqual(stepIndex, $"{prefix}.customNotes", ef.CustomNotes, af.CustomNotes ?? "");
+        }
     }
 
     private void AssertChildForces(int stepIndex, string prefix,
@@ -541,7 +641,9 @@ public sealed class SpecRunner
             AssertForce(stepIndex, $"{prefix}.childForce[{ci}]", expected[ci], actual![ci]);
         }
         if (actualCount > expected.Count)
+        {
             _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} child forces but got {actualCount}");
+        }
     }
 
     private void AssertSelections(int stepIndex, string prefix,
@@ -559,36 +661,56 @@ public sealed class SpecRunner
             var selPrefix = $"{prefix}.selection[{si}]";
 
             if (es.Name is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.name", es.Name, a.Name);
+            }
 
             if (es.Type is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.type", es.Type, a.Type);
+            }
 
             if (es.Number is { } num)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.number", num, a.Number);
+            }
 
             AssertEqual(stepIndex, $"{selPrefix}.hidden", es.Hidden ?? false, a.Hidden);
 
             if (es.EntryId is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.entryId", es.EntryId, a.EntryId ?? "");
+            }
 
             if (es.Page is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.page", es.Page, a.Page);
+            }
 
             if (es.PublicationId is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.publicationId", es.PublicationId, a.PublicationId ?? "");
+            }
 
             if (es.PublicationName is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.publicationName", es.PublicationName, a.PublicationName ?? "");
+            }
 
             if (es.EntryGroupId is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.entryGroupId", es.EntryGroupId, a.EntryGroupId ?? "");
+            }
 
             if (es.CustomName is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.customName", es.CustomName, a.CustomName ?? "");
+            }
 
             if (es.CustomNotes is not null)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.customNotes", es.CustomNotes, a.CustomNotes ?? "");
+            }
 
             if (es.Costs is { } eCosts)
             {
@@ -601,29 +723,45 @@ public sealed class SpecRunner
                             ? a.Costs.FirstOrDefault(c => c.Name == ec.Name)
                             : null;
                     if (ac is null)
+                    {
                         _errors.Add($"Step {stepIndex}: {selPrefix} cost type '{matchKey}' not found");
+                    }
                     else if (ec.Value is { } v)
+                    {
                         AssertEqual(stepIndex, $"{selPrefix}.cost[{matchKey}]", v, ac.Value);
+                    }
                 }
             }
 
             if (es.Profiles is { } eProfiles)
+            {
                 AssertProfiles(stepIndex, selPrefix, eProfiles, a.Profiles);
+            }
 
             if (es.Rules is { } eRules)
+            {
                 AssertRules(stepIndex, selPrefix, eRules, a.Rules);
+            }
 
             if (es.Categories is { } eCategories)
+            {
                 AssertCategories(stepIndex, selPrefix, eCategories, a.Categories);
+            }
 
             if (es.Children is { } expectedChildren)
+            {
                 AssertSelections(stepIndex, selPrefix, expectedChildren, a.Children);
+            }
 
             if (es.ChildCount is { } childCount)
+            {
                 AssertEqual(stepIndex, $"{selPrefix}.childCount", childCount, a.Children.Count);
+            }
         }
         if (actual.Count > expected.Count)
+        {
             _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} selections but got {actual.Count}");
+        }
     }
 
     private void AssertProfiles(int stepIndex, string prefix,
@@ -645,18 +783,26 @@ public sealed class SpecRunner
             var profPrefix = $"{prefix}.profile[{ep.Name ?? pi.ToString()}]";
 
             if (ep.TypeName is not null)
+            {
                 AssertEqual(stepIndex, $"{profPrefix}.typeName", ep.TypeName, ap.TypeName);
+            }
 
             if (ep.TypeId is not null)
+            {
                 AssertEqual(stepIndex, $"{profPrefix}.typeId", ep.TypeId, ap.TypeId);
+            }
 
             AssertEqual(stepIndex, $"{profPrefix}.hidden", ep.Hidden ?? false, ap.Hidden);
 
             if (ep.Page is not null)
+            {
                 AssertEqual(stepIndex, $"{profPrefix}.page", ep.Page, ap.Page ?? "");
+            }
 
             if (ep.PublicationId is not null)
+            {
                 AssertEqual(stepIndex, $"{profPrefix}.publicationId", ep.PublicationId, ap.PublicationId ?? "");
+            }
 
             if (ep.Characteristics is { } eChars)
             {
@@ -671,14 +817,21 @@ public sealed class SpecRunner
                         continue;
                     }
                     if (ec.Value is not null)
+                    {
                         AssertEqual(stepIndex, $"{profPrefix}.characteristic[{ec.Name}].value", ec.Value, ac.Value);
+                    }
+
                     if (ec.TypeId is not null)
+                    {
                         AssertEqual(stepIndex, $"{profPrefix}.characteristic[{ec.Name}].typeId", ec.TypeId, ac.TypeId);
+                    }
                 }
             }
         }
         if (actualCount > expected.Count)
+        {
             _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} profiles but got {actualCount}");
+        }
     }
 
     private void AssertRules(int stepIndex, string prefix,
@@ -699,18 +852,26 @@ public sealed class SpecRunner
             var rulePrefix = $"{prefix}.rule[{er.Name ?? ri.ToString()}]";
 
             if (er.Description is not null)
+            {
                 AssertEqual(stepIndex, $"{rulePrefix}.description", er.Description, ar.Description);
+            }
 
             AssertEqual(stepIndex, $"{rulePrefix}.hidden", er.Hidden ?? false, ar.Hidden);
 
             if (er.Page is not null)
+            {
                 AssertEqual(stepIndex, $"{rulePrefix}.page", er.Page, ar.Page ?? "");
+            }
 
             if (er.PublicationId is not null)
+            {
                 AssertEqual(stepIndex, $"{rulePrefix}.publicationId", er.PublicationId, ar.PublicationId ?? "");
+            }
         }
         if (actualCount > expected.Count)
+        {
             _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} rules but got {actualCount}");
+        }
     }
 
     private void AssertCategories(int stepIndex, string prefix,
@@ -735,28 +896,44 @@ public sealed class SpecRunner
             var catPrefix = $"{prefix}.category[{ec.EntryId ?? ec.Name ?? ci.ToString()}]";
 
             if (ec.Name is not null && ec.EntryId is not null)
+            {
                 AssertEqual(stepIndex, $"{catPrefix}.name", ec.Name, ac.Name);
+            }
 
             if (ec.Primary is { } p)
+            {
                 AssertEqual(stepIndex, $"{catPrefix}.primary", p, ac.Primary);
+            }
 
             if (ec.Profiles is { } catProfs)
+            {
                 AssertProfiles(stepIndex, catPrefix, catProfs, ac.Profiles);
+            }
 
             if (ec.Rules is { } catRules)
+            {
                 AssertRules(stepIndex, catPrefix, catRules, ac.Rules);
+            }
 
             if (ec.PublicationId is not null)
+            {
                 AssertEqual(stepIndex, $"{catPrefix}.publicationId", ec.PublicationId, ac.PublicationId ?? "");
+            }
 
             if (ec.Page is not null)
+            {
                 AssertEqual(stepIndex, $"{catPrefix}.page", ec.Page, ac.Page ?? "");
+            }
 
             if (ec.CustomNotes is not null)
+            {
                 AssertEqual(stepIndex, $"{catPrefix}.customNotes", ec.CustomNotes, ac.CustomNotes ?? "");
+            }
         }
         if (actualCount > expected.Count)
+        {
             _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} categories but got {actualCount}");
+        }
     }
 
     private void AssertPublications(int stepIndex, string prefix,
@@ -780,10 +957,14 @@ public sealed class SpecRunner
             var pubPrefix = $"{prefix}.publication[{ep.Id ?? ep.Name ?? pi.ToString()}]";
 
             if (ep.Name is not null && ep.Id is not null)
+            {
                 AssertEqual(stepIndex, $"{pubPrefix}.name", ep.Name, ap.Name);
+            }
         }
         if (actualCount > expected.Count)
+        {
             _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} publications but got {actualCount}");
+        }
     }
 
     private void AssertEqual<T>(int stepIndex, string field, T expected, T actual)
@@ -791,19 +972,27 @@ public sealed class SpecRunner
         if (expected is double ed && actual is double ad)
         {
             if (Math.Abs(ed - ad) > 1e-9)
+            {
                 _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
+            }
+
             return;
         }
 
         if (expected is float ef && actual is float af)
         {
             if (Math.Abs(ef - af) > 1e-6f)
+            {
                 _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
+            }
+
             return;
         }
 
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
+        {
             _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
+        }
     }
 }
 
