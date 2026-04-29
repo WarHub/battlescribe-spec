@@ -204,6 +204,8 @@ public static class SpecValidator
     {
         var setup = spec.Setup;
         var gs = setup.GameSystem;
+        if (gs is null)
+            return;
 
         // Collect all declared cost type IDs (from game system and catalogues).
         var costTypeIds = new HashSet<string>();

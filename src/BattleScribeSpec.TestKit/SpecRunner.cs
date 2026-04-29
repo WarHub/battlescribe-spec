@@ -289,7 +289,7 @@ public sealed class SpecRunner
         }
 
         if (expected.CostLimitCount is { } clc)
-            AssertEqual(stepIndex, "costLimitCount", clc, state.CostLimits.Count);
+            AssertEqual(stepIndex, "costLimitCount", clc, state.CostLimits?.Count ?? 0);
 
         if (expected.CostLimits is { } expectedCostLimits)
         {
@@ -300,12 +300,12 @@ public sealed class SpecRunner
                 if (ecl.TypeId is { Length: > 0 } typeId)
                 {
                     matchKey = typeId;
-                    actual = state.CostLimits.FirstOrDefault(c => c.TypeId == typeId);
+                    actual = state.CostLimits?.FirstOrDefault(c => c.TypeId == typeId);
                 }
                 else if (ecl.Name is { Length: > 0 } name)
                 {
                     matchKey = name;
-                    actual = state.CostLimits.FirstOrDefault(c => c.Name == name);
+                    actual = state.CostLimits?.FirstOrDefault(c => c.Name == name);
                 }
                 else
                 {
@@ -485,22 +485,10 @@ public sealed class SpecRunner
         AssertEqual(stepIndex, $"{prefix}.hidden", ef.Hidden ?? false, af.Hidden);
 
         if (ef.ChildForceCount is { } cfc)
-            AssertEqual(stepIndex, $"{prefix}.childForceCount", cfc, af.ChildForces.Count);
+            AssertEqual(stepIndex, $"{prefix}.childForceCount", cfc, af.ChildForces?.Count ?? 0);
 
         if (ef.ChildForces is { } expectedChildForces)
-        {
-            for (var ci = 0; ci < expectedChildForces.Count; ci++)
-            {
-                if (ci >= af.ChildForces.Count)
-                {
-                    _errors.Add($"Step {stepIndex}: {prefix}.childForce[{ci}] expected but only {af.ChildForces.Count} child forces");
-                    continue;
-                }
-                AssertForce(stepIndex, $"{prefix}.childForce[{ci}]", expectedChildForces[ci], af.ChildForces[ci]);
-            }
-            if (af.ChildForces.Count > expectedChildForces.Count)
-                _errors.Add($"Step {stepIndex}: {prefix} expected {expectedChildForces.Count} child forces but got {af.ChildForces.Count}");
-        }
+            AssertChildForces(stepIndex, prefix, expectedChildForces, af.ChildForces);
 
         if (ef.Selections is { } expectedSels)
             AssertSelections(stepIndex, prefix, expectedSels, af.Selections);
@@ -512,7 +500,7 @@ public sealed class SpecRunner
             AssertRules(stepIndex, prefix, forceRules, af.Rules);
 
         if (ef.CategoryCount is { } catCount)
-            AssertEqual(stepIndex, $"{prefix}.categoryCount", catCount, af.Categories.Count);
+            AssertEqual(stepIndex, $"{prefix}.categoryCount", catCount, af.Categories?.Count ?? 0);
 
         if (ef.Categories is { } forceCats)
             AssertCategories(stepIndex, prefix, forceCats, af.Categories);
@@ -537,6 +525,23 @@ public sealed class SpecRunner
 
         if (ef.CustomNotes is not null)
             AssertEqual(stepIndex, $"{prefix}.customNotes", ef.CustomNotes, af.CustomNotes ?? "");
+    }
+
+    private void AssertChildForces(int stepIndex, string prefix,
+        List<ExpectedForceDef> expected, IReadOnlyList<ForceState>? actual)
+    {
+        var actualCount = actual?.Count ?? 0;
+        for (var ci = 0; ci < expected.Count; ci++)
+        {
+            if (ci >= actualCount)
+            {
+                _errors.Add($"Step {stepIndex}: {prefix}.childForce[{ci}] expected but only {actualCount} child forces");
+                continue;
+            }
+            AssertForce(stepIndex, $"{prefix}.childForce[{ci}]", expected[ci], actual![ci]);
+        }
+        if (actualCount > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} child forces but got {actualCount}");
     }
 
     private void AssertSelections(int stepIndex, string prefix,
@@ -622,18 +627,19 @@ public sealed class SpecRunner
     }
 
     private void AssertProfiles(int stepIndex, string prefix,
-        List<ExpectedProfileDef> expected, IReadOnlyList<ProfileState> actual)
+        List<ExpectedProfileDef> expected, IReadOnlyList<ProfileState>? actual)
     {
+        var actualCount = actual?.Count ?? 0;
         for (var pi = 0; pi < expected.Count; pi++)
         {
             var ep = expected[pi];
             // Match by name if specified, otherwise by index
             var ap = ep.Name is not null
-                ? actual.FirstOrDefault(p => p.Name == ep.Name)
-                : pi < actual.Count ? actual[pi] : null;
+                ? actual?.FirstOrDefault(p => p.Name == ep.Name)
+                : pi < actualCount ? actual![pi] : null;
             if (ap is null)
             {
-                _errors.Add($"Step {stepIndex}: {prefix}.profile[{ep.Name ?? pi.ToString()}] not found (have {actual.Count} profiles)");
+                _errors.Add($"Step {stepIndex}: {prefix}.profile[{ep.Name ?? pi.ToString()}] not found (have {actualCount} profiles)");
                 continue;
             }
             var profPrefix = $"{prefix}.profile[{ep.Name ?? pi.ToString()}]";
@@ -671,22 +677,23 @@ public sealed class SpecRunner
                 }
             }
         }
-        if (actual.Count > expected.Count)
-            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} profiles but got {actual.Count}");
+        if (actualCount > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} profiles but got {actualCount}");
     }
 
     private void AssertRules(int stepIndex, string prefix,
-        List<ExpectedRuleDef> expected, IReadOnlyList<RuleState> actual)
+        List<ExpectedRuleDef> expected, IReadOnlyList<RuleState>? actual)
     {
+        var actualCount = actual?.Count ?? 0;
         for (var ri = 0; ri < expected.Count; ri++)
         {
             var er = expected[ri];
             var ar = er.Name is not null
-                ? actual.FirstOrDefault(r => r.Name == er.Name)
-                : ri < actual.Count ? actual[ri] : null;
+                ? actual?.FirstOrDefault(r => r.Name == er.Name)
+                : ri < actualCount ? actual![ri] : null;
             if (ar is null)
             {
-                _errors.Add($"Step {stepIndex}: {prefix}.rule[{er.Name ?? ri.ToString()}] not found (have {actual.Count} rules)");
+                _errors.Add($"Step {stepIndex}: {prefix}.rule[{er.Name ?? ri.ToString()}] not found (have {actualCount} rules)");
                 continue;
             }
             var rulePrefix = $"{prefix}.rule[{er.Name ?? ri.ToString()}]";
@@ -702,26 +709,27 @@ public sealed class SpecRunner
             if (er.PublicationId is not null)
                 AssertEqual(stepIndex, $"{rulePrefix}.publicationId", er.PublicationId, ar.PublicationId ?? "");
         }
-        if (actual.Count > expected.Count)
-            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} rules but got {actual.Count}");
+        if (actualCount > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} rules but got {actualCount}");
     }
 
     private void AssertCategories(int stepIndex, string prefix,
-        List<ExpectedCategoryDef> expected, IReadOnlyList<CategoryState> actual)
+        List<ExpectedCategoryDef> expected, IReadOnlyList<CategoryState>? actual)
     {
+        var actualCount = actual?.Count ?? 0;
         for (var ci = 0; ci < expected.Count; ci++)
         {
             var ec = expected[ci];
             // Match by entryId first, then name, then index
             var ac = ec.EntryId is not null
-                ? actual.FirstOrDefault(c => c.EntryId == ec.EntryId)
+                ? actual?.FirstOrDefault(c => c.EntryId == ec.EntryId)
                 : ec.Name is not null
-                    ? actual.FirstOrDefault(c => c.Name == ec.Name)
-                    : ci < actual.Count ? actual[ci] : null;
+                    ? actual?.FirstOrDefault(c => c.Name == ec.Name)
+                    : ci < actualCount ? actual![ci] : null;
             if (ac is null)
             {
                 var matchKey = ec.EntryId ?? ec.Name ?? ci.ToString();
-                _errors.Add($"Step {stepIndex}: {prefix}.category[{matchKey}] not found (have {actual.Count} categories)");
+                _errors.Add($"Step {stepIndex}: {prefix}.category[{matchKey}] not found (have {actualCount} categories)");
                 continue;
             }
             var catPrefix = $"{prefix}.category[{ec.EntryId ?? ec.Name ?? ci.ToString()}]";
@@ -747,25 +755,26 @@ public sealed class SpecRunner
             if (ec.CustomNotes is not null)
                 AssertEqual(stepIndex, $"{catPrefix}.customNotes", ec.CustomNotes, ac.CustomNotes ?? "");
         }
-        if (actual.Count > expected.Count)
-            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} categories but got {actual.Count}");
+        if (actualCount > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} categories but got {actualCount}");
     }
 
     private void AssertPublications(int stepIndex, string prefix,
-        List<ExpectedPublicationDef> expected, IReadOnlyList<PublicationState> actual)
+        List<ExpectedPublicationDef> expected, IReadOnlyList<PublicationState>? actual)
     {
+        var actualCount = actual?.Count ?? 0;
         for (var pi = 0; pi < expected.Count; pi++)
         {
             var ep = expected[pi];
             var ap = ep.Id is not null
-                ? actual.FirstOrDefault(p => p.Id == ep.Id)
+                ? actual?.FirstOrDefault(p => p.Id == ep.Id)
                 : ep.Name is not null
-                    ? actual.FirstOrDefault(p => p.Name == ep.Name)
-                    : pi < actual.Count ? actual[pi] : null;
+                    ? actual?.FirstOrDefault(p => p.Name == ep.Name)
+                    : pi < actualCount ? actual![pi] : null;
             if (ap is null)
             {
                 var matchKey = ep.Id ?? ep.Name ?? pi.ToString();
-                _errors.Add($"Step {stepIndex}: {prefix}.publication[{matchKey}] not found (have {actual.Count} publications)");
+                _errors.Add($"Step {stepIndex}: {prefix}.publication[{matchKey}] not found (have {actualCount} publications)");
                 continue;
             }
             var pubPrefix = $"{prefix}.publication[{ep.Id ?? ep.Name ?? pi.ToString()}]";
@@ -773,8 +782,8 @@ public sealed class SpecRunner
             if (ep.Name is not null && ep.Id is not null)
                 AssertEqual(stepIndex, $"{pubPrefix}.name", ep.Name, ap.Name);
         }
-        if (actual.Count > expected.Count)
-            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} publications but got {actual.Count}");
+        if (actualCount > expected.Count)
+            _errors.Add($"Step {stepIndex}: {prefix} expected {expected.Count} publications but got {actualCount}");
     }
 
     private void AssertEqual<T>(int stepIndex, string field, T expected, T actual)

@@ -127,11 +127,13 @@ public static class SpecLoader
     /// </summary>
     public static (ProtocolGameSystem GameSystem, ProtocolCatalogue[] Catalogues) GetSetupData(SetupDef setup)
     {
+        var gameSystem = setup.GameSystem
+            ?? throw new InvalidOperationException("Setup requires 'gameSystem'.");
         var catalogues = setup.Catalogues;
         if (catalogues is null || catalogues.Count == 0)
             throw new InvalidOperationException("Setup requires 'catalogues' with at least one catalogue.");
 
-        return (setup.GameSystem, catalogues.ToArray());
+        return (gameSystem, catalogues.ToArray());
     }
 
     private static void ValidateIdUniqueness(SpecFile spec)
