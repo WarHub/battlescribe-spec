@@ -23,7 +23,8 @@ public static class SetupIdValidator
     public static void Validate(SetupDef setup, string specId)
     {
         var idLocations = new Dictionary<string, List<string>>();
-        CollectIds(setup.GameSystem, "gameSystem", idLocations);
+        if (setup.GameSystem is not null)
+            CollectIds(setup.GameSystem, "gameSystem", idLocations);
         if (setup.Catalogues is not null)
         {
             for (var i = 0; i < setup.Catalogues.Count; i++)

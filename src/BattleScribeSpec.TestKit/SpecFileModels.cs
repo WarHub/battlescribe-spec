@@ -12,11 +12,11 @@ namespace BattleScribeSpec;
 /// </summary>
 public sealed class SpecFile
 {
-    public string Id { get; set; } = "";
+    public required string Id { get; set; }
 
-    public string Category { get; set; } = "";
+    public required string Category { get; set; }
 
-    public string Description { get; set; } = "";
+    public required string Description { get; set; }
 
     public List<string>? Tags { get; set; }
 
@@ -28,9 +28,9 @@ public sealed class SpecFile
     /// </summary>
     public Dictionary<string, string>? Engines { get; set; }
 
-    public SetupDef Setup { get; set; } = new();
+    public required SetupDef Setup { get; set; }
 
-    public List<StepDef> Steps { get; set; } = [];
+    public required List<StepDef> Steps { get; set; }
 
     /// <summary>
     /// Check if this spec should run on the given engine (not "skip").
@@ -78,7 +78,7 @@ public sealed class SpecFile
 /// </summary>
 public sealed class SetupDef
 {
-    public ProtocolGameSystem GameSystem { get; set; } = new();
+    public ProtocolGameSystem? GameSystem { get; set; }
 
     public string? DataSource { get; set; }
 
@@ -255,7 +255,7 @@ public sealed class ErrorAssertionDef
     /// Format: "{ownerType}" or "{ownerType} {ownerEntryId}".
     /// Examples: "roster", "force", "category cat-troops", "selection se-unit-a".
     /// </summary>
-    public string On { get; set; } = "";
+    public required string On { get; set; }
 
     /// <summary>
     /// The source entry and constraint that caused the error.
@@ -264,7 +264,7 @@ public sealed class ErrorAssertionDef
     ///   "{entryId}/hidden" for hidden entry errors.
     /// Examples: "se-unit-a/con-min-1", "costLimits/ct-pts", "se-unit-a/hidden".
     /// </summary>
-    public string From { get; set; } = "";
+    public required string From { get; set; }
 
     /// <summary>
     /// Optional substring to match against the error message text.

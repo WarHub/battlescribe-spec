@@ -383,7 +383,7 @@ void OutputJson(List<SpecResult> results, TimeSpan elapsed)
                 Description = r.Description,
                 Passed = r.Passed,
                 Failures = r.Failures,
-                Tags = spec?.Tags ?? [],
+                Tags = spec?.Tags,
             };
         }).ToList(),
     };

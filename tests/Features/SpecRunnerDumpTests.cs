@@ -41,6 +41,7 @@ public class SpecRunnerDumpTests
         {
             Id = "dump-test-action",
             Category = "test",
+            Description = "test",
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
@@ -68,6 +69,7 @@ public class SpecRunnerDumpTests
         {
             Id = "dump-test-assertion",
             Category = "test",
+            Description = "test",
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
@@ -104,6 +106,7 @@ public class SpecRunnerDumpTests
         {
             Id = "dump-test-dump-action",
             Category = "test",
+            Description = "test",
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
@@ -131,6 +134,7 @@ public class SpecRunnerDumpTests
         {
             Id = "dump-test-no-break",
             Category = "test",
+            Description = "test",
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [
@@ -171,6 +175,7 @@ public class SpecRunnerDumpTests
         {
             Id = "dump-test-valid-state",
             Category = "test",
+            Description = "test",
             Setup = new SetupDef { GameSystem = MinimalGs(), Catalogues = [MinimalCat()] },
             Steps =
             [

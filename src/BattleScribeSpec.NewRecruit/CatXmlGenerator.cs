@@ -49,47 +49,47 @@ public static class CatXmlGenerator
     {
         var node = Gamesystem(name: gameSystem.Name, id: gameSystem.Id);
 
-        foreach (var costType in gameSystem.CostTypes ?? [])
-            node = node.AddCostTypes(MapCostType(costType));
+        if (gameSystem.CostTypes is { } costTypes)
+            node = node.AddCostTypes(costTypes.Select(MapCostType));
 
-        foreach (var forceEntry in gameSystem.ForceEntries ?? [])
-            node = node.AddForceEntries(MapForceEntry(forceEntry));
+        if (gameSystem.ForceEntries is { } forceEntries)
+            node = node.AddForceEntries(forceEntries.Select(MapForceEntry));
 
-        foreach (var categoryEntry in gameSystem.CategoryEntries ?? [])
-            node = node.AddCategoryEntries(MapCategoryEntry(categoryEntry));
+        if (gameSystem.CategoryEntries is { } categoryEntries)
+            node = node.AddCategoryEntries(categoryEntries.Select(MapCategoryEntry));
 
-        foreach (var profileType in gameSystem.ProfileTypes ?? [])
-            node = node.AddProfileTypes(MapProfileType(profileType));
+        if (gameSystem.ProfileTypes is { } profileTypes)
+            node = node.AddProfileTypes(profileTypes.Select(MapProfileType));
 
-        foreach (var pub in gameSystem.Publications ?? [])
-            node = node.AddPublications(MapPublication(pub));
+        if (gameSystem.Publications is { } publications)
+            node = node.AddPublications(publications.Select(MapPublication));
 
-        foreach (var se in gameSystem.SelectionEntries ?? [])
-            node = node.AddSelectionEntries(MapSelectionEntry(se));
+        if (gameSystem.SelectionEntries is { } selectionEntries)
+            node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
 
-        foreach (var el in gameSystem.EntryLinks ?? [])
-            node = node.AddEntryLinks(MapEntryLink(el));
+        if (gameSystem.EntryLinks is { } entryLinks)
+            node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
 
-        foreach (var rule in gameSystem.Rules ?? [])
-            node = node.AddRules(MapRule(rule));
+        if (gameSystem.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var il in gameSystem.InfoLinks ?? [])
-            node = node.AddInfoLinks(MapInfoLink(il));
+        if (gameSystem.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
-        foreach (var se in gameSystem.SharedSelectionEntries ?? [])
-            node = node.AddSharedSelectionEntries(MapSelectionEntry(se));
+        if (gameSystem.SharedSelectionEntries is { } sharedSelectionEntries)
+            node = node.AddSharedSelectionEntries(sharedSelectionEntries.Select(MapSelectionEntry));
 
-        foreach (var seg in gameSystem.SharedSelectionEntryGroups ?? [])
-            node = node.AddSharedSelectionEntryGroups(MapSelectionEntryGroup(seg));
+        if (gameSystem.SharedSelectionEntryGroups is { } sharedSelectionEntryGroups)
+            node = node.AddSharedSelectionEntryGroups(sharedSelectionEntryGroups.Select(MapSelectionEntryGroup));
 
-        foreach (var rule in gameSystem.SharedRules ?? [])
-            node = node.AddSharedRules(MapRule(rule));
+        if (gameSystem.SharedRules is { } sharedRules)
+            node = node.AddSharedRules(sharedRules.Select(MapRule));
 
-        foreach (var profile in gameSystem.SharedProfiles ?? [])
-            node = node.AddSharedProfiles(MapProfile(profile));
+        if (gameSystem.SharedProfiles is { } sharedProfiles)
+            node = node.AddSharedProfiles(sharedProfiles.Select(MapProfile));
 
-        foreach (var ig in gameSystem.SharedInfoGroups ?? [])
-            node = node.AddSharedInfoGroups(MapInfoGroup(ig));
+        if (gameSystem.SharedInfoGroups is { } sharedInfoGroups)
+            node = node.AddSharedInfoGroups(sharedInfoGroups.Select(MapInfoGroup));
 
         return node;
     }
@@ -98,68 +98,50 @@ public static class CatXmlGenerator
     {
         var node = Catalogue(gamesystem: gamesystem, name: catalogue.Name, id: catalogue.Id);
 
-        foreach (var selectionEntry in catalogue.SelectionEntries ?? [])
-        {
-            node = node.AddSelectionEntries(MapSelectionEntry(selectionEntry));
-        }
+        if (catalogue.SelectionEntries is { } selectionEntries)
+            node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
 
-        foreach (var entryLink in catalogue.EntryLinks ?? [])
-        {
-            node = node.AddEntryLinks(MapEntryLink(entryLink));
-        }
+        if (catalogue.EntryLinks is { } entryLinks)
+            node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
 
-        foreach (var sharedSelectionEntry in catalogue.SharedSelectionEntries ?? [])
-        {
-            node = node.AddSharedSelectionEntries(MapSelectionEntry(sharedSelectionEntry));
-        }
+        if (catalogue.SharedSelectionEntries is { } sharedSelectionEntries)
+            node = node.AddSharedSelectionEntries(sharedSelectionEntries.Select(MapSelectionEntry));
 
-        foreach (var sharedSelectionEntryGroup in catalogue.SharedSelectionEntryGroups ?? [])
-        {
-            node = node.AddSharedSelectionEntryGroups(MapSelectionEntryGroup(sharedSelectionEntryGroup));
-        }
+        if (catalogue.SharedSelectionEntryGroups is { } sharedSelectionEntryGroups)
+            node = node.AddSharedSelectionEntryGroups(sharedSelectionEntryGroups.Select(MapSelectionEntryGroup));
 
-        foreach (var sharedRule in catalogue.SharedRules ?? [])
-        {
-            node = node.AddSharedRules(MapRule(sharedRule));
-        }
+        if (catalogue.SharedRules is { } sharedRules)
+            node = node.AddSharedRules(sharedRules.Select(MapRule));
 
-        foreach (var sharedProfile in catalogue.SharedProfiles ?? [])
-        {
-            node = node.AddSharedProfiles(MapProfile(sharedProfile));
-        }
+        if (catalogue.SharedProfiles is { } sharedProfiles)
+            node = node.AddSharedProfiles(sharedProfiles.Select(MapProfile));
 
-        foreach (var sharedInfoGroup in catalogue.SharedInfoGroups ?? [])
-            node = node.AddSharedInfoGroups(MapInfoGroup(sharedInfoGroup));
+        if (catalogue.SharedInfoGroups is { } sharedInfoGroups)
+            node = node.AddSharedInfoGroups(sharedInfoGroups.Select(MapInfoGroup));
 
-        foreach (var rule in catalogue.Rules ?? [])
-            node = node.AddRules(MapRule(rule));
+        if (catalogue.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var infoLink in catalogue.InfoLinks ?? [])
-        {
-            node = node.AddInfoLinks(MapInfoLink(infoLink));
-        }
+        if (catalogue.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
-        foreach (var catalogueLink in catalogue.CatalogueLinks ?? [])
-        {
-            node = node.AddCatalogueLinks(MapCatalogueLink(catalogueLink));
-        }
+        if (catalogue.CatalogueLinks is { } catalogueLinks)
+            node = node.AddCatalogueLinks(catalogueLinks.Select(MapCatalogueLink));
 
-        foreach (var publication in catalogue.Publications ?? [])
-        {
-            node = node.AddPublications(MapPublication(publication));
-        }
+        if (catalogue.Publications is { } publications)
+            node = node.AddPublications(publications.Select(MapPublication));
 
-        foreach (var costType in catalogue.CostTypes ?? [])
-            node = node.AddCostTypes(MapCostType(costType));
+        if (catalogue.CostTypes is { } costTypes)
+            node = node.AddCostTypes(costTypes.Select(MapCostType));
 
-        foreach (var profileType in catalogue.ProfileTypes ?? [])
-            node = node.AddProfileTypes(MapProfileType(profileType));
+        if (catalogue.ProfileTypes is { } profileTypes)
+            node = node.AddProfileTypes(profileTypes.Select(MapProfileType));
 
-        foreach (var categoryEntry in catalogue.CategoryEntries ?? [])
-            node = node.AddCategoryEntries(MapCategoryEntry(categoryEntry));
+        if (catalogue.CategoryEntries is { } categoryEntries)
+            node = node.AddCategoryEntries(categoryEntries.Select(MapCategoryEntry));
 
-        foreach (var forceEntry in catalogue.ForceEntries ?? [])
-            node = node.AddForceEntries(MapForceEntry(forceEntry));
+        if (catalogue.ForceEntries is { } forceEntries)
+            node = node.AddForceEntries(forceEntries.Select(MapForceEntry));
 
         return node;
     }
@@ -184,32 +166,32 @@ public static class CatXmlGenerator
             page: page,
             hidden: spec.Hidden);
 
-        foreach (var constraint in spec.Constraints ?? [])
-            node = node.AddConstraints(MapConstraint(constraint));
+        if (spec.Constraints is { } constraints)
+            node = node.AddConstraints(constraints.Select(MapConstraint));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
-        foreach (var categoryLink in spec.CategoryLinks ?? [])
-            node = node.AddCategoryLinks(MapCategoryLink(categoryLink));
+        if (spec.CategoryLinks is { } categoryLinks)
+            node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
 
-        foreach (var forceEntry in spec.ForceEntries ?? [])
-            node = node.AddForceEntries(MapForceEntry(forceEntry));
+        if (spec.ForceEntries is { } forceEntries)
+            node = node.AddForceEntries(forceEntries.Select(MapForceEntry));
 
-        foreach (var rule in spec.Rules ?? [])
-            node = node.AddRules(MapRule(rule));
+        if (spec.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var profile in spec.Profiles ?? [])
-            node = node.AddProfiles(MapProfile(profile));
+        if (spec.Profiles is { } profiles)
+            node = node.AddProfiles(profiles.Select(MapProfile));
 
-        foreach (var infoGroup in spec.InfoGroups ?? [])
-            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+        if (spec.InfoGroups is { } infoGroups)
+            node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
 
-        foreach (var infoLink in spec.InfoLinks ?? [])
-            node = node.AddInfoLinks(MapInfoLink(infoLink));
+        if (spec.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
         return node;
     }
@@ -226,26 +208,26 @@ public static class CatXmlGenerator
             page: page,
             hidden: spec.Hidden);
 
-        foreach (var constraint in spec.Constraints ?? [])
-            node = node.AddConstraints(MapConstraint(constraint));
+        if (spec.Constraints is { } constraints)
+            node = node.AddConstraints(constraints.Select(MapConstraint));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
-        foreach (var rule in spec.Rules ?? [])
-            node = node.AddRules(MapRule(rule));
+        if (spec.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var profile in spec.Profiles ?? [])
-            node = node.AddProfiles(MapProfile(profile));
+        if (spec.Profiles is { } profiles)
+            node = node.AddProfiles(profiles.Select(MapProfile));
 
-        foreach (var infoGroup in spec.InfoGroups ?? [])
-            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+        if (spec.InfoGroups is { } infoGroups)
+            node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
 
-        foreach (var infoLink in spec.InfoLinks ?? [])
-            node = node.AddInfoLinks(MapInfoLink(infoLink));
+        if (spec.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
         return node;
     }
@@ -253,10 +235,8 @@ public static class CatXmlGenerator
     private static ProfileTypeNode MapProfileType(ProtocolProfileType spec)
     {
         var node = ProfileType(comment: null, id: spec.Id, name: spec.Name);
-        foreach (var characteristicType in spec.CharacteristicTypes ?? [])
-        {
-            node = node.AddCharacteristicTypes(MapCharacteristicType(characteristicType));
-        }
+        if (spec.CharacteristicTypes is { } characteristicTypes)
+            node = node.AddCharacteristicTypes(characteristicTypes.Select(MapCharacteristicType));
 
         return node;
     }
@@ -279,65 +259,41 @@ public static class CatXmlGenerator
             exported: spec.Import,
             type: MapSelectionEntryKind(spec.Type));
 
-        foreach (var cost in spec.Costs ?? [])
-        {
-            node = node.AddCosts(MapCost(cost));
-        }
+        if (spec.Costs is { } costs)
+            node = node.AddCosts(costs.Select(MapCost));
 
-        foreach (var constraint in spec.Constraints ?? [])
-        {
-            node = node.AddConstraints(MapConstraint(constraint));
-        }
+        if (spec.Constraints is { } constraints)
+            node = node.AddConstraints(constraints.Select(MapConstraint));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-        {
-            node = node.AddModifiers(MapModifier(modifier));
-        }
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-        {
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
-        }
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
-        foreach (var childEntry in spec.SelectionEntries ?? [])
-        {
-            node = node.AddSelectionEntries(MapSelectionEntry(childEntry));
-        }
+        if (spec.SelectionEntries is { } selectionEntries)
+            node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
 
-        foreach (var group in spec.SelectionEntryGroups ?? [])
-        {
-            node = node.AddSelectionEntryGroups(MapSelectionEntryGroup(group));
-        }
+        if (spec.SelectionEntryGroups is { } selectionEntryGroups)
+            node = node.AddSelectionEntryGroups(selectionEntryGroups.Select(MapSelectionEntryGroup));
 
-        foreach (var categoryLink in spec.CategoryLinks ?? [])
-        {
-            node = node.AddCategoryLinks(MapCategoryLink(categoryLink));
-        }
+        if (spec.CategoryLinks is { } categoryLinks)
+            node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
 
-        foreach (var rule in spec.Rules ?? [])
-        {
-            node = node.AddRules(MapRule(rule));
-        }
+        if (spec.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var profile in spec.Profiles ?? [])
-        {
-            node = node.AddProfiles(MapProfile(profile));
-        }
+        if (spec.Profiles is { } profiles)
+            node = node.AddProfiles(profiles.Select(MapProfile));
 
-        foreach (var infoGroup in spec.InfoGroups ?? [])
-        {
-            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
-        }
+        if (spec.InfoGroups is { } infoGroups)
+            node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
 
-        foreach (var entryLink in spec.EntryLinks ?? [])
-        {
-            node = node.AddEntryLinks(MapEntryLink(entryLink));
-        }
+        if (spec.EntryLinks is { } entryLinks)
+            node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
 
-        foreach (var infoLink in spec.InfoLinks ?? [])
-        {
-            node = node.AddInfoLinks(MapInfoLink(infoLink));
-        }
+        if (spec.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
         return node;
     }
@@ -360,38 +316,38 @@ public static class CatXmlGenerator
             exported: spec.Import,
             defaultSelectionEntryId: defaultSelectionEntryId);
 
-        foreach (var constraint in spec.Constraints ?? [])
-            node = node.AddConstraints(MapConstraint(constraint));
+        if (spec.Constraints is { } constraints)
+            node = node.AddConstraints(constraints.Select(MapConstraint));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
-        foreach (var selectionEntry in spec.SelectionEntries ?? [])
-            node = node.AddSelectionEntries(MapSelectionEntry(selectionEntry));
+        if (spec.SelectionEntries is { } selectionEntries)
+            node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
 
-        foreach (var childGroup in spec.SelectionEntryGroups ?? [])
-            node = node.AddSelectionEntryGroups(MapSelectionEntryGroup(childGroup));
+        if (spec.SelectionEntryGroups is { } selectionEntryGroups)
+            node = node.AddSelectionEntryGroups(selectionEntryGroups.Select(MapSelectionEntryGroup));
 
-        foreach (var entryLink in spec.EntryLinks ?? [])
-            node = node.AddEntryLinks(MapEntryLink(entryLink));
+        if (spec.EntryLinks is { } entryLinks)
+            node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
 
-        foreach (var categoryLink in spec.CategoryLinks ?? [])
-            node = node.AddCategoryLinks(MapCategoryLink(categoryLink));
+        if (spec.CategoryLinks is { } categoryLinks)
+            node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
 
-        foreach (var profile in spec.Profiles ?? [])
-            node = node.AddProfiles(MapProfile(profile));
+        if (spec.Profiles is { } profiles)
+            node = node.AddProfiles(profiles.Select(MapProfile));
 
-        foreach (var rule in spec.Rules ?? [])
-            node = node.AddRules(MapRule(rule));
+        if (spec.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var infoGroup in spec.InfoGroups ?? [])
-            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+        if (spec.InfoGroups is { } infoGroups)
+            node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
 
-        foreach (var infoLink in spec.InfoLinks ?? [])
-            node = node.AddInfoLinks(MapInfoLink(infoLink));
+        if (spec.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
         return node;
     }
@@ -412,41 +368,41 @@ public static class CatXmlGenerator
             targetId: spec.TargetId,
             type: MapEntryLinkKind(spec.Type));
 
-        foreach (var cost in spec.Costs ?? [])
-            node = node.AddCosts(MapCost(cost));
+        if (spec.Costs is { } costs)
+            node = node.AddCosts(costs.Select(MapCost));
 
-        foreach (var constraint in spec.Constraints ?? [])
-            node = node.AddConstraints(MapConstraint(constraint));
+        if (spec.Constraints is { } constraints)
+            node = node.AddConstraints(constraints.Select(MapConstraint));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
-        foreach (var categoryLink in spec.CategoryLinks ?? [])
-            node = node.AddCategoryLinks(MapCategoryLink(categoryLink));
+        if (spec.CategoryLinks is { } categoryLinks)
+            node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
 
-        foreach (var se in spec.SelectionEntries ?? [])
-            node = node.AddSelectionEntries(MapSelectionEntry(se));
+        if (spec.SelectionEntries is { } selectionEntries)
+            node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
 
-        foreach (var seg in spec.SelectionEntryGroups ?? [])
-            node = node.AddSelectionEntryGroups(MapSelectionEntryGroup(seg));
+        if (spec.SelectionEntryGroups is { } selectionEntryGroups)
+            node = node.AddSelectionEntryGroups(selectionEntryGroups.Select(MapSelectionEntryGroup));
 
-        foreach (var el in spec.EntryLinks ?? [])
-            node = node.AddEntryLinks(MapEntryLink(el));
+        if (spec.EntryLinks is { } entryLinks)
+            node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
 
-        foreach (var profile in spec.Profiles ?? [])
-            node = node.AddProfiles(MapProfile(profile));
+        if (spec.Profiles is { } profiles)
+            node = node.AddProfiles(profiles.Select(MapProfile));
 
-        foreach (var rule in spec.Rules ?? [])
-            node = node.AddRules(MapRule(rule));
+        if (spec.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var ig in spec.InfoGroups ?? [])
-            node = node.AddInfoGroups(MapInfoGroup(ig));
+        if (spec.InfoGroups is { } infoGroups)
+            node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
 
-        foreach (var il in spec.InfoLinks ?? [])
-            node = node.AddInfoLinks(MapInfoLink(il));
+        if (spec.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
         return node;
     }
@@ -468,20 +424,14 @@ public static class CatXmlGenerator
     {
         var node = Modifier(comment: null, type: MapModifierKind(spec.Type), field: spec.Field, value: spec.Value);
 
-        foreach (var condition in spec.Conditions ?? [])
-        {
-            node = node.AddConditions(MapCondition(condition));
-        }
+        if (spec.Conditions is { } conditions)
+            node = node.AddConditions(conditions.Select(MapCondition));
 
-        foreach (var conditionGroup in spec.ConditionGroups ?? [])
-        {
-            node = node.AddConditionGroups(MapConditionGroup(conditionGroup));
-        }
+        if (spec.ConditionGroups is { } conditionGroups)
+            node = node.AddConditionGroups(conditionGroups.Select(MapConditionGroup));
 
-        foreach (var repeat in spec.Repeats ?? [])
-        {
-            node = node.AddRepeats(MapRepeat(repeat));
-        }
+        if (spec.Repeats is { } repeats)
+            node = node.AddRepeats(repeats.Select(MapRepeat));
 
         return node;
     }
@@ -490,30 +440,20 @@ public static class CatXmlGenerator
     {
         var node = ModifierGroup();
 
-        foreach (var condition in spec.Conditions ?? [])
-        {
-            node = node.AddConditions(MapCondition(condition));
-        }
+        if (spec.Conditions is { } conditions)
+            node = node.AddConditions(conditions.Select(MapCondition));
 
-        foreach (var conditionGroup in spec.ConditionGroups ?? [])
-        {
-            node = node.AddConditionGroups(MapConditionGroup(conditionGroup));
-        }
+        if (spec.ConditionGroups is { } conditionGroups)
+            node = node.AddConditionGroups(conditionGroups.Select(MapConditionGroup));
 
-        foreach (var repeat in spec.Repeats ?? [])
-        {
-            node = node.AddRepeats(MapRepeat(repeat));
-        }
+        if (spec.Repeats is { } repeats)
+            node = node.AddRepeats(repeats.Select(MapRepeat));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-        {
-            node = node.AddModifiers(MapModifier(modifier));
-        }
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-        {
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
-        }
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
         return node;
     }
@@ -538,15 +478,11 @@ public static class CatXmlGenerator
     {
         var node = ConditionGroup(type: MapConditionGroupKind(spec.Type));
 
-        foreach (var condition in spec.Conditions ?? [])
-        {
-            node = node.AddConditions(MapCondition(condition));
-        }
+        if (spec.Conditions is { } conditions)
+            node = node.AddConditions(conditions.Select(MapCondition));
 
-        foreach (var conditionGroup in spec.ConditionGroups ?? [])
-        {
-            node = node.AddConditionGroups(MapConditionGroup(conditionGroup));
-        }
+        if (spec.ConditionGroups is { } conditionGroups)
+            node = node.AddConditionGroups(conditionGroups.Select(MapConditionGroup));
 
         return node;
     }
@@ -582,26 +518,26 @@ public static class CatXmlGenerator
             targetId: spec.TargetId,
             primary: spec.Primary);
 
-        foreach (var constraint in spec.Constraints ?? [])
-            node = node.AddConstraints(MapConstraint(constraint));
+        if (spec.Constraints is { } constraints)
+            node = node.AddConstraints(constraints.Select(MapConstraint));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
-        foreach (var rule in spec.Rules ?? [])
-            node = node.AddRules(MapRule(rule));
+        if (spec.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var profile in spec.Profiles ?? [])
-            node = node.AddProfiles(MapProfile(profile));
+        if (spec.Profiles is { } profiles)
+            node = node.AddProfiles(profiles.Select(MapProfile));
 
-        foreach (var infoGroup in spec.InfoGroups ?? [])
-            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+        if (spec.InfoGroups is { } infoGroups)
+            node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
 
-        foreach (var infoLink in spec.InfoLinks ?? [])
-            node = node.AddInfoLinks(MapInfoLink(infoLink));
+        if (spec.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
         return node;
     }
@@ -619,11 +555,11 @@ public static class CatXmlGenerator
             hidden: spec.Hidden,
             description: spec.Description);
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
         return node;
     }
@@ -642,14 +578,14 @@ public static class CatXmlGenerator
             typeId: spec.TypeId,
             typeName: spec.TypeName);
 
-        foreach (var characteristic in spec.Characteristics ?? [])
-            node = node.AddCharacteristics(MapCharacteristic(characteristic));
+        if (spec.Characteristics is { } characteristics)
+            node = node.AddCharacteristics(characteristics.Select(MapCharacteristic));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
         return node;
     }
@@ -669,23 +605,23 @@ public static class CatXmlGenerator
             page: page,
             hidden: spec.Hidden);
 
-        foreach (var profile in spec.Profiles ?? [])
-            node = node.AddProfiles(MapProfile(profile));
+        if (spec.Profiles is { } profiles)
+            node = node.AddProfiles(profiles.Select(MapProfile));
 
-        foreach (var rule in spec.Rules ?? [])
-            node = node.AddRules(MapRule(rule));
+        if (spec.Rules is { } rules)
+            node = node.AddRules(rules.Select(MapRule));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
-        foreach (var infoLink in spec.InfoLinks ?? [])
-            node = node.AddInfoLinks(MapInfoLink(infoLink));
+        if (spec.InfoLinks is { } infoLinks)
+            node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
 
-        foreach (var infoGroup in spec.InfoGroups ?? [])
-            node = node.AddInfoGroups(MapInfoGroup(infoGroup));
+        if (spec.InfoGroups is { } infoGroups)
+            node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
 
         return node;
     }
@@ -729,11 +665,11 @@ public static class CatXmlGenerator
             targetId: spec.TargetId,
             type: MapInfoLinkKind(spec.Type));
 
-        foreach (var modifier in spec.Modifiers ?? [])
-            node = node.AddModifiers(MapModifier(modifier));
+        if (spec.Modifiers is { } modifiers)
+            node = node.AddModifiers(modifiers.Select(MapModifier));
 
-        foreach (var modifierGroup in spec.ModifierGroups ?? [])
-            node = node.AddModifierGroups(MapModifierGroup(modifierGroup));
+        if (spec.ModifierGroups is { } modifierGroups)
+            node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
 
         return node;
     }

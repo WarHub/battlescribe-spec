@@ -76,9 +76,9 @@ public static class StateDumper
         }
 
         // Cost limits
-        if (state.CostLimits.Count > 0)
+        if (state.CostLimits is [_, ..] costLimits)
         {
-            var limitStr = string.Join(", ", state.CostLimits.Select(c => $"{c.Name}={c.Value}"));
+            var limitStr = string.Join(", ", costLimits.Select(c => $"{c.Name}={c.Value}"));
             writer.WriteLine($"CostLimits: {limitStr}");
         }
 
@@ -122,34 +122,34 @@ public static class StateDumper
         writer.WriteLine();
 
         // Force categories
-        if (force.Categories.Count > 0)
+        if (force.Categories is [_, ..] forceCats)
         {
             var catStr = string.Join(", ",
-                force.Categories.Select(c => c.Primary ? $"*{c.Name}" : c.Name));
+                forceCats.Select(c => c.Primary ? $"*{c.Name}" : c.Name));
             writer.WriteLine($"{indent}  Categories: [{catStr}]");
         }
 
         // Force publications
-        if (force.Publications.Count > 0)
+        if (force.Publications is [_, ..] forcePubs)
         {
-            writer.WriteLine($"{indent}  Publications: {force.Publications.Count}");
-            foreach (var p in force.Publications)
+            writer.WriteLine($"{indent}  Publications: {forcePubs.Count}");
+            foreach (var p in forcePubs)
                 writer.WriteLine($"{indent}    - \"{p.Name}\" (id={p.Id})");
         }
 
         // Force profiles
-        if (force.Profiles.Count > 0)
+        if (force.Profiles is [_, ..] forceProfiles)
         {
-            writer.WriteLine($"{indent}  Profiles: {force.Profiles.Count}");
-            foreach (var p in force.Profiles)
+            writer.WriteLine($"{indent}  Profiles: {forceProfiles.Count}");
+            foreach (var p in forceProfiles)
                 DumpProfile(p, writer, indent + "    ");
         }
 
         // Force rules
-        if (force.Rules.Count > 0)
+        if (force.Rules is [_, ..] forceRules)
         {
-            writer.WriteLine($"{indent}  Rules: {force.Rules.Count}");
-            foreach (var r in force.Rules)
+            writer.WriteLine($"{indent}  Rules: {forceRules.Count}");
+            foreach (var r in forceRules)
                 DumpRule(r, writer, indent + "    ");
         }
 
@@ -159,11 +159,11 @@ public static class StateDumper
             DumpSelection(force.Selections[si], writer, indent + "    ", si);
 
         // Child forces
-        if (force.ChildForces.Count > 0)
+        if (force.ChildForces is [_, ..] childForces)
         {
-            writer.WriteLine($"{indent}  ChildForces: {force.ChildForces.Count}");
-            for (var ci = 0; ci < force.ChildForces.Count; ci++)
-                DumpForce(force.ChildForces[ci], writer, indent + "    ", ci);
+            writer.WriteLine($"{indent}  ChildForces: {childForces.Count}");
+            for (var ci = 0; ci < childForces.Count; ci++)
+                DumpForce(childForces[ci], writer, indent + "    ", ci);
         }
     }
 
@@ -197,26 +197,26 @@ public static class StateDumper
         }
 
         // Categories
-        if (sel.Categories.Count > 0)
+        if (sel.Categories is [_, ..] selCats)
         {
             var catStr = string.Join(", ",
-                sel.Categories.Select(c => c.Primary ? $"*{c.Name}" : c.Name));
+                selCats.Select(c => c.Primary ? $"*{c.Name}" : c.Name));
             writer.WriteLine($"{indent}  Categories: [{catStr}]");
         }
 
         // Profiles
-        if (sel.Profiles.Count > 0)
+        if (sel.Profiles is [_, ..] selProfiles)
         {
-            writer.WriteLine($"{indent}  Profiles: {sel.Profiles.Count}");
-            foreach (var p in sel.Profiles)
+            writer.WriteLine($"{indent}  Profiles: {selProfiles.Count}");
+            foreach (var p in selProfiles)
                 DumpProfile(p, writer, indent + "    ");
         }
 
         // Rules
-        if (sel.Rules.Count > 0)
+        if (sel.Rules is [_, ..] selRules)
         {
-            writer.WriteLine($"{indent}  Rules: {sel.Rules.Count}");
-            foreach (var r in sel.Rules)
+            writer.WriteLine($"{indent}  Rules: {selRules.Count}");
+            foreach (var r in selRules)
                 DumpRule(r, writer, indent + "    ");
         }
 

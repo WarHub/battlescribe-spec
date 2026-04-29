@@ -21,10 +21,7 @@ public record RosterState(
     IReadOnlyList<CostState> Costs,
     IReadOnlyList<ValidationErrorState> ValidationErrors,
     IReadOnlyList<CostState>? CostLimits = null,
-    string? GameSystemName = null)
-{
-    public IReadOnlyList<CostState> CostLimits { get; init; } = CostLimits ?? [];
-}
+    string? GameSystemName = null);
 
 public record ForceState(
     string? Id,
@@ -43,14 +40,7 @@ public record ForceState(
     IReadOnlyList<PublicationState>? Publications = null,
     string? CatalogueName = null,
     string? CustomName = null,
-    string? CustomNotes = null)
-{
-    public IReadOnlyList<ForceState> ChildForces { get; init; } = ChildForces ?? [];
-    public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
-    public IReadOnlyList<RuleState> Rules { get; init; } = Rules ?? [];
-    public IReadOnlyList<CategoryState> Categories { get; init; } = Categories ?? [];
-    public IReadOnlyList<PublicationState> Publications { get; init; } = Publications ?? [];
-}
+    string? CustomNotes = null);
 
 public record SelectionState(
     string? Id,
@@ -69,12 +59,7 @@ public record SelectionState(
     string? PublicationName = null,
     string? EntryGroupId = null,
     string? CustomName = null,
-    string? CustomNotes = null)
-{
-    public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
-    public IReadOnlyList<RuleState> Rules { get; init; } = Rules ?? [];
-    public IReadOnlyList<CategoryState> Categories { get; init; } = Categories ?? [];
-}
+    string? CustomNotes = null);
 
 public record CostState(
     string Name,
@@ -110,11 +95,7 @@ public record CategoryState(
     IReadOnlyList<RuleState>? Rules = null,
     string? PublicationId = null,
     string? Page = null,
-    string? CustomNotes = null)
-{
-    public IReadOnlyList<ProfileState> Profiles { get; init; } = Profiles ?? [];
-    public IReadOnlyList<RuleState> Rules { get; init; } = Rules ?? [];
-}
+    string? CustomNotes = null);
 
 public record PublicationState(
     string Id,

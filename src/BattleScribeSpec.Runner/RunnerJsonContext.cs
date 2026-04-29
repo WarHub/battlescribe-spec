@@ -53,5 +53,5 @@ internal sealed class JsonSpecEntry
     public IReadOnlyList<string> Failures { get; init; } = [];
 
     [JsonPropertyName("tags")]
-    public IReadOnlyList<string> Tags { get; init; } = [];
+    public IReadOnlyList<string>? Tags { get; init; }
 }
