@@ -39,8 +39,9 @@ steps:
           selections:
             - name: Hidden Squad
               hidden: true
+      errors:
+        - on: selection se-squad
+          from: se-squad/hidden
       engines:
-        newrecruit:
-          errors:
-            - on: selection se-squad
-              from: se-squad/hidden
+        battlescribe:
+          errors: []

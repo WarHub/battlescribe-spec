@@ -1,6 +1,6 @@
 id: selection-hidden-entry
 category: selection
-description: Hidden selection entries can still be selected
+description: Hidden selection entries can still be selected but produce a validation error
 tags: [design-difference]
 
 setup:
@@ -35,8 +35,9 @@ steps:
           selections:
             - name: Hidden Unit
               hidden: true
+      errors:
+        - on: selection se-1
+          from: se-1/hidden
       engines:
-        newrecruit:
-          errors:
-            - on: selection se-1
-              from: se-1/hidden
+        battlescribe:
+          errors: []

@@ -1,15 +1,20 @@
 id: modifier-field-hidden
 category: modifier
-description: Modifier targeting 'hidden' field changes entry visibility (boolean set)
-tags: [design-difference]
+description: Modifier targeting 'hidden' field changes entry visibility and produces validation error
 
 setup:
   gameSystem:
     id: test-gs
     name: Test GS
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
     forceEntries:
       - id: fe-1
         name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: ce-troops
   catalogues:
     - id: cat-1
       name: Cat
@@ -18,6 +23,10 @@ setup:
         - id: se-1
           name: Stealth Unit
           type: unit
+          categoryLinks:
+            - id: cl-se-troops
+              targetId: ce-troops
+              primary: true
           modifiers:
             - type: set
               field: hidden
@@ -31,15 +40,13 @@ steps:
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
-  # Hidden modifier set to true makes the entry hidden
+
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Stealth Unit
               hidden: true
-      engines:
-        newrecruit:
-          errors:
-            - on: selection se-1
-              from: se-1/hidden
+      errors:
+        - on: selection se-1
+          from: se-1/hidden

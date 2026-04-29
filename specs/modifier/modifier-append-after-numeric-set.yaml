@@ -1,0 +1,72 @@
+id: modifier-append-after-numeric-set
+category: modifier
+tags: [newrecruit-bug]
+description: >
+  Append modifier should concatenate to the current name value
+  regardless of whether that value looks numeric. When set assigns
+  a numeric-looking string, append must still produce
+  "{value} {appended}".
+  NR bug: set with a numeric string coerces to Number type internally;
+  append then cannot read it and produces only the appended suffix.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        # Control: set non-numeric + append works in all engines
+        - id: se-text
+          name: Original
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Alpha
+            - type: append
+              field: name
+              value: Beta
+        # Bug trigger: set numeric + append loses the set value in NR
+        - id: se-numeric
+          name: Original
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: "100"
+            - type: append
+              field: name
+              value: units
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-text
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-numeric
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: "100 units"
+            - name: Alpha Beta
+      engines:
+        newrecruit:
+          # NR bug: set "100" is stored as Number; append can't read it.
+          # Result is just the appended value "units" (numeric prefix lost).
+          forces:
+            - selections:
+                - name: Alpha Beta
+                - name: units

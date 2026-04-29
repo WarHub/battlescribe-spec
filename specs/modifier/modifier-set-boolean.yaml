@@ -1,15 +1,23 @@
 id: modifier-set-boolean
 category: modifier
-description: Set modifier changes a boolean field (hidden flag)
-tags: [design-difference]
+description: >
+  Set modifier on boolean field (hidden=true) hides the entry and produces a validation error.
+  Same setup as modifier-field-hidden; kept for modifier-type matrix completeness
+  (set-name, set-cost, set-boolean).
 
 setup:
   gameSystem:
     id: test-gs
     name: Test GS
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
     forceEntries:
       - id: fe-1
         name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: ce-troops
   catalogues:
     - id: cat-1
       name: Cat
@@ -18,15 +26,14 @@ setup:
         - id: se-1
           name: Secret Agent
           type: unit
+          categoryLinks:
+            - id: cl-se-troops
+              targetId: ce-troops
+              primary: true
           modifiers:
             - type: set
               field: hidden
               value: "true"
-              conditions:
-                - type: atLeast
-                  value: 1
-                  field: selections
-                  scope: self
 
 steps:
   - action: addForce
@@ -42,12 +49,7 @@ steps:
         - selectionCount: 1
           selections:
             - name: Secret Agent
-      engines:
-        newrecruit:
-          forces:
-            - selections:
-                - name: Secret Agent
-                  hidden: true
-          errors:
-            - on: selection se-1
-              from: se-1/hidden
+              hidden: true
+      errors:
+        - on: selection se-1
+          from: se-1/hidden
