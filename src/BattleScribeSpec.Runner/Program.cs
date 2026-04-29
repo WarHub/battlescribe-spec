@@ -91,6 +91,9 @@ if (!string.IsNullOrEmpty(matrixDir))
 // Parse --tags into a TagFilter
 var tagFilter = TagFilter.Parse(tagsExpr);
 
+// Parse --filter into patterns (comma-separated, OR logic)
+var filterPatterns = filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
 if (string.IsNullOrEmpty(adapter))
 {
     Console.Error.WriteLine("Error: --adapter is required.");
@@ -171,7 +174,7 @@ foreach (var (_, id, category, loader) in specSources)
 {
     var specName = $"{category}/{id}";
 
-    if (filter is not null && !specName.Contains(filter, StringComparison.OrdinalIgnoreCase))
+    if (filterPatterns is not null && !filterPatterns.Any(p => specName.Contains(p, StringComparison.OrdinalIgnoreCase)))
     {
         skipped++;
         reportResults.Add(new SpecResultSummary(id, category, "", "skipped", [$"Skipped by filter '{filter}'"]));
@@ -436,7 +439,8 @@ void PrintUsage()
           --matrix <dir>      Read *-conformance.json files and output markdown matrix
           --specs <dir>       Path to specs directory (default: embedded specs)
           --output <format>   Output format: summary (default), json, github-actions
-          --filter <pattern>  Only run specs matching pattern
+          --filter <pattern>  Only run specs matching pattern (comma-separated, OR logic)
+                              Examples: "kitchen-sink", "protocol/,category/"
           --tags <expr>       Tag filter expression (comma-separated, +/- prefix)
                               Include: "cost,constraint" (OR — matches any)
                               Exclude: "-undefined-behavior"
