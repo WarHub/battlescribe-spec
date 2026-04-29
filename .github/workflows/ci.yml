@@ -44,7 +44,7 @@ jobs:
         run: dotnet build --no-restore
 
       - name: Verify formatting
-        run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes
+        run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
 
       - name: Test
         run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "FullyQualifiedName!~NewRecruit&FullyQualifiedName!~FrozenNewRecruit"
