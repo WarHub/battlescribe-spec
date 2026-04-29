@@ -22,6 +22,10 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/*.csproj
 
       - name: Generate GitHub App token
         id: app-token
@@ -75,6 +79,10 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/*.csproj
 
       - name: Generate GitHub App token
         id: app-token
@@ -110,6 +118,10 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/*.csproj
 
       - name: Generate GitHub App token
         id: app-token
