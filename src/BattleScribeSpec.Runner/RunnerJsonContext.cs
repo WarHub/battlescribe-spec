@@ -53,5 +53,6 @@ internal sealed class JsonSpecEntry
     public IReadOnlyList<string> Failures { get; init; } = [];
 
     [JsonPropertyName("tags")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? Tags { get; init; }
 }
