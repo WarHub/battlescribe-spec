@@ -1,0 +1,59 @@
+id: modifier-numeric-on-name
+category: modifier
+description: >
+  Increment and decrement modifiers on the name field parse the
+  current name as a number and add/subtract. Set establishes a
+  numeric base, then increment/decrement adjust it.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-inc
+          name: Entry
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: "100"
+            - type: increment
+              field: name
+              value: "23"
+        - id: se-dec
+          name: Entry
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: "200"
+            - type: decrement
+              field: name
+              value: "67"
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-inc
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-dec
+
+  # set "100" + increment 23 → "123"; set "200" - decrement 67 → "133"
+  - expectedState:
+      forces:
+        - selections:
+            - name: "123"
+            - name: "133"
