@@ -92,12 +92,9 @@ public sealed class SpecStructureTests
                         continue;
                     }
 
-                    foreach (var err in overErrors)
-                    {
-                        _ = err;
-                        // Engine overrides may omit 'from:' when the engine doesn't
-                        // expose structured constraint data for that error type.
-                    }
+                    // Engine overrides may omit 'from:' when the engine doesn't
+                    // expose structured constraint data for that error type.
+                    Assert.All(overErrors, err => Assert.NotNull(err.On));
                 }
             }
         }
