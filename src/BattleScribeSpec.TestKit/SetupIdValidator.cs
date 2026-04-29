@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -24,7 +24,10 @@ public static class SetupIdValidator
     {
         var idLocations = new Dictionary<string, List<string>>();
         if (setup.GameSystem is not null)
+        {
             CollectIds(setup.GameSystem, "gameSystem", idLocations);
+        }
+
         if (setup.Catalogues is not null)
         {
             for (var i = 0; i < setup.Catalogues.Count; i++)
@@ -53,26 +56,35 @@ public static class SetupIdValidator
     private static TypeInfo GetTypeInfo([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type)
     {
         if (TypeInfoCache.TryGetValue(type, out var cached))
+        {
             return cached;
+        }
 
         var idProp = type.GetProperty("Id", BindingFlags.Public | BindingFlags.Instance);
         // Only collect "Id" properties that are string type
         if (idProp is not null && idProp.PropertyType != typeof(string))
+        {
             idProp = null;
+        }
 
         var listProps = new List<(PropertyInfo, string)>();
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             var propType = prop.PropertyType;
             if (!propType.IsGenericType || propType.GetGenericTypeDefinition() != typeof(List<>))
+            {
                 continue;
+            }
+
             var elementType = propType.GetGenericArguments()[0];
             // Recurse into List<T> where T is a protocol/setup type (has at least one property with Id or List<>)
             if (IsWalkableType(elementType))
+            {
                 listProps.Add((prop, ToCamelCase(prop.Name)));
+            }
         }
 
-        var info = new TypeInfo(idProp, listProps.ToArray());
+        var info = new TypeInfo(idProp, [.. listProps]);
         return TypeInfoCache.GetOrAdd(type, info);
     }
 
@@ -108,12 +120,17 @@ public static class SetupIdValidator
         foreach (var (prop, name) in typeInfo.ListProperties)
         {
             if (prop.GetValue(obj) is not IList list)
+            {
                 continue;
+            }
+
             for (var i = 0; i < list.Count; i++)
             {
                 var item = list[i];
                 if (item is not null)
+                {
                     CollectIds(item, $"{path}/{name}[{i}]", idLocations);
+                }
             }
         }
     }

@@ -1,6 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Protocol;
-using Xunit;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Tests;
 
@@ -38,8 +36,10 @@ public class MultiCatalogueProtocolTests(ITestOutputHelper output)
 
         var state1 = engine.GetRosterState();
         output.WriteLine($"After AddForce: forceCount={state1.Forces.Count}");
-        for (int i = 0; i < state1.Forces.Count; i++)
+        for (var i = 0; i < state1.Forces.Count; i++)
+        {
             output.WriteLine($"  Force[{i}]: name={state1.Forces[i].Name}");
+        }
 
         try
         {

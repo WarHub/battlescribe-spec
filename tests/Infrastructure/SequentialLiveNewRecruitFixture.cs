@@ -1,5 +1,4 @@
-using BattleScribeSpec.NewRecruit;
-using Xunit;
+﻿using BattleScribeSpec.NewRecruit;
 
 namespace BattleScribeSpec.Tests;
 
@@ -18,7 +17,9 @@ public sealed class SequentialLiveNewRecruitFixture : IAsyncLifetime
     {
         var baseUrl = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
         if (string.IsNullOrEmpty(baseUrl))
+        {
             return;
+        }
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";

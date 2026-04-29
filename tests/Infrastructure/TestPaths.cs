@@ -1,4 +1,4 @@
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Resolves paths to external test data.
@@ -7,7 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// </summary>
 internal static class TestPaths
 {
-    private static readonly Lazy<string?> _repoRoot = new(FindRepoRoot);
+    private static readonly Lazy<string?> RepoRoot = new(FindRepoRoot);
 
     /// <summary>
     /// Path to wh40k-9e data directory. Checks WH40K_DATA_DIR env var first,
@@ -28,11 +28,15 @@ internal static class TestPaths
     {
         var envDir = Environment.GetEnvironmentVariable("WH40K_DATA_DIR");
         if (!string.IsNullOrEmpty(envDir))
+        {
             return envDir;
+        }
 
-        var repoRoot = _repoRoot.Value;
+        var repoRoot = RepoRoot.Value;
         if (repoRoot is null)
+        {
             return null;
+        }
 
         var candidate = Path.GetFullPath(Path.Combine(repoRoot, ".testdata", "wh40k-9e"));
         return Directory.Exists(candidate) ? candidate : null;
@@ -45,7 +49,10 @@ internal static class TestPaths
         while (dir is not null)
         {
             if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
+            {
                 return dir;
+            }
+
             dir = Path.GetDirectoryName(dir);
         }
         return null;

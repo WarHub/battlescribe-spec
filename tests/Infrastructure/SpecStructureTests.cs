@@ -1,7 +1,4 @@
-using BattleScribeSpec;
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 [Trait("Category", "Unit")]
 public sealed class SpecStructureTests
@@ -10,8 +7,11 @@ public sealed class SpecStructureTests
     {
         var specsDir = SpecLoader.FindSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
+        {
             yield break;
-        foreach (var (path, id, category) in SpecLoader.DiscoverSpecs(specsDir))
+        }
+
+        foreach (var (path, _, _) in SpecLoader.DiscoverSpecs(specsDir))
         {
             var spec = SpecLoader.Load(path);
             yield return (path, spec);
@@ -46,7 +46,10 @@ public sealed class SpecStructureTests
     public void NoLegacyAssertSteps(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        if (spec.Steps is null) return;
+        if (spec.Steps is null)
+        {
+            return;
+        }
         // StepDef no longer has Assert property, so this verifies
         // that no YAML has 'assert:' keys (they would be silently ignored).
         // We check the raw YAML text instead.
@@ -60,10 +63,18 @@ public sealed class SpecStructureTests
     public void AllErrorAssertionsHaveFrom(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        if (spec.Steps is null) return;
+        if (spec.Steps is null)
+        {
+            return;
+        }
+
         foreach (var step in spec.Steps)
         {
-            if (step.ExpectedState?.Errors is not { } errors) continue;
+            if (step.ExpectedState?.Errors is not { } errors)
+            {
+                continue;
+            }
+
             foreach (var err in errors)
             {
                 Assert.False(string.IsNullOrEmpty(err.From),
@@ -76,9 +87,14 @@ public sealed class SpecStructureTests
             {
                 foreach (var (engine, over) in engines)
                 {
-                    if (over.Errors is not { } overErrors) continue;
+                    if (over.Errors is not { } overErrors)
+                    {
+                        continue;
+                    }
+
                     foreach (var err in overErrors)
                     {
+                        _ = err;
                         // Engine overrides may omit 'from:' when the engine doesn't
                         // expose structured constraint data for that error type.
                     }

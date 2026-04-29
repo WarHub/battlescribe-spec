@@ -1,4 +1,4 @@
-using BattleScribeSpec.NewRecruit;
+﻿using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
@@ -183,7 +183,7 @@ public class RunnerAndProtocolRegressionTests
     public void CatXmlGenerator_ThrowsOnEmptyCatalogueArray()
     {
         var gameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" };
-        Assert.Throws<ArgumentException>(() => CatXmlGenerator.GenerateCatalogueXml(gameSystem, Array.Empty<ProtocolCatalogue>()));
+        Assert.Throws<ArgumentException>(() => CatXmlGenerator.GenerateCatalogueXml(gameSystem, []));
     }
 
     [Fact]
@@ -226,7 +226,10 @@ public class RunnerAndProtocolRegressionTests
         public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
         {
             if (ThrowOnSetup)
+            {
                 throw new InvalidOperationException("setup boom");
+            }
+
             return SetupErrors;
         }
 
@@ -234,7 +237,10 @@ public class RunnerAndProtocolRegressionTests
         {
             ActionCalls++;
             if (ThrowOnAddForce)
+            {
                 throw new InvalidOperationException("boom");
+            }
+
             return new ActionOutputs { ForceId = "force-1" };
         }
 

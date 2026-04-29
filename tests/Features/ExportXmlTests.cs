@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using WarHub.ArmouryModel.Source.BattleScribe;
+﻿using WarHub.ArmouryModel.Source.BattleScribe;
 
 namespace BattleScribeSpec.Tests;
 
@@ -21,7 +20,9 @@ public sealed class ExportXmlTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_outputDir))
+        {
             Directory.Delete(_outputDir, recursive: true);
+        }
     }
 
     [Fact]
@@ -139,7 +140,10 @@ public sealed class ExportXmlTests : IDisposable
             ?? throw new InvalidOperationException("Could not find specs directory");
         var path = Path.Combine(specsDir, specId + ".yaml");
         if (!File.Exists(path))
+        {
             throw new FileNotFoundException($"Spec not found: {path}");
+        }
+
         return path;
     }
 }

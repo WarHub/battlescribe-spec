@@ -1,4 +1,4 @@
-namespace BattleScribeSpec;
+﻿namespace BattleScribeSpec;
 
 /// <summary>
 /// Engine-agnostic state records for roster conformance testing.

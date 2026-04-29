@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using BattleScribeSpec;
 using BattleScribeSpec.Protocol;
@@ -113,16 +113,20 @@ if (specsDir is not null)
         Console.Error.WriteLine($"Error: specs directory not found: {specsDir}");
         return 1;
     }
-    fileSpecs = SpecLoader.DiscoverSpecs(specsDir).ToList();
+    fileSpecs = [.. SpecLoader.DiscoverSpecs(specsDir)];
 }
 else
 {
     // Try filesystem first, then embedded
     specsDir = SpecLoader.FindSpecsDirectory();
     if (specsDir is not null)
-        fileSpecs = SpecLoader.DiscoverSpecs(specsDir).ToList();
+    {
+        fileSpecs = [.. SpecLoader.DiscoverSpecs(specsDir)];
+    }
     else
-        embeddedSpecs = SpecLoader.DiscoverEmbeddedSpecs().ToList();
+    {
+        embeddedSpecs = [.. SpecLoader.DiscoverEmbeddedSpecs()];
+    }
 }
 
 var totalSpecs = fileSpecs?.Count ?? embeddedSpecs?.Count ?? 0;
@@ -220,13 +224,17 @@ if (workers > 1)
     Console.Error.WriteLine($"Running {filteredSpecs.Count} specs with {workers} workers...");
 
     var adapterProcesses = new List<AdapterProcess>();
-    for (int w = 0; w < workers; w++)
+    for (var w = 0; w < workers; w++)
+    {
         adapterProcesses.Add(AdapterProcess.Start(adapterExe, adapterArgs));
+    }
 
     // Channel-based process pool
     var processPool = System.Threading.Channels.Channel.CreateBounded<AdapterProcess>(workers);
     foreach (var proc in adapterProcesses)
+    {
         processPool.Writer.TryWrite(proc);
+    }
 
     var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFile Spec, string Status)>();
 
@@ -248,8 +256,14 @@ if (workers > 1)
                 if (expectedFailuresEngine is not null)
                 {
                     var isExpectedFail = spec.IsExpectedToFail(expectedFailuresEngine);
-                    if (!result.Passed && isExpectedFail) status = "expected-failure";
-                    else if (result.Passed && isExpectedFail) status = "unexpected-pass";
+                    if (!result.Passed && isExpectedFail)
+                    {
+                        status = "expected-failure";
+                    }
+                    else if (result.Passed && isExpectedFail)
+                    {
+                        status = "unexpected-pass";
+                    }
                 }
 
                 concurrentResults.Add((result, spec, status));
@@ -270,7 +284,9 @@ if (workers > 1)
 
     // Dispose adapter processes
     foreach (var proc in adapterProcesses)
+    {
         proc.Dispose();
+    }
 }
 else
 {
@@ -288,8 +304,14 @@ else
         if (expectedFailuresEngine is not null)
         {
             var isExpectedFail = spec.IsExpectedToFail(expectedFailuresEngine);
-            if (!result.Passed && isExpectedFail) status = "expected-failure";
-            else if (result.Passed && isExpectedFail) status = "unexpected-pass";
+            if (!result.Passed && isExpectedFail)
+            {
+                status = "expected-failure";
+            }
+            else if (result.Passed && isExpectedFail)
+            {
+                status = "unexpected-pass";
+            }
         }
 
         reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags));
@@ -301,8 +323,8 @@ sw.Stop();
 // ===== Output results =====
 var passed = results.Count(r => r.Passed);
 int failed;
-int expectedFailureCount = 0;
-int unexpectedPassCount = 0;
+var expectedFailureCount = 0;
+var unexpectedPassCount = 0;
 if (expectedFailuresEngine is not null)
 {
     failed = 0;
@@ -311,11 +333,19 @@ if (expectedFailuresEngine is not null)
         var spec = specsByResult.TryGetValue(r, out var s) ? s : null;
         var isExpectedFail = spec?.IsExpectedToFail(expectedFailuresEngine) ?? false;
         if (!r.Passed && !isExpectedFail)
+        {
             failed++;
+        }
+
         if (!r.Passed && isExpectedFail)
+        {
             expectedFailureCount++;
+        }
+
         if (r.Passed && isExpectedFail)
+        {
             unexpectedPassCount++;
+        }
     }
     failed += unexpectedPassCount; // Unexpected passes count as failures
 }
@@ -339,7 +369,9 @@ switch (output)
 }
 
 if (reportPath is not null)
+{
     OutputConformanceReport(reportPath, reportResults);
+}
 
 return exitCode;
 
@@ -348,7 +380,9 @@ return exitCode;
 void OutputSummary(List<SpecResult> results, TimeSpan elapsed)
 {
     if (engineFilter is not null)
+    {
         Console.WriteLine($"Engine: {engineFilter}");
+    }
 
     foreach (var result in results)
     {
@@ -357,7 +391,9 @@ void OutputSummary(List<SpecResult> results, TimeSpan elapsed)
         if (!result.Passed)
         {
             foreach (var failure in result.Failures)
+            {
                 Console.WriteLine($"         {failure}");
+            }
         }
     }
     Console.WriteLine();
@@ -374,7 +410,7 @@ void OutputJson(List<SpecResult> results, TimeSpan elapsed)
         Failed = failed,
         Total = results.Count,
         ElapsedSeconds = elapsed.TotalSeconds,
-        Specs = results.Select(r =>
+        Specs = [.. results.Select(r =>
         {
             var spec = specsByResult.TryGetValue(r, out var s) ? s : null;
             return new JsonSpecEntry
@@ -386,7 +422,7 @@ void OutputJson(List<SpecResult> results, TimeSpan elapsed)
                 Failures = r.Failures,
                 Tags = spec?.Tags,
             };
-        }).ToList(),
+        })],
     };
     Console.WriteLine(JsonSerializer.Serialize(report, RunnerJsonContext.Default.JsonRunReport));
 }
@@ -481,7 +517,9 @@ void OutputConformanceReport(string path, List<SpecResultSummary> results)
 
     var directory = Path.GetDirectoryName(path);
     if (!string.IsNullOrEmpty(directory))
+    {
         Directory.CreateDirectory(directory);
+    }
 
     File.WriteAllText(path, JsonSerializer.Serialize(report, RunnerJsonContext.Default.ConformanceReport));
 
@@ -503,7 +541,9 @@ void OutputConformanceReport(string path, List<SpecResultSummary> results)
         {
             Console.WriteLine($"  - {failedSpec.Category}/{failedSpec.SpecId}");
             foreach (var failure in failedSpec.Failures)
+            {
                 Console.WriteLine($"    {failure}");
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 
 namespace BattleScribeSpec;
 
@@ -17,7 +17,9 @@ public sealed class EnginePool<T> : IAsyncDisposable where T : IRosterEngine
         _allEngines = [.. engines];
         _pool = Channel.CreateBounded<T>(engines.Count);
         foreach (var engine in engines)
+        {
             _pool.Writer.TryWrite(engine);
+        }
     }
 
     /// <summary>
@@ -26,7 +28,10 @@ public sealed class EnginePool<T> : IAsyncDisposable where T : IRosterEngine
     public static EnginePool<T> Create(IReadOnlyList<T> engines)
     {
         if (engines.Count == 0)
+        {
             throw new ArgumentException("At least one engine instance is required.", nameof(engines));
+        }
+
         return new EnginePool<T>(engines);
     }
 
@@ -49,21 +54,31 @@ public sealed class EnginePool<T> : IAsyncDisposable where T : IRosterEngine
     internal void Release(T engine)
     {
         if (!_disposed)
+        {
             _pool.Writer.TryWrite(engine);
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
         _pool.Writer.Complete();
 
         foreach (var engine in _allEngines)
         {
             if (engine is IAsyncDisposable asyncDisposable)
+            {
                 await asyncDisposable.DisposeAsync();
+            }
             else
+            {
                 engine.Dispose();
+            }
         }
     }
 }

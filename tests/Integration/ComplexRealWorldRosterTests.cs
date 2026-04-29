@@ -1,7 +1,4 @@
-using BattleScribeSpec;
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// 10 complex real-world roster tests using wh40k-9e data.
@@ -35,7 +32,9 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
 
         var cats = engine.GetLoadedCatalogues();
         foreach (var (id, name) in cats)
+        {
             output.WriteLine($"  Loaded catalogue: {name} ({id})");
+        }
 
         // Set the primary (non-library) catalogue as active
         engine.SetActiveCatalogue(cats.First(c => c.Name.Contains(primaryCatalogueName.Split(" - ").Last().Split(" ").First())).Id);
@@ -43,7 +42,9 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         var errors = engine.InitializeFromLoadedData();
         output.WriteLine($"Init errors: {errors.Count}");
         foreach (var e in errors.Take(5))
+        {
             output.WriteLine($"  - {e}");
+        }
 
         return engine;
     }
@@ -80,13 +81,17 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
             var firstName = catalogueNames[0].Split(" - ").Last();
             var match = cats.FirstOrDefault(c => c.Name.Contains(firstName, StringComparison.OrdinalIgnoreCase));
             if (match != default)
+            {
                 engine.SetActiveCatalogue(match.Id);
+            }
         }
 
         var errors = engine.InitializeFromLoadedData();
         output.WriteLine($"Init errors: {errors.Count}");
         foreach (var e in errors.Take(5))
+        {
             output.WriteLine($"  - {e}");
+        }
 
         return engine;
     }
@@ -119,18 +124,25 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         output.WriteLine($"\n--- Roster State ---");
         output.WriteLine($"Forces: {snapshot.Forces.Count}");
         foreach (var cost in snapshot.Costs)
+        {
             output.WriteLine($"  Cost: {cost.Name} = {cost.Value}");
-        for (int i = 0; i < snapshot.Forces.Count; i++)
+        }
+
+        for (var i = 0; i < snapshot.Forces.Count; i++)
         {
             var f = snapshot.Forces[i];
             output.WriteLine($"  Force[{i}]: {f.Name} ({f.Selections.Count} selections)");
             foreach (var sel in f.Selections)
+            {
                 output.WriteLine($"    - {sel.Name} ({sel.Type}, x{sel.Number}) [{string.Join(", ", sel.Costs.Select(c => $"{c.Name}={c.Value}"))}]");
+            }
         }
         var valErrors = engine.GetValidationErrors();
         output.WriteLine($"Validation errors: {valErrors.Count}");
         foreach (var e in valErrors.Take(10))
+        {
             output.WriteLine($"  ! {e}");
+        }
     }
 
     // =========================================================================
@@ -554,7 +566,9 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         // Find the Craftworlds catalogue to set as active for first force
         var cwCat = cats.FirstOrDefault(c => c.Name.Contains("Craftworld"));
         if (cwCat != default)
+        {
             engine.SetActiveCatalogue(cwCat.Id);
+        }
 
         AddForce(engine, "Patrol");
 
@@ -566,7 +580,9 @@ public class ComplexRealWorldRosterTests(ITestOutputHelper output)
         // Add a second Patrol for Harlequins
         var harleCat = cats.FirstOrDefault(c => c.Name.Contains("Harlequin"));
         if (harleCat != default)
+        {
             engine.SetActiveCatalogue(harleCat.Id);
+        }
 
         AddForce(engine, "Patrol");
 

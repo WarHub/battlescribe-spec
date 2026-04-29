@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Tests;
 
@@ -32,10 +31,7 @@ public class SpecRunnerDumpTests
         var runner = new SpecRunner(engine, engineName: "battlescribe");
 
         var callbackSteps = new List<(int Index, string? Action)>();
-        runner.OnStepCompleted = (index, step, state, errors) =>
-        {
-            callbackSteps.Add((index, step.Action));
-        };
+        runner.OnStepCompleted = (index, step, state, errors) => callbackSteps.Add((index, step.Action));
 
         var spec = new SpecFile
         {
@@ -99,7 +95,10 @@ public class SpecRunnerDumpTests
         var dumpCalls = new List<int>();
         runner.OnStepCompleted = (index, step, _, _) =>
         {
-            if (step.Action == "dump") dumpCalls.Add(index);
+            if (step.Action == "dump")
+            {
+                dumpCalls.Add(index);
+            }
         };
 
         var spec = new SpecFile

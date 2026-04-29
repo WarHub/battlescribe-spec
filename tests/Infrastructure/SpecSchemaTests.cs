@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Json.Schema;
 using Yaml2JsonNode;
 using YamlDotNet.RepresentationModel;
@@ -23,8 +23,11 @@ public sealed class SpecSchemaTests
     public static IEnumerable<object[]> AllSpecs()
     {
         if (SpecsDir is null || !Directory.Exists(SpecsDir))
+        {
             yield break;
-        foreach (var (path, id, category) in SpecLoader.DiscoverSpecs(SpecsDir))
+        }
+
+        foreach (var (path, _, _) in SpecLoader.DiscoverSpecs(SpecsDir))
         {
             var relPath = Path.GetRelativePath(SpecsDir, path).Replace('\\', '/');
             yield return [path, relPath];

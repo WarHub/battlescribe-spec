@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.NewRecruit;
+﻿using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
@@ -74,7 +73,8 @@ public class CatXmlGeneratorTests
     {
         var gs = new ProtocolGameSystem
         {
-            Id = "gs-1", Name = "GS",
+            Id = "gs-1",
+            Name = "GS",
             CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts" }],
             CategoryEntries = [new ProtocolCategoryEntry { Id = "cat-1", Name = "Troops" }],
         };
@@ -130,7 +130,8 @@ public class CatXmlGeneratorTests
     {
         var gs = new ProtocolGameSystem
         {
-            Id = "gs-1", Name = "GS",
+            Id = "gs-1",
+            Name = "GS",
             CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts" }],
         };
 
@@ -357,7 +358,8 @@ public class CatXmlGeneratorTests
     {
         var gs = new ProtocolGameSystem
         {
-            Id = "gs-1", Name = "GS",
+            Id = "gs-1",
+            Name = "GS",
             ProfileTypes =
             [
                 new ProtocolProfileType { Id = "pt-1", Name = "Stats",
@@ -578,7 +580,7 @@ public class CatXmlGeneratorTests
     {
         var gs = new ProtocolGameSystem { Id = "gs-1", Name = "GS" };
         Assert.Throws<ArgumentException>(() =>
-            CatXmlGenerator.GenerateCatalogueXml(gs, Array.Empty<ProtocolCatalogue>()));
+            CatXmlGenerator.GenerateCatalogueXml(gs, []));
     }
 
     [Fact]

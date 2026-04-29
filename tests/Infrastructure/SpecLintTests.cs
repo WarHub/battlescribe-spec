@@ -1,6 +1,4 @@
-using BattleScribeSpec;
-using System.Text.RegularExpressions;
-using Xunit;
+﻿using System.Text.RegularExpressions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -16,8 +14,11 @@ public sealed class SpecLintTests
     private static IEnumerable<(string path, string relPath, SpecFile spec)> AllSpecFiles()
     {
         if (SpecsDir is null || !Directory.Exists(SpecsDir))
+        {
             yield break;
-        foreach (var (path, id, category) in SpecLoader.DiscoverSpecs(SpecsDir))
+        }
+
+        foreach (var (path, _, _) in SpecLoader.DiscoverSpecs(SpecsDir))
         {
             var spec = SpecLoader.Load(path);
             var relPath = Path.GetRelativePath(SpecsDir, path).Replace('\\', '/');
@@ -92,7 +93,10 @@ public sealed class SpecLintTests
                 inSteps = true;
                 continue;
             }
-            if (!inSteps) continue;
+            if (!inSteps)
+            {
+                continue;
+            }
 
             // Top-level step item (2-space indent + "- ")
             if (Regex.IsMatch(lines[i], @"^  - (action|expectedState):"))
@@ -149,10 +153,18 @@ public sealed class SpecLintTests
     public void ActionsAreKnown(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        if (spec.Steps is null) return;
+        if (spec.Steps is null)
+        {
+            return;
+        }
+
         foreach (var step in spec.Steps)
         {
-            if (step.Action is null) continue;
+            if (step.Action is null)
+            {
+                continue;
+            }
+
             Assert.True(KnownActions.Contains(step.Action),
                 $"{specName}: unknown action '{step.Action}'");
         }
@@ -190,7 +202,11 @@ public sealed class SpecLintTests
     public void TagsAreKnown(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        if (spec.Tags is null) return;
+        if (spec.Tags is null)
+        {
+            return;
+        }
+
         var unknown = spec.Tags.Where(t => !KnownTags.Contains(t)).ToList();
         Assert.True(unknown.Count == 0,
             $"{specName}: unknown tag(s): {string.Join(", ", unknown.Select(t => $"'{t}'"))}. " +
@@ -206,7 +222,11 @@ public sealed class SpecLintTests
     public void EngineExpectationsAreValid(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        if (spec.Engines is null) return;
+        if (spec.Engines is null)
+        {
+            return;
+        }
+
         foreach (var (engine, expectation) in spec.Engines)
         {
             Assert.True(KnownExpectations.Contains(expectation),
@@ -222,7 +242,11 @@ public sealed class SpecLintTests
     public void StepsAreActionOrExpectedState(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        if (spec.Steps is null) return;
+        if (spec.Steps is null)
+        {
+            return;
+        }
+
         for (var i = 0; i < spec.Steps.Count; i++)
         {
             var step = spec.Steps[i];
@@ -242,15 +266,24 @@ public sealed class SpecLintTests
     public void SetSelectionCountHasSelectionId(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        if (spec.Steps is null) return;
+        if (spec.Steps is null)
+        {
+            return;
+        }
+
         var violations = new List<string>();
         for (var i = 0; i < spec.Steps.Count; i++)
         {
             var step = spec.Steps[i];
-            if (step.Action != "setSelectionCount") continue;
+            if (step.Action != "setSelectionCount")
+            {
+                continue;
+            }
 
             if (step.SelectionId is null or { Length: 0 })
+            {
                 violations.Add($"step {i + 1}: setSelectionCount requires selectionId");
+            }
         }
         Assert.True(violations.Count == 0,
             $"{specName}: setSelectionCount issues:\n  {string.Join("\n  ", violations)}");
@@ -266,13 +299,25 @@ public sealed class SpecLintTests
         var catalogueCount = spec.Setup.Catalogues?.Count ?? 0;
         // For DataSource specs, catalogueId is always required (protocol can't auto-resolve)
         var isDataSource = spec.Setup.DataSource is { Length: > 0 };
-        if (catalogueCount < 2 && !isDataSource) return;
-        if (spec.Steps is null) return;
+        if (catalogueCount < 2 && !isDataSource)
+        {
+            return;
+        }
+
+        if (spec.Steps is null)
+        {
+            return;
+        }
+
         var violations = new List<string>();
         for (var i = 0; i < spec.Steps.Count; i++)
         {
             var step = spec.Steps[i];
-            if (step.Action is not ("addForce" or "addChildForce")) continue;
+            if (step.Action is not ("addForce" or "addChildForce"))
+            {
+                continue;
+            }
+
             if (step.CatalogueId is null or { Length: 0 })
             {
                 var reason = isDataSource
@@ -296,7 +341,9 @@ public sealed class SpecLintTests
         for (var i = 0; i < lines.Length; i++)
         {
             if (lines[i].Length > 0 && lines[i] != lines[i].TrimEnd())
+            {
                 violations.Add($"line {i + 1}");
+            }
         }
         Assert.True(violations.Count == 0,
             $"{specName}: trailing whitespace on {string.Join(", ", violations)}");
@@ -339,26 +386,36 @@ public sealed class SpecLintTests
         for (var i = 0; i < lines.Length; i++)
         {
             var stripped = lines[i].Trim();
-            if (stripped.StartsWith("- expectedState:"))
+            if (stripped.StartsWith("- expectedState:", StringComparison.Ordinal))
+            {
                 inExpectedState = true;
-            else if (stripped.StartsWith("- action:"))
+            }
+            else if (stripped.StartsWith("- action:", StringComparison.Ordinal))
+            {
                 inExpectedState = false;
+            }
 
             // Global defaults are redundant everywhere.
             foreach (var (pattern, description) in GlobalDefaultPatterns)
             {
                 if (stripped == pattern)
+                {
                     violations.Add($"line {i + 1}: '{pattern}' ({description})");
+                }
             }
 
             if (inExpectedState)
+            {
                 continue;
+            }
 
             // Setup-only defaults.
             foreach (var (pattern, description) in DefaultValuePatterns)
             {
                 if (stripped == pattern)
+                {
                     violations.Add($"line {i + 1}: '{pattern}' ({description})");
+                }
             }
         }
         Assert.True(violations.Count == 0,

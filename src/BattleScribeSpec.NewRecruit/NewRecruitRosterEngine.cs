@@ -1,4 +1,4 @@
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.NewRecruit;
 
@@ -15,12 +15,10 @@ namespace BattleScribeSpec.NewRecruit;
 /// </summary>
 public sealed class NewRecruitRosterEngine : IRosterEngine
 {
-    private readonly NewRecruitBrowser _browser;
-
     /// <summary>
     /// Exposes the underlying browser for advanced probing in integration tests.
     /// </summary>
-    internal NewRecruitBrowser Browser => _browser;
+    internal NewRecruitBrowser Browser { get; }
     private bool _disposed;
     private ProtocolGameSystem? _gameSystem;
     private string _rosterName = "Spec Test";
@@ -42,7 +40,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     private NewRecruitRosterEngine(NewRecruitBrowser browser)
     {
-        _browser = browser;
+        Browser = browser;
     }
 
     /// <summary>
@@ -95,15 +93,15 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             // In frozen mode after the first setup, the page is already at /app
             // with Pinia initialized. The JS cleanup block handles state reset,
             // so we can skip the expensive navigation + Pinia polling.
-            if (_browser.FrozenReady)
+            if (Browser.FrozenReady)
             {
                 Timings.RecordSkip("NavigateToApp");
                 Timings.RecordSkip("WaitForPinia");
             }
             else
             {
-                await Timings.TimeAsync("NavigateToApp", () => _browser.NavigateToAppAsync());
-                await Timings.TimeAsync("WaitForPinia", () => _browser.WaitForPiniaAsync());
+                await Timings.TimeAsync("NavigateToApp", Browser.NavigateToAppAsync);
+                await Timings.TimeAsync("WaitForPinia", () => Browser.WaitForPiniaAsync());
             }
 
             // Generate BattleScribe XML from spec data
@@ -120,7 +118,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             var catNames = catalogues.Select(c => c.Name).ToArray();
 
             // Single consolidated EvaluateAsync: setup
-            var setupResult = await Timings.TimeAsync("SetupJsEval", () => _browser.Page.EvaluateAsync<string?>("""
+            var setupResult = await Timings.TimeAsync("SetupJsEval", () => Browser.Page.EvaluateAsync<string?>("""
                 async ([gstXml, catFiles, systemId, catNames, rosterName]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
@@ -231,15 +229,21 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                     _rosterName }));
 
             if (setupResult != null)
+            {
                 errors.Add(setupResult);
+            }
 
             // Mark frozen mode as ready to skip navigation on subsequent setups
-            if (setupResult == null && _browser.IsFrozen)
-                _browser.FrozenReady = true;
+            if (setupResult == null && Browser.IsFrozen)
+            {
+                Browser.FrozenReady = true;
+            }
 
             // In visual mode, navigate to the roster editor so the UI shows the roster
             if (setupResult == null && Visual)
+            {
                 await NavigateToEditorVisualAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -260,13 +264,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         var errors = new List<string>();
         try
         {
-            await _browser.NavigateToAppAsync();
-            await _browser.WaitForPiniaAsync();
+            await Browser.NavigateToAppAsync();
+            await Browser.WaitForPiniaAsync();
 
             // Build files array for loadSystemFromFs
             var fileData = files.Select(f => new { name = f.FileName, path = $"/spec/{f.FileName}", data = f.Content }).ToArray();
 
-            var setupResult = await _browser.Page.EvaluateAsync<string?>("""
+            var setupResult = await Browser.Page.EvaluateAsync<string?>("""
                 async ([fileData, rosterName]) => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
@@ -366,11 +370,15 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 """, new object[] { fileData, _rosterName });
 
             if (setupResult != null)
+            {
                 errors.Add(setupResult);
+            }
 
             // In visual mode, navigate to the roster editor so the UI shows the roster
             if (setupResult == null && Visual)
+            {
                 await NavigateToEditorVisualAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -382,11 +390,11 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public ActionOutputs AddForce(string forceEntryId, string catalogueId)
     {
-        var forceId = NewRecruitActions.AddForceByIdAsync(_browser.Page, forceEntryId, catalogueId)
+        var forceId = NewRecruitActions.AddForceByIdAsync(Browser.Page, forceEntryId, catalogueId)
             .GetAwaiter().GetResult();
         // Collect auto-selected entries (from min constraints)
         var selections = forceId is not null
-            ? NewRecruitActions.GetForceAutoSelectionsAsync(_browser.Page, forceId)
+            ? NewRecruitActions.GetForceAutoSelectionsAsync(Browser.Page, forceId)
                 .GetAwaiter().GetResult()
             : null;
         return new ActionOutputs { ForceId = forceId, Selections = selections };
@@ -394,66 +402,66 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
     {
-        var forceId = NewRecruitActions.AddChildForceByIdAsync(_browser.Page, parentForceId, forceEntryId, catalogueId)
+        var forceId = NewRecruitActions.AddChildForceByIdAsync(Browser.Page, parentForceId, forceEntryId, catalogueId)
             .GetAwaiter().GetResult();
         return new ActionOutputs { ForceId = forceId };
     }
 
     public void RemoveForce(string forceId)
     {
-        NewRecruitActions.RemoveForceAsync(_browser.Page, forceId)
+        NewRecruitActions.RemoveForceAsync(Browser.Page, forceId)
             .GetAwaiter().GetResult();
     }
 
     public ActionOutputs SelectEntry(string forceId, string entryId)
     {
-        var selectionId = NewRecruitActions.SelectEntryByIdAsync(_browser.Page, forceId, entryId)
+        var selectionId = NewRecruitActions.SelectEntryByIdAsync(Browser.Page, forceId, entryId)
             .GetAwaiter().GetResult();
         return new ActionOutputs { SelectionId = selectionId };
     }
 
     public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
     {
-        var selectionId = NewRecruitActions.SelectChildEntryByIdAsync(_browser.Page, forceId, parentSelectionId, entryId)
+        var selectionId = NewRecruitActions.SelectChildEntryByIdAsync(Browser.Page, forceId, parentSelectionId, entryId)
             .GetAwaiter().GetResult();
         return new ActionOutputs { SelectionId = selectionId };
     }
 
     public void DeselectSelection(string forceId, string selectionId)
     {
-        NewRecruitActions.DeselectSelectionAsync(_browser.Page, forceId, selectionId)
+        NewRecruitActions.DeselectSelectionAsync(Browser.Page, forceId, selectionId)
             .GetAwaiter().GetResult();
     }
 
     public void SetSelectionCount(string forceId, string selectionId, int count)
     {
-        NewRecruitActions.SetSelectionCountAsync(_browser.Page, forceId, selectionId, count)
+        NewRecruitActions.SetSelectionCountAsync(Browser.Page, forceId, selectionId, count)
             .GetAwaiter().GetResult();
     }
 
     public ActionOutputs DuplicateSelection(string forceId, string selectionId)
     {
-        var newSelectionId = NewRecruitActions.DuplicateSelectionAsync(_browser.Page, forceId, selectionId)
+        var newSelectionId = NewRecruitActions.DuplicateSelectionAsync(Browser.Page, forceId, selectionId)
             .GetAwaiter().GetResult();
         return new ActionOutputs { SelectionId = newSelectionId };
     }
 
     public ActionOutputs DuplicateForce(string forceId)
     {
-        var newForceId = NewRecruitActions.DuplicateForceAsync(_browser.Page, forceId)
+        var newForceId = NewRecruitActions.DuplicateForceAsync(Browser.Page, forceId)
             .GetAwaiter().GetResult();
         return new ActionOutputs { ForceId = newForceId };
     }
 
     public void SetCostLimit(string costTypeId, double value)
     {
-        NewRecruitActions.SetCostLimitAsync(_browser.Page, costTypeId, value)
+        NewRecruitActions.SetCostLimitAsync(Browser.Page, costTypeId, value)
             .GetAwaiter().GetResult();
     }
 
     public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
     {
-        NewRecruitActions.SetCustomizationAsync(_browser.Page, forceId, selectionId, categoryEntryId, customName, customNotes)
+        NewRecruitActions.SetCustomizationAsync(Browser.Page, forceId, selectionId, categoryEntryId, customName, customNotes)
             .GetAwaiter().GetResult();
     }
 
@@ -462,7 +470,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         Timings.StartPhase("GetRosterState");
         try
         {
-            return NewRecruitStateReader.ReadRosterStateAsync(_browser.Page)
+            return NewRecruitStateReader.ReadRosterStateAsync(Browser.Page)
                 .GetAwaiter().GetResult();
         }
         finally
@@ -477,10 +485,12 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// </summary>
     private async Task NavigateToEditorVisualAsync()
     {
-        var listKey = await _browser.Page.EvaluateAsync<string?>(
+        var listKey = await Browser.Page.EvaluateAsync<string?>(
             "window.__bsspec?.row?.list_key");
         if (listKey != null)
-            await _browser.NavigateToEditorAsync(listKey);
+        {
+            await Browser.NavigateToEditorAsync(listKey);
+        }
     }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
@@ -497,9 +507,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     {
         try
         {
-            await _browser.WaitForPiniaAsync();
+            await Browser.WaitForPiniaAsync();
 
-            var cleanupError = await _browser.Page.EvaluateAsync<string?>("""
+            var cleanupError = await Browser.Page.EvaluateAsync<string?>("""
                 async () => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
@@ -532,7 +542,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 """);
 
             if (cleanupError != null)
+            {
                 Console.Error.WriteLine($"[NewRecruitRosterEngine] {cleanupError}");
+            }
         }
         catch (Exception ex)
         {
@@ -546,7 +558,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         {
             try
             {
-                _browser.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                Browser.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
             finally
             {

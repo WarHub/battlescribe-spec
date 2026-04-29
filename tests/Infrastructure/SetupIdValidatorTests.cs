@@ -1,7 +1,4 @@
-using BattleScribeSpec;
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 [Trait("Category", "Unit")]
 public sealed class SetupIdValidatorTests

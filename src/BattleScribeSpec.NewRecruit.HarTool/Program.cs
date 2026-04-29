@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using BattleScribeSpec.NewRecruit;
 
 var baseUrl = "https://newrecruit.eu";

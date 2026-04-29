@@ -1,13 +1,11 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace BattleScribeSpec.Protocol;
 
-/// <summary>
-/// JSON-line protocol message types for BattleScribe conformance testing.
-/// The runner sends commands to the adapter via stdin, and receives responses via stdout.
-/// Each message is a single JSON object on one line (NDJSON format).
-/// </summary>
+// JSON-line protocol message types for BattleScribe conformance testing.
+// The runner sends commands to the adapter via stdin, and receives responses via stdout.
+// Each message is a single JSON object on one line (NDJSON format).
 
 // ===== Base types =====
 

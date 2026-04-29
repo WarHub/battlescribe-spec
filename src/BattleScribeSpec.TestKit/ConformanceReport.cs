@@ -1,4 +1,4 @@
-namespace BattleScribeSpec;
+﻿namespace BattleScribeSpec;
 
 public record ConformanceReport(
     string Engine,

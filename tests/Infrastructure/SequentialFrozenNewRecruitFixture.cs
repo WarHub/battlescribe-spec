@@ -1,5 +1,4 @@
-using BattleScribeSpec.NewRecruit;
-using Xunit;
+﻿using BattleScribeSpec.NewRecruit;
 
 namespace BattleScribeSpec.Tests;
 
@@ -18,14 +17,20 @@ public sealed class SequentialFrozenNewRecruitFixture : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         if (Environment.GetEnvironmentVariable("NR_SEQUENTIAL") is not "true")
+        {
             return;
+        }
 
         if (Environment.GetEnvironmentVariable("NR_FROZEN_SKIP") == "true")
+        {
             return;
+        }
 
         HarFilePath = HarRecorder.FindFrozenHarFile();
         if (HarFilePath is null)
+        {
             return;
+        }
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";

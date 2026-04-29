@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec.Tests;
 
@@ -63,8 +62,10 @@ public class ConstraintStructureTests
         var constraint = new ConstraintCore
         {
             Id = "test",
-            Type = ConstraintKind.Minimum, Value = 0,
-            Scope = "force", Field = "selections",
+            Type = ConstraintKind.Minimum,
+            Value = 0,
+            Scope = "force",
+            Field = "selections",
         }.ToNode();
         Assert.Equal(0m, constraint.Value);
         Assert.Equal(ConstraintKind.Minimum, constraint.Type);
@@ -76,8 +77,10 @@ public class ConstraintStructureTests
         var constraint = new ConstraintCore
         {
             Id = "test",
-            Type = ConstraintKind.Maximum, Value = -1,
-            Scope = "force", Field = "selections",
+            Type = ConstraintKind.Maximum,
+            Value = -1,
+            Scope = "force",
+            Field = "selections",
         }.ToNode();
         Assert.Equal(-1m, constraint.Value);
         Assert.Equal(ConstraintKind.Maximum, constraint.Type);
@@ -121,8 +124,10 @@ public class ConstraintStructureTests
             var constraint = new ConstraintCore
             {
                 Id = "test",
-                Type = ConstraintKind.Maximum, Value = 5,
-                Scope = scope, Field = "selections",
+                Type = ConstraintKind.Maximum,
+                Value = 5,
+                Scope = scope,
+                Field = "selections",
             }.ToNode();
             Assert.Equal(scope, constraint.Scope);
         }

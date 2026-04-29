@@ -1,5 +1,4 @@
-using BattleScribeSpec.NewRecruit;
-using Xunit;
+﻿using BattleScribeSpec.NewRecruit;
 
 namespace BattleScribeSpec.Tests;
 
@@ -16,11 +15,15 @@ public sealed class FrozenNewRecruitFixture : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         if (Environment.GetEnvironmentVariable("NR_FROZEN_SKIP") == "true")
+        {
             return;
+        }
 
         var harFile = HarRecorder.FindFrozenHarFile();
         if (harFile is null)
+        {
             return;
+        }
 
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
@@ -28,7 +31,9 @@ public sealed class FrozenNewRecruitFixture : IAsyncLifetime
 
         var concurrency = 5;
         if (int.TryParse(Environment.GetEnvironmentVariable("NR_PARALLEL"), out var envConcurrency) && envConcurrency > 0)
+        {
             concurrency = envConcurrency;
+        }
 
         EnginePool = await NewRecruitEnginePool.CreateFrozenAsync(harFile, concurrency, headless: headless, visual: visual, slowMo: slowMo);
     }
@@ -36,7 +41,10 @@ public sealed class FrozenNewRecruitFixture : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         if (EnginePool is not null)
+        {
             await EnginePool.DisposeAsync();
+        }
+
         EnginePool = null;
     }
 }

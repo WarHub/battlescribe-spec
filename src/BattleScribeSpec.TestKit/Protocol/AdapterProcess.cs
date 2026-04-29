@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace BattleScribeSpec.Protocol;
@@ -50,7 +50,9 @@ public sealed class AdapterProcess : IDisposable
         process.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
+            {
                 stderrLines.Enqueue(e.Data);
+            }
         };
         process.BeginErrorReadLine();
 
@@ -65,8 +67,10 @@ public sealed class AdapterProcess : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         if (_process.HasExited)
+        {
             throw new InvalidOperationException(
                 $"Adapter process has exited with code {_process.ExitCode}. Stderr tail: {GetStderrTail()}");
+        }
 
         await _stdin.WriteLineAsync(jsonLine.AsMemory(), ct);
 
@@ -89,7 +93,11 @@ public sealed class AdapterProcess : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
 
         try
@@ -98,7 +106,9 @@ public sealed class AdapterProcess : IDisposable
             {
                 _stdin.Close();
                 if (!_process.WaitForExit(5000))
+                {
                     _process.Kill();
+                }
             }
             _process.CancelErrorRead();
         }
@@ -115,7 +125,9 @@ public sealed class AdapterProcess : IDisposable
     private string GetStderrTail(int maxLines = 10)
     {
         if (_stderrLines.IsEmpty)
+        {
             return "<empty>";
+        }
 
         var lines = _stderrLines.ToArray();
         var tail = lines.Skip(Math.Max(0, lines.Length - maxLines));

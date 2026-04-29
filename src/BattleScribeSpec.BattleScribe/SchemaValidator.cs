@@ -1,5 +1,4 @@
-using System.Xml;
-using System.Xml.Linq;
+﻿using System.Xml;
 using System.Xml.Schema;
 
 namespace BattleScribeSpec;
@@ -24,7 +23,10 @@ public static class SchemaValidator
         while (dir is not null)
         {
             if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
+            {
                 return dir;
+            }
+
             dir = Path.GetDirectoryName(dir);
         }
         return null;
@@ -35,8 +37,10 @@ public static class SchemaValidator
         var schemaSet = new XmlSchemaSet();
         var catalogueXsd = Path.Combine(SchemaDirectory, "Catalogue.xsd");
         if (!File.Exists(catalogueXsd))
+        {
             throw new FileNotFoundException(
                 $"BattleScribe schema file not found: {catalogueXsd}. Set {nameof(SchemaDirectory)} before validation.");
+        }
 
         schemaSet.Add(null, catalogueXsd);
         schemaSet.Compile();
@@ -58,7 +62,8 @@ public static class SchemaValidator
         settings.ValidationEventHandler += (_, e) => errors.Add(e.Message);
 
         using var reader = XmlReader.Create(new StringReader(xml), settings);
-        while (reader.Read()) { }
+        while (reader.Read())
+        { }
         return errors;
     }
 

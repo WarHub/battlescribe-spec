@@ -1,6 +1,4 @@
-using BattleScribeSpec;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 [Trait("Category", "Unit")]
 public sealed class DataSourceResolverTests
@@ -29,8 +27,8 @@ public sealed class DataSourceResolverTests
 
         var resolver = new DataSourceResolver();
 
-        Assert.Equal(gstPath, resolver.FindGameSystem(tempDir.Path, "warHAMMER"));
-        Assert.Equal(catPath, resolver.FindCatalogue(tempDir.Path, "MARINES"));
+        Assert.Equal(gstPath, DataSourceResolver.FindGameSystem(tempDir.Path, "warHAMMER"));
+        Assert.Equal(catPath, DataSourceResolver.FindCatalogue(tempDir.Path, "MARINES"));
     }
 
     [Fact]
@@ -65,7 +63,9 @@ public sealed class DataSourceResolverTests
         public void Dispose()
         {
             if (Directory.Exists(Path))
+            {
                 Directory.Delete(Path, recursive: true);
+            }
         }
     }
 }

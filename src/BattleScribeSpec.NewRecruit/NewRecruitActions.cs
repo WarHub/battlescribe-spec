@@ -1,4 +1,4 @@
-using Microsoft.Playwright;
+﻿using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
 
@@ -24,8 +24,11 @@ public static class NewRecruitActions
     /// </summary>
     internal static string? HandleCreateResult(string? result)
     {
-        if (result?.StartsWith(ErrorPrefix) == true)
+        if (result?.StartsWith(ErrorPrefix, StringComparison.Ordinal) == true)
+        {
             throw new InvalidOperationException(result[ErrorPrefix.Length..]);
+        }
+
         return result;
     }
 
@@ -92,7 +95,11 @@ public static class NewRecruitActions
                 }
             }
             """, forceUid);
-        if (json is null) return null;
+        if (json is null)
+        {
+            return null;
+        }
+
         HandleCreateResult(json);
         return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
     }
@@ -163,7 +170,10 @@ public static class NewRecruitActions
                 }
             }
             """, forceUid);
-        if (error != null) throw new InvalidOperationException(error);
+        if (error != null)
+        {
+            throw new InvalidOperationException(error);
+        }
     }
 
     /// <summary>
@@ -330,7 +340,10 @@ public static class NewRecruitActions
                 }
             }
             """, new { forceUid, selectionUid });
-        if (error != null) throw new InvalidOperationException(error);
+        if (error != null)
+        {
+            throw new InvalidOperationException(error);
+        }
     }
 
     /// <summary>
@@ -366,7 +379,10 @@ public static class NewRecruitActions
                 }
             }
             """, new { forceUid, selectionUid, count });
-        if (error != null) throw new InvalidOperationException(error);
+        if (error != null)
+        {
+            throw new InvalidOperationException(error);
+        }
     }
 
     /// <summary>
@@ -477,7 +493,10 @@ public static class NewRecruitActions
                 }
             }
             """, new { costTypeId, value });
-        if (error != null) throw new InvalidOperationException(error);
+        if (error != null)
+        {
+            throw new InvalidOperationException(error);
+        }
     }
 
     public static async Task SetCustomizationAsync(IPage page, string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
@@ -525,6 +544,9 @@ public static class NewRecruitActions
                 }
             }
             """, new { forceId, selectionId, categoryEntryId, customName, customNotes });
-        if (error != null) throw new InvalidOperationException(error);
+        if (error != null)
+        {
+            throw new InvalidOperationException(error);
+        }
     }
 }

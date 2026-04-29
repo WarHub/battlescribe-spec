@@ -1,6 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Protocol;
-using Xunit;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Tests;
 
@@ -16,7 +14,7 @@ public class ConstraintBattleScribeTests
                 Name = "Test Game System",
                 ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Patrol" }],
             },
-            [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs", SelectionEntries = [..entries] }]);
+            [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs", SelectionEntries = [.. entries] }]);
     }
 
     private static (ProtocolGameSystem gs, ProtocolCatalogue[] cats) MakeCategorisedScenario(ProtocolSelectionEntry[] entries)
@@ -46,7 +44,7 @@ public class ConstraintBattleScribeTests
                 ],
                 CategoryEntries = [new ProtocolCategoryEntry { Id = categoryId, Name = "Troops" }],
             },
-            [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs", SelectionEntries = [..entries] }]);
+            [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "test-gs", SelectionEntries = [.. entries] }]);
     }
 
     [Fact]
@@ -129,8 +127,10 @@ public class ConstraintBattleScribeTests
         engine.SetupFromProtocol(gs, cats);
         engine.AddForceByIndex(0);
 
-        for (int i = 0; i < 5; i++)
+        for (var i = 0; i < 5; i++)
+        {
             engine.SelectFirstAvailableEntry();
+        }
 
         var errors = engine.GetValidationErrors();
         Assert.False(engine.HasValidationErrors());

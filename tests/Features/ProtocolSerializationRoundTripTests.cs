@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Tests;
 
@@ -95,7 +94,7 @@ public class ProtocolSerializationRoundTripTests
         {
             SpecId = spec.Id,
             GameSystem = gameSystem,
-            Catalogues = catalogues.ToList(),
+            Catalogues = [.. catalogues],
         };
 
         var json = ProtocolSerializer.SerializeCommand(command);
@@ -114,7 +113,10 @@ public class ProtocolSerializationRoundTripTests
             ?? throw new InvalidOperationException("Could not find specs directory");
         var path = Path.Combine(specsDir, specId + ".yaml");
         if (!File.Exists(path))
+        {
             throw new FileNotFoundException($"Spec not found: {path}");
+        }
+
         return path;
     }
 }

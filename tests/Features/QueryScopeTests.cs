@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec.Tests;
 
@@ -22,8 +21,10 @@ public class QueryScopeStructureTests
     {
         var condition = new ConditionCore
         {
-            Type = ConditionKind.AtLeast, Value = 1,
-            Field = "selections", Scope = scope,
+            Type = ConditionKind.AtLeast,
+            Value = 1,
+            Field = "selections",
+            Scope = scope,
         }.ToNode();
         Assert.Equal(scope, condition.Scope);
     }
@@ -37,8 +38,10 @@ public class QueryScopeStructureTests
     {
         var condition = new ConditionCore
         {
-            Type = ConditionKind.EqualTo, Value = 1,
-            Field = field, Scope = "force",
+            Type = ConditionKind.EqualTo,
+            Value = 1,
+            Field = field,
+            Scope = "force",
         }.ToNode();
         Assert.Equal(field, condition.Field);
     }
@@ -51,8 +54,11 @@ public class QueryScopeStructureTests
     {
         var condition = new ConditionCore
         {
-            Type = ConditionKind.AtLeast, Value = 1,
-            Field = "selections", Scope = "force", ChildId = childId,
+            Type = ConditionKind.AtLeast,
+            Value = 1,
+            Field = "selections",
+            Scope = "force",
+            ChildId = childId,
         }.ToNode();
         Assert.Equal(childId, condition.ChildId);
     }
@@ -62,8 +68,10 @@ public class QueryScopeStructureTests
     {
         var condition = new ConditionCore
         {
-            Type = ConditionKind.AtLeast, Value = 1,
-            Field = "selections", Scope = "force",
+            Type = ConditionKind.AtLeast,
+            Value = 1,
+            Field = "selections",
+            Scope = "force",
             IncludeChildSelections = true,
         }.ToNode();
         Assert.True(condition.IncludeChildSelections);
@@ -74,8 +82,10 @@ public class QueryScopeStructureTests
     {
         var condition = new ConditionCore
         {
-            Type = ConditionKind.AtLeast, Value = 1,
-            Field = "selections", Scope = "roster",
+            Type = ConditionKind.AtLeast,
+            Value = 1,
+            Field = "selections",
+            Scope = "roster",
             IncludeChildForces = true,
         }.ToNode();
         Assert.True(condition.IncludeChildForces);
@@ -86,8 +96,10 @@ public class QueryScopeStructureTests
     {
         var condition = new ConditionCore
         {
-            Type = ConditionKind.AtMost, Value = 50,
-            Field = "pts", Scope = "roster",
+            Type = ConditionKind.AtMost,
+            Value = 50,
+            Field = "pts",
+            Scope = "roster",
             IsValuePercentage = true,
         }.ToNode();
         Assert.True(condition.IsValuePercentage);
@@ -99,8 +111,10 @@ public class QueryScopeStructureTests
     {
         var condition = new ConditionCore
         {
-            Type = ConditionKind.AtLeast, Value = 1,
-            Field = "selections", Scope = "force",
+            Type = ConditionKind.AtLeast,
+            Value = 1,
+            Field = "selections",
+            Scope = "force",
             Shared = true,
         }.ToNode();
         Assert.True(condition.Shared);
@@ -112,8 +126,10 @@ public class QueryScopeStructureTests
         var constraint = new ConstraintCore
         {
             Id = "test",
-            Type = ConstraintKind.Maximum, Value = 3,
-            Scope = "force", Field = "selections",
+            Type = ConstraintKind.Maximum,
+            Value = 3,
+            Scope = "force",
+            Field = "selections",
             IncludeChildSelections = false,
         }.ToNode();
 

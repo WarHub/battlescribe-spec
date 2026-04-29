@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec.Tests;
 
@@ -36,7 +35,7 @@ public class CostCalculationTests
 
         Assert.Equal(10m, model.Costs[0].Value);
 
-        for (int n = 5; n <= 10; n++)
+        for (var n = 5; n <= 10; n++)
         {
             var expectedCost = n * 10m;
             Assert.Equal(expectedCost, n * model.Costs[0].Value);

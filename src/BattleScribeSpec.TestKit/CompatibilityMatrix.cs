@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -16,7 +16,9 @@ public static class CompatibilityMatrix
     public static string GenerateMarkdown(params ConformanceReport[] reports)
     {
         if (reports.Length == 0)
+        {
             return "# Engine Compatibility Matrix\n\nGenerated: n/a\n";
+        }
 
         var engines = reports.Select(r => r.Engine).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var categories = reports
@@ -65,11 +67,17 @@ public static class CompatibilityMatrix
         sb.AppendLine();
         sb.Append("| Category |");
         foreach (var engine in engines)
+        {
             sb.Append($" {engine} |");
+        }
+
         sb.AppendLine();
         sb.Append("|----------|");
         foreach (var _ in engines)
+        {
             sb.Append(":----------:|");
+        }
+
         sb.AppendLine();
 
         foreach (var category in categories)
@@ -94,9 +102,13 @@ public static class CompatibilityMatrix
         {
             var totals = engineTotals[engine];
             if (totals.Total == 0)
+            {
                 sb.Append(" **—** |");
+            }
             else
+            {
                 sb.Append($" **{totals.Passed}/{totals.Total} ({(double)totals.Passed / totals.Total * 100:0}%)** |");
+            }
         }
         sb.AppendLine();
         sb.AppendLine();
@@ -122,9 +134,15 @@ public static class CompatibilityMatrix
     private static string GetEmoji(double passRate)
     {
         if (passRate >= 100.0)
+        {
             return "✅";
+        }
+
         if (passRate >= 75.0)
+        {
             return "🟡";
+        }
+
         return "🔴";
     }
 }

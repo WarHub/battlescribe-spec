@@ -1,4 +1,4 @@
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec;
 
@@ -72,21 +72,33 @@ public static class SpecValidator
                 var hasExpectedState = step.ExpectedState is not null;
 
                 if (hasAction && hasExpectedState)
+                {
                     errors.Add($"{stepLabel}: step has both 'action' and 'expectedState' — must have exactly one");
+                }
                 else if (!hasAction && !hasExpectedState)
+                {
                     errors.Add($"{stepLabel}: step has neither 'action' nor 'expectedState' — must have exactly one");
+                }
                 else if (hasAction)
+                {
                     ValidateActionStep(step, stepLabel, errors);
+                }
                 else
+                {
                     ValidateAssertionStep(step, stepLabel, errors);
+                }
             }
         }
 
         if (spec.Tags?.Contains(InvalidDataTag) != true)
+        {
             ValidateSetupCrossReferences(spec, errors);
+        }
 
         if (errors.Count > 0)
+        {
             throw new SpecValidationException(spec.Id, errors);
+        }
     }
 
     private static void ValidateActionStep(StepDef step, string stepLabel, List<string> errors)
@@ -103,7 +115,9 @@ public static class SpecValidator
         foreach (var required in paramDef.Required)
         {
             if (GetFieldValue(step, required) is null)
+            {
                 errors.Add($"{stepLabel}: action '{action}' requires '{required}'");
+            }
         }
 
         // Check for unexpected parameters.
@@ -111,12 +125,18 @@ public static class SpecValidator
         allowedFields.UnionWith(paramDef.Optional);
         allowedFields.Add("id"); // id is always allowed (step output reference)
 
-        foreach (var (fieldName, value) in GetSetFields(step))
+
+        foreach (var (fieldName, _) in GetSetFields(step))
         {
             if (fieldName is "action" or "expectedState")
+            {
                 continue;
+            }
+
             if (!allowedFields.Contains(fieldName))
+            {
                 errors.Add($"{stepLabel}: action '{action}' does not accept '{fieldName}'");
+            }
         }
     }
 
@@ -126,9 +146,14 @@ public static class SpecValidator
         foreach (var (fieldName, _) in GetSetFields(step))
         {
             if (fieldName is "id" or "expectedState")
+            {
                 continue;
+            }
+
             if (ActionOnlyFields.Contains(fieldName))
+            {
                 errors.Add($"{stepLabel}: assertion step has action-only field '{fieldName}'");
+            }
         }
 
         // Validate mutually-exclusive expectedState fields.
@@ -153,11 +178,19 @@ public static class SpecValidator
         var hasErrorCount = es.ErrorCount is not null;
 
         if (hasErrors && hasErrorsContain)
+        {
             errors.Add($"{stepLabel}: 'errors' and 'errorsContain' are mutually exclusive");
+        }
+
         if (hasErrors && hasErrorCount)
+        {
             errors.Add($"{stepLabel}: 'errors' and 'errorCount' are mutually exclusive");
+        }
+
         if (hasErrorsContain && hasErrorCount)
+        {
             errors.Add($"{stepLabel}: 'errorsContain' and 'errorCount' are mutually exclusive");
+        }
     }
 
     /// <summary>
@@ -165,18 +198,65 @@ public static class SpecValidator
     /// </summary>
     private static IEnumerable<(string FieldName, object Value)> GetSetFields(StepDef step)
     {
-        if (step.ForceEntryId is not null) yield return ("forceEntryId", step.ForceEntryId);
-        if (step.EntryId is not null) yield return ("entryId", step.EntryId);
-        if (step.CatalogueId is not null) yield return ("catalogueId", step.CatalogueId);
-        if (step.ForceId is not null) yield return ("forceId", step.ForceId);
-        if (step.SelectionId is not null) yield return ("selectionId", step.SelectionId);
-        if (step.CostTypeId is not null) yield return ("costTypeId", step.CostTypeId);
-        if (step.Count is not null) yield return ("count", step.Count);
-        if (step.Value is not null) yield return ("value", step.Value);
-        if (step.CustomName is not null) yield return ("customName", step.CustomName);
-        if (step.CustomNotes is not null) yield return ("customNotes", step.CustomNotes);
-        if (step.CategoryEntryId is not null) yield return ("categoryEntryId", step.CategoryEntryId);
-        if (step.Path is not null) yield return ("path", step.Path);
+        if (step.ForceEntryId is not null)
+        {
+            yield return ("forceEntryId", step.ForceEntryId);
+        }
+
+        if (step.EntryId is not null)
+        {
+            yield return ("entryId", step.EntryId);
+        }
+
+        if (step.CatalogueId is not null)
+        {
+            yield return ("catalogueId", step.CatalogueId);
+        }
+
+        if (step.ForceId is not null)
+        {
+            yield return ("forceId", step.ForceId);
+        }
+
+        if (step.SelectionId is not null)
+        {
+            yield return ("selectionId", step.SelectionId);
+        }
+
+        if (step.CostTypeId is not null)
+        {
+            yield return ("costTypeId", step.CostTypeId);
+        }
+
+        if (step.Count is not null)
+        {
+            yield return ("count", step.Count);
+        }
+
+        if (step.Value is not null)
+        {
+            yield return ("value", step.Value);
+        }
+
+        if (step.CustomName is not null)
+        {
+            yield return ("customName", step.CustomName);
+        }
+
+        if (step.CustomNotes is not null)
+        {
+            yield return ("customNotes", step.CustomNotes);
+        }
+
+        if (step.CategoryEntryId is not null)
+        {
+            yield return ("categoryEntryId", step.CategoryEntryId);
+        }
+
+        if (step.Path is not null)
+        {
+            yield return ("path", step.Path);
+        }
     }
 
     private static object? GetFieldValue(StepDef step, string fieldName) => fieldName switch
@@ -207,15 +287,22 @@ public static class SpecValidator
         if (gs is null)
         {
             if (setup.DataSource is not { Length: > 0 })
+            {
                 errors.Add("Setup requires either 'gameSystem' or 'dataSource' to be defined.");
+            }
+
             return;
         }
 
         // Collect all declared cost type IDs (from game system and catalogues).
         var costTypeIds = new HashSet<string>();
         if (gs.CostTypes is not null)
+        {
             foreach (var ct in gs.CostTypes)
+            {
                 costTypeIds.Add(ct.Id);
+            }
+        }
 
         if (setup.Catalogues is not null)
         {
@@ -223,11 +310,17 @@ public static class SpecValidator
             {
                 // Catalogue gameSystemId must match the game system.
                 if (!string.IsNullOrEmpty(cat.GameSystemId) && cat.GameSystemId != gs.Id)
+                {
                     errors.Add($"Catalogue '{cat.Id}' has gameSystemId '{cat.GameSystemId}' but gameSystem id is '{gs.Id}'");
+                }
 
                 if (cat.CostTypes is not null)
+                {
                     foreach (var ct in cat.CostTypes)
+                    {
                         costTypeIds.Add(ct.Id);
+                    }
+                }
             }
         }
 
@@ -256,7 +349,11 @@ public static class SpecValidator
         string parentPath,
         List<string> errors)
     {
-        if (entries is null) return;
+        if (entries is null)
+        {
+            return;
+        }
+
         foreach (var entry in entries)
         {
             var entryPath = $"{parentPath}/entry '{entry.Id}'";
@@ -265,7 +362,9 @@ public static class SpecValidator
                 foreach (var cost in entry.Costs)
                 {
                     if (!string.IsNullOrEmpty(cost.TypeId) && !costTypeIds.Contains(cost.TypeId))
+                    {
                         errors.Add($"{entryPath}: cost typeId '{cost.TypeId}' not found in declared costTypes");
+                    }
                 }
             }
             // Recurse into children.
@@ -280,7 +379,11 @@ public static class SpecValidator
         string parentPath,
         List<string> errors)
     {
-        if (groups is null) return;
+        if (groups is null)
+        {
+            return;
+        }
+
         foreach (var group in groups)
         {
             var groupPath = $"{parentPath}/group '{group.Id}'";
@@ -289,7 +392,9 @@ public static class SpecValidator
                 foreach (var cost in group.Costs)
                 {
                     if (!string.IsNullOrEmpty(cost.TypeId) && !costTypeIds.Contains(cost.TypeId))
+                    {
                         errors.Add($"{groupPath}: cost typeId '{cost.TypeId}' not found in declared costTypes");
+                    }
                 }
             }
             ValidateCostTypeRefs(group.SelectionEntries, costTypeIds, groupPath, errors);
@@ -302,7 +407,11 @@ public static class SpecValidator
         string parentPath,
         List<string> errors)
     {
-        if (groups is null) return;
+        if (groups is null)
+        {
+            return;
+        }
+
         foreach (var group in groups)
         {
             var groupPath = $"{parentPath}/group '{group.Id}'";
@@ -311,13 +420,25 @@ public static class SpecValidator
                 // defaultSelectionEntryId must reference a direct child entry or entry link.
                 var childIds = new HashSet<string>();
                 if (group.SelectionEntries is not null)
+                {
                     foreach (var se in group.SelectionEntries)
+                    {
                         childIds.Add(se.Id);
+                    }
+                }
+
                 if (group.EntryLinks is not null)
+                {
                     foreach (var el in group.EntryLinks)
+                    {
                         childIds.Add(el.Id);
+                    }
+                }
+
                 if (!childIds.Contains(defaultId))
+                {
                     errors.Add($"{groupPath}: defaultSelectionEntryId '{defaultId}' not found in group's children");
+                }
             }
             // Recurse into nested groups.
             ValidateEntryGroupDefaultRefs(group.SelectionEntryGroups, groupPath, errors);

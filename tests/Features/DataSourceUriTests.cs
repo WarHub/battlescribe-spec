@@ -1,6 +1,4 @@
-using BattleScribeSpec;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 [Trait("Category", "Unit")]
 public class DataSourceUriTests

@@ -1,5 +1,4 @@
-using System.Text.Json.Serialization;
-using BattleScribeSpec;
+﻿using System.Text.Json.Serialization;
 
 namespace BattleScribeSpec.Runner;
 

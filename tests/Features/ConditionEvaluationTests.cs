@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec.Tests;
 
@@ -63,22 +62,28 @@ public class ConditionStructureTests
         // Test conditions with different scope values using Core records
         var rosterScope = new ConditionCore
         {
-            Type = ConditionKind.EqualTo, Value = 1,
-            Field = "selections", Scope = "roster"
+            Type = ConditionKind.EqualTo,
+            Value = 1,
+            Field = "selections",
+            Scope = "roster"
         }.ToNode();
         Assert.Equal("roster", rosterScope.Scope);
 
         var selfScope = new ConditionCore
         {
-            Type = ConditionKind.EqualTo, Value = 1,
-            Field = "selections", Scope = "self"
+            Type = ConditionKind.EqualTo,
+            Value = 1,
+            Field = "selections",
+            Scope = "self"
         }.ToNode();
         Assert.Equal("self", selfScope.Scope);
 
         var parentScope = new ConditionCore
         {
-            Type = ConditionKind.EqualTo, Value = 1,
-            Field = "selections", Scope = "parent"
+            Type = ConditionKind.EqualTo,
+            Value = 1,
+            Field = "selections",
+            Scope = "parent"
         }.ToNode();
         Assert.Equal("parent", parentScope.Scope);
     }

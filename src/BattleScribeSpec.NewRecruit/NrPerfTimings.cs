@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace BattleScribeSpec.NewRecruit;
@@ -30,7 +30,7 @@ public sealed class NrPerfTimings
         _sw.Stop();
         if (_currentPhase is not null)
         {
-            var list = _timings.GetOrAdd(_currentPhase, _ => new List<double>());
+            var list = _timings.GetOrAdd(_currentPhase, _ => []);
             lock (list)
             {
                 list.Add(_sw.Elapsed.TotalMilliseconds);
@@ -45,7 +45,8 @@ public sealed class NrPerfTimings
     public void Time(string phase, Action action)
     {
         StartPhase(phase);
-        try { action(); }
+        try
+        { action(); }
         finally { EndPhase(); }
     }
 
@@ -55,7 +56,8 @@ public sealed class NrPerfTimings
     public async Task TimeAsync(string phase, Func<Task> action)
     {
         StartPhase(phase);
-        try { await action(); }
+        try
+        { await action(); }
         finally { EndPhase(); }
     }
 
@@ -65,7 +67,8 @@ public sealed class NrPerfTimings
     public async Task<T> TimeAsync<T>(string phase, Func<Task<T>> func)
     {
         StartPhase(phase);
-        try { return await func(); }
+        try
+        { return await func(); }
         finally { EndPhase(); }
     }
 
@@ -75,7 +78,7 @@ public sealed class NrPerfTimings
     /// </summary>
     public void RecordSkip(string phase)
     {
-        var list = _timings.GetOrAdd(phase + " [skipped]", _ => new List<double>());
+        var list = _timings.GetOrAdd(phase + " [skipped]", _ => []);
         lock (list)
         {
             list.Add(0);
@@ -95,7 +98,11 @@ public sealed class NrPerfTimings
             {
                 snapshot = [.. durations];
             }
-            if (snapshot.Count == 0) continue;
+            if (snapshot.Count == 0)
+            {
+                continue;
+            }
+
             var avg = snapshot.Average();
             var total = snapshot.Sum();
             var min = snapshot.Min();

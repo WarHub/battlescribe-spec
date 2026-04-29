@@ -1,4 +1,4 @@
-using WarHub.ArmouryModel.Source;
+﻿using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
 
 namespace BattleScribeSpec;
@@ -30,10 +30,15 @@ public class DataLoader
 
         var gamesystemFiles = Directory.GetFiles(directory, "*.gst");
         if (gamesystemFiles.Length > 1)
+        {
             throw new InvalidOperationException(
                 $"Expected at most one .gst file in '{directory}', found {gamesystemFiles.Length}: {string.Join(", ", gamesystemFiles.Select(Path.GetFileName))}");
+        }
+
         if (gamesystemFiles.Length == 1)
+        {
             gamesystem = LoadFile(gamesystemFiles[0]);
+        }
 
         foreach (var file in Directory.GetFiles(directory, "*.cat"))
         {
@@ -62,10 +67,14 @@ public class DataLoader
             memStream.Position = 0;
             var roundTripped = DataVersionManagement.DeserializeAuto(memStream, MigrationMode.None);
             if (roundTripped == null)
+            {
                 return (false, "Failed to deserialize round-tripped XML");
+            }
 
             if (!HasEquivalentCoreData(original, roundTripped, out var mismatch))
+            {
                 return (false, mismatch);
+            }
 
             return (true, null);
         }

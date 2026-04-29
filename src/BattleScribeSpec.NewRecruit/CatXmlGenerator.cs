@@ -1,5 +1,4 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
 using static WarHub.ArmouryModel.Source.NodeFactory;
@@ -33,7 +32,9 @@ public static class CatXmlGenerator
     public static IReadOnlyList<(string FileName, string Xml)> GenerateAllCatalogueXml(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         if (catalogues.Length == 0)
+        {
             throw new ArgumentException("At least one catalogue is required.", nameof(catalogues));
+        }
 
         var gamesystem = MapGameSystem(gameSystem);
         var result = new List<(string, string)>();
@@ -50,46 +51,74 @@ public static class CatXmlGenerator
         var node = Gamesystem(name: gameSystem.Name, id: gameSystem.Id);
 
         if (gameSystem.CostTypes is { } costTypes)
+        {
             node = node.AddCostTypes(costTypes.Select(MapCostType));
+        }
 
         if (gameSystem.ForceEntries is { } forceEntries)
+        {
             node = node.AddForceEntries(forceEntries.Select(MapForceEntry));
+        }
 
         if (gameSystem.CategoryEntries is { } categoryEntries)
+        {
             node = node.AddCategoryEntries(categoryEntries.Select(MapCategoryEntry));
+        }
 
         if (gameSystem.ProfileTypes is { } profileTypes)
+        {
             node = node.AddProfileTypes(profileTypes.Select(MapProfileType));
+        }
 
         if (gameSystem.Publications is { } publications)
+        {
             node = node.AddPublications(publications.Select(MapPublication));
+        }
 
         if (gameSystem.SelectionEntries is { } selectionEntries)
+        {
             node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
+        }
 
         if (gameSystem.EntryLinks is { } entryLinks)
+        {
             node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
+        }
 
         if (gameSystem.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (gameSystem.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         if (gameSystem.SharedSelectionEntries is { } sharedSelectionEntries)
+        {
             node = node.AddSharedSelectionEntries(sharedSelectionEntries.Select(MapSelectionEntry));
+        }
 
         if (gameSystem.SharedSelectionEntryGroups is { } sharedSelectionEntryGroups)
+        {
             node = node.AddSharedSelectionEntryGroups(sharedSelectionEntryGroups.Select(MapSelectionEntryGroup));
+        }
 
         if (gameSystem.SharedRules is { } sharedRules)
+        {
             node = node.AddSharedRules(sharedRules.Select(MapRule));
+        }
 
         if (gameSystem.SharedProfiles is { } sharedProfiles)
+        {
             node = node.AddSharedProfiles(sharedProfiles.Select(MapProfile));
+        }
 
         if (gameSystem.SharedInfoGroups is { } sharedInfoGroups)
+        {
             node = node.AddSharedInfoGroups(sharedInfoGroups.Select(MapInfoGroup));
+        }
 
         return node;
     }
@@ -99,49 +128,79 @@ public static class CatXmlGenerator
         var node = Catalogue(gamesystem: gamesystem, name: catalogue.Name, id: catalogue.Id);
 
         if (catalogue.SelectionEntries is { } selectionEntries)
+        {
             node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
+        }
 
         if (catalogue.EntryLinks is { } entryLinks)
+        {
             node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
+        }
 
         if (catalogue.SharedSelectionEntries is { } sharedSelectionEntries)
+        {
             node = node.AddSharedSelectionEntries(sharedSelectionEntries.Select(MapSelectionEntry));
+        }
 
         if (catalogue.SharedSelectionEntryGroups is { } sharedSelectionEntryGroups)
+        {
             node = node.AddSharedSelectionEntryGroups(sharedSelectionEntryGroups.Select(MapSelectionEntryGroup));
+        }
 
         if (catalogue.SharedRules is { } sharedRules)
+        {
             node = node.AddSharedRules(sharedRules.Select(MapRule));
+        }
 
         if (catalogue.SharedProfiles is { } sharedProfiles)
+        {
             node = node.AddSharedProfiles(sharedProfiles.Select(MapProfile));
+        }
 
         if (catalogue.SharedInfoGroups is { } sharedInfoGroups)
+        {
             node = node.AddSharedInfoGroups(sharedInfoGroups.Select(MapInfoGroup));
+        }
 
         if (catalogue.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (catalogue.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         if (catalogue.CatalogueLinks is { } catalogueLinks)
+        {
             node = node.AddCatalogueLinks(catalogueLinks.Select(MapCatalogueLink));
+        }
 
         if (catalogue.Publications is { } publications)
+        {
             node = node.AddPublications(publications.Select(MapPublication));
+        }
 
         if (catalogue.CostTypes is { } costTypes)
+        {
             node = node.AddCostTypes(costTypes.Select(MapCostType));
+        }
 
         if (catalogue.ProfileTypes is { } profileTypes)
+        {
             node = node.AddProfileTypes(profileTypes.Select(MapProfileType));
+        }
 
         if (catalogue.CategoryEntries is { } categoryEntries)
+        {
             node = node.AddCategoryEntries(categoryEntries.Select(MapCategoryEntry));
+        }
 
         if (catalogue.ForceEntries is { } forceEntries)
+        {
             node = node.AddForceEntries(forceEntries.Select(MapForceEntry));
+        }
 
         return node;
     }
@@ -167,31 +226,49 @@ public static class CatXmlGenerator
             hidden: spec.Hidden);
 
         if (spec.Constraints is { } constraints)
+        {
             node = node.AddConstraints(constraints.Select(MapConstraint));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         if (spec.CategoryLinks is { } categoryLinks)
+        {
             node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
+        }
 
         if (spec.ForceEntries is { } forceEntries)
+        {
             node = node.AddForceEntries(forceEntries.Select(MapForceEntry));
+        }
 
         if (spec.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (spec.Profiles is { } profiles)
+        {
             node = node.AddProfiles(profiles.Select(MapProfile));
+        }
 
         if (spec.InfoGroups is { } infoGroups)
+        {
             node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
+        }
 
         if (spec.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         return node;
     }
@@ -209,25 +286,39 @@ public static class CatXmlGenerator
             hidden: spec.Hidden);
 
         if (spec.Constraints is { } constraints)
+        {
             node = node.AddConstraints(constraints.Select(MapConstraint));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         if (spec.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (spec.Profiles is { } profiles)
+        {
             node = node.AddProfiles(profiles.Select(MapProfile));
+        }
 
         if (spec.InfoGroups is { } infoGroups)
+        {
             node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
+        }
 
         if (spec.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         return node;
     }
@@ -236,7 +327,9 @@ public static class CatXmlGenerator
     {
         var node = ProfileType(comment: null, id: spec.Id, name: spec.Name);
         if (spec.CharacteristicTypes is { } characteristicTypes)
+        {
             node = node.AddCharacteristicTypes(characteristicTypes.Select(MapCharacteristicType));
+        }
 
         return node;
     }
@@ -260,40 +353,64 @@ public static class CatXmlGenerator
             type: MapSelectionEntryKind(spec.Type));
 
         if (spec.Costs is { } costs)
+        {
             node = node.AddCosts(costs.Select(MapCost));
+        }
 
         if (spec.Constraints is { } constraints)
+        {
             node = node.AddConstraints(constraints.Select(MapConstraint));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         if (spec.SelectionEntries is { } selectionEntries)
+        {
             node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
+        }
 
         if (spec.SelectionEntryGroups is { } selectionEntryGroups)
+        {
             node = node.AddSelectionEntryGroups(selectionEntryGroups.Select(MapSelectionEntryGroup));
+        }
 
         if (spec.CategoryLinks is { } categoryLinks)
+        {
             node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
+        }
 
         if (spec.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (spec.Profiles is { } profiles)
+        {
             node = node.AddProfiles(profiles.Select(MapProfile));
+        }
 
         if (spec.InfoGroups is { } infoGroups)
+        {
             node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
+        }
 
         if (spec.EntryLinks is { } entryLinks)
+        {
             node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
+        }
 
         if (spec.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         return node;
     }
@@ -317,37 +434,59 @@ public static class CatXmlGenerator
             defaultSelectionEntryId: defaultSelectionEntryId);
 
         if (spec.Constraints is { } constraints)
+        {
             node = node.AddConstraints(constraints.Select(MapConstraint));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         if (spec.SelectionEntries is { } selectionEntries)
+        {
             node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
+        }
 
         if (spec.SelectionEntryGroups is { } selectionEntryGroups)
+        {
             node = node.AddSelectionEntryGroups(selectionEntryGroups.Select(MapSelectionEntryGroup));
+        }
 
         if (spec.EntryLinks is { } entryLinks)
+        {
             node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
+        }
 
         if (spec.CategoryLinks is { } categoryLinks)
+        {
             node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
+        }
 
         if (spec.Profiles is { } profiles)
+        {
             node = node.AddProfiles(profiles.Select(MapProfile));
+        }
 
         if (spec.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (spec.InfoGroups is { } infoGroups)
+        {
             node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
+        }
 
         if (spec.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         return node;
     }
@@ -369,40 +508,64 @@ public static class CatXmlGenerator
             type: MapEntryLinkKind(spec.Type));
 
         if (spec.Costs is { } costs)
+        {
             node = node.AddCosts(costs.Select(MapCost));
+        }
 
         if (spec.Constraints is { } constraints)
+        {
             node = node.AddConstraints(constraints.Select(MapConstraint));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         if (spec.CategoryLinks is { } categoryLinks)
+        {
             node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
+        }
 
         if (spec.SelectionEntries is { } selectionEntries)
+        {
             node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));
+        }
 
         if (spec.SelectionEntryGroups is { } selectionEntryGroups)
+        {
             node = node.AddSelectionEntryGroups(selectionEntryGroups.Select(MapSelectionEntryGroup));
+        }
 
         if (spec.EntryLinks is { } entryLinks)
+        {
             node = node.AddEntryLinks(entryLinks.Select(MapEntryLink));
+        }
 
         if (spec.Profiles is { } profiles)
+        {
             node = node.AddProfiles(profiles.Select(MapProfile));
+        }
 
         if (spec.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (spec.InfoGroups is { } infoGroups)
+        {
             node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
+        }
 
         if (spec.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         return node;
     }
@@ -425,13 +588,19 @@ public static class CatXmlGenerator
         var node = Modifier(comment: null, type: MapModifierKind(spec.Type), field: spec.Field, value: spec.Value);
 
         if (spec.Conditions is { } conditions)
+        {
             node = node.AddConditions(conditions.Select(MapCondition));
+        }
 
         if (spec.ConditionGroups is { } conditionGroups)
+        {
             node = node.AddConditionGroups(conditionGroups.Select(MapConditionGroup));
+        }
 
         if (spec.Repeats is { } repeats)
+        {
             node = node.AddRepeats(repeats.Select(MapRepeat));
+        }
 
         return node;
     }
@@ -441,19 +610,29 @@ public static class CatXmlGenerator
         var node = ModifierGroup();
 
         if (spec.Conditions is { } conditions)
+        {
             node = node.AddConditions(conditions.Select(MapCondition));
+        }
 
         if (spec.ConditionGroups is { } conditionGroups)
+        {
             node = node.AddConditionGroups(conditionGroups.Select(MapConditionGroup));
+        }
 
         if (spec.Repeats is { } repeats)
+        {
             node = node.AddRepeats(repeats.Select(MapRepeat));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         return node;
     }
@@ -479,10 +658,14 @@ public static class CatXmlGenerator
         var node = ConditionGroup(type: MapConditionGroupKind(spec.Type));
 
         if (spec.Conditions is { } conditions)
+        {
             node = node.AddConditions(conditions.Select(MapCondition));
+        }
 
         if (spec.ConditionGroups is { } conditionGroups)
+        {
             node = node.AddConditionGroups(conditionGroups.Select(MapConditionGroup));
+        }
 
         return node;
     }
@@ -519,25 +702,39 @@ public static class CatXmlGenerator
             primary: spec.Primary);
 
         if (spec.Constraints is { } constraints)
+        {
             node = node.AddConstraints(constraints.Select(MapConstraint));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         if (spec.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (spec.Profiles is { } profiles)
+        {
             node = node.AddProfiles(profiles.Select(MapProfile));
+        }
 
         if (spec.InfoGroups is { } infoGroups)
+        {
             node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
+        }
 
         if (spec.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         return node;
     }
@@ -556,10 +753,14 @@ public static class CatXmlGenerator
             description: spec.Description);
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         return node;
     }
@@ -579,13 +780,19 @@ public static class CatXmlGenerator
             typeName: spec.TypeName);
 
         if (spec.Characteristics is { } characteristics)
+        {
             node = node.AddCharacteristics(characteristics.Select(MapCharacteristic));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         return node;
     }
@@ -606,22 +813,34 @@ public static class CatXmlGenerator
             hidden: spec.Hidden);
 
         if (spec.Profiles is { } profiles)
+        {
             node = node.AddProfiles(profiles.Select(MapProfile));
+        }
 
         if (spec.Rules is { } rules)
+        {
             node = node.AddRules(rules.Select(MapRule));
+        }
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         if (spec.InfoLinks is { } infoLinks)
+        {
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
+        }
 
         if (spec.InfoGroups is { } infoGroups)
+        {
             node = node.AddInfoGroups(infoGroups.Select(MapInfoGroup));
+        }
 
         return node;
     }
@@ -666,10 +885,14 @@ public static class CatXmlGenerator
             type: MapInfoLinkKind(spec.Type));
 
         if (spec.Modifiers is { } modifiers)
+        {
             node = node.AddModifiers(modifiers.Select(MapModifier));
+        }
 
         if (spec.ModifierGroups is { } modifierGroups)
+        {
             node = node.AddModifierGroups(modifierGroups.Select(MapModifierGroup));
+        }
 
         return node;
     }

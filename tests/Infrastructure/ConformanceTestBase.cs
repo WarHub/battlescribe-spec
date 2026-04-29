@@ -1,6 +1,4 @@
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared base class for running declarative YAML spec files against any IRosterEngine.
@@ -31,16 +29,20 @@ public abstract class ConformanceTestBase
     {
         var specsDir = SpecLoader.FindSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
+        {
             return [];
+        }
 
-        return SpecLoader.DiscoverSpecs(specsDir).Select(s =>
+        return [.. SpecLoader.DiscoverSpecs(specsDir).Select(s =>
         {
             var row = new TheoryDataRow<string, string>(s.Path, $"{s.Category}/{s.Id}");
             try
             {
                 var spec = SpecLoader.Load(s.Path);
                 if (spec.Tags is { Count: > 0 })
+                {
                     row.Traits.Add("Tag", [.. spec.Tags]);
+                }
             }
             catch
             {
@@ -48,7 +50,7 @@ public abstract class ConformanceTestBase
                 // so execution reports the load error normally.
             }
             return row;
-        }).ToArray();
+        })];
     }
 
     /// <summary>
@@ -59,10 +61,11 @@ public abstract class ConformanceTestBase
     {
         var specsDir = SpecLoader.FindSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
+        {
             return [];
-        return SpecLoader.DiscoverSpecs(specsDir)
-            .Select(s => (s.Path, Name: $"{s.Category}/{s.Id}"))
-            .ToList();
+        }
+
+        return [.. SpecLoader.DiscoverSpecs(specsDir).Select(s => (s.Path, Name: $"{s.Category}/{s.Id}"))];
     }
 
     protected void RunSpec(string specPath, string specName)
@@ -80,7 +83,9 @@ public abstract class ConformanceTestBase
 
         var engine = GetEngine();
         if (engine is null)
+        {
             return;
+        }
 
         var runner = new SpecRunner(engine, new DataSourceResolver(), EngineName);
         var result = runner.Run(spec);
@@ -95,7 +100,10 @@ public abstract class ConformanceTestBase
         {
             _output.WriteLine($"{LogPrefix}[EXPECTED FAILURE] Spec '{specName}' failed as expected on {EngineName}:");
             foreach (var (f, i) in result.Failures.Select((f, i) => (f, i)))
+            {
                 _output.WriteLine($"  [{i + 1}] {f}");
+            }
+
             return;
         }
 

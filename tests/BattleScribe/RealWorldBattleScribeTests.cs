@@ -1,7 +1,4 @@
-using BattleScribeSpec;
-using Xunit;
-
-namespace BattleScribeSpec.Tests;
+﻿namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// engine tests against real wh40k-9e data.
@@ -28,7 +25,9 @@ public class RealWorldBattleScribeTests(ITestOutputHelper output)
 
         output.WriteLine($"Init errors: {errors.Count}");
         foreach (var e in errors.Take(5))
+        {
             output.WriteLine($"  - {e}");
+        }
 
         var forceEntries = engine.GetAvailableForceEntryNames();
         output.WriteLine($"Force entries: {string.Join(", ", forceEntries)}");
@@ -64,7 +63,9 @@ public class RealWorldBattleScribeTests(ITestOutputHelper output)
         var valErrors = engine.GetValidationErrors();
         output.WriteLine($"Validation errors: {valErrors.Count}");
         foreach (var e in valErrors.Take(10))
+        {
             output.WriteLine($"  - {e}");
+        }
     }
 
     [Fact]
@@ -95,7 +96,9 @@ public class RealWorldBattleScribeTests(ITestOutputHelper output)
 
         output.WriteLine($"Loaded {loaded}/{catFiles.Length} catalogues");
         foreach (var f in failed)
+        {
             output.WriteLine($"  FAILED: {f}");
+        }
 
         Assert.True(loaded > 0, "Should load at least some catalogues");
         Assert.Empty(failed);
@@ -125,7 +128,7 @@ public class RealWorldBattleScribeTests(ITestOutputHelper output)
 
         // Both should have same force entry names
         Assert.Equal(whamForceNames.Count, javaForceNames.Count);
-        for (int i = 0; i < whamForceNames.Count; i++)
+        for (var i = 0; i < whamForceNames.Count; i++)
         {
             Assert.Equal(whamForceNames[i], javaForceNames[i]);
         }

@@ -1,6 +1,4 @@
-using System.Collections.Concurrent;
-using BattleScribeSpec.NewRecruit;
-using Xunit;
+﻿using System.Collections.Concurrent;
 
 namespace BattleScribeSpec.Tests;
 

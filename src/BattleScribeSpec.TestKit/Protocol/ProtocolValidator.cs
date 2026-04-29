@@ -1,4 +1,4 @@
-namespace BattleScribeSpec.Protocol;
+﻿namespace BattleScribeSpec.Protocol;
 
 /// <summary>
 /// Protocol-level validation and resolution for action parameters.
@@ -20,8 +20,11 @@ public static class ProtocolValidator
         if (!string.IsNullOrEmpty(catalogueId))
         {
             if (setupCatalogueIds.Count > 0 && !setupCatalogueIds.Contains(catalogueId))
+            {
                 throw new InvalidOperationException(
                     $"catalogueId '{catalogueId}' not found in setup catalogues: [{string.Join(", ", setupCatalogueIds)}]");
+            }
+
             return catalogueId;
         }
 
