@@ -205,7 +205,11 @@ public static class SpecValidator
         var setup = spec.Setup;
         var gs = setup.GameSystem;
         if (gs is null)
+        {
+            if (setup.DataSource is not { Length: > 0 })
+                errors.Add("Setup requires either 'gameSystem' or 'dataSource' to be defined.");
             return;
+        }
 
         // Collect all declared cost type IDs (from game system and catalogues).
         var costTypeIds = new HashSet<string>();

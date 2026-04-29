@@ -91,8 +91,9 @@ if (!string.IsNullOrEmpty(matrixDir))
 // Parse --tags into a TagFilter
 var tagFilter = TagFilter.Parse(tagsExpr);
 
-// Parse --filter into patterns (comma-separated, OR logic)
-var filterPatterns = filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+// Parse --filter into patterns (comma-separated, OR logic); treat empty as no filter
+var filterPatterns = filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    is { Length: > 0 } patterns ? patterns : null;
 
 if (string.IsNullOrEmpty(adapter))
 {
