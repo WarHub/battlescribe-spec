@@ -7,9 +7,15 @@ setup:
   gameSystem:
     id: test-gs
     name: Test Game System
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
     forceEntries:
       - id: fe-patrol
         name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: ce-troops
   catalogues:
     - id: cat-1
       name: Test Catalogue
@@ -18,10 +24,18 @@ setup:
         - id: se-visible
           name: Visible Unit
           type: unit
+          categoryLinks:
+            - id: cl-vis-troops
+              targetId: ce-troops
+              primary: true
         - id: se-hidden
           name: Hidden Unit
           type: unit
           hidden: true
+          categoryLinks:
+            - id: cl-hid-troops
+              targetId: ce-troops
+              primary: true
           constraints:
             - id: con-min
               type: min
@@ -59,6 +73,9 @@ steps:
             - name: Hidden Unit
               hidden: true
             - name: Visible Unit
+      errors:
+        - on: selection se-hidden
+          from: se-hidden/hidden
       engines:
         # NR only has the manually-selected Visible Unit
         newrecruit:
@@ -66,3 +83,4 @@ steps:
             - selectionCount: 1
               selections:
                 - name: Visible Unit
+          errors: []

@@ -1,6 +1,13 @@
 id: modifier-order-set-then-append
 category: modifier
-description: Modifier order matters — set name then append produces combined result
+tags: [newrecruit-bug]
+description: >
+  Modifier application order matters — same modifiers in different
+  order produce different results. Forward: set overwrites base,
+  appends build on it. Reverse: appends on base are overwritten by
+  final set.
+  NR bug: processes modifiers by type priority (set before append)
+  instead of respecting list order.
 
 setup:
   gameSystem:
@@ -14,16 +21,32 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
-          name: Alpha
+        - id: se-forward
+          name: Original
           type: unit
           modifiers:
             - type: set
+              field: name
+              value: Alpha
+            - type: append
               field: name
               value: Beta
             - type: append
               field: name
               value: Gamma
+        - id: se-reverse
+          name: Original
+          type: unit
+          modifiers:
+            - type: append
+              field: name
+              value: Gamma
+            - type: append
+              field: name
+              value: Beta
+            - type: set
+              field: name
+              value: Alpha
 
 steps:
   - action: addForce
@@ -32,9 +55,24 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-1
-  # Modifiers applied in order: set name="Beta", then append " Gamma" → "Beta Gamma"
+    entryId: se-forward
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-reverse
+
+  # Forward: set "Alpha" → append "Beta" → "Alpha Beta" → append "Gamma" → "Alpha Beta Gamma"
+  # Reverse: append "Gamma" → "Original Gamma" → append "Beta" → "Original Gamma Beta" → set "Alpha"
   - expectedState:
       forces:
         - selections:
-            - name: "Beta Gamma"
+            - name: Alpha
+            - name: Alpha Beta Gamma
+      engines:
+        # NR bug: sorts modifiers by type (set before append) ignoring list order.
+        # Reverse entry: set "Alpha" runs first, then appends in list order → "Alpha Gamma Beta"
+        newrecruit:
+          forces:
+            - selections:
+                - name: Alpha Beta Gamma
+                - name: Alpha Gamma Beta

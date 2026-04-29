@@ -1,10 +1,11 @@
 id: modifier-set-hidden-no-category
 category: modifier
-tags: [battlescribe-bug]
+tags: [design-difference]
 description: >
   A hidden selection without categoryLinks gets no validation error in BattleScribe.
   The hidden error generator only runs inside category validation (f.java L444),
   so selections not assigned to any category are never checked.
+  NR checks hidden independently of categories and produces an error.
   See docs/hidden-validation-analysis.md for decompiled source analysis.
 
 setup:
