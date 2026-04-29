@@ -11,14 +11,16 @@ namespace BattleScribeSpec.Protocol;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     WriteIndented = false)]
-// Commands
+// Commands (polymorphic base + concrete types)
+[JsonSerializable(typeof(ProtocolCommand))]
 [JsonSerializable(typeof(SetupCommand))]
 [JsonSerializable(typeof(SetupFromFilesCommand))]
 [JsonSerializable(typeof(ActionCommand))]
 [JsonSerializable(typeof(GetStateCommand))]
 [JsonSerializable(typeof(GetErrorsCommand))]
 [JsonSerializable(typeof(TeardownCommand))]
-// Responses
+// Responses (polymorphic base + concrete types)
+[JsonSerializable(typeof(ProtocolResponse))]
 [JsonSerializable(typeof(SetupResult))]
 [JsonSerializable(typeof(ActionResult))]
 [JsonSerializable(typeof(StateResponse))]

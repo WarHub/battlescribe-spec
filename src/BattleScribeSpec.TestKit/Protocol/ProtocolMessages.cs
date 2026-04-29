@@ -14,15 +14,29 @@ namespace BattleScribeSpec.Protocol;
 /// <summary>
 /// Base for all protocol messages. The "type" field discriminates message kinds.
 /// </summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(SetupCommand), "setup")]
+[JsonDerivedType(typeof(SetupFromFilesCommand), "setupFromFiles")]
+[JsonDerivedType(typeof(ActionCommand), "action")]
+[JsonDerivedType(typeof(GetStateCommand), "getState")]
+[JsonDerivedType(typeof(GetErrorsCommand), "getErrors")]
+[JsonDerivedType(typeof(TeardownCommand), "teardown")]
 public abstract class ProtocolCommand
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public abstract string Type { get; }
 }
 
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(SetupResult), "setupResult")]
+[JsonDerivedType(typeof(ActionResult), "actionResult")]
+[JsonDerivedType(typeof(StateResponse), "state")]
+[JsonDerivedType(typeof(ErrorsResponse), "errors")]
+[JsonDerivedType(typeof(TeardownResult), "teardownResult")]
+[JsonDerivedType(typeof(ProtocolError), "error")]
 public abstract class ProtocolResponse
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public abstract string Type { get; }
 }
 
@@ -33,7 +47,7 @@ public abstract class ProtocolResponse
 /// </summary>
 public sealed class SetupCommand : ProtocolCommand
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "setup";
 
     public string Version { get; set; } = "1.0";
@@ -51,7 +65,7 @@ public sealed class SetupCommand : ProtocolCommand
 /// </summary>
 public sealed class SetupFromFilesCommand : ProtocolCommand
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "setupFromFiles";
 
     public string? SpecId { get; set; }
@@ -76,7 +90,7 @@ public sealed class ProtocolDataFile
 /// </summary>
 public sealed class ActionCommand : ProtocolCommand
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "action";
 
     public string Action { get; set; } = "";
@@ -106,19 +120,19 @@ public sealed class ActionCommand : ProtocolCommand
 
 public sealed class GetStateCommand : ProtocolCommand
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "getState";
 }
 
 public sealed class GetErrorsCommand : ProtocolCommand
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "getErrors";
 }
 
 public sealed class TeardownCommand : ProtocolCommand
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "teardown";
 }
 
@@ -126,7 +140,7 @@ public sealed class TeardownCommand : ProtocolCommand
 
 public sealed class SetupResult : ProtocolResponse
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "setupResult";
 
     public List<string> Errors { get; set; } = [];
@@ -134,7 +148,7 @@ public sealed class SetupResult : ProtocolResponse
 
 public sealed class ActionResult : ProtocolResponse
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "actionResult";
 
     public bool Ok { get; set; }
@@ -146,7 +160,7 @@ public sealed class ActionResult : ProtocolResponse
 
 public sealed class StateResponse : ProtocolResponse
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "state";
 
     public string Name { get; set; } = "";
@@ -166,7 +180,7 @@ public sealed class StateResponse : ProtocolResponse
 
 public sealed class ErrorsResponse : ProtocolResponse
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "errors";
 
     public List<ValidationErrorState> Errors { get; set; } = [];
@@ -174,7 +188,7 @@ public sealed class ErrorsResponse : ProtocolResponse
 
 public sealed class TeardownResult : ProtocolResponse
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "teardownResult";
 }
 
@@ -183,7 +197,7 @@ public sealed class TeardownResult : ProtocolResponse
 /// </summary>
 public sealed class ProtocolError : ProtocolResponse
 {
-    [JsonPropertyName("type")]
+    [JsonIgnore]
     public override string Type => "error";
 
     public string Message { get; set; } = "";
@@ -757,7 +771,7 @@ public sealed class ProtocolPublication
 /// <summary>
 /// Shared JSON serialization for the protocol.
 /// Uses source-generated <see cref="ProtocolJsonContext"/> for reflection-free serialization
-/// and manual type dispatch since the "type" discriminator is a semantic property.
+/// with STJ polymorphic type discriminators for command/response routing.
 /// </summary>
 public static class ProtocolSerializer
 {
@@ -767,63 +781,15 @@ public static class ProtocolSerializer
     /// </summary>
     public static JsonSerializerOptions Options => ProtocolJsonContext.Default.Options;
 
-    public static string SerializeCommand(ProtocolCommand command) => command switch
-    {
-        SetupCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.SetupCommand),
-        SetupFromFilesCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.SetupFromFilesCommand),
-        ActionCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.ActionCommand),
-        GetStateCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.GetStateCommand),
-        GetErrorsCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.GetErrorsCommand),
-        TeardownCommand c => JsonSerializer.Serialize(c, ProtocolJsonContext.Default.TeardownCommand),
-        _ => throw new JsonException($"Unknown command type: '{command.Type}'"),
-    };
+    public static string SerializeCommand(ProtocolCommand command)
+        => JsonSerializer.Serialize(command, ProtocolJsonContext.Default.ProtocolCommand);
 
-    public static string SerializeResponse(ProtocolResponse response) => response switch
-    {
-        SetupResult r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.SetupResult),
-        ActionResult r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.ActionResult),
-        StateResponse r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.StateResponse),
-        ErrorsResponse r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.ErrorsResponse),
-        TeardownResult r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.TeardownResult),
-        ProtocolError r => JsonSerializer.Serialize(r, ProtocolJsonContext.Default.ProtocolError),
-        _ => throw new JsonException($"Unknown response type: '{response.Type}'"),
-    };
+    public static string SerializeResponse(ProtocolResponse response)
+        => JsonSerializer.Serialize(response, ProtocolJsonContext.Default.ProtocolResponse);
 
     public static ProtocolResponse? DeserializeResponse(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("type", out var typeProp))
-            throw new JsonException("Protocol response missing required 'type' field");
-        var type = typeProp.GetString()
-            ?? throw new JsonException("Protocol response 'type' field is null");
-        return type switch
-        {
-            "setupResult" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.SetupResult),
-            "actionResult" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ActionResult),
-            "state" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.StateResponse),
-            "errors" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ErrorsResponse),
-            "teardownResult" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.TeardownResult),
-            "error" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ProtocolError),
-            _ => throw new JsonException($"Unknown response type: '{type}'"),
-        };
-    }
+        => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ProtocolResponse);
 
     public static ProtocolCommand? DeserializeCommand(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("type", out var typeProp))
-            throw new JsonException("Protocol command missing required 'type' field");
-        var type = typeProp.GetString()
-            ?? throw new JsonException("Protocol command 'type' field is null");
-        return type switch
-        {
-            "setup" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.SetupCommand),
-            "setupFromFiles" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.SetupFromFilesCommand),
-            "action" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ActionCommand),
-            "getState" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.GetStateCommand),
-            "getErrors" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.GetErrorsCommand),
-            "teardown" => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.TeardownCommand),
-            _ => throw new JsonException($"Unknown command type: '{type}'"),
-        };
-    }
+        => JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.ProtocolCommand);
 }
