@@ -206,7 +206,7 @@ public static class SpecValidator
         var gs = setup.GameSystem;
         if (gs is null)
         {
-            if (setup.DataSource is null)
+            if (setup.DataSource is not { Length: > 0 })
                 errors.Add("Setup requires either 'gameSystem' or 'dataSource' to be defined.");
             return;
         }
