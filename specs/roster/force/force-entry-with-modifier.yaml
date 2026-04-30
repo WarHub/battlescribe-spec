@@ -8,6 +8,10 @@ setup:
   gameSystem:
     id: test-gs
     name: Test Game System
+    sharedSelectionEntries:
+      - id: se-blocker
+        name: Blocker Unit
+        type: unit
     forceEntries:
       - id: fe-patrol
         name: Patrol
@@ -23,15 +27,18 @@ setup:
                 field: selections
                 scope: roster
                 childId: se-blocker
+                shared: true
 
   catalogues:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: test-gs
-      selectionEntries:
-        - id: se-blocker
+      entryLinks:
+        - id: el-blocker
           name: Blocker Unit
-          type: unit
+          targetId: se-blocker
+          type: selectionEntry
+      selectionEntries:
         - id: se-unit
           name: Unit A
           type: unit
@@ -54,7 +61,7 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-patrol.forceId }}
-    entryId: se-blocker
+    entryId: el-blocker
 
   # After selecting blocker: Special Detachment becomes hidden
   - expectedState:
