@@ -1,4 +1,5 @@
-﻿using BattleScribeSpec.Protocol;
+﻿using BattleScribeSpec.GameData;
+using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 using YamlDotNet.Serialization;
 
@@ -10,7 +11,7 @@ namespace BattleScribeSpec;
 /// The rest of this partial class is generated at build time by the YamlDotNet source generator.
 /// </summary>
 [YamlStaticContext]
-// Spec file model types
+// Roster spec file model types
 [YamlSerializable(typeof(SpecFile))]
 [YamlSerializable(typeof(SetupDef))]
 [YamlSerializable(typeof(GameSystemDef))]
@@ -26,6 +27,11 @@ namespace BattleScribeSpec;
 [YamlSerializable(typeof(ExpectedRuleDef))]
 [YamlSerializable(typeof(ExpectedCategoryDef))]
 [YamlSerializable(typeof(ExpectedPublicationDef))]
+// GameData spec file model types
+[YamlSerializable(typeof(GameDataSpecFile))]
+[YamlSerializable(typeof(GameDataSetupDef))]
+[YamlSerializable(typeof(GameDataStepDef))]
+[YamlSerializable(typeof(GameDataExpectedStateDef))]
 // Protocol setup data types (used in YAML setup section)
 [YamlSerializable(typeof(ProtocolGameSystem))]
 [YamlSerializable(typeof(ProtocolCatalogue))]
