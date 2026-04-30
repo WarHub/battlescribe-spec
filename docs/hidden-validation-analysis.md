@@ -136,6 +136,54 @@ This appears to be an oversight in the engine — the hidden-error-generation
 pattern is consistently applied to categories, selections, and child selections,
 but not to forces.
 
+## Validation Trigger Analysis
+
+The main validation method `v()` is not called after every engine mutation. Some
+Java engine methods internally invoke `v()` at the end; others do not. When `v()`
+is missing, validation errors (including hidden/constraint violations) remain stale
+until the next operation that happens to call `v()`.
+
+### Which Operations Trigger v()
+
+Determined empirically via probe testing (adding entries with known constraint
+violations and checking whether errors appear immediately):
+
+| Java method | Adapter operation | Triggers v() | Notes |
+|---|---|---|---|
+| `b(gs, cat, linked, forceEntry, favs, errors)` | `AddForce` (selectRootForce) | ❌ | Creates force only; no validation |
+| `x()` | `SelectDefaultRootEntries` | ❌ | Auto-selects min≥1 entries; no validation |
+| `b(parent, entry)` | `SelectEntry` | ✅ | Internally validates after select |
+| `m(selection)` | `DeselectEntry` | ✅ | Internally validates after deselect |
+| `a(parent, entry, count)` | `SetNumSelections` | ❌ | Sets selection number; no validation |
+| `k(selection)` | `DuplicateSelection` | ✅ | Internally validates after duplicate |
+| `g(force)` | `RemoveForce` | ✅ | Internally validates after removal |
+| `a(costType, value)` | `SetCostLimit` | ✅ | Internally validates (cost limit errors update) |
+| `b(parentForce, gs, cat, linked, childEntry, favs, errors)` | `CreateChildForce` | ❌ | Creates child force; no validation |
+
+### Adapter Compensation: Explicit Validate() Calls
+
+The adapter's `Validate()` method invokes `v()` via reflection to compensate for
+operations that don't trigger it internally. It is called after:
+
+1. **`SelectDefaultRootEntries()`** (in `AddForce`) — auto-selected entries may
+   trigger hidden constraints (e.g., hidden entry with min≥1 is force-created,
+   must immediately produce a hidden error).
+2. **`SetNumSelections()`** — changing selection count can affect cost totals,
+   which may trigger cost limit validation errors.
+3. **`CreateChildForce()`** — adding a child force changes the roster structure,
+   which may affect force-level constraints.
+
+### Why Not Call Validate() After Every Operation?
+
+- **Performance**: `v()` walks the entire roster tree. Calling it redundantly after
+  operations that already trigger it internally would double the validation work.
+- **Correctness**: Operations that trigger `v()` internally already produce correct
+  errors. Adding a redundant `Validate()` call would not change behavior but would
+  slow down the adapter.
+- **CreateChildForce**: Does not trigger `v()`, but newly created child forces are
+  empty (no selections = no constraint violations). Validation will naturally occur
+  on the next mutation (selectEntry, etc.).
+
 ## NewRecruit Behavior
 
 ### Live UI Investigation (Playwright, 2025-04)
@@ -204,8 +252,16 @@ the spec adapters do not currently synthesize hidden-force errors.
 
 ### BattleScribe adapter
 
-the BattleScribe engine adapter reads modifier-applied hidden state by calling the engine's
-internal modifier-application method:
+The BattleScribe engine adapter compensates for engine gaps in two ways:
+
+**1. Explicit validation calls** — See "Validation Trigger Analysis" above.
+The adapter calls `Validate()` (which reflectively invokes `v()`) after engine
+operations that don't trigger validation internally:
+- After `SelectDefaultRootEntries()` in `AddForce`
+- After `SetNumSelections()`
+
+**2. Hidden state reads** — The adapter reads modifier-applied hidden state by
+calling the engine's internal modifier-application method:
 
 ```csharp
 // Creates a COPY of the entry with modifiers applied

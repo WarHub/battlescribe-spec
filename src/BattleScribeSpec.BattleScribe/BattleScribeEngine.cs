@@ -198,6 +198,7 @@ public sealed class BattleScribeEngine : IDisposable
         {
             _autoSelectDone = true;
             SelectDefaultRootEntries();
+            Validate();
         }
 
         return (force, JavaListToStringErrors(errors));
@@ -242,6 +243,7 @@ public sealed class BattleScribeEngine : IDisposable
     {
         EnsureInitialized();
         _engine.a(parent, entry, count);
+        Validate();
     }
 
     /// <summary>
@@ -2176,6 +2178,7 @@ public sealed class BattleScribeEngine : IDisposable
         var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors) ?? throw new InvalidOperationException("Java engine returned null when creating child force.");
 
         _forceCatalogueMap[childForce] = catalogue;
+        Validate();
         return childForce;
     }
 
@@ -2216,6 +2219,29 @@ public sealed class BattleScribeEngine : IDisposable
             BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly,
             binder: null, types: Type.EmptyTypes, modifiers: null) ?? throw new InvalidOperationException(
                 "Could not find engine method x() for auto-selecting default root entries.");
+
+        method.Invoke(_engine, null);
+    }
+
+    /// <summary>
+    /// Calls the engine's private v() method (main validation pass).
+    /// The BattleScribe engine uses a dirty-flag pattern: mutations mark elements as
+    /// changed, and v() processes only dirty elements. Some mutation methods (like
+    /// selectEntry/b()) trigger v() internally, but others (like x() / auto-select
+    /// default entries) do not. We call v() explicitly after operations that skip it
+    /// to ensure validation state is always current.
+    /// </summary>
+    /// <remarks>
+    /// WARNING: This uses reflection on an obfuscated private method name "v".
+    /// The method signature is: private void v() in net.battlescribe.engine.a.f
+    /// (decompiled source reference: BattleScribeEngine line 356).
+    /// </remarks>
+    private void Validate()
+    {
+        var method = _engine.GetType().GetMethod("v",
+            BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+            binder: null, types: Type.EmptyTypes, modifiers: null) ?? throw new InvalidOperationException(
+                "Could not find engine method v() for validation.");
 
         method.Invoke(_engine, null);
     }
