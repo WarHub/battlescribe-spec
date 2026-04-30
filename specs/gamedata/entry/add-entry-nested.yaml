@@ -1,0 +1,37 @@
+id: add-entry-nested
+category: entry
+description: >
+  Add child entries nested inside a parent entry and verify
+  the tree structure is correct.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-squad
+    parentId: cat-1
+    entryType: selectionEntry
+    name: Tactical Squad
+
+  - action: addEntry
+    id: add-weapon
+    parentId: ${{ steps.add-squad.entryId }}
+    entryType: selectionEntry
+    name: Bolter
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - name: Tactical Squad
+              entryType: selectionEntry
+              children:
+                - name: Bolter
+                  entryType: selectionEntry

@@ -1,3 +1,4 @@
+using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 using YamlDotNet.Serialization;
@@ -129,6 +130,57 @@ public static class SpecLoader
 
         var gameDataDir = Path.Combine(specsDir, "gamedata");
         return Directory.Exists(gameDataDir) ? gameDataDir : null;
+    }
+
+    /// <summary>
+    /// Load a single GameData spec file.
+    /// </summary>
+    public static GameDataSpecFile LoadGameData(string yamlPath)
+    {
+        var yaml = File.ReadAllText(yamlPath);
+        var spec = Deserializer.Deserialize<GameDataSpecFile>(yaml);
+        if (string.IsNullOrEmpty(spec.Id))
+        {
+            spec.Id = Path.GetFileNameWithoutExtension(yamlPath);
+        }
+        return spec;
+    }
+
+    /// <summary>
+    /// Load a GameData spec from a YAML string.
+    /// </summary>
+    public static GameDataSpecFile LoadGameDataFromYaml(string yaml, string? defaultId = null)
+    {
+        var spec = Deserializer.Deserialize<GameDataSpecFile>(yaml);
+        if (string.IsNullOrEmpty(spec.Id) && defaultId is not null)
+        {
+            spec.Id = defaultId;
+        }
+        return spec;
+    }
+
+    /// <summary>
+    /// Discover all GameData spec YAML files under the given directory.
+    /// </summary>
+    public static IEnumerable<(string Path, string Id, string Category)> DiscoverGameDataSpecs(string specsDir)
+    {
+        if (!Directory.Exists(specsDir))
+        {
+            yield break;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
+        {
+            var dir = Path.GetDirectoryName(file);
+            if (string.Equals(Path.GetFullPath(dir!), Path.GetFullPath(specsDir), StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var category = Path.GetFileName(dir) ?? "unknown";
+            var id = Path.GetFileNameWithoutExtension(file);
+            yield return (file, id, category);
+        }
     }
 
     /// <summary>

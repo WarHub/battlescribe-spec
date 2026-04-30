@@ -56,15 +56,20 @@ pwsh -File tools/format-specs.ps1                                               
 
 | Path | What |
 |------|------|
-| `specs/{category}/{id}.yaml` | Spec files (312 total, 17 categories) |
+| `specs/roster/{category}/{id}.yaml` | Roster spec files (312 total, 17 categories) |
+| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (10 total, 1 category) |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
-| `src/BattleScribeSpec.TestKit/EngineTypes.cs` | State records (Roster/Force/Selection/Profile/Rule/Category/Cost) |
-| `src/BattleScribeSpec.TestKit/SpecFileModels.cs` | YAML spec model classes |
-| `src/BattleScribeSpec.TestKit/SpecRunner.cs` | Assertion engine + dump callback |
-| `src/BattleScribeSpec.TestKit/StateDumper.cs` | Pretty-print roster state (tree or JSON) |
-| `src/BattleScribeSpec.TestKit/IDumpEnricher.cs` | Engine-specific dump enrichment interface |
+| `src/BattleScribeSpec.TestKit/Roster/RosterTypes.cs` | Roster state records |
+| `src/BattleScribeSpec.TestKit/Roster/RosterSpecModels.cs` | Roster YAML spec model classes |
+| `src/BattleScribeSpec.TestKit/Roster/RosterRunner.cs` | Roster assertion engine + dump callback |
+| `src/BattleScribeSpec.TestKit/GameData/IGameDataEngine.cs` | GameData engine interface |
+| `src/BattleScribeSpec.TestKit/GameData/GameDataTypes.cs` | GameData state records |
+| `src/BattleScribeSpec.TestKit/GameData/GameDataSpecModels.cs` | GameData YAML spec model classes |
+| `src/BattleScribeSpec.TestKit/GameData/GameDataRunner.cs` | GameData assertion engine |
+| `src/BattleScribeSpec.TestKit/GameData/MemoryGameDataEngine.cs` | In-memory GameData engine for testing |
 | `src/BattleScribeSpec.Debugger/Program.cs` | bs-spec-debug console app |
 | `src/BattleScribeSpec.TestKit/Protocol/AdapterHandler.cs` | Action dispatch |
-| `tests/Infrastructure/SpecLintTests.cs` | Lint rules, known tags |
+| `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |
+| `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
 | `tools/format-specs.ps1` | Spec formatter |
 

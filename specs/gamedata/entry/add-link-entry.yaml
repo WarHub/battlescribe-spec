@@ -1,0 +1,33 @@
+id: add-link-entry
+category: entry
+description: >
+  Add an entry link pointing to a shared selection entry and verify
+  the link appears in the catalogue's entry links container.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntries:
+        - id: sse-bolter
+          name: Bolter
+          type: upgrade
+
+steps:
+  - action: addLink
+    id: add-link
+    parentId: cat-1
+    linkType: entryLink
+    targetId: sse-bolter
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - entryType: entryLink
+              fields:
+                targetId: sse-bolter

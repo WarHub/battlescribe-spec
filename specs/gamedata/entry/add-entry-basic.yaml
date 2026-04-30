@@ -1,11 +1,9 @@
 id: add-entry-basic
+category: entry
 description: >
-  Stub spec for GameData conformance testing.
-  Verifies that a basic selection entry can be added to a catalogue.
-tags:
-  - stub
-engines:
-  - nr-editor
+  Add a basic selection entry to a catalogue and verify it appears
+  in the catalogue's selection entries list.
+
 setup:
   gameSystem:
     id: gs-1
@@ -13,14 +11,18 @@ setup:
   catalogues:
     - id: cat-1
       name: Test Catalogue
+      gameSystemId: gs-1
+
 steps:
   - action: addEntry
-    catalogueId: cat-1
+    id: add-unit
+    parentId: cat-1
     entryType: selectionEntry
-    name: New Unit
+    name: Space Marine
+
   - expectedState:
       catalogues:
         - id: cat-1
-          entries:
-            - name: New Unit
-              type: selectionEntry
+          selectionEntries:
+            - name: Space Marine
+              entryType: selectionEntry

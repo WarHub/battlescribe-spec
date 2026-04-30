@@ -1,0 +1,46 @@
+id: add-multiple-entries
+category: entry
+description: >
+  Add multiple entries of different types to a catalogue and verify
+  they appear in their respective containers.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-unit
+    parentId: cat-1
+    entryType: selectionEntry
+    name: Intercessor Squad
+
+  - action: addEntry
+    id: add-rule
+    parentId: cat-1
+    entryType: rule
+    name: Angels of Death
+
+  - action: addEntry
+    id: add-force
+    parentId: cat-1
+    entryType: forceEntry
+    name: Patrol Detachment
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - name: Intercessor Squad
+              entryType: selectionEntry
+          rules:
+            - name: Angels of Death
+              entryType: rule
+          forceEntries:
+            - name: Patrol Detachment
+              entryType: forceEntry

@@ -2,6 +2,6 @@
 <!-- Run spec lint and structure validation tests. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>FullyQualifiedName~SpecLintTests|FullyQualifiedName~SpecStructureTests|FullyQualifiedName~SetupIdValidatorTests|FullyQualifiedName~SpecSchemaTests</TestCaseFilter>
+    <TestCaseFilter>FullyQualifiedName~SpecLintTests|FullyQualifiedName~GameDataSpecLintTests|FullyQualifiedName~SpecStructureTests|FullyQualifiedName~SetupIdValidatorTests|FullyQualifiedName~SpecSchemaTests</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

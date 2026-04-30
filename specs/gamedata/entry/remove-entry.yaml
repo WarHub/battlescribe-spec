@@ -1,0 +1,26 @@
+id: remove-entry
+category: entry
+description: >
+  Remove an entry from a catalogue and verify it is no longer present.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-existing
+          name: Existing Unit
+          type: unit
+
+steps:
+  - action: removeEntry
+    entryId: se-existing
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntryCount: 0
