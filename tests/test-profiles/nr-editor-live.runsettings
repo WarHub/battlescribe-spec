@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run live NR Editor GameData conformance tests against the NR Editor web app. -->
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <NR_EDITOR_URL>https://giloushaker.github.io/nr-editor/</NR_EDITOR_URL>
+    </EnvironmentVariables>
+    <TestCaseFilter>FullyQualifiedName~LiveNewRecruitGameData</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>
