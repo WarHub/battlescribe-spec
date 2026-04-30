@@ -1,8 +1,8 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using BattleScribeSpec;
-using BattleScribeSpec.Roster;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 using BattleScribeSpec.Runner;
 
 // ===== Parse arguments =====

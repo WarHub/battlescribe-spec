@@ -1,4 +1,4 @@
-namespace BattleScribeSpec;
+﻿namespace BattleScribeSpec;
 
 /// <summary>
 /// Result of running a single spec test.

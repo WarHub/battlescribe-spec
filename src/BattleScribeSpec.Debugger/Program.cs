@@ -1,6 +1,6 @@
-using BattleScribeSpec;
-using BattleScribeSpec.Roster;
+﻿using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.Roster;
 
 // ===== Parse arguments =====
 string? specInput = null;

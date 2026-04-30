@@ -1,4 +1,4 @@
-namespace BattleScribeSpec.GameData;
+﻿namespace BattleScribeSpec.GameData;
 
 /// <summary>
 /// YAML spec file model for GameData conformance tests.

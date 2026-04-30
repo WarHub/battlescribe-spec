@@ -1,6 +1,7 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 using net.battlescribe.model.data;
 using net.battlescribe.model.roster;
 using BsRoster = net.battlescribe.model.roster.Roster;
@@ -9,7 +10,6 @@ using JavaEngine = net.battlescribe.engine.a.f;
 using JavaHashMap = java.util.HashMap;
 using JavaList = java.util.List;
 using JavaPerfMetrics = net.battlescribe.engine.b.e;
-using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec;
 

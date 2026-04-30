@@ -1,4 +1,4 @@
-namespace BattleScribeSpec.GameData;
+﻿namespace BattleScribeSpec.GameData;
 
 /// <summary>
 /// Runs GameData conformance specs against an <see cref="IGameDataEngine"/> implementation.
