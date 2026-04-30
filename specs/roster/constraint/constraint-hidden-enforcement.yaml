@@ -1,7 +1,7 @@
 id: constraint-hidden-enforcement
 category: constraint
 description: Hidden entries are not shown to users but constraints still apply to them
-tags: [design-difference]
+tags: []
 
 setup:
   gameSystem:
@@ -48,18 +48,23 @@ steps:
     id: add-patrol
     forceEntryId: fe-patrol
 
-  # Hidden Unit auto-selected (min=1 constraint) — hidden from user but enforced by engine
+  # Hidden Unit auto-selected (min=1 constraint) — hidden from user but enforced by engine.
+  # The hidden entry error is produced immediately because the constraint is unsatisfied.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Hidden Unit
               hidden: true
+      errors:
+        - on: selection se-hidden
+          from: se-hidden/hidden
       engines:
-        # NR doesn't auto-select hidden entries
+        # NR doesn't auto-select hidden entries, so no selection and no error
         newrecruit:
           forces:
             - selectionCount: 0
+          errors: []
 
   # Manually add Visible Unit
   - action: selectEntry
