@@ -1,5 +1,6 @@
-﻿using BattleScribeSpec;
+using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.Roster;
 
 // ===== Parse arguments =====
 string? specInput = null;
@@ -122,7 +123,7 @@ catch (Exception ex)
 using (engine)
 {
     var dumpOptions = new DumpOptions(Json: json);
-    var runner = new SpecRunner(engine, new DataSourceResolver(), engineName);
+    var runner = new RosterRunner(engine, new DataSourceResolver(), engineName);
 
     var stepCount = spec.Steps.Count;
     var lastStepIndex = stepCount - 1;

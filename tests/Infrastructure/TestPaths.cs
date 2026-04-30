@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.Tests;
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Resolves paths to external test data.

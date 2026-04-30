@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.Protocol;
+namespace BattleScribeSpec.Protocol;
 
 /// <summary>
 /// Protocol-level validation and resolution for action parameters.

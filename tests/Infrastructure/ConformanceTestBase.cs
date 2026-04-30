@@ -1,4 +1,6 @@
-﻿namespace BattleScribeSpec.Tests;
+using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared base class for running declarative YAML spec files against any IRosterEngine.
@@ -27,7 +29,7 @@ public abstract class ConformanceTestBase
 
     public static TheoryDataRow<string, string>[] AllSpecs()
     {
-        var specsDir = SpecLoader.FindSpecsDirectory();
+        var specsDir = SpecLoader.FindRosterSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
         {
             return [];
@@ -59,7 +61,7 @@ public abstract class ConformanceTestBase
     /// </summary>
     public static List<(string Path, string Name)> AllSpecPaths()
     {
-        var specsDir = SpecLoader.FindSpecsDirectory();
+        var specsDir = SpecLoader.FindRosterSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
         {
             return [];
@@ -87,7 +89,7 @@ public abstract class ConformanceTestBase
             return;
         }
 
-        var runner = new SpecRunner(engine, new DataSourceResolver(), EngineName);
+        var runner = new RosterRunner(engine, new DataSourceResolver(), EngineName);
         var result = runner.Run(spec);
 
         if (result.Passed && expectedToFail)

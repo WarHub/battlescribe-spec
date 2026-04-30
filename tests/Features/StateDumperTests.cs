@@ -1,4 +1,6 @@
-﻿namespace BattleScribeSpec.Tests;
+using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec.Tests;
 
 [Trait("Category", "Unit")]
 public class StateDumperTests

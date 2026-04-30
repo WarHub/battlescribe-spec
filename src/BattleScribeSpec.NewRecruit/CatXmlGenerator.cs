@@ -1,4 +1,4 @@
-﻿using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
 using static WarHub.ArmouryModel.Source.NodeFactory;

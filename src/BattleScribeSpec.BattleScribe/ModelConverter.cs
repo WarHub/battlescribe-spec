@@ -1,4 +1,5 @@
-﻿using WarHub.ArmouryModel.Source;
+using BattleScribeSpec.Roster;
+using WarHub.ArmouryModel.Source;
 
 namespace BattleScribeSpec;
 

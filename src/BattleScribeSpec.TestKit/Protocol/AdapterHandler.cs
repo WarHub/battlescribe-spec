@@ -1,4 +1,6 @@
-﻿namespace BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec.Protocol;
 
 /// <summary>
 /// Handles the adapter side of the JSON-line protocol.

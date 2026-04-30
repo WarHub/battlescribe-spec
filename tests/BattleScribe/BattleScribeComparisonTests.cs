@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.Tests;
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Comparison tests that run the same operations on the BattleScribe Java engine

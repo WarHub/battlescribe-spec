@@ -1,4 +1,6 @@
-﻿namespace BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec.Protocol;
 
 /// <summary>
 /// IRosterEngine implementation that communicates with an external adapter process

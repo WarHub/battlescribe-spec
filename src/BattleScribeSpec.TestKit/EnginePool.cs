@@ -1,4 +1,5 @@
-﻿using System.Threading.Channels;
+using System.Threading.Channels;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec;
 

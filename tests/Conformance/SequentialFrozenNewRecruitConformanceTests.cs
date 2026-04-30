@@ -1,4 +1,6 @@
-﻿namespace BattleScribeSpec.Tests;
+using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Sequential version of frozen NR conformance tests (one spec at a time).

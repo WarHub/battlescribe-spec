@@ -1,5 +1,6 @@
-﻿using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Tests;
 
@@ -149,7 +150,7 @@ public sealed class LiveNewRecruitSmokeTests
         Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set");
 
         // Run the simplest existing spec against NR to validate the full pipeline
-        var specsDir = SpecLoader.FindSpecsDirectory();
+        var specsDir = SpecLoader.FindRosterSpecsDirectory();
         Assert.SkipWhen(specsDir is null, "Specs directory not found");
 
         // Find a basic spec to run
@@ -171,7 +172,7 @@ public sealed class LiveNewRecruitSmokeTests
                 continue;
             }
 
-            var runner = new SpecRunner(_fixture.Engine!);
+            var runner = new RosterRunner(_fixture.Engine!);
             var result = runner.Run(spec);
 
             _output.WriteLine($"  Result: {(result.Passed ? "PASS" : "FAIL")}");

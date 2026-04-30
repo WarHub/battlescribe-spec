@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.Tests;
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Tests for the BattleScribe Java engine (via IKVM).

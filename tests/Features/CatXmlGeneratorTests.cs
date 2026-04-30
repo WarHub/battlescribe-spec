@@ -1,4 +1,4 @@
-﻿using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;

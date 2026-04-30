@@ -1,4 +1,4 @@
-﻿using WarHub.ArmouryModel.Source.BattleScribe;
+using WarHub.ArmouryModel.Source.BattleScribe;
 
 namespace BattleScribeSpec.Tests;
 
@@ -136,14 +136,24 @@ public sealed class ExportXmlTests : IDisposable
 
     private static string FindSpec(string specId)
     {
-        var specsDir = SpecLoader.FindSpecsDirectory()
+        var specsDir = SpecLoader.FindRosterSpecsDirectory()
             ?? throw new InvalidOperationException("Could not find specs directory");
-        var path = Path.Combine(specsDir, specId + ".yaml");
-        if (!File.Exists(path))
+        // specId can be "category/id" or just "id"
+        string? category = null;
+        var id = specId;
+        if (specId.Contains('/'))
         {
-            throw new FileNotFoundException($"Spec not found: {path}");
+            var parts = specId.Split('/', 2);
+            category = parts[0];
+            id = parts[1];
+        }
+        var match = SpecLoader.DiscoverSpecs(specsDir)
+            .FirstOrDefault(s => s.Id == id && (category is null || s.Category == category));
+        if (match.Path is null)
+        {
+            throw new FileNotFoundException($"Spec not found: {specId}");
         }
 
-        return path;
+        return match.Path;
     }
 }

@@ -1,5 +1,6 @@
-﻿using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
 
@@ -12,7 +13,7 @@ public class RunnerAndProtocolRegressionTests
     public void SpecRunner_PropagatesSetupErrors_AndSkipsSteps()
     {
         var engine = new FakeEngine { SetupErrors = ["missing catalogue"] };
-        var runner = new SpecRunner(engine);
+        var runner = new RosterRunner(engine);
         var spec = new SpecFile
         {
             Id = "setup-errors",
@@ -33,7 +34,7 @@ public class RunnerAndProtocolRegressionTests
     public void SpecRunner_StopsAfterActionException()
     {
         var engine = new FakeEngine { ThrowOnAddForce = true };
-        var runner = new SpecRunner(engine);
+        var runner = new RosterRunner(engine);
         var spec = new SpecFile
         {
             Id = "action-stop",
@@ -67,7 +68,7 @@ public class RunnerAndProtocolRegressionTests
                 [],
                 [])
         };
-        var runner = new SpecRunner(engine);
+        var runner = new RosterRunner(engine);
         var spec = new SpecFile
         {
             Id = "hidden-assert",
@@ -105,7 +106,7 @@ public class RunnerAndProtocolRegressionTests
     public void SpecRunner_CallsCleanup_AfterSuccessfulRun()
     {
         var engine = new FakeEngine();
-        var runner = new SpecRunner(engine);
+        var runner = new RosterRunner(engine);
         var spec = new SpecFile
         {
             Id = "cleanup-success",
@@ -124,7 +125,7 @@ public class RunnerAndProtocolRegressionTests
     public void SpecRunner_CallsCleanup_AfterFailedAction()
     {
         var engine = new FakeEngine { ThrowOnAddForce = true };
-        var runner = new SpecRunner(engine);
+        var runner = new RosterRunner(engine);
         var spec = new SpecFile
         {
             Id = "cleanup-failure",
@@ -143,7 +144,7 @@ public class RunnerAndProtocolRegressionTests
     public void SpecRunner_CallsCleanup_AfterSetupErrors()
     {
         var engine = new FakeEngine { SetupErrors = ["bad setup"] };
-        var runner = new SpecRunner(engine);
+        var runner = new RosterRunner(engine);
         var spec = new SpecFile
         {
             Id = "cleanup-setup-error",
@@ -162,7 +163,7 @@ public class RunnerAndProtocolRegressionTests
     public void SpecRunner_CallsCleanup_AfterSetupException()
     {
         var engine = new FakeEngine { ThrowOnSetup = true };
-        var runner = new SpecRunner(engine);
+        var runner = new RosterRunner(engine);
         var spec = new SpecFile
         {
             Id = "cleanup-setup-exception",

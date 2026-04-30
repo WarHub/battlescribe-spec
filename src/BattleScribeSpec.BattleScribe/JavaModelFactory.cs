@@ -1,4 +1,4 @@
-﻿using net.battlescribe.model.data;
+using net.battlescribe.model.data;
 
 namespace BattleScribeSpec;
 

@@ -1,5 +1,6 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec;
 
