@@ -262,6 +262,11 @@ public sealed class GameDataRunner
         {
             AssertEntryList(stepIndex, $"{prefix}.sharedSelectionEntries", expected.SharedSelectionEntries, actual.SharedSelectionEntries);
         }
+
+        if (expected.SharedSelectionEntryGroups is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.sharedSelectionEntryGroups", expected.SharedSelectionEntryGroups, actual.SharedSelectionEntryGroups);
+        }
     }
 
     private void AssertCatalogue(int stepIndex, ExpectedCatalogueDataDef expected, CatalogueDataState actual)

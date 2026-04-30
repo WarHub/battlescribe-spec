@@ -1,0 +1,34 @@
+id: seg-set-field-publication
+category: entry
+description: >
+  Set the publicationId field of a selection entry group and verify
+  it is stored in the fields dictionary.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    publications:
+      - id: pub-core
+        name: Core Rules
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-1
+          name: Standard Wargear
+
+steps:
+  - action: setField
+    entryId: seg-1
+    field: publicationId
+    value: pub-core
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - id: seg-1
+              fields:
+                publicationId: pub-core

@@ -1,0 +1,27 @@
+id: fe-set-field-name
+category: entry
+description: >
+  Set the name field of a force entry and verify it is updated.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    forceEntries:
+      - id: fe-1
+        name: Old Detachment
+
+steps:
+  - action: setField
+    entryId: fe-1
+    field: name
+    value: Strike Force
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        forceEntries:
+          - id: fe-1
+            name: Strike Force

@@ -1,0 +1,46 @@
+id: se-nest-multiple-levels
+category: entry
+description: >
+  Create a three-level deep nesting of selection entries and verify
+  the entire tree structure is correctly represented.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-squad
+    parentId: cat-1
+    entryType: selectionEntry
+    name: Kill Team
+
+  - action: addEntry
+    id: add-model
+    parentId: ${{ steps.add-squad.entryId }}
+    entryType: selectionEntry
+    name: Veteran
+
+  - action: addEntry
+    id: add-weapon
+    parentId: ${{ steps.add-model.entryId }}
+    entryType: selectionEntry
+    name: Power Sword
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - name: Kill Team
+              entryType: selectionEntry
+              children:
+                - name: Veteran
+                  entryType: selectionEntry
+                  children:
+                    - name: Power Sword
+                      entryType: selectionEntry

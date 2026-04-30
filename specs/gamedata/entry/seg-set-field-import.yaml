@@ -1,0 +1,31 @@
+id: seg-set-field-import
+category: entry
+description: >
+  Set the imported field of a selection entry group to false and verify
+  the state reflects it in the fields dictionary.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-1
+          name: Local Group
+
+steps:
+  - action: setField
+    entryId: seg-1
+    field: imported
+    value: "false"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - id: seg-1
+              fields:
+                imported: "false"

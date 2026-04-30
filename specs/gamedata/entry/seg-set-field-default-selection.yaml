@@ -1,0 +1,38 @@
+id: seg-set-field-default-selection
+category: entry
+description: >
+  Set the defaultSelectionEntryId field of a selection entry group
+  to reference a child entry and verify round-trip.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-weapons
+          name: Weapon Options
+          selectionEntries:
+            - id: se-bolter
+              name: Bolter
+              type: upgrade
+            - id: se-plasma
+              name: Plasma Gun
+              type: upgrade
+
+steps:
+  - action: setField
+    entryId: seg-weapons
+    field: defaultSelectionEntryId
+    value: se-bolter
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - id: seg-weapons
+              fields:
+                defaultSelectionEntryId: se-bolter

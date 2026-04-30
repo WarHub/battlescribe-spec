@@ -1,0 +1,29 @@
+id: se-create-shared-in-catalogue
+category: entry
+description: >
+  Verify a shared selection entry defined in catalogue setup data appears
+  in the sharedSelectionEntries container with correct fields.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntries:
+        - id: sse-bolter
+          name: Bolter
+          type: upgrade
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntries:
+            - id: sse-bolter
+              name: Bolter
+              entryType: selectionEntry
+              fields:
+                type: upgrade

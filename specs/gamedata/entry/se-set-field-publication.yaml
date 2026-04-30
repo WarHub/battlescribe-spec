@@ -1,0 +1,35 @@
+id: se-set-field-publication
+category: entry
+description: >
+  Set the publicationId field of a selection entry and verify it is stored
+  in the fields dictionary.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    publications:
+      - id: pub-codex
+        name: Codex Astartes
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Intercessors
+          type: unit
+
+steps:
+  - action: setField
+    entryId: se-1
+    field: publicationId
+    value: pub-codex
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                publicationId: pub-codex

@@ -1,0 +1,34 @@
+id: seg-create-in-selection-entry
+category: entry
+description: >
+  Add a selection entry group nested inside a selection entry and verify
+  it appears as a child of the parent entry.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-group
+    parentId: se-squad
+    entryType: selectionEntryGroup
+    name: Weapon Options
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-squad
+              children:
+                - name: Weapon Options
+                  entryType: selectionEntryGroup

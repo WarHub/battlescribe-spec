@@ -1,0 +1,28 @@
+id: fe-create-in-catalogue
+category: entry
+description: >
+  Add a force entry to a catalogue and verify it appears in the
+  forceEntries container.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-fe
+    parentId: cat-1
+    entryType: forceEntry
+    name: Patrol
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          forceEntries:
+            - name: Patrol
+              entryType: forceEntry

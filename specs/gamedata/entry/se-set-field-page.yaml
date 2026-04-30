@@ -1,0 +1,32 @@
+id: se-set-field-page
+category: entry
+description: >
+  Set the page field of a selection entry and verify it is stored
+  in the fields dictionary.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: setField
+    entryId: se-1
+    field: page
+    value: "42"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                page: "42"

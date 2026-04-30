@@ -1,0 +1,29 @@
+id: fe-set-field-page
+category: entry
+description: >
+  Set the page field of a force entry and verify it is stored
+  in the fields dictionary.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    forceEntries:
+      - id: fe-1
+        name: Patrol Detachment
+
+steps:
+  - action: setField
+    entryId: fe-1
+    field: page
+    value: "7"
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        forceEntries:
+          - id: fe-1
+            fields:
+              page: "7"

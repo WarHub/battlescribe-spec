@@ -1,0 +1,26 @@
+id: seg-create-in-gamesystem
+category: entry
+description: >
+  Add a selection entry group to a game system and verify it appears
+  in the sharedSelectionEntryGroups container.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+
+steps:
+  - action: addEntry
+    id: add-seg
+    parentId: gs-1
+    entryType: selectionEntryGroup
+    name: Wargear
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        sharedSelectionEntryGroups:
+          - name: Wargear
+            entryType: selectionEntryGroup

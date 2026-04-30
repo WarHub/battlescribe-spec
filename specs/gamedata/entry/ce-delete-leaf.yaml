@@ -1,0 +1,27 @@
+id: ce-delete-leaf
+category: entry
+description: >
+  Delete a category entry from a game system and verify it is removed.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
+      - id: ce-elites
+        name: Elites
+
+steps:
+  - action: removeEntry
+    entryId: ce-troops
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        categoryEntries:
+          - id: ce-elites
+            name: Elites
