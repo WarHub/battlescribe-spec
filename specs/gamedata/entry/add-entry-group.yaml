@@ -1,0 +1,28 @@
+id: add-entry-group
+category: entry
+description: >
+  Add a selection entry group to a catalogue and verify it appears
+  in the shared selection entry groups container.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-group
+    parentId: cat-1
+    entryType: selectionEntryGroup
+    name: Wargear Options
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - name: Wargear Options
+              entryType: selectionEntryGroup

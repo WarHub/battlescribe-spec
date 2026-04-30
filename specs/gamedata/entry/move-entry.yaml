@@ -1,0 +1,43 @@
+id: move-entry
+category: entry
+description: >
+  Move an entry from one parent to another within the same catalogue.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-parent-a
+          name: Squad Alpha
+          type: unit
+        - id: se-parent-b
+          name: Squad Beta
+          type: unit
+          selectionEntries:
+            - id: se-weapon
+              name: Lascannon
+              type: upgrade
+
+steps:
+  - action: moveEntry
+    entryId: se-weapon
+    newParentId: se-parent-a
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-parent-a
+              name: Squad Alpha
+              childCount: 1
+              children:
+                - id: se-weapon
+                  name: Lascannon
+            - id: se-parent-b
+              name: Squad Beta
+              childCount: 0

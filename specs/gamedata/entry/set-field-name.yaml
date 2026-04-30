@@ -1,0 +1,30 @@
+id: set-field-name
+category: entry
+description: >
+  Set the name field of an existing entry and verify it is updated.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-unit
+          name: Old Name
+          type: unit
+
+steps:
+  - action: setField
+    entryId: se-unit
+    field: name
+    value: New Name
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-unit
+              name: New Name

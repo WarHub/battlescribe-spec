@@ -1,0 +1,1066 @@
+using BattleScribeSpec.GameData;
+using BattleScribeSpec.Protocol;
+using net.battlescribe.model.data;
+using JavaList = java.util.List;
+
+namespace BattleScribeSpec;
+
+/// <summary>
+/// IGameDataEngine implementation backed by direct Java model manipulation via IKVM.
+///
+/// Unlike the roster engine (which needs the full engine controller for cost calculations,
+/// validation, etc.), the data editor adapter only needs to manipulate the Java model objects
+/// directly — creating, removing, moving entries in their parent lists.
+///
+/// This is the BattleScribe-native data model, so it serves as the reference implementation
+/// for how entries should be structured, named, and nested.
+/// </summary>
+public sealed class BattleScribeGameDataEngine : IGameDataEngine
+{
+    private GameSystem? _gameSystem;
+    private Catalogue? _catalogue;
+    private string _specId = "";
+
+    // Lookup maps for finding entries by ID
+    private readonly Dictionary<string, object> _entriesById = [];
+
+    public void SetTestContext(string specId) => _specId = specId;
+
+    public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
+    {
+        var errors = new List<string>();
+        try
+        {
+            _entriesById.Clear();
+
+            // Build game system from protocol types (reuse BattleScribeEngine patterns)
+            _gameSystem = BuildGameSystem(gameSystem);
+
+            // Build catalogues (we support one primary catalogue for now)
+            if (catalogues.Length > 0)
+            {
+                _catalogue = BuildCatalogue(catalogues[0]);
+                IndexAllEntries(_catalogue);
+            }
+
+            // Also index game system entries
+            if (_gameSystem != null)
+            {
+                IndexGameSystemEntries(_gameSystem);
+            }
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Setup error: {ex.Message}");
+        }
+
+        return errors;
+    }
+
+    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
+    {
+        var parent = FindById(parentId)
+            ?? throw new InvalidOperationException($"Parent not found: {parentId}");
+
+        var id = Guid.NewGuid().ToString();
+        var entryName = name ?? $"New {entryType}";
+
+        // Create the Java model object for this entry type and add to parent
+        var created = CreateAndAddEntry(parent, entryType, id, entryName);
+        _entriesById[id] = created;
+
+        return new GameDataActionOutputs { EntryId = id };
+    }
+
+    public void RemoveEntry(string entryId)
+    {
+        // Walk all container lists to find and remove the entry
+        if (!RemoveFromParent(_catalogue, entryId) &&
+            !RemoveFromParent(_gameSystem, entryId))
+        {
+            throw new InvalidOperationException($"Could not remove entry: {entryId}");
+        }
+
+        _entriesById.Remove(entryId);
+    }
+
+    public void MoveEntry(string entryId, string newParentId, int? index = null)
+    {
+        // Find entry, remove from current parent, add to new parent
+        var entry = FindById(entryId)
+            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+
+        var newParent = FindById(newParentId)
+            ?? throw new InvalidOperationException($"New parent not found: {newParentId}");
+
+        // Determine entry type to know which container it belongs to
+        var entryType = GetEntryType(entry);
+
+        // Remove from old location
+        if (!RemoveFromParent(_catalogue, entryId) &&
+            !RemoveFromParent(_gameSystem, entryId))
+        {
+            throw new InvalidOperationException($"Could not remove entry for move: {entryId}");
+        }
+
+        // Add to new parent
+        var container = GetContainerList(newParent, entryType)
+            ?? throw new InvalidOperationException(
+                $"No suitable container for {entryType} in parent {newParentId}");
+
+        if (index is { } idx && idx >= 0 && idx <= container.size())
+        {
+            container.add(idx, entry);
+        }
+        else
+        {
+            container.add(entry);
+        }
+    }
+
+    public void SetField(string entryId, string field, string? value)
+    {
+        var entry = FindById(entryId)
+            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+
+        SetFieldOnObject(entry, field, value);
+    }
+
+    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
+    {
+        var parent = FindById(parentId)
+            ?? throw new InvalidOperationException($"Parent not found: {parentId}");
+
+        var id = Guid.NewGuid().ToString();
+
+        object link = linkType switch
+        {
+            "entryLink" => CreateEntryLink(id, targetId),
+            "infoLink" => CreateInfoLink(id, targetId),
+            "categoryLink" => CreateCategoryLink(id, targetId),
+            _ => throw new InvalidOperationException($"Unknown link type: {linkType}"),
+        };
+
+        var container = GetContainerList(parent, linkType)
+            ?? throw new InvalidOperationException(
+                $"No suitable container for {linkType} in parent {parentId}");
+
+        container.add(link);
+        _entriesById[id] = link;
+
+        return new GameDataActionOutputs { EntryId = id };
+    }
+
+    public GameDataState GetState()
+    {
+        var catalogues = new List<CatalogueDataState>();
+        if (_catalogue != null)
+        {
+            catalogues.Add(ReadCatalogueState(_catalogue));
+        }
+
+        GameSystemDataState? gsState = null;
+        if (_gameSystem != null)
+        {
+            gsState = ReadGameSystemState(_gameSystem);
+        }
+
+        return new GameDataState
+        {
+            GameSystem = gsState,
+            Catalogues = catalogues,
+        };
+    }
+
+    public void Dispose()
+    {
+        _entriesById.Clear();
+        _gameSystem = null;
+        _catalogue = null;
+    }
+
+    // ===== Setup helpers =====
+
+    private static GameSystem BuildGameSystem(ProtocolGameSystem spec)
+    {
+        var costTypes = spec.CostTypes?.Select(ct =>
+            JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray();
+
+        var forceEntries = spec.ForceEntries?.Select(BuildForceEntry).ToArray();
+
+        var categoryEntries = spec.CategoryEntries?.Select(ce =>
+            JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name, ce.Hidden,
+                ce.Constraints?.Select(BuildConstraint).ToArray(),
+                ce.Modifiers?.Select(BuildModifier).ToArray())).ToArray();
+
+        var profileTypes = spec.ProfileTypes?.Select(pt =>
+            JavaModelFactory.CreateProfileType(pt.Id, pt.Name,
+                pt.CharacteristicTypes?.Select(ct =>
+                    JavaModelFactory.CreateCharacteristicType(ct.Id, ct.Name)))).ToArray();
+
+        var publications = spec.Publications?.Select(p =>
+            JavaModelFactory.CreatePublication(p.Id, p.Name, p.ShortName ?? "", p.Publisher ?? "",
+                p.PublicationDate ?? "", p.PublisherUrl ?? "")).ToArray();
+
+        var selectionEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var entryLinks = spec.EntryLinks?.Select(BuildEntryLink).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+        var infoLinks = spec.InfoLinks?.Select(BuildInfoLink).ToArray();
+        var sharedSelectionEntries = spec.SharedSelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var sharedSelectionEntryGroups = spec.SharedSelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var sharedRules = spec.SharedRules?.Select(BuildRule).ToArray();
+        var sharedProfiles = spec.SharedProfiles?.Select(BuildProfile).ToArray();
+        var sharedInfoGroups = spec.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();
+
+        return JavaModelFactory.CreateGameSystem(
+            id: spec.Id,
+            name: spec.Name,
+            costTypes: costTypes,
+            forceEntries: forceEntries,
+            categoryEntries: categoryEntries,
+            profileTypes: profileTypes,
+            publications: publications,
+            selectionEntries: selectionEntries,
+            entryLinks: entryLinks,
+            rules: rules,
+            infoLinks: infoLinks,
+            sharedSelectionEntries: sharedSelectionEntries,
+            sharedSelectionEntryGroups: sharedSelectionEntryGroups,
+            sharedRules: sharedRules,
+            sharedProfiles: sharedProfiles,
+            sharedInfoGroups: sharedInfoGroups);
+    }
+
+    private static Catalogue BuildCatalogue(ProtocolCatalogue spec)
+    {
+        var selectionEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var entryLinks = spec.EntryLinks?.Select(BuildEntryLink).ToArray();
+        var sharedSelectionEntries = spec.SharedSelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var sharedSelectionEntryGroups = spec.SharedSelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var sharedRules = spec.SharedRules?.Select(BuildRule).ToArray();
+        var sharedProfiles = spec.SharedProfiles?.Select(BuildProfile).ToArray();
+        var sharedInfoGroups = spec.SharedInfoGroups?.Select(BuildInfoGroup).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+
+        var cat = JavaModelFactory.CreateCatalogue(
+            spec.Id, spec.Name, spec.GameSystemId,
+            library: spec.Library,
+            selectionEntries: selectionEntries,
+            entryLinks: entryLinks,
+            sharedSelectionEntries: sharedSelectionEntries,
+            sharedSelectionEntryGroups: sharedSelectionEntryGroups,
+            sharedRules: sharedRules,
+            sharedProfiles: sharedProfiles,
+            sharedInfoGroups: sharedInfoGroups,
+            rules: rules,
+            costTypes: spec.CostTypes?.Select(ct =>
+                JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit ?? -1)).ToArray(),
+            profileTypes: spec.ProfileTypes?.Select(pt =>
+                JavaModelFactory.CreateProfileType(pt.Id, pt.Name,
+                    pt.CharacteristicTypes?.Select(ct =>
+                        JavaModelFactory.CreateCharacteristicType(ct.Id, ct.Name)))).ToArray(),
+            categoryEntries: spec.CategoryEntries?.Select(ce =>
+                JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name, ce.Hidden,
+                    ce.Constraints?.Select(BuildConstraint).ToArray(),
+                    ce.Modifiers?.Select(BuildModifier).ToArray())).ToArray(),
+            forceEntries: spec.ForceEntries?.Select(BuildForceEntry).ToArray());
+
+        if (spec.Publications != null)
+        {
+            foreach (var pubSpec in spec.Publications)
+            {
+                cat.getPublications().add(
+                    JavaModelFactory.CreatePublication(pubSpec.Id, pubSpec.Name, pubSpec.ShortName ?? "",
+                        pubSpec.Publisher ?? "", pubSpec.PublicationDate ?? "", pubSpec.PublisherUrl ?? ""));
+            }
+        }
+
+        if (spec.InfoLinks != null)
+        {
+            foreach (var il in spec.InfoLinks)
+            {
+                cat.getInfoLinks().add(BuildInfoLink(il));
+            }
+        }
+
+        return cat;
+    }
+
+    // ===== Protocol → Java model builders =====
+
+    private static SelectionEntry BuildSelectionEntry(ProtocolSelectionEntry spec)
+    {
+        var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
+        var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var childEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
+
+        var entry = JavaModelFactory.CreateSelectionEntry(
+            spec.Id, spec.Name, spec.Type,
+            hidden: spec.Hidden,
+            costs: costs,
+            constraints: constraints,
+            modifiers: modifiers,
+            selectionEntries: childEntries,
+            categoryLinks: categoryLinks,
+            collective: spec.Collective,
+            import: spec.Import,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
+
+        if (spec.ModifierGroups != null)
+        {
+            foreach (var mg in spec.ModifierGroups)
+            {
+                entry.getModifierGroups().add(BuildModifierGroup(mg));
+            }
+        }
+
+        if (spec.SelectionEntryGroups != null)
+        {
+            foreach (var seg in spec.SelectionEntryGroups)
+            {
+                entry.getSelectionEntryGroups().add(BuildSelectionEntryGroup(seg));
+            }
+        }
+
+        if (spec.Rules != null)
+        {
+            foreach (var r in spec.Rules)
+            {
+                entry.getRules().add(BuildRule(r));
+            }
+        }
+
+        if (spec.Profiles != null)
+        {
+            foreach (var p in spec.Profiles)
+            {
+                entry.getProfiles().add(BuildProfile(p));
+            }
+        }
+
+        if (spec.InfoGroups != null)
+        {
+            foreach (var ig in spec.InfoGroups)
+            {
+                entry.getInfoGroups().add(BuildInfoGroup(ig));
+            }
+        }
+
+        if (spec.EntryLinks != null)
+        {
+            foreach (var el in spec.EntryLinks)
+            {
+                entry.getEntryLinks().add(BuildEntryLink(el));
+            }
+        }
+
+        if (spec.InfoLinks != null)
+        {
+            foreach (var il in spec.InfoLinks)
+            {
+                entry.getInfoLinks().add(BuildInfoLink(il));
+            }
+        }
+
+        return entry;
+    }
+
+    private static SelectionEntryGroup BuildSelectionEntryGroup(ProtocolSelectionEntryGroup spec)
+    {
+        var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
+        var childEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var childGroups = spec.SelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var entryLinks = spec.EntryLinks?.Select(BuildEntryLink).ToArray();
+        var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
+
+        return JavaModelFactory.CreateSelectionEntryGroup(
+            spec.Id, spec.Name,
+            hidden: spec.Hidden,
+            defaultSelectionEntryId: spec.DefaultSelectionEntryId,
+            constraints: constraints,
+            modifiers: modifiers,
+            modifierGroups: modifierGroups,
+            selectionEntries: childEntries,
+            selectionEntryGroups: childGroups,
+            entryLinks: entryLinks,
+            categoryLinks: categoryLinks,
+            collective: spec.Collective,
+            import: spec.Import,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
+    }
+
+    private static EntryLink BuildEntryLink(ProtocolEntryLink spec)
+    {
+        var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
+        var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
+
+        return JavaModelFactory.CreateEntryLink(
+            spec.Id, spec.Name ?? "", spec.TargetId ?? "", spec.Type,
+            hidden: spec.Hidden,
+            collective: spec.Collective,
+            import: spec.Import,
+            constraints: constraints,
+            modifiers: modifiers,
+            modifierGroups: modifierGroups,
+            categoryLinks: categoryLinks,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
+    }
+
+    private static ForceEntry BuildForceEntry(ProtocolForceEntry spec)
+    {
+        var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
+        var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var childForces = spec.ForceEntries?.Select(BuildForceEntry).ToArray();
+
+        return JavaModelFactory.CreateForceEntry(
+            spec.Id, spec.Name,
+            hidden: spec.Hidden,
+            categoryLinks: categoryLinks,
+            forceEntries: childForces,
+            constraints: constraints,
+            modifiers: modifiers);
+    }
+
+    private static Rule BuildRule(ProtocolRule spec)
+    {
+        return JavaModelFactory.CreateRule(
+            spec.Id, spec.Name, spec.Description ?? "",
+            hidden: spec.Hidden,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            page: spec.Page ?? "");
+    }
+
+    private static Profile BuildProfile(ProtocolProfile spec)
+    {
+        var characteristics = spec.Characteristics?.Select(c =>
+            JavaModelFactory.CreateCharacteristic(c.Name, c.TypeId, c.Value ?? "")).ToArray();
+
+        return JavaModelFactory.CreateProfile(
+            spec.Id, spec.Name, spec.TypeId, spec.TypeName,
+            hidden: spec.Hidden,
+            characteristics: characteristics,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
+    }
+
+    private static InfoGroup BuildInfoGroup(ProtocolInfoGroup spec)
+    {
+        var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+        var infoLinks = spec.InfoLinks?.Select(BuildInfoLink).ToArray();
+        var childGroups = spec.InfoGroups?.Select(BuildInfoGroup).ToArray();
+
+        var ig = JavaModelFactory.CreateInfoGroup(
+            spec.Id, spec.Name,
+            hidden: spec.Hidden,
+            profiles: profiles,
+            rules: rules,
+            infoGroups: childGroups);
+
+        if (infoLinks != null)
+        {
+            foreach (var il in infoLinks)
+            {
+                ig.getInfoLinks().add(il);
+            }
+        }
+
+        return ig;
+    }
+
+    private static InfoLink BuildInfoLink(ProtocolInfoLink spec)
+    {
+        return JavaModelFactory.CreateInfoLink(
+            spec.Id, spec.Name ?? "", spec.TargetId ?? "", spec.Type,
+            hidden: spec.Hidden,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
+    }
+
+    private static Constraint BuildConstraint(ProtocolConstraint spec)
+    {
+        return JavaModelFactory.CreateConstraint(
+            spec.Id, spec.Type, spec.Value, spec.Field, spec.Scope,
+            shared: spec.Shared,
+            percentValue: spec.PercentValue,
+            includeChildSelections: spec.IncludeChildSelections,
+            includeChildForces: spec.IncludeChildForces);
+    }
+
+    private static Modifier BuildModifier(ProtocolModifier spec)
+    {
+        var conditions = spec.Conditions?.Select(BuildCondition).ToArray();
+        var conditionGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
+        var repeats = spec.Repeats?.Select(BuildRepeat).ToArray();
+
+        var m = JavaModelFactory.CreateModifier(
+            spec.Type, spec.Field, spec.Value,
+            conditions: conditions,
+            repeats: repeats);
+
+        if (conditionGroups != null)
+        {
+            foreach (var cg in conditionGroups)
+            {
+                m.getConditionGroups().add(cg);
+            }
+        }
+
+        return m;
+    }
+
+    private static ModifierGroup BuildModifierGroup(ProtocolModifierGroup spec)
+    {
+        var conditions = spec.Conditions?.Select(BuildCondition).ToArray();
+        var conditionGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var repeats = spec.Repeats?.Select(BuildRepeat).ToArray();
+        var childGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
+
+        var mg = JavaModelFactory.CreateModifierGroup(
+            conditions: conditions,
+            conditionGroups: conditionGroups,
+            modifiers: modifiers);
+
+        if (repeats != null)
+        {
+            foreach (var r in repeats)
+            {
+                mg.getRepeats().add(r);
+            }
+        }
+
+        if (childGroups != null)
+        {
+            foreach (var child in childGroups)
+            {
+                mg.getModifierGroups().add(child);
+            }
+        }
+
+        return mg;
+    }
+
+    private static Condition BuildCondition(ProtocolCondition spec)
+    {
+        return JavaModelFactory.CreateCondition(
+            spec.Type, spec.Value, spec.Field, spec.Scope,
+            childId: spec.ChildId,
+            shared: spec.Shared,
+            percentValue: spec.PercentValue,
+            includeChildSelections: spec.IncludeChildSelections,
+            includeChildForces: spec.IncludeChildForces);
+    }
+
+    private static ConditionGroup BuildConditionGroup(ProtocolConditionGroup spec)
+    {
+        var conditions = spec.Conditions?.Select(BuildCondition).ToArray();
+        var childGroups = spec.ConditionGroups?.Select(BuildConditionGroup).ToArray();
+
+        return JavaModelFactory.CreateConditionGroup(
+            spec.Type,
+            conditions: conditions,
+            conditionGroups: childGroups);
+    }
+
+    private static Repeat BuildRepeat(ProtocolRepeat spec)
+    {
+        return JavaModelFactory.CreateRepeat(
+            spec.Value, spec.Repeats, spec.Field, spec.Scope,
+            childId: spec.ChildId,
+            shared: spec.Shared,
+            percentValue: spec.PercentValue,
+            includeChildSelections: spec.IncludeChildSelections,
+            includeChildForces: spec.IncludeChildForces,
+            roundUp: spec.RoundUp);
+    }
+
+    private static CategoryLink BuildCategoryLink(ProtocolCategoryLink spec)
+    {
+        var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
+        var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+
+        return JavaModelFactory.CreateCategoryLink(
+            spec.Id, spec.Name ?? "", spec.TargetId,
+            primary: spec.Primary,
+            hidden: spec.Hidden,
+            constraints: constraints,
+            modifiers: modifiers);
+    }
+
+    // ===== Entry creation =====
+
+    private static object CreateAndAddEntry(object parent, string entryType, string id, string name)
+    {
+        // Determine the correct container based on entry type and parent
+        var isRootParent = parent is Catalogue || parent is GameSystem;
+
+        return entryType switch
+        {
+            "selectionEntry" => AddNewSelectionEntry(parent, id, name),
+            "selectionEntryGroup" => AddNewSelectionEntryGroup(parent, id, name, isRootParent),
+            "rule" => AddNewRule(parent, id, name),
+            "profile" => AddNewProfile(parent, id, name, isRootParent),
+            "entryLink" => AddNewEntryLink(parent, id, name),
+            "forceEntry" => AddNewForceEntry(parent, id, name),
+            "categoryEntry" => AddNewCategoryEntry(parent, id, name),
+            _ => throw new InvalidOperationException($"Unsupported entry type for AddEntry: {entryType}"),
+        };
+    }
+
+    private static SelectionEntry AddNewSelectionEntry(object parent, string id, string name)
+    {
+        var entry = JavaModelFactory.CreateSelectionEntry(id, name, "upgrade");
+        GetContainerList(parent, "selectionEntry")!.add(entry);
+        return entry;
+    }
+
+    private static SelectionEntryGroup AddNewSelectionEntryGroup(
+        object parent, string id, string name, bool isRootParent)
+    {
+        var group = JavaModelFactory.CreateSelectionEntryGroup(id, name);
+        // At catalogue/system root, groups go to sharedSelectionEntryGroups
+        var containerName = isRootParent ? "sharedSelectionEntryGroup" : "selectionEntryGroup";
+        GetContainerList(parent, containerName)!.add(group);
+        return group;
+    }
+
+    private static Rule AddNewRule(object parent, string id, string name)
+    {
+        var rule = JavaModelFactory.CreateRule(id, name, "");
+        GetContainerList(parent, "rule")!.add(rule);
+        return rule;
+    }
+
+    private static Profile AddNewProfile(object parent, string id, string name, bool isRootParent)
+    {
+        var profile = JavaModelFactory.CreateProfile(id, name, "", "");
+        var containerName = isRootParent ? "sharedProfile" : "profile";
+        GetContainerList(parent, containerName)!.add(profile);
+        return profile;
+    }
+
+    private static EntryLink AddNewEntryLink(object parent, string id, string name)
+    {
+        var link = JavaModelFactory.CreateEntryLink(id, name, "", "selectionEntry");
+        GetContainerList(parent, "entryLink")!.add(link);
+        return link;
+    }
+
+    private static ForceEntry AddNewForceEntry(object parent, string id, string name)
+    {
+        var fe = JavaModelFactory.CreateForceEntry(id, name);
+        GetContainerList(parent, "forceEntry")!.add(fe);
+        return fe;
+    }
+
+    private static CategoryEntry AddNewCategoryEntry(object parent, string id, string name)
+    {
+        var ce = JavaModelFactory.CreateCategoryEntry(id, name);
+        GetContainerList(parent, "categoryEntry")!.add(ce);
+        return ce;
+    }
+
+    // ===== Link creation =====
+
+    private static EntryLink CreateEntryLink(string id, string targetId)
+    {
+        return JavaModelFactory.CreateEntryLink(id, "", targetId, "selectionEntry");
+    }
+
+    private static InfoLink CreateInfoLink(string id, string targetId)
+    {
+        return JavaModelFactory.CreateInfoLink(id, "", targetId, "profile");
+    }
+
+    private static CategoryLink CreateCategoryLink(string id, string targetId)
+    {
+        return JavaModelFactory.CreateCategoryLink(id, "", targetId);
+    }
+
+    // ===== Container resolution =====
+
+    /// <summary>
+    /// Gets the Java List for the appropriate container on the parent object.
+    /// </summary>
+    private static JavaList? GetContainerList(object parent, string entryType)
+    {
+        return entryType switch
+        {
+            "selectionEntry" => GetList(parent, "getSelectionEntries"),
+            "selectionEntryGroup" => GetList(parent, "getSelectionEntryGroups"),
+            "sharedSelectionEntryGroup" => GetList(parent, "getSharedSelectionEntryGroups"),
+            "entryLink" => GetList(parent, "getEntryLinks"),
+            "rule" => GetList(parent, "getRules"),
+            "sharedRule" => GetList(parent, "getSharedRules"),
+            "profile" => GetList(parent, "getProfiles"),
+            "sharedProfile" => GetList(parent, "getSharedProfiles"),
+            "infoLink" => GetList(parent, "getInfoLinks"),
+            "categoryLink" => GetList(parent, "getCategoryLinks"),
+            "forceEntry" => GetList(parent, "getForceEntries"),
+            "categoryEntry" => GetList(parent, "getCategoryEntries"),
+            "constraint" => GetList(parent, "getConstraints"),
+            "modifier" => GetList(parent, "getModifiers"),
+            "modifierGroup" => GetList(parent, "getModifierGroups"),
+            "infoGroup" => GetList(parent, "getInfoGroups"),
+            _ => null,
+        };
+    }
+
+    private static JavaList? GetList(object obj, string methodName)
+    {
+        var method = obj.GetType().GetMethod(methodName);
+        return method?.Invoke(obj, null) as JavaList;
+    }
+
+    // ===== Field setting =====
+
+    private static void SetFieldOnObject(object entry, string field, string? value)
+    {
+        // Map field name to setter method
+        var setterName = "set" + char.ToUpperInvariant(field[0]) + field[1..];
+        var type = entry.GetType();
+        var setter = type.GetMethod(setterName)
+            ?? throw new InvalidOperationException(
+                $"No setter '{setterName}' found on {type.Name}");
+
+        var paramType = setter.GetParameters()[0].ParameterType;
+
+        // Convert value to the expected type
+        object? converted;
+        if (paramType == typeof(bool) || paramType == typeof(java.lang.Boolean))
+        {
+            converted = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+        }
+        else if (paramType == typeof(int) || paramType == typeof(java.lang.Integer))
+        {
+            converted = int.TryParse(value, out var i) ? i : 0;
+        }
+        else if (paramType == typeof(double) || paramType == typeof(java.lang.Double))
+        {
+            converted = double.TryParse(value, out var d) ? d : 0.0;
+        }
+        else
+        {
+            converted = value;
+        }
+
+        setter.Invoke(entry, [converted]);
+    }
+
+    // ===== Entry lookup and indexing =====
+
+    private object? FindById(string id)
+    {
+        if (_catalogue != null && _catalogue.getId() == id)
+        {
+            return _catalogue;
+        }
+
+        if (_gameSystem != null && _gameSystem.getId() == id)
+        {
+            return _gameSystem;
+        }
+
+        return _entriesById.GetValueOrDefault(id);
+    }
+
+    private void IndexAllEntries(Catalogue cat)
+    {
+        IndexList(cat.getSelectionEntries());
+        IndexList(cat.getEntryLinks());
+        IndexList(cat.getSharedSelectionEntries());
+        IndexList(cat.getSharedSelectionEntryGroups());
+        IndexList(cat.getSharedRules());
+        IndexList(cat.getSharedProfiles());
+        IndexList(cat.getRules());
+        IndexList(cat.getForceEntries());
+        IndexList(cat.getCategoryEntries());
+        IndexList(cat.getInfoLinks());
+    }
+
+    private void IndexGameSystemEntries(GameSystem gs)
+    {
+        IndexList(gs.getSelectionEntries());
+        IndexList(gs.getEntryLinks());
+        IndexList(gs.getSharedSelectionEntries());
+        IndexList(gs.getSharedSelectionEntryGroups());
+        IndexList(gs.getSharedRules());
+        IndexList(gs.getSharedProfiles());
+        IndexList(gs.getRules());
+        IndexList(gs.getForceEntries());
+        IndexList(gs.getCategoryEntries());
+        IndexList(gs.getInfoLinks());
+    }
+
+    private void IndexList(JavaList? list)
+    {
+        if (list == null)
+        {
+            return;
+        }
+
+        var iter = list.iterator();
+        while (iter.hasNext())
+        {
+            var item = iter.next();
+            var id = GetId(item);
+            if (!string.IsNullOrEmpty(id))
+            {
+                _entriesById[id] = item;
+            }
+            // Recursively index children
+            IndexChildren(item);
+        }
+    }
+
+    private void IndexChildren(object entry)
+    {
+        // Index nested entries for each known container
+        string[] containers = [
+            "getSelectionEntries", "getSelectionEntryGroups", "getEntryLinks",
+            "getRules", "getProfiles", "getInfoGroups", "getInfoLinks",
+            "getCategoryLinks", "getConstraints", "getModifiers", "getModifierGroups",
+            "getForceEntries", "getCategoryEntries",
+        ];
+
+        foreach (var getter in containers)
+        {
+            var list = GetList(entry, getter);
+            if (list != null && list.size() > 0)
+            {
+                IndexList(list);
+            }
+        }
+    }
+
+    // ===== Removal =====
+
+    private static bool RemoveFromParent(object? root, string entryId)
+    {
+        if (root == null)
+        {
+            return false;
+        }
+
+        // Try removing from all container lists on this object
+        string[] containers = [
+            "getSelectionEntries", "getSelectionEntryGroups", "getEntryLinks",
+            "getRules", "getProfiles", "getInfoGroups", "getInfoLinks",
+            "getCategoryLinks", "getConstraints", "getModifiers", "getModifierGroups",
+            "getForceEntries", "getCategoryEntries",
+            "getSharedSelectionEntries", "getSharedSelectionEntryGroups",
+            "getSharedRules", "getSharedProfiles",
+        ];
+
+        foreach (var getter in containers)
+        {
+            var list = GetList(root, getter);
+            if (list == null)
+            {
+                continue;
+            }
+
+            for (var i = 0; i < list.size(); i++)
+            {
+                var item = list.get(i);
+                if (GetId(item) == entryId)
+                {
+                    list.remove(i);
+                    return true;
+                }
+                // Recurse into children
+                if (RemoveFromParent(item, entryId))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // ===== State extraction =====
+
+    private static CatalogueDataState ReadCatalogueState(Catalogue cat)
+    {
+        return new CatalogueDataState
+        {
+            Id = cat.getId() ?? "",
+            Name = cat.getName() ?? "",
+            GameSystemId = cat.getGameSystemId() ?? "",
+            SelectionEntries = ReadEntryList(cat.getSelectionEntries(), "selectionEntry"),
+            EntryLinks = ReadEntryList(cat.getEntryLinks(), "entryLink"),
+            Rules = ReadEntryList(cat.getRules(), "rule"),
+            SharedSelectionEntries = ReadEntryList(cat.getSharedSelectionEntries(), "selectionEntry"),
+            SharedSelectionEntryGroups = ReadEntryList(cat.getSharedSelectionEntryGroups(), "selectionEntryGroup"),
+            SharedRules = ReadEntryList(cat.getSharedRules(), "rule"),
+            SharedProfiles = ReadEntryList(cat.getSharedProfiles(), "profile"),
+            ForceEntries = ReadEntryList(cat.getForceEntries(), "forceEntry"),
+            CategoryEntries = ReadEntryList(cat.getCategoryEntries(), "categoryEntry"),
+            Publications = ReadEntryList(cat.getPublications(), "publication"),
+            CostTypes = ReadEntryList(cat.getCostTypes(), "costType"),
+            ProfileTypes = ReadEntryList(cat.getProfileTypes(), "profileType"),
+        };
+    }
+
+    private static GameSystemDataState ReadGameSystemState(GameSystem gs)
+    {
+        return new GameSystemDataState
+        {
+            Id = gs.getId() ?? "",
+            Name = gs.getName() ?? "",
+            SelectionEntries = ReadEntryList(gs.getSelectionEntries(), "selectionEntry"),
+            EntryLinks = ReadEntryList(gs.getEntryLinks(), "entryLink"),
+            Rules = ReadEntryList(gs.getRules(), "rule"),
+            SharedSelectionEntries = ReadEntryList(gs.getSharedSelectionEntries(), "selectionEntry"),
+            SharedSelectionEntryGroups = ReadEntryList(gs.getSharedSelectionEntryGroups(), "selectionEntryGroup"),
+            SharedRules = ReadEntryList(gs.getSharedRules(), "rule"),
+            SharedProfiles = ReadEntryList(gs.getSharedProfiles(), "profile"),
+            ForceEntries = ReadEntryList(gs.getForceEntries(), "forceEntry"),
+            CategoryEntries = ReadEntryList(gs.getCategoryEntries(), "categoryEntry"),
+            Publications = ReadEntryList(gs.getPublications(), "publication"),
+            CostTypes = ReadEntryList(gs.getCostTypes(), "costType"),
+            ProfileTypes = ReadEntryList(gs.getProfileTypes(), "profileType"),
+        };
+    }
+
+    private static IReadOnlyList<DataEntryState> ReadEntryList(JavaList? list, string entryType)
+    {
+        if (list == null || list.size() == 0)
+        {
+            return [];
+        }
+
+        var result = new List<DataEntryState>();
+        var iter = list.iterator();
+        while (iter.hasNext())
+        {
+            var item = iter.next();
+            result.Add(ReadEntry(item, entryType));
+        }
+        return result;
+    }
+
+    private static DataEntryState ReadEntry(object entry, string entryType)
+    {
+        var id = GetId(entry) ?? "";
+        var name = GetName(entry) ?? "";
+        var hidden = GetHidden(entry);
+
+        // Collect children
+        var children = new List<DataEntryState>();
+        AddChildren(children, entry, "getSelectionEntries", "selectionEntry");
+        AddChildren(children, entry, "getSelectionEntryGroups", "selectionEntryGroup");
+        AddChildren(children, entry, "getEntryLinks", "entryLink");
+        AddChildren(children, entry, "getRules", "rule");
+        AddChildren(children, entry, "getProfiles", "profile");
+        AddChildren(children, entry, "getInfoGroups", "infoGroup");
+        AddChildren(children, entry, "getInfoLinks", "infoLink");
+        AddChildren(children, entry, "getCategoryLinks", "categoryLink");
+        AddChildren(children, entry, "getConstraints", "constraint");
+        AddChildren(children, entry, "getModifiers", "modifier");
+        AddChildren(children, entry, "getModifierGroups", "modifierGroup");
+
+        // Collect type-specific fields
+        var fields = new Dictionary<string, string?>();
+        TryAddField(fields, entry, "getType", "type");
+        TryAddField(fields, entry, "getTargetId", "targetId");
+        TryAddField(fields, entry, "getPublicationId", "publicationId");
+        TryAddField(fields, entry, "getPage", "page");
+
+        return new DataEntryState
+        {
+            Id = id,
+            Name = name,
+            EntryType = entryType,
+            Hidden = hidden,
+            Children = children,
+            Fields = fields.Count > 0 ? fields : null,
+        };
+    }
+
+    private static void AddChildren(
+        List<DataEntryState> children, object parent, string getter, string entryType)
+    {
+        var list = GetList(parent, getter);
+        if (list == null || list.size() == 0)
+        {
+            return;
+        }
+
+        var iter = list.iterator();
+        while (iter.hasNext())
+        {
+            children.Add(ReadEntry(iter.next(), entryType));
+        }
+    }
+
+    private static void TryAddField(Dictionary<string, string?> fields, object entry, string getter, string key)
+    {
+        var method = entry.GetType().GetMethod(getter);
+        if (method == null)
+        {
+            return;
+        }
+
+        var value = method.Invoke(entry, null)?.ToString();
+        if (!string.IsNullOrEmpty(value))
+        {
+            fields[key] = value;
+        }
+    }
+
+    // ===== Reflection helpers =====
+
+    private static string? GetId(object entry)
+    {
+        return entry.GetType().GetMethod("getId")?.Invoke(entry, null)?.ToString();
+    }
+
+    private static string? GetName(object entry)
+    {
+        return entry.GetType().GetMethod("getName")?.Invoke(entry, null)?.ToString();
+    }
+
+    private static bool GetHidden(object entry)
+    {
+        var method = entry.GetType().GetMethod("getHidden")
+            ?? entry.GetType().GetMethod("isHidden");
+        if (method == null)
+        {
+            return false;
+        }
+
+        var result = method.Invoke(entry, null);
+        return result is true;
+    }
+
+    private static string GetEntryType(object entry)
+    {
+        return entry switch
+        {
+            SelectionEntry => "selectionEntry",
+            SelectionEntryGroup => "selectionEntryGroup",
+            EntryLink => "entryLink",
+            Rule => "rule",
+            Profile => "profile",
+            InfoGroup => "infoGroup",
+            InfoLink => "infoLink",
+            CategoryLink => "categoryLink",
+            ForceEntry => "forceEntry",
+            CategoryEntry => "categoryEntry",
+            Constraint => "constraint",
+            Modifier => "modifier",
+            ModifierGroup => "modifierGroup",
+            _ => "unknown",
+        };
+    }
+}
