@@ -21,7 +21,7 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id
 
 **Always run `pre-push` before pushing.** It covers lint, BattleScribe conformance, and NR frozen
 (offline HAR replay) in one fast command. Other profiles: `lint`, `bs`, `nr-frozen`,
-`nr-live`, `nr-live-visible`.
+`nr-editor-frozen`, `nr-editor-live`, `nr-live`, `nr-live-visible`.
 
 ## NR frozen tests and HAR
 
@@ -30,6 +30,13 @@ bundles, CSS, assets). This is NOT per-spec — all specs run against the same H
 editing specs requires no HAR changes; new specs work immediately. The HAR is versioned by
 NR client version (pinned in `testdata.json`), updated separately via
 [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har) releases.
+
+## NR Editor frozen tests
+
+The frozen NR Editor GameData tests serve the **gh-pages static deployment** of the
+[NR Editor](https://github.com/giloushaker/nr-editor) locally via Playwright route
+interception. No network access needed. The static files are downloaded by `setup.ps1`
+(git clone of the gh-pages branch, pinned by commit SHA in `testdata.json`).
 
 ## Debugging specs
 
@@ -66,9 +73,11 @@ pwsh -File tools/format-specs.ps1                                               
 | `src/BattleScribeSpec.TestKit/GameData/GameDataTypes.cs` | GameData state records |
 | `src/BattleScribeSpec.TestKit/GameData/GameDataSpecModels.cs` | GameData YAML spec model classes |
 | `src/BattleScribeSpec.TestKit/GameData/GameDataRunner.cs` | GameData assertion engine |
+| `src/BattleScribeSpec.NewRecruit/NewRecruitGameDataEngine.cs` | NR Editor GameData adapter (live + frozen) |
 | `src/BattleScribeSpec.Debugger/Program.cs` | bs-spec-debug console app |
 | `src/BattleScribeSpec.TestKit/Protocol/AdapterHandler.cs` | Action dispatch |
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
+| `tests/Infrastructure/FrozenNewRecruitGameDataFixture.cs` | Frozen NR Editor GameData fixture |
 | `tools/format-specs.ps1` | Spec formatter |
 

@@ -103,6 +103,11 @@ jobs:
           NR_HEADLESS: true
           NR_PARALLEL: 4
 
+      - name: Run frozen NR Editor GameData tests
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FullyQualifiedName~FrozenNewRecruitGameDataConformanceTests" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        env:
+          NR_HEADLESS: true
+
   nr-conformance:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[nr-test]')
     runs-on: ubuntu-latest

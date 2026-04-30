@@ -82,34 +82,71 @@ if (Test-Path $configPath) {
     foreach ($key in $config.PSObject.Properties.Name) {
         $entry = $config.$key
         $repo = $entry.repo
-        $tag = $entry.tag
         $destDir = Join-Path $testdataDir $key
 
-        Write-Host "[$key] repo=$repo tag=$tag" -ForegroundColor Cyan
+        $entryType = if ($entry.PSObject.Properties['type']) { $entry.type } else { 'release' }
 
-        # Check if already downloaded with matching tag
-        $tagMarker = Join-Path $destDir '.tag'
-        if (-not $Force -and (Test-Path $tagMarker) -and ((Get-Content $tagMarker -Raw).Trim() -eq $tag)) {
-            Write-Host "  [OK] Already downloaded ($tag)" -ForegroundColor Green
-            continue
+        switch ($entryType) {
+            'release' {
+                $tag = $entry.tag
+                Write-Host "[$key] release: $repo @ $tag" -ForegroundColor Cyan
+
+                $tagMarker = Join-Path $destDir '.tag'
+                if (-not $Force -and (Test-Path $tagMarker) -and ((Get-Content $tagMarker -Raw).Trim() -eq $tag)) {
+                    Write-Host "  [OK] Already downloaded ($tag)" -ForegroundColor Green
+                    continue
+                }
+
+                if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force }
+                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+
+                Write-Host "  Downloading release $tag from $repo..." -ForegroundColor Yellow
+                gh release download $tag -R $repo -D $destDir
+                if ($LASTEXITCODE -ne 0) { throw "Failed to download release $tag from $repo" }
+
+                $tag | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
+                Write-Host "  [OK] Downloaded to $destDir" -ForegroundColor Green
+            }
+            'archive' {
+                $commit = $entry.commit
+                $ref = if ($entry.PSObject.Properties['ref']) { $entry.ref } else { $null }
+                Write-Host "[$key] archive: $repo @ $($commit.Substring(0, 12))" -ForegroundColor Cyan
+
+                $tagMarker = Join-Path $destDir '.tag'
+                if (-not $Force -and (Test-Path $tagMarker) -and ((Get-Content $tagMarker -Raw).Trim() -eq $commit)) {
+                    Write-Host "  [OK] Already downloaded ($($commit.Substring(0, 12)))" -ForegroundColor Green
+                    continue
+                }
+
+                if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force }
+
+                # Clone at specific branch (shallow) then verify commit matches
+                $cloneArgs = @('clone', '--depth', '1')
+                if ($ref) { $cloneArgs += @('--branch', $ref) }
+                $cloneArgs += @("https://github.com/$repo.git", $destDir)
+                $refLabel = if ($ref) { $ref } else { 'default' }
+                Write-Host "  Cloning $repo ($refLabel)..." -ForegroundColor Yellow
+                git @cloneArgs
+                if ($LASTEXITCODE -ne 0) { throw "Failed to clone $repo" }
+
+                # Verify commit SHA — write actual commit to .tag (not expected)
+                $actual = (git -C $destDir rev-parse HEAD).Trim()
+                if ($actual -ne $commit) {
+                    Write-Warning "  Expected commit $($commit.Substring(0, 12)) but got $($actual.Substring(0, 12))"
+                    Write-Warning "  The pinned commit may be outdated. Update testdata.json to match."
+                }
+
+                # Remove .git to save space — we only need the static files
+                $gitDir = Join-Path $destDir '.git'
+                if (Test-Path $gitDir) { Remove-Item $gitDir -Recurse -Force }
+
+                $actual | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
+                Write-Host "  [OK] Downloaded to $destDir" -ForegroundColor Green
+            }
+            default {
+                Write-Warning "[$key] Unknown type '$entryType' — skipping"
+            }
         }
-
-        # Clean and recreate destination
-        if (Test-Path $destDir) {
-            Remove-Item $destDir -Recurse -Force
-        }
-        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-
-        Write-Host "  Downloading release $tag from $repo..." -ForegroundColor Yellow
-        gh release download $tag -R $repo -D $destDir
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to download release $tag from $repo"
-        }
-
-        # Write tag marker for skip-check
-        $tag | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
-
-        Write-Host "  [OK] Downloaded to $destDir" -ForegroundColor Green
     }
 }
 
