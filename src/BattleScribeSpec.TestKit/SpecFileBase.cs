@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec;
+namespace BattleScribeSpec;
 
 /// <summary>
 /// Base class for all spec file types (roster, gamedata).

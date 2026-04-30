@@ -1,4 +1,4 @@
-﻿using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;

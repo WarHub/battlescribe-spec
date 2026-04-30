@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.Tests;
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// 10 complex real-world roster tests using wh40k-9e data.

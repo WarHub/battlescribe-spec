@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.GameData;
+namespace BattleScribeSpec.GameData;
 
 /// <summary>
 /// Abstraction for a BattleScribe-compatible data editing engine.

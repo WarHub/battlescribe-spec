@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec;
+namespace BattleScribeSpec;
 
 /// <summary>
 /// Parsed data source URI identifying game system data.

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;

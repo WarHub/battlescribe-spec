@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.Tests;
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// engine tests against real wh40k-9e data.

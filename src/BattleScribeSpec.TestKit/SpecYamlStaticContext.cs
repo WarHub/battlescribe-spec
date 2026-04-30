@@ -1,4 +1,4 @@
-﻿using BattleScribeSpec.GameData;
+using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 using YamlDotNet.Serialization;

@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec;
+namespace BattleScribeSpec;
 
 /// <summary>
 /// Parses and applies tag filter expressions for spec filtering.

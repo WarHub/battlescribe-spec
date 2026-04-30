@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.GameData;
+namespace BattleScribeSpec.GameData;
 
 /// <summary>
 /// State snapshot of the game data being edited.

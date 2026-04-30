@@ -1,4 +1,4 @@
-﻿namespace BattleScribeSpec.Tests;
+namespace BattleScribeSpec.Tests;
 
 public sealed class TagFilterTests
 {

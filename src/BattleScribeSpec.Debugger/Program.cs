@@ -1,4 +1,4 @@
-﻿using BattleScribeSpec;
+using BattleScribeSpec;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Roster;
 
