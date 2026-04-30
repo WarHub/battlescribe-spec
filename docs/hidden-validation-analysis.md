@@ -165,9 +165,9 @@ violations and checking whether errors appear immediately):
 The adapter's `Validate()` method invokes `v()` via reflection to compensate for
 operations that don't trigger it internally. It is called after:
 
-1. **`SelectDefaultRootEntries()`** (in `AddForce`) — auto-selected entries may
-   trigger hidden constraints (e.g., hidden entry with min≥1 is force-created,
-   must immediately produce a hidden error).
+1. **`AddForce()`** — both force creation (`b(gs,cat,...)`) and auto-select (`x()`)
+   don't trigger v(). Validate() runs unconditionally after every AddForce so that
+   hidden constraints and force-level errors are immediately visible.
 2. **`SetNumSelections()`** — changing selection count can affect cost totals,
    which may trigger cost limit validation errors.
 3. **`CreateChildForce()`** — adding a child force changes the roster structure,
@@ -180,9 +180,9 @@ operations that don't trigger it internally. It is called after:
 - **Correctness**: Operations that trigger `v()` internally already produce correct
   errors. Adding a redundant `Validate()` call would not change behavior but would
   slow down the adapter.
-- **CreateChildForce**: Does not trigger `v()`, but newly created child forces are
-  empty (no selections = no constraint violations). Validation will naturally occur
-  on the next mutation (selectEntry, etc.).
+- **Targeted compensation only**: The adapter adds explicit `Validate()` calls only
+  for operations that need compensation because they do not reliably trigger `v()`
+  internally and can still affect visible validation state.
 
 ## NewRecruit Behavior
 
@@ -257,8 +257,9 @@ The BattleScribe engine adapter compensates for engine gaps in two ways:
 **1. Explicit validation calls** — See "Validation Trigger Analysis" above.
 The adapter calls `Validate()` (which reflectively invokes `v()`) after engine
 operations that don't trigger validation internally:
-- After `SelectDefaultRootEntries()` in `AddForce`
+- After `AddForce` (force creation + auto-select don't trigger v())
 - After `SetNumSelections()`
+- After `CreateChildForce()`
 
 **2. Hidden state reads** — The adapter reads modifier-applied hidden state by
 calling the engine's internal modifier-application method:

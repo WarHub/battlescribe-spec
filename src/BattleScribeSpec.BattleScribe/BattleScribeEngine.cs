@@ -198,8 +198,9 @@ public sealed class BattleScribeEngine : IDisposable
         {
             _autoSelectDone = true;
             SelectDefaultRootEntries();
-            Validate();
         }
+
+        Validate();
 
         return (force, JavaListToStringErrors(errors));
     }
@@ -2238,13 +2239,15 @@ public sealed class BattleScribeEngine : IDisposable
     /// </remarks>
     private void Validate()
     {
-        var method = _engine.GetType().GetMethod("v",
+        _validateMethod ??= _engine.GetType().GetMethod("v",
             BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly,
             binder: null, types: Type.EmptyTypes, modifiers: null) ?? throw new InvalidOperationException(
                 "Could not find engine method v() for validation.");
 
-        method.Invoke(_engine, null);
+        _validateMethod.Invoke(_engine, null);
     }
+
+    private MethodInfo? _validateMethod;
 
     [MemberNotNull(nameof(_gameSystem))]
     private void EnsureInitialized()
