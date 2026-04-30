@@ -1,4 +1,5 @@
 ﻿using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec;
 

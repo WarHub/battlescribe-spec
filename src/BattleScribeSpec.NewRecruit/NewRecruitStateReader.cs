@@ -1,4 +1,5 @@
-﻿using Microsoft.Playwright;
+using Microsoft.Playwright;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.NewRecruit;
 

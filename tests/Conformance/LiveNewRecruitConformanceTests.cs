@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Tests;
 
@@ -63,7 +64,7 @@ public sealed class LiveNewRecruitConformanceTests
                 using var pooled = await pool.AcquireAsync(ct);
                 var engine = pooled.Engine;
 
-                var runner = new SpecRunner(engine, resolver, EngineName);
+                var runner = new RosterRunner(engine, resolver, EngineName);
                 var result = runner.Run(spec);
 
                 if (result.Passed && expectedToFail)

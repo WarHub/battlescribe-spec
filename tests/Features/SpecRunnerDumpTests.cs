@@ -1,4 +1,5 @@
-﻿using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Tests;
 
@@ -28,7 +29,7 @@ public class SpecRunnerDumpTests
     public void OnStepCompleted_CalledAfterAction()
     {
         using var engine = new BattleScribeRosterEngine();
-        var runner = new SpecRunner(engine, engineName: "battlescribe");
+        var runner = new RosterRunner(engine, engineName: "battlescribe");
 
         var callbackSteps = new List<(int Index, string? Action)>();
         runner.OnStepCompleted = (index, step, state, errors) => callbackSteps.Add((index, step.Action));
@@ -56,7 +57,7 @@ public class SpecRunnerDumpTests
     public void OnStepCompleted_CalledAfterAssertion()
     {
         using var engine = new BattleScribeRosterEngine();
-        var runner = new SpecRunner(engine, engineName: "battlescribe");
+        var runner = new RosterRunner(engine, engineName: "battlescribe");
 
         var states = new List<RosterState>();
         runner.OnStepCompleted = (_, _, state, _) => states.Add(state);
@@ -90,7 +91,7 @@ public class SpecRunnerDumpTests
     public void DumpAction_IsNoOp_ButTriggersCallback()
     {
         using var engine = new BattleScribeRosterEngine();
-        var runner = new SpecRunner(engine, engineName: "battlescribe");
+        var runner = new RosterRunner(engine, engineName: "battlescribe");
 
         var dumpCalls = new List<int>();
         runner.OnStepCompleted = (index, step, _, _) =>
@@ -127,7 +128,7 @@ public class SpecRunnerDumpTests
     public void DumpAction_DoesNotBreakSpecExecution()
     {
         using var engine = new BattleScribeRosterEngine();
-        var runner = new SpecRunner(engine, engineName: "battlescribe");
+        var runner = new RosterRunner(engine, engineName: "battlescribe");
 
         var spec = new SpecFile
         {
@@ -160,7 +161,7 @@ public class SpecRunnerDumpTests
     public void OnStepCompleted_ReceivesValidState()
     {
         using var engine = new BattleScribeRosterEngine();
-        var runner = new SpecRunner(engine, engineName: "battlescribe");
+        var runner = new RosterRunner(engine, engineName: "battlescribe");
 
         RosterState? capturedState = null;
         IReadOnlyList<ValidationErrorState>? capturedErrors = null;

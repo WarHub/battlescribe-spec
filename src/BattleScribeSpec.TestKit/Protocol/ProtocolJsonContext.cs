@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Protocol;
 

@@ -1,11 +1,11 @@
 ﻿using BattleScribeSpec.Protocol;
 
-namespace BattleScribeSpec;
+namespace BattleScribeSpec.Roster;
 
 /// <summary>
 /// Executes spec test steps against an IRosterEngine and validates assertions.
 /// </summary>
-public sealed class SpecRunner
+public sealed class RosterRunner
 {
     private readonly IRosterEngine _engine;
     private readonly DataSourceResolver? _dataSourceResolver;
@@ -22,7 +22,7 @@ public sealed class SpecRunner
     /// </summary>
     public Action<int, StepDef, RosterState, IReadOnlyList<ValidationErrorState>>? OnStepCompleted { get; set; }
 
-    public SpecRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null, string? engineName = null)
+    public RosterRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null, string? engineName = null)
     {
         _engine = engine;
         _dataSourceResolver = dataSourceResolver;
@@ -994,16 +994,4 @@ public sealed class SpecRunner
             _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
         }
     }
-}
-
-/// <summary>
-/// Result of running a single spec test.
-/// </summary>
-public sealed record SpecResult(
-    string SpecId,
-    string Category,
-    string Description,
-    IReadOnlyList<string> Failures)
-{
-    public bool Passed => Failures.Count == 0;
 }

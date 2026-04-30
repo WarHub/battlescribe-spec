@@ -1,4 +1,6 @@
-﻿namespace BattleScribeSpec;
+﻿using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec;
 
 /// <summary>
 /// Resolves ${{ steps.&lt;stepId&gt;.&lt;field&gt; }} expressions against stored step outputs.

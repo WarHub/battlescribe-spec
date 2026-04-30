@@ -1,7 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace BattleScribeSpec;
+namespace BattleScribeSpec.Roster;
 
 /// <summary>
 /// Options controlling state dump output format.

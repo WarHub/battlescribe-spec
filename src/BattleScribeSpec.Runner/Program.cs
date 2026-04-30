@@ -1,6 +1,7 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.Json;
 using BattleScribeSpec;
+using BattleScribeSpec.Roster;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Runner;
 
@@ -249,7 +250,7 @@ if (workers > 1)
             {
                 var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
                 using var engine = new JsonProtocolEngine(proc, timeout);
-                var runner = new SpecRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
+                var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
                 var result = runner.Run(spec);
 
                 var status = result.Passed ? "passed" : "failed";
@@ -295,7 +296,7 @@ else
     {
         var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
         using var engine = new JsonProtocolEngine(adapterProcess!, timeout);
-        var runner = new SpecRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
+        var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
         var result = runner.Run(spec);
         results.Add(result);
         specsByResult[result] = spec;

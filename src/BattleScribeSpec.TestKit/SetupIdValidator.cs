@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec;
 

@@ -1,5 +1,6 @@
-﻿using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Tests;
 
@@ -171,7 +172,7 @@ public sealed class LiveNewRecruitSmokeTests
                 continue;
             }
 
-            var runner = new SpecRunner(_fixture.Engine!);
+            var runner = new RosterRunner(_fixture.Engine!);
             var result = runner.Run(spec);
 
             _output.WriteLine($"  Result: {(result.Passed ? "PASS" : "FAIL")}");

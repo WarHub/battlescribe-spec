@@ -1,4 +1,6 @@
-﻿namespace BattleScribeSpec.Tests;
+using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Runs all declarative YAML spec files against the BattleScribe (Java) engine.

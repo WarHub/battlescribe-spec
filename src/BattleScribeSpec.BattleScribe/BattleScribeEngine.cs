@@ -1,13 +1,15 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using BattleScribeSpec.Protocol;
 using net.battlescribe.model.data;
 using net.battlescribe.model.roster;
+using BsRoster = net.battlescribe.model.roster.Roster;
 using JavaArrayList = java.util.ArrayList;
 using JavaEngine = net.battlescribe.engine.a.f;
 using JavaHashMap = java.util.HashMap;
 using JavaList = java.util.List;
 using JavaPerfMetrics = net.battlescribe.engine.b.e;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec;
 
@@ -88,7 +90,7 @@ public sealed class BattleScribeEngine : IDisposable
             _catalogues[kvp.Key] = kvp.Value;
         }
 
-        var roster = new Roster();
+        var roster = new BsRoster();
         roster.setId(java.util.UUID.randomUUID().toString());
         roster.setName(RosterName ?? "Test Roster");
         roster.setGameSystemId(gameSystem.getId());
@@ -401,7 +403,7 @@ public sealed class BattleScribeEngine : IDisposable
         }
     }
 
-    private void CollectRosterErrors(Roster roster, List<ValidationErrorState> result)
+    private void CollectRosterErrors(BsRoster roster, List<ValidationErrorState> result)
     {
         var errors = roster.getValidationErrors();
         if (errors is null || errors.size() == 0)
@@ -660,7 +662,7 @@ public sealed class BattleScribeEngine : IDisposable
     /// <summary>
     /// Get the current roster.
     /// </summary>
-    public Roster GetRoster()
+    public BsRoster GetRoster()
     {
         EnsureInitialized();
         return _engine.a();

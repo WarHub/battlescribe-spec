@@ -1,6 +1,6 @@
 ﻿using BattleScribeSpec.Protocol;
 
-namespace BattleScribeSpec;
+namespace BattleScribeSpec.Roster;
 
 /// <summary>
 /// YAML-serializable models for declarative roster spec test files.

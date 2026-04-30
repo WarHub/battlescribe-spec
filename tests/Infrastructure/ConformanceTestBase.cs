@@ -1,4 +1,6 @@
-﻿namespace BattleScribeSpec.Tests;
+using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared base class for running declarative YAML spec files against any IRosterEngine.
@@ -87,7 +89,7 @@ public abstract class ConformanceTestBase
             return;
         }
 
-        var runner = new SpecRunner(engine, new DataSourceResolver(), EngineName);
+        var runner = new RosterRunner(engine, new DataSourceResolver(), EngineName);
         var result = runner.Run(spec);
 
         if (result.Passed && expectedToFail)

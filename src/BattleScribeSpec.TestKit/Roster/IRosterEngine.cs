@@ -1,7 +1,7 @@
 ﻿using System.Text.Json.Serialization;
 using BattleScribeSpec.Protocol;
 
-namespace BattleScribeSpec;
+namespace BattleScribeSpec.Roster;
 
 /// <summary>
 /// Structured outputs from mutating roster actions.
@@ -123,7 +123,7 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Provide the spec ID for the upcoming test run.
-    /// Called by <see cref="SpecRunner"/> before <see cref="Setup"/> or <see cref="SetupFromFiles"/>.
+    /// Called by <see cref="RosterRunner"/> before <see cref="Setup"/> or <see cref="SetupFromFiles"/>.
     /// Engines may use this to label the roster (e.g. for non-headless debugging).
     /// </summary>
     void SetTestContext(string specId) { }
