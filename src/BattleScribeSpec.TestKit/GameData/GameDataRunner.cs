@@ -159,7 +159,7 @@ public sealed class GameDataRunner
                 outputs = _engine.AddLink(
                     parentId ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires parentId"),
                     step.LinkType ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires linkType"),
-                    step.TargetId ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires targetId"));
+                    _exprResolver.Resolve(step.TargetId) ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires targetId"));
                 break;
 
             default:

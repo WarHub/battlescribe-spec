@@ -66,7 +66,6 @@ pwsh -File tools/format-specs.ps1                                               
 | `src/BattleScribeSpec.TestKit/GameData/GameDataTypes.cs` | GameData state records |
 | `src/BattleScribeSpec.TestKit/GameData/GameDataSpecModels.cs` | GameData YAML spec model classes |
 | `src/BattleScribeSpec.TestKit/GameData/GameDataRunner.cs` | GameData assertion engine |
-| `src/BattleScribeSpec.TestKit/GameData/MemoryGameDataEngine.cs` | In-memory GameData engine for testing |
 | `src/BattleScribeSpec.Debugger/Program.cs` | bs-spec-debug console app |
 | `src/BattleScribeSpec.TestKit/Protocol/AdapterHandler.cs` | Action dispatch |
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |
