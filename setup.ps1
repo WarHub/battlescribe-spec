@@ -124,11 +124,12 @@ if (Test-Path $configPath) {
                 $cloneArgs = @('clone', '--depth', '1')
                 if ($ref) { $cloneArgs += @('--branch', $ref) }
                 $cloneArgs += @("https://github.com/$repo.git", $destDir)
-                Write-Host "  Cloning $repo ($ref ?? default)..." -ForegroundColor Yellow
+                $refLabel = if ($ref) { $ref } else { 'default' }
+                Write-Host "  Cloning $repo ($refLabel)..." -ForegroundColor Yellow
                 git @cloneArgs
                 if ($LASTEXITCODE -ne 0) { throw "Failed to clone $repo" }
 
-                # Verify commit SHA
+                # Verify commit SHA — write actual commit to .tag (not expected)
                 $actual = (git -C $destDir rev-parse HEAD).Trim()
                 if ($actual -ne $commit) {
                     Write-Warning "  Expected commit $($commit.Substring(0, 12)) but got $($actual.Substring(0, 12))"
@@ -139,7 +140,7 @@ if (Test-Path $configPath) {
                 $gitDir = Join-Path $destDir '.git'
                 if (Test-Path $gitDir) { Remove-Item $gitDir -Recurse -Force }
 
-                $commit | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
+                $actual | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
                 Write-Host "  [OK] Downloaded to $destDir" -ForegroundColor Green
             }
             default {

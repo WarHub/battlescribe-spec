@@ -169,14 +169,17 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
 
     private static async Task SetupStaticFileRouting(IPage page, string staticDir)
     {
-        // Normalize the staticDir path for consistent comparison
-        var normalizedDir = Path.GetFullPath(staticDir);
+        // Normalize with trailing separator for safe containment check
+        var normalizedDir = Path.GetFullPath(staticDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
         await page.RouteAsync("**/*", async route =>
         {
             var request = route.Request;
             var url = new Uri(request.Url);
             var path = Uri.UnescapeDataString(url.AbsolutePath);
+
+            // Normalize backslashes that could come from %5C decoding
+            path = path.Replace('\\', '/');
 
             // Strip the /nr-editor/ base URL prefix
             const string basePrefix = "/nr-editor/";
@@ -199,7 +202,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                 path = "index.html";
             }
 
-            // Security: prevent path traversal
+            // Security: prevent path traversal (trailing separator ensures no prefix collision)
             var fullPath = Path.GetFullPath(Path.Combine(normalizedDir, path.Replace('/', Path.DirectorySeparatorChar)));
             if (!fullPath.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase))
             {
@@ -227,27 +230,33 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             }
             else
             {
-                // SPA fallback: serve index.html for unknown routes (client-side routing)
-                var indexPath = Path.Combine(normalizedDir, "index.html");
-                if (File.Exists(indexPath))
+                // SPA fallback only for navigation requests (HTML pages), not static assets.
+                // Returning index.html for a missing .js/.css would hide real 404s.
+                var ext = Path.GetExtension(fullPath);
+                var isStaticAsset = !string.IsNullOrEmpty(ext) && ext != ".html";
+
+                if (!isStaticAsset)
                 {
-                    var body = await File.ReadAllBytesAsync(indexPath);
-                    await route.FulfillAsync(new RouteFulfillOptions
+                    var indexPath = Path.Combine(normalizedDir, "index.html");
+                    if (File.Exists(indexPath))
                     {
-                        Status = 200,
-                        ContentType = "text/html",
-                        BodyBytes = body,
-                    });
+                        var body = await File.ReadAllBytesAsync(indexPath);
+                        await route.FulfillAsync(new RouteFulfillOptions
+                        {
+                            Status = 200,
+                            ContentType = "text/html",
+                            BodyBytes = body,
+                        });
+                        return;
+                    }
                 }
-                else
+
+                await route.FulfillAsync(new RouteFulfillOptions
                 {
-                    await route.FulfillAsync(new RouteFulfillOptions
-                    {
-                        Status = 404,
-                        ContentType = "text/plain",
-                        Body = "Not Found",
-                    });
-                }
+                    Status = 404,
+                    ContentType = "text/plain",
+                    Body = "Not Found",
+                });
             }
         });
     }
