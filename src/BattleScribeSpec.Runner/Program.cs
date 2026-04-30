@@ -118,7 +118,7 @@ if (specsDir is not null)
 else
 {
     // Try filesystem first, then embedded
-    specsDir = SpecLoader.FindSpecsDirectory();
+    specsDir = SpecLoader.FindRosterSpecsDirectory();
     if (specsDir is not null)
     {
         fileSpecs = [.. SpecLoader.DiscoverSpecs(specsDir)];

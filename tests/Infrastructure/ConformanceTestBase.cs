@@ -27,7 +27,7 @@ public abstract class ConformanceTestBase
 
     public static TheoryDataRow<string, string>[] AllSpecs()
     {
-        var specsDir = SpecLoader.FindSpecsDirectory();
+        var specsDir = SpecLoader.FindRosterSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
         {
             return [];
@@ -59,7 +59,7 @@ public abstract class ConformanceTestBase
     /// </summary>
     public static List<(string Path, string Name)> AllSpecPaths()
     {
-        var specsDir = SpecLoader.FindSpecsDirectory();
+        var specsDir = SpecLoader.FindRosterSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
         {
             return [];

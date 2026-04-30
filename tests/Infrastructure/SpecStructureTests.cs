@@ -5,7 +5,7 @@ public sealed class SpecStructureTests
 {
     private static IEnumerable<(string path, SpecFile spec)> AllSpecFiles()
     {
-        var specsDir = SpecLoader.FindSpecsDirectory();
+        var specsDir = SpecLoader.FindRosterSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
         {
             yield break;

@@ -109,14 +109,14 @@ public class ProtocolSerializationRoundTripTests
 
     private static string FindSpec(string specId)
     {
-        var specsDir = SpecLoader.FindSpecsDirectory()
+        var specsDir = SpecLoader.FindRosterSpecsDirectory()
             ?? throw new InvalidOperationException("Could not find specs directory");
-        var path = Path.Combine(specsDir, specId + ".yaml");
-        if (!File.Exists(path))
+        var match = SpecLoader.DiscoverSpecs(specsDir).FirstOrDefault(s => s.Id == specId);
+        if (match.Path is null)
         {
-            throw new FileNotFoundException($"Spec not found: {path}");
+            throw new FileNotFoundException($"Spec not found: {specId}");
         }
 
-        return path;
+        return match.Path;
     }
 }

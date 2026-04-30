@@ -77,7 +77,7 @@ public static class SpecLoader
     }
 
     /// <summary>
-    /// Find the specs directory by walking up from the test assembly location.
+    /// Find the specs root directory by walking up from the test assembly location.
     /// </summary>
     public static string? FindSpecsDirectory()
     {
@@ -98,6 +98,36 @@ public static class SpecLoader
             dir = Path.GetDirectoryName(dir);
         }
         return null;
+    }
+
+    /// <summary>
+    /// Find the roster specs directory (specs/roster/).
+    /// </summary>
+    public static string? FindRosterSpecsDirectory()
+    {
+        var specsDir = FindSpecsDirectory();
+        if (specsDir is null)
+        {
+            return null;
+        }
+
+        var rosterDir = Path.Combine(specsDir, "roster");
+        return Directory.Exists(rosterDir) ? rosterDir : null;
+    }
+
+    /// <summary>
+    /// Find the gamedata specs directory (specs/gamedata/).
+    /// </summary>
+    public static string? FindGameDataSpecsDirectory()
+    {
+        var specsDir = FindSpecsDirectory();
+        if (specsDir is null)
+        {
+            return null;
+        }
+
+        var gameDataDir = Path.Combine(specsDir, "gamedata");
+        return Directory.Exists(gameDataDir) ? gameDataDir : null;
     }
 
     /// <summary>

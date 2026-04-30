@@ -9,7 +9,7 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Unit")]
 public sealed class SpecLintTests
 {
-    private static readonly string? SpecsDir = SpecLoader.FindSpecsDirectory();
+    private static readonly string? SpecsDir = SpecLoader.FindRosterSpecsDirectory();
 
     private static IEnumerable<(string path, string relPath, SpecFile spec)> AllSpecFiles()
     {

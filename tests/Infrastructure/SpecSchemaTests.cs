@@ -11,11 +11,11 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Unit")]
 public sealed class SpecSchemaTests
 {
-    private static readonly string? SpecsDir = SpecLoader.FindSpecsDirectory();
+    private static readonly string? SpecsDir = SpecLoader.FindRosterSpecsDirectory();
 
     private static readonly Lazy<JsonSchema> Schema = new(() =>
     {
-        var schemaPath = Path.Combine(SpecsDir!, "..", "docs", "spec-schema.json");
+        var schemaPath = Path.Combine(SpecsDir!, "..", "..", "docs", "spec-schema.json");
         var schemaText = File.ReadAllText(schemaPath);
         return JsonSchema.FromText(schemaText);
     });
