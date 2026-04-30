@@ -48,6 +48,53 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         return engine;
     }
 
+    /// <summary>
+    /// Create a frozen NR Editor engine that serves static files from a local directory.
+    /// The directory must contain the gh-pages deployment of the NR Editor
+    /// (index.html, _nuxt/, assets/, etc.).
+    /// </summary>
+    public static async Task<NewRecruitGameDataEngine> CreateFrozenAsync(
+        string staticDir,
+        bool headless = true,
+        float? slowMo = null)
+    {
+        if (!Directory.Exists(staticDir))
+        {
+            throw new DirectoryNotFoundException($"NR Editor static directory not found: {staticDir}");
+        }
+
+        if (!File.Exists(Path.Combine(staticDir, "index.html")))
+        {
+            throw new FileNotFoundException(
+                $"NR Editor static directory doesn't contain index.html: {staticDir}");
+        }
+
+        // Use a synthetic base URL — all requests are intercepted locally
+        var engine = new NewRecruitGameDataEngine("https://nr-editor.local/nr-editor", headless);
+        await engine.InitializeFrozenAsync(staticDir, slowMo);
+        return engine;
+    }
+
+    /// <summary>
+    /// Locates the NR Editor static files directory by walking up from startDir
+    /// looking for .testdata/nr-editor/index.html.
+    /// </summary>
+    public static string? FindFrozenStaticDir(string? startDir = null)
+    {
+        var dir = startDir ?? Directory.GetCurrentDirectory();
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir, ".testdata", "nr-editor");
+            if (File.Exists(Path.Combine(candidate, "index.html")))
+            {
+                return candidate;
+            }
+
+            dir = Path.GetDirectoryName(dir);
+        }
+        return null;
+    }
+
     private async Task InitializeAsync(float? slowMo)
     {
         _playwright = await Playwright.CreateAsync();
@@ -64,6 +111,145 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         });
         // Wait for the app to initialize (Vue/Nuxt)
         await WaitForAppReadyAsync();
+    }
+
+    private async Task InitializeFrozenAsync(string staticDir, float? slowMo)
+    {
+        _playwright = await Playwright.CreateAsync();
+        _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        {
+            Headless = Headless,
+            SlowMo = slowMo,
+        });
+        var context = await _browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            // Block service workers to prevent them from bypassing route interception
+            ServiceWorkers = ServiceWorkerPolicy.Block,
+        });
+        _page = await context.NewPageAsync();
+
+        // Set up route interception that serves local static files
+        await SetupStaticFileRouting(_page, staticDir);
+
+        // Navigate to the app — all network requests will be served from local files
+        await _page.GotoAsync(BaseUrl, new PageGotoOptions
+        {
+            WaitUntil = WaitUntilState.Load,
+            Timeout = 60_000,
+        });
+        // Wait for the app to initialize (Vue/Nuxt)
+        await WaitForAppReadyAsync();
+    }
+
+    private static readonly Dictionary<string, string> MimeTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".html"] = "text/html",
+        [".js"] = "application/javascript",
+        [".mjs"] = "application/javascript",
+        [".css"] = "text/css",
+        [".json"] = "application/json",
+        [".png"] = "image/png",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".gif"] = "image/gif",
+        [".svg"] = "image/svg+xml",
+        [".ico"] = "image/x-icon",
+        [".woff"] = "font/woff",
+        [".woff2"] = "font/woff2",
+        [".ttf"] = "font/ttf",
+        [".otf"] = "font/otf",
+        [".eot"] = "application/vnd.ms-fontobject",
+        [".map"] = "application/json",
+        [".webp"] = "image/webp",
+        [".webm"] = "video/webm",
+        [".mp4"] = "video/mp4",
+        [".txt"] = "text/plain",
+        [".xml"] = "application/xml",
+    };
+
+    private static async Task SetupStaticFileRouting(IPage page, string staticDir)
+    {
+        // Normalize the staticDir path for consistent comparison
+        var normalizedDir = Path.GetFullPath(staticDir);
+
+        await page.RouteAsync("**/*", async route =>
+        {
+            var request = route.Request;
+            var url = new Uri(request.Url);
+            var path = Uri.UnescapeDataString(url.AbsolutePath);
+
+            // Strip the /nr-editor/ base URL prefix
+            const string basePrefix = "/nr-editor/";
+            if (path.StartsWith(basePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                path = path[basePrefix.Length..];
+            }
+            else if (path == "/nr-editor")
+            {
+                path = "";
+            }
+            else if (path.StartsWith('/'))
+            {
+                path = path[1..];
+            }
+
+            // Empty path maps to index.html
+            if (string.IsNullOrEmpty(path) || path == "/")
+            {
+                path = "index.html";
+            }
+
+            // Security: prevent path traversal
+            var fullPath = Path.GetFullPath(Path.Combine(normalizedDir, path.Replace('/', Path.DirectorySeparatorChar)));
+            if (!fullPath.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase))
+            {
+                await route.FulfillAsync(new RouteFulfillOptions
+                {
+                    Status = 403,
+                    ContentType = "text/plain",
+                    Body = "Forbidden",
+                });
+                return;
+            }
+
+            if (File.Exists(fullPath))
+            {
+                var ext = Path.GetExtension(fullPath);
+                var contentType = MimeTypes.GetValueOrDefault(ext, "application/octet-stream");
+                var body = await File.ReadAllBytesAsync(fullPath);
+
+                await route.FulfillAsync(new RouteFulfillOptions
+                {
+                    Status = 200,
+                    ContentType = contentType,
+                    BodyBytes = body,
+                });
+            }
+            else
+            {
+                // SPA fallback: serve index.html for unknown routes (client-side routing)
+                var indexPath = Path.Combine(normalizedDir, "index.html");
+                if (File.Exists(indexPath))
+                {
+                    var body = await File.ReadAllBytesAsync(indexPath);
+                    await route.FulfillAsync(new RouteFulfillOptions
+                    {
+                        Status = 200,
+                        ContentType = "text/html",
+                        BodyBytes = body,
+                    });
+                }
+                else
+                {
+                    await route.FulfillAsync(new RouteFulfillOptions
+                    {
+                        Status = 404,
+                        ContentType = "text/plain",
+                        Body = "Not Found",
+                    });
+                }
+            }
+        });
     }
 
     private async Task WaitForAppReadyAsync()
