@@ -90,56 +90,93 @@ Unit (se-unit)
 
 ### NewRecruit
 
-The NewRecruit engine does **NOT** implement composite `::` IDs. Specifically:
+NR **does** support composite `::` IDs via `getBattleScribePath()` — the same method
+used by NR's own `.ros`/`.rosz` export. However, the simpler `getId()` API returns
+only the plain target entry definition ID.
 
-- **entryId**: NR's `sel.getId()` always returns the target entry's definition ID without
-  any link prefixes. Where BS returns `el-weapon::sse-weapon`, NR returns just `sse-weapon`.
-- **entryGroupId**: NR does not populate this field at all — it always returns null/empty,
-  regardless of whether the entry is inside a group.
+#### Key APIs on selection nodes
 
-#### Internal Structure (from probing)
+| Method | Returns | Use for |
+|--------|---------|---------|
+| `sel.getBattleScribePath()` | Full composite `entryId` | e.g. `"el-relics-group::el-relic::sse-relic"` |
+| `sel.getBattleScribePath(true)` | Full composite `entryGroupId` | e.g. `"el-relics-group::sseg-relics"` |
+| `sel.getId()` | Plain target entry definition ID | e.g. `"sse-relic"` |
+| `sel.getOptionIds()` | Array of immediate link + target IDs | e.g. `["el-relic","sse-relic"]` |
+| `sel.getNarrowId()` | Immediate link ID (or entry ID if direct) | e.g. `"el-relic"` |
+| `sel.selector.ids` | Same as `getOptionIds()` | Partial — only immediate link |
 
-NR selection nodes have a `selector.ids` array that contains partial link info:
+#### `getBattleScribePath()` algorithm (deobfuscated)
 
-| Scenario | `selector.ids` | BS composite |
-|----------|---------------|--------------|
-| Direct entry | `["se-unit"]` | `se-unit` |
-| 1-hop link target | `["el-weapon","sse-weapon"]` | `el-weapon::sse-weapon` |
-| 2-hop chain (inner) | `["el-inner","sse-weapon"]` | `el-outer::el-inner::sse-weapon` |
-| Descendant in link target | `["se-ammo"]` | `el-weapon::se-ammo` |
-| Entry via group link | `["se-sword"]` | `el-gear::se-sword` |
+```javascript
+getBattleScribePath(forGroup = false) {
+    const node = forGroup ? this.getParent() : this;
+    if (forGroup && !node.isGroup()) return "";
+    const ids = [...node.getOptionIds()];
+    let currentIds = ids, parent = node.getParent();
+    while (parent.selector.isQuantifiable || parent.isGroup()) {
+        const src = parent.source;
+        if (src.isLink()) {
+            // prepend link id if not already in the chain
+            let alreadyPresent = false;
+            for (const u of src.localSelectionsIterator())
+                if (currentIds.includes(u.id)) { alreadyPresent = true; break; }
+            if (!alreadyPresent) ids.unshift(src.id);
+        }
+        currentIds = parent.getOptionIds();
+        parent = parent.getParent();
+    }
+    return ids.join("::");
+}
+```
 
-Key differences from BS:
-- `selector.ids` only tracks the **immediate** link, not ancestor chains
-- No propagation of link prefixes to descendants inside link targets
-- Group links do NOT contribute to `selector.ids`
-- No `entryGroupId` equivalent exists anywhere in NR's selection nodes
-- Properties `entryId`, `entryGroupId`, `linkId`, `targetId`, `compositeId` are all
-  `undefined` on NR selection objects — they are not part of NR's data model
+The algorithm walks up the parent chain, prepending link IDs from ancestor sources
+that are links, producing the same `::` segments as BattleScribe's Java engine.
 
-The adapter faithfully reports what NR natively produces (`sel.getId()`), without
-synthesizing composite IDs from `selector.ids`.
+#### Internal data model vs export format
 
-#### Export Format Investigation
+NR maintains **two different representations** of entry identity:
 
-NR does **not** export BattleScribe-format `.ros`/`.rosz` XML. Its save/export capabilities:
+1. **Runtime model** (used by `getId()`, `selector.ids`):
+   - `selector.ids` only tracks the **immediate** link, not ancestor chains
+   - No propagation of link prefixes to descendants inside link targets
+   - Group links do NOT contribute to `selector.ids`
+   - Properties `entryId`, `entryGroupId`, `linkId`, `targetId`, `compositeId` are all
+     `undefined` on NR selection objects
 
-- **`toJsonObject()`** — serializes roster as JSON. Entries are stored with `option_id` (plain
-  target definition ID) and a separate `link_id` field when accessed through a link. Example:
-  ```json
-  { "name": "Shared Relic", "option_id": "sse-relic", "link_id": "el-relic", "amount": 1 }
-  ```
-  There is no `::` composition — the link and target IDs are stored as separate fields.
+2. **BattleScribe-compatible export** (used by `getBattleScribePath()` and `.ros` export):
+   - Walks the full ancestor chain to construct composite `::` paths
+   - Handles entry links, group links, and chained links correctly
+   - Used by NR's `.ros`, `.rosz`, and JSON (roster schema) export buttons
 
-- **`exportArmy(format)`** — produces human-readable text exports only. Available formats:
-  `GW`, `Tournament`, `NR`, `SHORT` — all produce identical HTML text summaries, not XML.
+#### Export formats available in NR
 
-- **No `.rosz` export** — `listsStore` has `importBs` (to import BattleScribe files) but no
-  export-to-BS method. Army has 234 methods; none relate to file/download/blob/zip/rosz.
+| Export | Format | ID style |
+|--------|--------|----------|
+| `.ros` button | BattleScribe roster XML | Composite `::` via `getBattleScribePath()` |
+| `.rosz` button | Compressed `.ros` | Same composite `::` |
+| `json` button | BS roster JSON schema | Same composite `::` |
+| `exportArmy(format)` | Human-readable text (GW/Tournament/NR/SHORT) | No IDs in output |
+| `toJsonObject()` | NR internal save format | Plain `option_id` + separate `link_id` field |
 
-This confirms NR's data model fundamentally stores link and entry IDs separately rather
-than composing them with `::`, making composite ID assertions impossible on this engine.
+Example `.ros` export output:
+```xml
+<selection name="Shared Relic"
+           entryId="el-relics-group::el-relic::sse-relic"
+           entryGroupId="el-relics-group::sseg-relics"
+           type="upgrade" from="group" group="Shared Relics"/>
+```
 
-All entry-id specs that assert composite IDs or entryGroupId are marked
-`engines: newrecruit: skip`. The two specs with plain assertions (`entry-id-direct`,
-`entry-id-shared-entry-child`) run on both engines.
+Example `toJsonObject()` output (internal save):
+```json
+{ "name": "Shared Relic", "option_id": "sse-relic", "link_id": "el-relic", "amount": 1 }
+```
+
+#### Adapter implications
+
+The adapter can use `sel.getBattleScribePath()` instead of `sel.getId()` to produce
+composite IDs matching the BattleScribe engine. This is NR's own native API — the same
+one used by their `.ros` export — so using it is not "cheating" or synthesizing IDs.
+
+All entry-id specs that assert composite IDs or entryGroupId are currently marked
+`engines: newrecruit: skip`. With the adapter updated to use `getBattleScribePath()`,
+these specs should pass on NR as well.
