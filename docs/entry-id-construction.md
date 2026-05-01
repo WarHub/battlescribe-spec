@@ -120,6 +120,26 @@ Key differences from BS:
 The adapter faithfully reports what NR natively produces (`sel.getId()`), without
 synthesizing composite IDs from `selector.ids`.
 
+#### Export Format Investigation
+
+NR does **not** export BattleScribe-format `.ros`/`.rosz` XML. Its save/export capabilities:
+
+- **`toJsonObject()`** — serializes roster as JSON. Entries are stored with `option_id` (plain
+  target definition ID) and a separate `link_id` field when accessed through a link. Example:
+  ```json
+  { "name": "Shared Relic", "option_id": "sse-relic", "link_id": "el-relic", "amount": 1 }
+  ```
+  There is no `::` composition — the link and target IDs are stored as separate fields.
+
+- **`exportArmy(format)`** — produces human-readable text exports only. Available formats:
+  `GW`, `Tournament`, `NR`, `SHORT` — all produce identical HTML text summaries, not XML.
+
+- **No `.rosz` export** — `listsStore` has `importBs` (to import BattleScribe files) but no
+  export-to-BS method. Army has 234 methods; none relate to file/download/blob/zip/rosz.
+
+This confirms NR's data model fundamentally stores link and entry IDs separately rather
+than composing them with `::`, making composite ID assertions impossible on this engine.
+
 All entry-id specs that assert composite IDs or entryGroupId are marked
 `engines: newrecruit: skip`. The two specs with plain assertions (`entry-id-direct`,
 `entry-id-shared-entry-child`) run on both engines.
