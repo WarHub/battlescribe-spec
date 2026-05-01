@@ -1,0 +1,56 @@
+id: entry-id-in-group
+category: entry-id
+description: >
+  Entry within a selectionEntryGroup has a plain entryId (the entry's own id)
+  and entryGroupId set to the group's id. No :: composition for direct groups.
+tags: [entry-id, entryGroup]
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          selectionEntryGroups:
+            - id: seg-weapons
+              name: Weapons
+              selectionEntries:
+                - id: se-sword
+                  name: Sword
+                  type: upgrade
+                  constraints:
+                    - id: con-min
+                      type: min
+                      value: 1
+                      field: selections
+                      scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Sword
+                  entryId: se-sword
+                  entryGroupId: seg-weapons

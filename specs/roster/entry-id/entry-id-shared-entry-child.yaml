@@ -1,0 +1,64 @@
+id: entry-id-shared-entry-child
+category: entry-id
+description: >
+  Child entry nested directly in a sharedSelectionEntry that is NOT accessed
+  via a link (e.g. a shared entry used directly as a catalogue entry) has
+  plain entryId with no :: composition.
+tags: [entry-id]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Parent Unit
+          type: unit
+          selectionEntries:
+            - id: se-nested
+              name: Nested Gear
+              type: upgrade
+              selectionEntries:
+                - id: se-deep-nested
+                  name: Deep Nested
+                  type: upgrade
+                  constraints:
+                    - id: con-deep-min
+                      type: min
+                      value: 1
+                      field: selections
+                      scope: parent
+              constraints:
+                - id: con-nested-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-parent
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Parent Unit
+              entryId: se-parent
+              children:
+                - name: Nested Gear
+                  entryId: se-nested
+                  children:
+                    - name: Deep Nested
+                      entryId: se-deep-nested

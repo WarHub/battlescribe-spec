@@ -1,0 +1,73 @@
+id: entry-id-link-within-link
+category: entry-id
+description: >
+  Entry link nested within another entry link's target: the outer link id
+  is prepended to the inner link's composite, producing
+  "outerLink::innerLink::targetId" on the nested selection.
+tags: [entry-id, entryLink, deep-nesting]
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-ammo
+          name: Shared Ammo
+          type: upgrade
+        - id: sse-weapon
+          name: Shared Weapon
+          type: upgrade
+          entryLinks:
+            - id: el-inner
+              targetId: sse-ammo
+              type: selectionEntry
+              constraints:
+                - id: con-inner-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          entryLinks:
+            - id: el-outer
+              targetId: sse-weapon
+              type: selectionEntry
+              constraints:
+                - id: con-outer-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Shared Weapon
+                  entryId: el-outer::sse-weapon
+                  children:
+                    - name: Shared Ammo
+                      entryId: el-outer::el-inner::sse-ammo

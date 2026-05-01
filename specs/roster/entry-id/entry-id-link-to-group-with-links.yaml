@@ -1,0 +1,87 @@
+id: entry-id-link-to-group-with-links
+category: entry-id
+description: >
+  Group link targets a shared group that contains entry links.
+  The group link's id propagates into both the entry link composite
+  and the entryGroupId: entryId="groupLink::entryLink::target",
+  entryGroupId="groupLink::groupId".
+tags: [entry-id, entryLink, entryGroup, deep-nesting]
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-relic
+          name: Shared Relic
+          type: upgrade
+      sharedSelectionEntryGroups:
+        - id: sseg-relics
+          name: Shared Relics
+          entryLinks:
+            - id: el-relic
+              targetId: sse-relic
+              type: selectionEntry
+              constraints:
+                - id: con-relic-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+          selectionEntries:
+            - id: se-relic-direct
+              name: Direct Relic
+              type: upgrade
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          entryLinks:
+            - id: el-relics-group
+              targetId: sseg-relics
+              type: selectionEntryGroup
+              name: Relics
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-unit
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  # Linked entry in linked group:
+  - action: selectChildEntry
+    forceId: ${{ steps.add-f.forceId }}
+    selectionId: ${{ steps.select-unit.selectionId }}
+    entryId: el-relics-group::el-relic::sse-relic
+
+  # Direct entry in linked group:
+  - action: selectChildEntry
+    forceId: ${{ steps.add-f.forceId }}
+    selectionId: ${{ steps.select-unit.selectionId }}
+    entryId: el-relics-group::se-relic-direct
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Direct Relic
+                  entryId: el-relics-group::se-relic-direct
+                  entryGroupId: el-relics-group::sseg-relics
+                - name: Shared Relic
+                  entryId: el-relics-group::el-relic::sse-relic
+                  entryGroupId: el-relics-group::sseg-relics

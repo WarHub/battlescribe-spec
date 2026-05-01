@@ -1,0 +1,50 @@
+id: entry-id-direct
+category: entry-id
+description: >
+  Direct entry (no links, no groups) has a plain entryId equal to the
+  selectionEntry's own id. No entryGroupId is set.
+tags: [entry-id]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          selectionEntries:
+            - id: se-child
+              name: Child Entry
+              type: upgrade
+              constraints:
+                - id: con-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Child Entry
+                  entryId: se-child

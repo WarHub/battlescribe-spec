@@ -1,0 +1,88 @@
+id: entry-id-chained-links-3-hop
+category: entry-id
+description: >
+  Chained entry links (3-hop): el-1 -> shared -> el-2 -> shared -> el-3 -> target.
+  Produces 4-segment composite: "el-1::el-2::el-3::targetId".
+tags: [entry-id, entryLink, deep-nesting]
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-deep
+          name: Deep Target
+          type: upgrade
+        - id: sse-mid
+          name: Mid Target
+          type: upgrade
+          entryLinks:
+            - id: el-3
+              targetId: sse-deep
+              type: selectionEntry
+              constraints:
+                - id: con-3
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+        - id: sse-outer
+          name: Outer Target
+          type: upgrade
+          entryLinks:
+            - id: el-2
+              targetId: sse-mid
+              type: selectionEntry
+              constraints:
+                - id: con-2
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          entryLinks:
+            - id: el-1
+              targetId: sse-outer
+              type: selectionEntry
+              constraints:
+                - id: con-1
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Outer Target
+                  entryId: el-1::sse-outer
+                  children:
+                    - name: Mid Target
+                      entryId: el-1::el-2::sse-mid
+                      children:
+                        - name: Deep Target
+                          entryId: el-1::el-2::el-3::sse-deep

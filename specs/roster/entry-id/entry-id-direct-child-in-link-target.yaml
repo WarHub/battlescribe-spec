@@ -1,0 +1,69 @@
+id: entry-id-direct-child-in-link-target
+category: entry-id
+description: >
+  A direct child entry (not via another link) inside a link target inherits
+  the outer link's id prefix: entryId="outerLinkId::childEntryId".
+tags: [entry-id, entryLink]
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-vehicle
+          name: Shared Vehicle
+          type: upgrade
+          selectionEntries:
+            - id: se-hull
+              name: Hull Plating
+              type: upgrade
+              constraints:
+                - id: con-hull-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          entryLinks:
+            - id: el-vehicle
+              targetId: sse-vehicle
+              type: selectionEntry
+              constraints:
+                - id: con-veh-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Shared Vehicle
+                  entryId: el-vehicle::sse-vehicle
+                  children:
+                    - name: Hull Plating
+                      entryId: el-vehicle::se-hull

@@ -1,0 +1,75 @@
+id: entry-id-group-link-in-entry
+category: entry-id
+description: >
+  A group link (entryLink type=selectionEntryGroup) inside a selectionEntry.
+  The group link id prefixes both entryId and entryGroupId on selections
+  within the linked group.
+tags: [entry-id, entryLink, entryGroup]
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntryGroups:
+        - id: sseg-wargear
+          name: Shared Wargear
+          selectionEntries:
+            - id: se-grenade
+              name: Grenade
+              type: upgrade
+              constraints:
+                - id: con-grenade-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              constraints:
+                - id: con-trooper-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+              entryLinks:
+                - id: el-wargear
+                  targetId: sseg-wargear
+                  type: selectionEntryGroup
+                  name: Wargear
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Trooper
+                  entryId: se-trooper
+                  children:
+                    - name: Grenade
+                      entryId: el-wargear::se-grenade
+                      entryGroupId: el-wargear::sseg-wargear

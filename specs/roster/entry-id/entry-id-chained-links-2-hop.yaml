@@ -1,0 +1,72 @@
+id: entry-id-chained-links-2-hop
+category: entry-id
+description: >
+  Chained entry links (2-hop): Unit -> el-outer -> sharedEntry -> el-inner -> sharedTarget.
+  Each link in the chain prepends its id, producing "outerLink::innerLink::targetId".
+tags: [entry-id, entryLink, deep-nesting]
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-ammo
+          name: Shared Ammo
+          type: upgrade
+        - id: sse-weapon
+          name: Shared Weapon
+          type: upgrade
+          entryLinks:
+            - id: el-ammo
+              targetId: sse-ammo
+              type: selectionEntry
+              constraints:
+                - id: con-ammo-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          entryLinks:
+            - id: el-weapon
+              targetId: sse-weapon
+              type: selectionEntry
+              constraints:
+                - id: con-weapon-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Shared Weapon
+                  entryId: el-weapon::sse-weapon
+                  children:
+                    - name: Shared Ammo
+                      entryId: el-weapon::el-ammo::sse-ammo
