@@ -197,6 +197,7 @@ public sealed class SpecLintTests
         "costType", "profileType",
         "deep-nesting",
         "entry-id", "entryGroup",
+        "collective", "deselect", "validation",
     ];
 
     [Theory]

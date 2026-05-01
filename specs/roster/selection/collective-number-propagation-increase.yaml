@@ -1,0 +1,108 @@
+id: collective-number-propagation-increase
+category: selection
+description: >
+  Increasing a non-collective parent's number propagates to its collective
+  child: the child's number scales up proportionally and costs scale accordingly.
+tags:
+  - collective
+  - number
+  - cost
+  - newrecruit-missing-feature
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              selectionEntries:
+                - id: se-weapon
+                  name: Weapon
+                  type: upgrade
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-weapon
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 1
+                  children:
+                    - name: Weapon
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 5
+      costs:
+        - typeId: pts
+          value: 5
+
+  # Increase Trooper count from 1 to 3 — collective Weapon should scale up
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 15
+      costs:
+        - typeId: pts
+          value: 15
