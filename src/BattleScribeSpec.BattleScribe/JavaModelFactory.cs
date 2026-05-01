@@ -1096,7 +1096,7 @@ public static class JavaModelFactory
     /// Create a Repeat for a modifier.
     /// </summary>
     public static Repeat CreateRepeat(
-        decimal value = 1,
+        decimal value = 1m,
         int repeats = 1,
         string field = "selections",
         string scope = "self",

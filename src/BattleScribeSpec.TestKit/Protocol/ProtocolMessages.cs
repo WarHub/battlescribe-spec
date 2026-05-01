@@ -619,7 +619,7 @@ public sealed class ProtocolConditionGroup
 
 public sealed class ProtocolRepeat
 {
-    public decimal Value { get; set; } = 1;
+    public decimal Value { get; set; } = 1m;
 
     public int Repeats { get; set; } = 1;
 
