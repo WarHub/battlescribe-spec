@@ -1,0 +1,57 @@
+id: entry-id-nested-groups
+category: entry-id
+description: >
+  Nested groups (group within group): entryGroupId is set to the immediate
+  parent group's id only — no multi-segment composition for direct groups.
+tags: [entry-id, entryGroup]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          selectionEntryGroups:
+            - id: seg-outer
+              name: Outer Group
+              selectionEntryGroups:
+                - id: seg-inner
+                  name: Inner Group
+                  selectionEntries:
+                    - id: se-deep
+                      name: Deep Entry
+                      type: upgrade
+                      constraints:
+                        - id: con-min
+                          type: min
+                          value: 1
+                          field: selections
+                          scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Deep Entry
+                  entryId: se-deep
+                  entryGroupId: seg-inner

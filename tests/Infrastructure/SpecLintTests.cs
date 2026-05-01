@@ -196,6 +196,7 @@ public sealed class SpecLintTests
         "publication", "rule", "catalogue",
         "costType", "profileType",
         "deep-nesting",
+        "entry-id", "entryGroup",
     ];
 
     [Theory]

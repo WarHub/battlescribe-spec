@@ -245,13 +245,14 @@ public static class NewRecruitActions
 
                     // Try to find an existing pre-created instance in getSelections().
                     // For entryLinks, getId() returns the target ID, not the link ID.
-                    // Also check source.id and selector.ids for link ID matching.
+                    // Also check source.id, selector.ids, and getBattleScribePath for matching.
                     // sel is an instance node — getSelections always exists.
                     const children = sel.getSelections();
                     const child = children.find(c =>
                         c.getId() === childEntryId
                         || c.source?.id === childEntryId
-                        || c.selector?.ids?.includes?.(childEntryId));
+                        || c.selector?.ids?.includes?.(childEntryId)
+                        || (childEntryId.includes('::') && c.getBattleScribePath?.() === childEntryId));
 
                     if (child) {
                         // Found existing instance — activate via incrementAmount.
@@ -271,6 +272,8 @@ public static class NewRecruitActions
                     function findSelectorDeep(selectors, id) {
                         for (const s of selectors) {
                             if (s.id === id || s.ids?.includes(id)) return s;
+                            if (id.includes('::') && typeof s.getBattleScribePath === 'function'
+                                && s.getBattleScribePath() === id) return s;
                             // Recurse through each instance's child selectors
                             for (const inst of (s.instances || [])) {
                                 const found = findSelectorDeep(inst.selectors || [], id);
@@ -299,7 +302,8 @@ public static class NewRecruitActions
                     const newChild = afterChildren.find(c =>
                         (c.getId() === childEntryId
                         || c.source?.id === childEntryId
-                        || c.selector?.ids?.includes?.(childEntryId))
+                        || c.selector?.ids?.includes?.(childEntryId)
+                        || (childEntryId.includes('::') && c.getBattleScribePath?.() === childEntryId))
                         && c.getAmount() > 0);
                     if (!newChild)
                         return `ERROR:addInstance on '${childEntryId}' did not produce a child selection`;

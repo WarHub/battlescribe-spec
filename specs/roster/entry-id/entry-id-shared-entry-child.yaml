@@ -1,0 +1,63 @@
+id: entry-id-shared-entry-child
+category: entry-id
+description: >
+  Deeply nested direct child entries (no links involved) always have plain
+  entryId with no :: composition, regardless of nesting depth.
+tags: [entry-id]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Parent Unit
+          type: unit
+          selectionEntries:
+            - id: se-nested
+              name: Nested Gear
+              type: upgrade
+              selectionEntries:
+                - id: se-deep-nested
+                  name: Deep Nested
+                  type: upgrade
+                  constraints:
+                    - id: con-deep-min
+                      type: min
+                      value: 1
+                      field: selections
+                      scope: parent
+              constraints:
+                - id: con-nested-min
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-parent
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Parent Unit
+              entryId: se-parent
+              children:
+                - name: Nested Gear
+                  entryId: se-nested
+                  children:
+                    - name: Deep Nested
+                      entryId: se-deep-nested

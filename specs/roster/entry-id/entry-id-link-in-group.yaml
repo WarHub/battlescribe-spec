@@ -1,0 +1,58 @@
+id: entry-id-link-in-group
+category: entry-id
+description: >
+  An entry link inside a selectionEntryGroup produces composite entryId
+  ("linkId::targetId") while entryGroupId remains the plain group id.
+tags: [entry-id, entryLink, entryGroup]
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: sse-trait
+          name: Shared Trait
+          type: upgrade
+      selectionEntries:
+        - id: se-unit
+          name: Test Unit
+          type: unit
+          selectionEntryGroups:
+            - id: seg-traits
+              name: Traits
+              entryLinks:
+                - id: el-trait
+                  targetId: sse-trait
+                  type: selectionEntry
+                  constraints:
+                    - id: con-min
+                      type: min
+                      value: 1
+                      field: selections
+                      scope: parent
+
+steps:
+  - action: addForce
+    id: add-f
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-f.forceId }}
+    entryId: se-unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Test Unit
+              entryId: se-unit
+              children:
+                - name: Shared Trait
+                  entryId: el-trait::sse-trait
+                  entryGroupId: seg-traits

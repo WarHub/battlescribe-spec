@@ -79,9 +79,14 @@ internal static class JsHelpers
             window.findSelectorById = function(node, targetId) {
                 if (!node) return null;
                 if (node.ids?.includes(targetId)) return node;
+                // For composite IDs (containing ::), match via getBattleScribePath
+                if (targetId.includes('::') && typeof node.getBattleScribePath === 'function'
+                    && node.getBattleScribePath() === targetId) return node;
                 const sels = node.selectors || [];
                 for (const s of sels) {
                     if (s.ids?.includes(targetId)) return s;
+                    if (targetId.includes('::') && typeof s.getBattleScribePath === 'function'
+                        && s.getBattleScribePath() === targetId) return s;
                     if (typeof s.first === 'function') {
                         const inst = s.first();
                         if (inst?.selectors) {
@@ -189,7 +194,7 @@ internal static class JsHelpers
                     return {
                         id: sel.uid,
                         name: sel.getName(),
-                        entryId: sel.getId(),
+                        entryId: sel.getBattleScribePath(),
                         type: sel.getType?.() || null,
                         number: sel.getAmount(),
                         hidden: sel.isHidden?.() || false,
@@ -230,7 +235,7 @@ internal static class JsHelpers
                         page: selPage != null ? String(selPage) : null,
                         publicationId: selPubId,
                         publicationName: selPubName,
-                        entryGroupId: src?.entryGroupId || null,
+                        entryGroupId: sel.getBattleScribePath(true) || null,
                         customName: sel.customName || null,
                         customNotes: sel.note || null
                     };
