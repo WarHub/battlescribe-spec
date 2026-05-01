@@ -5,8 +5,6 @@ description: >
   The group link id prefixes both entryId and entryGroupId on selections
   within the linked group.
 tags: [entry-id, entryLink, entryGroup]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

@@ -4,8 +4,6 @@ description: >
   Chained entry links (2-hop): Unit -> el-outer -> sharedEntry -> el-inner -> sharedTarget.
   Each link in the chain prepends its id, producing "outerLink::innerLink::targetId".
 tags: [entry-id, entryLink, deep-nesting]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

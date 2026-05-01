@@ -4,8 +4,6 @@ description: >
   Nested groups (group within group): entryGroupId is set to the immediate
   parent group's id only — no multi-segment composition for direct groups.
 tags: [entry-id, entryGroup]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

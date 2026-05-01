@@ -5,8 +5,6 @@ description: >
   the entry link composite ("groupLink::entryLink::targetId") and the
   entryGroupId ("groupLink::sharedGroupId").
 tags: [entry-id, entryLink, entryGroup, deep-nesting]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

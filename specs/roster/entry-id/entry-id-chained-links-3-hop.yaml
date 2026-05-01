@@ -4,8 +4,6 @@ description: >
   Chained entry links (3-hop): el-1 -> shared -> el-2 -> shared -> el-3 -> target.
   Produces 4-segment composite: "el-1::el-2::el-3::targetId".
 tags: [entry-id, entryLink, deep-nesting]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

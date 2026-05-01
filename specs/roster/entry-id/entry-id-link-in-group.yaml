@@ -4,8 +4,6 @@ description: >
   An entry link inside a selectionEntryGroup produces composite entryId
   ("linkId::targetId") while entryGroupId remains the plain group id.
 tags: [entry-id, entryLink, entryGroup]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

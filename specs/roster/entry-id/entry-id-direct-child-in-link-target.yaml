@@ -4,8 +4,6 @@ description: >
   A direct child entry (not via another link) inside a link target inherits
   the outer link's id prefix: entryId="outerLinkId::childEntryId".
 tags: [entry-id, entryLink]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

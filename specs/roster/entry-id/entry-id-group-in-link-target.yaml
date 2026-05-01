@@ -4,8 +4,6 @@ description: >
   A selectionEntryGroup inside a link target: the outer link id prefixes both
   the entryId ("linkId::childId") and the entryGroupId ("linkId::groupId").
 tags: [entry-id, entryLink, entryGroup]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

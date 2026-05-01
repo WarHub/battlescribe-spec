@@ -4,8 +4,6 @@ description: >
   Entry within a selectionEntryGroup has a plain entryId (the entry's own id)
   and entryGroupId set to the group's id. No :: composition for direct groups.
 tags: [entry-id, entryGroup]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

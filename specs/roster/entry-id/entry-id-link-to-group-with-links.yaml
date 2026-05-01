@@ -6,8 +6,6 @@ description: >
   and the entryGroupId: entryId="groupLink::entryLink::target",
   entryGroupId="groupLink::groupId".
 tags: [entry-id, entryLink, entryGroup, deep-nesting]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

@@ -4,8 +4,6 @@ description: >
   Entry selected via an entry link gets a composite entryId of the form
   "linkId::targetId". The link's own id is prepended with :: separator.
 tags: [entry-id, entryLink]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:

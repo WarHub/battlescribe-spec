@@ -5,8 +5,6 @@ description: >
   composite IDs on both fields: entryId="linkId::entryId" and
   entryGroupId="linkId::targetGroupId".
 tags: [entry-id, entryLink, entryGroup]
-engines:
-  newrecruit: skip
 
 setup:
   gameSystem:
