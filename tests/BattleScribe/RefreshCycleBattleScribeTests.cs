@@ -29,7 +29,7 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
             GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Tactical Squad",
-                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 65.0 }] }
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 65.0m }] }
             ],
         };
 
@@ -53,7 +53,7 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         var ptsCost = snap2.Forces[0].Selections[0].Costs.FirstOrDefault(c => c.TypeId == "pts");
         output.WriteLine($"Unit cost: {ptsCost?.Value ?? -1}");
         Assert.NotNull(ptsCost);
-        Assert.Equal(65.0, ptsCost.Value);
+        Assert.Equal(65.0m, ptsCost.Value);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
             GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
-                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100.0 }] }
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100.0m }] }
             ],
         };
 
@@ -129,7 +129,7 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         output.WriteLine($"Roster total pts: {rosterPts?.Value ?? -1} (expected 300)");
         if (rosterPts != null)
         {
-            Assert.Equal(300.0, rosterPts.Value);
+            Assert.Equal(300.0m, rosterPts.Value);
         }
     }
 
@@ -185,7 +185,7 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
             GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
-                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 50.0 }],
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 50.0m }],
                     Modifiers = [new ProtocolModifier { Type = "increment", Field = "pts", Value = "10" }],
                     Constraints = [
                         new ProtocolConstraint { Id = "c-min", Type = "min", Value = 1, Field = "selections", Scope = "parent" },
@@ -212,7 +212,7 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
         output.WriteLine($"Unit cost: {ptsCost?.Value ?? -1} (expected 60)");
         if (ptsCost != null)
         {
-            Assert.Equal(60.0, ptsCost.Value);
+            Assert.Equal(60.0m, ptsCost.Value);
         }
     }
 
@@ -236,9 +236,9 @@ public class RefreshCycleBattleScribeTests(ITestOutputHelper output)
             GameSystemId = "test-gs",
             SelectionEntries = [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Tactical Squad",
-                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 65.0 }] },
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 65.0m }] },
                 new ProtocolSelectionEntry { Id = "se-2", Name = "Assault Squad",
-                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 80.0 }] },
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 80.0m }] },
             ],
         };
         engine.SetupFromProtocol(gs, [cat]);

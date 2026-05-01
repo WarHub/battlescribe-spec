@@ -108,7 +108,7 @@ public sealed class ActionCommand : ProtocolCommand
 
     public int? Count { get; set; }
 
-    public double? Value { get; set; }
+    public decimal? Value { get; set; }
 
     public string? CustomName { get; set; }
 
@@ -286,7 +286,7 @@ public sealed class ProtocolCostType
 
     public string Name { get; set; } = "";
 
-    public double? DefaultCostLimit { get; set; }
+    public decimal? DefaultCostLimit { get; set; }
 
     public bool Hidden { get; set; }
 
@@ -535,7 +535,7 @@ public sealed class ProtocolCostValue
 
     public string TypeId { get; set; } = "";
 
-    public double Value { get; set; }
+    public decimal Value { get; set; }
 }
 
 public sealed class ProtocolConstraint
@@ -544,7 +544,7 @@ public sealed class ProtocolConstraint
 
     public string Type { get; set; } = "";
 
-    public double Value { get; set; }
+    public decimal Value { get; set; }
 
     public string Field { get; set; } = "selections";
 
@@ -591,7 +591,7 @@ public sealed class ProtocolCondition
 {
     public string Type { get; set; } = "";
 
-    public double Value { get; set; }
+    public decimal Value { get; set; }
 
     public string Field { get; set; } = "selections";
 
@@ -619,7 +619,7 @@ public sealed class ProtocolConditionGroup
 
 public sealed class ProtocolRepeat
 {
-    public double Value { get; set; } = 1;
+    public decimal Value { get; set; } = 1;
 
     public int Repeats { get; set; } = 1;
 

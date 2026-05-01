@@ -274,10 +274,10 @@ public sealed class BattleScribeEngine : IDisposable
     /// <summary>
     /// Set cost limit for a cost type.
     /// </summary>
-    public void SetCostLimit(CostType costType, double value)
+    public void SetCostLimit(CostType costType, decimal value)
     {
         EnsureInitialized();
-        _engine.a(costType, value);
+        _engine.a(costType, (double)value);
     }
 
     /// <summary>
@@ -749,7 +749,7 @@ public sealed class BattleScribeEngine : IDisposable
     public void SetupWithPatrolAndUnit(bool withCosts = false)
     {
         var costs = withCosts
-            ? new[] { JavaModelFactory.CreateCost("pts", "pts", 100.0) }
+            ? new[] { JavaModelFactory.CreateCost("pts", "pts", 100.0m) }
             : null;
         var unitEntry = JavaModelFactory.CreateSelectionEntry("se-unit", "Marine Squad", "unit", costs: costs);
         var forceEntry = JavaModelFactory.CreateForceEntry("fe-patrol", "Patrol");

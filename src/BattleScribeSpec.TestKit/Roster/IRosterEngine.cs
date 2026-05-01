@@ -100,7 +100,7 @@ public interface IRosterEngine : IDisposable
     /// <summary>
     /// Set cost limit for a cost type by its ID.
     /// </summary>
-    void SetCostLimit(string costTypeId, double value);
+    void SetCostLimit(string costTypeId, decimal value);
 
     /// <summary>
     /// Set custom name and/or notes on a force, selection, or category.

@@ -30,7 +30,7 @@ public static class ModelConverter
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
         var costStates = costs.Select(c =>
-            new CostState(c.getName(), c.getTypeId(), c.getValue())).ToList();
+            new CostState(c.getName(), c.getTypeId(), (decimal)c.getValue())).ToList();
 
         return new RosterState(
             roster.getName(),
@@ -51,7 +51,7 @@ public static class ModelConverter
             sel.getType(),
             sel.getNumber(),
             Hidden: false,
-            [.. costs.Select(c => new CostState(c.getName(), c.getTypeId(), c.getValue()))],
+            [.. costs.Select(c => new CostState(c.getName(), c.getTypeId(), (decimal)c.getValue()))],
             [.. children.Select(CaptureSelection)]);
     }
 
@@ -68,7 +68,7 @@ public static class ModelConverter
                 [.. f.Selections.Select(CaptureWhamSelection)])).ToList();
 
         var costs = roster.Costs.Select(c =>
-            new CostState(c.Name ?? "", c.TypeId ?? "", (double)c.Value)).ToList();
+            new CostState(c.Name ?? "", c.TypeId ?? "", (decimal)c.Value)).ToList();
 
         var errors = validationErrors?.Select(e => new ValidationErrorState(e)).ToList()
             ?? [];
@@ -84,7 +84,7 @@ public static class ModelConverter
     private static SelectionState CaptureWhamSelection(SelectionNode sel)
     {
         var costs = sel.Costs.Select(c =>
-            new CostState(c.Name ?? "", c.TypeId ?? "", (double)c.Value)).ToList();
+            new CostState(c.Name ?? "", c.TypeId ?? "", (decimal)c.Value)).ToList();
         var children = sel.Selections.Select(CaptureWhamSelection).ToList();
         return new SelectionState(
             Id: null,

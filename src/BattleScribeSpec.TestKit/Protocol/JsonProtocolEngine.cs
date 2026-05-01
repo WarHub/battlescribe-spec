@@ -124,7 +124,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
         });
     }
 
-    public void SetCostLimit(string costTypeId, double value)
+    public void SetCostLimit(string costTypeId, decimal value)
     {
         SendAction(new ActionCommand
         {

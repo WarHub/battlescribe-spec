@@ -64,7 +64,7 @@ public record SelectionState(
 public record CostState(
     string Name,
     string TypeId,
-    double Value);
+    decimal Value);
 
 public record ProfileState(
     string Name,

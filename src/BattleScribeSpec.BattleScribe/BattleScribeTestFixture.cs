@@ -60,7 +60,7 @@ public sealed class BattleScribeTestFixture : IDisposable
     /// </summary>
     public void SetupWithUnit(
         string unitName = "Marine Squad",
-        double unitCost = 100.0,
+        decimal unitCost = 100.0m,
         string costTypeName = "pts")
     {
         var gsId = "test-gs";

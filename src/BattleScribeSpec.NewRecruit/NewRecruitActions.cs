@@ -474,7 +474,7 @@ public static class NewRecruitActions
     /// <summary>
     /// Set cost limit for a cost type using army.setMaxCosts().
     /// </summary>
-    public static async Task SetCostLimitAsync(IPage page, string costTypeId, double value)
+    public static async Task SetCostLimitAsync(IPage page, string costTypeId, decimal value)
     {
         var error = await page.EvaluateAsync<string?>("""
             ({costTypeId, value}) => {

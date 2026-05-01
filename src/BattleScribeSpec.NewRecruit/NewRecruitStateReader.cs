@@ -200,7 +200,7 @@ public static class NewRecruitStateReader
     {
         public string Name { get; init; } = "";
         public string TypeId { get; init; } = "";
-        public double Value { get; init; }
+        public decimal Value { get; init; }
     }
 
     internal record NrProfileSnapshot
