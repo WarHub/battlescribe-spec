@@ -969,19 +969,9 @@ public sealed class RosterRunner
 
     private void AssertEqual<T>(int stepIndex, string field, T expected, T actual)
     {
-        if (expected is double ed && actual is double ad)
+        if (expected is decimal em && actual is decimal am)
         {
-            if (Math.Abs(ed - ad) > 1e-9)
-            {
-                _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
-            }
-
-            return;
-        }
-
-        if (expected is float ef && actual is float af)
-        {
-            if (Math.Abs(ef - af) > 1e-6f)
+            if (em != am)
             {
                 _errors.Add($"Step {stepIndex}: {field}: expected {expected} but got {actual}");
             }

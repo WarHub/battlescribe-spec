@@ -167,7 +167,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             "DuplicateForce is not supported by the BattleScribe Java engine (no public API).");
     }
 
-    public void SetCostLimit(string costTypeId, double value)
+    public void SetCostLimit(string costTypeId, decimal value)
     {
         var costType = Engine.GetCostTypeById(costTypeId)
             ?? throw new InvalidOperationException($"Cost type '{costTypeId}' not found.");
@@ -233,12 +233,12 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
         var costStates = costs.Select(c =>
-            new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList();
+            new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue())).ToList();
 
         var rawCostLimits = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCostLimits());
         var costLimitStates = rawCostLimits.Count > 0
             ? rawCostLimits.Select(c =>
-                new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue())).ToList()
+                new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue())).ToList()
             : null;
 
         return new RosterState(
@@ -626,7 +626,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             sel.getType(),
             sel.getNumber(),
             hidden,
-            [.. costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", c.getValue()))],
+            [.. costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue()))],
             [.. children.Select(c => CaptureSelection(c, force))],
             Profiles: [.. profiles.Select(CaptureProfile)],
             Rules: [.. rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),

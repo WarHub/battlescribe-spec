@@ -42,7 +42,7 @@ public class BattleScribeComparisonTests(ITestOutputHelper output)
     public void SelectEntry_CreatesSelectionInForce()
     {
         using var fixture = new BattleScribeTestFixture();
-        fixture.SetupWithUnit("Marine Squad", 100.0);
+        fixture.SetupWithUnit("Marine Squad", 100.0m);
         fixture.AddForce();
         fixture.SelectEntry();
 
@@ -59,7 +59,7 @@ public class BattleScribeComparisonTests(ITestOutputHelper output)
     public void SelectEntry_CostIsTracked()
     {
         using var fixture = new BattleScribeTestFixture();
-        fixture.SetupWithUnit("Marine Squad", 100.0);
+        fixture.SetupWithUnit("Marine Squad", 100.0m);
         fixture.AddForce();
         fixture.SelectEntry();
 
@@ -71,7 +71,7 @@ public class BattleScribeComparisonTests(ITestOutputHelper output)
         output.WriteLine($"Selection costs: {string.Join(", ", selection.Costs.Select(c => $"{c.Name}={c.Value}"))}");
         Assert.NotEmpty(selection.Costs);
         var ptsCost = Assert.Single(selection.Costs, c => c.TypeId == "pts");
-        Assert.Equal(100.0, ptsCost.Value);
+        Assert.Equal(100.0m, ptsCost.Value);
         output.WriteLine($"Cost verified: {ptsCost.Name} = {ptsCost.Value}");
 
         // Check roster-level costs too
@@ -117,7 +117,7 @@ public class BattleScribeComparisonTests(ITestOutputHelper output)
     public void MultipleSelections_CostsAccumulate()
     {
         using var fixture = new BattleScribeTestFixture();
-        fixture.SetupWithUnit("Marine Squad", 50.0);
+        fixture.SetupWithUnit("Marine Squad", 50.0m);
         fixture.AddForce();
 
         fixture.SelectEntry();
@@ -151,7 +151,7 @@ public class BattleScribeComparisonTests(ITestOutputHelper output)
     public void EngineState_ConsistentAfterMultipleOperations()
     {
         using var fixture = new BattleScribeTestFixture();
-        fixture.SetupWithUnit("Marine Squad", 75.0);
+        fixture.SetupWithUnit("Marine Squad", 75.0m);
 
         // Add force, select entry, take snapshot
         fixture.AddForce();
@@ -172,7 +172,7 @@ public class BattleScribeComparisonTests(ITestOutputHelper output)
     public void Snapshot_CapturesAllDetails()
     {
         using var fixture = new BattleScribeTestFixture();
-        fixture.SetupWithUnit("Tactical Marines", 65.0, "pts");
+        fixture.SetupWithUnit("Tactical Marines", 65.0m, "pts");
         fixture.AddForce();
         fixture.SelectEntry();
 

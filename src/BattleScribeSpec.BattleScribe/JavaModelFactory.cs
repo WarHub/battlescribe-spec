@@ -159,7 +159,7 @@ public static class JavaModelFactory
     public static CostType CreateCostType(
         string id,
         string name,
-        double? defaultCostLimit = null,
+        decimal? defaultCostLimit = null,
         bool hidden = false,
         bool limit = false)
     {
@@ -167,7 +167,7 @@ public static class JavaModelFactory
         ct.setId(id);
         ct.setName(name);
         // When no limit specified, use -1.0 (BattleScribe convention for "no limit")
-        ct.setDefaultCostLimit(defaultCostLimit ?? -1.0);
+        ct.setDefaultCostLimit((double)(defaultCostLimit ?? -1m));
         ct.setHidden(hidden);
         var setLimit = ct.GetType().GetMethod("setLimit")
             ?? throw new MissingMethodException(ct.GetType().FullName, "setLimit");
@@ -965,12 +965,12 @@ public static class JavaModelFactory
     /// <summary>
     /// Create a Cost entry.
     /// </summary>
-    public static Cost CreateCost(string name, string typeId, double value)
+    public static Cost CreateCost(string name, string typeId, decimal value)
     {
         var c = new Cost();
         c.setName(name);
         c.setTypeId(typeId);
-        c.setValue(value);
+        c.setValue((double)value);
         return c;
     }
 
@@ -980,7 +980,7 @@ public static class JavaModelFactory
     public static Constraint CreateConstraint(
         string id,
         string type,
-        double value,
+        decimal value,
         string field,
         string scope,
         bool shared = false,
@@ -991,7 +991,7 @@ public static class JavaModelFactory
         var c = new Constraint();
         c.setId(id);
         c.setType(type);
-        c.setValue(value);
+        c.setValue((double)value);
         c.setField(field);
         c.setScope(scope);
         c.setShared(shared);
@@ -1040,7 +1040,7 @@ public static class JavaModelFactory
     /// </summary>
     public static Condition CreateCondition(
         string type,
-        double value,
+        decimal value,
         string field,
         string scope,
         string childId = "",
@@ -1051,7 +1051,7 @@ public static class JavaModelFactory
     {
         var c = new Condition();
         c.setType(type);
-        c.setValue(value);
+        c.setValue((double)value);
         c.setField(field);
         c.setScope(scope);
         c.setChildId(childId);
@@ -1096,7 +1096,7 @@ public static class JavaModelFactory
     /// Create a Repeat for a modifier.
     /// </summary>
     public static Repeat CreateRepeat(
-        double value = 1,
+        decimal value = 1m,
         int repeats = 1,
         string field = "selections",
         string scope = "self",
@@ -1108,7 +1108,7 @@ public static class JavaModelFactory
         bool percentValue = false)
     {
         var r = new Repeat();
-        r.setValue(value);
+        r.setValue((double)value);
         r.setRepeats(repeats);
         r.setField(field);
         r.setScope(scope);

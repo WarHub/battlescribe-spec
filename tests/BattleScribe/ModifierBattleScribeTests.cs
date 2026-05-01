@@ -86,7 +86,7 @@ public class ModifierBattleScribeTests(ITestOutputHelper output)
         var (gs, cats) = MakeScenario(
             entries: [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
-                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 50.0 }],
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 50.0m }],
                     Modifiers = [new ProtocolModifier { Type = "increment", Field = "pts", Value = "25" }] }
             ],
             costTypes: [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }]);
@@ -102,7 +102,7 @@ public class ModifierBattleScribeTests(ITestOutputHelper output)
         var ptsCost = selCosts.FirstOrDefault(c => c.TypeId == "pts");
         Assert.NotNull(ptsCost);
         output.WriteLine($"Expected 75 (50 base + 25 increment), got {ptsCost.Value}");
-        Assert.Equal(75.0, ptsCost.Value);
+        Assert.Equal(75.0m, ptsCost.Value);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class ModifierBattleScribeTests(ITestOutputHelper output)
         var (gs, cats) = MakeScenario(
             entries: [
                 new ProtocolSelectionEntry { Id = "se-1", Name = "Marine Squad",
-                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100.0 }],
+                    Costs = [new ProtocolCostValue { Name = "pts", TypeId = "pts", Value = 100.0m }],
                     Modifiers = [new ProtocolModifier { Type = "decrement", Field = "pts", Value = "30" }] }
             ],
             costTypes: [new ProtocolCostType { Id = "pts", Name = "pts", DefaultCostLimit = 2000 }]);
@@ -125,7 +125,7 @@ public class ModifierBattleScribeTests(ITestOutputHelper output)
         var ptsCost = snapshot.Forces[0].Selections[0].Costs.FirstOrDefault(c => c.TypeId == "pts");
         Assert.NotNull(ptsCost);
         output.WriteLine($"Expected 70 (100 base - 30 decrement), got {ptsCost.Value}");
-        Assert.Equal(70.0, ptsCost.Value);
+        Assert.Equal(70.0m, ptsCost.Value);
     }
 
     [Fact]

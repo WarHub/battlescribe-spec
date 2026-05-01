@@ -87,7 +87,7 @@ public sealed class StepDef
 
     public int? Count { get; set; }
 
-    public double? Value { get; set; }
+    public decimal? Value { get; set; }
 
     /// <summary>
     /// Custom name to set (for setCustomization).
@@ -304,7 +304,7 @@ public sealed class ExpectedCostDef
 
     public string? TypeId { get; set; }
 
-    public double? Value { get; set; }
+    public decimal? Value { get; set; }
 }
 
 public sealed class ExpectedProfileDef

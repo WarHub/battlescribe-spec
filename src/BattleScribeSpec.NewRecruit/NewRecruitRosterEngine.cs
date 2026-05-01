@@ -454,7 +454,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return new ActionOutputs { ForceId = newForceId };
     }
 
-    public void SetCostLimit(string costTypeId, double value)
+    public void SetCostLimit(string costTypeId, decimal value)
     {
         NewRecruitActions.SetCostLimitAsync(Browser.Page, costTypeId, value)
             .GetAwaiter().GetResult();

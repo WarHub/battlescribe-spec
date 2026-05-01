@@ -281,7 +281,7 @@ public class RunnerAndProtocolRegressionTests
             return new ActionOutputs { ForceId = "dup-force-1" };
         }
 
-        public void SetCostLimit(string costTypeId, double value) => ActionCalls++;
+        public void SetCostLimit(string costTypeId, decimal value) => ActionCalls++;
 
         public RosterState GetRosterState()
         {
