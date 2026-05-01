@@ -1,0 +1,31 @@
+id: seg-set-field-collective
+category: entry
+description: >
+  Set the collective field of a selection entry group to true and verify
+  the state reflects it in the fields dictionary.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-1
+          name: Squad Wargear
+
+steps:
+  - action: setField
+    entryId: seg-1
+    field: collective
+    value: "true"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - id: seg-1
+              fields:
+                collective: "true"

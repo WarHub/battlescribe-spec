@@ -1,0 +1,34 @@
+id: seg-create-nested
+category: entry
+description: >
+  Add a selection entry group nested inside another selection entry group
+  and verify the parent-child relationship is correct.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-parent
+          name: Equipment
+
+steps:
+  - action: addEntry
+    id: add-child-group
+    parentId: seg-parent
+    entryType: selectionEntryGroup
+    name: Ranged Weapons
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - id: seg-parent
+              name: Equipment
+              children:
+                - name: Ranged Weapons
+                  entryType: selectionEntryGroup

@@ -1,0 +1,34 @@
+id: se-create-in-entry-group
+category: entry
+description: >
+  Add a selection entry nested inside a selection entry group and verify
+  it appears as a child of the group.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-weapons
+          name: Weapon Options
+
+steps:
+  - action: addEntry
+    id: add-weapon
+    parentId: seg-weapons
+    entryType: selectionEntry
+    name: Plasma Gun
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - id: seg-weapons
+              name: Weapon Options
+              children:
+                - name: Plasma Gun
+                  entryType: selectionEntry

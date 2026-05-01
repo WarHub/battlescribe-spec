@@ -1,0 +1,26 @@
+id: seg-delete-leaf
+category: entry
+description: >
+  Delete a selection entry group that has no children and verify
+  it is removed from the catalogue.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-empty
+          name: Empty Group
+
+steps:
+  - action: removeEntry
+    entryId: seg-empty
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups: []

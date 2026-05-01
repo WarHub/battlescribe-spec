@@ -1,0 +1,31 @@
+id: seg-set-field-page
+category: entry
+description: >
+  Set the page field of a selection entry group and verify it is stored
+  in the fields dictionary.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-1
+          name: Wargear Options
+
+steps:
+  - action: setField
+    entryId: seg-1
+    field: page
+    value: "15"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - id: seg-1
+              fields:
+                page: "15"

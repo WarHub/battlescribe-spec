@@ -1,0 +1,29 @@
+id: seg-set-field-name
+category: entry
+description: >
+  Set the name field of a selection entry group and verify it is updated.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-1
+          name: Old Group Name
+
+steps:
+  - action: setField
+    entryId: seg-1
+    field: name
+    value: Upgraded Wargear
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups:
+            - id: seg-1
+              name: Upgraded Wargear

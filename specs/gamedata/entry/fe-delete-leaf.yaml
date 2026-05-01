@@ -1,0 +1,28 @@
+id: fe-delete-leaf
+category: entry
+description: >
+  Delete a force entry that has no children and verify it is removed
+  from the game system.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+      - id: fe-battalion
+        name: Battalion
+
+steps:
+  - action: removeEntry
+    entryId: fe-patrol
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        forceEntries:
+          - id: fe-battalion
+            name: Battalion

@@ -1,0 +1,58 @@
+id: se-set-field-type
+category: entry
+description: >
+  Set the type field of a selection entry to each valid value
+  (unit, model, upgrade) and verify round-trip.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Test Entry
+          type: upgrade
+
+steps:
+  - action: setField
+    entryId: se-1
+    field: type
+    value: unit
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                type: unit
+
+  - action: setField
+    entryId: se-1
+    field: type
+    value: model
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                type: model
+
+  - action: setField
+    entryId: se-1
+    field: type
+    value: upgrade
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                type: upgrade

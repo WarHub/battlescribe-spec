@@ -1,0 +1,29 @@
+id: ce-set-field-page
+category: entry
+description: >
+  Set the page field of a category entry and verify it is stored
+  in the fields dictionary.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    categoryEntries:
+      - id: ce-1
+        name: Fast Attack
+
+steps:
+  - action: setField
+    entryId: ce-1
+    field: page
+    value: "23"
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        categoryEntries:
+          - id: ce-1
+            fields:
+              page: "23"

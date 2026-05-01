@@ -1,0 +1,28 @@
+id: ce-create-in-catalogue
+category: entry
+description: >
+  Add a category entry to a catalogue and verify it appears in the
+  categoryEntries container.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-ce
+    parentId: cat-1
+    entryType: categoryEntry
+    name: Elites
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          categoryEntries:
+            - name: Elites
+              entryType: categoryEntry

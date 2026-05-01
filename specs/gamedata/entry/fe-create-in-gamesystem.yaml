@@ -1,0 +1,26 @@
+id: fe-create-in-gamesystem
+category: entry
+description: >
+  Add a force entry to a game system and verify it appears in the
+  forceEntries container.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+
+steps:
+  - action: addEntry
+    id: add-fe
+    parentId: gs-1
+    entryType: forceEntry
+    name: Battalion
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        forceEntries:
+          - name: Battalion
+            entryType: forceEntry

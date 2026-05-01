@@ -1,0 +1,28 @@
+id: ce-set-field-hidden
+category: entry
+description: >
+  Set the hidden field of a category entry and verify the state reflects it.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    categoryEntries:
+      - id: ce-1
+        name: Hidden Category
+
+steps:
+  - action: setField
+    entryId: ce-1
+    field: hidden
+    value: "true"
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        categoryEntries:
+          - id: ce-1
+            name: Hidden Category
+            hidden: true

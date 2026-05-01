@@ -968,6 +968,8 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         AddChildren(children, entry, "getConstraints", "constraint");
         AddChildren(children, entry, "getModifiers", "modifier");
         AddChildren(children, entry, "getModifierGroups", "modifierGroup");
+        AddChildren(children, entry, "getForceEntries", "forceEntry");
+        AddChildren(children, entry, "getCategoryEntries", "categoryEntry");
 
         // Collect type-specific fields
         var fields = new Dictionary<string, string?>();
@@ -975,6 +977,9 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         TryAddField(fields, entry, "getTargetId", "targetId");
         TryAddField(fields, entry, "getPublicationId", "publicationId");
         TryAddField(fields, entry, "getPage", "page");
+        TryAddBoolField(fields, entry, "isCollective", "collective");
+        TryAddBoolField(fields, entry, "isImported", "imported");
+        TryAddField(fields, entry, "getDefaultSelectionEntryId", "defaultSelectionEntryId");
 
         return new DataEntryState
         {
@@ -1015,6 +1020,25 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         if (!string.IsNullOrEmpty(value))
         {
             fields[key] = value;
+        }
+    }
+
+    private static void TryAddBoolField(Dictionary<string, string?> fields, object entry, string getter, string key)
+    {
+        var method = entry.GetType().GetMethod(getter);
+        if (method == null)
+        {
+            return;
+        }
+
+        var result = method.Invoke(entry, null);
+        if (result is true)
+        {
+            fields[key] = "true";
+        }
+        else if (result is false)
+        {
+            fields[key] = "false";
         }
     }
 

@@ -1,0 +1,32 @@
+id: fe-create-nested
+category: entry
+description: >
+  Add a force entry nested inside another force entry and verify
+  the parent-child relationship.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    forceEntries:
+      - id: fe-parent
+        name: Army
+
+steps:
+  - action: addEntry
+    id: add-child
+    parentId: fe-parent
+    entryType: forceEntry
+    name: Detachment
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        forceEntries:
+          - id: fe-parent
+            name: Army
+            children:
+              - name: Detachment
+                entryType: forceEntry

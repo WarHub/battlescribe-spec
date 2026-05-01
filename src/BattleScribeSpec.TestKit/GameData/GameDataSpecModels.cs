@@ -208,6 +208,7 @@ public sealed class ExpectedGameSystemDataDef
     public List<ExpectedDataEntryDef>? ProfileTypes { get; set; }
     public List<ExpectedDataEntryDef>? SelectionEntries { get; set; }
     public List<ExpectedDataEntryDef>? SharedSelectionEntries { get; set; }
+    public List<ExpectedDataEntryDef>? SharedSelectionEntryGroups { get; set; }
 }
 
 /// <summary>

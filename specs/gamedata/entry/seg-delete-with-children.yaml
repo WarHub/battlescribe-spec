@@ -1,0 +1,33 @@
+id: seg-delete-with-children
+category: entry
+description: >
+  Delete a selection entry group that has nested children and verify
+  the entire subtree is removed.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntryGroups:
+        - id: seg-weapons
+          name: Weapons
+          selectionEntries:
+            - id: se-bolter
+              name: Bolter
+              type: upgrade
+            - id: se-melta
+              name: Meltagun
+              type: upgrade
+
+steps:
+  - action: removeEntry
+    entryId: seg-weapons
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntryGroups: []

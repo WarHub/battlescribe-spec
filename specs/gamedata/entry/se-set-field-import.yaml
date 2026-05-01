@@ -1,0 +1,32 @@
+id: se-set-field-import
+category: entry
+description: >
+  Set the imported field of a selection entry to false and verify
+  the state reflects it in the fields dictionary.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Local Entry
+          type: upgrade
+
+steps:
+  - action: setField
+    entryId: se-1
+    field: imported
+    value: "false"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                imported: "false"

@@ -1,0 +1,29 @@
+id: fe-delete-with-children
+category: entry
+description: >
+  Delete a force entry that has nested force entries and verify
+  the entire subtree is removed.
+engines:
+  nr-editor: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    forceEntries:
+      - id: fe-parent
+        name: Army
+        forceEntries:
+          - id: fe-child-1
+            name: Left Flank
+          - id: fe-child-2
+            name: Right Flank
+
+steps:
+  - action: removeEntry
+    entryId: fe-parent
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        forceEntries: []
