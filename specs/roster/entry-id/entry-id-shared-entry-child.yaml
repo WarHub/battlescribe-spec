@@ -1,9 +1,8 @@
 id: entry-id-shared-entry-child
 category: entry-id
 description: >
-  Child entry nested directly in a sharedSelectionEntry that is NOT accessed
-  via a link (e.g. a shared entry used directly as a catalogue entry) has
-  plain entryId with no :: composition.
+  Deeply nested direct child entries (no links involved) always have plain
+  entryId with no :: composition, regardless of nesting depth.
 tags: [entry-id]
 
 setup:
