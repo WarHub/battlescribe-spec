@@ -1,0 +1,135 @@
+id: collective-group-constraint-per-model
+category: selection
+description: >
+  Constraint on a SelectionEntryGroup where all entries are collective uses
+  per-model validation: actual count is divided by parent.number before
+  comparing against the limit. The group itself is not collective.
+tags:
+  - collective
+  - constraint
+  - validation
+  - entry-group
+  - newrecruit-missing-feature
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              selectionEntryGroups:
+                - id: seg-weapons
+                  name: Weapons
+                  constraints:
+                    - id: con-max-2
+                      type: max
+                      value: 2
+                      field: selections
+                      scope: parent
+                  selectionEntries:
+                    - id: se-rifle
+                      name: Rifle
+                      type: upgrade
+                      collective: true
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 5
+                    - id: se-sword
+                      name: Sword
+                      type: upgrade
+                      collective: true
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 3
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  # Set Trooper to 3
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  # Select Rifle — adds at number=3 (1 per model). Group total: 1 per model. No error.
+  - action: selectChildEntry
+    id: select-rifle
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-rifle
+
+  # Select Sword — adds at number=3 (1 per model). Group total: 2 per model. No error.
+  - action: selectChildEntry
+    id: select-sword
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-sword
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Rifle
+                      number: 3
+                    - name: Sword
+                      number: 3
+      errors: []
+
+  # Select Sword again — Sword goes to 6 (2 per model). Group total: 3 per model > max 2.
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-sword
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Rifle
+                      number: 3
+                    - name: Sword
+                      number: 6
+      errors:
+        - on: selection se-trooper
+          from: seg-weapons/con-max-2

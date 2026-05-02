@@ -1,10 +1,12 @@
-id: collective-deselect-child
+id: collective-per-model-operations
 category: selection
 description: >
-  Directly deselecting a collective child selection removes one instance
-  per model from the parent's collective pool.
+  Collective child operations use per-model semantics: setSelectionCount
+  scales by parent.number, and deselection removes one instance per model.
 tags:
   - collective
+  - number
+  - cost
   - deselect
   - newrecruit-missing-feature
 engines:
@@ -64,7 +66,7 @@ steps:
     selectionId: ${{ steps.select-trooper.selectionId }}
     entryId: se-weapon
 
-  # Set Trooper to 3 — Weapon propagates to number=3
+  # Set Trooper to 3 — Weapon propagates to number=3 (1 per model)
   - action: setSelectionCount
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}
@@ -85,12 +87,13 @@ steps:
                           typeId: pts
                           value: 15
 
-  # Deselect the collective Weapon directly
-  - action: deselectSelection
+  # setSelectionCount on collective Weapon to 2 (per model)
+  # Actual number should become 2 × 3 = 6
+  - action: setSelectionCount
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-weapon.selectionId }}
+    count: 2
 
-  # Collective deselection removes weapon entirely (goes from 3 to 0)
   - expectedState:
       forces:
         - selections:
@@ -98,4 +101,36 @@ steps:
               children:
                 - name: Trooper
                   number: 3
-                  childCount: 0
+                  children:
+                    - name: Weapon
+                      number: 6
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 30
+      costs:
+        - typeId: pts
+          value: 30
+
+  # Deselect the collective Weapon — removes one instance per model (6→3)
+  - action: deselectSelection
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 15
+      costs:
+        - typeId: pts
+          value: 15

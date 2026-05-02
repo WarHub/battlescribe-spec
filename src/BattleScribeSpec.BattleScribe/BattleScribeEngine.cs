@@ -650,6 +650,26 @@ public sealed class BattleScribeEngine : IDisposable
                 }
             }
         }
+        // Also search SelectionEntryGroups for constraint matches
+        foreach (var (id, group) in _groupLookup)
+        {
+            var groupName = group.getName();
+            if (groupName is null || !message.Contains(groupName))
+            {
+                continue;
+            }
+
+            var constraints = JavaListToList<Constraint>(group.getConstraints());
+            foreach (var c in constraints)
+            {
+                var type = c.getType();
+                if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
+                    (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                {
+                    return (id, c.getId());
+                }
+            }
+        }
         return (null, null);
     }
 
@@ -713,6 +733,7 @@ public sealed class BattleScribeEngine : IDisposable
     private readonly List<SelectionEntry> _setupSelectionEntries = [];
     private readonly List<CostType> _setupCostTypes = [];
     private readonly Dictionary<string, SelectionEntry> _entryLookup = [];
+    private readonly Dictionary<string, SelectionEntryGroup> _groupLookup = [];
     // Entry link constraints indexed by target entry ID: targetId → [(linkId, constraintId, constraintType)]
     private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType)>> _linkConstraintLookup = [];
     // Entry link target resolution: linkId → targetId
@@ -1466,6 +1487,7 @@ public sealed class BattleScribeEngine : IDisposable
         _forceCatalogueMap.Clear();
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
+        _groupLookup.Clear();
         _linkConstraintLookup.Clear();
         _linkTargetMap.Clear();
 
@@ -1965,11 +1987,32 @@ public sealed class BattleScribeEngine : IDisposable
         var groups = JavaListToList<SelectionEntryGroup>(entry.getSelectionEntryGroups());
         foreach (var group in groups)
         {
+            _groupLookup[group.getId()] = group;
             var groupEntries = JavaListToList<SelectionEntry>(group.getSelectionEntries());
             foreach (var ge in groupEntries)
             {
                 IndexEntries(ge);
             }
+            var subGroups = JavaListToList<SelectionEntryGroup>(group.getSelectionEntryGroups());
+            foreach (var sg in subGroups)
+            {
+                IndexGroupRecursive(sg);
+            }
+        }
+    }
+
+    private void IndexGroupRecursive(SelectionEntryGroup group)
+    {
+        _groupLookup[group.getId()] = group;
+        var entries = JavaListToList<SelectionEntry>(group.getSelectionEntries());
+        foreach (var e in entries)
+        {
+            IndexEntries(e);
+        }
+        var subGroups = JavaListToList<SelectionEntryGroup>(group.getSelectionEntryGroups());
+        foreach (var sg in subGroups)
+        {
+            IndexGroupRecursive(sg);
         }
     }
 
@@ -2194,6 +2237,7 @@ public sealed class BattleScribeEngine : IDisposable
         _setupForceEntries.Clear();
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
+        _groupLookup.Clear();
         _linkConstraintLookup.Clear();
         _linkTargetMap.Clear();
         GC.SuppressFinalize(this);

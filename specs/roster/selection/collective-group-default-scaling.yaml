@@ -1,12 +1,15 @@
-id: collective-number-propagation-increase
+id: collective-group-default-scaling
 category: selection
 description: >
-  Increasing a non-collective parent's number propagates to its collective
-  child: the child's number scales up proportionally and costs scale accordingly.
+  A collective SelectionEntryGroup's default entry (also collective) is
+  auto-selected scaled by parent.number. On parent increase, both the group's
+  collective scaling and the entry's collective propagation multiply, producing
+  a number² effect (parent=3 → child=9).
 tags:
   - collective
   - number
   - cost
+  - entry-group
   - newrecruit-missing-feature
 engines:
   newrecruit: skip
@@ -33,15 +36,34 @@ setup:
             - id: se-trooper
               name: Trooper
               type: model
-              selectionEntries:
-                - id: se-weapon
-                  name: Weapon
-                  type: upgrade
+              selectionEntryGroups:
+                - id: seg-weapons
+                  name: Weapons
                   collective: true
-                  costs:
-                    - name: pts
-                      typeId: pts
-                      value: 5
+                  defaultSelectionEntryId: se-rifle
+                  constraints:
+                    - id: con-min-1
+                      type: min
+                      value: 1
+                      field: selections
+                      scope: parent
+                  selectionEntries:
+                    - id: se-rifle
+                      name: Rifle
+                      type: upgrade
+                      collective: true
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 5
+                    - id: se-sword
+                      name: Sword
+                      type: upgrade
+                      collective: true
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 3
 
 steps:
   - action: addForce
@@ -59,12 +81,7 @@ steps:
     selectionId: ${{ steps.select-squad.selectionId }}
     entryId: se-trooper
 
-  - action: selectChildEntry
-    id: select-weapon
-    forceId: ${{ steps.add-detachment.forceId }}
-    selectionId: ${{ steps.select-trooper.selectionId }}
-    entryId: se-weapon
-
+  # Trooper at number=1 — Rifle auto-selected with number=1
   - expectedState:
       forces:
         - selections:
@@ -73,7 +90,7 @@ steps:
                 - name: Trooper
                   number: 1
                   children:
-                    - name: Weapon
+                    - name: Rifle
                       number: 1
                       costs:
                         - name: pts
@@ -83,7 +100,7 @@ steps:
         - typeId: pts
           value: 5
 
-  # Increase Trooper count from 1 to 3 — collective Weapon should scale up
+  # Increase Trooper to 3 — Rifle scales to 9 (group collective × entry collective)
   - action: setSelectionCount
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}
@@ -97,12 +114,12 @@ steps:
                 - name: Trooper
                   number: 3
                   children:
-                    - name: Weapon
-                      number: 3
+                    - name: Rifle
+                      number: 9
                       costs:
                         - name: pts
                           typeId: pts
-                          value: 15
+                          value: 45
       costs:
         - typeId: pts
-          value: 15
+          value: 45

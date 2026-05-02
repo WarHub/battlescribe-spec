@@ -198,6 +198,7 @@ public sealed class SpecLintTests
         "deep-nesting",
         "entry-id", "entryGroup",
         "collective", "deselect", "validation",
+        "entry-group",
     ];
 
     [Theory]

@@ -1,8 +1,8 @@
-id: collective-number-propagation-decrease
+id: collective-number-propagation
 category: selection
 description: >
-  Decreasing a non-collective parent's number propagates to its collective
-  child: the child's number scales down proportionally and costs decrease.
+  Changing a non-collective parent's number propagates to its collective
+  child: increasing scales up, decreasing scales back down proportionally.
 tags:
   - collective
   - number
