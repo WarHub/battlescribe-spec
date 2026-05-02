@@ -407,6 +407,48 @@ if (selectionEntryGroup.isCollective()) {
 }
 ```
 
+### Double-Multiplication Effect (Collective Group + Collective Entry)
+
+When a **collective group** contains **collective entries** (both have
+`collective="true"`), propagation fires through TWO paths simultaneously:
+
+1. **Path 1** (f.java:1126): Iterates all child entries flattened from groups via
+   `d2.f((BaseSelectionEntry)entry)`. Finds collective entries and adds instances.
+2. **Path 2** (f.java:1134): Iterates `entry.getSelectionEntryGroups()`, finds
+   collective groups with default entries, and adds MORE instances.
+
+Both paths fire for the same entry, producing a multiplicative (n²) effect:
+
+```
+Trooper 1→2: Rifle goes 1→2 (path1: +1), then 2→4 (path2: +ceil(2/1)=2)
+Trooper 2→3: Rifle goes 4→6 (path1: +ceil(4/2)=2), then 6→9 (path2: +ceil(6/2)=3)
+Final: Trooper=3, Rifle=9 (instead of expected 3)
+```
+
+This is observable behavior in BattleScribe Desktop — a collective group with a
+collective default entry produces non-linear scaling. The spec
+`collective-group-default-scaling` validates this exact behavior.
+
+### Group Constraint Per-Model Validation (d.java:1143-1153)
+
+A constraint on a `SelectionEntryGroup` uses per-model validation when **all**
+entries in the group are collective:
+
+```java
+// d.java:1143-1153
+public boolean f(SelectionEntryGroup group) {
+    for (SelectionEntry entry : group.getSelectionEntries()) {
+        if (!entry.isCollective()) return false;
+    }
+    return true;
+}
+```
+
+This check (`d2.f(group)`) is used at f.java:498-500 to decide whether to divide
+the actual count by parent.number before comparing against the constraint limit.
+The **group itself** does not need to be collective — only its entries matter for
+per-model constraint evaluation.
+
 ## Sibling Replication
 
 The `this.a(d2, (Selection)baseSelectionParent)` call at f.java:1011 returns all
@@ -451,12 +493,12 @@ The following specs validate collective behavior:
 
 | Spec ID | Behavior Tested |
 |---------|----------------|
-| `collective-number-propagation-increase` | Parent number increase propagates to child |
-| `collective-number-propagation-decrease` | Parent number decrease scales child down |
+| `collective-number-propagation` | Parent number increase+decrease propagates to child |
 | `collective-child-inherits-number` | New child created with parent's number |
-| `collective-set-count-per-model` | setSelectionCount per-model semantics |
+| `collective-per-model-operations` | setSelectionCount + deselect per-model semantics |
 | `collective-constraint-per-model` | Constraint validation per-model division |
-| `collective-deselect-child` | Deselection removes all per-model instances |
+| `collective-group-default-scaling` | Group double-multiplication effect (n² scaling) |
+| `collective-group-constraint-per-model` | Group constraint uses per-model validation |
 
 ## Source References
 
