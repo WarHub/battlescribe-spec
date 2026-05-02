@@ -1,0 +1,140 @@
+id: collective-is-duplicate
+category: selection
+description: >
+  Entries with only collective (or hidden) children use number-increment mode
+  (d2.f()=false): repeated selection increments number on a single node.
+  Entries with non-collective visible children use separate-node mode
+  (d2.f()=true): each selection creates a new node.
+tags:
+  - collective
+  - number
+  - cost
+  - newrecruit-missing-feature
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            # Model type (d2.f=false): only collective children → number-increment
+            - id: se-trooper
+              name: Trooper
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 10
+              selectionEntries:
+                - id: se-rifle
+                  name: Rifle
+                  type: upgrade
+                  collective: true
+            # Duplicate type (d2.f=true): has non-collective child → separate nodes
+            - id: se-specialist
+              name: Specialist
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 15
+              selectionEntries:
+                - id: se-radio
+                  name: Radio
+                  type: upgrade
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # Select Trooper 3 times — model type increments number on single node
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  # Single Trooper node with number=3
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+
+  # Select Specialist 3 times — duplicate type creates separate nodes
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-specialist
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-specialist
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-specialist
+
+  # 3 separate Specialist×1 + 1 Trooper×3 nodes
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Specialist
+                  number: 1
+                  costs:
+                    - typeId: pts
+                      value: 15
+                - name: Specialist
+                  number: 1
+                  costs:
+                    - typeId: pts
+                      value: 15
+                - name: Specialist
+                  number: 1
+                  costs:
+                    - typeId: pts
+                      value: 15
+                - name: Trooper
+                  number: 3
+                  costs:
+                    - typeId: pts
+                      value: 30
+      costs:
+        - typeId: pts
+          value: 75

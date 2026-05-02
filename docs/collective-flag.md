@@ -475,17 +475,49 @@ parent uses number-increment), there is only one parent Selection node with
 
 ## NR Engine Differences
 
-The NewRecruit engine does **not** implement collective number propagation. In
-NR, collective children always have `number=1` regardless of their parent's
-number. This means:
+NewRecruit handles collective entries **differently from BattleScribe** at the
+selection-tree level, but achieves the **same correct total cost**.
 
-- Selecting a collective child creates it with `number=1` (not parent.number)
-- Parent number changes do not propagate to collective children
-- Cost calculations show per-instance cost (not scaled by parent)
-- Constraint validation reports errors on the child selection (not the parent)
+### Representation difference
 
-All specs validating collective per-model behavior are marked
-`engines: newrecruit: skip`.
+| Aspect | BattleScribe | NewRecruit |
+|--------|-------------|------------|
+| **Selection count** | Collective child's `number` = parent.number × per-model count (e.g., Rifle ×3 when Trooper ×3) | Collective child's `amount` stays at per-model count (e.g., Rifle ×1 even when Trooper ×3) |
+| **Cost per selection** | `entry.cost × selection.number` (5 × 3 = 15 for the selection node) | `entry.cost × getAmount()` (5 × 1 = 5 for the selection node) |
+| **Total roster cost** | Sum of all selection-level costs = 15 | `getTotalCosts()` returns 15 — NR multiplies by `getModelAmount()` internally |
+| **Key API** | `selection.getNumber()` returns scaled value | `sel.getAmount()` returns per-model; `sel.getModelAmount()` returns parent model count |
+
+### NR internal properties (discovered via live probing)
+
+For a collective entry (Rifle, `collective=true`, parent Trooper ×3):
+
+```text
+Rifle.getAmount()       = 1       # per-model selection count (not scaled)
+Rifle.getModelAmount()  = 3       # parent's model count (used as cost multiplier)
+Rifle.getPointsCost()   = 5       # per-instance cost
+Rifle.source.collective = true    # the collective flag from catalog data
+Rifle.source.collective_recursive = true  # NR's recursive collective tracking
+```
+
+Non-collective parent (Trooper):
+```text
+Trooper.source.collective = false
+Trooper.source.collective_recursive = true  # has collective descendants
+```
+
+### What this means for specs
+
+NR achieves the correct total cost (15 pts for 3 Troopers each with a 5pt Rifle)
+but through a different mechanism: `getModelAmount()` multiplier instead of
+propagating the selection number. Our adapter reads `getAmount()` as the selection
+`Number`, so NR reports `Rifle ×1` where BS reports `Rifle ×3`.
+
+All specs validating collective per-model behavior remain marked
+`engines: newrecruit: skip` because the spec assertions validate BS-style
+number propagation (e.g., `number: 3` on the collective child).
+
+A future adapter enhancement could translate NR's representation by multiplying
+`getAmount()` by `getModelAmount()` for collective entries to match BS semantics.
 
 ## Spec Coverage
 
@@ -499,6 +531,10 @@ The following specs validate collective behavior:
 | `collective-constraint-per-model` | Constraint validation per-model division |
 | `collective-group-default-scaling` | Group double-multiplication effect (n² scaling) |
 | `collective-group-constraint-per-model` | Group constraint uses per-model validation |
+| `collective-group-no-default` | Group without defaultSelectionEntryId — no auto-propagation |
+| `collective-sibling-replication` | Duplicate-type parent replicates collective child to all sibling nodes; non-collective child stays on first node only |
+| `collective-root-ignored` | Collective flag on root entry (parent=Force) is ignored |
+| `collective-is-duplicate` | isDuplicate (d2.f) determines increment-vs-new-node behavior |
 
 ## Source References
 

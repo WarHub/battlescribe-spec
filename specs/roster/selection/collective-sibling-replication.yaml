@@ -1,0 +1,149 @@
+id: collective-sibling-replication
+category: selection
+description: >
+  When a parent entry is a "duplicate type" (has non-collective non-hidden
+  children, d2.f()=true), each selection creates a separate node. Selecting a
+  collective child under one sibling replicates it to all sibling nodes.
+  Selecting a non-collective child does not replicate.
+tags:
+  - collective
+  - number
+  - newrecruit-missing-feature
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            # Sergeant has a non-collective child (Badge) → d2.f(Sergeant)=true
+            # → separate node per selection (duplicate type)
+            - id: se-sergeant
+              name: Sergeant
+              type: model
+              selectionEntries:
+                - id: se-badge
+                  name: Badge
+                  type: upgrade
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 2
+                - id: se-special-weapon
+                  name: Special Weapon
+                  type: upgrade
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # Select Sergeant 3 times — creates 3 separate nodes (duplicate type)
+  - action: selectChildEntry
+    id: select-sgt-1
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-sergeant
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-sergeant
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-sergeant
+
+  # 3 separate Sergeant nodes, each with number=1, no children
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sergeant
+                  number: 1
+                - name: Sergeant
+                  number: 1
+                - name: Sergeant
+                  number: 1
+
+  # Select non-collective Badge on first Sergeant — does NOT replicate
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-sgt-1.selectionId }}
+    entryId: se-badge
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sergeant
+                  number: 1
+                  children:
+                    - name: Badge
+                      number: 1
+                - name: Sergeant
+                  number: 1
+                  children: []
+                - name: Sergeant
+                  number: 1
+                  children: []
+
+  # Select collective Special Weapon on first Sergeant — replicates to all 3
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-sgt-1.selectionId }}
+    entryId: se-special-weapon
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sergeant
+                  number: 1
+                  children:
+                    - name: Badge
+                      number: 1
+                    - name: Special Weapon
+                      number: 1
+                - name: Sergeant
+                  number: 1
+                  children:
+                    - name: Special Weapon
+                      number: 1
+                - name: Sergeant
+                  number: 1
+                  children:
+                    - name: Special Weapon
+                      number: 1
+      costs:
+        - typeId: pts
+          value: 32

@@ -1,0 +1,117 @@
+id: collective-group-no-default
+category: selection
+description: >
+  A collective SelectionEntryGroup without a defaultSelectionEntryId does not
+  auto-select any entry. Entries must be manually selected. When the parent's
+  number increases, no group entries are added automatically.
+tags:
+  - collective
+  - entry-group
+  - newrecruit-missing-feature
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              selectionEntryGroups:
+                - id: seg-weapons
+                  name: Weapons
+                  collective: true
+                  selectionEntries:
+                    - id: se-rifle
+                      name: Rifle
+                      type: upgrade
+                      collective: true
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 5
+                    - id: se-sword
+                      name: Sword
+                      type: upgrade
+                      collective: true
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 3
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  # No entries auto-selected — group has no defaultSelectionEntryId
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 1
+                  children: []
+
+  # Increase Trooper to 3 — still no auto-selection from the group
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children: []
+
+  # Manually select Rifle — gets number=3 (parent.number) due to collective
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-rifle
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Rifle
+                      number: 3
+      costs:
+        - typeId: pts
+          value: 15
