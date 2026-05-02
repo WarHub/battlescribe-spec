@@ -505,6 +505,65 @@ Trooper.source.collective = false
 Trooper.source.collective_recursive = true  # has collective descendants
 ```
 
+### NR `getSelectionCount()` — the export multiplier
+
+NR has a critical method `getSelectionCount(stopAtId)` that multiplies the
+selection's own amount through the parent chain up to the specified ancestor.
+This is used by the `.ros`/`.json` export serializer (`JU()`) with the argument
+`"root"` to compute the export `number` attribute.
+
+```text
+# With Trooper ×3, Rifle (collective, amount=1), Badge (non-collective, amount=1):
+
+Trooper.getSelectionCount()       = 3   # same as getAmount()
+Trooper.getSelectionCount("root") = 3
+
+Rifle.getSelectionCount()         = 1   # own amount only
+Rifle.getSelectionCount("root")   = 3   # 1 × 3 (multiplied through Trooper)
+Rifle.getSelectionCountIn()       = 1   # per-instance count
+
+Badge.getSelectionCount()         = 1   # own amount only
+Badge.getSelectionCount("root")   = 3   # 1 × 3 (multiplied through Trooper)
+Badge.getSelectionCountIn()       = 1   # per-instance count
+```
+
+**Key finding**: `getSelectionCount("root")` returns the **same value for both
+collective and non-collective children** — both get multiplied by the parent
+model count. The collective flag does NOT affect the export number.
+
+### NR export formats compared
+
+**BS-format export** (`.ros` XML / `.json`):
+Uses `getSelectionCount("root")` for `number`, multiplies costs by that number.
+Both Rifle and Badge appear as single nodes with `number=3`.
+
+```json
+{
+  "name": "Trooper", "number": 3, "type": "model",
+  "selections": [
+    { "name": "Badge", "number": 3, "type": "upgrade",
+      "source.collective": false,
+      "costs": [{"name": "pts", "value": 6}] },
+    { "name": "Rifle", "number": 3, "type": "upgrade",
+      "source.collective": true,
+      "costs": [{"name": "pts", "value": 15}] }
+  ]
+}
+```
+
+**Internal save format** (`toJsonObject`):
+Uses raw `amount` values. No cost data — costs are recomputed on load.
+
+```json
+{
+  "name": "Trooper", "option_id": "se-trooper", "amount": 3,
+  "options": [
+    { "name": "Badge", "option_id": "se-badge", "amount": 1 },
+    { "name": "Rifle", "option_id": "se-rifle", "amount": 1 }
+  ]
+}
+```
+
 ### What this means for specs
 
 NR achieves the correct total cost (15 pts for 3 Troopers each with a 5pt Rifle)
@@ -512,12 +571,19 @@ but through a different mechanism: `getModelAmount()` multiplier instead of
 propagating the selection number. Our adapter reads `getAmount()` as the selection
 `Number`, so NR reports `Rifle ×1` where BS reports `Rifle ×3`.
 
+**Adapter cost discrepancy**: The adapter currently reads
+`cost.value × sel.getAmount()` per selection. For collective entries this gives
+`5 × 1 = 5` per selection, yielding a roster total of 7 (Badge 2 + Rifle 5).
+But NR's actual `getTotalCosts()` returns 21 (Badge 6 + Rifle 15). The adapter
+under-counts costs for collective entries.
+
 All specs validating collective per-model behavior remain marked
 `engines: newrecruit: skip` because the spec assertions validate BS-style
 number propagation (e.g., `number: 3` on the collective child).
 
-A future adapter enhancement could translate NR's representation by multiplying
-`getAmount()` by `getModelAmount()` for collective entries to match BS semantics.
+A future adapter enhancement could translate NR's representation by:
+- Using `getSelectionCount("root")` instead of `getAmount()` for `Number`
+- Or multiplying `getAmount()` by `getModelAmount()` for collective entries
 
 ## Spec Coverage
 
