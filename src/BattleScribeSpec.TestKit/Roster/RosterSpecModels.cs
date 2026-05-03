@@ -209,9 +209,10 @@ public sealed class ErrorAssertionDef
     /// Required. Format: "{entryId}/{constraintId}" with reserved pseudo-values:
     ///   "costLimits/{costTypeId}" for cost limit errors,
     ///   "{entryId}/hidden" for hidden entry errors.
+    /// When omitted, matches any error on the specified roster element.
     /// Examples: "se-unit-a/con-min-1", "costLimits/ct-pts", "se-unit-a/hidden".
     /// </summary>
-    public required string From { get; set; }
+    public string? From { get; set; }
 
     /// <summary>
     /// Optional substring to match against the error message text.

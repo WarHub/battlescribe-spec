@@ -9,9 +9,7 @@ tags:
   - constraint
   - validation
   - entry-group
-  - newrecruit-missing-feature
-engines:
-  newrecruit: fail
+engines: {}
 
 setup:
   gameSystem:

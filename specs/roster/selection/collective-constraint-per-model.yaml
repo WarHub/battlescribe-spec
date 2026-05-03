@@ -8,9 +8,7 @@ tags:
   - collective
   - constraint
   - validation
-  - newrecruit-missing-feature
-engines:
-  newrecruit: fail
+engines: {}
 
 setup:
   gameSystem:
@@ -117,3 +115,8 @@ steps:
       errors:
         - on: selection se-trooper
           from: se-weapon/con-max-2
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-weapon
+              from: se-weapon/con-max-2

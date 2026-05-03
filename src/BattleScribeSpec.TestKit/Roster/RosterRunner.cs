@@ -453,7 +453,7 @@ public sealed class RosterRunner
         foreach (var ea in assertions)
         {
             var (expectedOwnerType, expectedOwnerEntryId) = ParseOn(ea.On);
-            var (expectedEntryId, expectedConstraintId) = ParseFrom(ea.From);
+            var (expectedEntryId, expectedConstraintId) = ea.From is not null ? ParseFrom(ea.From) : (null, null);
 
             var matchIndex = -1;
             for (var i = 0; i < actualErrors.Count; i++)
@@ -466,8 +466,8 @@ public sealed class RosterRunner
                 var ae = actualErrors[i];
                 if (ae.OwnerType == expectedOwnerType &&
                     (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
-                    ae.EntryId == expectedEntryId &&
-                    ae.ConstraintId == expectedConstraintId &&
+                    (expectedEntryId is null || ae.EntryId == expectedEntryId) &&
+                    (expectedConstraintId is null || ae.ConstraintId == expectedConstraintId) &&
                     (ea.MessageContains is null || (ae.Message?.Contains(ea.MessageContains, StringComparison.OrdinalIgnoreCase) ?? false)))
                 {
                     matchIndex = i;

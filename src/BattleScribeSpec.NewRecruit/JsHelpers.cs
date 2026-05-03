@@ -493,12 +493,35 @@ internal static class JsHelpers
                                 if (hash) seen.add(hash);
                                 const msg = (e.msg || e.message || '').replace(/<[^>]*>/g, '');
                                 const constraintId = e.constraint?.id || null;
+
+                                let ownerType = e.scope || null;
+                                let ownerEntryId = null;
+                                let entryId = null;
+
+                                // Extract entryId from the error's parent node (the entry owning the constraint)
+                                // and walk up to find the owning selection
+                                if (e.parent) {
+                                    const parentSrc = e.parent.source;
+                                    entryId = parentSrc?.targetId || parentSrc?.id || null;
+
+                                    // Walk up from the constraint's parent to find the owning selection
+                                    let walker = e.parent.parent;
+                                    while (walker) {
+                                        const wSrc = walker.source;
+                                        const wId = wSrc?.targetId || wSrc?.id;
+                                        if (wId) {
+                                            ownerType = 'selection';
+                                            ownerEntryId = wId;
+                                            break;
+                                        }
+                                        walker = walker.parent;
+                                    }
+                                }
+
                                 result.push({
                                     message: msg,
-                                    ownerType: e.scope || null,
-                                    ownerEntryId: null,
-                                    entryId: null,
-                                    constraintId
+                                    ownerType, ownerEntryId,
+                                    entryId, constraintId
                                 });
                             }
                         } catch(ex) {}
