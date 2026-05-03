@@ -191,17 +191,22 @@ internal static class JsHelpers
 
                     // sel is an instance node (filtered by getAmount > 0 in extractSelections).
                     // Instance nodes always have getName, getId, getAmount, getType, isHidden.
+                    // Use getSelectionCount("root") for number — it multiplies through
+                    // parent chain, matching BattleScribe's exported number attribute.
+                    // This correctly handles collective entries (amount stays at 1 internally
+                    // but getSelectionCount("root") returns parent-multiplied total).
+                    const count = sel.getSelectionCount?.("root") || sel.getAmount();
                     return {
                         id: sel.uid,
                         name: sel.getName(),
                         entryId: sel.getBattleScribePath(),
                         type: sel.getType?.() || null,
-                        number: sel.getAmount(),
+                        number: count,
                         hidden: sel.isHidden?.() || false,
                         costs: costs.map(c => ({
                             name: c.name || '',
                             typeId: c.typeId || '',
-                            value: (c.value || 0) * sel.getAmount()
+                            value: (c.value || 0) * count
                         })),
                         children: extractSelections(sel),
                         profiles: profiles.map(p => ({
@@ -282,11 +287,14 @@ internal static class JsHelpers
                             if (typeof sel.getAmount !== 'function') continue;
                             const amount = sel.getAmount();
                             if (amount <= 0) continue;
+                            // Use getSelectionCount("root") for cost multiplication —
+                            // correctly accounts for parent model count on collective entries.
+                            const count = sel.getSelectionCount?.("root") || amount;
                             for (const c of (sel.getCosts?.() || [])) {
                                 const tid = c.typeId || '';
                                 if (!tid) continue;
                                 if (!result[tid]) result[tid] = { name: c.name || '', typeId: tid, value: 0 };
-                                result[tid].value += (c.value || 0) * amount;
+                                result[tid].value += (c.value || 0) * count;
                             }
                             sumNode(sel);
                         }

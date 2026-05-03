@@ -8,9 +8,7 @@ tags:
   - collective
   - number
   - cost
-  - newrecruit-missing-feature
-engines:
-  newrecruit: skip
+engines: {}
 
 setup:
   gameSystem:

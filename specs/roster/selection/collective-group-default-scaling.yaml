@@ -12,7 +12,7 @@ tags:
   - entry-group
   - newrecruit-missing-feature
 engines:
-  newrecruit: skip
+  newrecruit: fail
 
 setup:
   gameSystem:

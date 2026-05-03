@@ -7,9 +7,7 @@ description: >
 tags:
   - collective
   - entry-group
-  - newrecruit-missing-feature
-engines:
-  newrecruit: skip
+engines: {}
 
 setup:
   gameSystem:
