@@ -473,10 +473,213 @@ parent uses number-increment), there is only one parent Selection node with
 | Cost display | entry.cost × child.number | weapon.cost = 5 × 3 = 15pts |
 | Constraint check | actualCount / parent.number vs. limit | 3/3=1 vs. max=2 → OK |
 
-## NR Engine Differences
+## NR Engine Internals — Source Code Analysis
 
 NewRecruit handles collective entries **differently from BattleScribe** at the
-selection-tree level, but achieves the **same correct total cost**.
+selection-tree level, but achieves the **same correct total cost**. This section
+is based on direct analysis of NR's JavaScript source code (from the nr-editor
+static deployment and the live NR HAR capture).
+
+### Where `collective` appears in NR source code
+
+The `collective` flag is used at **three architectural layers** in NR:
+
+#### Layer 1: Data model (`Base` class in entry.js / BA2pibXD.js)
+
+The `Base` class (NR's equivalent of BattleScribe's `SelectionEntry`) defines
+the raw catalog data properties and computed flags:
+
+```javascript
+class Base {
+    // ... raw data fields
+    collective;                 // the boolean flag from XML catalog data
+    collective_recursive;       // computed: are ALL descendants collective?
+    limited_to_one;             // computed: can amount be > 1?
+    loaded;                     // computed flags already calculated?
+
+    process() {
+        // Called once when entry is first used
+        this.loaded || (
+            this.collective_recursive = this.isCollectiveRecursive(),
+            this.limited_to_one = !this.canAmountBeAbove1(),
+            this.loaded = true
+        );
+    }
+
+    isCollective() {
+        return this.collective;
+    }
+
+    // Recursively checks ALL descendants (not just direct children)
+    isCollectiveRecursive() {
+        const stack = [...this.selectionsIterator()];
+        for (; stack.length;) {
+            const child = stack.pop();
+            if (!child.isCollective() && !child.isGroup()) return false;
+            stack.push(...child.selectionsIterator());
+        }
+        return true;
+    }
+}
+```
+
+For **entry links** (`Ec` class), `isCollective()` is overridden to inherit
+from the target:
+
+```javascript
+class Ec extends Base {    // entry link
+    isCollective() {
+        return super.isCollective() || this.target?.isCollective();
+    }
+}
+```
+
+**Key difference from BattleScribe**: BS's `isDuplicate` (`d2.f`) checks only
+**direct children** and **skips hidden** entries. NR's `isCollectiveRecursive()`
+checks **all descendants recursively** and does **not consider hidden status**.
+In practice this rarely matters, but hidden non-collective children could cause
+different instancing behavior between the two engines.
+
+#### Layer 2: Roster runtime (`Cs` / `tU` classes in BA2pibXD.js)
+
+The `collective_recursive` flag controls two critical runtime decisions:
+
+**`checkIsInstanced()`** — determines single-node-with-count vs. separate instances:
+
+```javascript
+// On selection selector (manages instances of an entry)
+checkIsInstanced() {
+    return this.isUnit || this.source.isForce()
+        ? true
+        : !this.source.isQuantifiable() || this.isLimitedTo1
+            ? false
+            : !this.source.collective_recursive;
+    //      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    //      collective_recursive=true → NOT instanced → single node with count
+    //      collective_recursive=false → instanced → separate nodes per instance
+}
+```
+
+This is the NR equivalent of BattleScribe's `isDuplicate`:
+- BS: "has non-collective, non-hidden direct children → isDuplicate=true → separate nodes"
+- NR: "NOT all descendants are collective → collective_recursive=false → instanced → separate nodes"
+
+**`checkIsSubUnit()`** — determines if a selection is a sub-unit:
+
+```javascript
+checkIsSubUnit() {
+    return !this.source.isQuantifiable()
+        || this.isLimitedTo1
+        || this.isUnit
+        || this.source.collective_recursive   // ← collective entries can't be sub-units
+            ? false
+            : !!(this.parent && (this.parent.isUnit() || this.parent.getParentUnit()));
+}
+```
+
+**`propagateChanges`** — controls cost/amount propagation up the tree:
+
+```javascript
+class Cs {                          // regular selection instance
+    propagateChanges = true;        // propagates by default
+    // ...
+    enable(amount, flag) {
+        this.state.setPropagate(this.propagateChanges);
+        // ...
+    }
+}
+
+class tU extends Cs {               // instanced/header selection
+    propagateChanges = false;        // does NOT propagate
+    // ...
+}
+```
+
+The `propagateChanges` flag feeds into the `ez()` function which builds the
+multiplication array for `getSelectionCount()`:
+
+```javascript
+function ez(selection, selfAmount) {
+    const result = [];
+    let current = selfAmount;
+    if (selection.propagateChanges === false) return [];  // ← stops here!
+    let parent = selection.getParent();
+    for (; parent && !Object.is(parent, parent.getParent());) {
+        if (parent.propagateChanges === false) {
+            result.push(current);
+            result.push(0);
+            break;
+        }
+        const multiplied = (xY(parent) ? parent.getAmount() : 1) * current;
+        result.push(multiplied);
+        current = multiplied;
+        parent = parent.getParent();
+    }
+    return result;
+}
+```
+
+#### Layer 3: NR Editor UI (catalogue.js)
+
+The catalogue editor shows a "Collective" checkbox with tooltip:
+
+```javascript
+{
+    name: "Collective",
+    status: this.collective,
+    field: "collective",
+    title: "indicates that multiple instances of this entry may be combined " +
+           "into one entry with an amount",
+    default: false
+}
+```
+
+The checkbox visibility is controlled by `collective()` computed property which
+returns `0` (hidden) for root catalog entries:
+
+```javascript
+collective() {
+    if (this.item.parent?.isCatalogue()) {
+        const key = this.item.parentKey;
+        if (key === "selectionEntries" || key === "entryLinks") return 0;
+    }
+    switch (this.item.editorTypeName) {
+        case "selectionEntryLink": return /* ... */;
+        // ...
+    }
+}
+```
+
+Data importers also set `collective: true` for unit-scoped equipment:
+```javascript
+// In data import (e.g., from army builder text)
+if (scope === "unit") {
+    equipment.collective = true;
+    weapon.collective = true;
+    group.collective = true;
+    entry.collective = true;
+}
+```
+
+### Complete list of `collective` usages in NR source
+
+| Location | File | Usage |
+|----------|------|-------|
+| `Base.collective` | entry.js | Raw data property on catalog entry |
+| `Base.collective_recursive` | entry.js | Computed flag: all descendants collective? |
+| `Base.isCollective()` | entry.js | Getter returning `this.collective` |
+| `Base.isCollectiveRecursive()` | entry.js | Recursive check for `collective_recursive` |
+| `Base.process()` | entry.js | Computes `collective_recursive` on first use |
+| `Ec.isCollective()` | entry.js | Entry link override: `self \|\| target` |
+| `checkIsInstanced()` | BA2pibXD.js | `!collective_recursive` → instanced (separate nodes) |
+| `checkIsSubUnit()` | BA2pibXD.js | `collective_recursive → false` (can't be sub-unit) |
+| `Cs.propagateChanges` | BA2pibXD.js | `true` on regular selections (propagates) |
+| `tU.propagateChanges` | BA2pibXD.js | `false` on instanced selections (stops propagation) |
+| `ez()` | BA2pibXD.js | Multiplication array; stops at `propagateChanges=false` |
+| Editor checkbox | catalogue.js | UI toggle with tooltip text |
+| Editor visibility | catalogue.js | Hidden for root entries at catalogue level |
+| Data import | entry.js | Sets `collective: true` for unit-scoped equipment |
+| Entry link creation | entry.js | Copies `collective` from source entry |
 
 ### Representation difference
 
@@ -505,12 +708,43 @@ Trooper.source.collective = false
 Trooper.source.collective_recursive = true  # has collective descendants
 ```
 
-### NR `getSelectionCount()` — the export multiplier
+### `getModelAmount()` — NR's cost multiplier
+
+`getModelAmount()` is the key method NR uses to correctly account for parent
+model counts in cost calculations. Its source:
+
+```javascript
+getModelAmount() {
+    if (this.getBook().getSystem().settings.extractModelCountFromName) {
+        const match = this.getName().match(/([0-9]+) .*/);
+        return match && match[1] ? parseInt(match[1]) : 1;
+    } else {
+        return this.getSelectionCount("root");
+    }
+}
+```
+
+By default it delegates to `getSelectionCount("root")` which multiplies the
+selection's own amount through the entire parent chain.
+
+### `getSelectionCount()` — the export multiplier
 
 NR has a critical method `getSelectionCount(stopAtId)` that multiplies the
 selection's own amount through the parent chain up to the specified ancestor.
 This is used by the `.ros`/`.json` export serializer (`JU()`) with the argument
 `"root"` to compute the export `number` attribute.
+
+```javascript
+getSelectionCount(stopAtId) {
+    const selfAmount = this.getSelfAmountElseChilds();
+    if (!stopAtId) return selfAmount;        // no arg → return own amount
+    const multiplied = ez(this, selfAmount); // builds multiplication array
+    let idx = 0, parent = this.getParent();
+    for (; parent && parent.getId() !== stopAtId;)
+        parent = parent.getParent(), parent && idx++;
+    return multiplied[idx] ?? 0;
+}
+```
 
 ```text
 # With Trooper ×3, Rifle (collective, amount=1), Badge (non-collective, amount=1):
