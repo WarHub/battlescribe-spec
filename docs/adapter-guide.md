@@ -7,8 +7,8 @@ to verify your roster engine implementation.
 
 An adapter is a thin wrapper around your roster engine that speaks the
 [JSON-line protocol](adapter-protocol.md) over stdin/stdout. The spec runner
-sends commands (setup, action, getState, getErrors, teardown) and your adapter
-responds with the corresponding results.
+sends commands (setup, setupFromFiles, action, getState, getErrors, teardown) and
+your adapter responds with the corresponding results.
 
 ## Architecture
 
@@ -198,7 +198,7 @@ dotnet bs-spec-runner.dll --adapter "dotnet:your-adapter.dll" --specs specs
 ## Reference Implementation
 
 See `src/BattleScribeSpec.ReferenceAdapter/` for a complete .NET adapter implementation
-that wraps the BattleScribe engine. It's only ~10 lines of code thanks to the
+that wraps the BattleScribe engine. It's only ~20 lines of code thanks to the
 `AdapterHandler` helper class from the TestKit.
 
 ## Tips
@@ -219,13 +219,14 @@ Actions in dataSource specs use the same **ID-based** parameters (`forceEntryId`
 Name-based actions (`forceEntryName`, `entryName`, `catalogueName`) are also supported as
 an alternative for readability when exact IDs are not convenient.
 
-DataSource specs are resolved by the test runner using `DataSourceResolver` and are supported
-by engines that implement the `IRosterEngine` file-based interface methods:
+DataSource specs are resolved by the test runner using `DataSourceResolver` and require the
+engine to implement `SetupFromFiles(files)` from `IRosterEngine` — this loads raw
+`.gst`/`.cat` XML files and is sent as a `setupFromFiles` protocol command.
 
-- `SetupFromFiles(files)` — load raw `.gst`/`.cat` XML files
-- `AddForceByName(forceEntryName, catalogueName = null)` — add a force by name (alternative to ID-based)
-- `SelectEntryByName(forceId, entryName)` — select an entry by name (alternative to ID-based)
-- `SelectChildEntryByName(forceId, selectionId, childEntryName)` — select a child entry by name
+Name-based actions (`forceEntryName`, `entryName`, `catalogueName`) are an authoring
+convenience supported by BattleScribe engine helpers (`AddForceByName`, `SelectEntryByName`,
+`SelectChildEntryByName`) but are **not** part of the `IRosterEngine` interface. Protocol
+adapters only need to handle the standard ID-based `action` command.
 
-The protocol adapter does not need to support DataSource specs — they are handled internally
-by the spec runner and the `IRosterEngine` implementation.
+The protocol adapter does not need special handling for DataSource specs beyond implementing
+the `setupFromFiles` command — all data resolution is done by the runner before sending.

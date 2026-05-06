@@ -8,7 +8,7 @@ immune to site downtime or breaking changes.
 
 1. **HAR recording** — A Playwright browser session navigates newrecruit.eu, capturing all
    network traffic into an [HTTP Archive (HAR)](https://en.wikipedia.org/wiki/HAR_(file_format)) file.
-   The recording is post-processed to strip ad/tracker domains and deduplicate entries.
+   The recording is post-processed to strip requests to non-essential domains (only the NR app domains are kept) and deduplicate entries.
 
 2. **Snapshot storage** — HAR snapshots are published as GitHub Releases in
    [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har), tagged by the NR client
@@ -55,7 +55,7 @@ The `testdata.json` file pins the HAR release version:
 {
   "newrecruit-har": {
     "repo": "WarHub/newrecruit-har",
-    "tag": "v34.14"
+    "tag": "v34.53-20260506"
   }
 }
 ```

@@ -84,8 +84,8 @@ public class ConformanceTests
     public void Spec(string id, SpecFile spec)
     {
         var engine = new MyRosterEngine();
-        var runner = new SpecRunner(engine);
-        runner.Run(spec);
+        var runner = new RosterRunner(engine, new DataSourceResolver(), engineName: "my-engine");
+        await runner.RunAsync(spec);
     }
 }
 ```

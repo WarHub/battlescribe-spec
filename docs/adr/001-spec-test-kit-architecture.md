@@ -7,8 +7,8 @@
 ## Context
 
 The BattleScribe conformance spec suite (`battlescribe-spec`) validates roster-editing engine
-behavior against 179 declarative YAML specs using the original Java BattleScribe engine
-(via IKVM.NET). The current architecture requires every engine under test to implement
+behavior against 392 declarative YAML specs using the original Java BattleScribe engine
+(via IKVM.NET).The current architecture requires every engine under test to implement
 `IRosterEngine` **in C#** and run inside the same .NET process. This limits the spec suite to
 .NET engines only.
 
@@ -23,7 +23,7 @@ conformance suites like the [ConnectRPC Conformance Suite](https://github.com/co
 
 ### Key Constraint
 
-The `SpecRunner` assertion logic (~630 lines of recursive matching for nested forces,
+The `RosterRunner` assertion logic (~630 lines of recursive matching for nested forces,
 selections, costs, and validation errors) must **not** be reimplemented per engine. Any
 architecture that requires each engine author to reimplement the runner defeats the purpose of
 a conformance suite, as subtle interpretation differences would lead to false positives/negatives.
@@ -50,7 +50,7 @@ validate engine conformance without installing the .NET SDK.
 ```mermaid
 graph TD
     L1["**Layer 1: Spec Data**<br/>YAML files + schema"]
-    L2["**Layer 2: .NET Test Kit** (NuGet package)<br/>IRosterEngine, SpecRunner, SpecLoader, all specs"]
+    L2["**Layer 2: .NET Test Kit** (NuGet package)<br/>IRosterEngine, RosterRunner, SpecLoader, all specs"]
     L3["**Layer 3: CLI Runner + JSON Protocol**<br/>dotnet tool / Docker image<br/>For any-language engines via JSON-line adapter"]
     L4["**Layer 4: Containerized Runner**<br/>Docker image<br/>docker run warhub/bs-spec-runner --adapter ./my-adapter"]
 
@@ -83,7 +83,7 @@ adapter as a child process and communicates over stdin/stdout.
 | `state` | Full roster state (forces, selections, costs) |
 | `errors` | List of validation error strings |
 
-The state response format maps directly to the existing `EngineTypes.cs` records
+The state response format maps directly to the existing `RosterTypes.cs` records
 (`RosterState`, `ForceState`, `SelectionState`, `CostState`), ensuring compatibility between
 the NuGet package and the CLI runner.
 
@@ -171,7 +171,7 @@ Define engine protocol in Protobuf, communicate via gRPC.
 
 - **Universal engine testing:** Any roster-editing engine in any language can validate
   BattleScribe conformance by writing a ~200-line adapter.
-- **Single source of truth:** The SpecRunner assertion logic lives in one place (the .NET
+- **Single source of truth:** The RosterRunner assertion logic lives in one place (the .NET
   runner). No risk of divergent interpretations across languages.
 - **Layered consumption:** .NET engines get the simplest path (NuGet package, implement
   `IRosterEngine`). Non-.NET engines use the JSON protocol. CI/CD pipelines use the Docker
@@ -197,11 +197,11 @@ Define engine protocol in Protobuf, communicate via gRPC.
   correctly handles basic setup/action/query/teardown.
 - **State model coverage:** The JSON state format must capture everything the YAML specs assert
   on. If new assertion types are added, the protocol must evolve. Mitigation: the state format
-  already maps 1:1 to `EngineTypes.cs` records.
+  already maps 1:1 to `RosterTypes.cs` records.
 
 ## Implementation Roadmap
 
-1. **Extract NuGet package** — Move `IRosterEngine`, `SpecRunner`, `SpecLoader`, `EngineTypes`,
+1. **Extract NuGet package** — Move `IRosterEngine`, `RosterRunner`, `SpecLoader`, `RosterTypes`,
    `SpecFileModels` to a `BattleScribeSpec.TestKit` project. Embed YAML specs as
    assembly resources. Publish to NuGet.
 

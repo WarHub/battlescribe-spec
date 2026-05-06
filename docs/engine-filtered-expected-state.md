@@ -19,10 +19,11 @@ simply didn't run assertions for that engine at all.
 ## Solution
 
 The `expectedState` block now supports an `engines` map. Each key is an engine
-name (`"battlescribe"`, `"newrecruit"`, `"phalanx"`), and each value is a
+name (e.g. `"battlescribe"`, `"newrecruit"`, `"nr-editor"`), and each value is a
 partial `expectedState` whose non-null fields **replace** the corresponding base
 fields for that engine. Fields not specified in the override fall through to the
-base assertion.
+base assertion. Engine names are open-ended strings; unlisted engines default to
+the base assertion.
 
 ## YAML Syntax
 
@@ -91,7 +92,7 @@ Any field in `expectedState` can be overridden per engine — not just `errors`:
         errors:
           - on: selection se-unit
             from: se-unit/con-max
-      phalanx:
+      nr-editor:
         errors: []
 ```
 

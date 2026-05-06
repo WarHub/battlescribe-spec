@@ -3,6 +3,10 @@
 This document describes NR's deobfuscated export pipeline — how roster data is
 serialized to `.ros`, `.rosz`, JSON, and text formats.
 
+> **Note:** Function names and implementation details (e.g. `_b()`, `iX()`, `w4e()`,
+> `exportArmy()`, `toJsonObject()`) are from NR's live JS bundle, not in-repo source code.
+> In-repo implementation references use full paths under `src/`.
+
 ## Export Formats
 
 | Export | Format | ID style |

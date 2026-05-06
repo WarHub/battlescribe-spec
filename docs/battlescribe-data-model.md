@@ -748,6 +748,6 @@ calculations, validation, or roster state.
 ## Sources
 
 - XSD schema: `../.deps/wham/src/dataformat/xml/schema/v2_03/Catalogue.xsd`
-- Java model: decompiled `BattleScribeEngine.jar` (v2.3.21) in `battlescribe-decompiled/`
+- Java model: `lib/BattleScribeEngine.jar` (v2.3.21)
 - Protocol types: `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs`
 - XML generator: `src/BattleScribeSpec.NewRecruit/CatXmlGenerator.cs`

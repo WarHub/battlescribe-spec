@@ -111,8 +111,7 @@ without matching specifics. Useful for smoke tests.
     errorCount: 3
 ```
 
-Can be combined with `errorsContain:` to assert both count and specific errors.
-**Cannot** be combined with `errors:` (which already implies an exact count).
+**Cannot** be combined with `errorsContain:` or `errors:` — all three are mutually exclusive.
 
 ## Per-Engine Overrides
 

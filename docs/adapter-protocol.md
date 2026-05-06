@@ -85,6 +85,18 @@ Sent once at the start of each spec test. Provides game system and catalogues da
 }
 ```
 
+### `setupFromFiles` — Initialize Engine from Files
+
+Used for DataSource specs. Provides raw `.gst`/`.cat` XML file contents instead of
+the structured protocol format. Adapters that do not support real-world data files
+may return an error.
+
+```json
+{"type":"setupFromFiles","specId":"wh40k-10e-create-army","files":[{"fileName":"Warhammer40000.gst","content":"<?xml ...?>"},{"fileName":"SpaceMarines.cat","content":"<?xml ...?>"}]}
+```
+
+**Response:** same `setupResult` format as `setup`.
+
 ### `action` — Execute Roster Action
 
 All addressing is **ID-based**. Definition references (e.g., `forceEntryId`, `entryId`)
