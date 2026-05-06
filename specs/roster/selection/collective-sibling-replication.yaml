@@ -10,7 +10,6 @@ description: >
 tags:
   - collective
   - number
-engines: {}
 
 setup:
   gameSystem:

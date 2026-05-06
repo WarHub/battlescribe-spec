@@ -10,7 +10,6 @@ tags:
   - collective
   - number
   - cost
-engines: {}
 
 setup:
   gameSystem:

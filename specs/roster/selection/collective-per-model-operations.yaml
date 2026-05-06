@@ -8,7 +8,6 @@ tags:
   - number
   - cost
   - deselect
-engines: {}
 
 setup:
   gameSystem:

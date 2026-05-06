@@ -217,6 +217,20 @@ public sealed class SpecLintTests
             $"Add to KnownTags in SpecLintTests if intentional.");
     }
 
+    // ── No empty/redundant engines declaration ─────────────────────
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void NoEmptyEnginesDeclaration(string specPath, string specName)
+    {
+        var lines = File.ReadAllLines(specPath);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            Assert.False(lines[i].TrimEnd() == "engines: {}",
+                $"{specName}: line {i + 1}: remove empty 'engines: {{}}' (omit the field instead)");
+        }
+    }
+
     // ── Valid engine expectation values ───────────────────────────────
 
     private static readonly HashSet<string> KnownExpectations = ["pass", "fail", "skip"];

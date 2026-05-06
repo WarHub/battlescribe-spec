@@ -58,6 +58,12 @@ foreach ($file in $files) {
             $line = ''
         }
 
+        # Fix: remove redundant 'engines: {}' (empty engines is same as omitting)
+        if ($stripped -eq 'engines: {}') {
+            $fixes += "line $($i+1): removed redundant engines: {}"
+            continue
+        }
+
         # Fix: remove redundant 'hidden: false' (defaults to false everywhere)
         if ($stripped -eq 'hidden: false') {
             $fixes += "line $($i+1): removed redundant hidden: false"

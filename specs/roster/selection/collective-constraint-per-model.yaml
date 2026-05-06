@@ -8,7 +8,6 @@ tags:
   - collective
   - constraint
   - validation
-engines: {}
 
 setup:
   gameSystem:
