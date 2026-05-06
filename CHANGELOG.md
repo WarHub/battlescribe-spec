@@ -39,6 +39,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`format-specs.ps1` formatting script** in `tools/` — auto-fixes spec YAML
   formatting (blank lines, trailing whitespace, newlines). Run with `-Check` to verify.
 - **SpecLintTests** — 11 lint rules enforcing spec YAML formatting conventions.
+  Includes `NoEmptyEnginesDeclaration` to flag redundant `engines: {}` (omit instead).
+- **Collective flag spec suite** — 10 specs covering all collective behaviors:
+  number propagation, per-model constraints, isDuplicate instancing, group defaults,
+  sibling replication, deselect, and root-entry ignoring. All pass on both BS and NR
+  engines with per-engine overrides documenting structural differences.
+- **`docs/collective-flag.md`** — comprehensive deep-analysis document covering the
+  BattleScribe collective flag implementation (decompiled Java), NR source code analysis,
+  and NR export format comparison.
 - **Engine difference tags** on 36 specs classifying behavioral divergences:
   `battlescribe-bug`, `newrecruit-bug`, `newrecruit-missing-feature`,
   `design-difference`, `undefined-behavior`.
@@ -54,6 +62,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **NR adapter `DeselectSelectionAsync`** — now uses `decrementAmount()` instead of
+  `delete()`, matching BattleScribe's deselect semantics (decrement per-model count
+  by 1). Previously `delete()` would completely remove the selection regardless of
+  current amount, breaking collective entries with scaled counts.
+- **NR adapter `getSelectionCount("root")` for number** — the adapter now reads
+  selection number via `getSelectionCount("root")` which correctly multiplies through
+  the parent chain. This handles collective entries (where internal `amount` stays at 1
+  but displayed number should be parent-multiplied).
+- **NR adapter `army.getErrors()` for group constraints** — error extraction now
+  falls back to `army.getErrors()` to capture constraint errors on entry groups,
+  which aren't attached to individual selection nodes.
+- **Strict error assertion matching** — `from` field on error assertions is now a
+  required string (not nullable). Assertion matching uses exact equality, not
+  soft/substring matching.
 - **Oracle `percentValue` wiring** — `JavaModelFactory.CreateConstraint` was missing
   the `percentValue` parameter, causing BS engine to treat all percent-based constraints
   as flat limits. Conditions and repeats were unaffected (they already passed it).
@@ -67,15 +89,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`format-specs.ps1` enhanced** — now also removes redundant `engines: {}` lines.
+  The formatter keeps specs clean by removing declarations that are semantically
+  identical to being omitted.
 - **CI verbose test progress** — all `dotnet test` steps now include
   `--logger "console;verbosity=minimal"` alongside the existing GitHubActions logger,
   printing one line per completed test so CI output shows progress instead of silence.
 - **Per-engine `expectedState` overrides** replace blunt `engines: {engineName: fail}`
-  markers on 25 specs. Each spec now describes the *actual* per-engine behavior via
+  markers on 29 specs. Each spec now describes the *actual* per-engine behavior via
   `expectedState.engines.{engineName}` blocks, keeping all engines passing while
-  documenting behavioral differences precisely. Only 1 real-world spec retains
-  `newrecruit: fail` (wh40k-10e-space-marines-army) due to fundamental data
-  incompatibilities that can't be expressed as state overrides.
+  documenting behavioral differences precisely. Includes collective specs documenting
+  BS double-counting bug (`battlescribe` override on `group-default-scaling`) and NR
+  single-node-increment model (`newrecruit` overrides on `is-duplicate`,
+  `sibling-replication`). Only 1 real-world spec retains `newrecruit: fail`
+  (wh40k-10e-space-marines-army) due to fundamental data incompatibilities that can't
+  be expressed as state overrides.
 - **Before/after coverage** added to 13 condition, modifier, and scope specs that
   previously only tested one side of their conditional behavior. Specs now assert
   both the triggered and non-triggered states, verifying the condition truly controls

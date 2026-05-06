@@ -425,9 +425,10 @@ Trooper 2→3: Rifle goes 4→6 (path1: +ceil(4/2)=2), then 6→9 (path2: +ceil(
 Final: Trooper=3, Rifle=9 (instead of expected 3)
 ```
 
-This is observable behavior in BattleScribe Desktop — a collective group with a
-collective default entry produces non-linear scaling. The spec
-`collective-group-default-scaling` validates this exact behavior.
+**This is a BattleScribe bug**: the correct result is linear scaling (parent=3 →
+child=3, one per model). NewRecruit correctly produces ×3. The spec
+`collective-group-default-scaling` uses NR's correct ×3 as the base assertion
+with a `battlescribe` engine override documenting the ×9 bug.
 
 ### Group Constraint Per-Model Validation (d.java:1143-1153)
 
@@ -800,24 +801,20 @@ Uses raw `amount` values. No cost data — costs are recomputed on load.
 
 ### What this means for specs
 
-NR achieves the correct total cost (15 pts for 3 Troopers each with a 5pt Rifle)
-but through a different mechanism: `getModelAmount()` multiplier instead of
-propagating the selection number. Our adapter reads `getAmount()` as the selection
-`Number`, so NR reports `Rifle ×1` where BS reports `Rifle ×3`.
+The adapter uses `getSelectionCount("root")` for all selection `number` fields,
+which correctly handles both collective and non-collective children. For cost
+calculation, the adapter multiplies unit cost by `getSelectionCount("root")`,
+matching BattleScribe's `cost × number` semantics.
 
-**Adapter cost discrepancy**: The adapter currently reads
-`cost.value × sel.getAmount()` per selection. For collective entries this gives
-`5 × 1 = 5` per selection, yielding a roster total of 7 (Badge 2 + Rifle 5).
-But NR's actual `getTotalCosts()` returns 21 (Badge 6 + Rifle 15). The adapter
-under-counts costs for collective entries.
+All collective specs now pass on both engines (BattleScribe and NR frozen).
+Where tree structure differs (e.g., isDuplicate creates separate nodes in BS
+but NR uses a single node with incremented number), the specs use per-engine
+`expectedState` overrides to document both behaviors while asserting semantic
+equivalence (total costs match).
 
-All specs validating collective per-model behavior remain marked
-`engines: newrecruit: skip` because the spec assertions validate BS-style
-number propagation (e.g., `number: 3` on the collective child).
-
-A future adapter enhancement could translate NR's representation by:
-- Using `getSelectionCount("root")` instead of `getAmount()` for `Number`
-- Or multiplying `getAmount()` by `getModelAmount()` for collective entries
+The `deselectSelection` adapter action uses NR's `decrementAmount()` method,
+which reduces the per-model count by 1 — matching BattleScribe's deselect
+semantics (decrement number, or remove if number reaches 0).
 
 ## Spec Coverage
 
@@ -827,14 +824,14 @@ The following specs validate collective behavior:
 |---------|----------------|
 | `collective-number-propagation` | Parent number increase+decrease propagates to child |
 | `collective-child-inherits-number` | New child created with parent's number |
-| `collective-per-model-operations` | setSelectionCount + deselect per-model semantics |
+| `collective-per-model-operations` | setSelectionCount + deselect per-model semantics (both engines agree) |
 | `collective-constraint-per-model` | Constraint validation per-model division |
-| `collective-group-default-scaling` | Group double-multiplication effect (n² scaling) |
+| `collective-group-default-scaling` | Group double-processing bug in BS produces n² scaling; NR correctly gives linear ×3 (BS override documents ×9 bug) |
 | `collective-group-constraint-per-model` | Group constraint uses per-model validation |
 | `collective-group-no-default` | Group without defaultSelectionEntryId — no auto-propagation |
-| `collective-sibling-replication` | Duplicate-type parent replicates collective child to all sibling nodes; non-collective child stays on first node only |
+| `collective-sibling-replication` | Duplicate-type parent replicates collective child to all sibling nodes in BS; NR uses single ×N node (engine overrides document structural difference) |
 | `collective-root-ignored` | Collective flag on root entry (parent=Force) is ignored |
-| `collective-is-duplicate` | isDuplicate (d2.f) determines increment-vs-new-node behavior |
+| `collective-is-duplicate` | isDuplicate (d2.f) determines increment-vs-new-node behavior in BS; NR always uses increment mode (engine overrides document structural difference) |
 
 ## Source References
 
