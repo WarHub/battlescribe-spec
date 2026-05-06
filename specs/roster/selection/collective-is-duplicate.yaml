@@ -2,10 +2,10 @@ id: collective-is-duplicate
 category: selection
 description: >
   Entries with only collective (or hidden) children use number-increment mode
-  (d2.f()=false): repeated selection increments number on a single node.
-  Entries with non-collective visible children use separate-node mode
-  (d2.f()=true): each selection creates a new node in BS. NR always uses
-  single-node mode (increments number). Total cost is equivalent.
+  (d2.f()=false in BS, collective_recursive=true in NR): repeated selection
+  increments number on a single node. Entries with non-collective visible
+  children use separate-node mode (d2.f()=true in BS, isInstanced=true in NR):
+  each selection creates a new independent node.
 tags:
   - collective
   - number
@@ -29,7 +29,7 @@ setup:
         - id: se-squad
           name: Squad
           selectionEntries:
-            # d2.f=false: only collective children → number-increment
+            # d2.f=false / collective_recursive=true: only collective children → number-increment
             - id: se-trooper
               name: Trooper
               costs:
@@ -40,7 +40,7 @@ setup:
                 - id: se-rifle
                   name: Rifle
                   collective: true
-            # d2.f=true: has non-collective child → separate nodes
+            # d2.f=true / collective_recursive=false: has non-collective child → separate nodes
             - id: se-specialist
               name: Specialist
               costs:
@@ -86,8 +86,8 @@ steps:
                 - name: Trooper
                   number: 3
 
-  # Select Specialist 3 times — in BS creates 3 separate nodes;
-  # in NR increments single node to number=3. Total cost is the same.
+  # Select Specialist 3 times — has non-collective child Radio → isDuplicate/isInstanced
+  # Both engines: creates 3 separate nodes (one per selection)
   - action: selectChildEntry
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-squad.selectionId }}
@@ -103,9 +103,9 @@ steps:
     selectionId: ${{ steps.select-squad.selectionId }}
     entryId: se-specialist
 
-  # BS: 3 separate Specialist×1 nodes (duplicate type) + 1 Trooper×3
-  # NR: 1 Specialist×3 node (always increment mode) + 1 Trooper×3
-  # Total cost: 75pts (both engines agree)
+  # Both engines: 3 separate Specialist×1 nodes + 1 Trooper×3 node
+  # Specialist has non-collective child Radio → isInstanced/isDuplicate → separate nodes
+  # Trooper has only collective child Rifle → !isInstanced/!isDuplicate → number increments
   - expectedState:
       costs:
         - typeId: pts
@@ -134,19 +134,3 @@ steps:
                   costs:
                     - typeId: pts
                       value: 30
-      engines:
-        newrecruit:
-          forces:
-            - selections:
-                - name: Squad
-                  children:
-                    - name: Specialist
-                      number: 3
-                      costs:
-                        - typeId: pts
-                          value: 45
-                    - name: Trooper
-                      number: 3
-                      costs:
-                        - typeId: pts
-                          value: 30

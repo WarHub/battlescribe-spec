@@ -255,8 +255,18 @@ public static class NewRecruitActions
                         || (childEntryId.includes('::') && c.getBattleScribePath?.() === childEntryId));
 
                     if (child) {
-                        // Found existing instance — activate via incrementAmount.
-                        // Instance nodes always have incrementAmount (not addInstance).
+                        // Found existing instance. Behavior depends on isInstanced:
+                        // - isInstanced=true (non-collective-recursive): create new instance (separate node)
+                        // - isInstanced=false (collective_recursive): increment amount (same node)
+                        if (child.selector?.isInstanced) {
+                            // Instanced entry: each select creates a new independent instance
+                            if (typeof child.selector.addInstance !== 'function')
+                                return `ERROR:Selector for '${childEntryId}' has no addInstance`;
+                            const newInst = child.selector.addInstance();
+                            if (newInst) { newInst.autocheck?.(); return newInst.uid; }
+                            return `ERROR:addInstance on '${childEntryId}' returned null`;
+                        }
+                        // Non-instanced: increment amount on existing node
                         if (typeof child.incrementAmount !== 'function')
                             return `ERROR:Child instance '${childEntryId}' has no incrementAmount (unexpected node type)`;
                         child.incrementAmount();

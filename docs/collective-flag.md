@@ -805,11 +805,18 @@ which correctly handles both collective and non-collective children. For cost
 calculation, the adapter multiplies unit cost by `getSelectionCount("root")`,
 matching BattleScribe's `cost × number` semantics.
 
+The adapter's `SelectChildEntry` action checks the NR selector's `isInstanced`
+property to decide between creating a new instance (`addInstance()`) or
+incrementing the existing amount (`incrementAmount()`). This mirrors BS's
+`isDuplicate` logic: entries with non-collective visible descendants create
+separate nodes per selection, while entries with only collective descendants
+increment a single node's count.
+
 All collective specs now pass on both engines (BattleScribe and NR frozen).
-Where tree structure differs (e.g., isDuplicate creates separate nodes in BS
-but NR uses a single node with incremented number), the specs use per-engine
-`expectedState` overrides to document both behaviors while asserting semantic
-equivalence (total costs match).
+The key behavioral difference is **sibling replication**: BS replicates
+collective children across all sibling instances of a duplicate-type parent,
+while NR does not — each instance is independent. Where this differs, specs
+use per-engine `expectedState` overrides.
 
 The `deselectSelection` adapter action uses NR's `decrementAmount()` method,
 which reduces the per-model count by 1 — matching BattleScribe's deselect
@@ -828,9 +835,9 @@ The following specs validate collective behavior:
 | `collective-group-default-scaling` | Group double-processing bug in BS produces n² scaling; NR correctly gives linear ×3 (BS override documents ×9 bug) |
 | `collective-group-constraint-per-model` | Group constraint uses per-model validation |
 | `collective-group-no-default` | Group without defaultSelectionEntryId — no auto-propagation |
-| `collective-sibling-replication` | Duplicate-type parent replicates collective child to all sibling nodes in BS; NR uses single ×N node (engine overrides document structural difference) |
+| `collective-sibling-replication` | Duplicate-type parent: both engines create separate nodes; BS replicates collective child to all siblings, NR does not (engine override documents different costs) |
 | `collective-root-ignored` | Collective flag on root entry (parent=Force) is ignored |
-| `collective-is-duplicate` | isDuplicate (d2.f) determines increment-vs-new-node behavior in BS; NR always uses increment mode (engine overrides document structural difference) |
+| `collective-is-duplicate` | isDuplicate/isInstanced determines increment-vs-new-node in both engines (entries with non-collective children → separate nodes) |
 
 ## Source References
 
