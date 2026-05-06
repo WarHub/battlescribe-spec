@@ -1,493 +1,203 @@
-# Collective Flag — Deep Analysis
+# Collective Flag — Reference Behavior and Engine Differences
 
-This document describes how the BattleScribe engine handles entries marked with
-`collective="true"`. The analysis is based on the decompiled Java engine source
-(`net.battlescribe.engine.a.f`, `d`, `c`, and `net.battlescribe.engine.b.h`).
+This document is the reference for how `collective="true"` behaves in BattleScribe roster engines.
+
+**NewRecruit (NR) is the canonical engine.** Spec defaults should follow NR behavior. Where BattleScribe (BS) differs, this document treats the difference as either a BS bug or a BS-specific design choice.
+
+The analysis below combines:
+
+- NR JavaScript source analysis
+- live/runtime probing results from NR
+- decompiled BS Java source (`net.battlescribe.engine.a.f`, `d`, `c`, and `net.battlescribe.engine.b.h`)
 
 ## Overview
 
-The `collective` flag on a `SelectionEntry` fundamentally changes how the entry
-behaves within the roster tree. Instead of each instance being an independent
-selection node, collective entries act as a **shared pool across parent
-instances** — their count, cost, and constraints are evaluated **per model**
-(i.e., divided by the parent selection's number).
+Conceptually, a collective child is chosen **per parent model**, not as an independent child tree under each parent instance.
 
-**Key principle**: A collective entry's `number` field represents the total count
-across all parent instances. Operations (select, deselect, set count) scale by
-the parent's number, and validation divides by it.
+Example:
 
-## Terminology
+- `Trooper` has `number=3`
+- `Rifle` is a child of `Trooper` and has `collective=true`
+- selecting `Rifle` once means **1 Rifle per Trooper**, not “one Rifle on one specific Trooper instance”
+
+For specs and BS-format exports, that usually appears as a single `Rifle` node with `number=3`. In NR's internal runtime, however, the logical amount is still **1 per model**; the exported `number` is derived later by multiplying through the parent chain.
+
+Two immediate consequences follow from that model:
+
+1. `setSelectionCount` on a collective child uses **per-model semantics**.
+2. Constraints on collective entries with `scope="parent"` validate **per model**, not against the raw exported count.
+
+The flag is only interesting when the parent is itself a `Selection`. At the root (`Force -> Selection`), collective behavior is effectively ignored and entries behave like ordinary root selections.
+
+### Terminology
 
 | Term | Meaning |
 |------|---------|
 | **Collective entry** | A `SelectionEntry` with `collective="true"` |
 | **Parent selection** | The `Selection` node containing the collective child |
-| **Root selection** | A selection whose parent is a `Force` (not a `Selection`) |
-| **Per-model count** | The effective count per parent instance: `child.number / parent.number` |
-| **d2.f(entry)** | "isDuplicate" check — determines if the entry gets new selection nodes vs. number increments |
+| **Per-model amount** | The logical amount per parent model |
+| **Exported number** | The BS-format `number` after multiplying through the parent chain |
+| **`collective_recursive`** | NR flag meaning “all descendants are collective-compatible, so this entry can stay merged into one counted node” |
+| **`d2.f(entry)` / isDuplicate** | BS heuristic deciding whether an entry should create separate nodes instead of incrementing one node's count |
 
-## When Collective Behavior Activates
+## Core Behaviors
 
-Collective replication logic triggers only when **all three conditions** are met:
+### Per-model state vs. exported numbers (NR reference)
 
-```java
-// f.java:1010
-if (selectionEntry.isCollective()
-    && baseSelectionParent instanceof Selection
-    && !this.i((Selection)baseSelectionParent))
+NR stores the logical amount on the selection itself, then derives BS-style exported numbers by multiplying through the parent chain.
+
+For a collective entry (`Rifle`) under `Trooper ×3`:
+
+```text
+Rifle.getAmount()       = 1
+Rifle.getModelAmount()  = 3
+Rifle.getSelectionCount()       = 1
+Rifle.getSelectionCount("root") = 3
 ```
 
-1. The entry has `collective="true"`
-2. The parent is a `Selection` (not a `Force`)
-3. The parent is **not** a root selection (its parent is not a `Force`)
+For a non-collective sibling (`Badge`) under the same `Trooper ×3`:
 
-If the parent IS a root selection (i.e., directly under a Force), collective
-entries behave identically to non-collective entries. This means the interesting
-collective behaviors only manifest in **nested structures** (e.g.,
-Force → Unit → Model → Weapon).
-
-### isRootSelection (c.java:1643-1645)
-
-```java
-public boolean i(Selection selection) {
-    this.a("isRootSelection", selection);
-    return selection.getParent() instanceof Force;
-}
+```text
+Badge.getAmount()       = 1
+Badge.getSelectionCount()       = 1
+Badge.getSelectionCount("root") = 3
 ```
 
-## Selection (Selecting a Collective Entry)
+**Important:** in NR, `getSelectionCount("root")` multiplies through the parent chain for **all** children. The `collective` flag does **not** change the export multiplier. It affects:
 
-When selecting a collective entry under a non-root parent, the engine iterates
-over all **sibling selections** of the parent entry and creates one child per
-parent instance:
+- whether the entry is treated as merged vs. instanced (`collective_recursive` / `isInstanced`)
+- related UI/runtime behavior built on that distinction
 
-```java
-// f.java:1000-1027 — method c(BaseSelectionParent, SelectionEntry, int n)
-for (int i = 0; i < n; ++i) {
-    if (selectionEntry.isCollective()
-        && baseSelectionParent instanceof Selection
-        && !this.i((Selection)baseSelectionParent)) {
-        // Collective: replicate across all sibling instances × their number
-        for (Selection selection : this.a(d2, (Selection)baseSelectionParent)) {
-            for (int j = 0; j < selection.getNumber(); ++j) {
-                Selection child = this.b(d2, (BaseSelectionParent)selection, selectionEntry);
-                if (child != null) arrayList.add(child);
-            }
-        }
-    } else {
-        // Non-collective: create one instance
-        Selection child = this.b(d2, baseSelectionParent, selectionEntry);
-        if (child != null) arrayList.add(child);
-    }
-}
+The adapter therefore uses `getSelectionCount("root")` for the exported `number` field regardless of whether the child is collective.
+
+### Selection, deselection, and parent-count changes
+
+NR's logical behavior is linear and per-model:
+
+| Operation | Logical result | Exported result (parent `number=3`) |
+|-----------|----------------|-------------------------------------|
+| Select a collective child once | amount becomes `1` per model | exported `number=3` |
+| `setSelectionCount(2)` on the child | amount becomes `2` per model | exported `number=6` |
+| Deselect the child once | amount decreases by `1` per model | exported `6 -> 3` |
+| Parent `2 -> 3` with child at `1` per model | child stays at `1` per model | exported `2 -> 3` |
+| Parent `3 -> 2` with child at `1` per model | child stays at `1` per model | exported `3 -> 2` |
+
+That is the behavior specs should treat as correct.
+
+### Cost calculation
+
+NR and BS use different internal representations but agree on the correct total cost.
+
+| Aspect | BattleScribe | NewRecruit |
+|--------|-------------|------------|
+| **Selection count** | Collective child's `number` is already scaled (e.g. `Rifle ×3`) | Collective child's `amount` stays per-model (e.g. `Rifle ×1`) |
+| **Selection-level cost** | `entry.cost × selection.number` | `entry.cost × getAmount()` |
+| **Total roster cost** | Sum of scaled selection costs | `getTotalCosts()` multiplies through `getModelAmount()` / `getSelectionCount("root")` |
+| **What specs assert** | Exported/scaled value | Exported/scaled value from adapter |
+
+So with `Trooper ×3` and `Rifle = 5pts`:
+
+- BS stores `Rifle.number = 3`, `Rifle.cost = 15`
+- NR stores `Rifle.amount = 1`, `Rifle.getPointsCost() = 5`, but total/exported cost is still `15`
+
+### Constraint validation
+
+Collective constraints are validated per model.
+
+- For a collective `SelectionEntry` with `scope="parent"`, the effective count is divided by the parent number before comparison.
+- For a `SelectionEntryGroup`, per-model validation applies when **all entries in the group are collective-compatible**.
+- Over-selection is still allowed; engines report validation errors rather than clamping the count.
+
+That means a `max 2` collective weapon constraint under `Trooper ×3` allows:
+
+- exported `number=6` (`2 per model × 3 models`) with no error
+- exported `number=9` (`3 per model × 3 models`) with a validation error
+
+### Instancing vs. merged nodes
+
+The `collective` flag also determines whether repeated selection increments one counted node or creates separate instance nodes.
+
+NR's rule is the reference rule:
+
+- if an entry is **collective-compatible all the way down** (`collective_recursive=true`), it stays merged and repeated selection increments one node's amount
+- if any descendant requires instance separation, the entry is **instanced** and repeated selection creates distinct nodes
+
+This is why:
+
+- a model with only collective descendants becomes one node with `number=3`
+- a model with a non-collective child becomes three separate `number=1` nodes
+
+BS has a similar but not identical heuristic (`d2.f(entry)` / `isDuplicate`), described in the implementation section.
+
+## Engine Differences
+
+### 1. BS sibling replication (design difference)
+
+When a collective child is selected on an **instanced** parent, NR applies the change only to the selected instance.
+
+BS instead walks all sibling parent instances of the same entry and replicates the collective child to each of them.
+
+Example:
+
+- three separate `Sergeant` nodes exist
+- selecting collective `Special Weapon` on the first `Sergeant`
+- **NR:** only the first `Sergeant` gets the weapon
+- **BS:** all three `Sergeant` siblings get the weapon
+
+This is a design difference, not NR behavior to emulate. Specs should default to the NR result and use a BS override where needed.
+
+### 2. BS `setSelectionCount` on instanced entries is a no-op (bug)
+
+For entries that BS classifies as `isDuplicate` / separate-instance entries, calling `setSelectionCount` is broken.
+
+Canonical NR behavior:
+
+- increasing an instanced parent's count scales children through parent-chain multiplication
+- exported numbers and costs scale accordingly
+
+BS bug:
+
+- `setSelectionCount` on the duplicate entry does nothing
+- the entry stays at `number=1`
+- child counts and costs remain unchanged
+
+The spec `collective-instance-amount` documents this with a `battlescribe` engine override.
+
+### 3. BS collective group double-multiplication is an `n²` bug
+
+When a **collective group** contains a **collective default entry**, NR scales linearly:
+
+- parent `1 -> 3`
+- default child `1 -> 3`
+
+BS incorrectly processes the same entry twice during parent-number propagation:
+
+1. once via flattened group contents
+2. again via the collective-group default-entry path
+
+That yields the bug:
+
+```text
+parent=3 -> child=9
 ```
 
-**Effect**: If the parent has `number=3`, selecting a collective child creates 3
-instances (one per parent model), resulting in `child.number = 3`.
+This is a BS-only bug. NR's linear result is the correct reference behavior.
 
-### Number Inheritance on Creation (f.java:1308-1314)
+## Implementation Details
 
-When a new selection node is created, if the parent is a Selection and the entry
-is collective and not a "duplicate" entry, the child inherits the parent's number:
+### NewRecruit internals
 
-```java
-// f.java:1311-1313
-if (baseSelectionParent instanceof Selection
-    && selectionEntry.isCollective()
-    && !d2.f(selectionEntry)) {
-    selection.setNumber(((Selection)baseSelectionParent).getNumber());
-}
-```
+#### Where `collective` appears in NR source code
 
-This means a collective child always starts with `number = parent.number`.
+NR uses `collective` at three layers:
 
-### Increment vs. New Node (f.java:1029-1053)
+1. **data model** (`Base` / `Ec`)
+2. **roster runtime** (`Cs`, `tU`, `checkIsInstanced`, `getSelectionCount`)
+3. **editor UI** (catalogue checkbox / visibility)
 
-The `b(d2, parent, entry)` method determines whether to increment an existing
-selection's number or create a new selection node:
+#### Layer 1: data model (`Base` / `Ec`)
 
-```java
-if (baseSelectionParent instanceof Force || d2.f(selectionEntry)) {
-    // Root selections OR "duplicate" entries: always create new node
-    selection = this.a(d2, baseSelectionParent, selectionEntry);
-} else {
-    // Non-root: find existing selection and increment its number
-    List<Selection> existing = this.c(d2, parent, entry, ...);
-    if (existing.isEmpty()) {
-        selection = this.a(d2, baseSelectionParent, selectionEntry);
-    } else {
-        selection = existing.get(0);
-        selection.setNumber(selection.getNumber() + 1);
-    }
-}
-```
-
-For collective entries that are not "duplicate" entries (`d2.f()` returns false),
-subsequent selections increment the existing node's number rather than creating
-new siblings.
-
-## Deselection
-
-Deselecting a collective entry mirrors the selection logic — it removes one
-instance per parent model:
-
-```java
-// f.java:1218-1246 — method a(Selection, int n)
-for (int i = 0; i < n; ++i) {
-    if (selectionEntry.isCollective()
-        && !d2.f(selectionEntry)
-        && baseSelectionParent instanceof Selection) {
-        // Collective: remove from all sibling instances × their number
-        for (Selection sibling : this.a(d2, (Selection)baseSelectionParent)) {
-            for (int j = 0; j < sibling.getNumber(); ++j) {
-                List<Selection> children = this.c(d2, sibling, entry, ...);
-                if (!children.isEmpty()) {
-                    this.a(d2, sibling, children.get(0)); // remove
-                }
-            }
-        }
-    } else {
-        // Non-collective: remove one instance
-        this.a(d2, baseSelectionParent, selection);
-    }
-}
-```
-
-### Decrement vs. Remove (f.java:1248-1263)
-
-Individual removal either decrements the number or removes the node:
-
-```java
-// f.java:1251
-if (selection.getNumber() == 1 || baseSelectionParent instanceof Force) {
-    // Remove the node entirely (recursively removing children first)
-    this.b(baseSelectionParent, selection);
-    this.p(selection); // subtract costs from roster
-    return true;
-} else {
-    // Decrement: first propagate to collective children, then decrement
-    this.g(d2, selection);          // remove proportional children
-    selection.setNumber(selection.getNumber() - 1);
-    return false;
-}
-```
-
-## Parent Number Propagation
-
-When a non-collective parent's number changes, its collective children are
-scaled proportionally.
-
-### Number Increase (f.java:1118-1143 — method `f()`)
-
-Called after a parent's number is incremented. Adds children to match the new
-ratio:
-
-```java
-private void f(d d2, Selection selection) {
-    SelectionEntry entry = d2.i(selection.getEntryId());
-    int newNumber = selection.getNumber() - 1; // previous number (before increment)
-    if (newNumber == 0) return;
-
-    for (SelectionEntry childEntry : d2.f(entry)) {
-        if (!childEntry.isCollective() || d2.f(childEntry)) continue;
-        int currentChildCount = this.a(d2, selection, childEntry, ...);
-        int toAdd = (int) Math.ceil(currentChildCount / newNumber);
-        for (int i = 0; i < toAdd; ++i) {
-            this.b(d2, selection, childEntry);  // creates one instance
-        }
-    }
-    // Also handles collective groups...
-}
-```
-
-**Example**: Parent goes from number=2 to number=3. Collective child currently
-has number=2. `ceil(2/2) = 1`, so 1 child is added → child becomes number=3.
-
-### Number Decrease (f.java:1266-1294 — method `g()`)
-
-Called before a parent's number is decremented. Removes proportional children:
-
-```java
-private void g(d d2, Selection selection) {
-    SelectionEntry entry = d2.i(selection.getEntryId());
-    int parentNumber = selection.getNumber(); // current number (before decrement)
-    if (parentNumber == 0) return;
-
-    for (SelectionEntry childEntry : d2.f(entry)) {
-        if (!childEntry.isCollective() || d2.f(childEntry)) continue;
-        int childCount = this.a(d2, selection, childEntry, ...);
-        int toRemove = (int) Math.ceil(childCount / parentNumber);
-        for (int i = 0; i < toRemove; ++i) {
-            this.a(d2, selection, child);  // removes one instance
-        }
-    }
-}
-```
-
-**Example**: Parent goes from number=3 to number=2. Collective child has
-number=3. `ceil(3/3) = 1`, so 1 child is removed → child becomes number=2.
-
-## setSelectionCount (Per-Model Semantics)
-
-The `getNumChanges` / `setNumSelections` API uses per-model semantics for
-collective entries:
-
-### getNumChanges (f.java:948-970)
-
-```java
-public int b(BaseSelectionParent parent, SelectionEntry entry, int desiredCount) {
-    // ... constraint clamping ...
-    int rawCount = this.a(d2, parent, entry, ...); // actual child count
-    int effectiveCount = rawCount;
-    if (parent instanceof Selection) {
-        // h.a() divides by parent.number for collective entries
-        effectiveCount = net.battlescribe.engine.b.h.a(
-            (Selection)parent, entry, rawCount);
-    }
-    return desiredCount - effectiveCount;
-}
-```
-
-### h.a() — Per-Model Count (h.java:186-191)
-
-```java
-public static int a(Selection selection, SelectionEntry selectionEntry, int n) {
-    if (!selectionEntry.isCollective()) {
-        return n;
-    }
-    return (int) Math.floor(n / selection.getNumber());
-}
-```
-
-**Effect**: When you call `setSelectionCount(weapon, 2)` and the parent has
-`number=3`, the engine computes `effectiveCount = floor(currentCount / 3)` and
-the delta is `2 - effectiveCount`. That delta is then applied via the collective
-selection path, which replicates × parent.number, resulting in
-`weapon.number = 2 × 3 = 6`.
-
-## Cost Calculation
-
-Selection costs are computed as `entry.costValue × selection.number`:
-
-```java
-// f.java:1401-1408
-for (Cost cost : entry.getCosts()) {
-    Cost c = cost.copy();
-    c.setValue(c.getValue() * (double)selection.getNumber());
-    // ...
-}
-selection.setCosts(costList);
-```
-
-For a collective entry with `cost = 5pts` and `number = 3`, the selection's
-displayed cost is `15pts`. The roster total sums all selection costs.
-
-Since collective children scale with the parent, a unit with 3 models where each
-model has one 5pt weapon shows `weapon.cost = 15pts` (3 × 5).
-
-## Constraint Validation (Per-Model)
-
-Constraints on collective entries with `scope="parent"` are evaluated per-model:
-
-### Detection (f.java:494-501)
-
-The engine identifies when per-model validation applies:
-
-```java
-// f.java:495-497
-if (baseEntry2 instanceof SelectionEntry) {
-    baseSelectionEntry = (SelectionEntry)baseEntry2;
-    isPerModel = baseSelectionEntry.isCollective()
-        && scope == BaseQuery.Scope.PARENT
-        && baseSelectable instanceof Selection;
-}
-```
-
-### Application (f.java:558-561)
-
-When `isPerModel` is true, the actual count is divided by the parent's number
-before comparing against the constraint limit:
-
-```java
-// f.java:558-560
-if (isPerModel) {
-    Selection parent = (Selection)baseRosterElement;
-    actualCount /= (double)parent.getNumber();
-}
-```
-
-### Error Message Format (f.java:596-598)
-
-When per-model validation is active, the error message includes " each":
-
-```java
-if (isPerModel) {
-    stringBuilder.append(" each");
-}
-```
-
-**Example error**: `"Trooper has 1 selections too many of Weapon (max 2 each)"`
-
-### Important: No Capping
-
-The engine does **NOT** prevent exceeding the constraint maximum. It allows
-over-selection and reports a validation error. The constraint is advisory, not
-enforcing.
-
-## The "isDuplicate" Check — d2.f(SelectionEntry)
-
-This method (d.java:1126-1141) determines whether an entry should create new
-selection nodes (returns `true`) or increment an existing node's number (returns
-`false`):
-
-```java
-// d.java:1126-1141
-public boolean f(SelectionEntry selectionEntry) {
-    if (this.b(selectionEntry)) {  // some base condition
-        return true;
-    }
-    for (SelectionEntry child : this.f(selectionEntry)) {
-        if (!child.isCollective() && !this.h(child)) {  // has visible non-collective child
-            return true;
-        }
-        if (this.f(child)) {  // recursive check
-            return true;
-        }
-    }
-    return false;
-}
-```
-
-**Returns true (create new nodes) when**: The entry has non-collective,
-non-hidden children. Each selection creates a distinct node with its own
-children tree.
-
-**Returns false (increment number) when**: The entry has ONLY collective children
-(or no children). Instances are tracked by incrementing `number` on a single node.
-
-This is why an entry with only collective weapon children uses
-number-increment semantics: `d2.f(entry)` returns `false` because all its
-children are collective.
-
-## Collective Groups (SelectionEntryGroup)
-
-Entry groups can also be collective. The behavior is similar but checked
-differently:
-
-### d2.f(SelectionEntryGroup) — d.java:1143-1153
-
-```java
-public boolean f(SelectionEntryGroup group) {
-    for (SelectionEntry entry : group.getSelectionEntries()) {
-        if (entry.isCollective()) continue;
-        return false;  // has non-collective entry → group is NOT all-collective
-    }
-    for (SelectionEntryGroup subGroup : group.getSelectionEntryGroups()) {
-        if (this.f(subGroup)) continue;
-        return false;
-    }
-    return true;  // all entries are collective
-}
-```
-
-When a group is entirely collective (all children are collective), it receives
-per-model constraint validation similar to individual collective entries
-(f.java:498-500).
-
-### Group Default Selection with Collective Scaling (f.java:1082-1099)
-
-When auto-selecting default entries within a collective group, the count is
-multiplied by the parent's number:
-
-```java
-// f.java:1093-1094
-if (selectionEntryGroup.isCollective()) {
-    n *= selection.getNumber();
-}
-```
-
-### Double-Multiplication Effect (Collective Group + Collective Entry)
-
-When a **collective group** contains **collective entries** (both have
-`collective="true"`), propagation fires through TWO paths simultaneously:
-
-1. **Path 1** (f.java:1126): Iterates all child entries flattened from groups via
-   `d2.f((BaseSelectionEntry)entry)`. Finds collective entries and adds instances.
-2. **Path 2** (f.java:1134): Iterates `entry.getSelectionEntryGroups()`, finds
-   collective groups with default entries, and adds MORE instances.
-
-Both paths fire for the same entry, producing a multiplicative (n²) effect:
-
-```
-Trooper 1→2: Rifle goes 1→2 (path1: +1), then 2→4 (path2: +ceil(2/1)=2)
-Trooper 2→3: Rifle goes 4→6 (path1: +ceil(4/2)=2), then 6→9 (path2: +ceil(6/2)=3)
-Final: Trooper=3, Rifle=9 (instead of expected 3)
-```
-
-**This is a BattleScribe bug**: the correct result is linear scaling (parent=3 →
-child=3, one per model). NewRecruit correctly produces ×3. The spec
-`collective-group-default-scaling` uses NR's correct ×3 as the base assertion
-with a `battlescribe` engine override documenting the ×9 bug.
-
-### Group Constraint Per-Model Validation (d.java:1143-1153)
-
-A constraint on a `SelectionEntryGroup` uses per-model validation when **all**
-entries in the group are collective:
-
-```java
-// d.java:1143-1153
-public boolean f(SelectionEntryGroup group) {
-    for (SelectionEntry entry : group.getSelectionEntries()) {
-        if (!entry.isCollective()) return false;
-    }
-    return true;
-}
-```
-
-This check (`d2.f(group)`) is used at f.java:498-500 to decide whether to divide
-the actual count by parent.number before comparing against the constraint limit.
-The **group itself** does not need to be collective — only its entries matter for
-per-model constraint evaluation.
-
-## Sibling Replication
-
-The `this.a(d2, (Selection)baseSelectionParent)` call at f.java:1011 returns all
-**sibling selections** of the same entry type as the parent. This handles the
-case where the same collective entry is selected under multiple sibling instances
-of the parent entry.
-
-In practice, for the common case where `d2.f(parentEntry)` returns false (the
-parent uses number-increment), there is only one parent Selection node with
-`number > 1`, and the "siblings" list contains just that one node.
-
-## Summary of Per-Model Arithmetic
-
-| Operation | Formula | Example (parent.number=3, weapon.cost=5pts) |
-|-----------|---------|---------------------------------------------|
-| Select collective child | child.number += parent.number | weapon: 0 → 3 |
-| Deselect collective child | child.number -= parent.number | weapon: 3 → 0 |
-| Parent increases (2→3) | add ceil(child.number / oldNumber) | weapon: 2 → 3 |
-| Parent decreases (3→2) | remove ceil(child.number / currentNumber) | weapon: 3 → 2 |
-| setSelectionCount(n) | child.number = n × parent.number | setCount(2) → weapon=6 |
-| getNumChanges(n) | n - floor(child.number / parent.number) | getChanges(2) with weapon=6 → 0 |
-| Cost display | entry.cost × child.number | weapon.cost = 5 × 3 = 15pts |
-| Constraint check | actualCount / parent.number vs. limit | 3/3=1 vs. max=2 → OK |
-
-## NR Engine Internals — Source Code Analysis
-
-NewRecruit handles collective entries **differently from BattleScribe** at the
-selection-tree level, but achieves the **same correct total cost**. This section
-is based on direct analysis of NR's JavaScript source code (from the nr-editor
-static deployment and the live NR HAR capture).
-
-### Where `collective` appears in NR source code
-
-The `collective` flag is used at **three architectural layers** in NR:
-
-#### Layer 1: Data model (`Base` class in entry.js / BA2pibXD.js)
-
-The `Base` class (NR's equivalent of BattleScribe's `SelectionEntry`) defines
-the raw catalog data properties and computed flags:
+The raw flag lives on the entry model, and NR derives `collective_recursive` from descendants.
 
 ```javascript
 class Base {
@@ -523,8 +233,7 @@ class Base {
 }
 ```
 
-For **entry links** (`Ec` class), `isCollective()` is overridden to inherit
-from the target:
+For entry links, NR treats collectiveness as `self || target`:
 
 ```javascript
 class Ec extends Base {    // entry link
@@ -534,20 +243,18 @@ class Ec extends Base {    // entry link
 }
 ```
 
-**Key difference from BattleScribe**: BS's `isDuplicate` (`d2.f`) checks only
-**direct children** and **skips hidden** entries. NR's `isCollectiveRecursive()`
-checks **all descendants recursively** and does **not consider hidden status**.
-In practice this rarely matters, but hidden non-collective children could cause
-different instancing behavior between the two engines.
+This is the key NR rule to keep in mind:
 
-#### Layer 2: Roster runtime (`Cs` / `tU` classes in BA2pibXD.js)
+- `collective` is the raw catalog flag on one entry
+- `collective_recursive` is the runtime property that decides whether the whole subtree can remain merged
 
-The `collective_recursive` flag controls two critical runtime decisions:
+That one recursive notion replaces a lot of BS-specific reasoning about direct children, duplicates, and hidden entries. BS's `d2.f(entry)` effectively cares about visible non-collective descendants; NR's `collective_recursive` does not have a hidden-entry exception and simply asks whether the subtree is collectively compatible.
 
-**`checkIsInstanced()`** — determines single-node-with-count vs. separate instances:
+#### Layer 2: roster runtime (`Cs`, `tU`, `checkIsInstanced`)
+
+**`checkIsInstanced()`** is the runtime switch between merged-vs-instanced behavior:
 
 ```javascript
-// On selection selector (manages instances of an entry)
 checkIsInstanced() {
     return this.isUnit || this.source.isForce()
         ? true
@@ -555,29 +262,30 @@ checkIsInstanced() {
             ? false
             : !this.source.collective_recursive;
     //      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    //      collective_recursive=true → NOT instanced → single node with count
-    //      collective_recursive=false → instanced → separate nodes per instance
+    //      collective_recursive=true  -> NOT instanced -> single node with count
+    //      collective_recursive=false -> instanced     -> separate nodes
 }
 ```
 
-This is the NR equivalent of BattleScribe's `isDuplicate`:
-- BS: "has non-collective, non-hidden direct children → isDuplicate=true → separate nodes"
-- NR: "NOT all descendants are collective → collective_recursive=false → instanced → separate nodes"
+This is the NR equivalent of BS `isDuplicate`:
 
-**`checkIsSubUnit()`** — determines if a selection is a sub-unit:
+- **BS:** “has non-collective, non-hidden direct children” -> duplicate / separate nodes
+- **NR:** “not recursively collective-compatible” -> instanced / separate nodes
+
+**`checkIsSubUnit()`** also keys off `collective_recursive`:
 
 ```javascript
 checkIsSubUnit() {
     return !this.source.isQuantifiable()
         || this.isLimitedTo1
         || this.isUnit
-        || this.source.collective_recursive   // ← collective entries can't be sub-units
+        || this.source.collective_recursive   // collective-compatible entries can't be sub-units
             ? false
             : !!(this.parent && (this.parent.isUnit() || this.parent.getParentUnit()));
 }
 ```
 
-**`propagateChanges`** — controls cost/amount propagation up the tree:
+**`propagateChanges`** is important and easy to misread:
 
 ```javascript
 class Cs {                          // regular selection instance
@@ -590,19 +298,25 @@ class Cs {                          // regular selection instance
 }
 
 class tU extends Cs {               // instanced/header selection
-    propagateChanges = false;        // does NOT propagate
+    propagateChanges = false;       // does NOT propagate
     // ...
 }
 ```
 
-The `propagateChanges` flag feeds into the `ez()` function which builds the
-multiplication array for `getSelectionCount()`:
+The important detail is:
+
+- **individual instance nodes (`Cs`) have `propagateChanges=true`**
+- **only the instanced header/selector node (`tU`) has `propagateChanges=false`**
+
+So propagation is not disabled on ordinary child selections. It stops only when the multiplication walk reaches the header node that represents an instanced boundary.
+
+That feeds into `ez()`, which builds the multiplication array used by `getSelectionCount()`:
 
 ```javascript
 function ez(selection, selfAmount) {
     const result = [];
     let current = selfAmount;
-    if (selection.propagateChanges === false) return [];  // ← stops here!
+    if (selection.propagateChanges === false) return [];  // stops immediately on header nodes
     let parent = selection.getParent();
     for (; parent && !Object.is(parent, parent.getParent());) {
         if (parent.propagateChanges === false) {
@@ -619,9 +333,9 @@ function ez(selection, selfAmount) {
 }
 ```
 
-#### Layer 3: NR Editor UI (catalogue.js)
+#### Layer 3: NR Editor UI (`catalogue.js`)
 
-The catalogue editor shows a "Collective" checkbox with tooltip:
+The editor exposes a `Collective` checkbox with tooltip text:
 
 ```javascript
 {
@@ -634,8 +348,7 @@ The catalogue editor shows a "Collective" checkbox with tooltip:
 }
 ```
 
-The checkbox visibility is controlled by `collective()` computed property which
-returns `0` (hidden) for root catalog entries:
+The UI also hides the checkbox for root catalogue entries:
 
 ```javascript
 collective() {
@@ -650,68 +363,28 @@ collective() {
 }
 ```
 
-Data importers also set `collective: true` for unit-scoped equipment:
-```javascript
-// In data import (e.g., from army builder text)
-if (scope === "unit") {
-    equipment.collective = true;
-    weapon.collective = true;
-    group.collective = true;
-    entry.collective = true;
-}
-```
+That matches the runtime reality: the interesting collective behavior is below a parent `Selection`, not at the force/root boundary.
 
-### Complete list of `collective` usages in NR source
+#### NR internal properties (live probing)
 
-| Location | File | Usage |
-|----------|------|-------|
-| `Base.collective` | entry.js | Raw data property on catalog entry |
-| `Base.collective_recursive` | entry.js | Computed flag: all descendants collective? |
-| `Base.isCollective()` | entry.js | Getter returning `this.collective` |
-| `Base.isCollectiveRecursive()` | entry.js | Recursive check for `collective_recursive` |
-| `Base.process()` | entry.js | Computes `collective_recursive` on first use |
-| `Ec.isCollective()` | entry.js | Entry link override: `self \|\| target` |
-| `checkIsInstanced()` | BA2pibXD.js | `!collective_recursive` → instanced (separate nodes) |
-| `checkIsSubUnit()` | BA2pibXD.js | `collective_recursive → false` (can't be sub-unit) |
-| `Cs.propagateChanges` | BA2pibXD.js | `true` on regular selections (propagates) |
-| `tU.propagateChanges` | BA2pibXD.js | `false` on instanced selections (stops propagation) |
-| `ez()` | BA2pibXD.js | Multiplication array; stops at `propagateChanges=false` |
-| Editor checkbox | catalogue.js | UI toggle with tooltip text |
-| Editor visibility | catalogue.js | Hidden for root entries at catalogue level |
-| Data import | entry.js | Sets `collective: true` for unit-scoped equipment |
-| Entry link creation | entry.js | Copies `collective` from source entry |
-
-### Representation difference
-
-| Aspect | BattleScribe | NewRecruit |
-|--------|-------------|------------|
-| **Selection count** | Collective child's `number` = parent.number × per-model count (e.g., Rifle ×3 when Trooper ×3) | Collective child's `amount` stays at per-model count (e.g., Rifle ×1 even when Trooper ×3) |
-| **Cost per selection** | `entry.cost × selection.number` (5 × 3 = 15 for the selection node) | `entry.cost × getAmount()` (5 × 1 = 5 for the selection node) |
-| **Total roster cost** | Sum of all selection-level costs = 15 | `getTotalCosts()` returns 15 — NR multiplies by `getModelAmount()` internally |
-| **Key API** | `selection.getNumber()` returns scaled value | `sel.getAmount()` returns per-model; `sel.getModelAmount()` returns parent model count |
-
-### NR internal properties (discovered via live probing)
-
-For a collective entry (Rifle, `collective=true`, parent Trooper ×3):
+For a collective entry (`Rifle`, parent `Trooper ×3`):
 
 ```text
-Rifle.getAmount()       = 1       # per-model selection count (not scaled)
-Rifle.getModelAmount()  = 3       # parent's model count (used as cost multiplier)
+Rifle.getAmount()       = 1       # per-model amount
+Rifle.getModelAmount()  = 3       # parent's model count used for total cost/export
 Rifle.getPointsCost()   = 5       # per-instance cost
-Rifle.source.collective = true    # the collective flag from catalog data
-Rifle.source.collective_recursive = true  # NR's recursive collective tracking
+Rifle.source.collective = true
+Rifle.source.collective_recursive = true
 ```
 
-Non-collective parent (Trooper):
+For the non-collective parent (`Trooper`):
+
 ```text
 Trooper.source.collective = false
-Trooper.source.collective_recursive = true  # has collective descendants
+Trooper.source.collective_recursive = true  # has only collective-compatible descendants
 ```
 
-### `getModelAmount()` — NR's cost multiplier
-
-`getModelAmount()` is the key method NR uses to correctly account for parent
-model counts in cost calculations. Its source:
+#### `getModelAmount()` — NR's total-cost multiplier
 
 ```javascript
 getModelAmount() {
@@ -724,20 +397,14 @@ getModelAmount() {
 }
 ```
 
-By default it delegates to `getSelectionCount("root")` which multiplies the
-selection's own amount through the entire parent chain.
+By default, total-cost scaling comes from `getSelectionCount("root")`, i.e. from parent-chain multiplication.
 
-### `getSelectionCount()` — the export multiplier
-
-NR has a critical method `getSelectionCount(stopAtId)` that multiplies the
-selection's own amount through the parent chain up to the specified ancestor.
-This is used by the `.ros`/`.json` export serializer (`JU()`) with the argument
-`"root"` to compute the export `number` attribute.
+#### `getSelectionCount()` — export multiplier for every child
 
 ```javascript
 getSelectionCount(stopAtId) {
     const selfAmount = this.getSelfAmountElseChilds();
-    if (!stopAtId) return selfAmount;        // no arg → return own amount
+    if (!stopAtId) return selfAmount;        // no arg -> return own amount
     const multiplied = ez(this, selfAmount); // builds multiplication array
     let idx = 0, parent = this.getParent();
     for (; parent && parent.getId() !== stopAtId;)
@@ -746,30 +413,27 @@ getSelectionCount(stopAtId) {
 }
 ```
 
-```text
-# With Trooper ×3, Rifle (collective, amount=1), Badge (non-collective, amount=1):
+Observed behavior with `Trooper ×3`, `Rifle` collective, `Badge` non-collective:
 
-Trooper.getSelectionCount()       = 3   # same as getAmount()
+```text
+Trooper.getSelectionCount()        = 3
 Trooper.getSelectionCount("root") = 3
 
-Rifle.getSelectionCount()         = 1   # own amount only
-Rifle.getSelectionCount("root")   = 3   # 1 × 3 (multiplied through Trooper)
-Rifle.getSelectionCountIn()       = 1   # per-instance count
+Rifle.getSelectionCount()          = 1
+Rifle.getSelectionCount("root")   = 3
+Rifle.getSelectionCountIn()        = 1
 
-Badge.getSelectionCount()         = 1   # own amount only
-Badge.getSelectionCount("root")   = 3   # 1 × 3 (multiplied through Trooper)
-Badge.getSelectionCountIn()       = 1   # per-instance count
+Badge.getSelectionCount()          = 1
+Badge.getSelectionCount("root")   = 3
+Badge.getSelectionCountIn()        = 1
 ```
 
-**Key finding**: `getSelectionCount("root")` returns the **same value for both
-collective and non-collective children** — both get multiplied by the parent
-model count. The collective flag does NOT affect the export number.
+**Key finding:** `getSelectionCount("root")` returns the same parent-multiplied export number for both collective and non-collective children. The collective flag does **not** control exported `number`; it controls whether the subtree is merged/instanced and how the UI/runtime treat it.
 
-### NR export formats compared
+#### NR export formats compared
 
 **BS-format export** (`.ros` XML / `.json`):
-Uses `getSelectionCount("root")` for `number`, multiplies costs by that number.
-Both Rifle and Badge appear as single nodes with `number=3`.
+Uses `getSelectionCount("root")` for `number`, so both collective and non-collective children appear with parent-multiplied counts.
 
 ```json
 {
@@ -786,7 +450,7 @@ Both Rifle and Badge appear as single nodes with `number=3`.
 ```
 
 **Internal save format** (`toJsonObject`):
-Uses raw `amount` values. No cost data — costs are recomputed on load.
+Uses raw amounts only.
 
 ```json
 {
@@ -798,57 +462,391 @@ Uses raw `amount` values. No cost data — costs are recomputed on load.
 }
 ```
 
-### What this means for specs
+#### Complete list of `collective` usages in NR source
 
-The adapter uses `getSelectionCount("root")` for all selection `number` fields,
-which correctly handles both collective and non-collective children. For cost
-calculation, the adapter multiplies unit cost by `getSelectionCount("root")`,
-matching BattleScribe's `cost × number` semantics.
+| Location | File | Usage |
+|----------|------|-------|
+| `Base.collective` | entry.js | Raw data property on catalog entry |
+| `Base.collective_recursive` | entry.js | Computed flag: all descendants collective? |
+| `Base.isCollective()` | entry.js | Getter returning `this.collective` |
+| `Base.isCollectiveRecursive()` | entry.js | Recursive check for `collective_recursive` |
+| `Base.process()` | entry.js | Computes `collective_recursive` on first use |
+| `Ec.isCollective()` | entry.js | Entry link override: `self || target` |
+| `checkIsInstanced()` | BA2pibXD.js | `!collective_recursive` -> instanced |
+| `checkIsSubUnit()` | BA2pibXD.js | `collective_recursive -> false` |
+| `Cs.propagateChanges` | BA2pibXD.js | `true` on regular selections |
+| `tU.propagateChanges` | BA2pibXD.js | `false` only on instanced header/selector |
+| `ez()` | BA2pibXD.js | Multiplication array builder; stops at `propagateChanges=false` |
+| Editor checkbox | catalogue.js | UI toggle with tooltip text |
+| Editor visibility | catalogue.js | Hidden for root entries at catalogue level |
+| Data import | entry.js | Sets `collective: true` for unit-scoped equipment |
+| Entry link creation | entry.js | Copies `collective` from source entry |
 
-The adapter's `SelectChildEntry` action checks the NR selector's `isInstanced`
-property to decide between creating a new instance (`addInstance()`) or
-incrementing the existing amount (`incrementAmount()`). This mirrors BS's
-`isDuplicate` logic: entries with non-collective visible descendants create
-separate nodes per selection, while entries with only collective descendants
-increment a single node's count.
+### BattleScribe internals
 
-All collective specs now pass on both engines (BattleScribe and NR frozen).
-NR is the **reference engine** — spec defaults reflect NR's behavior, and
-BattleScribe differences are documented via `engines.battlescribe` overrides.
+BS exposes the same logical ideas more directly because it stores the scaled/exported count on `selection.number` itself.
 
-The key behavioral differences are:
+#### Activation condition: when BS collective behavior actually turns on
 
-1. **Sibling replication** (design difference): When a collective child is selected
-   on one instance of a duplicate-type parent, it appears only on that instance.
-   BS replicates it across all sibling instances — a design choice that differs
-   from NR's instance-independence model. Specs use a BS override.
+BS only enters its special collective selection path when all three conditions hold:
 
-2. **setSelectionCount on instanced entries** (BS bug): Changing an instanced
-   entry's count scales all children proportionally via parent chain multiplication.
-   BS has a bug where `setNumSelections()` on isDuplicate entries is a no-op.
-   Specs use a BS override documenting the bug.
+```java
+// f.java:1010
+if (selectionEntry.isCollective()
+    && baseSelectionParent instanceof Selection
+    && !this.i((Selection)baseSelectionParent))
+```
 
-The `deselectSelection` adapter action uses NR's `decrementAmount()` method,
-which reduces the per-model count by 1 — matching BattleScribe's deselect
-semantics (decrement number, or remove if number reaches 0).
+So BS requires:
+
+1. `collective=true`
+2. parent is a `Selection`
+3. parent is **not** a root selection
+
+The root check is:
+
+```java
+public boolean i(Selection selection) {
+    this.a("isRootSelection", selection);
+    return selection.getParent() instanceof Force;
+}
+```
+
+That is why `collective-root-ignored` behaves the same way on both engines.
+
+#### Selection
+
+When selecting a collective child under a non-root parent, BS iterates sibling parent selections and creates one child per parent instance:
+
+```java
+// f.java:1000-1027 — method c(BaseSelectionParent, SelectionEntry, int n)
+for (int i = 0; i < n; ++i) {
+    if (selectionEntry.isCollective()
+        && baseSelectionParent instanceof Selection
+        && !this.i((Selection)baseSelectionParent)) {
+        // Collective: replicate across all sibling instances × their number
+        for (Selection selection : this.a(d2, (Selection)baseSelectionParent)) {
+            for (int j = 0; j < selection.getNumber(); ++j) {
+                Selection child = this.b(d2, (BaseSelectionParent)selection, selectionEntry);
+                if (child != null) arrayList.add(child);
+            }
+        }
+    } else {
+        // Non-collective: create one instance
+        Selection child = this.b(d2, baseSelectionParent, selectionEntry);
+        if (child != null) arrayList.add(child);
+    }
+}
+```
+
+This is the implementation source of BS sibling replication.
+
+#### Number inheritance on creation
+
+When BS creates a new collective selection node and the entry is not duplicate-style, it seeds the child with the parent's number:
+
+```java
+// f.java:1311-1313
+if (baseSelectionParent instanceof Selection
+    && selectionEntry.isCollective()
+    && !d2.f(selectionEntry)) {
+    selection.setNumber(((Selection)baseSelectionParent).getNumber());
+}
+```
+
+So if `Trooper.number = 3`, newly selecting `Weapon` creates `Weapon.number = 3` immediately.
+
+#### Increment vs. new node (`d2.f(entry)`)
+
+BS chooses between “increment one node's number” and “create a separate node” here:
+
+```java
+if (baseSelectionParent instanceof Force || d2.f(selectionEntry)) {
+    // Root selections OR "duplicate" entries: always create new node
+    selection = this.a(d2, baseSelectionParent, selectionEntry);
+} else {
+    // Non-root: find existing selection and increment its number
+    List<Selection> existing = this.c(d2, parent, entry, ...);
+    if (existing.isEmpty()) {
+        selection = this.a(d2, baseSelectionParent, selectionEntry);
+    } else {
+        selection = existing.get(0);
+        selection.setNumber(selection.getNumber() + 1);
+    }
+}
+```
+
+If `d2.f(entry)` is false, repeated selection increments one node's `number`. If it is true, BS creates separate sibling nodes.
+
+#### Deselection
+
+BS mirrors selection on deselect:
+
+```java
+// f.java:1218-1246 — method a(Selection, int n)
+for (int i = 0; i < n; ++i) {
+    if (selectionEntry.isCollective()
+        && !d2.f(selectionEntry)
+        && baseSelectionParent instanceof Selection) {
+        // Collective: remove from all sibling instances × their number
+        for (Selection sibling : this.a(d2, (Selection)baseSelectionParent)) {
+            for (int j = 0; j < sibling.getNumber(); ++j) {
+                List<Selection> children = this.c(d2, sibling, entry, ...);
+                if (!children.isEmpty()) {
+                    this.a(d2, sibling, children.get(0)); // remove
+                }
+            }
+        }
+    } else {
+        // Non-collective: remove one instance
+        this.a(d2, baseSelectionParent, selection);
+    }
+}
+```
+
+And individual removal either decrements the node or removes it entirely:
+
+```java
+// f.java:1251
+if (selection.getNumber() == 1 || baseSelectionParent instanceof Force) {
+    // Remove the node entirely
+    this.b(baseSelectionParent, selection);
+    this.p(selection); // subtract costs from roster
+    return true;
+} else {
+    // Decrement: first propagate to collective children, then decrement
+    this.g(d2, selection);
+    selection.setNumber(selection.getNumber() - 1);
+    return false;
+}
+```
+
+#### Parent-number propagation
+
+When a non-collective parent changes number, BS scales collective children proportionally.
+
+Increase path:
+
+```java
+private void f(d d2, Selection selection) {
+    SelectionEntry entry = d2.i(selection.getEntryId());
+    int newNumber = selection.getNumber() - 1; // previous number
+    if (newNumber == 0) return;
+
+    for (SelectionEntry childEntry : d2.f(entry)) {
+        if (!childEntry.isCollective() || d2.f(childEntry)) continue;
+        int currentChildCount = this.a(d2, selection, childEntry, ...);
+        int toAdd = (int) Math.ceil(currentChildCount / newNumber);
+        for (int i = 0; i < toAdd; ++i) {
+            this.b(d2, selection, childEntry);
+        }
+    }
+    // Also handles collective groups...
+}
+```
+
+Decrease path:
+
+```java
+private void g(d d2, Selection selection) {
+    SelectionEntry entry = d2.i(selection.getEntryId());
+    int parentNumber = selection.getNumber(); // current number before decrement
+    if (parentNumber == 0) return;
+
+    for (SelectionEntry childEntry : d2.f(entry)) {
+        if (!childEntry.isCollective() || d2.f(childEntry)) continue;
+        int childCount = this.a(d2, selection, childEntry, ...);
+        int toRemove = (int) Math.ceil(childCount / parentNumber);
+        for (int i = 0; i < toRemove; ++i) {
+            this.a(d2, selection, child);
+        }
+    }
+}
+```
+
+For ordinary collective children, this produces the same linear behavior NR gives logically:
+
+- parent `1 -> 3` -> child `1 -> 3`
+- parent `3 -> 1` -> child `3 -> 1`
+
+#### `setSelectionCount` / `getNumChanges` use per-model semantics
+
+BS computes deltas for collective children in per-model units.
+
+```java
+public int b(BaseSelectionParent parent, SelectionEntry entry, int desiredCount) {
+    // ... constraint clamping ...
+    int rawCount = this.a(d2, parent, entry, ...); // actual child count
+    int effectiveCount = rawCount;
+    if (parent instanceof Selection) {
+        // h.a() divides by parent.number for collective entries
+        effectiveCount = net.battlescribe.engine.b.h.a(
+            (Selection)parent, entry, rawCount);
+    }
+    return desiredCount - effectiveCount;
+}
+```
+
+The helper is:
+
+```java
+public static int a(Selection selection, SelectionEntry selectionEntry, int n) {
+    if (!selectionEntry.isCollective()) {
+        return n;
+    }
+    return (int) Math.floor(n / selection.getNumber());
+}
+```
+
+So with `Trooper.number = 3` and `Weapon.number = 6`, BS interprets the effective child count as `floor(6 / 3) = 2`, i.e. “2 per model”.
+
+That is why `setSelectionCount(2)` on a collective child under `Trooper ×3` yields exported `Weapon.number = 6`.
+
+#### Cost calculation
+
+BS multiplies entry cost by the stored `selection.number`:
+
+```java
+for (Cost cost : entry.getCosts()) {
+    Cost c = cost.copy();
+    c.setValue(c.getValue() * (double)selection.getNumber());
+    // ...
+}
+selection.setCosts(costList);
+```
+
+For collective entries, that stored number is already parent-scaled, so `5pts × Weapon.number(3) = 15pts`.
+
+#### Constraint validation
+
+BS identifies per-model validation like this:
+
+```java
+if (baseEntry2 instanceof SelectionEntry) {
+    baseSelectionEntry = (SelectionEntry)baseEntry2;
+    isPerModel = baseSelectionEntry.isCollective()
+        && scope == BaseQuery.Scope.PARENT
+        && baseSelectable instanceof Selection;
+}
+```
+
+Then divides by the parent number before comparison:
+
+```java
+if (isPerModel) {
+    Selection parent = (Selection)baseRosterElement;
+    actualCount /= (double)parent.getNumber();
+}
+```
+
+And uses ` each` in the validation message:
+
+```java
+if (isPerModel) {
+    stringBuilder.append(" each");
+}
+```
+
+Like NR, BS does **not** cap the count. It allows over-selection and reports an error instead.
+
+#### `d2.f(SelectionEntry)` — BS duplicate/instancing heuristic
+
+```java
+public boolean f(SelectionEntry selectionEntry) {
+    if (this.b(selectionEntry)) {
+        return true;
+    }
+    for (SelectionEntry child : this.f(selectionEntry)) {
+        if (!child.isCollective() && !this.h(child)) {
+            return true;
+        }
+        if (this.f(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+Interpretation:
+
+- **returns `true`** -> create separate nodes
+- **returns `false`** -> increment one node's `number`
+
+In common cases this lines up with NR `collective_recursive`, but the implementations are not identical:
+
+- BS reasons mostly in terms of direct visible/non-hidden children plus recursion
+- NR reasons directly in terms of recursive collectiveness of the whole subtree
+
+#### Collective groups (`SelectionEntryGroup`)
+
+BS has a separate all-collective check for groups:
+
+```java
+public boolean f(SelectionEntryGroup group) {
+    for (SelectionEntry entry : group.getSelectionEntries()) {
+        if (entry.isCollective()) continue;
+        return false;
+    }
+    for (SelectionEntryGroup subGroup : group.getSelectionEntryGroups()) {
+        if (this.f(subGroup)) continue;
+        return false;
+    }
+    return true;
+}
+```
+
+That is used for group-level per-model constraint validation. The group itself does not need `collective=true` for this validation rule to apply; what matters is that the group's entries are collectively compatible.
+
+Default-entry scaling also has a collective-group branch:
+
+```java
+if (selectionEntryGroup.isCollective()) {
+    n *= selection.getNumber();
+}
+```
+
+The BS bug is that propagation hits collective default entries through two paths at once:
+
+1. flattened group contents
+2. collective-group default-entry logic
+
+That produces the `n²` behavior documented by `collective-group-default-scaling`.
+
+#### Summary of BS arithmetic
+
+For a normal nested collective child, BS's stored-number model can be summarized as:
+
+| Operation | Stored/Exported formula | Example (`parent.number=3`, `weapon.cost=5pts`) |
+|-----------|-------------------------|--------------------------------------------------|
+| Select collective child | `child.number += parent.number` | `0 -> 3` |
+| Deselect collective child | `child.number -= parent.number` | `6 -> 3` |
+| Parent increases `2 -> 3` | add `ceil(child.number / oldParentNumber)` | `2 -> 3` |
+| Parent decreases `3 -> 2` | remove `ceil(child.number / currentParentNumber)` | `3 -> 2` |
+| `setSelectionCount(n)` | `child.number = n × parent.number` | `2 -> 6` |
+| `getNumChanges(n)` | `n - floor(child.number / parent.number)` | `2 - floor(6/3) = 0` |
+| Cost display | `entry.cost × child.number` | `5 × 3 = 15pts` |
+| Constraint check | `child.number / parent.number` vs. limit | `6/3 = 2` |
 
 ## Spec Coverage
 
-The following specs validate collective behavior:
+Spec defaults should follow NR. BS-only divergences are captured with `engines.battlescribe` overrides where appropriate.
 
-| Spec ID | Behavior Tested |
-|---------|----------------|
-| `collective-number-propagation` | Parent number increase+decrease propagates to child |
-| `collective-child-inherits-number` | New child created with parent's number |
-| `collective-per-model-operations` | setSelectionCount + deselect per-model semantics (both engines agree) |
-| `collective-constraint-per-model` | Constraint validation per-model division |
-| `collective-group-default-scaling` | Group double-processing bug in BS produces n² scaling; NR correctly gives linear ×3 (BS override documents ×9 bug) |
-| `collective-group-constraint-per-model` | Group constraint uses per-model validation |
-| `collective-group-no-default` | Group without defaultSelectionEntryId — no auto-propagation |
-| `collective-sibling-replication` | Duplicate-type parent: both engines create separate nodes; collective child appears only on selected instance (BS override: replicates to all siblings) |
-| `collective-root-ignored` | Collective flag on root entry (parent=Force) is ignored |
-| `collective-is-duplicate` | isDuplicate/isInstanced determines increment-vs-new-node in both engines (entries with non-collective children → separate nodes) |
-| `collective-instance-amount` | setSelectionCount on instanced entry scales children via parent chain multiplication (BS override: no-op bug) |
+| Category | Spec ID | Coverage |
+|----------|---------|----------|
+| `selection` | `collective-number-propagation` | Parent number changes scale collective children linearly up and back down. |
+| `selection` | `collective-child-inherits-number` | Selecting a collective child under an existing parent count creates the child with the parent's scaled/exported number and cost. |
+| `selection` | `collective-per-model-operations` | `setSelectionCount` on a collective child uses per-model semantics; deselect removes one per model. |
+| `selection` | `collective-constraint-per-model` | Entry-level `scope=parent` constraint validation divides by parent number and reports errors only when per-model limits are exceeded. |
+| `selection` | `collective-group-default-scaling` | NR linear default-entry scaling vs. BS `n²` group double-processing bug. |
+| `selection` | `collective-group-constraint-per-model` | Group-level constraint uses per-model validation when all entries in the group are collective. |
+| `selection` | `collective-group-no-default` | Collective group without `defaultSelectionEntryId` does not auto-select or auto-propagate entries. |
+| `selection` | `collective-sibling-replication` | NR keeps collective children on the selected instanced parent only; BS replicates to sibling parent instances. |
+| `selection` | `collective-root-ignored` | Root selections ignore collective behavior and remain ordinary separate root nodes. |
+| `selection` | `collective-is-duplicate` | Merged-node vs. separate-instance behavior for entries with only collective descendants vs. entries with non-collective descendants. |
+| `selection` | `collective-instance-amount` | Canonical NR behavior for scaling instanced entries via parent-chain multiplication; BS `setSelectionCount` no-op bug on duplicate entries. |
+| `selection` | `collective-with-constraint` | Legacy smoke test: a parent that has a collective child still respects its own parent-scoped max-selection constraint. |
+| `entry-group` | `entry-group-collective` | Collective `SelectionEntryGroup` counts its child selections as one collective for group-level constraint purposes. |
 
 ## Source References
 
@@ -866,9 +864,9 @@ The following specs validate collective behavior:
 | `f.java` | 1398-1413 | Cost = entry.cost × selection.number |
 | `f.java` | 480-502 | Constraint per-model detection |
 | `f.java` | 558-561 | Constraint per-model application |
-| `f.java` | 596-598 | " each" suffix in error messages |
-| `f.java` | 948-970 | getNumChanges per-model semantics |
+| `f.java` | 596-598 | `" each"` suffix in error messages |
+| `f.java` | 948-970 | `getNumChanges` per-model semantics |
 | `h.java` | 186-191 | `h.a()` — per-model count helper |
 | `d.java` | 1126-1141 | `d2.f(SelectionEntry)` — isDuplicate |
 | `d.java` | 1143-1153 | `d2.f(SelectionEntryGroup)` — all-collective check |
-| `c.java` | 1643-1645 | `isRootSelection` — parent instanceof Force |
+| `c.java` | 1643-1645 | `isRootSelection` — `parent instanceof Force` |

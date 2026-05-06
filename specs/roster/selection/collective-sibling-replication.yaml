@@ -10,6 +10,7 @@ description: >
 tags:
   - collective
   - number
+  - design-difference
 
 setup:
   gameSystem:
