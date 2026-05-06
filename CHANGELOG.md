@@ -40,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   formatting (blank lines, trailing whitespace, newlines). Run with `-Check` to verify.
 - **SpecLintTests** — 11 lint rules enforcing spec YAML formatting conventions.
   Includes `NoEmptyEnginesDeclaration` to flag redundant `engines: {}` (omit instead).
-- **Collective flag spec suite** — 10 specs covering all collective behaviors:
+- **Collective flag spec suite** — 12 specs covering all collective behaviors:
   number propagation, per-model constraints, isDuplicate instancing, group defaults,
   sibling replication, deselect, and root-entry ignoring. All pass on both BS and NR
   engines with per-engine overrides documenting structural differences.
