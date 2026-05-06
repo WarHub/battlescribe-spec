@@ -738,9 +738,19 @@ steps:
   # Every field below is verified against the actual BS and NR engine debugger dumps.
   # The NR override restates the full force tree because ForEngine() merge is top-level only.
   - expectedState:
+      errorsContain:
+        - on: roster
+          from: costLimits/ct-pts
       costs:
         - typeId: ct-pts
         - typeId: ct-power
+      gameSystemName: Kitchen Sink GS
+      costLimitCount: 1
+      costLimits:
+        - typeId: ct-pts
+          name: pts
+          value: 200
+      forceCount: 1
       forces:
         - name: Battalion
           entryId: fe-battalion
@@ -1271,13 +1281,3 @@ steps:
                       primary: true
                       profiles: []
                       rules: []
-      gameSystemName: Kitchen Sink GS
-      costLimitCount: 1
-      costLimits:
-        - typeId: ct-pts
-          name: pts
-          value: 200
-      forceCount: 1
-      errorsContain:
-        - on: roster
-          from: costLimits/ct-pts

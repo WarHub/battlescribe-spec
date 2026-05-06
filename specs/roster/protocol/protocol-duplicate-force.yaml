@@ -146,6 +146,7 @@ steps:
       costs:
         - typeId: ct-pts
           value: 300
+      forceCount: 2
       forces:
         - name: Patrol
           selectionCount: 2
@@ -161,7 +162,6 @@ steps:
               children:
                 - name: Power Sword
             - name: Squad
-      forceCount: 2
 
   # Step 6: Remove the duplicated force
   - action: removeForce
@@ -171,7 +171,7 @@ steps:
       costs:
         - typeId: ct-pts
           value: 150
+      forceCount: 1
       forces:
         - name: Patrol
           selectionCount: 2
-      forceCount: 1

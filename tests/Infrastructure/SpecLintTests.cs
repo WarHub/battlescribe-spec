@@ -231,9 +231,15 @@ public sealed class SpecLintTests
         }
     }
 
-    // ── expectedState property order: costs → errors → forces → engines ──
+    // ── expectedState property order: errors first, forces second-last, engines last ──
 
-    private static readonly string[] ExpectedStatePropertyOrder = ["costs", "errors", "forces", "engines"];
+    private static int GetPropertyZone(string prop) => prop switch
+    {
+        "errors" or "errorsContain" => 0,   // first
+        "forces" => 2,                       // second-to-last
+        "engines" => 3,                      // last
+        _ => 1,                              // middle (no mutual ordering)
+    };
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
@@ -243,7 +249,7 @@ public sealed class SpecLintTests
         var violations = new List<string>();
         var inExpected = false;
         var stepStart = -1;
-        var stepProps = new List<(string Name, int Line)>();
+        var stepProps = new List<(string Name, int Line, int Zone)>();
 
         for (var i = 0; i < lines.Length; i++)
         {
@@ -269,35 +275,36 @@ public sealed class SpecLintTests
             if (inExpected && Regex.IsMatch(stripped, @"^      \w+:") && !stripped.StartsWith("        ", StringComparison.Ordinal))
             {
                 var prop = stripped.TrimStart()[..stripped.TrimStart().IndexOf(':')];
-                if (Array.IndexOf(ExpectedStatePropertyOrder, prop) >= 0)
-                {
-                    stepProps.Add((prop, i + 1));
-                }
+                stepProps.Add((prop, i + 1, GetPropertyZone(prop)));
             }
         }
         // Check last expectedState block
         CheckStepProps(stepProps, stepStart, violations);
 
         Assert.True(violations.Count == 0,
-            $"{specName}: expectedState properties out of order (expected: costs → errors → forces → engines):\n  {string.Join("\n  ", violations)}");
+            $"{specName}: expectedState properties out of order (expected: errors → ... → forces → engines):\n  {string.Join("\n  ", violations)}");
 
-        static void CheckStepProps(List<(string Name, int Line)> props, int stepLine, List<string> violations)
+        static void CheckStepProps(List<(string Name, int Line, int Zone)> props, int stepLine, List<string> violations)
         {
             if (props.Count < 2)
             {
                 return;
             }
-            var lastOrder = -1;
+            var maxZoneSoFar = -1;
+            string? maxZoneProp = null;
             for (var j = 0; j < props.Count; j++)
             {
-                var order = Array.IndexOf(ExpectedStatePropertyOrder, props[j].Name);
-                if (order < lastOrder)
+                if (props[j].Zone < maxZoneSoFar)
                 {
                     violations.Add(
-                        $"line {props[j].Line}: '{props[j].Name}' must come before " +
-                        $"'{props[j - 1].Name}' (step at line {stepLine})");
+                        $"line {props[j].Line}: '{props[j].Name}' (zone {props[j].Zone}) must come before " +
+                        $"'{maxZoneProp}' (zone {maxZoneSoFar}) (step at line {stepLine})");
                 }
-                lastOrder = order;
+                if (props[j].Zone > maxZoneSoFar)
+                {
+                    maxZoneSoFar = props[j].Zone;
+                    maxZoneProp = props[j].Name;
+                }
             }
         }
     }

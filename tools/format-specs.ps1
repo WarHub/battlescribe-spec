@@ -104,10 +104,10 @@ foreach ($file in $files) {
 
     $newText = ($result -join "`n")
 
-    # Fix: reorder expectedState properties (costs → errors → forces → engines)
+    # Fix: reorder expectedState properties (errors first, forces second-last, engines last)
+    # Zone 0: errors/errorsContain, Zone 1: everything else, Zone 2: forces, Zone 3: engines
     # Process line-by-line to identify expectedState blocks and reorder their
     # top-level properties without disturbing blank lines/comments outside them.
-    $propertyOrder = @('costs', 'errors', 'forces', 'engines')
     $textLines = $newText -split "`n"
     $reordered = $false
     $i2 = 0
@@ -153,23 +153,29 @@ foreach ($file in $files) {
                 $propBlocks += @{ Name = $currentName; Lines = $currentBlockLines }
             }
 
-            # Check if ordering needs fixing
+            # Check if zone ordering needs fixing
             if ($propBlocks.Count -ge 2) {
-                $knownIndices = @()
-                foreach ($pb in $propBlocks) {
-                    $idx = [array]::IndexOf($propertyOrder, $pb.Name)
-                    if ($idx -ge 0) { $knownIndices += $idx }
-                }
-                $sorted = @($knownIndices | Sort-Object)
+                $zones = @($propBlocks | ForEach-Object {
+                    switch ($_.Name) {
+                        { $_ -in @('errors', 'errorsContain') } { 0 }
+                        'forces' { 2 }
+                        'engines' { 3 }
+                        default { 1 }
+                    }
+                })
                 $needsFix = $false
-                for ($k = 0; $k -lt $knownIndices.Count; $k++) {
-                    if ($knownIndices[$k] -ne $sorted[$k]) { $needsFix = $true; break }
+                $maxZone = -1
+                foreach ($z in $zones) {
+                    if ($z -lt $maxZone) { $needsFix = $true; break }
+                    if ($z -gt $maxZone) { $maxZone = $z }
                 }
                 if ($needsFix) {
-                    $sortedBlocks = @($propBlocks | Sort-Object {
-                        $idx = [array]::IndexOf($propertyOrder, $_.Name)
-                        if ($idx -ge 0) { $idx } else { 999 }
-                    })
+                    # Stable sort by zone
+                    $indexed = @()
+                    for ($k = 0; $k -lt $propBlocks.Count; $k++) {
+                        $indexed += @{ Block = $propBlocks[$k]; Zone = $zones[$k]; Idx = $k }
+                    }
+                    $sortedBlocks = @($indexed | Sort-Object { $_.Zone }, { $_.Idx } | ForEach-Object { $_.Block })
                     # Replace lines after expectedState: with sorted blocks
                     $newBlockLines = @()
                     foreach ($sb in $sortedBlocks) {

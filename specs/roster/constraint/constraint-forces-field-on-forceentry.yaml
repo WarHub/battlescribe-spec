@@ -49,7 +49,6 @@ steps:
   # 3 Patrol forces, max 2 → validation error
   # Each Patrol force instance evaluates the constraint independently
   - expectedState:
-      forceCount: 3
       errors:
         - on: roster
           from: fe-patrol/con-max-forces
@@ -57,6 +56,7 @@ steps:
           from: fe-patrol/con-max-forces
         - on: roster
           from: fe-patrol/con-max-forces
+      forceCount: 3
       engines:
         # NR doesn't evaluate field=forces constraints on ForceEntries
         newrecruit:

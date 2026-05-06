@@ -41,10 +41,10 @@ steps:
       costs:
         - typeId: pts
           value: 100
+      forceCount: 1
       forces:
         - name: Patrol
           selectionCount: 1
           selections:
             - name: Unit A
               type: unit
-      forceCount: 1
