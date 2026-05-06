@@ -813,17 +813,20 @@ separate nodes per selection, while entries with only collective descendants
 increment a single node's count.
 
 All collective specs now pass on both engines (BattleScribe and NR frozen).
+NR is the **reference engine** — spec defaults reflect NR's behavior, and
+BattleScribe differences are documented via `engines.battlescribe` overrides.
+
 The key behavioral differences are:
 
-1. **Sibling replication**: BS replicates collective children across all sibling
-   instances of a duplicate-type parent, while NR does not — each instance is
-   independent. Where this differs, specs use per-engine `expectedState` overrides.
+1. **Sibling replication** (design difference): When a collective child is selected
+   on one instance of a duplicate-type parent, it appears only on that instance.
+   BS replicates it across all sibling instances — a design choice that differs
+   from NR's instance-independence model. Specs use a BS override.
 
-2. **setSelectionCount on instanced entries**: In NR, `setAmount()` on an instanced
-   entry changes that instance's amount, and all children scale proportionally via
-   `getSelectionCount("root")` parent chain multiplication (regardless of collective
-   flag). In BS, `setNumSelections()` on an isDuplicate entry is a no-op — the number
-   stays at 1, and only `selectChildEntry` can create additional copies.
+2. **setSelectionCount on instanced entries** (BS bug): Changing an instanced
+   entry's count scales all children proportionally via parent chain multiplication.
+   BS has a bug where `setNumSelections()` on isDuplicate entries is a no-op.
+   Specs use a BS override documenting the bug.
 
 The `deselectSelection` adapter action uses NR's `decrementAmount()` method,
 which reduces the per-model count by 1 — matching BattleScribe's deselect
@@ -842,10 +845,10 @@ The following specs validate collective behavior:
 | `collective-group-default-scaling` | Group double-processing bug in BS produces n² scaling; NR correctly gives linear ×3 (BS override documents ×9 bug) |
 | `collective-group-constraint-per-model` | Group constraint uses per-model validation |
 | `collective-group-no-default` | Group without defaultSelectionEntryId — no auto-propagation |
-| `collective-sibling-replication` | Duplicate-type parent: both engines create separate nodes; BS replicates collective child to all siblings, NR does not (engine override documents different costs) |
+| `collective-sibling-replication` | Duplicate-type parent: both engines create separate nodes; collective child appears only on selected instance (BS override: replicates to all siblings) |
 | `collective-root-ignored` | Collective flag on root entry (parent=Force) is ignored |
 | `collective-is-duplicate` | isDuplicate/isInstanced determines increment-vs-new-node in both engines (entries with non-collective children → separate nodes) |
-| `collective-instance-amount` | setSelectionCount on instanced entry: NR scales amount and children via parent chain; BS is a no-op for isDuplicate (engine override) |
+| `collective-instance-amount` | setSelectionCount on instanced entry scales children via parent chain multiplication (BS override: no-op bug) |
 
 ## Source References
 

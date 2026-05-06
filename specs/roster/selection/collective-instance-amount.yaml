@@ -1,15 +1,14 @@
 id: collective-instance-amount
 category: selection
 description: >
-  Changing the count of an instanced entry (isInstanced/isDuplicate) works
-  differently between engines. In NR, setAmount changes the instance's
-  multiplier and all children scale through getSelectionCount (parent chain
-  multiplication). In BS, setNumSelections on a duplicate-type entry is a
-  no-op — the entry's number cannot be changed via setSelectionCount; only
-  selectChildEntry can create new copies.
+  Increasing the count of an instanced entry scales all children proportionally
+  through the parent chain (getSelectionCount multiplies amounts up the tree).
+  BS has a bug where setNumSelections on isDuplicate entries is a no-op — the
+  number cannot be changed; only selectChildEntry can create new copies.
 tags:
   - collective
   - number
+  - battlescribe-bug
 
 setup:
   gameSystem:
@@ -99,8 +98,8 @@ steps:
                           value: 10
 
   # Set Sergeant count to 3
-  # NR: instance amount becomes 3, children scale via getSelectionCount
-  # BS: no-op for isDuplicate entries (number stays 1)
+  # Children scale via parent chain multiplication (amount × parent amounts)
+  # BS bug: no-op for isDuplicate entries (number stays 1)
   - action: setSelectionCount
     forceId: ${{ steps.add-force.forceId }}
     selectionId: ${{ steps.select-sgt.selectionId }}
@@ -109,47 +108,47 @@ steps:
   - expectedState:
       costs:
         - typeId: pts
-          value: 12
+          value: 36
       forces:
         - selections:
             - name: Squad
               children:
                 - name: Sergeant
-                  number: 1
+                  number: 3
                   children:
                     - name: Badge
-                      number: 1
+                      number: 3
                       costs:
                         - name: pts
                           typeId: pts
-                          value: 2
+                          value: 6
                     - name: Weapon
-                      number: 1
+                      number: 3
                       costs:
                         - name: pts
                           typeId: pts
-                          value: 10
+                          value: 30
       engines:
-        newrecruit:
+        battlescribe:
           costs:
             - typeId: pts
-              value: 36
+              value: 12
           forces:
             - selections:
                 - name: Squad
                   children:
                     - name: Sergeant
-                      number: 3
+                      number: 1
                       children:
                         - name: Badge
-                          number: 3
+                          number: 1
                           costs:
                             - name: pts
                               typeId: pts
-                              value: 6
+                              value: 2
                         - name: Weapon
-                          number: 3
+                          number: 1
                           costs:
                             - name: pts
                               typeId: pts
-                              value: 30
+                              value: 10

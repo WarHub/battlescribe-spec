@@ -1,11 +1,12 @@
 id: collective-sibling-replication
 category: selection
 description: >
-  When a parent entry is a "duplicate type" (has non-collective non-hidden
-  children, d2.f()=true / isInstanced=true), both engines create separate nodes
-  per selection. BS replicates collective children across all sibling nodes;
-  NR does not — collective children only appear on the instance where they
-  were explicitly selected. Non-collective children do not replicate in either.
+  When a parent entry is instanced (has non-collective non-hidden children),
+  both engines create separate nodes per selection. Collective children only
+  appear on the instance where they were explicitly selected — they do not
+  replicate to siblings. BS has a design difference: it replicates collective
+  children across all sibling nodes of the same entry.
+  Non-collective children do not replicate in either engine.
 tags:
   - collective
   - number
@@ -112,8 +113,8 @@ steps:
                   children: []
 
   # Select collective Special Weapon on first Sergeant
-  # BS: replicates to all 3 sibling nodes (collective sibling replication)
-  # NR: only first Sergeant gets it (no replication across instances)
+  # Collective children appear only on the instance where selected.
+  # BS design difference: replicates to all sibling nodes of same entry.
   - action: selectChildEntry
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-sgt-1.selectionId }}
@@ -122,7 +123,7 @@ steps:
   - expectedState:
       costs:
         - typeId: pts
-          value: 32
+          value: 12
       forces:
         - selections:
             - name: Squad
@@ -132,23 +133,27 @@ steps:
                   children:
                     - name: Badge
                       number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 2
                     - name: Special Weapon
                       number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 10
                 - name: Sergeant
                   number: 1
-                  children:
-                    - name: Special Weapon
-                      number: 1
+                  children: []
                 - name: Sergeant
                   number: 1
-                  children:
-                    - name: Special Weapon
-                      number: 1
+                  children: []
       engines:
-        newrecruit:
+        battlescribe:
           costs:
             - typeId: pts
-              value: 12
+              value: 32
           forces:
             - selections:
                 - name: Squad
@@ -158,19 +163,15 @@ steps:
                       children:
                         - name: Badge
                           number: 1
-                          costs:
-                            - name: pts
-                              typeId: pts
-                              value: 2
                         - name: Special Weapon
                           number: 1
-                          costs:
-                            - name: pts
-                              typeId: pts
-                              value: 10
                     - name: Sergeant
                       number: 1
-                      children: []
+                      children:
+                        - name: Special Weapon
+                          number: 1
                     - name: Sergeant
                       number: 1
-                      children: []
+                      children:
+                        - name: Special Weapon
+                          number: 1
