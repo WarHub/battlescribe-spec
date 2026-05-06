@@ -69,8 +69,8 @@ steps:
 
   # Three selections — exceeds max=2, constraint fires
   - expectedState:
-      forces:
-        - selectionCount: 3
       errors:
         - on: selection shared-unit
           from: shared-unit/con-max
+      forces:
+        - selectionCount: 3

@@ -53,11 +53,11 @@ steps:
     forceEntryId: fe-patrol
 
   - expectedState:
-      forces:
-        - selectionCount: 0
       errors:
         - on: category cat-troops
           from: se-unit-a/con-cost-min
+      forces:
+        - selectionCount: 0
 
   # Unit A costs 10 pts, below min cost constraint of 50
   - action: selectEntry
@@ -65,10 +65,10 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
+      errors:
+        - on: category cat-troops
+          from: se-unit-a/con-cost-min
       forces:
         - selectionCount: 1
           selections:
             - name: Unit A
-      errors:
-        - on: category cat-troops
-          from: se-unit-a/con-cost-min

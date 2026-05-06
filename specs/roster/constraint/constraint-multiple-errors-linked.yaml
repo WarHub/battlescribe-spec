@@ -90,10 +90,10 @@ steps:
     selectionId: ${{ steps.add-patrol.selections.se-hq }}
 
   - expectedState:
-      forces:
-        - selectionCount: 0
       errors:
         - on: category cat-troops
           from: se-unit-a/con-min-troops
         - on: category cat-hq
           from: se-hq/con-min-hq
+      forces:
+        - selectionCount: 0

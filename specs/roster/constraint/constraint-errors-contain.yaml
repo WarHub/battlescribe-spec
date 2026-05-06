@@ -71,8 +71,8 @@ steps:
 
   # errorsContain: assert only one of the two errors, ignoring the other
   - expectedState:
-      forces:
-        - selectionCount: 0
       errorsContain:
         - on: category cat-troops
           from: se-unit-a/con-min-troops
+      forces:
+        - selectionCount: 0

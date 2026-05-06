@@ -143,6 +143,9 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
 
   - expectedState:
+      costs:
+        - typeId: ct-pts
+          value: 300
       forceCount: 2
       forces:
         - name: Patrol
@@ -159,19 +162,16 @@ steps:
               children:
                 - name: Power Sword
             - name: Squad
-      costs:
-        - typeId: ct-pts
-          value: 300
 
   # Step 6: Remove the duplicated force
   - action: removeForce
     forceId: ${{ steps.dupe-patrol.forceId }}
 
   - expectedState:
+      costs:
+        - typeId: ct-pts
+          value: 150
       forceCount: 1
       forces:
         - name: Patrol
           selectionCount: 2
-      costs:
-        - typeId: ct-pts
-          value: 150

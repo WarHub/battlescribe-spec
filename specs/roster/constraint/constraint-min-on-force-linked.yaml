@@ -59,11 +59,11 @@ steps:
     selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - expectedState:
-      forces:
-        - selectionCount: 1
       errors:
         - on: force
           from: se-unit-a/con-min-force
+      forces:
+        - selectionCount: 1
       engines:
         newrecruit:
           errors:

@@ -35,10 +35,10 @@ steps:
   # 1 Patrol force added, min 2 required → validation error.
   # Note: field=forces min does NOT auto-add forces (unlike field=selections min).
   - expectedState:
-      forceCount: 1
       errors:
         - on: roster
           from: fe-patrol/con-min-forces
+      forceCount: 1
       engines:
         # NR places the error on force (not roster) and never resolves it
         newrecruit:

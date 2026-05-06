@@ -39,9 +39,9 @@ steps:
     entryId: se-1
   # Number decrement: 100 - 30 = 70
   - expectedState:
-      forces:
-        - selections:
-            - name: Discounted Unit
       costs:
         - typeId: pts
           value: 70.0
+      forces:
+        - selections:
+            - name: Discounted Unit

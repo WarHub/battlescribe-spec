@@ -69,11 +69,11 @@ steps:
   # Exceeds entry link max=2 (scope=force) — link's constraint fires
   # even though the shared entry's max=4 is not yet reached
   - expectedState:
-      forces:
-        - selectionCount: 3
       errors:
         - on: selection shared-unit
           from: shared-unit/con-shared-max
+      forces:
+        - selectionCount: 3
       engines:
         newrecruit:
           errors:

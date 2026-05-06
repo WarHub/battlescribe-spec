@@ -34,14 +34,14 @@ steps:
     forceEntryId: fe-patrol
 
   - expectedState:
+      errors:
+        - on: roster
+          from: se-unit/con-force-field
       forces:
         - selectionCount: 0
       # No selections yet, but the min 1 field=forces constraint on the entry
       # is evaluated. Because the owning entry is a SelectionEntry (not ForceEntry),
       # force count is always 0 → validation error.
-      errors:
-        - on: roster
-          from: se-unit/con-force-field
       engines:
         # NR auto-selects the entry and doesn't evaluate field=forces constraints
         newrecruit:
@@ -58,13 +58,13 @@ steps:
   # Even after selecting, the constraint still counts forces (not selections).
   # Force count is still 0 → validation error persists.
   - expectedState:
+      errors:
+        - on: roster
+          from: se-unit/con-force-field
       forces:
         - selectionCount: 1
           selections:
             - name: Unit A
-      errors:
-        - on: roster
-          from: se-unit/con-force-field
       engines:
         # NR: 2 selections (auto-selected + manually selected), no force-field errors
         newrecruit:

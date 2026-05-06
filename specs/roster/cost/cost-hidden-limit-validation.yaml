@@ -41,9 +41,9 @@ steps:
 
   # HQ costs 2 CP, limit is 1 — should produce a validation error
   - expectedState:
-      costs:
-        - typeId: cp
-          value: 2
       errors:
         - on: roster
           from: costLimits/cp
+      costs:
+        - typeId: cp
+          value: 2

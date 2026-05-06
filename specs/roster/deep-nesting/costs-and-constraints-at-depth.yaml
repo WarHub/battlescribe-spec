@@ -80,6 +80,9 @@ steps:
   # Ammo Pack auto-selects (min=1 on inner link).
   # Costs: Squad 80 + Bolter 15 + Ammo 3 = 98
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 98
       forces:
         - selectionCount: 1
           selections:
@@ -91,9 +94,6 @@ steps:
                   children:
                     - name: Ammo Pack
                       type: upgrade
-      costs:
-        - typeId: pts
-          value: 98
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
@@ -102,8 +102,8 @@ steps:
   # Second Devastator Squad → second Heavy Bolter + Ammo auto-select.
   # Costs: 2 × (80 + 15 + 3) = 196
   - expectedState:
-      forces:
-        - selectionCount: 2
       costs:
         - typeId: pts
           value: 196
+      forces:
+        - selectionCount: 2

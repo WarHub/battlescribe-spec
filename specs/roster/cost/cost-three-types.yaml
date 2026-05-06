@@ -45,6 +45,13 @@ steps:
     entryId: se-1
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
+        - typeId: pl
+          value: 5
+        - typeId: cp
+          value: 1
       forces:
         - selections:
             - name: Command Unit
@@ -55,10 +62,3 @@ steps:
                   value: 5
                 - typeId: cp
                   value: 1
-      costs:
-        - typeId: pts
-          value: 100
-        - typeId: pl
-          value: 5
-        - typeId: cp
-          value: 1

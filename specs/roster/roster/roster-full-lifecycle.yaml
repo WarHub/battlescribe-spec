@@ -69,22 +69,22 @@ steps:
     selectionId: ${{ steps.select-scout.selectionId }}
 
   - expectedState:
-      forces:
-        - selectionCount: 3
       costs:
         - typeId: pts
           value: 150
+      forces:
+        - selectionCount: 3
 
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
     selectionId: ${{ steps.select-heavy.selectionId }}
 
   - expectedState:
-      forces:
-        - selectionCount: 2
       costs:
         - typeId: pts
           value: 60
+      forces:
+        - selectionCount: 2
 
   - action: removeForce
     forceId: ${{ steps.add-patrol.forceId }}

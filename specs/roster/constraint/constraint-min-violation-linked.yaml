@@ -57,8 +57,8 @@ steps:
     selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - expectedState:
-      forces:
-        - selectionCount: 0
       errors:
         - on: category cat-troops
           from: se-unit-a/con-min-1
+      forces:
+        - selectionCount: 0

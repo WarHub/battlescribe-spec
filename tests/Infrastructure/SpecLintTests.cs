@@ -197,6 +197,8 @@ public sealed class SpecLintTests
         "costType", "profileType",
         "deep-nesting",
         "entry-id", "entryGroup",
+        "collective", "deselect", "validation",
+        "entry-group",
     ];
 
     [Theory]
@@ -213,6 +215,98 @@ public sealed class SpecLintTests
         Assert.True(unknown.Count == 0,
             $"{specName}: unknown tag(s): {string.Join(", ", unknown.Select(t => $"'{t}'"))}. " +
             $"Add to KnownTags in SpecLintTests if intentional.");
+    }
+
+    // ── No empty/redundant engines declaration ─────────────────────
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void NoEmptyEnginesDeclaration(string specPath, string specName)
+    {
+        var lines = File.ReadAllLines(specPath);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            Assert.False(lines[i].TrimEnd() == "engines: {}",
+                $"{specName}: line {i + 1}: remove empty 'engines: {{}}' (omit the field instead)");
+        }
+    }
+
+    // ── expectedState property order: errors first, forces second-last, engines last ──
+
+    private static int GetPropertyZone(string prop) => prop switch
+    {
+        "errors" or "errorsContain" => 0,   // first
+        "forces" => 2,                       // second-to-last
+        "engines" => 3,                      // last
+        _ => 1,                              // middle (no mutual ordering)
+    };
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void ExpectedStatePropertyOrdering(string specPath, string specName)
+    {
+        var lines = File.ReadAllLines(specPath);
+        var violations = new List<string>();
+        var inExpected = false;
+        var stepStart = -1;
+        var stepProps = new List<(string Name, int Line, int Zone)>();
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var stripped = lines[i].TrimEnd();
+
+            if (Regex.IsMatch(stripped, @"^  - expectedState:"))
+            {
+                CheckStepProps(stepProps, stepStart, violations);
+                inExpected = true;
+                stepStart = i + 1;
+                stepProps.Clear();
+                continue;
+            }
+            if (Regex.IsMatch(stripped, @"^  - action:"))
+            {
+                CheckStepProps(stepProps, stepStart, violations);
+                inExpected = false;
+                stepProps.Clear();
+                continue;
+            }
+
+            // Top-level property under expectedState (6 spaces indent)
+            if (inExpected && Regex.IsMatch(stripped, @"^      \w+:") && !stripped.StartsWith("        ", StringComparison.Ordinal))
+            {
+                var prop = stripped.TrimStart()[..stripped.TrimStart().IndexOf(':')];
+                stepProps.Add((prop, i + 1, GetPropertyZone(prop)));
+            }
+        }
+        // Check last expectedState block
+        CheckStepProps(stepProps, stepStart, violations);
+
+        Assert.True(violations.Count == 0,
+            $"{specName}: expectedState properties out of order (expected: errors → ... → forces → engines):\n  {string.Join("\n  ", violations)}");
+
+        static void CheckStepProps(List<(string Name, int Line, int Zone)> props, int stepLine, List<string> violations)
+        {
+            if (props.Count < 2)
+            {
+                return;
+            }
+            var maxZoneSoFar = -1;
+            string? maxZoneProp = null;
+            for (var j = 0; j < props.Count; j++)
+            {
+                if (props[j].Zone < maxZoneSoFar)
+                {
+                    violations.Add(
+                        $"line {props[j].Line}: '{props[j].Name}' (zone {props[j].Zone}) must come before " +
+                        $"'{maxZoneProp}' (zone {maxZoneSoFar}) (step at line {stepLine})");
+                }
+                if (props[j].Zone > maxZoneSoFar)
+                {
+                    maxZoneSoFar = props[j].Zone;
+                    maxZoneProp = props[j].Name;
+                }
+            }
+        }
     }
 
     // ── Valid engine expectation values ───────────────────────────────

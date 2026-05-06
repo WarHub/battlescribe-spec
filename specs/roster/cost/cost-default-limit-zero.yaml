@@ -38,9 +38,9 @@ steps:
 
   # Cost 10 exceeds defaultCostLimit of 0 → validation error
   - expectedState:
-      costs:
-        - typeId: pts
-          value: 10
       errors:
         - on: roster
           from: costLimits/pts
+      costs:
+        - typeId: pts
+          value: 10

@@ -51,6 +51,6 @@ steps:
     selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
   - expectedState:
+      errorCount: 1
       forces:
         - selectionCount: 0
-      errorCount: 1

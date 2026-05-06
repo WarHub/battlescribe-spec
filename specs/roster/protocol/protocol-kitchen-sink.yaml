@@ -738,6 +738,12 @@ steps:
   # Every field below is verified against the actual BS and NR engine debugger dumps.
   # The NR override restates the full force tree because ForEngine() merge is top-level only.
   - expectedState:
+      errorsContain:
+        - on: roster
+          from: costLimits/ct-pts
+      costs:
+        - typeId: ct-pts
+        - typeId: ct-power
       gameSystemName: Kitchen Sink GS
       costLimitCount: 1
       costLimits:
@@ -1015,12 +1021,6 @@ steps:
                   primary: true
                   profiles: []
                   rules: []
-      costs:
-        - typeId: ct-pts
-        - typeId: ct-power
-      errorsContain:
-        - on: roster
-          from: costLimits/ct-pts
       engines:
         newrecruit:
           # NR override must restate the full force tree because ForEngine() merge

@@ -1,0 +1,139 @@
+id: collective-group-default-scaling
+category: selection
+description: >
+  A collective SelectionEntryGroup's default entry (also collective) scales
+  linearly with parent.number: parent=3 → child=3 (one per model). BS has a
+  double-processing bug where the entry is incremented twice per parent increase
+  (once via flattened group contents, once via group-default loop), producing
+  number² (parent=3 → child=9).
+tags:
+  - collective
+  - number
+  - cost
+  - entry-group
+  - battlescribe-bug
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              selectionEntryGroups:
+                - id: seg-weapons
+                  name: Weapons
+                  collective: true
+                  defaultSelectionEntryId: se-rifle
+                  constraints:
+                    - id: con-min-1
+                      type: min
+                      value: 1
+                      field: selections
+                      scope: parent
+                  selectionEntries:
+                    - id: se-rifle
+                      name: Rifle
+                      collective: true
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 5
+                    - id: se-sword
+                      name: Sword
+                      collective: true
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 3
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  # Trooper at number=1 — Rifle auto-selected with number=1
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 5
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 1
+                  children:
+                    - name: Rifle
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 5
+
+  # Increase Trooper to 3 — Rifle scales to 3 (1 per model × 3 models)
+  # BS bug: double-processes via group-flatten + group-default loops → gives 9
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Rifle
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 15
+      engines:
+        battlescribe:
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Trooper
+                      number: 3
+                      children:
+                        - name: Rifle
+                          number: 9
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 45
+          costs:
+            - typeId: pts
+              value: 45

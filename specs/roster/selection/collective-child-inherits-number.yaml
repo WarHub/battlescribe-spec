@@ -1,10 +1,10 @@
-id: selection-set-child-count-instance-model
+id: collective-child-inherits-number
 category: selection
 description: >
-  setSelectionCount on a child selection sets number=N on a single selection
-  and scales costs accordingly (N × per-unit cost).
+  Selecting a collective child under a parent that already has number > 1
+  creates the child with the same number as its parent.
 tags:
-  - selection
+  - collective
   - number
   - cost
 
@@ -25,15 +25,17 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
             - id: se-trooper
               name: Trooper
-              type: model
-              costs:
-                - name: pts
-                  typeId: pts
-                  value: 10
+              selectionEntries:
+                - id: se-weapon
+                  name: Weapon
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 5
 
 steps:
   - action: addForce
@@ -51,38 +53,41 @@ steps:
     selectionId: ${{ steps.select-squad.selectionId }}
     entryId: se-trooper
 
-  - expectedState:
-      costs:
-        - typeId: pts
-          value: 10
-      forces:
-        - selections:
-            - name: Squad
-              children:
-                - name: Trooper
-                  number: 1
-                  costs:
-                    - name: pts
-                      typeId: pts
-                      value: 10
-
-  # setSelectionCount to 3
+  # Set Trooper to number=3 BEFORE adding weapon
   - action: setSelectionCount
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}
     count: 3
 
   - expectedState:
-      costs:
-        - typeId: pts
-          value: 30
       forces:
         - selections:
             - name: Squad
               children:
                 - name: Trooper
                   number: 3
-                  costs:
-                    - name: pts
-                      typeId: pts
-                      value: 30
+
+  # Now select collective Weapon — it should inherit number=3 from Trooper
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-weapon
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 15

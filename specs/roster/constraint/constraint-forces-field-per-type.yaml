@@ -64,12 +64,12 @@ steps:
   # 2 Patrol (max 2), 2 Battalion (max 1) → error on Battalion
   # Each Battalion force instance evaluates the constraint independently
   - expectedState:
-      forceCount: 4
       errors:
         - on: roster
           from: fe-battalion/con-max-battalion
         - on: roster
           from: fe-battalion/con-max-battalion
+      forceCount: 4
       engines:
         # NR doesn't evaluate field=forces constraints
         newrecruit:

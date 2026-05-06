@@ -45,11 +45,11 @@ steps:
     entryId: se-1
 
   - expectedState:
+      errors:
+        - on: selection se-1
+          from: se-1/hidden
       forces:
         - selectionCount: 1
           selections:
             - name: Secret Agent
               hidden: true
-      errors:
-        - on: selection se-1
-          from: se-1/hidden

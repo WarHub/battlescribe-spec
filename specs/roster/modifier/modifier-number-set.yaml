@@ -39,9 +39,9 @@ steps:
     entryId: se-1
   # Number set: cost becomes 50 regardless of original value
   - expectedState:
-      forces:
-        - selections:
-            - name: Unit A
       costs:
         - typeId: pts
           value: 50.0
+      forces:
+        - selections:
+            - name: Unit A

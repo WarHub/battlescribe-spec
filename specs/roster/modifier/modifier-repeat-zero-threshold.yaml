@@ -46,9 +46,9 @@ steps:
   # The modifier's repeat count is 0, so the increment is NOT applied.
   # Cost remains at base value 50.
   - expectedState:
-      forces:
-        - selections:
-            - name: Squad
       costs:
         - typeId: pts
           value: 50.0
+      forces:
+        - selections:
+            - name: Squad

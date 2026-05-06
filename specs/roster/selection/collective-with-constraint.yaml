@@ -16,7 +16,6 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           constraints:
             - id: con-max-2
               type: max
@@ -26,7 +25,6 @@ setup:
           selectionEntries:
             - id: se-weapon
               name: Weapon
-              type: model
               collective: true
 
 steps:

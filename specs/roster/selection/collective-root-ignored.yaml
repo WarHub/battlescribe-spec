@@ -1,6 +1,13 @@
-id: selection-duplicate
+id: collective-root-ignored
 category: selection
-description: Duplicating a selection creates a copy in the same force
+description: >
+  The collective flag is ignored for root selections (parent is a Force).
+  Selecting a root entry with collective=true creates independent nodes, not
+  a shared pool. Each selection has number=1.
+tags:
+  - collective
+  - number
+  - cost
 
 setup:
   gameSystem:
@@ -17,9 +24,9 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
-          name: Squad Alpha
-          type: unit
+        - id: se-unit
+          name: Support Unit
+          collective: true
           costs:
             - name: pts
               typeId: pts
@@ -30,23 +37,17 @@ steps:
     id: add-detachment
     forceEntryId: fe-1
 
+  # Select the root collective entry twice — each creates a separate node
   - action: selectEntry
-    id: select-squad-alpha
+    id: select-unit-1
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-1
+    entryId: se-unit
 
-  - expectedState:
-      forces:
-        - selectionCount: 1
-
-  - action: duplicateSelection
+  - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    selectionId: ${{ steps.select-squad-alpha.selectionId }}
+    entryId: se-unit
 
-  - expectedState:
-      forces:
-        - selectionCount: 2
-
+  # Two independent selections, each with number=1
   - expectedState:
       costs:
         - typeId: pts
@@ -54,13 +55,13 @@ steps:
       forces:
         - selectionCount: 2
           selections:
-            - name: Squad Alpha
-              type: unit
+            - name: Support Unit
+              number: 1
               costs:
                 - typeId: pts
                   value: 50
-            - name: Squad Alpha
-              type: unit
+            - name: Support Unit
+              number: 1
               costs:
                 - typeId: pts
                   value: 50

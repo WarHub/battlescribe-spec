@@ -82,8 +82,8 @@ steps:
 
   # 4 total — shared counting exceeds max=3, constraint fires
   - expectedState:
-      forces:
-        - selectionCount: 4
       errors:
         - on: selection shared-unit
           from: shared-unit/con-max-shared
+      forces:
+        - selectionCount: 4

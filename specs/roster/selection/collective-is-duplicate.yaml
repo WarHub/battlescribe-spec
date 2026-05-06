@@ -1,0 +1,136 @@
+id: collective-is-duplicate
+category: selection
+description: >
+  Entries with only collective (or hidden) children use number-increment mode
+  (d2.f()=false in BS, collective_recursive=true in NR): repeated selection
+  increments number on a single node. Entries with non-collective visible
+  children use separate-node mode (d2.f()=true in BS, isInstanced=true in NR):
+  each selection creates a new independent node.
+tags:
+  - collective
+  - number
+  - cost
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          selectionEntries:
+            # d2.f=false / collective_recursive=true: only collective children → number-increment
+            - id: se-trooper
+              name: Trooper
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 10
+              selectionEntries:
+                - id: se-rifle
+                  name: Rifle
+                  collective: true
+            # d2.f=true / collective_recursive=false: has non-collective child → separate nodes
+            - id: se-specialist
+              name: Specialist
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 15
+              selectionEntries:
+                - id: se-radio
+                  name: Radio
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # Select Trooper 3 times — model type increments number on single node
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  # Single Trooper node with number=3
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+
+  # Select Specialist 3 times — has non-collective child Radio → isDuplicate/isInstanced
+  # Both engines: creates 3 separate nodes (one per selection)
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-specialist
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-specialist
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-specialist
+
+  # Both engines: 3 separate Specialist×1 nodes + 1 Trooper×3 node
+  # Specialist has non-collective child Radio → isInstanced/isDuplicate → separate nodes
+  # Trooper has only collective child Rifle → !isInstanced/!isDuplicate → number increments
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 75
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Specialist
+                  number: 1
+                  costs:
+                    - typeId: pts
+                      value: 15
+                - name: Specialist
+                  number: 1
+                  costs:
+                    - typeId: pts
+                      value: 15
+                - name: Specialist
+                  number: 1
+                  costs:
+                    - typeId: pts
+                      value: 15
+                - name: Trooper
+                  number: 3
+                  costs:
+                    - typeId: pts
+                      value: 30

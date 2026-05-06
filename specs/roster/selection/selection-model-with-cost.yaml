@@ -45,6 +45,9 @@ steps:
     entryId: se-trooper
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 10
       forces:
         - selectionCount: 1
           selections:
@@ -56,6 +59,3 @@ steps:
                   costs:
                     - typeId: pts
                       value: 10
-      costs:
-        - typeId: pts
-          value: 10

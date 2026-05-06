@@ -1,0 +1,118 @@
+id: collective-constraint-per-model
+category: selection
+description: >
+  Constraint validation on a collective entry is evaluated per-model:
+  the actual count is divided by the parent's number before comparing
+  against the constraint limit.
+tags:
+  - collective
+  - constraint
+  - validation
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              selectionEntries:
+                - id: se-weapon
+                  name: Weapon
+                  collective: true
+                  constraints:
+                    - id: con-max-2
+                      type: max
+                      value: 2
+                      field: selections
+                      scope: parent
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-weapon
+
+  # Set Trooper to 3 — Weapon propagates to number=3 (1 per model)
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  # Weapon has max=2 per model. Currently at 1 per model (3 total / 3 models).
+  # setSelectionCount to 2 per model → actual=6. No error.
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
+    count: 2
+
+  - expectedState:
+      errors: []
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 6
+
+  # Try to set Weapon to 3 per model (exceeds max=2). Engine allows it but reports error.
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
+    count: 3
+
+  # Engine sets weapon to 9 (3 per model × 3) and reports validation error
+  - expectedState:
+      errors:
+        - on: selection se-trooper
+          from: se-weapon/con-max-2
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 9
+      engines:
+        newrecruit:
+          errors:
+            - on: selection se-weapon
+              from: se-weapon/con-max-2

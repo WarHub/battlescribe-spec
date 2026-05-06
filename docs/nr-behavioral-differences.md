@@ -334,6 +334,19 @@ parent is selected. These are placeholder objects representing available entries
 
 This discovery resolved the **child cost aggregation** issue (8 specs fixed).
 
+### NR `decrementAmount()` for Deselect
+
+NR selections have a `decrementAmount()` method that reduces the selection's
+internal amount by 1 — the correct inverse of `incrementAmount()`. This matches
+BattleScribe's deselect semantics (decrement number by 1, or remove the node
+entirely when it reaches 0).
+
+Previously the adapter used `sel.delete()` which always removes the selection
+completely, regardless of its current amount. For collective entries with
+scaled counts (e.g., Weapon×6 from `setSelectionCount(2)` on a parent with
+number=3), `delete()` would remove the entry entirely instead of reducing to
+Weapon×3. Using `decrementAmount()` fixes this to match BS behavior.
+
 ### BattleScribe Auto-Select Mechanism
 
 Decompiled from `engine.a.f` (BattleScribe Java engine):

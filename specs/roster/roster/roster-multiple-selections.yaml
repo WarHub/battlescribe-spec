@@ -46,6 +46,9 @@ steps:
     entryId: se-unit-b
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 125
       forceCount: 1
       forces:
         - selectionCount: 2
@@ -58,6 +61,3 @@ steps:
               costs:
                 - typeId: pts
                   value: 75
-      costs:
-        - typeId: pts
-          value: 125

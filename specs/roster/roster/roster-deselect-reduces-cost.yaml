@@ -45,8 +45,8 @@ steps:
     selectionId: ${{ steps.select-unit-a.selectionId }}
 
   - expectedState:
-      forces:
-        - selectionCount: 0
       costs:
         - typeId: pts
           value: 0
+      forces:
+        - selectionCount: 0

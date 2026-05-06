@@ -62,10 +62,10 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
+      errors:
+        - on: selection se-unit-a
+          from: se-unit-a/con-cost-max
       forces:
         - selectionCount: 1
           selections:
             - name: Unit A
-      errors:
-        - on: selection se-unit-a
-          from: se-unit-a/con-cost-max
