@@ -25,15 +25,12 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
             - id: se-trooper
               name: Trooper
-              type: model
               selectionEntries:
                 - id: se-weapon
                   name: Weapon
-                  type: upgrade
                   collective: true
                   costs:
                     - name: pts
@@ -78,6 +75,9 @@ steps:
     entryId: se-weapon
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
       forces:
         - selections:
             - name: Squad
@@ -91,6 +91,3 @@ steps:
                         - name: pts
                           typeId: pts
                           value: 15
-      costs:
-        - typeId: pts
-          value: 15

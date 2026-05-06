@@ -26,15 +26,12 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
             - id: se-trooper
               name: Trooper
-              type: model
               selectionEntries:
                 - id: se-weapon
                   name: Weapon
-                  type: upgrade
                   collective: true
                   constraints:
                     - id: con-max-2
@@ -83,6 +80,7 @@ steps:
     count: 2
 
   - expectedState:
+      errors: []
       forces:
         - selections:
             - name: Squad
@@ -92,7 +90,6 @@ steps:
                   children:
                     - name: Weapon
                       number: 6
-      errors: []
 
   # Try to set Weapon to 3 per model (exceeds max=2). Engine allows it but reports error.
   - action: setSelectionCount
@@ -102,6 +99,9 @@ steps:
 
   # Engine sets weapon to 9 (3 per model × 3) and reports validation error
   - expectedState:
+      errors:
+        - on: selection se-trooper
+          from: se-weapon/con-max-2
       forces:
         - selections:
             - name: Squad
@@ -111,9 +111,6 @@ steps:
                   children:
                     - name: Weapon
                       number: 9
-      errors:
-        - on: selection se-trooper
-          from: se-weapon/con-max-2
       engines:
         newrecruit:
           errors:

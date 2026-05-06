@@ -26,15 +26,12 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
             - id: se-trooper
               name: Trooper
-              type: model
               selectionEntries:
                 - id: se-weapon
                   name: Weapon
-                  type: upgrade
                   collective: true
                   costs:
                     - name: pts
@@ -92,6 +89,9 @@ steps:
     count: 2
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 30
       forces:
         - selections:
             - name: Squad
@@ -105,9 +105,6 @@ steps:
                         - name: pts
                           typeId: pts
                           value: 30
-      costs:
-        - typeId: pts
-          value: 30
 
   # Deselect the collective Weapon — removes one instance per model (6→3)
   - action: deselectSelection
@@ -115,6 +112,9 @@ steps:
     selectionId: ${{ steps.select-weapon.selectionId }}
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
       forces:
         - selections:
             - name: Squad
@@ -128,6 +128,3 @@ steps:
                         - name: pts
                           typeId: pts
                           value: 15
-      costs:
-        - typeId: pts
-          value: 15

@@ -87,6 +87,9 @@ steps:
   # Depth: unit → group → link → sharedEntry → group → entry (5 levels)
   # Costs: Marine 20 + Bolter 0 + Scope 5 = 25
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 25
       forces:
         - selectionCount: 1
           selections:
@@ -98,6 +101,3 @@ steps:
                   children:
                     - name: Targeting Scope
                       type: upgrade
-      costs:
-        - typeId: pts
-          value: 25

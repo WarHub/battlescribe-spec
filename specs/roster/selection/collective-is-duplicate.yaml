@@ -28,12 +28,10 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
-            # Model type (d2.f=false): only collective children → number-increment
+            # d2.f=false: only collective children → number-increment
             - id: se-trooper
               name: Trooper
-              type: model
               costs:
                 - name: pts
                   typeId: pts
@@ -41,12 +39,10 @@ setup:
               selectionEntries:
                 - id: se-rifle
                   name: Rifle
-                  type: upgrade
                   collective: true
-            # Duplicate type (d2.f=true): has non-collective child → separate nodes
+            # d2.f=true: has non-collective child → separate nodes
             - id: se-specialist
               name: Specialist
-              type: model
               costs:
                 - name: pts
                   typeId: pts
@@ -54,7 +50,6 @@ setup:
               selectionEntries:
                 - id: se-radio
                   name: Radio
-                  type: upgrade
 
 steps:
   - action: addForce
@@ -112,6 +107,9 @@ steps:
   # NR: 1 Specialist×3 node (always increment mode) + 1 Trooper×3
   # Total cost: 75pts (both engines agree)
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 75
       forces:
         - selections:
             - name: Squad
@@ -152,6 +150,3 @@ steps:
                       costs:
                         - typeId: pts
                           value: 30
-      costs:
-        - typeId: pts
-          value: 75

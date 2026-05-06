@@ -80,13 +80,13 @@ steps:
     selectionId: ${{ steps.add-patrol.selections.se-unit-b }}
 
   - expectedState:
-      forces:
-        - selectionCount: 0
       errors:
         - on: category cat-troops
           from: se-unit-a/con-min-shared
         - on: category cat-troops
           from: se-unit-b/con-min-shared
+      forces:
+        - selectionCount: 0
       engines:
         newrecruit:
           errors:

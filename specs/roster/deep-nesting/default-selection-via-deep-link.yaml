@@ -86,6 +86,9 @@ steps:
   # Both levels cascade through the entry link.
   # Costs: Mech 40 + Standard Config 10 + Low Power 2 = 52
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 52
       forces:
         - selectionCount: 1
           selections:
@@ -97,6 +100,3 @@ steps:
                   children:
                     - name: Low Power
                       type: upgrade
-      costs:
-        - typeId: pts
-          value: 52

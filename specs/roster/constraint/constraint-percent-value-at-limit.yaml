@@ -70,11 +70,11 @@ steps:
 
   # 1 Elite of 1 total = 100% > 50% → error
   - expectedState:
-      forces:
-        - selectionCount: 1
       errors:
         - on: selection se-1
           from: se-1/c1
+      forces:
+        - selectionCount: 1
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}

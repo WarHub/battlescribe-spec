@@ -60,8 +60,8 @@ steps:
 
   # Exceeds max=2 — entry link's constraint (scope=force) fires
   - expectedState:
-      forces:
-        - selectionCount: 3
       errors:
         - on: selection shared-unit
           from: link-1/con-link-max
+      forces:
+        - selectionCount: 3

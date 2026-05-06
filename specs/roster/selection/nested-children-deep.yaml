@@ -50,6 +50,9 @@ steps:
     entryId: se-weapon
   # Parent unit costs 50pts, child upgrade costs 15pts, total 65pts
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 65
       forces:
         - selectionCount: 1
           selections:
@@ -58,6 +61,3 @@ steps:
               children:
                 - name: Heavy Weapon
                   type: upgrade
-      costs:
-        - typeId: pts
-          value: 65

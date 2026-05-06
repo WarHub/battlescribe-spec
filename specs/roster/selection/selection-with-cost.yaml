@@ -35,12 +35,12 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 150
       forces:
         - selections:
             - name: Unit A
               costs:
                 - typeId: pts
                   value: 150
-      costs:
-        - typeId: pts
-          value: 150

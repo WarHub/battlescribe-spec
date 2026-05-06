@@ -25,15 +25,12 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
             - id: se-trooper
               name: Trooper
-              type: model
               selectionEntries:
                 - id: se-weapon
                   name: Weapon
-                  type: upgrade
                   collective: true
                   costs:
                     - name: pts
@@ -69,6 +66,9 @@ steps:
     count: 3
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
       forces:
         - selections:
             - name: Squad
@@ -82,9 +82,6 @@ steps:
                         - name: pts
                           typeId: pts
                           value: 15
-      costs:
-        - typeId: pts
-          value: 15
 
   # Decrease Trooper count from 3 back to 1
   - action: setSelectionCount
@@ -93,6 +90,9 @@ steps:
     count: 1
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 5
       forces:
         - selections:
             - name: Squad
@@ -106,6 +106,3 @@ steps:
                         - name: pts
                           typeId: pts
                           value: 5
-      costs:
-        - typeId: pts
-          value: 5

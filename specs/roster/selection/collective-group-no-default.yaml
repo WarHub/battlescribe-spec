@@ -25,11 +25,9 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
             - id: se-trooper
               name: Trooper
-              type: model
               selectionEntryGroups:
                 - id: seg-weapons
                   name: Weapons
@@ -37,7 +35,6 @@ setup:
                   selectionEntries:
                     - id: se-rifle
                       name: Rifle
-                      type: upgrade
                       collective: true
                       costs:
                         - name: pts
@@ -45,7 +42,6 @@ setup:
                           value: 5
                     - id: se-sword
                       name: Sword
-                      type: upgrade
                       collective: true
                       costs:
                         - name: pts
@@ -100,6 +96,9 @@ steps:
     entryId: se-rifle
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
       forces:
         - selections:
             - name: Squad
@@ -109,6 +108,3 @@ steps:
                   children:
                     - name: Rifle
                       number: 3
-      costs:
-        - typeId: pts
-          value: 15

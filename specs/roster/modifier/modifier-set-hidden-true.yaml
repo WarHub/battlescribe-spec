@@ -55,12 +55,12 @@ steps:
     entryId: se-normal
 
   - expectedState:
+      errors:
+        - on: selection se-hidden
+          from: se-hidden/hidden
       forces:
         - selectionCount: 2
           selections:
             - name: Hidden Unit
               hidden: true
             - name: Normal Unit
-      errors:
-        - on: selection se-hidden
-          from: se-hidden/hidden

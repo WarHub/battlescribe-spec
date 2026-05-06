@@ -36,11 +36,11 @@ steps:
     entryId: se-1
 
   - expectedState:
-      forces:
-        - selectionCount: 1
       costs:
         - typeId: pts
           value: 50
+      forces:
+        - selectionCount: 1
 
   - action: deselectSelection
     forceId: ${{ steps.add-detachment.forceId }}

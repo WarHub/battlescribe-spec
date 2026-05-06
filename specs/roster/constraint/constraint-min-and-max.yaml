@@ -71,8 +71,8 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
-      forces:
-        - selectionCount: 3
       errors:
         - on: selection se-unit-a
           from: se-unit-a/con-max-2
+      forces:
+        - selectionCount: 3

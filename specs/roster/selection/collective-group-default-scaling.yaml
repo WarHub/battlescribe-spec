@@ -11,6 +11,7 @@ tags:
   - number
   - cost
   - entry-group
+  - battlescribe-bug
 
 setup:
   gameSystem:
@@ -29,11 +30,9 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
             - id: se-trooper
               name: Trooper
-              type: model
               selectionEntryGroups:
                 - id: seg-weapons
                   name: Weapons
@@ -48,7 +47,6 @@ setup:
                   selectionEntries:
                     - id: se-rifle
                       name: Rifle
-                      type: upgrade
                       collective: true
                       costs:
                         - name: pts
@@ -56,7 +54,6 @@ setup:
                           value: 5
                     - id: se-sword
                       name: Sword
-                      type: upgrade
                       collective: true
                       costs:
                         - name: pts
@@ -81,6 +78,9 @@ steps:
 
   # Trooper at number=1 — Rifle auto-selected with number=1
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 5
       forces:
         - selections:
             - name: Squad
@@ -94,9 +94,6 @@ steps:
                         - name: pts
                           typeId: pts
                           value: 5
-      costs:
-        - typeId: pts
-          value: 5
 
   # Increase Trooper to 3 — Rifle scales to 3 (1 per model × 3 models)
   # BS bug: double-processes via group-flatten + group-default loops → gives 9
@@ -106,6 +103,9 @@ steps:
     count: 3
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
       forces:
         - selections:
             - name: Squad
@@ -137,6 +137,3 @@ steps:
           costs:
             - typeId: pts
               value: 45
-      costs:
-        - typeId: pts
-          value: 15

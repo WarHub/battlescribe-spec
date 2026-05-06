@@ -46,6 +46,9 @@ steps:
   # Selecting entryIndex 0 picks the direct selectionEntry (se-base at 15 pts).
   # The entryLink is listed after direct entries.
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
       forces:
         - selectionCount: 1
           selections:
@@ -53,6 +56,3 @@ steps:
               costs:
                 - typeId: pts
                   value: 15
-      costs:
-        - typeId: pts
-          value: 15

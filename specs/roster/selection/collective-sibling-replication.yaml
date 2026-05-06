@@ -28,24 +28,20 @@ setup:
       selectionEntries:
         - id: se-squad
           name: Squad
-          type: unit
           selectionEntries:
             # Sergeant has a non-collective child (Badge) → d2.f(Sergeant)=true
             # → separate node per selection (duplicate type) in BS
             - id: se-sergeant
               name: Sergeant
-              type: model
               selectionEntries:
                 - id: se-badge
                   name: Badge
-                  type: upgrade
                   costs:
                     - name: pts
                       typeId: pts
                       value: 2
                 - id: se-special-weapon
                   name: Special Weapon
-                  type: upgrade
                   collective: true
                   costs:
                     - name: pts
@@ -151,6 +147,9 @@ steps:
     entryId: se-special-weapon
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 32
       forces:
         - selections:
             - name: Squad
@@ -196,6 +195,3 @@ steps:
           costs:
             - typeId: pts
               value: 36
-      costs:
-        - typeId: pts
-          value: 32

@@ -43,7 +43,9 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
-      forceCount: 2
+      costs:
+        - typeId: pts
+          value: 200
       forces:
         - selectionCount: 1
           selections:
@@ -51,6 +53,4 @@ steps:
         - selectionCount: 1
           selections:
             - name: Unit A
-      costs:
-        - typeId: pts
-          value: 200
+      forceCount: 2

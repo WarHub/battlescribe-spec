@@ -38,13 +38,13 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
-      forceCount: 1
+      costs:
+        - typeId: pts
+          value: 100
       forces:
         - name: Patrol
           selectionCount: 1
           selections:
             - name: Unit A
               type: unit
-      costs:
-        - typeId: pts
-          value: 100
+      forceCount: 1

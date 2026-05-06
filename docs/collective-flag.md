@@ -359,15 +359,14 @@ public boolean f(SelectionEntry selectionEntry) {
 ```
 
 **Returns true (create new nodes) when**: The entry has non-collective,
-non-hidden children. This is the "duplicate type" — each selection is a distinct
-node with its own children tree.
+non-hidden children. Each selection creates a distinct node with its own
+children tree.
 
 **Returns false (increment number) when**: The entry has ONLY collective children
-(or no children). This is the "model type" — instances are tracked by number on
-a single node.
+(or no children). Instances are tracked by incrementing `number` on a single node.
 
-This is why a "Trooper" model with only collective weapon children uses
-number-increment semantics: `d2.f(trooper)` returns `false` because all its
+This is why an entry with only collective weapon children uses
+number-increment semantics: `d2.f(entry)` returns `false` because all its
 children are collective.
 
 ## Collective Groups (SelectionEntryGroup)

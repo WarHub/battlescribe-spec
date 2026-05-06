@@ -48,6 +48,9 @@ steps:
         - selectionCount: 2
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
       forces:
         - selectionCount: 2
           selections:
@@ -61,6 +64,3 @@ steps:
               costs:
                 - typeId: pts
                   value: 50
-      costs:
-        - typeId: pts
-          value: 100

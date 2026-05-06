@@ -44,10 +44,10 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
+      errors:
+        - on: roster
+          from: costLimits/ct-pts
       forces:
         - selectionCount: 1
           selections:
             - name: Unit A
-      errors:
-        - on: roster
-          from: costLimits/ct-pts

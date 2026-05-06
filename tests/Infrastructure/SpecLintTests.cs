@@ -231,6 +231,77 @@ public sealed class SpecLintTests
         }
     }
 
+    // ── expectedState property order: costs → errors → forces → engines ──
+
+    private static readonly string[] ExpectedStatePropertyOrder = ["costs", "errors", "forces", "engines"];
+
+    [Theory]
+    [MemberData(nameof(AllSpecs))]
+    public void ExpectedStatePropertyOrdering(string specPath, string specName)
+    {
+        var lines = File.ReadAllLines(specPath);
+        var violations = new List<string>();
+        var inExpected = false;
+        var stepStart = -1;
+        var stepProps = new List<(string Name, int Line)>();
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var stripped = lines[i].TrimEnd();
+
+            if (Regex.IsMatch(stripped, @"^  - expectedState:"))
+            {
+                CheckStepProps(stepProps, stepStart, violations);
+                inExpected = true;
+                stepStart = i + 1;
+                stepProps.Clear();
+                continue;
+            }
+            if (Regex.IsMatch(stripped, @"^  - action:"))
+            {
+                CheckStepProps(stepProps, stepStart, violations);
+                inExpected = false;
+                stepProps.Clear();
+                continue;
+            }
+
+            // Top-level property under expectedState (6 spaces indent)
+            if (inExpected && Regex.IsMatch(stripped, @"^      \w+:") && !stripped.StartsWith("        ", StringComparison.Ordinal))
+            {
+                var prop = stripped.TrimStart()[..stripped.TrimStart().IndexOf(':')];
+                if (Array.IndexOf(ExpectedStatePropertyOrder, prop) >= 0)
+                {
+                    stepProps.Add((prop, i + 1));
+                }
+            }
+        }
+        // Check last expectedState block
+        CheckStepProps(stepProps, stepStart, violations);
+
+        Assert.True(violations.Count == 0,
+            $"{specName}: expectedState properties out of order (expected: costs → errors → forces → engines):\n  {string.Join("\n  ", violations)}");
+
+        static void CheckStepProps(List<(string Name, int Line)> props, int stepLine, List<string> violations)
+        {
+            if (props.Count < 2)
+            {
+                return;
+            }
+            var lastOrder = -1;
+            for (var j = 0; j < props.Count; j++)
+            {
+                var order = Array.IndexOf(ExpectedStatePropertyOrder, props[j].Name);
+                if (order < lastOrder)
+                {
+                    violations.Add(
+                        $"line {props[j].Line}: '{props[j].Name}' must come before " +
+                        $"'{props[j - 1].Name}' (step at line {stepLine})");
+                }
+                lastOrder = order;
+            }
+        }
+    }
+
     // ── Valid engine expectation values ───────────────────────────────
 
     private static readonly HashSet<string> KnownExpectations = ["pass", "fail", "skip"];
