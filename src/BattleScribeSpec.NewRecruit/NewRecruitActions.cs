@@ -318,7 +318,10 @@ public static class NewRecruitActions
     }
 
     /// <summary>
-    /// Deselect (remove) a selection by uid.
+    /// Deselect (decrement) a selection by uid.
+    /// Uses decrementAmount() which reduces the per-model count by 1
+    /// (matching BS's deselect semantics). Falls back to delete() when
+    /// decrementAmount is not available.
     /// </summary>
     public static async Task DeselectSelectionAsync(IPage page, string forceUid, string selectionUid)
     {
@@ -334,10 +337,13 @@ public static class NewRecruitActions
                     const sel = getSelectionByUid(force, selectionUid);
                     if (!sel) return `Selection not found with uid '${selectionUid}'`;
 
-                    // Instance nodes always have delete(). Using setAmount with 1 arg corrupts state.
-                    if (typeof sel.delete !== 'function')
-                        return `Selection '${selectionUid}' has no delete method (unexpected node type)`;
-                    sel.delete();
+                    if (typeof sel.decrementAmount === 'function') {
+                        sel.decrementAmount();
+                    } else if (typeof sel.delete === 'function') {
+                        sel.delete();
+                    } else {
+                        return `Selection '${selectionUid}' has no decrementAmount or delete method`;
+                    }
                     return null;
                 } catch(e) {
                     return 'DeselectSelection error: ' + e.message;

@@ -2,15 +2,15 @@ id: collective-sibling-replication
 category: selection
 description: >
   When a parent entry is a "duplicate type" (has non-collective non-hidden
-  children, d2.f()=true), each selection creates a separate node. Selecting a
-  collective child under one sibling replicates it to all sibling nodes.
-  Selecting a non-collective child does not replicate.
+  children, d2.f()=true), BS creates separate nodes per selection and replicates
+  collective children across all siblings. NR uses a single node with number=N
+  (no separate siblings). Selecting a collective child on a sibling node
+  in BS replicates to all; in NR the child is shared on the single node.
+  Non-collective children do not replicate in either engine.
 tags:
   - collective
   - number
-  - newrecruit-missing-feature
-engines:
-  newrecruit: fail
+engines: {}
 
 setup:
   gameSystem:
@@ -32,7 +32,7 @@ setup:
           type: unit
           selectionEntries:
             # Sergeant has a non-collective child (Badge) → d2.f(Sergeant)=true
-            # → separate node per selection (duplicate type)
+            # → separate node per selection (duplicate type) in BS
             - id: se-sergeant
               name: Sergeant
               type: model
@@ -63,7 +63,9 @@ steps:
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-squad
 
-  # Select Sergeant 3 times — creates 3 separate nodes (duplicate type)
+  # Select Sergeant 3 times
+  # BS: creates 3 separate nodes (duplicate type)
+  # NR: increments single node to number=3
   - action: selectChildEntry
     id: select-sgt-1
     forceId: ${{ steps.add-detachment.forceId }}
@@ -80,7 +82,8 @@ steps:
     selectionId: ${{ steps.select-squad.selectionId }}
     entryId: se-sergeant
 
-  # 3 separate Sergeant nodes, each with number=1, no children
+  # BS: 3 separate Sergeant nodes, each with number=1, no children
+  # NR: 1 Sergeant node with number=3
   - expectedState:
       forces:
         - selections:
@@ -92,8 +95,17 @@ steps:
                   number: 1
                 - name: Sergeant
                   number: 1
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Sergeant
+                      number: 3
 
-  # Select non-collective Badge on first Sergeant — does NOT replicate
+  # Select non-collective Badge on first Sergeant — does NOT replicate in BS
+  # In NR: Badge on single Sergeant×3 node shows number=3 (multiplied through parent)
   - action: selectChildEntry
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-sgt-1.selectionId }}
@@ -115,8 +127,25 @@ steps:
                 - name: Sergeant
                   number: 1
                   children: []
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Sergeant
+                      number: 3
+                      children:
+                        - name: Badge
+                          number: 3
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 6
 
-  # Select collective Special Weapon on first Sergeant — replicates to all 3
+  # Select collective Special Weapon on first Sergeant
+  # BS: replicates to all 3 sibling nodes (1 per node)
+  # NR: added to single node, shows number=3 (multiplied through parent)
   - action: selectChildEntry
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-sgt-1.selectionId }}
@@ -144,6 +173,30 @@ steps:
                   children:
                     - name: Special Weapon
                       number: 1
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Sergeant
+                      number: 3
+                      children:
+                        - name: Badge
+                          number: 3
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 6
+                        - name: Special Weapon
+                          number: 3
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 30
+          costs:
+            - typeId: pts
+              value: 36
       costs:
         - typeId: pts
           value: 32

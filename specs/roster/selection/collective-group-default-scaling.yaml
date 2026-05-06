@@ -2,17 +2,15 @@ id: collective-group-default-scaling
 category: selection
 description: >
   A collective SelectionEntryGroup's default entry (also collective) is
-  auto-selected scaled by parent.number. On parent increase, both the group's
-  collective scaling and the entry's collective propagation multiply, producing
-  a number² effect (parent=3 → child=9).
+  auto-selected scaled by parent.number. BS double-processes the entry (once as
+  flattened group content, once as group default) producing number² (parent=3 →
+  child=9). NR correctly multiplies once (parent=3 → child=3).
 tags:
   - collective
   - number
   - cost
   - entry-group
-  - newrecruit-missing-feature
-engines:
-  newrecruit: fail
+engines: {}
 
 setup:
   gameSystem:
@@ -100,7 +98,9 @@ steps:
         - typeId: pts
           value: 5
 
-  # Increase Trooper to 3 — Rifle scales to 9 (group collective × entry collective)
+  # Increase Trooper to 3
+  # BS: Rifle scales to 9 (double-processing bug: group-flatten + group-default loops)
+  # NR: Rifle scales to 3 (correct: 1 per model × 3 models)
   - action: setSelectionCount
     forceId: ${{ steps.add-detachment.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}
@@ -120,6 +120,24 @@ steps:
                         - name: pts
                           typeId: pts
                           value: 45
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Trooper
+                      number: 3
+                      children:
+                        - name: Rifle
+                          number: 3
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 15
+          costs:
+            - typeId: pts
+              value: 15
       costs:
         - typeId: pts
           value: 45

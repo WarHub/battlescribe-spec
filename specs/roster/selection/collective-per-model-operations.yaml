@@ -8,9 +8,7 @@ tags:
   - number
   - cost
   - deselect
-  - newrecruit-missing-feature
-engines:
-  newrecruit: fail
+engines: {}
 
 setup:
   gameSystem:
