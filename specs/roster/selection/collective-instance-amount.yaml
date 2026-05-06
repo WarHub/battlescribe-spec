@@ -1,0 +1,155 @@
+id: collective-instance-amount
+category: selection
+description: >
+  Changing the count of an instanced entry (isInstanced/isDuplicate) works
+  differently between engines. In NR, setAmount changes the instance's
+  multiplier and all children scale through getSelectionCount (parent chain
+  multiplication). In BS, setNumSelections on a duplicate-type entry is a
+  no-op — the entry's number cannot be changed via setSelectionCount; only
+  selectChildEntry can create new copies.
+tags:
+  - collective
+  - number
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          selectionEntries:
+            # Sergeant has a non-collective child → isDuplicate/isInstanced
+            - id: se-sergeant
+              name: Sergeant
+              selectionEntries:
+                - id: se-badge
+                  name: Badge
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 2
+                - id: se-weapon
+                  name: Weapon
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 10
+
+steps:
+  - action: addForce
+    id: add-force
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-force.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-sgt
+    forceId: ${{ steps.add-force.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-sergeant
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-force.forceId }}
+    selectionId: ${{ steps.select-sgt.selectionId }}
+    entryId: se-badge
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-force.forceId }}
+    selectionId: ${{ steps.select-sgt.selectionId }}
+    entryId: se-weapon
+
+  # Before changing count: both engines agree
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 12
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sergeant
+                  number: 1
+                  children:
+                    - name: Badge
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 2
+                    - name: Weapon
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 10
+
+  # Set Sergeant count to 3
+  # NR: instance amount becomes 3, children scale via getSelectionCount
+  # BS: no-op for isDuplicate entries (number stays 1)
+  - action: setSelectionCount
+    forceId: ${{ steps.add-force.forceId }}
+    selectionId: ${{ steps.select-sgt.selectionId }}
+    count: 3
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 12
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sergeant
+                  number: 1
+                  children:
+                    - name: Badge
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 2
+                    - name: Weapon
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 10
+      engines:
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 36
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Sergeant
+                      number: 3
+                      children:
+                        - name: Badge
+                          number: 3
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 6
+                        - name: Weapon
+                          number: 3
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 30
