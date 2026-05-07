@@ -1,6 +1,6 @@
 id: cost-set-limit
 category: cost
-description: Setting a cost limit updates the roster cost configuration
+description: Setting a cost limit leaves current roster cost unchanged
 
 setup:
   gameSystem:

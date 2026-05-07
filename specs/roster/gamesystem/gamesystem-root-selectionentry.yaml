@@ -1,8 +1,8 @@
 id: gamesystem-root-selectionentry
 category: gamesystem
 description: >
-  SelectionEntry defined at GameSystem level is available in all forces,
-  regardless of which catalogue is used.
+  SelectionEntry defined at GameSystem level is available in a force created
+  from a catalogue that uses that GameSystem.
 
 setup:
   gameSystem:

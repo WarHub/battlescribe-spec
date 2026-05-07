@@ -16,4 +16,5 @@ setup:
 
 steps:
   - expectedState:
+      costs: []
       forceCount: 0

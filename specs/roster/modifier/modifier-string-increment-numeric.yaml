@@ -21,6 +21,13 @@ setup:
             - type: increment
               field: name
               value: "25"
+        - id: se-2
+          name: "200"
+          type: unit
+          modifiers:
+            - type: decrement
+              field: name
+              value: "75"
 
 steps:
   - action: addForce
@@ -30,8 +37,18 @@ steps:
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
-  # String increment parses both values as doubles: 100 + 25 = 125
+  # String increment: 100 + 25 = 125
   - expectedState:
       forces:
         - selections:
+            - name: "125"
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-2
+  # String decrement: 200 - 75 = 125
+  - expectedState:
+      forces:
+        - selections:
+            - name: "125"
             - name: "125"

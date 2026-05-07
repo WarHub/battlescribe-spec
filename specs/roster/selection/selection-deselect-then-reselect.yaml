@@ -1,6 +1,6 @@
 id: selection-deselect-then-reselect
 category: selection
-description: After deselecting a selection, re-selecting the same entry creates a new selection
+description: After deselecting a selection, the same entry can be selected again
 
 setup:
   gameSystem:

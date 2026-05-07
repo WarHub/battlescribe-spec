@@ -1,9 +1,8 @@
 id: selection-set-child-count-collective
 category: selection
 description: >
-  setSelectionCount on a collective child entry. Collective entries are shared
-  across sibling instances. Verifies number=N on a single selection with
-  scaled costs (N × per-unit cost).
+  setSelectionCount on a collective child entry. Verifies number=N on a single
+  selection with scaled costs (N × per-unit cost).
 tags:
   - selection
   - number

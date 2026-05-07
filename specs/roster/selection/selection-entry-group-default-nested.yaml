@@ -22,6 +22,12 @@ setup:
             - id: seg-outer
               name: Equipment
               defaultSelectionEntryId: se-armor
+              constraints:
+                - id: con-min-outer
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
               selectionEntries:
                 - id: se-armor
                   name: Armor
@@ -30,6 +36,12 @@ setup:
                     - id: seg-inner
                       name: Armor Type
                       defaultSelectionEntryId: se-light
+                      constraints:
+                        - id: con-min-inner
+                          type: min
+                          value: 1
+                          field: selections
+                          scope: parent
                       selectionEntries:
                         - id: se-light
                           name: Light Armor
@@ -52,9 +64,12 @@ steps:
 
   # Parent Unit selected → Armor auto-selected (outer default) →
   # Light Armor auto-selected (inner default).
-  # Both levels of defaults are applied without errors.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Parent Unit
+              children:
+                - name: Armor
+                  children:
+                    - name: Light Armor

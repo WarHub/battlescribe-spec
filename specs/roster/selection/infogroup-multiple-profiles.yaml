@@ -1,6 +1,6 @@
 id: infogroup-multiple-profiles
 category: selection
-description: An infoGroup with multiple profiles each having different characteristics all appear in state
+description: An infoGroup with multiple profiles all appear in state
 tags: []
 
 setup:

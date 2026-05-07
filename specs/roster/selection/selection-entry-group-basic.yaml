@@ -35,12 +35,26 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-parent
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-parent
-  # Parent unit is created with its entry group children available.
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-parent.selectionId }}
+    entryId: se-sword
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-parent.selectionId }}
+    entryId: se-axe
+
   # Group children can be selected independently as child selections.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Parent Unit
+              children:
+                - name: Axe
+                - name: Sword

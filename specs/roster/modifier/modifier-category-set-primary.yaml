@@ -1,6 +1,6 @@
 id: modifier-category-set-primary
 category: modifier
-description: Category set-primary modifier sets a category as primary (adds it first if not present, then sets others non-primary)
+description: Category set-primary modifier sets a category as primary on the selection
 tags: []
 
 setup:

@@ -1,6 +1,6 @@
 id: force-with-categories
 category: force
-description: Force entry inherits category entries from game system
+description: Force can be added when the game system defines category entries
 
 setup:
   gameSystem:

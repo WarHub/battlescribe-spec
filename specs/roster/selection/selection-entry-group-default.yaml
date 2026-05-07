@@ -22,6 +22,12 @@ setup:
             - id: seg-weapons
               name: Weapon Options
               defaultSelectionEntryId: se-sword
+              constraints:
+                - id: con-min-1
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
               selectionEntries:
                 - id: se-sword
                   name: Sword
@@ -38,10 +44,12 @@ steps:
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-parent
-  # With defaultSelectionEntryId, the engine auto-selects se-sword
-  # when the parent unit is selected. Parent unit appears with child.
+
+  # With defaultSelectionEntryId and min=1, the engine auto-selects Sword.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Parent Unit
+              children:
+                - name: Sword

@@ -2,6 +2,8 @@ id: scope-ancestor
 category: scope
 description: >
   Ancestor scope condition should evaluate upward in the selection hierarchy.
+  The child modifier should rename Equipment to Modified Equipment because the
+  parent selection exists above it, but BattleScribe leaves the name unchanged.
   BS bug: the scope resolution method (c.java:738) handles SELF, PARENT, FORCE,
   ROSTER, PRIMARY_CATEGORY, PRIMARY_CATALOGUE — but has no ANCESTOR handler for
   count-based conditions (atLeast, atMost, etc.). It falls through to null,
@@ -63,8 +65,7 @@ steps:
   # Ancestor scope should resolve upward — parent IS selected, so the
   # condition "atLeast 1 selection in ancestor" should be true, and the
   # modifier should fire, renaming Equipment to Modified Equipment.
-  # BS bug: ancestor scope returns null in scope resolution (c.java:738),
-  # condition evaluates to false, modifier never fires — name unchanged.
+  # BattleScribe leaves the name unchanged.
   - expectedState:
       forces:
         - selections:

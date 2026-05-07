@@ -2,10 +2,9 @@ id: selection-ordering-numeric
 category: selection
 tags: [design-difference]
 description: >
-  NewRecruit uses locale-aware numeric sorting (localeCompare with numeric:true),
-  so "Unit 2" sorts before "Unit 10". BattleScribe uses Java lexicographic
-  compareToIgnoreCase where "Unit 10" sorts before "Unit 2" (character-by-character).
-  Both engines agree on alphabetical ordering for names without embedded numbers.
+  NewRecruit sorts embedded numbers numerically, so "Unit 2" sorts before
+  "Unit 10". BattleScribe sorts lexicographically, so "Unit 10" sorts
+  before "Unit 2".
 
 setup:
   gameSystem:

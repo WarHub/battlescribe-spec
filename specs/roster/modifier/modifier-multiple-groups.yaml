@@ -1,6 +1,6 @@
 id: modifier-multiple-groups
 category: modifier
-description: Multiple modifier groups are structured independently on an entry
+description: Multiple modifier groups on an entry all apply when their conditions match
 
 setup:
   gameSystem:

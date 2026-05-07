@@ -17,7 +17,10 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
+        - id: se-model
+          name: Model
+          type: model
+        - id: se-squad
           name: Squad
           type: unit
           costs:
@@ -29,10 +32,11 @@ setup:
               field: pts
               value: "10"
               repeats:
-                - value: 3
-                  repeats: 1
+                - value: 2
+                  repeats: 2
                   field: selections
-                  scope: self
+                  scope: force
+                  childId: se-model
                   roundUp: false
 
 steps:
@@ -42,10 +46,28 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-1
-  # self scope, 1 selection, repeat value 3 → repeats = floor(1/3) = 0
-  # So no increment applied → cost stays at 50
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # 3 Models, value=2, roundUp=false: floor(3/2) × 2 = 1 × 2 = 2 repetitions → 50 + 10×2 = 70
   - expectedState:
       forces:
         - selections:
+            - name: Model
+            - name: Model
+            - name: Model
             - name: Squad
+              costs:
+                - typeId: pts
+                  value: 70

@@ -1,8 +1,9 @@
 id: protocol-kitchen-sink
 category: protocol
 description: >
-  Comprehensive smoke test exercising all Protocol types, all action types,
-  and all state assertion fields for adapter protocol adherence.
+  Comprehensive smoke test exercising many Protocol setup types, multiple
+  action types, and a broad set of state assertion fields for adapter
+  protocol adherence.
 tags: []
 
 setup:
@@ -645,7 +646,7 @@ steps:
                 - name: Troops
                 - name: Elites
 
-  # Step 5: setSelectionCount— set Trooper child count to 2 via selectionPath
+  # Step 5: setSelectionCount— set Trooper child count to 2 via selectionId
   - action: setSelectionCount
     forceId: ${{ steps.add-battalion.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}

@@ -1,6 +1,6 @@
 id: force-nested-child-selections
 category: force
-description: Selections can be added to a child force independently using forcePath
+description: Selections can be added to a child force independently using its forceId
 tags: [childForce]
 
 setup:

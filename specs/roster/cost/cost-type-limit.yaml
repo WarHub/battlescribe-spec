@@ -1,6 +1,6 @@
 id: cost-type-limit
 category: cost
-description: CostType with limit flag represents a cost cap rather than an actual cost
+description: A cost type with a default limit still appears in roster costs
 tags: []
 
 setup:
@@ -35,8 +35,8 @@ steps:
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
-  # With a cost limit set on the cost type, the roster tracks the cost.
-  # Limit-type cost types are used in query resolution to check against caps.
+  # With a cost limit set on the cost type, the roster still tracks the cost.
+  # The pts cost should still appear in roster costs.
   - expectedState:
       costs:
         - typeId: pts
