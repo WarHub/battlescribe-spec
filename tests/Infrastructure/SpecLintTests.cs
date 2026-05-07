@@ -6,13 +6,18 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// Lint tests for spec YAML files — validates formatting, required fields,
 /// and conventions across the entire spec suite.
+///
+/// Each spec file is loaded exactly once per test run. All per-spec rules are
+/// aggregated into a single <see cref="AllLintChecks"/> theory, so a failing spec
+/// reports all its violations in one message. Cross-spec checks (e.g. duplicate IDs)
+/// remain separate <see cref="FactAttribute"/> methods.
 /// </summary>
 [Trait("Category", "Unit")]
 public sealed class SpecLintTests
 {
     private static readonly string? SpecsDir = SpecLoader.FindRosterSpecsDirectory();
 
-    private static IEnumerable<(string path, string relPath, SpecFile spec)> AllSpecFiles()
+    private static IEnumerable<(string path, string relPath, SpecFile? spec, string? loadError)> AllSpecFiles()
     {
         if (SpecsDir is null || !Directory.Exists(SpecsDir))
         {
@@ -21,55 +26,89 @@ public sealed class SpecLintTests
 
         foreach (var (path, _, _) in SpecLoader.DiscoverSpecs(SpecsDir))
         {
-            var spec = SpecLoader.Load(path);
             var relPath = Path.GetRelativePath(SpecsDir, path).Replace('\\', '/');
-            yield return (path, relPath, spec);
+            SpecFile? spec = null;
+            string? loadError = null;
+            try
+            {
+                spec = SpecLoader.Load(path);
+            }
+            catch (Exception ex)
+            {
+                loadError = ex.Message;
+            }
+            yield return (path, relPath, spec, loadError);
         }
     }
 
     public static IEnumerable<object[]> AllSpecs() =>
         AllSpecFiles().Select(x => new object[] { x.path, x.relPath });
 
-    // ── Required fields ──────────────────────────────────────────────
+    // ── Single aggregated lint check per spec ────────────────────────
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void HasRequiredFields(string specPath, string specName)
+    public void AllLintChecks(string specPath, string specName)
     {
-        var spec = SpecLoader.Load(specPath);
-        Assert.False(string.IsNullOrWhiteSpace(spec.Id), $"{specName}: missing 'id'");
-        Assert.False(string.IsNullOrWhiteSpace(spec.Category), $"{specName}: missing 'category'");
-        Assert.False(string.IsNullOrWhiteSpace(spec.Description), $"{specName}: missing 'description'");
+        var text = File.ReadAllText(specPath);
+        var lines = File.ReadAllLines(specPath);
+
+        // Run text-only checks first (don't need a successfully loaded model)
+        var violations = new List<string>();
+        violations.AddRange(CheckFormatting(text));
+        violations.AddRange(CheckTrailingWhitespace(lines));
+        violations.AddRange(CheckFileEndsWithNewline(text));
+        violations.AddRange(CheckBlankLineBeforeSetup(lines));
+        violations.AddRange(CheckBlankLineBetweenSteps(lines));
+        violations.AddRange(CheckNoEmptyEnginesDeclaration(lines));
+        violations.AddRange(CheckNoExplicitDefaults(lines));
+        violations.AddRange(CheckExpectedStatePropertyOrdering(lines));
+        violations.AddRange(CheckNoLegacyAssertSteps(text));
+        violations.AddRange(CheckNoLegacyErrorFields(text));
+
+        // Load the spec model (if text checks already failed, still try to load)
+        SpecFile? spec = null;
+        try
+        {
+            spec = SpecLoader.Load(specPath);
+        }
+        catch (Exception ex)
+        {
+            violations.Add($"Failed to load spec: {ex.Message}");
+        }
+
+        if (spec is not null)
+        {
+            var filename = Path.GetFileNameWithoutExtension(specPath);
+            var dirName = Path.GetFileName(Path.GetDirectoryName(specPath));
+
+            violations.AddRange(CheckRequiredFields(spec));
+            violations.AddRange(CheckIdMatchesFilename(spec, filename));
+            violations.AddRange(CheckCategoryMatchesDirectory(spec, dirName!));
+            violations.AddRange(CheckKnownActions(spec));
+            violations.AddRange(CheckKnownTags(spec));
+            violations.AddRange(CheckEngineExpectations(spec));
+            violations.AddRange(CheckStepsAreActionOrExpectedState(spec));
+            violations.AddRange(CheckSetSelectionCountHasSelectionId(spec));
+            violations.AddRange(CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(spec));
+            violations.AddRange(CheckEverySpecHasSetup(spec));
+            violations.AddRange(CheckLastStepIsExpectedState(spec));
+            violations.AddRange(CheckAllErrorAssertionsHaveFrom(spec));
+        }
+
+        Assert.True(violations.Count == 0,
+            $"{specName}:\n  {string.Join("\n  ", violations)}");
     }
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void IdMatchesFilename(string specPath, string specName)
-    {
-        var spec = SpecLoader.Load(specPath);
-        var filename = Path.GetFileNameWithoutExtension(specPath);
-        Assert.True(filename == spec.Id,
-            $"{specName}: expected id '{filename}' but got '{spec.Id}'");
-    }
-
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void CategoryMatchesDirectory(string specPath, string specName)
-    {
-        var spec = SpecLoader.Load(specPath);
-        var dirName = Path.GetFileName(Path.GetDirectoryName(specPath));
-        Assert.True(dirName == spec.Category,
-            $"{specName}: expected category '{dirName}' but got '{spec.Category}'");
-    }
-
-    // ── No duplicate IDs ─────────────────────────────────────────────
+    // ── No duplicate IDs (cross-spec check) ─────────────────────────
 
     [Fact]
     public void NoDuplicateSpecIds()
     {
         var allFiles = AllSpecFiles().ToList();
         var duplicates = allFiles
-            .GroupBy(x => x.spec.Id)
+            .Where(x => x.spec is not null)
+            .GroupBy(x => x.spec!.Id)
             .Where(g => g.Count() > 1)
             .Select(g => $"'{g.Key}' in: {string.Join(", ", g.Select(x => x.relPath))}")
             .ToList();
@@ -77,15 +116,65 @@ public sealed class SpecLintTests
             $"Duplicate spec IDs found:\n  {string.Join("\n  ", duplicates)}");
     }
 
-    // ── Formatting: blank lines between steps ────────────────────────
+    // ── Formatting ───────────────────────────────────────────────────
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void BlankLineBetweenSteps(string specPath, string specName)
+    private static IEnumerable<string> CheckFormatting(string text)
     {
-        var lines = File.ReadAllLines(specPath);
+        // Normalize CRLF → LF before comparing: on Windows with autocrlf=true,
+        // checked-out files have CRLF but the formatter (and repository) uses LF.
+        var normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        var formatted = SpecFormatter.FormatText(normalized);
+        if (formatted != normalized)
+        {
+            yield return "file is not correctly formatted — run 'pwsh tools/format-specs.ps1' to fix";
+        }
+    }
+
+    // ── Trailing whitespace ──────────────────────────────────────────
+
+    private static IEnumerable<string> CheckTrailingWhitespace(string[] lines)
+    {
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Length > 0 && lines[i] != lines[i].TrimEnd())
+            {
+                yield return $"line {i + 1}: trailing whitespace";
+            }
+        }
+    }
+
+    // ── File ends with newline ───────────────────────────────────────
+
+    private static IEnumerable<string> CheckFileEndsWithNewline(string text)
+    {
+        if (!text.EndsWith('\n'))
+        {
+            yield return "file does not end with a newline";
+        }
+    }
+
+    // ── Blank line before setup: ─────────────────────────────────────
+
+    private static IEnumerable<string> CheckBlankLineBeforeSetup(string[] lines)
+    {
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].TrimEnd() == "setup:")
+            {
+                if (i == 0 || lines[i - 1].Trim() != "")
+                {
+                    yield return $"line {i + 1}: expected blank line before 'setup:'";
+                }
+                break;
+            }
+        }
+    }
+
+    // ── Blank lines between steps ────────────────────────────────────
+
+    private static IEnumerable<string> CheckBlankLineBetweenSteps(string[] lines)
+    {
         var inSteps = false;
-        var violations = new List<string>();
         for (var i = 0; i < lines.Length; i++)
         {
             var stripped = lines[i].Trim();
@@ -99,45 +188,218 @@ public sealed class SpecLintTests
                 continue;
             }
 
-            // Top-level step item (2-space indent + "- ")
-            if (Regex.IsMatch(lines[i], @"^  - (action|expectedState):"))
+            if (Regex.IsMatch(lines[i], @"^  - (action|expectedState):") && i > 0)
             {
-                if (i > 0)
+                var prev = lines[i - 1].Trim();
+                if (prev != "" && prev != "steps:" && !prev.StartsWith('#'))
                 {
-                    var prev = lines[i - 1].Trim();
-                    if (prev != "" && prev != "steps:" && !prev.StartsWith('#'))
+                    yield return $"line {i + 1}: missing blank line before '{stripped[..Math.Min(40, stripped.Length)]}'";
+                }
+            }
+        }
+    }
+
+    // ── No empty engines declaration ─────────────────────────────────
+
+    private static IEnumerable<string> CheckNoEmptyEnginesDeclaration(string[] lines)
+    {
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].TrimEnd() == "engines: {}")
+            {
+                yield return $"line {i + 1}: remove empty 'engines: {{}}' (omit the field instead)";
+            }
+        }
+    }
+
+    // ── No explicit defaults ─────────────────────────────────────────
+
+    private static readonly (string Pattern, string Description)[] SetupDefaultPatterns =
+    [
+        ("primary: false", "primary defaults to false"),
+        ("defaultCostLimit: -1", "defaultCostLimit defaults to -1"),
+        ("import: true", "import defaults to true"),
+        ("importRootEntries: true", "importRootEntries defaults to true"),
+    ];
+
+    private static readonly (string Pattern, string Description)[] GlobalDefaultPatterns =
+    [
+        ("hidden: false", "hidden defaults to false"),
+    ];
+
+    private static IEnumerable<string> CheckNoExplicitDefaults(string[] lines)
+    {
+        var inExpectedState = false;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var stripped = lines[i].Trim();
+            if (stripped.StartsWith("- expectedState:", StringComparison.Ordinal))
+            {
+                inExpectedState = true;
+            }
+            else if (stripped.StartsWith("- action:", StringComparison.Ordinal))
+            {
+                inExpectedState = false;
+            }
+
+            foreach (var (pattern, description) in GlobalDefaultPatterns)
+            {
+                if (stripped == pattern)
+                {
+                    yield return $"line {i + 1}: '{pattern}' ({description} — omit it)";
+                }
+            }
+
+            if (!inExpectedState)
+            {
+                foreach (var (pattern, description) in SetupDefaultPatterns)
+                {
+                    if (stripped == pattern)
                     {
-                        violations.Add($"line {i + 1}: missing blank line before '{stripped[..Math.Min(40, stripped.Length)]}'");
+                        yield return $"line {i + 1}: '{pattern}' ({description} — omit it)";
                     }
                 }
             }
         }
-        Assert.True(violations.Count == 0,
-            $"{specName}: missing blank lines between steps:\n  {string.Join("\n  ", violations)}");
     }
 
-    // ── Formatting: blank line between header and setup ──────────────
+    // ── expectedState property ordering ─────────────────────────────
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void BlankLineBeforeSetup(string specPath, string specName)
+    private static int GetPropertyZone(string prop) => prop switch
     {
-        var lines = File.ReadAllLines(specPath);
+        "errors" or "errorsContain" => 0,
+        "forces" => 2,
+        "engines" => 3,
+        _ => 1,
+    };
+
+    private static IEnumerable<string> CheckExpectedStatePropertyOrdering(string[] lines)
+    {
+        var violations = new List<string>();
+        var inExpected = false;
+        var stepStart = -1;
+        var stepProps = new List<(string Name, int Line, int Zone)>();
+
         for (var i = 0; i < lines.Length; i++)
         {
-            if (lines[i].TrimEnd() == "setup:")
+            var stripped = lines[i].TrimEnd();
+
+            if (Regex.IsMatch(stripped, @"^  - expectedState:"))
             {
-                Assert.True(i > 0 && lines[i - 1].Trim() == "",
-                    $"{specName}: line {i + 1}: expected blank line before 'setup:'");
-                break;
+                FlushStepProps(stepProps, stepStart, violations);
+                inExpected = true;
+                stepStart = i + 1;
+                stepProps.Clear();
+                continue;
+            }
+            if (Regex.IsMatch(stripped, @"^  - action:"))
+            {
+                FlushStepProps(stepProps, stepStart, violations);
+                inExpected = false;
+                stepProps.Clear();
+                continue;
+            }
+
+            if (inExpected
+                && Regex.IsMatch(stripped, @"^      \w+:")
+                && !stripped.StartsWith("        ", StringComparison.Ordinal))
+            {
+                var prop = stripped.TrimStart()[..stripped.TrimStart().IndexOf(':')];
+                stepProps.Add((prop, i + 1, GetPropertyZone(prop)));
+            }
+        }
+        FlushStepProps(stepProps, stepStart, violations);
+        return violations;
+
+        static void FlushStepProps(List<(string Name, int Line, int Zone)> props, int stepLine, List<string> violations)
+        {
+            if (props.Count < 2)
+            {
+                return;
+            }
+
+            var maxZoneSoFar = -1;
+            string? maxZoneProp = null;
+            foreach (var (name, line, zone) in props)
+            {
+                if (zone < maxZoneSoFar)
+                {
+                    violations.Add(
+                        $"line {line}: '{name}' (zone {zone}) must come before '{maxZoneProp}' " +
+                        $"(zone {maxZoneSoFar}) — run format-specs.ps1 to fix (step at line {stepLine})");
+                }
+                if (zone > maxZoneSoFar)
+                {
+                    maxZoneSoFar = zone;
+                    maxZoneProp = name;
+                }
             }
         }
     }
 
-    // ── Valid actions ─────────────────────────────────────────────────
+    // ── No legacy assert steps ───────────────────────────────────────
 
-    // ── addChildForce is a known action ─────────────────────────────
-    // (added as part of the ID-based protocol redesign)
+    private static IEnumerable<string> CheckNoLegacyAssertSteps(string text)
+    {
+        if (Regex.IsMatch(text, @"^[ \t]*- assert:", RegexOptions.Multiline))
+        {
+            yield return "contains legacy 'assert:' step (use 'expectedState:' instead)";
+        }
+    }
+
+    // ── No legacy error fields ───────────────────────────────────────
+
+    private static readonly string[] LegacyErrorFields =
+        ["validationErrors", "validationErrorCount", "hasValidationErrors", "noValidationErrors"];
+
+    private static IEnumerable<string> CheckNoLegacyErrorFields(string text)
+    {
+        foreach (var field in LegacyErrorFields)
+        {
+            if (Regex.IsMatch(text, $@"^[ \t]+{field}:", RegexOptions.Multiline))
+            {
+                yield return $"contains legacy field '{field}:' (use 'errors:' instead)";
+            }
+        }
+    }
+
+    // ── Required fields ──────────────────────────────────────────────
+
+    private static IEnumerable<string> CheckRequiredFields(SpecFile spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec.Id))
+        {
+            yield return "missing 'id'";
+        }
+
+        if (string.IsNullOrWhiteSpace(spec.Category))
+        {
+            yield return "missing 'category'";
+        }
+
+        if (string.IsNullOrWhiteSpace(spec.Description))
+        {
+            yield return "missing 'description'";
+        }
+    }
+
+    private static IEnumerable<string> CheckIdMatchesFilename(SpecFile spec, string filename)
+    {
+        if (filename != spec.Id)
+        {
+            yield return $"expected id '{filename}' but got '{spec.Id}'";
+        }
+    }
+
+    private static IEnumerable<string> CheckCategoryMatchesDirectory(SpecFile spec, string dirName)
+    {
+        if (dirName != spec.Category)
+        {
+            yield return $"expected category '{dirName}' but got '{spec.Category}'";
+        }
+    }
+
+    // ── Valid actions ─────────────────────────────────────────────────
 
     private static readonly HashSet<string> KnownActions =
     [
@@ -149,25 +411,19 @@ public sealed class SpecLintTests
         "dump"
     ];
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void ActionsAreKnown(string specPath, string specName)
+    private static IEnumerable<string> CheckKnownActions(SpecFile spec)
     {
-        var spec = SpecLoader.Load(specPath);
         if (spec.Steps is null)
         {
-            return;
+            yield break;
         }
 
         foreach (var step in spec.Steps)
         {
-            if (step.Action is null)
+            if (step.Action is { } action && !KnownActions.Contains(action))
             {
-                continue;
+                yield return $"unknown action '{action}'";
             }
-
-            Assert.True(KnownActions.Contains(step.Action),
-                $"{specName}: unknown action '{step.Action}'");
         }
     }
 
@@ -201,146 +457,49 @@ public sealed class SpecLintTests
         "entry-group",
     ];
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void TagsAreKnown(string specPath, string specName)
+    private static IEnumerable<string> CheckKnownTags(SpecFile spec)
     {
-        var spec = SpecLoader.Load(specPath);
         if (spec.Tags is null)
         {
-            return;
+            yield break;
         }
 
         var unknown = spec.Tags.Where(t => !KnownTags.Contains(t)).ToList();
-        Assert.True(unknown.Count == 0,
-            $"{specName}: unknown tag(s): {string.Join(", ", unknown.Select(t => $"'{t}'"))}. " +
-            $"Add to KnownTags in SpecLintTests if intentional.");
-    }
-
-    // ── No empty/redundant engines declaration ─────────────────────
-
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void NoEmptyEnginesDeclaration(string specPath, string specName)
-    {
-        var lines = File.ReadAllLines(specPath);
-        for (var i = 0; i < lines.Length; i++)
+        if (unknown.Count > 0)
         {
-            Assert.False(lines[i].TrimEnd() == "engines: {}",
-                $"{specName}: line {i + 1}: remove empty 'engines: {{}}' (omit the field instead)");
+            yield return $"unknown tag(s): {string.Join(", ", unknown.Select(t => $"'{t}'"))} " +
+                         "(add to KnownTags in SpecLintTests if intentional)";
         }
     }
 
-    // ── expectedState property order: errors first, forces second-last, engines last ──
-
-    private static int GetPropertyZone(string prop) => prop switch
-    {
-        "errors" or "errorsContain" => 0,   // first
-        "forces" => 2,                       // second-to-last
-        "engines" => 3,                      // last
-        _ => 1,                              // middle (no mutual ordering)
-    };
-
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void ExpectedStatePropertyOrdering(string specPath, string specName)
-    {
-        var lines = File.ReadAllLines(specPath);
-        var violations = new List<string>();
-        var inExpected = false;
-        var stepStart = -1;
-        var stepProps = new List<(string Name, int Line, int Zone)>();
-
-        for (var i = 0; i < lines.Length; i++)
-        {
-            var stripped = lines[i].TrimEnd();
-
-            if (Regex.IsMatch(stripped, @"^  - expectedState:"))
-            {
-                CheckStepProps(stepProps, stepStart, violations);
-                inExpected = true;
-                stepStart = i + 1;
-                stepProps.Clear();
-                continue;
-            }
-            if (Regex.IsMatch(stripped, @"^  - action:"))
-            {
-                CheckStepProps(stepProps, stepStart, violations);
-                inExpected = false;
-                stepProps.Clear();
-                continue;
-            }
-
-            // Top-level property under expectedState (6 spaces indent)
-            if (inExpected && Regex.IsMatch(stripped, @"^      \w+:") && !stripped.StartsWith("        ", StringComparison.Ordinal))
-            {
-                var prop = stripped.TrimStart()[..stripped.TrimStart().IndexOf(':')];
-                stepProps.Add((prop, i + 1, GetPropertyZone(prop)));
-            }
-        }
-        // Check last expectedState block
-        CheckStepProps(stepProps, stepStart, violations);
-
-        Assert.True(violations.Count == 0,
-            $"{specName}: expectedState properties out of order (expected: errors → ... → forces → engines):\n  {string.Join("\n  ", violations)}");
-
-        static void CheckStepProps(List<(string Name, int Line, int Zone)> props, int stepLine, List<string> violations)
-        {
-            if (props.Count < 2)
-            {
-                return;
-            }
-            var maxZoneSoFar = -1;
-            string? maxZoneProp = null;
-            for (var j = 0; j < props.Count; j++)
-            {
-                if (props[j].Zone < maxZoneSoFar)
-                {
-                    violations.Add(
-                        $"line {props[j].Line}: '{props[j].Name}' (zone {props[j].Zone}) must come before " +
-                        $"'{maxZoneProp}' (zone {maxZoneSoFar}) (step at line {stepLine})");
-                }
-                if (props[j].Zone > maxZoneSoFar)
-                {
-                    maxZoneSoFar = props[j].Zone;
-                    maxZoneProp = props[j].Name;
-                }
-            }
-        }
-    }
-
-    // ── Valid engine expectation values ───────────────────────────────
+    // ── Valid engine expectations ─────────────────────────────────────
 
     private static readonly HashSet<string> KnownExpectations = ["pass", "fail", "skip"];
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void EngineExpectationsAreValid(string specPath, string specName)
+    private static IEnumerable<string> CheckEngineExpectations(SpecFile spec)
     {
-        var spec = SpecLoader.Load(specPath);
         if (spec.Engines is null)
         {
-            return;
+            yield break;
         }
 
         foreach (var (engine, expectation) in spec.Engines)
         {
-            Assert.True(KnownExpectations.Contains(expectation),
-                $"{specName}: engine '{engine}' has invalid expectation '{expectation}' " +
-                $"(expected: {string.Join(", ", KnownExpectations)})");
+            if (!KnownExpectations.Contains(expectation))
+            {
+                yield return $"engine '{engine}' has invalid expectation '{expectation}' " +
+                             $"(expected: {string.Join(", ", KnownExpectations)})";
+            }
         }
     }
 
-    // ── Steps have either action or expectedState (not both, not neither) ──
+    // ── Steps have action or expectedState ───────────────────────────
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void StepsAreActionOrExpectedState(string specPath, string specName)
+    private static IEnumerable<string> CheckStepsAreActionOrExpectedState(SpecFile spec)
     {
-        var spec = SpecLoader.Load(specPath);
         if (spec.Steps is null)
         {
-            return;
+            yield break;
         }
 
         for (var i = 0; i < spec.Steps.Count; i++)
@@ -348,64 +507,53 @@ public sealed class SpecLintTests
             var step = spec.Steps[i];
             var hasAction = step.Action is not null;
             var hasExpected = step.ExpectedState is not null;
-            Assert.True(hasAction || hasExpected,
-                $"{specName}: step {i + 1} has neither 'action' nor 'expectedState'");
-            Assert.False(hasAction && hasExpected,
-                $"{specName}: step {i + 1} has both 'action' and 'expectedState'");
+            if (!hasAction && !hasExpected)
+            {
+                yield return $"step {i + 1} has neither 'action' nor 'expectedState'";
+            }
+
+            if (hasAction && hasExpected)
+            {
+                yield return $"step {i + 1} has both 'action' and 'expectedState'";
+            }
         }
     }
 
-    // ── setSelectionCount must specify selectionId ─────────────────
+    // ── setSelectionCount requires selectionId ───────────────────────
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void SetSelectionCountHasSelectionId(string specPath, string specName)
+    private static IEnumerable<string> CheckSetSelectionCountHasSelectionId(SpecFile spec)
     {
-        var spec = SpecLoader.Load(specPath);
         if (spec.Steps is null)
         {
-            return;
+            yield break;
         }
 
-        var violations = new List<string>();
         for (var i = 0; i < spec.Steps.Count; i++)
         {
             var step = spec.Steps[i];
-            if (step.Action != "setSelectionCount")
+            if (step.Action == "setSelectionCount" && step.SelectionId is null or { Length: 0 })
             {
-                continue;
-            }
-
-            if (step.SelectionId is null or { Length: 0 })
-            {
-                violations.Add($"step {i + 1}: setSelectionCount requires selectionId");
+                yield return $"step {i + 1}: setSelectionCount requires 'selectionId'";
             }
         }
-        Assert.True(violations.Count == 0,
-            $"{specName}: setSelectionCount issues:\n  {string.Join("\n  ", violations)}");
     }
 
     // ── addForce/addChildForce require catalogueId when multi-catalogue ──
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void AddForceRequiresCatalogueIdWhenMultiCatalogue(string specPath, string specName)
+    private static IEnumerable<string> CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(SpecFile spec)
     {
-        var spec = SpecLoader.Load(specPath);
-        var catalogueCount = spec.Setup.Catalogues?.Count ?? 0;
-        // For DataSource specs, catalogueId is always required (protocol can't auto-resolve)
-        var isDataSource = spec.Setup.DataSource is { Length: > 0 };
+        var catalogueCount = spec.Setup?.Catalogues?.Count ?? 0;
+        var isDataSource = spec.Setup?.DataSource is { Length: > 0 };
         if (catalogueCount < 2 && !isDataSource)
         {
-            return;
+            yield break;
         }
 
         if (spec.Steps is null)
         {
-            return;
+            yield break;
         }
 
-        var violations = new List<string>();
         for (var i = 0; i < spec.Steps.Count; i++)
         {
             var step = spec.Steps[i];
@@ -416,105 +564,85 @@ public sealed class SpecLintTests
 
             if (step.CatalogueId is null or { Length: 0 })
             {
-                var reason = isDataSource
-                    ? "dataSource specs always require catalogueId"
+                var reason = isDataSource ? "dataSource specs always require catalogueId"
                     : $"setup has {catalogueCount} catalogues";
-                violations.Add($"step {i + 1}: {step.Action} requires catalogueId ({reason})");
+                yield return $"step {i + 1}: {step.Action} requires 'catalogueId' ({reason})";
             }
         }
-        Assert.True(violations.Count == 0,
-            $"{specName}: missing catalogueId on force actions:\n  {string.Join("\n  ", violations)}");
     }
 
-    // ── No trailing whitespace ───────────────────────────────────────
+    // ── Structure: setup required ────────────────────────────────────
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void NoTrailingWhitespace(string specPath, string specName)
+    private static IEnumerable<string> CheckEverySpecHasSetup(SpecFile spec)
     {
-        var lines = File.ReadAllLines(specPath);
-        var violations = new List<string>();
-        for (var i = 0; i < lines.Length; i++)
+        if (spec.Setup is null)
         {
-            if (lines[i].Length > 0 && lines[i] != lines[i].TrimEnd())
-            {
-                violations.Add($"line {i + 1}");
-            }
+            yield return "missing 'setup' section";
         }
-        Assert.True(violations.Count == 0,
-            $"{specName}: trailing whitespace on {string.Join(", ", violations)}");
     }
 
-    // ── File ends with newline ───────────────────────────────────────
+    // ── Structure: last step is expectedState ────────────────────────
 
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void FileEndsWithNewline(string specPath, string specName)
+    private static IEnumerable<string> CheckLastStepIsExpectedState(SpecFile spec)
     {
-        var text = File.ReadAllText(specPath);
-        Assert.True(text.EndsWith('\n'),
-            $"{specName}: file does not end with a newline");
-    }
-
-    // ── No explicit defaults in setup ────────────────────────────────
-
-    private static readonly (string Pattern, string Description)[] DefaultValuePatterns =
-    [
-        ("primary: false", "primary defaults to false"),
-        ("defaultCostLimit: -1", "defaultCostLimit defaults to -1"),
-        ("import: true", "import defaults to true"),
-        ("importRootEntries: true", "importRootEntries defaults to true"),
-    ];
-
-    // Patterns that are redundant everywhere (setup AND expectedState).
-    private static readonly (string Pattern, string Description)[] GlobalDefaultPatterns =
-    [
-        ("hidden: false", "hidden defaults to false"),
-    ];
-
-    [Theory]
-    [MemberData(nameof(AllSpecs))]
-    public void NoExplicitDefaultsInSetup(string specPath, string specName)
-    {
-        var lines = File.ReadAllLines(specPath);
-        var inExpectedState = false;
-        var violations = new List<string>();
-        for (var i = 0; i < lines.Length; i++)
+        if (spec.Steps is null)
         {
-            var stripped = lines[i].Trim();
-            if (stripped.StartsWith("- expectedState:", StringComparison.Ordinal))
-            {
-                inExpectedState = true;
-            }
-            else if (stripped.StartsWith("- action:", StringComparison.Ordinal))
-            {
-                inExpectedState = false;
-            }
+            yield return "missing 'steps' section";
+            yield break;
+        }
+        if (spec.Steps.Count == 0)
+        {
+            yield return "'steps' is empty";
+            yield break;
+        }
+        if (spec.Steps[^1].ExpectedState is null)
+        {
+            yield return "last step must be 'expectedState'";
+        }
+    }
 
-            // Global defaults are redundant everywhere.
-            foreach (var (pattern, description) in GlobalDefaultPatterns)
-            {
-                if (stripped == pattern)
-                {
-                    violations.Add($"line {i + 1}: '{pattern}' ({description})");
-                }
-            }
+    // ── Structure: error assertions have 'from' ──────────────────────
 
-            if (inExpectedState)
+    private static IEnumerable<string> CheckAllErrorAssertionsHaveFrom(SpecFile spec)
+    {
+        if (spec.Steps is null)
+        {
+            yield break;
+        }
+
+        foreach (var step in spec.Steps)
+        {
+            if (step.ExpectedState?.Errors is not { } errors)
             {
                 continue;
             }
 
-            // Setup-only defaults.
-            foreach (var (pattern, description) in DefaultValuePatterns)
+            foreach (var err in errors)
             {
-                if (stripped == pattern)
+                if (string.IsNullOrEmpty(err.From))
                 {
-                    violations.Add($"line {i + 1}: '{pattern}' ({description})");
+                    yield return $"error assertion on='{err.On}' is missing 'from:' field";
+                }
+            }
+
+            if (step.ExpectedState.Engines is { } engines)
+            {
+                foreach (var (_, over) in engines)
+                {
+                    if (over.Errors is not { } overErrors)
+                    {
+                        continue;
+                    }
+
+                    foreach (var err in overErrors)
+                    {
+                        if (err.On is null)
+                        {
+                            yield return $"engine override error assertion is missing 'on:' field";
+                        }
+                    }
                 }
             }
         }
-        Assert.True(violations.Count == 0,
-            $"{specName}: explicit default values (omit them):\n  {string.Join("\n  ", violations)}");
     }
 }
