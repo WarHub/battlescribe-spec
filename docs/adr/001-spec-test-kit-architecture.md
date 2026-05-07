@@ -7,8 +7,8 @@
 ## Context
 
 The BattleScribe conformance spec suite (`battlescribe-spec`) validates roster-editing engine
-behavior against 392 declarative YAML specs using the original Java BattleScribe engine
-(via IKVM.NET).The current architecture requires every engine under test to implement
+behavior against declarative YAML specs using the original Java BattleScribe engine
+(via IKVM.NET). The current architecture requires every engine under test to implement
 `IRosterEngine` **in C#** and run inside the same .NET process. This limits the spec suite to
 .NET engines only.
 

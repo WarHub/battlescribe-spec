@@ -8,7 +8,8 @@ immune to site downtime or breaking changes.
 
 1. **HAR recording** — A Playwright browser session navigates newrecruit.eu, capturing all
    network traffic into an [HTTP Archive (HAR)](https://en.wikipedia.org/wiki/HAR_(file_format)) file.
-   The recording is post-processed to strip requests to non-essential domains (only the NR app domains are kept) and deduplicate entries.
+   The recording is post-processed: an allowlist of required domains is kept
+   (`newrecruit.eu`, `raw.githubusercontent.com`, Google Fonts), everything else is stripped, and duplicate requests are deduplicated.
 
 2. **Snapshot storage** — HAR snapshots are published as GitHub Releases in
    [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har), tagged by the NR client
@@ -82,7 +83,7 @@ The tool:
 - Navigates newrecruit.eu landing page and `/app` route
 - Dismisses consent dialogs
 - Captures all network traffic
-- Post-processes: strips 24+ ad/tracker domains, deduplicates requests
+- Post-processes: keeps an allowlist of required domains (`newrecruit.eu`, `raw.githubusercontent.com`, Google Fonts), strips everything else, deduplicates requests
 - Extracts the NR `clientVersion` from `__NUXT_CONFIG__`
 - Computes and prints the SHA256 hash of the HAR file
 - Writes `newrecruit.har` and `metadata.json`

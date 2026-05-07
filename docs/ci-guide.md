@@ -85,7 +85,7 @@ public class ConformanceTests
     {
         var engine = new MyRosterEngine();
         var runner = new RosterRunner(engine, new DataSourceResolver(), engineName: "my-engine");
-        await runner.RunAsync(spec);
+        runner.Run(spec);
     }
 }
 ```

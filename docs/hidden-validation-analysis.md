@@ -175,10 +175,8 @@ operations that don't trigger it internally. It is called after:
    hidden constraints and force-level errors are immediately visible.
 2. **`SetNumSelections()`** — changing selection count can affect cost totals,
    which may trigger cost limit validation errors.
-
-Note: `CreateChildForce()` does **not** call `Validate()`. It is left without explicit
-validation because roster-level constraint recalculation is triggered by the next user
-action that does invoke `v()`.
+3. **`CreateChildForce()`** — adding a child force changes the roster structure,
+   which may affect force-level constraints.
 
 ### Why Not Call Validate() After Every Operation?
 

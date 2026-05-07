@@ -9,10 +9,8 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 | `Setup` | 244 | Every inline spec (implicit setup path) |
 | `SetupFromFiles` | 2 | DataSource specs: wh40k-10e-create-army, wh40k-10e-space-marines-army |
 | `AddForce` | 246 | force-add-single, force-add-multiple, force-nested-basic, force-multi-catalogue-two-forces |
-| `AddForceByName`* | 2 | DataSource specs using name-based force addition |
 | `RemoveForce` | 5 | force-remove, force-remove-second, force-add-and-remove-all, roster-full-lifecycle |
 | `SelectEntry` | 296 | selection-add-unit, selection-with-cost, selection-multiple-entries, import-*-entry-* |
-| `SelectEntryByName`* | 3 | DataSource specs using name-based entry selection |
 | `SelectChildEntry` | 9 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
 | `DeselectSelection` | 23 | selection-remove, selection-deselect-last, roster-full-lifecycle |
 | `SetSelectionCount` | 2 | selection-set-count |
@@ -20,9 +18,6 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 | `SetCostLimit` | 1 | cost-set-limit |
 | `GetRosterState` | 201 | Specs using `rosterState` assertions |
 | `GetValidationErrors` | 20 | Specs using `errors` assertions: constraint-*, cost-default-limit-positive |
-
-> \* `AddForceByName` and `SelectEntryByName` are not part of the `IRosterEngine` interface —
-> they are concrete helpers on `BattleScribeEngine` used by DataSource specs internally.
 
 ---
 

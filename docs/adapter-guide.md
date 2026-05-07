@@ -198,7 +198,7 @@ dotnet bs-spec-runner.dll --adapter "dotnet:your-adapter.dll" --specs specs
 ## Reference Implementation
 
 See `src/BattleScribeSpec.ReferenceAdapter/` for a complete .NET adapter implementation
-that wraps the BattleScribe engine. It's only ~20 lines of code thanks to the
+that wraps the BattleScribe engine. It's a small amount of code thanks to the
 `AdapterHandler` helper class from the TestKit.
 
 ## Tips
@@ -216,17 +216,9 @@ of inline game system/catalogue XML. These specs load real-world BattleScribe da
 Actions in dataSource specs use the same **ID-based** parameters (`forceEntryId`, `entryId`,
 `catalogueId`, etc.) as inline specs — the IDs come from the BattleScribe XML data files.
 
-Name-based actions (`forceEntryName`, `entryName`, `catalogueName`) are also supported as
-an alternative for readability when exact IDs are not convenient.
-
 DataSource specs are resolved by the test runner using `DataSourceResolver` and require the
 engine to implement `SetupFromFiles(files)` from `IRosterEngine` — this loads raw
 `.gst`/`.cat` XML files and is sent as a `setupFromFiles` protocol command.
-
-Name-based actions (`forceEntryName`, `entryName`, `catalogueName`) are an authoring
-convenience supported by BattleScribe engine helpers (`AddForceByName`, `SelectEntryByName`,
-`SelectChildEntryByName`) but are **not** part of the `IRosterEngine` interface. Protocol
-adapters only need to handle the standard ID-based `action` command.
 
 The protocol adapter does not need special handling for DataSource specs beyond implementing
 the `setupFromFiles` command — all data resolution is done by the runner before sending.
