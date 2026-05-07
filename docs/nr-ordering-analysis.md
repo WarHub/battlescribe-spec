@@ -2,6 +2,10 @@
 
 > Research conducted via live Playwright investigation of [newrecruit.eu](https://newrecruit.eu)
 > and NR JS bundle analysis. Verified against wh40k 10th Edition and Horus Heresy 3rd Edition.
+>
+> **Note:** NR JS internals (e.g. `Cs.initializeChilds()`, minified class names) are runtime
+> observations from the live NR application, not in-repo source code. In-repo implementation
+> references use full paths under `src/`.
 
 ## Summary
 

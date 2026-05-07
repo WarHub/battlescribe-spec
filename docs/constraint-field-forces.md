@@ -2,6 +2,10 @@
 
 Research on how the `field` attribute works in BattleScribe constraints, specifically `field="forces"`.
 
+> **Note:** Citations to Java source locations (e.g. `BaseQuery.java`, `engine/a/c.java`)
+> refer to decompiled BattleScribe engine code (`lib/BattleScribeEngine.jar`) and are
+> not present in this repository. In-repo implementation references use full paths under `src/`.
+
 ## Background
 
 A BattleScribe `<constraint>` has these key attributes:

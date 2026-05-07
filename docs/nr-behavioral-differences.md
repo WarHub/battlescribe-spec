@@ -5,6 +5,9 @@
 >
 > See also: [NR Ordering Analysis](nr-ordering-analysis.md) for a deep-dive into
 > NR's native selection and force ordering algorithm.
+>
+> **Note:** References to BattleScribe Java engine internals (`c.java`, `engine.a.f`)
+> are from decompiled `lib/BattleScribeEngine.jar` and are not present as files in this repository.
 
 
 | Category | Count | Severity | Description |

@@ -10,6 +10,10 @@ The analysis below combines:
 - live/runtime probing results from NR
 - decompiled BS Java source (`net.battlescribe.engine.a.f`, `d`, `c`, and `net.battlescribe.engine.b.h`)
 
+> **Note:** Java source citations (e.g. `f.java:1000`, `d.java:1126`) refer to decompiled
+> BattleScribe engine code (`lib/BattleScribeEngine.jar`) not present as files in this repository.
+> In-repo implementation references use full paths under `src/`.
+
 ## Overview
 
 Conceptually, a collective child is chosen **per parent model**, not as an independent child tree under each parent instance.
