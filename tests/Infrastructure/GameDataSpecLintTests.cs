@@ -17,7 +17,10 @@ public sealed class GameDataSpecLintTests
 {
     private static readonly string? SpecsDir = SpecLoader.FindGameDataSpecsDirectory();
 
-    private static IEnumerable<(string path, string relPath, GameDataSpecFile? spec, string? loadError)> AllSpecFiles()
+    private sealed record SpecEntry(string Path, string RelPath, GameDataSpecFile? Spec, string? LoadError);
+
+    // File discovery only — no YAML parsing
+    private static IEnumerable<(string path, string relPath)> DiscoverSpecFiles()
     {
         if (SpecsDir is null || !Directory.Exists(SpecsDir))
         {
@@ -26,23 +29,33 @@ public sealed class GameDataSpecLintTests
 
         foreach (var (path, _, _) in SpecLoader.DiscoverGameDataSpecs(SpecsDir))
         {
-            var relPath = Path.GetRelativePath(SpecsDir, path).Replace('\\', '/');
-            GameDataSpecFile? spec = null;
-            string? loadError = null;
-            try
-            {
-                spec = SpecLoader.LoadGameData(path);
-            }
-            catch (Exception ex)
-            {
-                loadError = ex.Message;
-            }
-            yield return (path, relPath, spec, loadError);
+            yield return (path, Path.GetRelativePath(SpecsDir, path).Replace('\\', '/'));
         }
     }
 
+    // Load helper: parse YAML and capture any error without throwing
+    private static SpecEntry TryLoadSpec(string path, string relPath)
+    {
+        try
+        {
+            return new SpecEntry(path, relPath, SpecLoader.LoadGameData(path), null);
+        }
+        catch (Exception ex)
+        {
+            return new SpecEntry(path, relPath, null, ex.Message);
+        }
+    }
+
+    // All specs loaded exactly once per test session
+    private static readonly Lazy<IReadOnlyList<SpecEntry>> _allSpecs =
+        new(() => [.. DiscoverSpecFiles().Select(x => TryLoadSpec(x.path, x.relPath))]);
+
+    // O(1) per-path lookup for AllLintChecks
+    private static readonly Lazy<Dictionary<string, SpecEntry>> _specsByPath =
+        new(() => _allSpecs.Value.ToDictionary(x => x.Path));
+
     public static IEnumerable<object[]> AllSpecs() =>
-        AllSpecFiles().Select(x => new object[] { x.path, x.relPath });
+        DiscoverSpecFiles().Select(x => new object[] { x.path, x.relPath });
 
     // ── Single aggregated lint check per spec ────────────────────────
 
@@ -55,28 +68,26 @@ public sealed class GameDataSpecLintTests
         var violations = new List<string>();
         violations.AddRange(CheckBlankLineBetweenSteps(lines));
 
-        GameDataSpecFile? spec = null;
-        try
+        // Look up the cached spec (loaded once per test session)
+        var entry = _specsByPath.Value[specPath];
+
+        if (entry.LoadError is not null)
         {
-            spec = SpecLoader.LoadGameData(specPath);
-        }
-        catch (Exception ex)
-        {
-            violations.Add($"Failed to load spec: {ex.Message}");
+            violations.Add($"Failed to load spec: {entry.LoadError}");
         }
 
-        if (spec is not null)
+        if (entry.Spec is not null)
         {
             var filename = Path.GetFileNameWithoutExtension(specPath);
             var dirName = Path.GetFileName(Path.GetDirectoryName(specPath));
 
-            violations.AddRange(CheckRequiredFields(spec));
-            violations.AddRange(CheckIdMatchesFilename(spec, filename));
-            violations.AddRange(CheckCategoryMatchesDirectory(spec, dirName!));
-            violations.AddRange(CheckKnownActions(spec));
-            violations.AddRange(CheckStepsAreActionOrExpectedState(spec));
-            violations.AddRange(CheckSetupHasGameSystem(spec));
-            violations.AddRange(CheckActionParameters(spec));
+            violations.AddRange(CheckRequiredFields(entry.Spec));
+            violations.AddRange(CheckIdMatchesFilename(entry.Spec, filename));
+            violations.AddRange(CheckCategoryMatchesDirectory(entry.Spec, dirName!));
+            violations.AddRange(CheckKnownActions(entry.Spec));
+            violations.AddRange(CheckStepsAreActionOrExpectedState(entry.Spec));
+            violations.AddRange(CheckSetupHasGameSystem(entry.Spec));
+            violations.AddRange(CheckActionParameters(entry.Spec));
         }
 
         Assert.True(violations.Count == 0,
@@ -88,12 +99,11 @@ public sealed class GameDataSpecLintTests
     [Fact]
     public void NoDuplicateSpecIds()
     {
-        var allFiles = AllSpecFiles().ToList();
-        var duplicates = allFiles
-            .Where(x => x.spec is not null)
-            .GroupBy(x => x.spec!.Id)
+        var duplicates = _allSpecs.Value
+            .Where(x => x.Spec is not null)
+            .GroupBy(x => x.Spec!.Id)
             .Where(g => g.Count() > 1)
-            .Select(g => $"'{g.Key}' in: {string.Join(", ", g.Select(x => x.relPath))}")
+            .Select(g => $"'{g.Key}' in: {string.Join(", ", g.Select(x => x.RelPath))}")
             .ToList();
         Assert.True(duplicates.Count == 0,
             $"Duplicate GameData spec IDs found:\n  {string.Join("\n  ", duplicates)}");

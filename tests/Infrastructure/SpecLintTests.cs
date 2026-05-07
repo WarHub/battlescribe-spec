@@ -17,7 +17,10 @@ public sealed class SpecLintTests
 {
     private static readonly string? SpecsDir = SpecLoader.FindRosterSpecsDirectory();
 
-    private static IEnumerable<(string path, string relPath, SpecFile? spec, string? loadError)> AllSpecFiles()
+    private sealed record SpecEntry(string Path, string RelPath, SpecFile? Spec, string? LoadError);
+
+    // File discovery only — no YAML parsing
+    private static IEnumerable<(string path, string relPath)> DiscoverSpecFiles()
     {
         if (SpecsDir is null || !Directory.Exists(SpecsDir))
         {
@@ -26,23 +29,33 @@ public sealed class SpecLintTests
 
         foreach (var (path, _, _) in SpecLoader.DiscoverSpecs(SpecsDir))
         {
-            var relPath = Path.GetRelativePath(SpecsDir, path).Replace('\\', '/');
-            SpecFile? spec = null;
-            string? loadError = null;
-            try
-            {
-                spec = SpecLoader.Load(path);
-            }
-            catch (Exception ex)
-            {
-                loadError = ex.Message;
-            }
-            yield return (path, relPath, spec, loadError);
+            yield return (path, Path.GetRelativePath(SpecsDir, path).Replace('\\', '/'));
         }
     }
 
+    // Load helper: parse YAML and capture any error without throwing
+    private static SpecEntry TryLoadSpec(string path, string relPath)
+    {
+        try
+        {
+            return new SpecEntry(path, relPath, SpecLoader.Load(path), null);
+        }
+        catch (Exception ex)
+        {
+            return new SpecEntry(path, relPath, null, ex.Message);
+        }
+    }
+
+    // All specs loaded exactly once per test session
+    private static readonly Lazy<IReadOnlyList<SpecEntry>> _allSpecs =
+        new(() => [.. DiscoverSpecFiles().Select(x => TryLoadSpec(x.path, x.relPath))]);
+
+    // O(1) per-path lookup for AllLintChecks
+    private static readonly Lazy<Dictionary<string, SpecEntry>> _specsByPath =
+        new(() => _allSpecs.Value.ToDictionary(x => x.Path));
+
     public static IEnumerable<object[]> AllSpecs() =>
-        AllSpecFiles().Select(x => new object[] { x.path, x.relPath });
+        DiscoverSpecFiles().Select(x => new object[] { x.path, x.relPath });
 
     // ── Single aggregated lint check per spec ────────────────────────
 
@@ -66,34 +79,31 @@ public sealed class SpecLintTests
         violations.AddRange(CheckNoLegacyAssertSteps(text));
         violations.AddRange(CheckNoLegacyErrorFields(text));
 
-        // Load the spec model (if text checks already failed, still try to load)
-        SpecFile? spec = null;
-        try
+        // Look up the cached spec (loaded once per test session)
+        var entry = _specsByPath.Value[specPath];
+
+        if (entry.LoadError is not null)
         {
-            spec = SpecLoader.Load(specPath);
-        }
-        catch (Exception ex)
-        {
-            violations.Add($"Failed to load spec: {ex.Message}");
+            violations.Add($"Failed to load spec: {entry.LoadError}");
         }
 
-        if (spec is not null)
+        if (entry.Spec is not null)
         {
             var filename = Path.GetFileNameWithoutExtension(specPath);
             var dirName = Path.GetFileName(Path.GetDirectoryName(specPath));
 
-            violations.AddRange(CheckRequiredFields(spec));
-            violations.AddRange(CheckIdMatchesFilename(spec, filename));
-            violations.AddRange(CheckCategoryMatchesDirectory(spec, dirName!));
-            violations.AddRange(CheckKnownActions(spec));
-            violations.AddRange(CheckKnownTags(spec));
-            violations.AddRange(CheckEngineExpectations(spec));
-            violations.AddRange(CheckStepsAreActionOrExpectedState(spec));
-            violations.AddRange(CheckSetSelectionCountHasSelectionId(spec));
-            violations.AddRange(CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(spec));
-            violations.AddRange(CheckEverySpecHasSetup(spec));
-            violations.AddRange(CheckLastStepIsExpectedState(spec));
-            violations.AddRange(CheckAllErrorAssertionsHaveFrom(spec));
+            violations.AddRange(CheckRequiredFields(entry.Spec));
+            violations.AddRange(CheckIdMatchesFilename(entry.Spec, filename));
+            violations.AddRange(CheckCategoryMatchesDirectory(entry.Spec, dirName!));
+            violations.AddRange(CheckKnownActions(entry.Spec));
+            violations.AddRange(CheckKnownTags(entry.Spec));
+            violations.AddRange(CheckEngineExpectations(entry.Spec));
+            violations.AddRange(CheckStepsAreActionOrExpectedState(entry.Spec));
+            violations.AddRange(CheckSetSelectionCountHasSelectionId(entry.Spec));
+            violations.AddRange(CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(entry.Spec));
+            violations.AddRange(CheckEverySpecHasSetup(entry.Spec));
+            violations.AddRange(CheckLastStepIsExpectedState(entry.Spec));
+            violations.AddRange(CheckAllErrorAssertionsHaveFrom(entry.Spec));
         }
 
         Assert.True(violations.Count == 0,
@@ -105,12 +115,11 @@ public sealed class SpecLintTests
     [Fact]
     public void NoDuplicateSpecIds()
     {
-        var allFiles = AllSpecFiles().ToList();
-        var duplicates = allFiles
-            .Where(x => x.spec is not null)
-            .GroupBy(x => x.spec!.Id)
+        var duplicates = _allSpecs.Value
+            .Where(x => x.Spec is not null)
+            .GroupBy(x => x.Spec!.Id)
             .Where(g => g.Count() > 1)
-            .Select(g => $"'{g.Key}' in: {string.Join(", ", g.Select(x => x.relPath))}")
+            .Select(g => $"'{g.Key}' in: {string.Join(", ", g.Select(x => x.RelPath))}")
             .ToList();
         Assert.True(duplicates.Count == 0,
             $"Duplicate spec IDs found:\n  {string.Join("\n  ", duplicates)}");

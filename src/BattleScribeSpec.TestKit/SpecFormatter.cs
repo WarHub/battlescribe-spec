@@ -30,9 +30,6 @@ public static class SpecFormatter
     private static readonly Regex ExpectedStatePattern =
         new(@"^  - expectedState:$", RegexOptions.Compiled);
 
-    private static readonly Regex ActionStepPattern =
-        new(@"^  - action:", RegexOptions.Compiled);
-
     // 6-space indent, first character is a lowercase word character (property name)
     private static readonly Regex EsTopPropPattern =
         new(@"^      [a-z]\w*:", RegexOptions.Compiled);
