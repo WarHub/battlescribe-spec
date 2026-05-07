@@ -47,12 +47,12 @@ public sealed class SpecLintTests
     }
 
     // All specs loaded exactly once per test session
-    private static readonly Lazy<IReadOnlyList<SpecEntry>> _allSpecs =
+    private static readonly Lazy<IReadOnlyList<SpecEntry>> AllSpecsLazy =
         new(() => [.. DiscoverSpecFiles().Select(x => TryLoadSpec(x.path, x.relPath))]);
 
     // O(1) per-path lookup for AllLintChecks
-    private static readonly Lazy<Dictionary<string, SpecEntry>> _specsByPath =
-        new(() => _allSpecs.Value.ToDictionary(x => x.Path));
+    private static readonly Lazy<Dictionary<string, SpecEntry>> SpecsByPath =
+        new(() => AllSpecsLazy.Value.ToDictionary(x => x.Path));
 
     public static IEnumerable<object[]> AllSpecs() =>
         DiscoverSpecFiles().Select(x => new object[] { x.path, x.relPath });
@@ -80,7 +80,7 @@ public sealed class SpecLintTests
         violations.AddRange(CheckNoLegacyErrorFields(text));
 
         // Look up the cached spec (loaded once per test session)
-        var entry = _specsByPath.Value[specPath];
+        var entry = SpecsByPath.Value[specPath];
 
         if (entry.LoadError is not null)
         {
@@ -115,7 +115,7 @@ public sealed class SpecLintTests
     [Fact]
     public void NoDuplicateSpecIds()
     {
-        var duplicates = _allSpecs.Value
+        var duplicates = AllSpecsLazy.Value
             .Where(x => x.Spec is not null)
             .GroupBy(x => x.Spec!.Id)
             .Where(g => g.Count() > 1)
