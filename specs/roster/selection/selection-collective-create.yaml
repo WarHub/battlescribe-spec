@@ -15,12 +15,21 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
+        - id: se-squad
           name: Squad
           type: unit
           selectionEntries:
-            - id: se-child
-              name: Weapon
+            - id: se-model
+              name: Trooper
+              type: model
+              constraints:
+                - id: con-min-2
+                  type: min
+                  value: 2
+                  field: selections
+                  scope: parent
+            - id: se-weapon
+              name: Shared Weapon
               type: upgrade
               collective: true
 
@@ -30,12 +39,21 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-squad
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-1
-  # Collective child entries are automatically created for all instances.
-  # The selection appears with its children.
+    entryId: se-squad
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-weapon
+
+  # Collective child entries are replicated across sibling model selections.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Squad
+              children:
+                - name: Shared Weapon
+                - name: Trooper

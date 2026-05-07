@@ -1,10 +1,10 @@
 id: default-selection-via-deep-link
 category: deep-nesting
 description: >
-  An entry link targets a shared entry via a group with min=1 (single option,
-  auto-selected). The shared entry itself has a nested group (also with min=1,
-  single option) containing a further entry. Both levels cascade through the
-  entry link, creating a deep hierarchy purely through min-constraint
+  An entry link targets a shared entry via a group with defaultSelectionEntryId
+  and min=1. The shared entry itself has a nested group (also with
+  defaultSelectionEntryId and min=1) containing a further entry. Both levels
+  cascade through the entry link, creating a deep hierarchy through group
   auto-selection.
 tags: [deep-nesting, entryLink]
 

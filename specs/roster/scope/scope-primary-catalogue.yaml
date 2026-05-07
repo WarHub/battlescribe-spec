@@ -14,9 +14,22 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
+        - id: se-trigger
+          name: Catalogue Trigger
+          type: unit
         - id: se-1
           name: Basic Unit
           type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Modified
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: primary-catalogue
+                  childId: se-trigger
 
 steps:
   - action: addForce
@@ -32,3 +45,21 @@ steps:
         - selectionCount: 1
           selections:
             - name: Basic Unit
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-trigger
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+          selections:
+            - name: Catalogue Trigger
+            - name: Modified
+      engines:
+        newrecruit:
+          forces:
+            - selectionCount: 2
+              selections:
+                - name: Modified
+                - name: Catalogue Trigger

@@ -1,6 +1,6 @@
 id: selection-hidden-entry
 category: selection
-description: Hidden selection entries can still be selected but produce a validation error
+description: Hidden selection entries can still be selected but produce a validation error (except BattleScribe)
 tags: [design-difference]
 
 setup:

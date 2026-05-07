@@ -45,3 +45,6 @@ steps:
           selections:
             - name: Commander
               type: unit
+              categories:
+                - name: HQ
+                  primary: true

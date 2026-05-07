@@ -1,8 +1,8 @@
 id: entry-link-with-child-group
 category: entry-link
 description: >
-  EntryLink can define child selectionEntryGroups that add option groups
-  to the linked entry. The group's entries become available as children.
+  EntryLink can reference a shared selectionEntryGroup, bringing its children
+  as options on the parent entry.
 
 setup:
   gameSystem:
@@ -16,19 +16,24 @@ setup:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: test-gs
-      sharedSelectionEntries:
-        - id: se-shared-unit
-          name: Base Unit
-          type: upgrade
+      sharedSelectionEntryGroups:
+        - id: seg-shared
+          name: Shared Wargear
+          selectionEntries:
+            - id: se-pistol
+              name: Bolt Pistol
+              type: upgrade
+            - id: se-chainsword
+              name: Chainsword
+              type: upgrade
       selectionEntries:
         - id: se-squad
           name: Squad
           type: unit
           entryLinks:
-            - id: el-unit
-              name: Base Unit
-              targetId: se-shared-unit
-              type: selectionEntry
+            - id: el-wargear
+              targetId: seg-shared
+              type: selectionEntryGroup
 
 steps:
   - action: addForce
@@ -43,11 +48,12 @@ steps:
   - action: selectChildEntry
     forceId: ${{ steps.add-patrol.forceId }}
     selectionId: ${{ steps.select-squad.selectionId }}
-    entryId: se-shared-unit
+    entryId: se-pistol
 
+  # The shared group's children are available on Squad via entry link.
   - expectedState:
       forces:
         - selections:
             - name: Squad
               children:
-                - name: Base Unit
+                - name: Bolt Pistol

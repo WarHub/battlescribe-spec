@@ -2,7 +2,7 @@ id: gamesystem-root-rule
 category: gamesystem
 description: >
   Rule defined at GameSystem level appears on selections that reference it
-  via infoLinks, or is available as a roster-level rule.
+  via infoLinks.
 
 setup:
   gameSystem:

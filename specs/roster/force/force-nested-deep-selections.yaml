@@ -3,7 +3,7 @@ category: force
 description: >-
   Triple-nested forces (Army > Division > Platoon) each containing
   triple-nested selections (Squad > Weapon > Scope), verifying that
-  deep path navigation works for both forces and selections combined.
+  deep nesting works for both forces and selections combined.
 tags: [childForce, nested, selection]
 
 setup:

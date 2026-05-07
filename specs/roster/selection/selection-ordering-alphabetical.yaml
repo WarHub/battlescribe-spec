@@ -1,9 +1,7 @@
 id: selection-ordering-alphabetical
 category: selection
 description: >
-  Selections are returned in alphabetical order by name. Both BattleScribe and
-  NewRecruit sort selections alphabetically in their display/render layers.
-  This spec verifies the canonical alphabetical ordering for simple names.
+  Selections are returned in alphabetical order by name for simple names.
 
 setup:
   gameSystem:

@@ -51,8 +51,8 @@ steps:
             - name: Target Unit
             - name: Active Watcher
       engines:
-        # BS render layer sorts by modified name: Active Watcher < Target Unit.
-        # NR sorts by original pre-modifier name: Target Unit < Watcher.
+        # BS and NR order these two selections differently after the modifier fires.
+        # BattleScribe expects Active Watcher before Target Unit.
         battlescribe:
           forces:
             - selections:

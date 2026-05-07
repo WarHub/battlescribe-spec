@@ -1,6 +1,6 @@
 id: modifier-conditional-set-name
 category: modifier
-description: Conditional modifier only applies when condition is met (using instanceOf)
+description: Conditional modifier only applies when condition is met (using atLeast)
 
 setup:
   gameSystem:

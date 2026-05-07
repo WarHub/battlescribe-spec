@@ -1,6 +1,6 @@
 id: modifier-repeat-zero-threshold
 category: modifier
-description: Repeat with value=0 is skipped by the engine (division by zero guard)
+description: Repeat with value=0 leaves the increment unapplied
 
 setup:
   gameSystem:
@@ -17,7 +17,10 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
+        - id: se-model
+          name: Model
+          type: model
+        - id: se-squad
           name: Squad
           type: unit
           costs:
@@ -30,9 +33,10 @@ setup:
               value: "100"
               repeats:
                 - value: 0
-                  repeats: 1
+                  repeats: 2
                   field: selections
-                  scope: self
+                  scope: force
+                  childId: se-model
 
 steps:
   - action: addForce
@@ -41,14 +45,29 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-1
-  # Repeat with value=0 → engine skips repeat calculation (division by zero guard).
-  # The modifier's repeat count is 0, so the increment is NOT applied.
-  # Cost remains at base value 50.
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # value=0 means division by zero is guarded — no repetitions applied despite
+  # 3 Models in scope and repeats=2. Cost stays at 50.
   - expectedState:
       costs:
         - typeId: pts
           value: 50.0
       forces:
         - selections:
+            - name: Model
+            - name: Model
+            - name: Model
             - name: Squad

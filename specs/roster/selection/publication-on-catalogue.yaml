@@ -1,6 +1,6 @@
 id: publication-on-catalogue
 category: selection
-description: Publications are metadata on catalogue, entries can reference them via page
+description: Publications defined on catalogue appear at force level, entries reference them
 
 setup:
   gameSystem:
@@ -22,6 +22,8 @@ setup:
         - id: se-1
           name: Marine
           type: unit
+          publicationId: pub-1
+          page: "42"
 
 steps:
   - action: addForce
@@ -32,7 +34,22 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-1
 
+  # Catalogue publications appear on the force; selection references publication by ID.
   - expectedState:
       forces:
-        - selections:
+        - publications:
+            - id: pub-1
+              name: Core Rulebook
+          selections:
             - name: Marine
+              publicationId: pub-1
+              publicationName: Core Rulebook
+              page: "42"
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Marine
+                  publicationId: pub-1
+                  publicationName: Core Rulebook
+                  page: "42"

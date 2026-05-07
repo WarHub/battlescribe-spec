@@ -1,6 +1,6 @@
 id: profile-inherited-from-link
 category: selection
-description: An entryLink resolves its target entry and the target's profile appears in selection state
+description: Selecting an entry with a profile includes that profile in selection state
 tags: []
 
 setup:
@@ -52,8 +52,7 @@ steps:
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-shared
-  # The entryLink resolves se-shared, so selecting entryIndex 0 creates
-  # a selection with the target's profile inherited.
+  # Selecting se-shared creates a selection with its profile included.
   - expectedState:
       forces:
         - selectionCount: 1

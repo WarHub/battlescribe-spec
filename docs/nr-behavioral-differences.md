@@ -13,7 +13,7 @@
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
 | [Import ordering](#1-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#2-missing-features) | 4 | Low | InfoLink pub/page override, page modifier, unset-primary |
+| [Missing features](#2-missing-features) | 5 | Low | InfoLink pub/page override, page modifier, unset-primary, append repeat |
 | [Scope/condition evaluation](#3-scopecondition-evaluation) | 4 | Medium | NR evaluates child-force scope, ancestor scope, and null-childId conditions differently |
 | [instanceOf scope limits](#instanceof-scope-limitations-both-engines) | 12 | Info | instanceOf only works with self/parent/ancestor scope — both engines agree |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
@@ -39,7 +39,7 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ## 2. Missing Features
 
-**4 specs** — NR doesn't implement or expose certain BattleScribe features.
+**5 specs** — NR doesn't implement or expose certain BattleScribe features.
 
 ### InfoLink publication/page override behavior (2 specs)
 
@@ -63,6 +63,12 @@ genuine behavioral difference in link resolution semantics.
 | Spec | Feature | Detail |
 |------|---------|--------|
 | `modifier/modifier-category-unset-primary` | Unset-primary modifier | NR ignores the `unset-primary` category modifier |
+
+### Append modifier not repeated (1 spec)
+
+| Spec | Feature | Detail |
+|------|---------|--------|
+| `modifier/modifier-group-with-repeat` | Append with repeats | NR applies `type: append` modifiers only once regardless of repeat count; BattleScribe applies them N times (e.g. 6 repeats → name appended 6×) |
 
 ### Previously missing, now resolved
 

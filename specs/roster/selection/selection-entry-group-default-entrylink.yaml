@@ -29,6 +29,12 @@ setup:
             - id: seg-sidearm
               name: Sidearm
               defaultSelectionEntryId: el-bolt-pistol
+              constraints:
+                - id: con-min-1
+                  type: min
+                  value: 1
+                  field: selections
+                  scope: parent
               entryLinks:
                 - id: el-bolt-pistol
                   targetId: sse-bolt-pistol
@@ -47,9 +53,10 @@ steps:
     entryId: se-parent
 
   # Parent Unit selected → Bolt Pistol auto-selected via entry link default.
-  # Entry link targets work correctly as defaultSelectionEntryId.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Parent Unit
+              children:
+                - name: Bolt Pistol

@@ -1,9 +1,8 @@
 id: entry-link-with-child-entries
 category: entry-link
 description: >
-  EntryLink can define child selectionEntries that supplement
-  the linked entry's children. The child entries defined on the
-  link are merged with the target's children.
+  EntryLink targeting a shared selection entry can be selected as a child of
+  its parent selection.
 
 setup:
   gameSystem:

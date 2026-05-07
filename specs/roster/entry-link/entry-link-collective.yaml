@@ -1,8 +1,8 @@
 id: entry-link-collective
 category: entry-link
 description: >
-  EntryLink with collective=true causes its selection to be counted
-  collectively with its parent for constraint purposes.
+  EntryLink with collective=true can still be selected normally, and the
+  linked entry appears as a child of its parent selection.
 
 setup:
   gameSystem:

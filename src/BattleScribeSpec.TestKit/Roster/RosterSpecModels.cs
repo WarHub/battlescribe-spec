@@ -115,6 +115,8 @@ public sealed class StepDef
 /// </summary>
 public sealed class ExpectedStateDef
 {
+    public string? Name { get; set; }
+
     public int? ForceCount { get; set; }
 
     public int? SelectionCount { get; set; }
@@ -130,6 +132,8 @@ public sealed class ExpectedStateDef
     public int? CostLimitCount { get; set; }
 
     public string? GameSystemName { get; set; }
+
+    public string? GameSystemId { get; set; }
 
     /// <summary>
     /// Structured error assertions using "on"/"from" format.
@@ -172,6 +176,7 @@ public sealed class ExpectedStateDef
 
         return new ExpectedStateDef
         {
+            Name = over.Name ?? Name,
             ForceCount = over.ForceCount ?? ForceCount,
             SelectionCount = over.SelectionCount ?? SelectionCount,
             Forces = over.Forces ?? Forces,
@@ -180,6 +185,7 @@ public sealed class ExpectedStateDef
             CostLimits = over.CostLimits ?? CostLimits,
             CostLimitCount = over.CostLimitCount ?? CostLimitCount,
             GameSystemName = over.GameSystemName ?? GameSystemName,
+            GameSystemId = over.GameSystemId ?? GameSystemId,
             Errors = over.Errors ?? Errors,
             ErrorsContain = over.ErrorsContain ?? ErrorsContain,
             ErrorCount = over.ErrorCount ?? ErrorCount,

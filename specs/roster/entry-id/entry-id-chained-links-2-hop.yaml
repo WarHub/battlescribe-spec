@@ -1,8 +1,8 @@
 id: entry-id-chained-links-2-hop
 category: entry-id
 description: >
-  Chained entry links (2-hop): Unit -> el-outer -> sharedEntry -> el-inner -> sharedTarget.
-  Each link in the chain prepends its id, producing "outerLink::innerLink::targetId".
+  Chained entry links (2-hop): se-unit -> el-weapon -> sse-weapon -> el-ammo -> sse-ammo.
+  Each link prepends its id, producing composite entryIds like "el-weapon::el-ammo::sse-ammo".
 tags: [entry-id, entryLink, deep-nesting]
 
 setup:
