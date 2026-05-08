@@ -33,3 +33,9 @@
 **Cross-epic effect:** Alex's parentage work enables prioritized execution of high-priority issues:
 - High-priority independent issues (#197 kitchen-sink, #186 error divergence) tracked separately.
 - Parented issues now queryable for phase-based execution (Phase 1: #19 blocker; Phase 2: high-priority specs; Phase 3: backlog).
+
+### Set parent issue + Type on #201 and #202 via GraphQL (2026-05-08)
+- **Parent links set:** #201 -> #15, #202 -> #18 via `addSubIssue` GraphQL mutation
+- **Labels applied:** `enhancement` on both issues
+- **Key learning:** `addSubIssue` mutation works on this repo; REST `/sub_issues` endpoint returns 404
+- **Project board finding:** WarHub project board (#2) has no `Type` field, so no Type value could be set

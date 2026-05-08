@@ -19,6 +19,8 @@ WarHub/battlescribe-spec uses GitHub Project Board v2 (#2) to track conformance 
 
 **Recommendation:** Regenerate/refresh gh token with explicit `read:project` scope in personal token settings (Settings > Developer Settings > Personal access tokens). Verify via `gh auth status`.
 
+**Follow-up (2026-05-08):** WarHub project board (#2) was later queried successfully and confirmed to have **no `Type` field**. For issue parentage, GraphQL `addSubIssue` works reliably; REST `/sub_issues` returns 404.
+
 #### Backlog Inventory (32 Open Issues)
 
 **By Priority:**
@@ -46,6 +48,13 @@ WarHub/battlescribe-spec uses GitHub Project Board v2 (#2) to track conformance 
 4. **Unblock design decision for #18 (Data Editor Epic) — resolve within 3 days.**
 5. **Set milestones for next 2 major epics** to establish delivery cadence.
 6. **Bug triage: hotfix #187 & #186 or backlog?** Recommend hotfix if test coverage impact is high; otherwise backlog with `priority: medium`.
+
+#### Follow-Up: Issue #19 Split Execution
+
+- **#201** (`LoadRosterCommand` + `SaveRosterCommand`) -> sub-issue of **#15** via GraphQL `addSubIssue`
+- **#202** (Data Editor conformance MVP) -> sub-issue of **#18** via GraphQL `addSubIssue`
+- `enhancement` label applied to both issues
+- **Technical note:** `addSubIssue` is the reliable method for setting parent issues on this org; REST `/sub_issues` returns 404
 
 #### Approved by
 

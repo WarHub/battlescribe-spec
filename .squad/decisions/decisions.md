@@ -252,6 +252,12 @@ This is a **design blocker** for Epic #18 (Data Editor Conformance) and gates 6+
 - `.rosz` compression support (defer to backlog)
 - Game data import/export (Option 3 — backlog for future epic)
 
+### Follow-Up Tracking (2026-05-08)
+
+- Scope split implemented as **#201** (roster loading protocol) and **#202** (data editor MVP)
+- Parent links confirmed via GraphQL `addSubIssue`: **#201 -> #15**, **#202 -> #18**
+- **Technical note:** On this org, GraphQL `addSubIssue` is the reliable method for setting parent issues; REST `/sub_issues` returns 404
+
 ---
 
 ## Domain Scope Proposal: Issue #19 — Roster Loading & Editor Specs
