@@ -1,0 +1,79 @@
+id: condition-shared-counting
+category: condition
+description: >
+  Condition with shared=true counts selections across all entry links
+  referencing the same shared entry. A modifier's condition uses childId
+  pointing to a shared entry; with shared=true, it counts selections from
+  both entry links toward the threshold.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-trigger
+          name: Trigger
+          type: unit
+      entryLinks:
+        - id: link-alpha
+          name: Alpha Trigger
+          targetId: shared-trigger
+          type: selectionEntry
+        - id: link-beta
+          name: Beta Trigger
+          targetId: shared-trigger
+          type: selectionEntry
+      selectionEntries:
+        - id: se-target
+          name: Target
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Activated
+              conditions:
+                - type: atLeast
+                  value: 2
+                  field: selections
+                  scope: force
+                  childId: shared-trigger
+                  shared: true
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-target
+
+  # One selection via link-alpha — condition needs 2, not yet met
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
+            - name: Trigger
+
+  # One selection via link-beta — shared counting: 1+1=2, condition met
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Activated
+            - name: Trigger
+            - name: Trigger

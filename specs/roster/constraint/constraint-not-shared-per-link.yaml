@@ -1,0 +1,68 @@
+id: constraint-not-shared-per-link
+category: constraint
+description: >
+  When a constraint on a shared entry has shared=false, each entry link
+  counts its selections independently. Two links to the same shared entry
+  each get their own max limit — selecting 2 from each link does not
+  exceed a max=2 constraint because each link is evaluated separately.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-unit
+          name: Squad
+          type: unit
+          constraints:
+            - id: con-max
+              type: max
+              value: 2
+              field: selections
+              scope: force
+              shared: false
+      entryLinks:
+        - id: link-alpha
+          name: Alpha Squad
+          targetId: shared-unit
+          type: selectionEntry
+        - id: link-beta
+          name: Beta Squad
+          targetId: shared-unit
+          type: selectionEntry
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-1
+
+  # Select 2 from link-alpha
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  # Select 2 from link-beta
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  # 4 total selections but no errors because shared=false means
+  # each link tracks its own count independently (2 each, at limit)
+  - expectedState:
+      forces:
+        - selectionCount: 4
