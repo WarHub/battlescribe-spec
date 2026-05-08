@@ -15,9 +15,7 @@ WarHub/battlescribe-spec uses GitHub Project Board v2 (#2) to track conformance 
 
 #### Current Project Board Status
 
-**Issue:** Current gh authentication token lacks `read:project` scope. Cannot fully query project fields, views, or item status directly via CLI. This must be remedied for Copilot CLI automation.
-
-**Recommendation:** Regenerate/refresh gh token with explicit `read:project` scope in personal token settings (Settings > Developer Settings > Personal access tokens). Verify via `gh auth status`.
+**Issue (resolved):** gh authentication token initially lacked `read:project` scope. Remedied by refreshing the token with explicit `read:project` scope (Settings > Developer Settings > Personal access tokens).
 
 **Follow-up (2026-05-08):** WarHub project board (#2) was later queried successfully and confirmed to have **no `Type` field**. For issue parentage, GraphQL `addSubIssue` works reliably; REST `/sub_issues` returns 404.
 

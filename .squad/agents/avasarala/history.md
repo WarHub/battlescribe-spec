@@ -27,8 +27,8 @@
   - #199: closed as duplicate of #197
 - **Duplicate detection:** Identified that #199 was a simpler restatement of #197; consolidated to single issue with richer detail.
 
-### Unparented Issue Audit & Work Order (2026-05-08)
-- **Critical finding:** All 26 non-epic issues (100% of active work) are unparented. GitHub project board v2 has no parent field enforcement.
+### Unparented Issue Audit & Work Order (2026-05-08) — Pre-Parentage Snapshot
+- **Critical finding (at time of audit):** All 26 non-epic issues (100% of active work) were unparented. GitHub project board v2 has no parent field enforcement.
 - **Epic coverage:** 5 epics identified (#18, #15, #16, #109, #181). Only 5 issues tracked; remaining 26 orphaned.
 - **Design blocker:** #19 (scope decision) gates 6 downstream issues. Resolve within 3 days.
 - **Parentage recommendations:** 23 issues can be parented to epics immediately:
