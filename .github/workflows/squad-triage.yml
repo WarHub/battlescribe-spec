@@ -201,6 +201,18 @@ jobs:
               labels: [assignLabel]
             });
 
+            // Remove the untriaged 'squad' inbox label now that assignment is done
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                name: 'squad'
+              });
+            } catch (err) {
+              core.info(`Could not remove 'squad' label: ${err.message}`);
+            }
+
             // Apply default triage verdict
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
