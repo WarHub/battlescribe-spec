@@ -12,6 +12,7 @@ namespace BattleScribeSpec;
 ///   1. Trailing whitespace stripped from every line
 ///   2. Redundant <c>engines: {}</c> lines removed
 ///   3. Redundant <c>hidden: false</c> lines removed
+///   3a. Empty <c>tag:</c> / <c>tag: []</c> / <c>tag: ~</c> lines removed
 ///   4. <c>expectedState:</c> property blocks zone-sorted: errors/errorsContain → … → forces → engines
 ///   5. Blank line inserted before <c>setup:</c> when preceded by non-blank content
 ///   6. Blank line inserted before each step item (<c>  - action:</c> / <c>  - expectedState:</c>)
@@ -116,6 +117,12 @@ public static class SpecFormatter
 
             // Skip redundant declarations
             if (stripped is "engines: {}" or "hidden: false")
+            {
+                continue;
+            }
+
+            // Skip empty tag fields
+            if (stripped is "tag: []" or "tag: ~" or "tag:")
             {
                 continue;
             }

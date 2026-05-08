@@ -78,6 +78,7 @@ public sealed class SpecLintTests
         violations.AddRange(CheckExpectedStatePropertyOrdering(lines));
         violations.AddRange(CheckNoLegacyAssertSteps(text));
         violations.AddRange(CheckNoLegacyErrorFields(text));
+        violations.AddRange(CheckNoEmptyTagFields(lines));
 
         // Look up the cached spec (loaded once per test session)
         var entry = SpecsByPath.Value[specPath];
@@ -368,6 +369,20 @@ public sealed class SpecLintTests
             if (Regex.IsMatch(text, $@"^[ \t]+{field}:", RegexOptions.Multiline))
             {
                 yield return $"contains legacy field '{field}:' (use 'errors:' instead)";
+            }
+        }
+    }
+
+    // ── No empty tag fields ──────────────────────────────────────────
+
+    private static IEnumerable<string> CheckNoEmptyTagFields(string[] lines)
+    {
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var stripped = lines[i].Trim();
+            if (stripped is "tag: []" or "tag: ~" or "tag:")
+            {
+                yield return $"line {i + 1}: remove empty 'tag' field (omit the field instead)";
             }
         }
     }
