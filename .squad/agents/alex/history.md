@@ -47,8 +47,6 @@
 - **Links applied:**
   - #186 → #16 (Error Validation)
   - #187 → #16 (Error Validation)
-  - #191 → #17 (DevEx)
-  - #196 → #17 (DevEx)
   - #191 → #17 (Structured validation errors)
   - #196 → #17 (Structured validation errors)
   - #197 → #109 (Fair Use / Divergence)
@@ -69,20 +67,6 @@ gh api body-prepend via string concatenation strips all internal newlines when u
 
 ### Failure Mode
 When editing issue bodies with:
-\\\powershell
-gh api repos/{owner}/{repo}/issues/{number} -f body="Part of #N\n\"
-\\\
-Result: All newlines in \ are stripped, corrupting markdown.
-
-### Fix Pattern (ALWAYS USE)
-\\\powershell
-\ = gh issue view {NUMBER} --json body -q .body
-# modify \ preserving newlines
-\ = [System.IO.Path]::GetTempFileName()
-\ | Set-Content -Path \ -Encoding UTF8 -NoNewline
-gh issue edit {NUMBER} --body-file \
-Remove-Item \
-\\\
 ```powershell
 gh api repos/{owner}/{repo}/issues/{number} -f body="Part of #N`n$body"
 ```
