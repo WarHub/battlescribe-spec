@@ -345,3 +345,53 @@ To **unblock Epic #18** and enable downstream work (#30, #31, #167–#173), reco
 ---
 
 **Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
+
+---
+
+## Decision: Unparented Issue Triage (14 non-epic issues)
+
+**Author:** Avasarala  
+**Date:** 2026-05-08  
+**Status:** Ready for implementation  
+**Scope:** Backlog triage, epic assignment
+
+### Executive Summary
+
+Found **14 unparented non-epic issues** in the backlog. Triaged all 14 and recommend parent epics for each based on issue domain.
+
+### Triage Distribution
+
+**By Epic:**
+- **#15 (Preloaded Roster Lifecycle):** 1 issue (#41)
+- **#16 (Error Validation Coverage):** 1 issue (#186)
+- **#17 (DevEx):** 2 issues (#196, #191)
+- **#18 (Data Editor Conformance):** 9 issues (#168-174, #30, #31)
+- **#109 (Fair Use / Divergence):** 1 issue (#197)
+
+### Decision
+
+Parent epic assignments for 14 unparented non-epic issues:
+- #197 → #109 (Kitchen sink protocol coverage)
+- #196 → #17 (Linter improvements)
+- #191 → #17 (NR debugging skill)
+- #186 → #16 (Error reporting divergence)
+- #174, #173, #172, #171, #170, #169, #168 → #18 (Data editor features)
+- #41 → #15 (Roster file I/O)
+- #31, #30 → #18 (Editor specs)
+
+### Rationale
+
+- **#15:** Roster lifecycle includes file I/O and round-trip operations
+- **#16:** Error validation coverage for concrete error divergence bugs
+- **#17:** Developer experience improvements (tooling, debugging, automation)
+- **#18:** Primary data editor conformance epic; all editor subsystem features
+- **#109:** Kitchen sink vehicle for systematic divergence analysis
+
+### Status
+
+High confidence. Mappings consistent with existing epic scopes. Fully reversible if scope changes.
+
+---
+
+**Archived from:** .squad/decisions/inbox/avasarala-unparented-triage.md  
+**Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>

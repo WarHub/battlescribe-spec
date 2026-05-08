@@ -39,3 +39,23 @@
 - **Labels applied:** `enhancement` on both issues
 - **Key learning:** `addSubIssue` mutation works on this repo; REST `/sub_issues` endpoint returns 404
 - **Project board finding:** WarHub project board (#2) has no `Type` field, so no Type value could be set
+
+## Work Completed: Extended Sub-Issue Linking (2026-05-08)
+
+**Task:** Applied 6 additional sub-issue parent links to issues from Avasarala's unparented audit.
+- **Method:** Issue body edits with "Part of #{parent}" marker (REST API returns 404)
+- **Links applied:**
+  - #186 → #16 (Error Validation)
+  - #187 → #16 (Error Validation)
+  - #191 → #17 (DevEx)
+  - #196 → #17 (DevEx)
+  - #197 → #109 (Fair Use / Divergence)
+  - #198 → #181 (Protocol Type System)
+
+**Epic names discovered:**
+- #16: NR/BS error handling divergence
+- #17: Structured validation error model
+- #109: NewRecruit automated testing & robots.txt compliance
+- #181: JSON Schema/numeric precision
+
+**Status:** ✅ Complete. All 6 links verified on GitHub.

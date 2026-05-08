@@ -53,3 +53,22 @@
 - **Team ownership:** Holden (protocol), Bobbie (spec authoring), Miller/Johnson (adapters)
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+## Work Completed: Unparented Issue Triage (2026-05-08)
+
+**Task:** Audit all non-epic issues and recommend parent epic assignments.
+- **Finding:** 14 unparented non-epic issues (reduced from original 26 estimate after Alex's prior linking)
+- **Triage scope:** All 14 issues analyzed and mapped to epics by domain
+- **Distribution:**
+  - #15 (Preloaded Roster Lifecycle): 1 issue (#41)
+  - #16 (Error Validation): 1 issue (#186)
+  - #17 (DevEx): 2 issues (#191, #196)
+  - #18 (Data Editor): 9 issues (#168-174, #30, #31)
+  - #109 (Fair Use / Divergence): 1 issue (#197)
+
+**Status:** ✅ Complete. Decision record merged to decisions.md. Ready for link application.
+
+**Note:** Triage audit confirmed epic name corrections:
+- #16 is error validation coverage (NR/BS divergence handling)
+- #17 is developer experience (tooling, debugging, automation)
+- #18 is data editor conformance (all subsystems)
