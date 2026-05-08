@@ -59,3 +59,31 @@
 - #181: JSON Schema/numeric precision
 
 **Status:** ✅ Complete. All 6 links verified on GitHub.
+
+## [2026-05-08 04:58:43] Body-Fix Mission — 11 Issues Repaired
+
+### Root Cause
+gh api body-prepend via string concatenation strips all internal newlines when using -f body="..." syntax.
+
+### Failure Mode
+When editing issue bodies with:
+\\\powershell
+gh api repos/{owner}/{repo}/issues/{number} -f body="Part of #N\n\"
+\\\
+Result: All newlines in \ are stripped, corrupting markdown.
+
+### Fix Pattern (ALWAYS USE)
+\\\powershell
+\ = gh issue view {NUMBER} --json body -q .body
+# modify \ preserving newlines
+\ = [System.IO.Path]::GetTempFileName()
+\ | Set-Content -Path \ -Encoding UTF8 -NoNewline
+gh issue edit {NUMBER} --body-file \
+Remove-Item \
+\\\
+
+### Issues Repaired (All 11)
+#20, #21, #22, #23, #25, #177, #187, #88, #89, #198, #159
+
+### Status
+✓ Complete. All 11 bodies restored. Skill extracted.
