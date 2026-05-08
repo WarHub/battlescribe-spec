@@ -78,3 +78,264 @@ No labels were removed; only additions were made to maintain traceability.
 
 **Archived from:** .squad/decisions/inbox/avasarala-triage-complete.md  
 **Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
+
+---
+
+## Decision: GitHub Sub-Issue Parentage Applied
+
+**Author:** Alex (Tester / QA)  
+**Date:** 2026-05-08  
+**Status:** Complete  
+**Scope:** GitHub issue link management
+
+### Summary
+
+Applied GitHub sub-issue parentage relationships to the WarHub/battlescribe-spec repository. All 12 child issues have been linked to their parent epics via issue body markers.
+
+### Method Applied
+
+**Method 2** (Edit issue body) — proved to be the reliable approach:
+- GitHub sub-issues API (`POST repos/{owner}/{repo}/issues/{issue}/sub_issues`) requires `sub_issue_id` as integer parameter, but returned 404 when tested
+- Method 1 (API) was attempted but not available or applicable for this repository
+- Method 2 (edit issue body) succeeded for all 12 issues
+
+Each child issue body was updated with a prepended "Part of #{PARENT}" marker.
+
+### Parentage Applied
+
+| Parent Epic | Issue | Child Issues |
+|--|--|--|
+| #15 (Preloaded Roster Lifecycle) | Title: "Epic: Preloaded roster lifecycle conformance" | #20, #21, #22, #23, #25 |
+| #16 (Error Validation Coverage) | Title: "Epic: Error Validation" (inferred) | #177, #187 |
+| #109 (Fair Use and Automation Policy) | Title: "Epic: Fair Use and Automation Policy" (inferred) | #88, #89 |
+| #181 (Protocol Type System) | Title: "Epic: Protocol Type System" (inferred) | #198, #159 |
+
+### Issues Updated
+
+✅ **Epic #15** (5 children):
+- ✓ #20 — Feature: Add preloaded roster setup to spec model
+- ✓ #21 — Feature: Add protocol support for loading roster state
+- ✓ #22 — Task: Add happy-path preloaded roster specs
+- ✓ #23 — Task: Add malformed/invalid roster load specs
+- ✓ #25 — Task: Add negative mutation error matrix specs
+
+✅ **Epic #16** (2 children):
+- ✓ #177 — Research: understand 'shared' flag behavior on conditions and constraints
+- ✓ #187 — Bug: constraint-shared-linked spec uses duplicate constraint IDs; shared flag undocumented
+
+✅ **Epic #109** (2 children):
+- ✓ #88 — Legal review: NewRecruit automated testing and robots.txt compliance
+- ✓ #89 — Set identifying User-Agent header for NewRecruit automated access
+
+✅ **Epic #181** (2 children):
+- ✓ #198 — Validate JSON schemas against their metaschema
+- ✓ #159 — feat: JSON Schema for engine adapter JSON-line protocol
+
+### Learnings
+
+- GitHub sub-issues REST API (Method 1) not applicable for this repository
+- "Part of #{parent}" marker method (Method 2) is reliable and widely supported
+- All 12 issues updated successfully with zero failures
+- Method 2 provides an explicit, queryable link in issue body that's visible to all users
+
+### Next Steps
+
+- Monitor GitHub for any UI features that might auto-detect the "Part of" marker
+- Consider using Project Board v2 fields as a complementary parent field (Method 3) if more structured metadata is needed
+
+---
+
+## Work Order: Unparented Issue Audit & Prioritization
+
+**Author:** Avasarala (Lead)  
+**Date:** 2026-05-08  
+**Requested by:** Amadeusz Sadowski  
+
+### Executive Summary
+
+**All 26 non-epic issues in WarHub/battlescribe-spec are currently unparented.** This represents 100% of active work with no explicit epic ownership. The GitHub project board lacks parent issue field linkage, making it impossible to trace work back to strategic epics.
+
+**Action items:**
+1. **Immediate:** Parent 23 out of 26 issues to appropriate epics (see table below)
+2. **Block 3 backlog issues** until their parent epic design decisions are made
+3. **Execute prioritized work order** interleaving quick wins with foundational work
+
+### Key Findings
+
+| Metric | Value |
+|--------|-------|
+| **Total open issues** | 31 |
+| **Epic issues** | 5 (#18, #15, #16, #109, #181) |
+| **Non-epic issues** | 26 |
+| **Issues with explicit parent link** | 0 |
+| **Unparented issues** | 26 (100%) |
+| **High priority unparented** | 7 |
+| **Medium priority unparented** | 5 |
+| **Backlog priority unparented** | 14 |
+
+### Phase 1: Unblock Design (Days 1–3)
+
+**#19 is the primary blocker.** It gates 6 downstream issues (#30, #31, #25, #23, #172–#168). Scope decision workshop needed.
+
+**Outcome:** Yes/no decision on roster loading & editor specs → enables parent #18 and child specs.
+
+### Recommended Prioritized Work Order
+
+**Strategy:** Start with high-impact, unblocked issues to build momentum. Resolve design blockers early. Interleave framework work with spec authoring to avoid long dry spells.
+
+**Phase 1 (Days 1–3):** #19 design workshop  
+**Phase 2 (Days 4–14):** High-priority specs, framework fixes (assume #19 is YES)  
+**Phase 3 (Week 2+):** Backlog infrastructure & legal
+
+Full breakdown in archived inbox decision.
+
+---
+
+## Decision: Scope of Roster Loading & Editor Specs (Issue #19)
+
+**Author:** Holden (WarHub Engine Specialist)  
+**Date:** 2026-05-08  
+**Status:** In Review  
+**Audience:** Amadeusz (decision maker), team stakeholders  
+**Relates to:** #19 (scope), #18 (data editor epic), #15 (roster loading), #168-#170 (downstream)
+
+### Problem Statement
+
+**Issue #19** asks: What is in-scope for roster loading and editor conformance specs?
+
+This is a **design blocker** for Epic #18 (Data Editor Conformance) and gates 6+ downstream issues (#168-#172).
+
+### Scope Options
+
+#### Option 1: Narrow — Roster Format Conformance Only
+- Load .ros XML files only (no .rosz compression yet)
+- 5-10 basic loading specs
+- Low complexity, low risk, independent of editor specs
+- Doesn't support editor round-trip use case
+
+#### Option 2: Medium — Roster Loading + Editor Round-Trip (RECOMMENDED)
+- Roster file loading (all of Option 1)
+- PLUS protocol support for save/reload cycle
+- Unified conformance model: "Can you edit game data AND have it stick?"
+- Medium complexity, unblocks #18 fully
+- Achievable in 2-3 sprints
+
+#### Option 3: Broad — Full Editor Persistence + Import/Export
+- All of Option 2
+- PLUS game data import/export (.gst/.cat file I/O)
+- Full editor ecosystem
+- High complexity, higher risk to schedule
+
+### DECISION: Option 2 — Medium Scope (Roster Loading + Editor Round-Trip)
+
+**Chosen:** 2026-05-08  
+**Rationale:**
+1. Unblocks #18 and downstream issues (#168-#172)
+2. Engine-agnostic (protocol defines interface; implementation up to adapters)
+3. Achievable in 2-3 sprints without overcommitting
+4. Forward-compatible (can add import/export later)
+
+### Implementation Path
+
+**Sprint N (Design):**
+- Add `LoadRosterCommand`, `RosterLoadResult` to protocol
+- Add `SaveRosterCommand`, `RosterSaveResult` to protocol
+- Define "valid roster" rules in conformance docs
+
+**Sprint N+1 (Roster Loading Specs):**
+- 5-10 basic loading specs (empty, with forces, with costs, invalid file, etc.)
+
+**Sprint N+2 (Round-Trip Specs):**
+- Initial integration with GameData editor specs (#168-#170)
+
+### What's NOT in scope (yet)
+- `.rosz` compression support (defer to backlog)
+- Game data import/export (Option 3 — backlog for future epic)
+
+---
+
+## Domain Scope Proposal: Issue #19 — Roster Loading & Editor Specs
+
+**Author:** Bobbie (Domain & Spec Specialist)  
+**Date:** 2026-05-08  
+**For:** Amadeusz Sadowski  
+**Related Issues:** #19, #18, #30, #31  
+
+### Executive Summary
+
+Issue #19 gates Epic #18 (Data Editor Conformance). This proposal clarifies **what "data editor" means in the BattleScribe domain**, what specs are needed, and proposes a **minimum viable scope** that balances coverage with manageable complexity.
+
+**Key Findings:**
+- **Roster editing** (loading .ros files, selecting units, modifying costs) is mature: 312 existing specs
+- **Data editor specs** (editing .gst/.cat files) are nascent: 10 basic gamedata specs exist
+- **Two separate problem spaces** requiring different test infrastructure and spec patterns
+- **Minimum scope for #18 MVP:** Basic CRUD for structural entries + validation specs + one round-trip scenario
+
+### Two Distinct Domains
+
+| Aspect | Roster Loading | Data Editor |
+|--------|---|---|
+| **Files** | `.ros` (roster XML) | `.gst` (game system), `.cat` (catalogue) |
+| **Actors** | Player/roster builder | Designer/content creator |
+| **Operations** | Load roster → Select units → Manage costs | Create entries → Link data → Validate structure |
+| **State** | Roster instance (forces, selections, customizations) | Game data structure (entry definitions, constraints, rules) |
+| **Current Coverage** | 312 specs (comprehensive) | 10 specs (proof-of-concept) |
+
+### Minimum Viable Scope for #18 (MVP)
+
+To **unblock Epic #18** and enable downstream work (#30, #31, #167–#173), recommend **Phase 1 MVP:**
+
+**Spec Infrastructure:**
+- [ ] Define `addEntry`, `deleteEntry`, `setField`, `setLink` actions in spec models
+- [ ] Update GameData spec runner to handle new actions
+- [ ] Update engine interface: `IGameDataEngine` with mutation methods
+
+**Structural Entry Specs** (matching #167):
+- [ ] Create SelectionEntry (in catalogue, game system, shared)
+- [ ] Create ForceEntry (in catalogue, game system)
+- [ ] Create CategoryEntry (in catalogue, game system, shared)
+- [ ] Set field: name, hidden, type, publicationId
+- [ ] Delete leaf entry
+- [ ] Nesting: entry within entry (2-3 levels)
+
+**Link Specs** (partial #168):
+- [ ] Create entry link (basic case)
+- [ ] Create category link (basic case)
+- [ ] Validate link targets exist
+- [ ] Break link → detect error
+
+**Validation Specs** (partial #31):
+- [ ] Duplicate ID detection
+- [ ] Missing required field detection
+- [ ] Broken link detection
+- [ ] Invalid containment detection
+
+**Round-Trip Spec** (partial #30):
+- [ ] Load system → modify entry name → save → reload → verify
+
+**Estimated effort:** 4-6 weeks for one developer
+
+### Test Scenarios to Write First (Priority Order)
+
+#### Priority 1: Foundation (Week 1-2)
+1. Create SelectionEntry in catalogue
+2. Set entry name
+3. Create SelectionEntryGroup
+4. Delete leaf entry
+5. Duplicate ID error
+
+#### Priority 2: Linking (Week 3-4)
+6. Create entry link
+7. Broken link error
+8. Create category link
+9. Shared entry visibility
+
+#### Priority 3: Round-Trip & Error Handling (Week 5-6)
+10. Mutation round-trip
+11. Malformed XML handling
+12. Missing required field error
+13. Invalid containment error
+
+---
+
+**Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>

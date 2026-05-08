@@ -15,3 +15,21 @@
 - Frozen NR tests replay a single HAR snapshot — all specs share the same HAR; no per-spec HAR needed
 - Game-system-only specs (no catalogues) must skip nr-editor profile
 - Debugger: `dotnet run --project src/BattleScribeSpec.Debugger -- {spec-id}` for full roster dump
+- GitHub sub-issues API (`POST repos/{owner}/{repo}/issues/{issue}/sub_issues`) requires `sub_issue_id` as integer, but returns 404. Method 2 (edit issue body to prepend "Part of #{parent}") works reliably.
+
+## Work Completed: GitHub Sub-Issue Parentage (2026-05-08)
+
+**Task:** Applied parentage relationships to 12 child issues across 4 parent epics.
+- Method 2 (issue body edits with "Part of #{parent}" marker) used for all 12 issues.
+- **Epic #15** (5 children): #20, #21, #22, #23, #25
+- **Epic #16** (2 children): #177, #187
+- **Epic #109** (2 children): #88, #89
+- **Epic #181** (2 children): #198, #159
+
+**Status:** ✅ Complete. All 12 issues updated successfully. Zero failures.
+
+## Team Decision Impact (2026-05-08)
+
+**Cross-epic effect:** Alex's parentage work enables prioritized execution of high-priority issues:
+- High-priority independent issues (#197 kitchen-sink, #186 error divergence) tracked separately.
+- Parented issues now queryable for phase-based execution (Phase 1: #19 blocker; Phase 2: high-priority specs; Phase 3: backlog).
