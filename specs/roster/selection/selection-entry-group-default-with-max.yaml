@@ -1,6 +1,6 @@
 id: selection-entry-group-default-with-max
 category: selection
-description: DefaultSelectionEntryId with max=1 on group — default counts toward max
+description: DefaultSelectionEntryId with min exceeding max causes validation error
 tags: [defaultSelectionEntryId, constraint, max]
 
 setup:
@@ -23,6 +23,11 @@ setup:
               name: Weapon Options
               defaultSelectionEntryId: se-sword
               constraints:
+                - id: con-min
+                  type: min
+                  value: 2
+                  field: selections
+                  scope: parent
                 - id: con-max
                   type: max
                   value: 1
@@ -45,11 +50,16 @@ steps:
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-parent
 
-  # Parent Unit is selected; Sword is auto-selected as the group default.
-  # Group has max=1, so only one weapon can be selected.
-  # Verifies no errors from the max constraint interaction with default.
+  # min=2 causes Sword to be auto-selected with number=2.
+  # This exceeds max=1, producing a validation error.
   - expectedState:
+      errorsContain:
+        - on: selection se-parent
+          from: seg-weapons/con-max
       forces:
         - selectionCount: 1
           selections:
             - name: Parent Unit
+              children:
+                - name: Sword
+                  number: 2

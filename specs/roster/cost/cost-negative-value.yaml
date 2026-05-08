@@ -46,8 +46,8 @@ steps:
     entryId: se-discount
 
   - expectedState:
-      forces:
-        - selectionCount: 2
       costs:
         - typeId: pts
           value: 75.0
+      forces:
+        - selectionCount: 2

@@ -1,0 +1,108 @@
+id: collective-number-propagation
+category: selection
+description: >
+  Changing a non-collective parent's number propagates to its collective
+  child: increasing scales up, decreasing scales back down proportionally.
+tags:
+  - collective
+  - number
+  - cost
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              selectionEntries:
+                - id: se-weapon
+                  name: Weapon
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-weapon
+
+  # First increase Trooper to 3
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 15
+
+  # Decrease Trooper count from 3 back to 1
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 1
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 5
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 1
+                  children:
+                    - name: Weapon
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 5

@@ -1,0 +1,68 @@
+{
+  "agents": {
+    "avasarala": {
+      "persistent_name": "Avasarala",
+      "universe": "The Expanse",
+      "created_at": "2026-05-08T01:29:29Z",
+      "legacy_named": false,
+      "status": "active",
+      "role": "Lead"
+    },
+    "miller": {
+      "persistent_name": "Miller",
+      "universe": "The Expanse",
+      "created_at": "2026-05-08T01:29:29Z",
+      "legacy_named": false,
+      "status": "active",
+      "role": "BattleScribe Specialist"
+    },
+    "johnson": {
+      "persistent_name": "Johnson",
+      "universe": "The Expanse",
+      "created_at": "2026-05-08T01:29:29Z",
+      "legacy_named": false,
+      "status": "active",
+      "role": "NewRecruit Specialist"
+    },
+    "holden": {
+      "persistent_name": "Holden",
+      "universe": "The Expanse",
+      "created_at": "2026-05-08T01:29:29Z",
+      "legacy_named": false,
+      "status": "active",
+      "role": "WarHub Specialist"
+    },
+    "bobbie": {
+      "persistent_name": "Bobbie",
+      "universe": "The Expanse",
+      "created_at": "2026-05-08T01:29:29Z",
+      "legacy_named": false,
+      "status": "active",
+      "role": "Domain & Spec"
+    },
+    "alex": {
+      "persistent_name": "Alex",
+      "universe": "The Expanse",
+      "created_at": "2026-05-08T01:29:29Z",
+      "legacy_named": false,
+      "status": "active",
+      "role": "Tester / QA"
+    },
+    "scribe": {
+      "persistent_name": "Scribe",
+      "universe": null,
+      "created_at": "2026-05-08T01:29:29Z",
+      "legacy_named": false,
+      "status": "active",
+      "role": "Scribe"
+    },
+    "ralph": {
+      "persistent_name": "Ralph",
+      "universe": null,
+      "created_at": "2026-05-08T01:29:29Z",
+      "legacy_named": false,
+      "status": "active",
+      "role": "Work Monitor"
+    }
+  }
+}

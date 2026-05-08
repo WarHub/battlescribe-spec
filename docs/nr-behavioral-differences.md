@@ -5,12 +5,15 @@
 >
 > See also: [NR Ordering Analysis](nr-ordering-analysis.md) for a deep-dive into
 > NR's native selection and force ordering algorithm.
+>
+> **Note:** References to BattleScribe Java engine internals (`c.java`, `engine.a.f`)
+> are from decompiled `lib/BattleScribeEngine.jar` and are not present as files in this repository.
 
 
 | Category | Count | Severity | Description |
 |----------|-------|----------|-------------|
 | [Import ordering](#1-import-ordering) | 3 | Low | NR puts imported entries before faction entries |
-| [Missing features](#2-missing-features) | 4 | Low | InfoLink pub/page override, page modifier, unset-primary |
+| [Missing features](#2-missing-features) | 5 | Low | InfoLink pub/page override, page modifier, unset-primary, append repeat |
 | [Scope/condition evaluation](#3-scopecondition-evaluation) | 4 | Medium | NR evaluates child-force scope, ancestor scope, and null-childId conditions differently |
 | [instanceOf scope limits](#instanceof-scope-limitations-both-engines) | 12 | Info | instanceOf only works with self/parent/ancestor scope — both engines agree |
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
@@ -36,7 +39,7 @@ faction-specific entries. BattleScribe puts faction entries first.
 
 ## 2. Missing Features
 
-**4 specs** — NR doesn't implement or expose certain BattleScribe features.
+**5 specs** — NR doesn't implement or expose certain BattleScribe features.
 
 ### InfoLink publication/page override behavior (2 specs)
 
@@ -60,6 +63,12 @@ genuine behavioral difference in link resolution semantics.
 | Spec | Feature | Detail |
 |------|---------|--------|
 | `modifier/modifier-category-unset-primary` | Unset-primary modifier | NR ignores the `unset-primary` category modifier |
+
+### Append modifier not repeated (1 spec)
+
+| Spec | Feature | Detail |
+|------|---------|--------|
+| `modifier/modifier-group-with-repeat` | Append with repeats | NR applies `type: append` modifiers only once regardless of repeat count; BattleScribe applies them N times (e.g. 6 repeats → name appended 6×) |
 
 ### Previously missing, now resolved
 
@@ -333,6 +342,19 @@ parent is selected. These are placeholder objects representing available entries
   (correct — costs properly included in `calcTotalCosts()`)
 
 This discovery resolved the **child cost aggregation** issue (8 specs fixed).
+
+### NR `decrementAmount()` for Deselect
+
+NR selections have a `decrementAmount()` method that reduces the selection's
+internal amount by 1 — the correct inverse of `incrementAmount()`. This matches
+BattleScribe's deselect semantics (decrement number by 1, or remove the node
+entirely when it reaches 0).
+
+Previously the adapter used `sel.delete()` which always removes the selection
+completely, regardless of its current amount. For collective entries with
+scaled counts (e.g., Weapon×6 from `setSelectionCount(2)` on a parent with
+number=3), `delete()` would remove the entry entirely instead of reducing to
+Weapon×3. Using `decrementAmount()` fixes this to match BS behavior.
 
 ### BattleScribe Auto-Select Mechanism
 

@@ -78,6 +78,9 @@ steps:
   # Power Core auto-selects (min=1 on inner link).
   # Costs: Mech Warrior 50 + Weapon System 10 + Power Core 5 = 65
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 65
       forces:
         - selectionCount: 1
           selections:
@@ -89,6 +92,3 @@ steps:
                   children:
                     - name: Power Core
                       type: upgrade
-      costs:
-        - typeId: pts
-          value: 65

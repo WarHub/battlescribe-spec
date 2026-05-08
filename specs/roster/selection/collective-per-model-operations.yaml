@@ -1,0 +1,130 @@
+id: collective-per-model-operations
+category: selection
+description: >
+  Collective child operations use per-model semantics: setSelectionCount
+  scales by parent.number, and deselection removes one instance per model.
+tags:
+  - collective
+  - number
+  - cost
+  - deselect
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              selectionEntries:
+                - id: se-weapon
+                  name: Weapon
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-weapon
+
+  # Set Trooper to 3 — Weapon propagates to number=3 (1 per model)
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 15
+
+  # setSelectionCount on collective Weapon to 2 (per model)
+  # Actual number should become 2 × 3 = 6
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
+    count: 2
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 30
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 6
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 30
+
+  # Deselect the collective Weapon — removes one instance per model (6→3)
+  - action: deselectSelection
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 15

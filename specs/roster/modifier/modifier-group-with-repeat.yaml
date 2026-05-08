@@ -1,6 +1,6 @@
 id: modifier-group-with-repeat
 category: modifier
-description: ModifierGroup with its own repeat multiplier applies contained modifiers multiple times
+description: ModifierGroup repeat applies all contained modifiers according to repeat count
 
 setup:
   gameSystem:
@@ -9,6 +9,8 @@ setup:
     costTypes:
       - id: pts
         name: pts
+      - id: cp
+        name: cp
     forceEntries:
       - id: fe-1
         name: Detachment
@@ -17,24 +19,36 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
+        - id: se-model
+          name: Model
+          type: model
+        - id: se-squad
           name: Squad
           type: unit
           costs:
             - name: pts
               typeId: pts
               value: 50
+            - name: cp
+              typeId: cp
+              value: 20
           modifierGroups:
             - repeats:
                 - value: 1
-                  repeats: 1
+                  repeats: 2
                   field: selections
                   scope: parent
-                  childId: se-1
+                  childId: se-model
               modifiers:
                 - type: increment
                   field: pts
                   value: "5"
+                - type: append
+                  field: name
+                  value: "+"
+                - type: decrement
+                  field: cp
+                  value: "2"
 
 steps:
   - action: addForce
@@ -43,13 +57,45 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-1
-  # ModifierGroup repeat: parent scope, childId se-1, 1 selection / value 1 = 1 repeat.
-  # Contained modifier increments pts by 5 once → 50 + 5 = 55.
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # ModifierGroup repeat: 3 Models in parent (force), value=1, repeats=2
+  # → floor(3/1) × 2 = 6 repetitions. All three modifiers apply 6 times each:
+  # pts: 50 + 5×6 = 80. cp: 20 - 2×6 = 8. Name: "Squad" + "+"×6 = "Squad + + + + + +".
   - expectedState:
       forces:
         - selections:
-            - name: Squad
+            - name: Model
+            - name: Model
+            - name: Model
+            - name: Squad + + + + + +
               costs:
                 - typeId: pts
-                  value: 55
+                  value: 80
+                - typeId: cp
+                  value: 8
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Model
+                - name: Model
+                - name: Model
+                - name: "Squad +"
+                  costs:
+                    - typeId: pts
+                      value: 80
+                    - typeId: cp
+                      value: 8

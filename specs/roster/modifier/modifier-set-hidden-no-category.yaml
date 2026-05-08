@@ -38,14 +38,14 @@ steps:
     entryId: se-hidden
 
   - expectedState:
+      errors:
+        - on: selection se-hidden
+          from: se-hidden/hidden
       forces:
         - selectionCount: 1
           selections:
             - name: Hidden Unit
               hidden: true
-      errors:
-        - on: selection se-hidden
-          from: se-hidden/hidden
       engines:
         battlescribe:
           errors: []

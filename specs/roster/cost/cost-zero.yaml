@@ -1,6 +1,6 @@
 id: cost-zero
 category: cost
-description: Selection with zero cost contributes nothing to roster total
+description: Selection with zero cost retains a 0-valued cost entry
 
 setup:
   gameSystem:

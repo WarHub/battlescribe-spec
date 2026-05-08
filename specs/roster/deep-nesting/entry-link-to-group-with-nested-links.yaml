@@ -93,6 +93,9 @@ steps:
   # Heavy Trooper → Weapon Bay → Combat Blade (min=1) + Special Ammo (min=1, via link).
   # Costs: Trooper 20 + Bay 5 + Blade 2 + Ammo 3 = 30
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 30
       forces:
         - selectionCount: 1
           selections:
@@ -106,6 +109,3 @@ steps:
                       type: upgrade
                     - name: Special Ammo
                       type: upgrade
-      costs:
-        - typeId: pts
-          value: 30

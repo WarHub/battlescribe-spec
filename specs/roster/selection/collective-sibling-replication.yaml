@@ -1,0 +1,178 @@
+id: collective-sibling-replication
+category: selection
+description: >
+  When a parent entry is instanced (has non-collective non-hidden children),
+  both engines create separate nodes per selection. Collective children only
+  appear on the instance where they were explicitly selected — they do not
+  replicate to siblings. BS has a design difference: it replicates collective
+  children across all sibling nodes of the same entry.
+  Non-collective children do not replicate in either engine.
+tags:
+  - collective
+  - number
+  - design-difference
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          selectionEntries:
+            # Sergeant has a non-collective child (Badge) → d2.f(Sergeant)=true /
+            # collective_recursive=false → separate node per selection in both engines
+            - id: se-sergeant
+              name: Sergeant
+              selectionEntries:
+                - id: se-badge
+                  name: Badge
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 2
+                - id: se-special-weapon
+                  name: Special Weapon
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # Select Sergeant 3 times
+  # Both engines: creates 3 separate nodes (isDuplicate/isInstanced)
+  - action: selectChildEntry
+    id: select-sgt-1
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-sergeant
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-sergeant
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-sergeant
+
+  # Both engines: 3 separate Sergeant nodes, each with number=1
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sergeant
+                  number: 1
+                - name: Sergeant
+                  number: 1
+                - name: Sergeant
+                  number: 1
+
+  # Select non-collective Badge on first Sergeant — does NOT replicate in either engine
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-sgt-1.selectionId }}
+    entryId: se-badge
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sergeant
+                  number: 1
+                  children:
+                    - name: Badge
+                      number: 1
+                - name: Sergeant
+                  number: 1
+                  children: []
+                - name: Sergeant
+                  number: 1
+                  children: []
+
+  # Select collective Special Weapon on first Sergeant
+  # Collective children appear only on the instance where selected.
+  # BS design difference: replicates to all sibling nodes of same entry.
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-sgt-1.selectionId }}
+    entryId: se-special-weapon
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 12
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Sergeant
+                  number: 1
+                  children:
+                    - name: Badge
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 2
+                    - name: Special Weapon
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 10
+                - name: Sergeant
+                  number: 1
+                  children: []
+                - name: Sergeant
+                  number: 1
+                  children: []
+      engines:
+        battlescribe:
+          costs:
+            - typeId: pts
+              value: 32
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Sergeant
+                      number: 1
+                      children:
+                        - name: Badge
+                          number: 1
+                        - name: Special Weapon
+                          number: 1
+                    - name: Sergeant
+                      number: 1
+                      children:
+                        - name: Special Weapon
+                          number: 1
+                    - name: Sergeant
+                      number: 1
+                      children:
+                        - name: Special Weapon
+                          number: 1

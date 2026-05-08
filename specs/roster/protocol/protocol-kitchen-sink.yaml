@@ -1,8 +1,9 @@
 id: protocol-kitchen-sink
 category: protocol
 description: >
-  Comprehensive smoke test exercising all Protocol types, all action types,
-  and all state assertion fields for adapter protocol adherence.
+  Comprehensive smoke test exercising many Protocol setup types, multiple
+  action types, and a broad set of state assertion fields for adapter
+  protocol adherence.
 tags: []
 
 setup:
@@ -645,7 +646,7 @@ steps:
                 - name: Troops
                 - name: Elites
 
-  # Step 5: setSelectionCount— set Trooper child count to 2 via selectionPath
+  # Step 5: setSelectionCount— set Trooper child count to 2 via selectionId
   - action: setSelectionCount
     forceId: ${{ steps.add-battalion.forceId }}
     selectionId: ${{ steps.select-trooper.selectionId }}
@@ -738,6 +739,12 @@ steps:
   # Every field below is verified against the actual BS and NR engine debugger dumps.
   # The NR override restates the full force tree because ForEngine() merge is top-level only.
   - expectedState:
+      errorsContain:
+        - on: roster
+          from: costLimits/ct-pts
+      costs:
+        - typeId: ct-pts
+        - typeId: ct-power
       gameSystemName: Kitchen Sink GS
       costLimitCount: 1
       costLimits:
@@ -1015,12 +1022,6 @@ steps:
                   primary: true
                   profiles: []
                   rules: []
-      costs:
-        - typeId: ct-pts
-        - typeId: ct-power
-      errorsContain:
-        - on: roster
-          from: costLimits/ct-pts
       engines:
         newrecruit:
           # NR override must restate the full force tree because ForEngine() merge

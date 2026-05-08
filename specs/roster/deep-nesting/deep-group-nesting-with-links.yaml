@@ -1,7 +1,7 @@
 id: deep-group-nesting-with-links
 category: deep-nesting
 description: >
-  Realistic 4-5 level deep hierarchy common in Warhammer 40k data:
+  Realistic 6-level deep hierarchy common in Warhammer 40k data:
   Unit (selectionEntry) → Equipment group (min=1) →
   Weapon (entryLink → sharedEntry) → Weapon Options group
   (min=1) → option entry. Groups use min=1 constraints with single options
@@ -84,9 +84,12 @@ steps:
   # Space Marine selected →
   # Wargear group (min=1) → Bolter auto-selects →
   # Bolter Modifications group (min=1) → Targeting Scope auto-selects.
-  # Depth: unit → group → link → sharedEntry → group → entry (5 levels)
+  # Depth: unit → group → link → sharedEntry → group → entry (6 levels)
   # Costs: Marine 20 + Bolter 0 + Scope 5 = 25
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 25
       forces:
         - selectionCount: 1
           selections:
@@ -98,6 +101,3 @@ steps:
                   children:
                     - name: Targeting Scope
                       type: upgrade
-      costs:
-        - typeId: pts
-          value: 25

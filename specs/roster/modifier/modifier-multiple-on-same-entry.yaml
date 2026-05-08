@@ -1,6 +1,6 @@
 id: modifier-multiple-on-same-entry
 category: modifier
-description: Multiple modifiers on the same entry are applied in order
+description: Multiple modifiers on the same entry all apply
 
 setup:
   gameSystem:

@@ -99,6 +99,9 @@ steps:
   # Bayonet Attachment auto-selects (min=1 on child entry)
   # Costs: Soldier 15 + Rifle 10 + Bayonet 2 = 27
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 27
       forces:
         - selectionCount: 1
           selections:
@@ -113,6 +116,3 @@ steps:
                       children:
                         - name: Bayonet Attachment
                           type: upgrade
-      costs:
-        - typeId: pts
-          value: 27

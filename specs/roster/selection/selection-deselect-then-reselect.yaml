@@ -1,6 +1,6 @@
 id: selection-deselect-then-reselect
 category: selection
-description: After deselecting a selection, re-selecting the same entry creates a new selection
+description: After deselecting a selection, the same entry can be selected again
 
 setup:
   gameSystem:
@@ -57,10 +57,10 @@ steps:
     entryId: se-1
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 50.0
       forces:
         - selectionCount: 1
           selections:
             - name: Unit A
-      costs:
-        - typeId: pts
-          value: 50.0

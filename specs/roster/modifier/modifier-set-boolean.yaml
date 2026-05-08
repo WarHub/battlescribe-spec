@@ -2,8 +2,6 @@ id: modifier-set-boolean
 category: modifier
 description: >
   Set modifier on boolean field (hidden=true) hides the entry and produces a validation error.
-  Same setup as modifier-field-hidden; kept for modifier-type matrix completeness
-  (set-name, set-cost, set-boolean).
 
 setup:
   gameSystem:
@@ -45,11 +43,11 @@ steps:
     entryId: se-1
 
   - expectedState:
+      errors:
+        - on: selection se-1
+          from: se-1/hidden
       forces:
         - selectionCount: 1
           selections:
             - name: Secret Agent
               hidden: true
-      errors:
-        - on: selection se-1
-          from: se-1/hidden

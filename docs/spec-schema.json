@@ -63,7 +63,7 @@
     },
     "scopeValue": {
       "type": "string",
-      "enum": ["self", "parent", "force", "roster", "primary-category", "ancestor"]
+      "enum": ["self", "parent", "force", "roster", "primary-category", "primary-catalogue", "ancestor"]
     },
     "conditionGroupType": {
       "type": "string",
@@ -893,6 +893,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "name": { "type": "string" },
         "forceCount": { "type": "integer" },
         "selectionCount": { "type": "integer" },
         "forces": {
@@ -910,6 +911,7 @@
         },
         "costLimitCount": { "type": "integer" },
         "gameSystemName": { "type": "string" },
+        "gameSystemId": { "type": "string" },
         "errors": {
           "type": "array",
           "items": { "$ref": "#/$defs/errorAssertion" }

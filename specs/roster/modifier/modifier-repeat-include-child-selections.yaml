@@ -18,7 +18,7 @@ setup:
       gameSystemId: test-gs
       selectionEntries:
         - id: se-parent
-          name: Squad
+          name: Leader
           type: unit
           costs:
             - name: pts
@@ -30,13 +30,17 @@ setup:
               value: "5"
               repeats:
                 - value: 1
-                  repeats: 1
+                  repeats: 2
                   field: selections
-                  scope: parent
+                  scope: force
+                  childId: se-trooper
                   includeChildSelections: true
           selectionEntries:
-            - id: se-child
+            - id: se-trooper
               name: Trooper
+              type: model
+            - id: se-sergeant
+              name: Sergeant
               type: model
 
 steps:
@@ -45,11 +49,31 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-leader
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-parent
-  # Repeat counts selections in parent scope including child selections.
-  # The parent selection itself counts as 1 in the parent scope.
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-leader.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-leader.selectionId }}
+    entryId: se-trooper
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-leader.selectionId }}
+    entryId: se-trooper
+
+  # includeChildSelections traverses into Leader's children for se-trooper matches.
+  # 3 Troopers found, value=1, repeats=2: floor(3/1) × 2 = 6 repetitions → 0 + 5×6 = 30
   - expectedState:
       forces:
         - selections:
-            - name: Squad
+            - name: Leader
+              costs:
+                - typeId: pts
+                  value: 30

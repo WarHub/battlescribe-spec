@@ -1,6 +1,6 @@
 id: selection-nested-child-entry
 category: selection
-description: selectChildEntry can target deeply nested selections via selectionPath
+description: selectChildEntry can target nested selections via selectionId
 tags: [selection, nested]
 
 setup:

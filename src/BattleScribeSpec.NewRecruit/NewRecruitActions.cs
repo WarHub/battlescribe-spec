@@ -255,8 +255,18 @@ public static class NewRecruitActions
                         || (childEntryId.includes('::') && c.getBattleScribePath?.() === childEntryId));
 
                     if (child) {
-                        // Found existing instance — activate via incrementAmount.
-                        // Instance nodes always have incrementAmount (not addInstance).
+                        // Found existing instance. Behavior depends on isInstanced:
+                        // - isInstanced=true (non-collective-recursive): create new instance (separate node)
+                        // - isInstanced=false (collective_recursive): increment amount (same node)
+                        if (child.selector?.isInstanced) {
+                            // Instanced entry: each select creates a new independent instance
+                            if (typeof child.selector.addInstance !== 'function')
+                                return `ERROR:Selector for '${childEntryId}' has no addInstance`;
+                            const newInst = child.selector.addInstance();
+                            if (newInst) { newInst.autocheck?.(); return newInst.uid; }
+                            return `ERROR:addInstance on '${childEntryId}' returned null`;
+                        }
+                        // Non-instanced: increment amount on existing node
                         if (typeof child.incrementAmount !== 'function')
                             return `ERROR:Child instance '${childEntryId}' has no incrementAmount (unexpected node type)`;
                         child.incrementAmount();
@@ -318,7 +328,10 @@ public static class NewRecruitActions
     }
 
     /// <summary>
-    /// Deselect (remove) a selection by uid.
+    /// Deselect (decrement) a selection by uid.
+    /// Uses decrementAmount() which reduces the per-model count by 1
+    /// (matching BS's deselect semantics). Falls back to delete() when
+    /// decrementAmount is not available.
     /// </summary>
     public static async Task DeselectSelectionAsync(IPage page, string forceUid, string selectionUid)
     {
@@ -334,10 +347,13 @@ public static class NewRecruitActions
                     const sel = getSelectionByUid(force, selectionUid);
                     if (!sel) return `Selection not found with uid '${selectionUid}'`;
 
-                    // Instance nodes always have delete(). Using setAmount with 1 arg corrupts state.
-                    if (typeof sel.delete !== 'function')
-                        return `Selection '${selectionUid}' has no delete method (unexpected node type)`;
-                    sel.delete();
+                    if (typeof sel.decrementAmount === 'function') {
+                        sel.decrementAmount();
+                    } else if (typeof sel.delete === 'function') {
+                        sel.delete();
+                    } else {
+                        return `Selection '${selectionUid}' has no decrementAmount or delete method`;
+                    }
                     return null;
                 } catch(e) {
                     return 'DeselectSelection error: ' + e.message;

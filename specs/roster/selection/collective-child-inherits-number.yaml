@@ -1,0 +1,93 @@
+id: collective-child-inherits-number
+category: selection
+description: >
+  Selecting a collective child under a parent that already has number > 1
+  creates the child with the same number as its parent.
+tags:
+  - collective
+  - number
+  - cost
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              selectionEntries:
+                - id: se-weapon
+                  name: Weapon
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: pts
+                      value: 5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  # Set Trooper to number=3 BEFORE adding weapon
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+
+  # Now select collective Weapon — it should inherit number=3 from Trooper
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-weapon
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+                  children:
+                    - name: Weapon
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: pts
+                          value: 15

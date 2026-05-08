@@ -59,11 +59,11 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
-      forces:
-        - selectionCount: 2
       errors:
         - on: selection se-unit-a
           from: se-unit-a/con-max-1
+      forces:
+        - selectionCount: 2
       engines:
         battlescribe:
           errors: []

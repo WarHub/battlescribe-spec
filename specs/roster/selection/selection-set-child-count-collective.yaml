@@ -1,9 +1,8 @@
 id: selection-set-child-count-collective
 category: selection
 description: >
-  setSelectionCount on a collective child entry. Collective entries are shared
-  across sibling instances. Verifies number=N on a single selection with
-  scaled costs (N × per-unit cost).
+  setSelectionCount on a collective child entry. Verifies number=N on a single
+  selection with scaled costs (N × per-unit cost).
 tags:
   - selection
   - number
@@ -54,6 +53,9 @@ steps:
     entryId: se-weapon
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 5
       forces:
         - selections:
             - name: Squad
@@ -64,9 +66,6 @@ steps:
                     - name: pts
                       typeId: pts
                       value: 5
-      costs:
-        - typeId: pts
-          value: 5
 
   # setSelectionCount to 3 on the collective child
   - action: setSelectionCount
@@ -75,6 +74,9 @@ steps:
     count: 3
 
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
       forces:
         - selections:
             - name: Squad
@@ -85,6 +87,3 @@ steps:
                     - name: pts
                       typeId: pts
                       value: 15
-      costs:
-        - typeId: pts
-          value: 15

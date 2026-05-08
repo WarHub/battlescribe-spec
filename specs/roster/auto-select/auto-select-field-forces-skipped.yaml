@@ -43,15 +43,15 @@ steps:
   # Only Selections Min Unit is auto-selected.
   # Forces Min Unit is NOT auto-selected because its constraint uses field=forces.
   - expectedState:
+      errors:
+        - on: roster
+          from: se-forces-min/con-min-forces
       forces:
         - selectionCount: 1
           selections:
             - name: Selections Min Unit
               type: unit
               number: 1
-      errors:
-        - on: roster
-          from: se-forces-min/con-min-forces
       engines:
         # NR auto-selects both entries (doesn't distinguish field=forces vs field=selections)
         newrecruit:

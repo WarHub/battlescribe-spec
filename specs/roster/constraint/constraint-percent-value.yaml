@@ -66,10 +66,10 @@ steps:
   # With 1 total selection: threshold = 1/100*50 = 0.5.
   # 1 selection > 0.5 → both engines produce an error.
   - expectedState:
+      errors:
+        - on: selection se-1
+          from: se-1/c1
       forces:
         - selectionCount: 1
           selections:
             - name: Elite
-      errors:
-        - on: selection se-1
-          from: se-1/c1

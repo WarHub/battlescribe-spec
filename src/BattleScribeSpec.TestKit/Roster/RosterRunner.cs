@@ -364,6 +364,16 @@ public sealed class RosterRunner
             AssertEqual(stepIndex, "gameSystemName", gsName, state.GameSystemName ?? "");
         }
 
+        if (expected.GameSystemId is { } gsId)
+        {
+            AssertEqual(stepIndex, "gameSystemId", gsId, state.GameSystemId);
+        }
+
+        if (expected.Name is { } rosterName)
+        {
+            AssertEqual(stepIndex, "name", rosterName, state.Name);
+        }
+
         if (expected.Forces is { } expectedForces)
         {
             for (var fi = 0; fi < expectedForces.Count; fi++)

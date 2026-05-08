@@ -4,6 +4,11 @@ Analysis of how the BattleScribe engine validates hidden entries, based on the
 decompiled Java source (`net.battlescribe.engine.a.f`). This documents a gap in
 hidden validation for force entries and how the spec adapters compensate.
 
+> **Note:** Citations to Java source locations (`f.java`, `c.java`, line numbers)
+> refer to decompiled BattleScribe engine code (`lib/BattleScribeEngine.jar`) and are
+> not present in this repository. In-repo implementation references use full file paths
+> under `src/`.
+
 ## Background
 
 The BattleScribe engine has a `hidden` flag on data model entries (`ForceEntry`,
@@ -301,4 +306,4 @@ forces and selections.
   - Hidden error generation at line 617–625
   - Constraint skipping at line 485
 - NR error synthesis: `JsHelpers.cs` lines 453–459
-- BattleScribe error detection: `BattleScribeEngine.cs` lines 560–573
+- BattleScribe error detection: `BattleScribeEngine.cs` lines 597–610

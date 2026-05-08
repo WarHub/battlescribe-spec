@@ -10,11 +10,17 @@ setup:
     forceEntries:
       - id: fe-patrol
         name: Patrol
+        forceEntries:
+          - id: fe-child
+            name: Child Force
   catalogues:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: test-gs
       selectionEntries:
+        - id: se-trigger
+          name: Child Trigger
+          type: unit
         - id: se-unit
           name: Unit A
           type: unit
@@ -27,6 +33,7 @@ setup:
                   value: 1
                   field: selections
                   scope: force
+                  childId: se-trigger
                   includeChildForces: true
 
 steps:
@@ -34,22 +41,26 @@ steps:
     id: add-patrol
     forceEntryId: fe-patrol
 
+  - action: addChildForce
+    id: add-child-force
+    forceId: ${{ steps.add-patrol.forceId }}
+    forceEntryId: fe-child
+
+  - action: selectEntry
+    forceId: ${{ steps.add-child-force.forceId }}
+    entryId: se-trigger
+
   - action: selectEntry
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit
 
-  # includeChildForces expands scope to nested forces. With only one
-  # force and no child forces, the flag has no additional effect and the
-  # condition evaluates the same as without the flag. Name unchanged.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
-            - name: Unit A
-      engines:
-        # NR ignores includeChildForces flag — condition fires counting current force
-        newrecruit:
-          forces:
+            - name: Child Forces Included
+          childForceCount: 1
+          childForces:
             - selectionCount: 1
               selections:
-                - name: Child Forces Included
+                - name: Child Trigger

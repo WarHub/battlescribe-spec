@@ -53,11 +53,11 @@ steps:
 
   # 4 selections exceeds max=3 — constraint violation
   - expectedState:
-      forces:
-        - selectionCount: 4
       errors:
         - on: selection se-unit-a
           from: se-unit-a/con-max-3
+      forces:
+        - selectionCount: 4
       engines:
         # BattleScribe doesn't enforce scope=parent constraints on
         # entries without categoryLinks (uncategorised root entries).

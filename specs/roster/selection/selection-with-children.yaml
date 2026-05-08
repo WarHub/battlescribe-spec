@@ -21,6 +21,10 @@ setup:
             - id: se-model
               name: Soldier
               type: model
+              constraints:
+                - id: min-1
+                  type: min
+                  value: 1
 
 steps:
   - action: addForce
@@ -37,3 +41,6 @@ steps:
           selections:
             - name: Squad
               type: unit
+              children:
+                - name: Soldier
+                  type: model

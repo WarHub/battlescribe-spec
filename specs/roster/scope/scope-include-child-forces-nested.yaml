@@ -13,11 +13,17 @@ setup:
         forceEntries:
           - id: fe-detach
             name: Detachment
+            forceEntries:
+              - id: fe-spearhead
+                name: Spearhead
   catalogues:
     - id: cat-1
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
+        - id: se-trigger
+          name: Deep Trigger
+          type: unit
         - id: se-1
           name: Squad
           type: unit
@@ -30,6 +36,7 @@ setup:
                   value: 1
                   field: selections
                   scope: force
+                  childId: se-trigger
                   includeChildForces: true
 
 steps:
@@ -37,19 +44,34 @@ steps:
     id: add-army
     forceEntryId: fe-army
 
+  - action: addChildForce
+    id: add-detachment
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-detach
+
+  - action: addChildForce
+    id: add-spearhead
+    forceId: ${{ steps.add-detachment.forceId }}
+    forceEntryId: fe-spearhead
+
+  - action: selectEntry
+    forceId: ${{ steps.add-spearhead.forceId }}
+    entryId: se-trigger
+
   - action: selectEntry
     forceId: ${{ steps.add-army.forceId }}
     entryId: se-1
-  # includeChildForces=true traverses nested forces when counting.
-  # With only the top-level Army force and no child forces selected,
-  # the condition does not find matching selections. Name unchanged.
+
   - expectedState:
       forces:
-        - selections:
-            - name: Squad
-      engines:
-        # NR ignores includeChildForces flag — condition fires counting current force
-        newrecruit:
-          forces:
-            - selections:
-                - name: Veteran Squad
+        - selectionCount: 1
+          selections:
+            - name: Veteran Squad
+          childForceCount: 1
+          childForces:
+            - selectionCount: 0
+              childForceCount: 1
+              childForces:
+                - selectionCount: 1
+                  selections:
+                    - name: Deep Trigger

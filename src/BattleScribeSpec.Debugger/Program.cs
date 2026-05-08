@@ -9,11 +9,25 @@ var dumpAll = false;
 var json = false;
 var headless = true;
 string? exportXmlDir = null;
+var formatMode = false;
+var formatCheck = false;
+string? formatDir = null;
 
 for (var i = 0; i < args.Length; i++)
 {
     switch (args[i])
     {
+        case "--format":
+            formatMode = true;
+            // Optional next arg: directory (if it doesn't start with '-')
+            if (i + 1 < args.Length && !args[i + 1].StartsWith('-'))
+            {
+                formatDir = args[++i];
+            }
+            break;
+        case "--check":
+            formatCheck = true;
+            break;
         case "--engine" when i + 1 < args.Length:
             engineName = args[++i].ToLowerInvariant() switch
             {
@@ -49,6 +63,41 @@ for (var i = 0; i < args.Length; i++)
             }
             specInput = args[i];
             break;
+    }
+}
+
+// ===== Format mode (exits before engine loading) =====
+if (formatMode)
+{
+    var targetDir = formatDir
+        ?? SpecLoader.FindRosterSpecsDirectory()
+        ?? throw new InvalidOperationException("Could not locate specs/roster directory. Pass a directory as argument.");
+
+    if (formatCheck)
+    {
+        Console.Error.WriteLine($"Checking formatting in: {targetDir}");
+        var issues = SpecFormatter.FormatDirectory(targetDir, checkOnly: true, log: Console.Error);
+        if (issues > 0)
+        {
+            Console.Error.WriteLine($"\n{issues} file(s) need formatting. Run format-specs.ps1 to fix.");
+            return 1;
+        }
+        Console.Error.WriteLine($"All files are correctly formatted.");
+        return 0;
+    }
+    else
+    {
+        Console.Error.WriteLine($"Formatting specs in: {targetDir}");
+        var fixed_ = SpecFormatter.FormatDirectory(targetDir, checkOnly: false, log: Console.Error);
+        if (fixed_ > 0)
+        {
+            Console.Error.WriteLine($"\nFixed {fixed_} file(s).");
+        }
+        else
+        {
+            Console.Error.WriteLine("All files are already correctly formatted.");
+        }
+        return 0;
     }
 }
 
@@ -319,6 +368,7 @@ static void PrintUsage()
 {
     Console.Error.WriteLine("""
         Usage: bs-spec-debug [options] <spec>
+               bs-spec-debug --format [--check] [<dir>]
 
         Arguments:
           <spec>          Spec file path, spec ID (e.g. "selection/selection-page"),
@@ -330,6 +380,8 @@ static void PrintUsage()
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
+          --format [<dir>]    Format all *.yaml files under <dir> (default: specs/roster/)
+          --check             With --format: report issues without fixing (exit 1 if any)
           -h, --help      Show this help
 
         Examples:
@@ -339,6 +391,8 @@ static void PrintUsage()
           bs-spec-debug --engine nr --dump specs/protocol/protocol-kitchen-sink.yaml
           bs-spec-debug --export-xml ./output/ cost/cost-hidden-limit-validation
           cat spec.yaml | bs-spec-debug -
+          bs-spec-debug --format
+          bs-spec-debug --format --check specs/roster/
         """);
 }
 

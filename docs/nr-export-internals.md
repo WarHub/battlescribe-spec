@@ -3,6 +3,10 @@
 This document describes NR's deobfuscated export pipeline — how roster data is
 serialized to `.ros`, `.rosz`, JSON, and text formats.
 
+> **Note:** Function names and implementation details (e.g. `_b()`, `iX()`, `w4e()`,
+> `exportArmy()`, `toJsonObject()`) are from NR's live JS bundle, not in-repo source code.
+> In-repo implementation references use full paths under `src/`.
+
 ## Export Formats
 
 | Export | Format | ID style |
@@ -117,6 +121,30 @@ function JU(selections, XmlBuilder = Es) {
     return builder.toString();
 }
 ```
+
+### `getSelectionCount("root")` and Collective
+
+The `number` attribute uses `getSelectionCount("root")` which multiplies the
+selection's own amount through the entire parent chain:
+
+```javascript
+getSelectionCount(stopAtId) {
+    const t = this.getSelfAmountElseChilds();
+    if (!stopAtId) return t;         // no arg → return own amount
+    const n = rz(this, t);          // rz() = array of cumulative products up the tree
+    let i = 0, s = this.getParent();
+    for (; s && s.getId() !== stopAtId; )
+        s = s.getParent(), s && i++;
+    return n[i] ?? 0;
+}
+```
+
+For collective entries, this produces the **same result as BattleScribe**:
+a Rifle (collective, amount=1) under Trooper (amount=3) exports as `number="3"`
+with `costs.value = 5 × 3 = 15`. The collective flag does not affect the export
+number — non-collective siblings also get multiplied through the parent chain.
+The difference only matters at runtime (NR keeps `amount=1` internally; BS
+propagates `number=3` on the selection node).
 
 ## Force Serializer: `WU()` with `fP()` for entryId
 

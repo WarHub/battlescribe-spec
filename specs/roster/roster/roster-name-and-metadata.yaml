@@ -15,13 +15,18 @@ setup:
       gameSystemId: custom-gs-123
 
 steps:
+  # Roster name defaults to spec ID; game system metadata is preserved.
   - expectedState:
+      name: roster-name-and-metadata
+      gameSystemId: custom-gs-123
+      gameSystemName: My Custom Game
       forceCount: 0
 
   - action: addForce
     forceEntryId: fe-1
 
   - expectedState:
+      name: roster-name-and-metadata
       forceCount: 1
       forces:
         - name: Formation

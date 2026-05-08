@@ -1,6 +1,6 @@
 id: selection-nested-deselect
 category: selection
-description: deselectSelection can target nested selections via selectionPath
+description: deselectSelection can target nested selections via selectionId
 tags: [selection, nested]
 
 setup:

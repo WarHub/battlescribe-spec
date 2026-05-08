@@ -1,10 +1,10 @@
 id: default-selection-via-deep-link
 category: deep-nesting
 description: >
-  An entry link targets a shared entry via a group with min=1 (single option,
-  auto-selected). The shared entry itself has a nested group (also with min=1,
-  single option) containing a further entry. Both levels cascade through the
-  entry link, creating a deep hierarchy purely through min-constraint
+  An entry link targets a shared entry via a group with defaultSelectionEntryId
+  and min=1. The shared entry itself has a nested group (also with
+  defaultSelectionEntryId and min=1) containing a further entry. Both levels
+  cascade through the entry link, creating a deep hierarchy through group
   auto-selection.
 tags: [deep-nesting, entryLink]
 
@@ -86,6 +86,9 @@ steps:
   # Both levels cascade through the entry link.
   # Costs: Mech 40 + Standard Config 10 + Low Power 2 = 52
   - expectedState:
+      costs:
+        - typeId: pts
+          value: 52
       forces:
         - selectionCount: 1
           selections:
@@ -97,6 +100,3 @@ steps:
                   children:
                     - name: Low Power
                       type: upgrade
-      costs:
-        - typeId: pts
-          value: 52

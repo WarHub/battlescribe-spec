@@ -41,12 +41,38 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-parent
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-parent
-  # Group constraint max=1 limits weapon selection to at most 1.
-  # Parent unit is created; constraint enforcement happens during refresh.
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-parent.selectionId }}
+    entryId: se-sword
+
+  # One selection within max=1 — no errors.
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Parent Unit
+              children:
+                - name: Sword
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-parent.selectionId }}
+    entryId: se-axe
+
+  # Two selections exceed max=1 constraint — error expected.
+  - expectedState:
+      errorsContain:
+        - on: selection se-parent
+          from: seg-weapons/con-max-1
+      forces:
+        - selectionCount: 1
+          selections:
+            - name: Parent Unit
+              children:
+                - name: Axe
+                - name: Sword

@@ -1,6 +1,6 @@
 id: modifier-repeat-percent-value
 category: modifier
-description: Repeat with percentValue=true uses percentage-based threshold calculation
+description: Repeat with percentValue=true counts percentage of matching selections in scope
 
 setup:
   gameSystem:
@@ -17,7 +17,10 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
+        - id: se-model
+          name: Model
+          type: model
+        - id: se-squad
           name: Squad
           type: unit
           costs:
@@ -29,11 +32,11 @@ setup:
               field: pts
               value: "10"
               repeats:
-                - value: 50
-                  repeats: 1
+                - value: 25
+                  repeats: 2
                   field: selections
-                  scope: parent
-                  childId: se-1
+                  scope: force
+                  childId: se-model
                   percentValue: true
 
 steps:
@@ -43,12 +46,35 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-1
-  # percentValue=true: raw count = 1 selection. Percentage = 1/50*100 = 2%.
-  # Round: floor(0.02) = 0 repeats. Modifier not applied → pts stays 100.
-  # (percentValue divides the count by the value and multiplies by 100,
-  # then applies repeats multiplier — with 1 selection and value 50, this is 0)
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # percentValue=true: "for each 25% of se-model selections in the force, apply modifier."
+  # 4 Models out of 5 total selections = 80%. floor(80/25) = 3, × repeats=2 = 6 repetitions.
+  # Squad cost: 100 + 10×6 = 160.
   - expectedState:
       forces:
         - selections:
+            - name: Model
+            - name: Model
+            - name: Model
+            - name: Model
             - name: Squad
+              costs:
+                - typeId: pts
+                  value: 160

@@ -34,14 +34,14 @@ steps:
     entryId: se-squad
 
   - expectedState:
+      errors:
+        - on: selection se-squad
+          from: se-squad/hidden
       forces:
         - selectionCount: 1
           selections:
             - name: Hidden Squad
               hidden: true
-      errors:
-        - on: selection se-squad
-          from: se-squad/hidden
       engines:
         battlescribe:
           errors: []

@@ -50,6 +50,9 @@ steps:
 
   # Cost 120 exceeds limit 100 → error; cost 100 at limit → no error; cost 50 under → no error
   - expectedState:
+      errors:
+        - on: roster
+          from: costLimits/ct-over
       costs:
         - typeId: ct-over
           value: 120
@@ -57,6 +60,3 @@ steps:
           value: 100
         - typeId: ct-under
           value: 50
-      errors:
-        - on: roster
-          from: costLimits/ct-over

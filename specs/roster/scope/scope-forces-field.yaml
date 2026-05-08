@@ -27,6 +27,7 @@ setup:
                   value: 1
                   field: forces
                   scope: roster
+                  childId: fe-patrol
 
 steps:
   - action: addForce
@@ -37,11 +38,9 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit
 
-  # field=forces counts forces in scope rather than selections.
-  # The condition checks for forces, and the engine evaluates
-  # this independently of selection state. Name unchanged.
   - expectedState:
+      forceCount: 1
       forces:
         - selectionCount: 1
           selections:
-            - name: Unit A
+            - name: Force Counted

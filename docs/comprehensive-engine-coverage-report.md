@@ -9,10 +9,8 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 | `Setup` | 244 | Every inline spec (implicit setup path) |
 | `SetupFromFiles` | 2 | DataSource specs: wh40k-10e-create-army, wh40k-10e-space-marines-army |
 | `AddForce` | 246 | force-add-single, force-add-multiple, force-nested-basic, force-multi-catalogue-two-forces |
-| `AddForceByName` | 2 | DataSource specs using name-based force addition |
 | `RemoveForce` | 5 | force-remove, force-remove-second, force-add-and-remove-all, roster-full-lifecycle |
 | `SelectEntry` | 296 | selection-add-unit, selection-with-cost, selection-multiple-entries, import-*-entry-* |
-| `SelectEntryByName` | 3 | DataSource specs using name-based entry selection |
 | `SelectChildEntry` | 9 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
 | `DeselectSelection` | 23 | selection-remove, selection-deselect-last, roster-full-lifecycle |
 | `SetSelectionCount` | 2 | selection-set-count |
@@ -42,7 +40,7 @@ All `IRosterEngine` methods are exercised by the conformance suite.
 
 `instanceOf` only works when the scope resolves to a `BaseSelectable` (a Selection).
 `scope=force` resolves to a Force object (not a Selection) and `scope=roster` is
-hardcoded to return `false` in the BS engine (c.java:1196-1197).
+hardcoded to return `false` in the BS engine (c.java:1196-1197; external decompiled source).
 
 | Scope | Works? | Reason |
 |-------|:------:|--------|
@@ -50,7 +48,7 @@ hardcoded to return `false` in the BS engine (c.java:1196-1197).
 | `parent` | ✅ | Resolves to parent Selection |
 | `ancestor` | ✅ | Walks parent chain (all Selections) |
 | `force` | ❌ | Resolves to Force (not a Selection) |
-| `roster` | ❌ | Hardcoded `return false` (c.java:1196-1197) |
+| `roster` | ❌ | Hardcoded `return false` (c.java:1196-1197; external decompiled source) |
 
 | childId type | Works? | Example spec |
 |--------------|:------:|--------------|

@@ -17,7 +17,10 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
+        - id: se-model
+          name: Model
+          type: model
+        - id: se-squad
           name: Squad
           type: unit
           costs:
@@ -29,17 +32,19 @@ setup:
               field: pts
               value: "5"
               repeats:
-                # First repeat: 1 selection in self → 1 repeat
+                # First: floor(3/1) × 2 = 6
                 - value: 1
-                  repeats: 1
+                  repeats: 2
                   field: selections
-                  scope: self
-                # Second repeat: 1 selection in self → 1 more repeat
-                # Total = 1 + 1 = 2 repeats → increment by 5 × 2 = 10
+                  scope: force
+                  childId: se-model
+                # Second: floor(3/1) × 3 = 9
+                # Total = 6 + 9 = 15 repetitions
                 - value: 1
-                  repeats: 1
+                  repeats: 3
                   field: selections
-                  scope: self
+                  scope: force
+                  childId: se-model
 
 steps:
   - action: addForce
@@ -48,9 +53,28 @@ steps:
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-1
-  # Multiple repeats are additive: n=1+1=2, increment 5×2=10 → 50+10=60
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-model
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # Two repeat elements: (3×2) + (3×3) = 15 total, increment 5×15 = 75 → 50 + 75 = 125
   - expectedState:
       forces:
         - selections:
+            - name: Model
+            - name: Model
+            - name: Model
             - name: Squad
+              costs:
+                - typeId: pts
+                  value: 125

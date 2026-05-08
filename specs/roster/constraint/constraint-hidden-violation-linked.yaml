@@ -49,11 +49,11 @@ steps:
     entryId: se-unit-a
 
   - expectedState:
+      errors:
+        - on: selection se-unit-a
+          from: se-unit-a/hidden
       forces:
         - selectionCount: 1
           selections:
             - name: Unit A
               hidden: true
-      errors:
-        - on: selection se-unit-a
-          from: se-unit-a/hidden
