@@ -49,6 +49,8 @@
   - #187 → #16 (Error Validation)
   - #191 → #17 (DevEx)
   - #196 → #17 (DevEx)
+  - #191 → #17 (Structured validation errors)
+  - #196 → #17 (Structured validation errors)
   - #197 → #109 (Fair Use / Divergence)
   - #198 → #181 (Protocol Type System)
 
@@ -81,6 +83,20 @@ Result: All newlines in \ are stripped, corrupting markdown.
 gh issue edit {NUMBER} --body-file \
 Remove-Item \
 \\\
+```powershell
+gh api repos/{owner}/{repo}/issues/{number} -f body="Part of #N`n$body"
+```
+Result: All newlines in `$body` are stripped, corrupting markdown.
+
+### Fix Pattern (ALWAYS USE)
+```powershell
+$body = gh issue view {NUMBER} --json body -q .body
+# modify $body preserving newlines
+$tmp = [System.IO.Path]::GetTempFileName()
+$body | Set-Content -Path $tmp -Encoding UTF8 -NoNewline
+gh issue edit {NUMBER} --body-file $tmp
+Remove-Item $tmp
+```
 
 ### Issues Repaired (All 11)
 #20, #21, #22, #23, #25, #177, #187, #88, #89, #198, #159

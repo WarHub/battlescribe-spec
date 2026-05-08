@@ -153,7 +153,7 @@ Each child issue body was updated with a prepended "Part of #{PARENT}" marker.
 
 ### Executive Summary
 
-**All 26 non-epic issues in WarHub/battlescribe-spec are currently unparented.** This represents 100% of active work with no explicit epic ownership. The GitHub project board lacks parent issue field linkage, making it impossible to trace work back to strategic epics.
+**All 26 non-epic issues in WarHub/battlescribe-spec were unparented (pre-parentage snapshot).** This represents 100% of active work with no explicit epic ownership at the time of audit.
 
 **Action items:**
 1. **Immediate:** Parent 23 out of 26 issues to appropriate epics (see table below)
@@ -167,15 +167,15 @@ Each child issue body was updated with a prepended "Part of #{PARENT}" marker.
 | **Total open issues** | 31 |
 | **Epic issues** | 5 (#18, #15, #16, #109, #181) |
 | **Non-epic issues** | 26 |
-| **Issues with explicit parent link** | 0 |
-| **Unparented issues** | 26 (100%) |
+| **Issues with explicit parent link** | 0 (pre-parentage snapshot) |
+| **Unparented issues** | 26 / 100% (pre-parentage snapshot) |
 | **High priority unparented** | 7 |
 | **Medium priority unparented** | 5 |
 | **Backlog priority unparented** | 14 |
 
 ### Phase 1: Unblock Design (Days 1–3)
 
-**#19 is the primary blocker.** It gates 6 downstream issues (#30, #31, #25, #23, #172–#168). Scope decision workshop needed.
+**#19 is the primary blocker.** It gates 6 downstream issues (#30, #31, #25, #23, #168–#172). Scope decision workshop needed.
 
 **Outcome:** Yes/no decision on roster loading & editor specs → enables parent #18 and child specs.
 
