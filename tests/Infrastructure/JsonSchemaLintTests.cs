@@ -1,119 +1,170 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Json.Schema;
 
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Lint tests that validate JSON schema files against their declared metaschema.
-/// Discovers all *.json files in the repository that declare a known JSON Schema
-/// metaschema URI in their "$schema" property and validates each against it.
+/// Lint tests that validate JSON schema files in docs/ against the JSON Schema draft 2020-12 metaschema.
 /// </summary>
 [Trait("Category", "Unit")]
 public sealed class JsonSchemaLintTests
 {
-    private static readonly string? RepoRoot = FindRepoRoot();
+    private const string ThisFileRelativePath = "tests\\Infrastructure\\JsonSchemaLintTests.cs";
+    private const string SupportedMetaschemaUri = "https://json-schema.org/draft/2020-12/schema";
 
-    private static readonly IReadOnlyDictionary<string, JsonSchema> MetaschemaByUri =
-        new Dictionary<string, JsonSchema>(StringComparer.Ordinal)
-        {
-            ["https://json-schema.org/draft/2020-12/schema"] = MetaSchemas.Draft202012,
-            ["https://json-schema.org/draft/2019-09/schema"] = MetaSchemas.Draft201909,
-            ["http://json-schema.org/draft-07/schema#"] = MetaSchemas.Draft7,
-            ["http://json-schema.org/draft-06/schema#"] = MetaSchemas.Draft6,
-        };
+    private static readonly JsonSchema SupportedMetaschema = MetaSchemas.Draft202012;
+    private static readonly string RepoRoot = FindRepoRoot();
+    private static readonly string DocsDirectory = FindDocsDirectory();
 
-    private static string? FindRepoRoot()
+    private static string FindRepoRoot([CallerFilePath] string callerFilePath = "")
     {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null)
+        if (string.IsNullOrWhiteSpace(callerFilePath))
         {
-            if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
+            throw new InvalidOperationException("Caller file path was not provided for JSON schema lint path discovery.");
+        }
+
+        var normalizedCallerPath = callerFilePath.Replace('/', '\\');
+        if (Path.IsPathRooted(normalizedCallerPath)
+            && normalizedCallerPath.EndsWith(ThisFileRelativePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedCallerPath[..^ThisFileRelativePath.Length].TrimEnd('\\');
+        }
+
+        var baseDirectory = AppContext.BaseDirectory;
+        while (baseDirectory is not null)
+        {
+            if (File.Exists(Path.Combine(baseDirectory, normalizedCallerPath)))
             {
-                return dir;
+                return baseDirectory;
             }
 
-            dir = Path.GetDirectoryName(dir);
+            baseDirectory = Path.GetDirectoryName(baseDirectory);
         }
-        return null;
+
+        throw new DirectoryNotFoundException(
+            $"Could not determine repository root from caller path '{callerFilePath}' and base directory '{AppContext.BaseDirectory}'.");
     }
 
-    public static IEnumerable<object[]> AllJsonSchemaFiles()
+    private static string FindDocsDirectory()
     {
-        if (RepoRoot is null)
+        var docsDirectory = Path.Combine(RepoRoot, "docs");
+        if (!Directory.Exists(docsDirectory))
         {
-            yield break;
+            throw new DirectoryNotFoundException($"JSON schema lint could not find docs directory '{docsDirectory}'.");
         }
 
-        foreach (var file in Directory.EnumerateFiles(RepoRoot, "*.json", SearchOption.AllDirectories))
+        return docsDirectory;
+    }
+
+    public static TheoryData<string, string> AllJsonSchemaFiles()
+    {
+        var files = new TheoryData<string, string>();
+
+        foreach (var file in Directory.EnumerateFiles(DocsDirectory, "*.json", SearchOption.AllDirectories))
         {
-            var normalized = file.Replace('/', '\\');
-            if (normalized.Contains("\\artifacts\\")
-                || normalized.Contains("\\node_modules\\")
-                || normalized.Contains("\\.git\\")
-                || normalized.Contains("\\.testdata\\"))
+            using var doc = LoadJsonDocument(file);
+            if (!doc.RootElement.TryGetProperty("$schema", out var schemaProperty))
             {
                 continue;
             }
 
-            string text;
-            try
-            {
-                text = File.ReadAllText(file);
-            }
-            catch
+            var schemaUri = schemaProperty.GetString();
+            if (!string.Equals(schemaUri, SupportedMetaschemaUri, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            if (!text.Contains("\"$schema\""))
-            {
-                continue;
-            }
-
-            string? schemaUri;
-            try
-            {
-                using var doc = JsonDocument.Parse(text);
-                schemaUri = doc.RootElement.TryGetProperty("$schema", out var prop)
-                    ? prop.GetString()
-                    : null;
-            }
-            catch
-            {
-                continue;
-            }
-
-            if (schemaUri is null || !MetaschemaByUri.ContainsKey(schemaUri))
-            {
-                continue;
-            }
-
-            var relPath = Path.GetRelativePath(RepoRoot, file).Replace('\\', '/');
-            yield return [file, relPath, schemaUri];
+            files.Add(file, Path.GetRelativePath(RepoRoot, file).Replace('\\', '/'));
         }
+
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"No JSON Schema files declaring supported metaschema '{SupportedMetaschemaUri}' were found under '{DocsDirectory}'.");
+        }
+
+        return files;
     }
 
     [Theory]
     [MemberData(nameof(AllJsonSchemaFiles))]
-    public void JsonSchemaIsValidAgainstMetaschema(string filePath, string relPath, string schemaUri)
+    public void JsonSchemaIsValidAgainstMetaschema(string filePath, string relPath)
     {
-        var fileText = File.ReadAllText(filePath);
-        using var jsonDoc = JsonDocument.Parse(fileText);
+        using var jsonDoc = LoadJsonDocument(filePath);
 
-        var metaSchema = MetaschemaByUri[schemaUri];
-        var result = metaSchema.Evaluate(jsonDoc.RootElement, new EvaluationOptions
+        var result = SupportedMetaschema.Evaluate(jsonDoc.RootElement, new EvaluationOptions
         {
             OutputFormat = OutputFormat.List,
         });
 
         if (!result.IsValid)
         {
-            var errors = (result.Details ?? [])
-                .Where(d => !d.IsValid && d.Errors is not null && d.Errors.Count > 0)
-                .SelectMany(d => d.Errors!.Select(e =>
-                    $"  {d.InstanceLocation}: {e.Key} — {e.Value}"))
-                .ToList();
-            Assert.Fail($"{relPath} failed metaschema validation ({schemaUri}):\n{string.Join("\n", errors)}");
+            var errors = CollectErrorMessages(result);
+            Assert.Fail($"{relPath} failed metaschema validation ({SupportedMetaschemaUri}):\n{string.Join("\n", errors)}");
+        }
+    }
+
+    private static JsonDocument LoadJsonDocument(string filePath)
+    {
+        try
+        {
+            return JsonDocument.Parse(File.ReadAllText(filePath));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Failed to read JSON file '{Path.GetRelativePath(RepoRoot, filePath)}'.", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"Failed to read JSON file '{Path.GetRelativePath(RepoRoot, filePath)}'.", ex);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"Failed to parse JSON file '{Path.GetRelativePath(RepoRoot, filePath)}'.", ex);
+        }
+    }
+
+    private static IReadOnlyList<string> CollectErrorMessages(EvaluationResults result)
+    {
+        var messages = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        CollectErrorMessages(result, messages, seen);
+
+        if (messages.Count == 0)
+        {
+            messages.Add("  <root>: metaschema validation failed but no detailed errors were reported.");
+        }
+
+        return messages;
+    }
+
+    private static void CollectErrorMessages(EvaluationResults result, List<string> messages, HashSet<string> seen)
+    {
+        if (result.Errors is not null)
+        {
+            var instanceLocation = string.IsNullOrEmpty(result.InstanceLocation.ToString())
+                ? "<root>"
+                : result.InstanceLocation.ToString();
+
+            foreach (var error in result.Errors)
+            {
+                var message = $"  {instanceLocation}: {error.Key} — {error.Value}";
+                if (seen.Add(message))
+                {
+                    messages.Add(message);
+                }
+            }
+        }
+
+        if (result.Details is null)
+        {
+            return;
+        }
+
+        foreach (var detail in result.Details)
+        {
+            CollectErrorMessages(detail, messages, seen);
         }
     }
 }
