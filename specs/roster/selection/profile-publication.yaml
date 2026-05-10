@@ -1,7 +1,6 @@
 id: profile-publication
 category: selection
 description: Profile on a selection preserves its publicationId
-tags: []
 
 setup:
   gameSystem:

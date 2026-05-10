@@ -1,7 +1,6 @@
 id: nested-children-deep
 category: selection
 description: Nested child entry with cost aggregates to roster total
-tags: []
 
 setup:
   gameSystem:

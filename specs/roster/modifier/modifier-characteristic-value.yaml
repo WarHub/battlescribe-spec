@@ -1,7 +1,6 @@
 id: modifier-characteristic-value
 category: modifier
 description: Modifier can set a Profile Characteristic value (STRING modifier on CharacteristicType ID field)
-tags: []
 
 setup:
   gameSystem:

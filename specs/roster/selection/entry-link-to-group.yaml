@@ -1,7 +1,6 @@
 id: entry-link-to-group
 category: selection
 description: EntryLink with type selectionEntryGroup targets a shared group and exposes its children
-tags: []
 
 setup:
   gameSystem:

@@ -4,7 +4,6 @@ description: >
   Comprehensive smoke test exercising many Protocol setup types, multiple
   action types, and a broad set of state assertion fields for adapter
   protocol adherence.
-tags: []
 
 setup:
   gameSystem:

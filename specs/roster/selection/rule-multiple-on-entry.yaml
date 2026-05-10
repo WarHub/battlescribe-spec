@@ -1,7 +1,6 @@
 id: rule-multiple-on-entry
 category: selection
 description: An entry with two rules produces both rules in selection state
-tags: []
 
 setup:
   gameSystem:

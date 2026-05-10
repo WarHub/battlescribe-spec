@@ -1,7 +1,6 @@
 id: constraint-hidden-enforcement
 category: constraint
 description: Hidden entries are not shown to users but constraints still apply to them
-tags: []
 
 setup:
   gameSystem:

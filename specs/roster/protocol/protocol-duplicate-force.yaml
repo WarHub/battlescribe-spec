@@ -3,7 +3,6 @@ category: protocol
 description: >
   Tests duplicateForce action: duplicating a force creates a deep copy
   with all selections and children preserved.
-tags: []
 engines:
   battlescribe: skip
 

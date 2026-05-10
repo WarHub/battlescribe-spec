@@ -1,7 +1,6 @@
 id: profile-with-multiple-characteristics
 category: selection
 description: A profile with multiple characteristics produces all values in selection state
-tags: []
 
 setup:
   gameSystem:

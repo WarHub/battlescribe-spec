@@ -1,7 +1,6 @@
 id: infogroup-with-modifiers
 category: modifier
 description: An infoGroup profile with a modifier that increments a characteristic value
-tags: []
 
 setup:
   gameSystem:

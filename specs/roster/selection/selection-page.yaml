@@ -1,7 +1,6 @@
 id: selection-page
 category: selection
 description: Selection entry preserves its page field from the catalogue definition
-tags: []
 
 setup:
   gameSystem:

@@ -1,7 +1,6 @@
 id: scope-forces-field
 category: scope
 description: Condition with field=forces counts forces in scope instead of selections
-tags: []
 
 setup:
   gameSystem:

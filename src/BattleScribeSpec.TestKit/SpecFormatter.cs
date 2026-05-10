@@ -110,8 +110,9 @@ public static class SpecFormatter
         var lines = text.Split('\n');
         var result = new List<string>(lines.Length);
 
-        foreach (var line in lines)
+        for (var i = 0; i < lines.Length; i++)
         {
+            var line = lines[i];
             var trimmed = line.TrimEnd();
             var stripped = trimmed.Trim();
 
@@ -121,8 +122,8 @@ public static class SpecFormatter
                 continue;
             }
 
-            // Skip empty tag fields
-            if (stripped is "tag: []" or "tag: ~" or "tag:")
+            // Skip empty tags declarations
+            if (IsEmptyTagsDeclaration(lines, i))
             {
                 continue;
             }
@@ -132,6 +133,36 @@ public static class SpecFormatter
 
         return string.Join("\n", result);
     }
+
+    private static bool IsEmptyTagsDeclaration(string[] lines, int index)
+    {
+        var stripped = lines[index].Trim();
+        if (stripped is "tags: []" or "tags: ~")
+        {
+            return true;
+        }
+
+        if (stripped != "tags:")
+        {
+            return false;
+        }
+
+        var currentIndent = GetIndentationWidth(lines[index]);
+        for (var i = index + 1; i < lines.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(lines[i]))
+            {
+                continue;
+            }
+
+            return GetIndentationWidth(lines[i]) <= currentIndent;
+        }
+
+        return true;
+    }
+
+    private static int GetIndentationWidth(string line) =>
+        line.TakeWhile(ch => ch is ' ' or '\t').Count();
 
     // ── Pass 2: reorder expectedState property blocks ─────────────────────
 

@@ -1,7 +1,6 @@
 id: modifier-on-profile
 category: modifier
 description: Modifiers can be applied to profiles and rules (BaseInfo elements), not just entries
-tags: []
 
 setup:
   gameSystem:
