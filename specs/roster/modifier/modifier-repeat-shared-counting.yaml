@@ -1,0 +1,101 @@
+id: modifier-repeat-shared-counting
+category: modifier
+description: >
+  Repeat with shared=true counts selections across all entry links
+  referencing the same shared entry. A modifier's repeat uses childId
+  pointing to a shared entry; with shared=true, it counts selections from
+  both entry links toward the repeat multiplier.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-model
+          name: Trooper
+          type: model
+      entryLinks:
+        - id: link-alpha
+          name: Alpha Trooper
+          targetId: shared-model
+          type: selectionEntry
+        - id: link-beta
+          name: Beta Trooper
+          targetId: shared-model
+          type: selectionEntry
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+          modifiers:
+            - type: increment
+              field: pts
+              value: "10"
+              repeats:
+                - value: 1
+                  repeats: 1
+                  field: selections
+                  scope: force
+                  childId: shared-model
+                  shared: true
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-squad
+
+  # No troopers yet — Squad costs 50pts base
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              costs:
+                - typeId: pts
+                  value: 50
+
+  # 1 selection via link-alpha — shared counting: 1 trooper → +10pts
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              costs:
+                - typeId: pts
+                  value: 60
+            - name: Trooper
+
+  # 1 selection via link-beta — shared counting: 1+1=2 troopers → +20pts
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              costs:
+                - typeId: pts
+                  value: 70
+            - name: Trooper
+            - name: Trooper

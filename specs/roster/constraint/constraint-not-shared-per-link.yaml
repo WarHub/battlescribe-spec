@@ -1,10 +1,16 @@
 id: constraint-not-shared-per-link
 category: constraint
 description: >
-  When a constraint on a shared entry has shared=false, each entry link
-  counts its selections independently. Two links to the same shared entry
-  each get their own max limit — selecting 2 from each link does not
-  exceed a max=2 constraint because each link is evaluated separately.
+  Contrasts shared=true vs shared=false on constraints of the same shared
+  entry accessed via two entry links. Two constraints on one
+  sharedSelectionEntry: con-max-per-link (shared=false, max=2) counts each
+  link independently; con-max-shared (shared=true, max=3) counts ALL
+  selections across links. Steps prove each fires at the correct threshold.
+  Note: BattleScribe attributes all errors on a shared entry to the
+  shared=true constraint's ID — we distinguish via messageContains.
+tags:
+  - validation-errors
+  - same-constraint-id
 
 setup:
   gameSystem:
@@ -22,12 +28,18 @@ setup:
           name: Squad
           type: unit
           constraints:
-            - id: con-max
+            - id: con-max-per-link
               type: max
               value: 2
               field: selections
               scope: force
               shared: false
+            - id: con-max-shared
+              type: max
+              value: 3
+              field: selections
+              scope: force
+              shared: true
       entryLinks:
         - id: link-alpha
           name: Alpha Squad
@@ -43,7 +55,7 @@ steps:
     id: add-patrol
     forceEntryId: fe-1
 
-  # Select 2 from link-alpha
+  # Select 2 from link-alpha: per-link alpha=2/2 at limit, shared=2/3
   - action: selectEntry
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-alpha
@@ -52,17 +64,59 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-alpha
 
-  # Select 2 from link-beta
-  - action: selectEntry
-    forceId: ${{ steps.add-patrol.forceId }}
-    entryId: link-beta
-
-  - action: selectEntry
-    forceId: ${{ steps.add-patrol.forceId }}
-    entryId: link-beta
-
-  # 4 total selections but no errors because shared=false means
-  # each link tracks its own count independently (2 each, at limit)
+  # No constraint violation yet
   - expectedState:
       forces:
+        - selectionCount: 2
+
+  # Select 1 more from link-alpha: per-link alpha=3 exceeds max=2 → fires
+  # shared total=3 at limit but not exceeded → no shared error yet
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  # Only per-link constraint fires (maximum 2)
+  # BS engine side effect: constraintId reported as con-max-shared
+  - expectedState:
+      errors:
+        - on: selection shared-unit
+          from: shared-unit/con-max-shared
+          messageContains: maximum 2
+      forces:
+        - selectionCount: 3
+
+  # Select 1 from link-beta: per-link beta=1/2 OK
+  # shared total=4 exceeds max=3 → shared constraint fires too
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  # Both constraints now fire: per-link (maximum 2) and shared (maximum 3)
+  - expectedState:
+      errors:
+        - on: selection shared-unit
+          from: shared-unit/con-max-shared
+          messageContains: maximum 2
+        - on: selection shared-unit
+          from: shared-unit/con-max-shared
+          messageContains: maximum 3
+      forces:
         - selectionCount: 4
+
+  # Select 1 more from link-beta: per-link beta=2/2, shared=5
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  # Per-link alpha still exceeds (3 > max 2), shared exceeds (5 > max 3)
+  # Per-link beta now at limit (2/2), no additional per-link error for beta
+  - expectedState:
+      errors:
+        - on: selection shared-unit
+          from: shared-unit/con-max-shared
+          messageContains: maximum 2
+        - on: selection shared-unit
+          from: shared-unit/con-max-shared
+          messageContains: maximum 3
+      forces:
+        - selectionCount: 5

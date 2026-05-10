@@ -52,6 +52,11 @@ When a shared constraint fires, the error references the **original shared entry
 the composite link ID):
 - Error `on: selection shared-unit` with `from: shared-unit/constraint-id`
 
+**Engine side effect:** When both `shared=true` and `shared=false` constraints exist on the
+same shared entry, BattleScribe attributes ALL error `constraintId` values to the
+`shared=true` constraint's ID. The errors can be distinguished by their `messageContains`
+values (different max values). See spec `constraint-not-shared-per-link`.
+
 ### Scope Interaction
 
 The `scope` field (parent, force, roster) determines **where** to look for selections.
@@ -65,6 +70,8 @@ counts selections by the shared entry's original ID rather than the composite li
 This matters when a condition's `childId` points to a shared entry referenced by multiple
 entry links. With `shared=true`, the condition counts selections from ALL entry links that
 reference that shared entry, not just one specific link.
+
+**Spec evidence:** `condition-shared-counting`
 
 ### Example
 
@@ -99,31 +106,54 @@ Without `shared=true`: each link counted separately → condition would need 2 f
 ## `shared=true` on Repeats
 
 **Behavior:** Analogous to conditions. When a repeat has `shared=true`, it counts selections
-by the shared entry's original ID when calculating the repeat multiplier.
+by the shared entry's original ID when calculating the repeat multiplier. Selections from
+ALL entry links referencing the same shared entry contribute to the repeat count.
 
-## Same-ID Constraint Deduplication
+**Spec evidence:** `modifier-repeat-shared-counting` — a repeat with `childId` pointing to
+a shared entry and `shared=true` counts selections from both entry links. Adding one trooper
+via link-alpha (+10pts) then one via link-beta (total 2 troopers → +20pts) confirms
+cross-link counting.
 
-A separate but related behavior: when multiple non-shared entries have constraints with the
-**same constraint ID** and `shared=true`, the constraint IDs enable error deduplication in
-some engines. This is a secondary effect — the primary purpose of `shared` is cross-link
-counting on shared entries.
+## Same-Constraint-ID Side Effect
+
+**Important:** Using the same constraint ID on multiple separate (non-shared) entries with
+`shared=true` does NOT cause cross-entry counting. Each entry's constraint still counts its
+own selections independently. The same constraint ID merely affects error reporting structure.
+
+This is a **side effect of ID reuse**, not a feature of the `shared` flag. When two entries
+have matching constraint IDs and `shared=true`:
+- Each entry independently evaluates its own constraint
+- When violated, each produces its own error
+- Errors are NOT deduplicated or merged
+
+**Spec evidence:** `constraint-shared-linked` — demonstrates that deselecting both entries
+produces two separate errors, one per entry, despite matching constraint IDs.
+
+**Recommendation:** Avoid duplicate constraint IDs in specs unless explicitly testing this
+side effect. Using unique IDs makes spec behavior unambiguous.
 
 ## Existing Spec Coverage
 
 | Spec ID | What it Tests |
 |---------|---------------|
-| `constraint-shared` | Two entries with shared constraints (basic, no limit exceeded) |
-| `constraint-shared-deduplication` | Single shared entry with min constraint auto-satisfied |
-| `constraint-shared-linked` | Same constraint ID on two entries, error per entry |
-| `constraint-entry-link-shared-counting` | **Key spec:** Two links → same shared entry, shared max counted across both |
-| `constraint-entry-link-shared-target` | Single link → shared entry with shared constraint |
+| `constraint-entry-link-shared-counting` | **Key spec:** Two links → same shared entry, shared max counted across both, error fires at aggregate limit |
+| `constraint-entry-link-shared-target` | Single link → shared entry with shared constraint, error fires at limit |
+| `constraint-not-shared-per-link` | **Contrast spec:** shared=true and shared=false on same entry; per-link fires at per-link limit, shared fires at aggregate limit |
+| `constraint-shared-linked` | Same-constraint-ID side effect: duplicate IDs on separate entries produce independent errors |
 | `constraint-entry-link-merged` | Shared entry constraint + link constraint merge |
 | `constraint-entry-link-own` | Link-only constraint (no shared entry constraint) |
 | `condition-shared-counting` | Condition with shared=true counts across entry links |
-| `constraint-not-shared-per-link` | shared=false means per-link independent counting |
+| `modifier-repeat-shared-counting` | Repeat with shared=true counts across entry links |
 
-## Gaps Addressed
+## Changes from Review
 
-1. **Condition `shared=true`** — previously untested; new spec `condition-shared-counting`
-2. **Constraint `shared=false` contrast** — new spec `constraint-not-shared-per-link` proves
-   that without shared=true, each link counts independently
+1. **Removed `constraint-shared`** — tested shared=true on separate non-shared entries with
+   different constraint IDs, which is a no-op (no cross-entry counting). Redundant.
+2. **Removed `constraint-shared-deduplication`** — single entry with min=2 auto-satisfied,
+   no error-proving, no deduplication scenario. Redundant.
+3. **Redesigned `constraint-not-shared-per-link`** — now contrasts shared=true vs shared=false
+   on the same shared entry with error-proving steps for both constraints.
+4. **Added `modifier-repeat-shared-counting`** — proves shared=true on repeats counts across
+   entry links (previously unverified claim).
+5. **Documented same-constraint-ID side effect** — explicit in `constraint-shared-linked`
+   description and this document.
