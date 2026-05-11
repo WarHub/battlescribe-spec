@@ -860,18 +860,23 @@ steps:
       forces:
         - childForceCount: 0
 
-  # Step 9f: duplicateForce — exercises duplicateForce action
+  # Step 9f: duplicateForce — exercises duplicateForce action (NR only; BS doesn't support this)
   - action: duplicateForce
     id: duplicate-battalion
     forceId: ${{ steps.add-battalion.forceId }}
+    skipEngines: [battlescribe]
 
   - expectedState:
       errorCount: 1
       forceCount: 2
+      engines:
+        battlescribe:
+          forceCount: 1
 
   # Step 9g: removeForce — clean up duplicate (restore single-force state)
   - action: removeForce
     forceId: ${{ steps.duplicate-battalion.forceId }}
+    skipEngines: [battlescribe]
 
   - expectedState:
       errorCount: 1

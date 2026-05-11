@@ -445,3 +445,47 @@ These are Bobbie's pending additions. Test will go green once those are added to
 ---
 
 **Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
+
+---
+
+## Decision: Protocol Kitchen-Sink Coverage Complete (Issue #197)
+
+**Author:** Bobbie (Domain & Spec Specialist)
+**Date:** 2026-05-09
+**Status:** Complete
+**Scope:** `specs/roster/protocol/protocol-kitchen-sink.yaml` + `docs/spec-schema.json`
+**Closes:** #197
+
+### Summary
+
+Extended `protocol-kitchen-sink.yaml` to cover all protocol types, all action types, and all expected-state assertion fields required by the `KitchenSinkCoversAllProtocolTypes` lint test.
+
+### Changes Made
+
+**`specs/roster/protocol/protocol-kitchen-sink.yaml`:**
+- Added `ProtocolModifierGroup` + `ProtocolConditionGroup` to `se-commander`'s `modifierGroups`
+- Added `ProtocolRepeat` to `se-commander`'s second modifier (never fires: `atLeast 99 infantry`)
+- Added `fe-platoon` nested inside `fe-battalion` (for `addChildForce`)
+- Added `fe-hidden-detachment` (hidden:true) as gameSystem forceEntry (for `ExpectedForceDef.Hidden`)
+- Added `se-inf-hidden-upgrade` (hidden:true) to se-infantry (for `ExpectedSelectionDef.Hidden`)
+- Added 6 new steps: step 8b/8c (hidden selection select/deselect), step 9a (errorsContain subset), step 9b/9c (hidden force add/remove), step 9d/9e (addChildForce/remove), step 9f/9g (duplicateForce with `skipEngines: [battlescribe]`)
+- Updated final expectedState: added `errorCount`, `gameSystemId`, `costCount`, `childCount`, `childForces`
+
+**`docs/spec-schema.json`:**
+- Added `skipEngines` field to the `step` definition (array of strings). Schema was previously missing this field introduced alongside `SkipEngines` in `StepDef`.
+
+### Key Design Decisions
+
+1. **`duplicateForce` with `skipEngines: [battlescribe]`** — BS engine throws `NotSupportedException`. The action is in the spec for lint coverage but skipped for BS via `skipEngines`. The expectedState after it uses `engines: battlescribe:` override to assert the correct force count (1, not 2).
+
+2. **`errorsContain` and `errorCount` in separate steps** — Validator enforces mutual exclusivity. Step 9a exercises `errorsContain`, final step exercises `errorCount`.
+
+3. **Hidden upgrade error is in BOTH engines** — BS generates the same hidden-entry error as NR. The error is on the parent selection (`se-infantry/hidden`), not the hidden child itself.
+
+4. **gameSystem force entries don't auto-select** — Forces added with `forceEntryId` pointing to a gameSystem entry (not catalogue) don't auto-select minimum-constraint selections from the linked catalogue. `selectionCount: 0` is correct for `fe-hidden-detachment`.
+
+5. **BS returns forces in oldest-first order** — `[Battalion, Hidden Detachment]` for BS (not newest-first as assumed earlier).
+
+---
+
+**Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>

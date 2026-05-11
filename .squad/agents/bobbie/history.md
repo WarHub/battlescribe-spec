@@ -68,3 +68,24 @@
 - `modifier-repeat-shared-flag`: merged spec (same approach as condition)
 - `constraint-shared-flag`: renamed from `constraint-not-shared-per-link`; contrasts both shared values with error-proving
 - 1428 specs pass on BS and NR frozen
+## Research: Issue #197 Protocol Kitchen-Sink Coverage (2026-05-09)
+
+**Task:** Extend `protocol-kitchen-sink.yaml` to cover all missing Protocol types and expected-state fields per lint requirement in `KitchenSinkCoversAllProtocolTypes`.
+
+**Key Findings:**
+
+- `duplicateForce` is NOT supported in BS engine (`NotSupportedException` thrown). It must be in kitchen-sink for lint compliance but must use `skipEngines: [battlescribe]` on the action step.
+- The JSON schema (`docs/spec-schema.json`) did NOT include `skipEngines` — schema must be updated when a new action-level field is added to `StepDef`.
+- `errorsContain` and `errorCount` are **mutually exclusive** in a single `expectedState` (validated in `SpecValidator.cs`). Use different steps to exercise each.
+- `errorsContain` and `errors` are also mutually exclusive.
+- When a hidden selection entry is selected in BS: the error owner is the **PARENT** selection (e.g. `se-infantry`), not the hidden child entry itself. Error format: `selection {parentEntryId} <- {parentEntryId}/hidden`.
+- BS returns forces in **add-chronological order** (oldest first). When adding Hidden Detachment after Battalion, order is `[Battalion, Hidden Detachment]`.
+- Hidden force entries added from the **gameSystem** (not catalogue) do NOT auto-select minimum-constraint entries from the catalogue. `fe-hidden-detachment` (in gameSystem) + `catalogueId: cat-1` → `selectionCount: 0`, not 1.
+- `format-specs.ps1` can corrupt YAML if a comment (using em dashes `—`) is on the same line as a scalar value. Always put step-header comments on their own line with a blank line separator.
+- `errorsContain` subset matching uses `on:` = error owner and `from:` = `{entryId}/{constraintId}`.
+- Engine-specific assertions in `expectedState` use `engines: battlescribe: {overrides}` (zone 3, last).
+- New protocol setup types exercised: `ProtocolModifierGroup`, `ProtocolConditionGroup`, `ProtocolRepeat`.
+- New actions exercised: `addChildForce`, `removeForce` (for child force).
+- New expected-state fields exercised: `errorCount`, `gameSystemId`, `costCount`, `hidden` (force), `childForces`, `childForceCount`, `childCount` (selection).
+
+**Outcome:** All lint checks pass, schema valid, BS engine conformance passes. NR frozen tests are pre-existing failures (Playwright browser not installed in environment). Closes #197.

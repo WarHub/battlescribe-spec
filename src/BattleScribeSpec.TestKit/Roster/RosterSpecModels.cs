@@ -106,6 +106,13 @@ public sealed class StepDef
 
     public string? Path { get; set; }
 
+    /// <summary>
+    /// Engine names to skip this action step for (e.g., ["battlescribe"]).
+    /// When skipped, empty outputs are stored so downstream expressions resolve to null.
+    /// Use for actions not supported by certain engines.
+    /// </summary>
+    public List<string>? SkipEngines { get; set; }
+
     public ExpectedStateDef? ExpectedState { get; set; }
 }
 

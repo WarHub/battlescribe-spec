@@ -126,6 +126,11 @@
         "customNotes": { "type": "string" },
         "categoryEntryId": { "type": "string" },
         "path": { "type": "string" },
+        "skipEngines": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Engine names to skip this action step for (e.g., [\"battlescribe\"])"
+        },
         "expectedState": { "$ref": "#/$defs/expectedState" }
       },
       "oneOf": [
