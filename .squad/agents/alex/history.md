@@ -87,3 +87,30 @@ Remove-Item $tmp
 
 ### Status
 ✓ Complete. All 11 bodies restored. Skill extracted.
+
+## Work Completed: KitchenSinkCoversAllProtocolTypes lint test (2026-05-08)
+
+**Task:** Implement `KitchenSinkCoversAllProtocolTypes` fact in `SpecLintTests.cs` per issue #197.
+
+### What was implemented
+
+Three coverage checks enforced on `protocol-kitchen-sink.yaml`:
+1. **Protocol setup types** — reflection walk of all `Protocol*` concrete types in `BattleScribeSpec.Protocol` namespace; any type not instantiated in the spec's setup YAML fails.
+2. **Action coverage** — all `KnownActions` except `dump` must appear in the spec's steps; missing actions fail.
+3. **ExpectedState field coverage** — all non-nullable fields of `ExpectedStateDef`, `ExpectedForceDef`, `ExpectedSelectionDef` must be set in at least one `expectedState` step.
+
+### Key learnings
+
+- `ProtocolJsonContext` must be explicitly excluded — it starts with "Protocol", is concrete, but is a source-generated JSON context class, not a data type.
+- `ProtocolSerializer` is abstract (static class in IL) — already excluded by `!t.IsAbstract`.
+- `TreatWarningsAsErrors=true` + `EnforceCodeStyleInBuild=true` → IDE0011 (braces required) and IDE0055 (formatting) are compile errors. Every `if`/`foreach` needs full braces.
+- Running `dotnet test` without `-p:TestProfile=lint` causes `SpecLoader.FindRosterSpecsDirectory()` to return null → `NullReferenceException` in other lint tests. Always use `-p:TestProfile=lint` or `pre-push`.
+- `SelectionCount` exists on both `ExpectedStateDef` and `ExpectedForceDef`. The check uses an OR: selectionCount must appear at roster OR force level (not required at both).
+
+### Test outcome
+
+392 existing lint tests still pass. New test fails with exactly 2 violations (Bobbie's pending additions):
+- `[action] 'duplicateForce' not exercised`
+- `[ExpectedStateDef] field 'Name' never set`
+
+**Status:** ✅ Complete. Committed on branch `alex/kitchen-sink-lint-test`.

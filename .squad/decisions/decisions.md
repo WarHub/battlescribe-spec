@@ -395,3 +395,53 @@ High confidence. Mappings consistent with existing epic scopes. Fully reversible
 
 **Archived from:** .squad/decisions/inbox/avasarala-unparented-triage.md  
 **Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
+
+---
+
+## Decision: KitchenSinkCoversAllProtocolTypes lint test design
+
+**Author:** Alex (Tester / QA)  
+**Date:** 2026-05-08  
+**Status:** Complete  
+**Scope:** Lint test design, `tests/Infrastructure/SpecLintTests.cs`  
+**Closes:** #197
+
+### Summary
+
+Added `KitchenSinkCoversAllProtocolTypes` fact to `SpecLintTests` that enforces `protocol-kitchen-sink.yaml` exercises every Protocol type, every known action, and every expected-state field.
+
+### Design Decisions
+
+#### 1. Excluded types from Protocol type scan
+
+| Type | Reason |
+|------|--------|
+| `ProtocolError` | Error wrapper — not a spec setup data type |
+| `ProtocolDataFile` | Intermediate deserialization wrapper — not emitted by spec authors |
+| `ProtocolJsonContext` | Source-generated `System.Text.Json` context class — not a data type |
+
+Abstract types (e.g. `ProtocolSerializer`) are excluded automatically via `!t.IsAbstract`.
+
+#### 2. `dump` excluded from action coverage
+
+`dump` is a debugging action, not a spec conformance action. It has no effect on roster state and would pollute the kitchen-sink spec if required. Excluded via `.Except(["dump"])`.
+
+#### 3. `SelectionCount` OR logic
+
+`SelectionCount` is a field on both `ExpectedStateDef` (roster level) and `ExpectedForceDef` (force level). The kitchen-sink spec checks `selectionCount` at force level, not roster level. The lint test checks that it appears at roster OR force level to avoid a false failure without weakening the requirement.
+
+#### 4. Required field detection
+
+Only non-nullable fields (value types and non-nullable reference types annotated with `[Required]` or lacking `?`) are required. Nullable fields (`int?`, `string?`, `List<T>?`) are considered optional — omitting them from an assertion is valid spec behaviour.
+
+### Outcome
+
+Test runs with 392 passing + 1 expected failure, reporting exactly:
+- `[action] 'duplicateForce' not exercised`
+- `[ExpectedStateDef] field 'Name' never set`
+
+These are Bobbie's pending additions. Test will go green once those are added to the spec.
+
+---
+
+**Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
