@@ -108,7 +108,11 @@ public sealed class StepDef
 
     /// <summary>
     /// Engine names to skip this action step for (e.g., ["battlescribe"]).
-    /// When skipped, empty outputs are stored so downstream expressions resolve to null.
+    /// When skipped, an empty <see cref="ActionOutputs"/> is stored for the step's ID (if set),
+    /// which prevents "step not found" errors in downstream expressions. However, any expression
+    /// that references a specific output field (e.g., <c>${{ steps.id.forceId }}</c>) will still
+    /// throw because those fields are null on the empty outputs. Do not use skipped-step expressions
+    /// in downstream steps for engines where the step is skipped.
     /// Use for actions not supported by certain engines.
     /// </summary>
     public List<string>? SkipEngines { get; set; }

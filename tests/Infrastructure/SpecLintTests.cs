@@ -710,21 +710,7 @@ public sealed class SpecLintTests
     /// </summary>
     private static readonly HashSet<Type> KitchenSinkProtocolTypeExclusions =
     [
-        // ProtocolCommand is abstract (filtered by !IsAbstract), but list concrete subclasses
-        // explicitly for clarity: these are protocol wire types sent over stdin/stdout,
-        // not inline YAML setup data.
-        typeof(SetupCommand),
-        typeof(SetupFromFilesCommand),
-        typeof(ActionCommand),
-        typeof(GetStateCommand),
-        typeof(GetErrorsCommand),
-        typeof(TeardownCommand),
-        // ProtocolResponse is abstract; concrete response types are wire types, not setup data.
-        typeof(SetupResult),
-        typeof(ActionResult),
-        typeof(StateResponse),
-        typeof(ErrorsResponse),
-        typeof(TeardownResult),
+        // ProtocolError is a wire-level response type, not inline YAML setup data.
         typeof(ProtocolError),
         // ProtocolDataFile is only used with SetupFromFilesCommand (file-based data source path),
         // not the inline YAML setup path used in kitchen-sink.
@@ -985,14 +971,19 @@ public sealed class SpecLintTests
         var result = new List<ExpectedSelectionDef>();
         foreach (var force in forces)
         {
-            CollectSelectionsRecursive(force.Selections, result);
-            foreach (var child in force.ChildForces ?? [])
-            {
-                CollectSelectionsRecursive(child.Selections, result);
-            }
+            CollectForceRecursive(force, result);
         }
 
         return result;
+
+        static void CollectForceRecursive(ExpectedForceDef force, List<ExpectedSelectionDef> result)
+        {
+            CollectSelectionsRecursive(force.Selections, result);
+            foreach (var child in force.ChildForces ?? [])
+            {
+                CollectForceRecursive(child, result);
+            }
+        }
 
         static void CollectSelectionsRecursive(List<ExpectedSelectionDef>? selections, List<ExpectedSelectionDef> result)
         {

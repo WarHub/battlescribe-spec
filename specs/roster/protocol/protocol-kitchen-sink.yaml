@@ -7,8 +7,6 @@ description: >
   selectChildEntry, deselectSelection, setSelectionCount, duplicateSelection,
   setCostLimit, setCustomization), and a broad set of state assertion fields
   for adapter protocol adherence.
-tags: []
->>>>>>> 368b288 (feat(spec): enhance kitchen-sink to cover all protocol types and actions (#197))
 
 setup:
   gameSystem:
