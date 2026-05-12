@@ -1,11 +1,19 @@
 id: constraint-shared-linked
 category: constraint
-description: Shared constraint violation produces structured error with entry link
+description: >
+  Same-constraint-ID side effect: two separate entries with matching
+  constraint IDs and shared=true produce independent validation errors
+  per entry, not a merged/deduplicated error. This is a side effect of
+  ID reuse — each entry's constraint is evaluated independently.
+  BattleScribe reports separate errors for each entry that violates its
+  own min=1 requirement. The shared flag and matching IDs do NOT cause
+  cross-entry counting for separate (non-shared) entries.
 tags:
   - duplicate-ids
   - validation-errors
   - structured-errors
   - design-difference
+  - same-constraint-id
 
 setup:
   gameSystem:
@@ -89,8 +97,7 @@ steps:
         - selectionCount: 0
       engines:
         newrecruit:
+          # NR deduplicates shared constraints and only reports one category-level error.
           errors:
             - on: category cat-troops
-              from: se-unit-a/con-min-shared
-            - on: selection se-unit-a
               from: se-unit-a/con-min-shared

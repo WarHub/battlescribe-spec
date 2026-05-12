@@ -1,0 +1,133 @@
+id: condition-shared-flag
+category: condition
+description: >
+  Contrasts shared=true vs shared=false on a condition referencing a shared
+  entry via two entry links. With shared=true, the engine counts selections
+  across all links by base shared ID, so 1+1=2 meets the threshold. With
+  shared=false, the engine matches by composite entry-link ID which never
+  matches the base childId, so the condition never fires regardless of
+  selection count.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-trigger
+          name: Trigger
+          type: unit
+      entryLinks:
+        - id: link-alpha
+          name: Alpha Trigger
+          targetId: shared-trigger
+          type: selectionEntry
+        - id: link-beta
+          name: Beta Trigger
+          targetId: shared-trigger
+          type: selectionEntry
+      selectionEntries:
+        - id: se-target-shared
+          name: Target Shared
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Activated Shared
+              conditions:
+                - type: atLeast
+                  value: 2
+                  field: selections
+                  scope: force
+                  childId: shared-trigger
+                  shared: true
+        - id: se-target-not-shared
+          name: Target Not Shared
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Activated Not Shared
+              conditions:
+                - type: atLeast
+                  value: 2
+                  field: selections
+                  scope: force
+                  childId: shared-trigger
+                  shared: false
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-target-shared
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-target-not-shared
+
+  # 1 trigger via link-alpha — neither condition met yet (need 2)
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target Not Shared
+            - name: Target Shared
+            - name: Trigger
+
+  # 1 trigger via link-beta — shared=true counts 1+1=2, meets threshold
+  # shared=false: childId "shared-trigger" can't match composite IDs, never fires
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Activated Shared
+            - name: Target Not Shared
+            - name: Trigger
+            - name: Trigger
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Activated Not Shared
+                - name: Activated Shared
+                - name: Trigger
+                - name: Trigger
+
+  # Even 2 from same link — shared=false still doesn't fire
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Activated Shared
+            - name: Target Not Shared
+            - name: Trigger
+            - name: Trigger
+            - name: Trigger
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Activated Not Shared
+                - name: Activated Shared
+                - name: Trigger
+                - name: Trigger
+                - name: Trigger

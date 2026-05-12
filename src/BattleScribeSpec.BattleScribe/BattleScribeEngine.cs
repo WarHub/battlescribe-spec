@@ -418,7 +418,8 @@ public sealed class BattleScribeEngine : IDisposable
         var costLimits = JavaListToList<Cost>(roster.getCostLimits());
 
         // Build error ID map from roster's validation error IDs (shared entries)
-        var errorIdMap = new Dictionary<string, (string entryId, string constraintId)>();
+        // Use a multimap: an entry can have multiple constraints with different IDs.
+        var errorIdMap = new Dictionary<string, List<string>>();
         var errorIds = ((BaseRosterElement)roster).getValidationErrorIds();
         if (errorIds is not null)
         {
@@ -434,7 +435,15 @@ public sealed class BattleScribeEngine : IDisposable
                 var parts = errorId.Split("::");
                 if (parts.Length >= 3)
                 {
-                    errorIdMap[parts[1]] = (parts[1], parts[2]);
+                    if (!errorIdMap.TryGetValue(parts[1], out var list))
+                    {
+                        list = [];
+                        errorIdMap[parts[1]] = list;
+                    }
+                    if (!list.Contains(parts[2]))
+                    {
+                        list.Add(parts[2]);
+                    }
                 }
             }
         }
@@ -471,11 +480,11 @@ public sealed class BattleScribeEngine : IDisposable
             {
                 foreach (var kvp in errorIdMap)
                 {
-                    var entry = GetEntryById(kvp.Value.entryId);
+                    var entry = GetEntryById(kvp.Key);
                     if (entry is not null && message.Contains(entry.getName()))
                     {
-                        entryId = kvp.Value.entryId;
-                        constraintId = kvp.Value.constraintId;
+                        entryId = kvp.Key;
+                        constraintId = ResolveConstraintFromEntry(entry, kvp.Value, message);
                         break;
                     }
                 }
@@ -488,9 +497,11 @@ public sealed class BattleScribeEngine : IDisposable
             }
 
             // 4. Fall back to SelectionEntry constraint resolution
-            if (entryId is null)
+            if (entryId is null || constraintId is null)
             {
-                (entryId, constraintId) = ResolveEntryFromMessage(message);
+                var (resolvedEntryId, resolvedConstraintId) = ResolveEntryFromMessage(message);
+                entryId ??= resolvedEntryId;
+                constraintId ??= resolvedConstraintId;
             }
 
             result.Add(new ValidationErrorState(message, "roster", roster.getId(), null,
@@ -539,7 +550,8 @@ public sealed class BattleScribeEngine : IDisposable
 
         // Build a lookup of error IDs on this element (shared entries only)
         // Format: ownerId::entryId::constraintId
-        var errorIdMap = new Dictionary<string, (string entryId, string constraintId)>();
+        // Use a multimap: an entry can have multiple constraints with different IDs.
+        var errorIdMap = new Dictionary<string, List<string>>();
         var errorIds = element.getValidationErrorIds();
         if (errorIds is not null)
         {
@@ -555,7 +567,15 @@ public sealed class BattleScribeEngine : IDisposable
                 var parts = errorId.Split("::");
                 if (parts.Length >= 3)
                 {
-                    errorIdMap[parts[1]] = (parts[1], parts[2]);
+                    if (!errorIdMap.TryGetValue(parts[1], out var list))
+                    {
+                        list = [];
+                        errorIdMap[parts[1]] = list;
+                    }
+                    if (!list.Contains(parts[2]))
+                    {
+                        list.Add(parts[2]);
+                    }
                 }
             }
         }
@@ -579,19 +599,21 @@ public sealed class BattleScribeEngine : IDisposable
             // Try shared entry error IDs first
             foreach (var kvp in errorIdMap)
             {
-                var entry = GetEntryById(kvp.Value.entryId);
+                var entry = GetEntryById(kvp.Key);
                 if (entry is not null && message.Contains(entry.getName()))
                 {
-                    entryId = kvp.Value.entryId;
-                    constraintId = kvp.Value.constraintId;
+                    entryId = kvp.Key;
+                    constraintId = ResolveConstraintFromEntry(entry, kvp.Value, message);
                     break;
                 }
             }
 
-            // Fall back to engine entry data for non-shared entries
-            if (entryId is null)
+            // Fall back to engine entry data when entryId or constraintId unresolved
+            if (entryId is null || constraintId is null)
             {
-                (entryId, constraintId) = ResolveEntryFromMessage(message);
+                var (resolvedEntryId, resolvedConstraintId) = ResolveEntryFromMessage(message);
+                entryId ??= resolvedEntryId;
+                constraintId ??= resolvedConstraintId;
             }
 
             // Detect hidden entry errors: "cannot have any selections of {name} (hidden)"
@@ -614,6 +636,38 @@ public sealed class BattleScribeEngine : IDisposable
     }
 
     /// <summary>
+    /// Given a shared entry and a list of candidate constraint IDs from errorIdMap,
+    /// pick the correct constraint ID by matching constraint value against the error message.
+    /// Returns null when no value match is found (caller should fall through to other resolution).
+    /// </summary>
+    private static string? ResolveConstraintFromEntry(
+        SelectionEntry entry, List<string> candidateConstraintIds, string message)
+    {
+        // Match by constraint value in message.
+        // BS error messages include "(maximum N)" or "(minimum N)" with the constraint value.
+        var constraints = JavaListToList<Constraint>(entry.getConstraints());
+        foreach (var candidateId in candidateConstraintIds)
+        {
+            foreach (var c in constraints)
+            {
+                if (c.getId() != candidateId)
+                {
+                    continue;
+                }
+
+                var value = (int)c.getValue();
+                if (message.Contains($"maximum {value}") || message.Contains($"minimum {value}"))
+                {
+                    return candidateId;
+                }
+            }
+        }
+
+        // No value match — return null so caller can try other resolution methods
+        return null;
+    }
+
+    /// <summary>
     /// Resolve entryId and constraintId by matching the error message against
     /// the engine's own entry data (names and constraint types).
     /// </summary>
@@ -628,14 +682,25 @@ public sealed class BattleScribeEngine : IDisposable
             }
 
             var constraints = JavaListToList<Constraint>(entry.getConstraints());
+            string? firstMatch = null;
             foreach (var c in constraints)
             {
                 var type = c.getType();
                 if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
                     (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
                 {
-                    return (id, c.getId());
+                    // Prefer constraint whose value matches the message
+                    var value = (int)c.getValue();
+                    if (message.Contains($"maximum {value}") || message.Contains($"minimum {value}"))
+                    {
+                        return (id, c.getId());
+                    }
+                    firstMatch ??= c.getId();
                 }
+            }
+            if (firstMatch is not null)
+            {
+                return (id, firstMatch);
             }
             // Entry has no matching constraint — check entry links targeting this entry
             if (_linkConstraintLookup.TryGetValue(id, out var linkConstraints))

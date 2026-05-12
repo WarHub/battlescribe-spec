@@ -395,3 +395,197 @@ High confidence. Mappings consistent with existing epic scopes. Fully reversible
 
 **Archived from:** .squad/decisions/inbox/avasarala-unparented-triage.md  
 **Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
+
+---
+
+## Decision: KitchenSinkCoversAllProtocolTypes lint test design
+
+**Author:** Alex (Tester / QA)  
+**Date:** 2026-05-08  
+**Status:** Complete  
+**Scope:** Lint test design, `tests/Infrastructure/SpecLintTests.cs`  
+**Closes:** #197
+
+### Summary
+
+Added `KitchenSinkCoversAllProtocolTypes` fact to `SpecLintTests` that enforces `protocol-kitchen-sink.yaml` exercises every Protocol type, every known action, and every expected-state field.
+
+### Design Decisions
+
+#### 1. Excluded types from Protocol type scan
+
+| Type | Reason |
+|------|--------|
+| `ProtocolError` | Error wrapper — not a spec setup data type |
+| `ProtocolDataFile` | Intermediate deserialization wrapper — not emitted by spec authors |
+| `ProtocolJsonContext` | Source-generated `System.Text.Json` context class — not a data type |
+
+Abstract types (e.g. `ProtocolSerializer`) are excluded automatically via `!t.IsAbstract`.
+
+#### 2. `dump` excluded from action coverage
+
+`dump` is a debugging action, not a spec conformance action. It has no effect on roster state and would pollute the kitchen-sink spec if required. Excluded via `.Except(["dump"])`.
+
+#### 3. `SelectionCount` OR logic
+
+`SelectionCount` is a field on both `ExpectedStateDef` (roster level) and `ExpectedForceDef` (force level). The kitchen-sink spec checks `selectionCount` at force level, not roster level. The lint test checks that it appears at roster OR force level to avoid a false failure without weakening the requirement.
+
+#### 4. Required field detection
+
+Required fields are determined by **hard-coded lists** in `SpecLintTests.cs`, not by reflection-based nullability. Each list enumerates property names that `protocol-kitchen-sink` must exercise at least once:
+
+- `RequiredExpectedStateFields`: `Name`, `ForceCount`, `Forces`, `CostCount`, `Costs`, `CostLimits`, `CostLimitCount`, `GameSystemName`, `GameSystemId`, `ErrorCount` (plus OR checks for `Errors`/`ErrorsContain` and `SelectionCount`)
+- `RequiredExpectedForceFields`: `Name`, `EntryId`, `CatalogueName`, `CatalogueId`, `CategoryCount`, `Categories`, `Publications`, `SelectionCount`, `Selections`, `Rules`, `Profiles`, `CustomName`, `CustomNotes`, `ChildForceCount`, `ChildForces`, `AvailableEntryCount`, `PublicationId`, `Page`, `Hidden`
+- `RequiredExpectedSelectionFields`: `Name`, `Type`, `Number`, `EntryId`, `EntryGroupId`, `Costs`, `Profiles`, `Rules`, `Categories`, `Children`, `ChildCount`, `Page`, `PublicationId`, `PublicationName`, `CustomName`, `CustomNotes`, `Hidden`
+
+Note: these lists intentionally include many **nullable** fields (e.g., `Page`, `Hidden`, `PublicationId`, `CustomName`, `CustomNotes`) because the kitchen-sink spec is required to demonstrate those fields are observable, even though omitting them in other specs is valid.
+
+### Outcome
+
+Test runs with 392 passing + 1 expected failure, reporting exactly:
+- `[action] 'duplicateForce' not exercised`
+- `[ExpectedStateDef] field 'Name' never set`
+
+These are Bobbie's pending additions. Test will go green once those are added to the spec.
+
+---
+
+**Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
+
+---
+
+## Decision: Protocol Kitchen-Sink Coverage Complete (Issue #197)
+
+**Author:** Bobbie (Domain & Spec Specialist)
+**Date:** 2026-05-09
+**Status:** Complete
+**Scope:** `specs/roster/protocol/protocol-kitchen-sink.yaml` + `docs/spec-schema.json`
+**Closes:** #197
+
+### Summary
+
+Extended `protocol-kitchen-sink.yaml` to cover all protocol types, all action types, and all expected-state assertion fields required by the `KitchenSinkCoversAllProtocolTypes` lint test.
+
+### Changes Made
+
+**`specs/roster/protocol/protocol-kitchen-sink.yaml`:**
+- Added `ProtocolModifierGroup` + `ProtocolConditionGroup` to `se-commander`'s `modifierGroups`
+- Added `ProtocolRepeat` to `se-commander`'s second modifier (never fires: `atLeast 99 infantry`)
+- Added `fe-platoon` nested inside `fe-battalion` (for `addChildForce`)
+- Added `fe-hidden-detachment` (hidden:true) as gameSystem forceEntry (for `ExpectedForceDef.Hidden`)
+- Added `se-inf-hidden-upgrade` (hidden:true) to se-infantry (for `ExpectedSelectionDef.Hidden`)
+- Added 6 new steps: step 8b/8c (hidden selection select/deselect), step 9a (errorsContain subset), step 9b/9c (hidden force add/remove), step 9d/9e (addChildForce/remove), step 9f/9g (duplicateForce with `skipEngines: [battlescribe]`)
+- Updated final expectedState: added `errorCount`, `gameSystemId`, `costCount`, `childCount`, `childForces`
+
+**`docs/spec-schema.json`:**
+- Added `skipEngines` field to the `step` definition (array of strings). Schema was previously missing this field introduced alongside `SkipEngines` in `StepDef`.
+
+### Key Design Decisions
+
+1. **`duplicateForce` with `skipEngines: [battlescribe]`** — BS engine throws `NotSupportedException`. The action is in the spec for lint coverage but skipped for BS via `skipEngines`. The expectedState after it uses `engines: battlescribe:` override to assert the correct force count (1, not 2).
+
+2. **`errorsContain` and `errorCount` in separate steps** — Validator enforces mutual exclusivity. Step 9a exercises `errorsContain`, final step exercises `errorCount`.
+
+3. **Hidden upgrade error is in BOTH engines** — BS generates the same hidden-entry error as NR. The error is on the parent selection (`se-infantry/hidden`), not the hidden child itself.
+
+4. **gameSystem force entries don't auto-select** — Forces added with `forceEntryId` pointing to a gameSystem entry (not catalogue) don't auto-select minimum-constraint selections from the linked catalogue. `selectionCount: 0` is correct for `fe-hidden-detachment`.
+
+5. **BS returns forces in oldest-first order** — `[Battalion, Hidden Detachment]` for BS (not newest-first as assumed earlier).
+
+---
+
+**Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
+
+
+---
+
+# Decision: KitchenSinkProtocolTypeExclusions — Only Protocol* Types Belong
+
+**Date:** 2026-05-12  
+**Author:** Alex (QA)  
+**Related:** `tests/Infrastructure/SpecLintTests.cs`, `KitchenSinkCoversAllProtocolTypes`
+
+## Decision
+
+`KitchenSinkProtocolTypeExclusions` must only contain types whose names start with `Protocol`.  
+The scan filter (`t.Name.StartsWith("Protocol")`) makes all non-`Protocol*` entries unreachable dead code.
+
+## Rationale
+
+Adding command/response types (SetupCommand, ActionResult, etc.) to the exclusion set provides false documentation — it implies they are candidates for the coverage check when they are not. This confused reviewers and could mislead future maintainers into thinking the scan would catch them.
+
+## Rule
+
+> When adding a new entry to `KitchenSinkProtocolTypeExclusions`, verify it starts with "Protocol". If it doesn't, it doesn't belong in this set.
+
+---
+
+# Decision: Check for Git Conflict Markers in Spec Lint
+
+**Date:** 2026-05-12  
+**Author:** Alex (QA)  
+**Related:** `specs/roster/protocol/protocol-kitchen-sink.yaml`, `tests/Infrastructure/SpecLintTests.cs`
+
+## Problem
+
+A stray `>>>>>>> ...` git conflict marker was committed in `protocol-kitchen-sink.yaml`. This caused a cryptic YAML parse error that manifested as `Assert.NotNull() Failure` in `KitchenSinkCoversAllProtocolTypes`, with no obvious connection between the test failure and the root cause.
+
+## Decision
+
+Consider adding a lint rule in `SpecLintTests.AllLintChecks` that detects git conflict marker patterns (`<<<<<<<`, `=======`, `>>>>>>>`) in spec YAML files and fails with a clear error message. This would make such failures immediately actionable instead of silently failing spec load.
+
+## Current Workaround
+
+Use `dotnet run --project src/BattleScribeSpec.Debugger -- {spec-id}` to directly load a failing spec — it prints YAML parse errors clearly.
+
+
+---
+
+# Decision: SkipEngines XML doc fix + decisions.md accuracy fix
+
+**Author:** Avasarala (Lead)
+**Date:** 2026-05-12
+**Status:** Complete
+**Scope:** `src/BattleScribeSpec.TestKit/Roster/RosterSpecModels.cs`, `.squad/decisions/decisions.md`
+
+---
+
+## Issue 1: SkipEngines XML doc was misleading (RosterSpecModels.cs:111)
+
+### Finding
+
+The XML doc for `StepDef.SkipEngines` stated:
+
+> "When skipped, empty outputs are stored so downstream expressions resolve to null."
+
+This is incorrect. When a step is skipped, `ExpressionResolver.StoreOutputs(id, new ActionOutputs())` is called, which stores an `ActionOutputs` with all fields null. The effect is:
+
+- **Prevents:** "step not found" `InvalidOperationException` for the skipped step's ID.
+- **Does NOT prevent:** `InvalidOperationException` for any expression like `${{ steps.id.forceId }}` — `ExpressionResolver.ResolveField` throws explicitly when `ForceId` is null.
+
+Expressions do **not** resolve to null; they throw. The documentation created a false expectation.
+
+### Decision
+
+Fix the XML doc — not the code. Making `ExpressionResolver` return `null` for skipped-step fields would propagate nulls silently to callers that then throw with less informative errors. The current throw-at-the-resolver behavior is correct; only the doc was wrong.
+
+### Change
+
+Updated the XML doc to say: empty outputs prevent "step not found" errors but expressions referencing specific output fields still throw; spec authors must not reference skipped-step outputs from downstream steps targeting those same engines.
+
+---
+
+## Issue 2: decisions.md "Required field detection" section was inaccurate (line 435)
+
+### Finding
+
+The decision doc claimed required-field detection used reflection-based nullability (non-nullable = required, nullable = optional). The actual implementation uses **hard-coded lists** (`RequiredExpectedStateFields`, `RequiredExpectedForceFields`, `RequiredExpectedSelectionFields`) in `SpecLintTests.cs`. These lists include many nullable fields — `Page` (`string?`), `Hidden` (`bool?`), `PublicationId` (`string?`), `CustomName` (`string?`), `CustomNotes` (`string?`) — because the kitchen-sink spec must demonstrate that all observable fields are reachable, regardless of nullability.
+
+### Decision
+
+Update the decision doc to describe the actual implementation: named hard-coded lists, the specific nullable fields included in each, and the rationale (kitchen-sink must demonstrate observability of all fields, not just non-nullable ones).
+
+---
+
+**Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
+
