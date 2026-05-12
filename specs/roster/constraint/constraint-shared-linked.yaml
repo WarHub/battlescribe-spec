@@ -97,8 +97,7 @@ steps:
         - selectionCount: 0
       engines:
         newrecruit:
+          # NR deduplicates shared constraints and only reports one category-level error.
           errors:
             - on: category cat-troops
-              from: se-unit-a/con-min-shared
-            - on: selection se-unit-a
               from: se-unit-a/con-min-shared
