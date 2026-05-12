@@ -1,25 +1,33 @@
 id: condition-shared-flag-nested
 category: condition
 description: >
-  Tests how shared=false on conditions behaves when the condition-holder is
-  nested inside a parent unit selection (Container), contrasting with the
-  top-level case in condition-shared-flag.yaml.
+  Tests shared=false condition behavior when the condition-holder is nested
+  inside a parent unit selection (Container), contrasting with the top-level
+  force-child case in condition-shared-flag.yaml.
 
-  In NR, find("force", shared=false) returns this.parent — for nested entries,
-  this is the Container (a unit selection), not the force. NR's reactive
-  counting system propagates base shared-entry ID counters only up to the
-  force scope; intermediate unit selections only track composite entry-link
-  IDs. So Container.do_get("::selections::shared-trigger") = 0 regardless of
-  how many triggers are inside Container. The condition never fires.
+  Observed behavior: both engines agree — the nested shared=false condition
+  never fires — but for different reasons.
 
-  The result: both engines agree — nested shared=false never fires — but for
-  different reasons. BattleScribe: childId can't match composite IDs. NR:
-  scope is Container, and Container has no base-ID counter for the shared
-  entry.
+  BattleScribe: childId ("shared-trigger") can never match composite
+  entry-link IDs ("link-alpha::shared-trigger"), so the count is always 0.
 
-  Contrast with condition-shared-flag.yaml (top-level): there, NR's
-  this.parent IS the force, which DOES have a base-ID counter, so NR fires
-  the shared=false condition when cross-link count reaches the threshold.
+  NewRecruit: the condition fires at force level (see condition-shared-flag
+  for that case), but NOT when nested. The mechanism (inferred from JS source
+  analysis in docs/shared-flag-semantics.md): NR's find("force", shared=false)
+  returns this.parent rather than traversing to the force node. For nested
+  entries this.parent is the Container, not the force. NR's reactive counters
+  for the base shared-entry ID ("shared-trigger") are only maintained at force
+  scope; Container-level counters track composite IDs only. So the count seen
+  by the condition is 0 regardless of how many triggers are inside Container.
+
+  The spec uses 1 trigger outside Container (beta, at force level) and
+  2 triggers inside Container (alpha, alpha-2) to establish that: the
+  cross-link total (3) alone is insufficient to fire in either engine when
+  nested, but the within-container total (2) is also insufficient for NR
+  due to scope/counter reasons.
+
+  See docs/shared-flag-semantics.md for a full behavioral table across all
+  combinations of engine × nesting × shared flag.
 
 setup:
   gameSystem:

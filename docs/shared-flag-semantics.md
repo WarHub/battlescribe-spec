@@ -1,35 +1,34 @@
 # `shared` Flag Semantics
 
 The `shared` boolean flag exists on three protocol types: **constraints**, **conditions**,
-and **repeats**. It controls how the engine identifies selections when counting them for
-validation or evaluation — specifically, whether to count by the **shared entry's original
-ID** or by the **entry-link-specific composite ID**.
+and **repeats**. It controls how the engine identifies selections when counting them —
+specifically, whether to count by the **shared entry's original ID** or by the
+**entry-link-specific composite ID**.
 
 ## Context: Entry Links and Shared Entries
 
 In BattleScribe, a `sharedSelectionEntry` (or `sharedSelectionEntryGroup`) is a reusable
-definition that lives in the catalogue's shared section. It becomes available in a roster
-through **entry links** — references that expand the shared entry into a selectable option.
+definition that lives in the catalogue's shared section. It becomes selectable through
+**entry links** — references that expand the shared entry into a roster option.
 
 During catalogue expansion, each entry link creates a composite ID:
-`{linkId}::{sharedEntryId}` (e.g., `link-alpha::shared-unit`). This means selections made
-through different entry links have **different composite IDs** even though they reference the
-same underlying shared entry.
+`{linkId}::{sharedEntryId}` (e.g., `link-alpha::shared-unit`). Selections made through
+different entry links have **different composite IDs** even though they reference the same
+underlying shared entry.
 
-## `shared=true` on Constraints
+The `shared` flag determines which ID is used when counting selections:
 
-**Behavior:** When a constraint has `shared=true`, the engine counts selections by the
-shared entry's **original ID** rather than the composite entry link ID. This means all
-selections from any entry link referencing the same shared entry are counted together toward
-a single limit.
+| `shared` value | Counted by |
+|---------------|-----------|
+| `true` | Base shared entry ID — all links aggregate |
+| `false` | Composite entry-link ID — each link independent |
 
-**Without `shared=true`:** Each entry link's constraint counts only its own selections
-independently. The max/min limit applies per-link, not globally. On conditions and repeats,
-`shared=false` means `childId` is matched by composite entry-link ID, so a `childId`
-pointing to a shared entry won't match any selections accessed via entry links — effectively
-disabling the condition/repeat for cross-link scenarios.
+## `shared` on Constraints
 
-### Example
+### `shared=true`
+
+The engine counts selections by the shared entry's **original ID**. All selections from
+any entry link referencing the same shared entry aggregate toward a single limit.
 
 ```yaml
 sharedSelectionEntries:
@@ -46,148 +45,139 @@ entryLinks:
     targetId: shared-unit
 ```
 
-With `shared=true`: selecting 2 via link-alpha and 1 via link-beta = **3 total** (at limit).
-Without `shared=true`: each link would independently track its own count.
+Selecting 2 via link-alpha and 1 via link-beta = **3 total** (at limit).
+
+**Spec evidence:** `constraint-entry-link-shared-counting`, `constraint-shared-flag`
+
+### `shared=false` (default)
+
+Each entry link's constraint counts only its own selections independently. The limit
+applies per-link, not globally.
+
+**Spec evidence:** `constraint-shared-flag`
 
 ### Error Attribution
 
-When a shared constraint fires, the error references the **original shared entry ID** (not
-the composite link ID):
-- Error `on: selection shared-unit` with `from: shared-unit/constraint-id`
+When a shared constraint fires, the error references the **original shared entry ID**:
+- `on: selection shared-unit`, `from: shared-unit/constraint-id`
 
-Each constraint error correctly reports its own constraint ID, even when both `shared=true`
-and `shared=false` constraints exist on the same shared entry. The constraint value in the
-error message (e.g., "maximum 2" vs "maximum 3") distinguishes them.
+Both `shared=true` and `shared=false` constraints on the same shared entry produce their
+own independent errors with their own constraint IDs and values.
 
 ### Scope Interaction
 
-The `scope` field (parent, force, roster) determines **where** to look for selections.
-The `shared` flag determines **how** to identify/group them when counting.
+The `scope` field (`parent`, `force`, `roster`) determines **where** to look for
+selections. The `shared` flag determines **how** to identify them when counting.
 
-## `shared=true` on Conditions
+## `shared` on Conditions
 
-**Behavior:** When a condition has `shared=true` and references a `childId`, the engine
-counts selections by the shared entry's original ID rather than the composite link ID.
+### `shared=true`
 
-This matters when a condition's `childId` points to a shared entry referenced by multiple
-entry links. With `shared=true`, the condition counts selections from ALL entry links that
-reference that shared entry, not just one specific link.
+The engine counts selections by the shared entry's original ID. A condition with
+`childId: shared-trigger` and `shared=true` counts selections from ALL entry links
+referencing `shared-trigger`.
+
+```yaml
+conditions:
+  - type: atLeast
+    value: 2
+    field: selections
+    scope: force
+    childId: shared-trigger
+    shared: true    # 1 via link-alpha + 1 via link-beta = 2 → fires
+```
 
 **Spec evidence:** `condition-shared-flag`
 
-### Example
+### `shared=false` (default)
 
-```yaml
-sharedSelectionEntries:
-  - id: shared-trigger
-    name: Trigger Unit
-entryLinks:
-  - id: link-1
-    targetId: shared-trigger
-  - id: link-2
-    targetId: shared-trigger
+**BattleScribe:** The engine matches by composite entry-link ID. Since selections via
+entry links have composite IDs (`link-alpha::shared-trigger`) and `childId` is the raw
+shared ID (`shared-trigger`), the condition can never match any selections. The condition
+effectively never fires.
 
-selectionEntries:
-  - id: se-target
-    modifiers:
-      - type: set
-        field: name
-        value: Activated
-        conditions:
-          - type: atLeast
-            value: 2
-            field: selections
-            scope: force
-            childId: shared-trigger
-            shared: true    # counts selections from BOTH link-1 and link-2
-```
+**NewRecruit:** Ignores `shared=false` — conditions fire as if `shared=true`. See
+[NewRecruit Engine Behavior](#newrecruit-engine-behavior) for root cause.
 
-With `shared=true`: 1 selection via link-1 + 1 via link-2 = 2 total → condition met.
-Without `shared=true`: each link counted separately → condition would need 2 from a single link.
+| Scenario | BattleScribe | NewRecruit |
+|----------|-------------|-----------|
+| Condition at force level, shared=false | Never fires (ID mismatch) | Fires (cross-link count, same as shared=true) |
+| Condition nested in unit, shared=false | Never fires (ID mismatch) | Never fires (scope = container, no base-ID counter at container level) |
 
-### `shared=false` on Conditions
+**Spec evidence:**
+- `condition-shared-flag` — top-level case; engines diverge
+- `condition-shared-flag-nested` — nested case; engines agree (different reasons)
 
-**BattleScribe behavior:** When a condition has `shared=false` (the default) and `childId`
-references a shared entry, the engine matches by **composite entry-link ID** rather than the
-base shared ID. Since selections accessed via entry links have composite IDs (e.g.,
-`link-alpha::shared-trigger`), and the `childId` is the raw shared ID (`shared-trigger`),
-the condition can never match any selections. This effectively disables the condition for
-shared entries accessed through entry links.
+## `shared` on Repeats
 
-**NewRecruit behavior (engine limitation):** NR ignores `shared=false` on conditions — they
-fire as if `shared=true`. See [NewRecruit Engine Limitation](#newrecruit-engine-limitation)
-below for the detailed root cause.
+### `shared=true`
 
-**Spec evidence:** `condition-shared-flag` — adding 1 Alpha Trigger + 1 Beta Trigger
-(total=2 across links) activates `Target Shared` (shared=true) in both engines, but only
-activates `Target Not Shared` (shared=false) in NewRecruit. BattleScribe correctly leaves it
-inactive.
-
-## `shared=true` on Repeats
-
-**Behavior:** Analogous to conditions. When a repeat has `shared=true`, it counts selections
-by the shared entry's original ID when calculating the repeat multiplier. Selections from
-ALL entry links referencing the same shared entry contribute to the repeat count.
+Analogous to conditions. The repeat multiplier is calculated by counting selections
+using the shared entry's original ID, aggregating across all entry links.
 
 **Spec evidence:** `modifier-repeat-shared-flag`
 
-### `shared=false` on Repeats
+### `shared=false` (default)
 
-**BattleScribe behavior:** Analogous to conditions. When a repeat has `shared=false` (the
-default) and `childId` references a shared entry, the engine matches by composite entry-link
-ID, so no selections match the raw `childId`. The repeat multiplier stays at zero regardless
-of how many selections exist via entry links.
+**BattleScribe:** Analogous to conditions — composite ID mismatch means no selections
+match the raw `childId`. Repeat multiplier stays at zero.
 
-**NewRecruit behavior (engine limitation):** NR ignores `shared=false` on repeats — they
-fire as if `shared=true`. Same root cause as conditions (see
-[NewRecruit Engine Limitation](#newrecruit-engine-limitation)).
+**NewRecruit:** Ignores `shared=false` — repeats fire as if `shared=true`. Same root
+cause as conditions.
 
-**Spec evidence:** `modifier-repeat-shared-flag` — adding troopers via two entry links does
-not change the Squad's cost in BattleScribe (stays at 50pts base), but NR increments cost
-per trooper regardless of the shared flag.
+**Spec evidence:** `modifier-repeat-shared-flag`
 
 ## Same-Constraint-ID Side Effect
 
-**Important:** Using the same constraint ID on multiple separate (non-shared) entries with
-`shared=true` does NOT cause cross-entry counting. Each entry's constraint still counts its
-own selections independently. The same constraint ID merely affects error reporting structure.
+Using the same constraint ID on multiple separate (non-shared) entries with `shared=true`
+does NOT cause cross-entry counting. Each entry's constraint independently evaluates
+its own selections. When violated, each produces its own separate error.
 
-This is a **side effect of ID reuse**, not a feature of the `shared` flag. When two entries
-have matching constraint IDs and `shared=true`:
-- Each entry independently evaluates its own constraint
-- When violated, each produces its own error
-- Errors are NOT deduplicated or merged
+**Spec evidence:** `constraint-shared-linked`
 
-**Spec evidence:** `constraint-shared-linked` — demonstrates that deselecting both entries
-produces two separate errors, one per entry, despite matching constraint IDs.
+**Recommendation:** Avoid duplicate constraint IDs unless explicitly testing this side
+effect. Unique IDs make spec behavior unambiguous.
 
-**Recommendation:** Avoid duplicate constraint IDs in specs unless explicitly testing this
-side effect. Using unique IDs makes spec behavior unambiguous.
-
-## Existing Spec Coverage
+## Spec Coverage Summary
 
 | Spec ID | What it Tests |
 |---------|---------------|
-| `constraint-entry-link-shared-counting` | **Key spec:** Two links → same shared entry, shared max counted across both, error fires at aggregate limit |
-| `constraint-entry-link-shared-target` | Single link → shared entry with shared constraint, error fires at limit |
-| `constraint-shared-flag` | **Contrast spec:** shared=true and shared=false on same entry; per-link fires at per-link limit, shared fires at aggregate limit |
-| `constraint-shared-linked` | Same-constraint-ID side effect: duplicate IDs on separate entries produce independent errors |
+| `constraint-entry-link-shared-counting` | Two links → shared max counted across both; error fires at aggregate limit |
+| `constraint-entry-link-shared-target` | Single link → shared entry with shared constraint; error fires at limit |
+| `constraint-shared-flag` | shared=true vs shared=false on same entry; both constraints error-proven |
+| `constraint-shared-linked` | Same constraint ID on separate entries → independent errors |
 | `constraint-entry-link-merged` | Shared entry constraint + link constraint merge |
 | `constraint-entry-link-own` | Link-only constraint (no shared entry constraint) |
-| `condition-shared-flag` | Unified: shared=true counts across links; shared=false never fires in BS (NR diverges) |
-| `modifier-repeat-shared-flag` | Unified: shared=true counts across links; shared=false multiplier stays zero in BS (NR diverges) |
+| `condition-shared-flag` | shared=true counts across links; shared=false never fires in BS; NR diverges |
+| `condition-shared-flag-nested` | Nested shared=false; both engines agree (different mechanisms) |
+| `modifier-repeat-shared-flag` | shared=true counts across links; shared=false multiplier stays zero in BS; NR diverges |
 
-## NewRecruit Engine Limitation
+## NewRecruit Engine Behavior
 
 NewRecruit correctly implements `shared=false` for **constraints** but ignores it for
-**conditions** and **repeats**. Both behaviors have been confirmed by:
-1. Live browser testing (headed Playwright session against `newrecruit.eu`)
-2. Frozen HAR testing (NR v34.55, bundle `BA2pibXD.js`)
-3. Direct JS source analysis
+**conditions** and **repeats**.
 
-### Root Cause: `hash()` function and missing `childId` adaptation
+### Summary Table
 
-NR's reactive counting system keys listeners via a `hash()` function:
+| Element | shared=true | shared=false |
+|---------|------------|--------------|
+| Constraint | ✅ Counts across all links | ✅ Counts per-link only |
+| Condition | ✅ Counts across all links | ❌ Ignored — fires as shared=true (at force level) |
+| Repeat | ✅ Counts across all links | ❌ Ignored — fires as shared=true (at force level) |
+
+Additionally, for entries **nested inside a parent selection** (not a direct force child):
+
+| Scenario | BattleScribe | NewRecruit |
+|----------|-------------|-----------|
+| Force-level + shared=false condition | ❌ never fires | ❌ fires (hash collision with shared=true) |
+| Nested + shared=false condition | ❌ never fires | ✅ never fires (no base-ID counter at container scope) |
+
+NR gets the right answer for the nested case, but for the wrong reason.
+
+### Root Cause: `hash()` and Missing `childId` Adaptation
+
+NR's reactive counting system keys listeners via a `hash()` function
+(from bundle `BA2pibXD.js`):
 
 ```js
 hash(e) {
@@ -195,14 +185,13 @@ hash(e) {
 }
 ```
 
-The hash does **NOT** include `shared`. This means conditions/repeats with `shared=true` and
-`shared=false` but the same `field`/`childId` share the identical listener bucket — they
-receive the same cross-link count.
+The hash does **NOT** include `shared`. Conditions/repeats with `shared=true` and
+`shared=false` but the same `field`/`childId` share the identical listener bucket —
+they receive the same cross-link count.
 
 For **constraints**, the setup code explicitly adapts `childId` when `shared===false`:
 
 ```js
-// In the constraint setup loop:
 this.listen(t, {
   ...t.source,
   childId: t.source.shared===!1 && !this.source.isCategory()
@@ -211,65 +200,44 @@ this.listen(t, {
 })
 ```
 
-When `shared=false`, the constraint's `childId` is replaced with `this.source.id` (the
-per-link composite ID like `link-alpha::shared-unit`). This creates a **distinct hash key**
-for each link, so each constraint counts only its own link's selections. This is correct ✓
+When `shared=false`, the constraint's `childId` becomes the per-link composite ID
+(e.g., `link-alpha::shared-unit`), creating a **distinct hash key** for each link.
+This is correct ✅
 
 For **conditions and repeats**, no equivalent `childId` adaptation exists. The `childId`
-stays as the raw shared entry ID (`shared-trigger`). Both shared=true and shared=false
-conditions hash to the **same key**, receive the same cross-link count, and always fire as if
-`shared=true`.
+stays as the raw shared entry ID. Both `shared=true` and `shared=false` hash to the same
+key and always behave as `shared=true`.
 
-### The `find()` asymmetry
+### The `find()` Scope Method
 
-The `find(scope, shared)` method also has a `shared=false` branch:
+The `find(scope, shared)` method also handles `shared=false`:
 
 ```js
 find(e, t, n) {
   if (t === !1) switch(e) {
-    case "force": return this.source.isGroup() ? this : this.parent;  // restricted
-    // ...
+    case "force": return this.source.isGroup() ? this : this.parent;
   }
   switch(e) {
-    case "force": return this.findParentOrSelf(i => i.source.isForce());  // full traversal
-    // ...
+    case "force": return this.findParentOrSelf(i => i.source.isForce());
   }
 }
 ```
 
 When `shared=false`, `find("force")` returns `this.parent` (immediate parent) instead of
-traversing up to the force node. This restriction is only meaningful for selections **nested
-inside a group** — for direct force children (the common case for shared entry links), the
-immediate parent IS the force scope, so the result is identical.
+traversing to the force node. Since `isGroup()` returns `false` for all entry types in NR,
+this always returns `this.parent`.
 
-### Net effect
+- **Force-level entries:** `this.parent` is the Force → same result as `shared=true`
+- **Nested entries:** `this.parent` is the container selection → scope restricted to container
 
-- `shared=false` on **constraints**: ✅ works correctly via explicit `childId` adaptation
-- `shared=false` on **conditions**: ❌ ignored — same hash as `shared=true`, same count
-- `shared=false` on **repeats**: ❌ ignored — same hash as `shared=true`, same count
+For nested entries, even though scope is restricted to the Container, the condition still
+doesn't fire because NR's reactive counters for the base shared-entry ID are only maintained
+at force scope. Container-level counters track composite IDs only, so the base-ID count seen
+by the condition is 0. (This is inferred from observable behavior and the JS source structure;
+it cannot be directly asserted in a YAML spec.)
 
-This is an NR engine design gap, not an adapter bug. The spec test suite documents this with
-per-engine `expectedState` overrides in `condition-shared-flag.yaml` and
-`modifier-repeat-shared-flag.yaml`.
+This distinction is what `condition-shared-flag-nested.yaml` observes: the condition doesn't
+fire for nested entries in NR, while `condition-shared-flag.yaml` shows it incorrectly fires
+for force-level entries. The contrast between the two specs provides behavioral evidence for
+the scope restriction mechanism.
 
-## Changes from Review
-
-1. **Removed `constraint-shared`** — tested shared=true on separate non-shared entries with
-   different constraint IDs, which is a no-op (no cross-entry counting). Redundant.
-2. **Removed `constraint-shared-deduplication`** — single entry with min=2 auto-satisfied,
-   no error-proving, no deduplication scenario. Redundant.
-3. **Redesigned `constraint-not-shared-per-link` → `constraint-shared-flag`** — now
-   contrasts shared=true vs shared=false on the same shared entry with error-proving steps
-   for both constraints.
-4. **Merged condition specs → `condition-shared-flag`** — unified shared=true and shared=false
-   conditions in one spec with per-engine expectedState overrides for NR divergence.
-5. **Merged modifier-repeat specs → `modifier-repeat-shared-flag`** — same approach.
-6. **Documented same-constraint-ID side effect** — explicit in `constraint-shared-linked`
-   description and this document.
-7. **Fixed adapter constraintId attribution bug** — errorIdMap in BattleScribeEngine was
-   overwriting entries for the same shared entry, causing all errors to be attributed to the
-   shared=true constraint's ID. Fixed with multimap and value-matching resolution.
-8. **Documented NR engine limitation** — `shared=false` on conditions/repeats is silently
-   ignored by NR due to missing `childId` adaptation in the condition/repeat setup path
-   (unlike constraints which have explicit per-link `childId` substitution). Documented with
-   per-engine expectedState overrides rather than skip flags.
