@@ -24,7 +24,10 @@ selections from any entry link referencing the same shared entry are counted tog
 a single limit.
 
 **Without `shared=true`:** Each entry link's constraint counts only its own selections
-independently. The max/min limit applies per-link, not globally.
+independently. The max/min limit applies per-link, not globally. On conditions and repeats,
+`shared=false` means `childId` is matched by composite entry-link ID, so a `childId`
+pointing to a shared entry won't match any selections accessed via entry links — effectively
+disabling the condition/repeat for cross-link scenarios.
 
 ### Example
 
@@ -52,10 +55,9 @@ When a shared constraint fires, the error references the **original shared entry
 the composite link ID):
 - Error `on: selection shared-unit` with `from: shared-unit/constraint-id`
 
-**Engine side effect:** When both `shared=true` and `shared=false` constraints exist on the
-same shared entry, BattleScribe attributes ALL error `constraintId` values to the
-`shared=true` constraint's ID. The errors can be distinguished by their `messageContains`
-values (different max values). See spec `constraint-not-shared-per-link`.
+Each constraint error correctly reports its own constraint ID, even when both `shared=true`
+and `shared=false` constraints exist on the same shared entry. The constraint value in the
+error message (e.g., "maximum 2" vs "maximum 3") distinguishes them.
 
 ### Scope Interaction
 
@@ -103,6 +105,19 @@ selectionEntries:
 With `shared=true`: 1 selection via link-1 + 1 via link-2 = 2 total → condition met.
 Without `shared=true`: each link counted separately → condition would need 2 from a single link.
 
+### `shared=false` on Conditions
+
+**Behavior:** When a condition has `shared=false` (the default) and `childId` references a
+shared entry, the engine matches by **composite entry-link ID** rather than the base shared
+ID. Since selections accessed via entry links have composite IDs (e.g.,
+`link-alpha::shared-trigger`), and the `childId` is the raw shared ID (`shared-trigger`),
+the condition can never match any selections. This effectively disables the condition for
+shared entries accessed through entry links.
+
+**Spec evidence:** `condition-not-shared-per-link` — adding 3+ selections of the shared
+trigger via two entry links never activates the condition (stays "Target", not "Activated"),
+contrasting with `condition-shared-counting` where `shared=true` activates at 2 total.
+
 ## `shared=true` on Repeats
 
 **Behavior:** Analogous to conditions. When a repeat has `shared=true`, it counts selections
@@ -113,6 +128,17 @@ ALL entry links referencing the same shared entry contribute to the repeat count
 a shared entry and `shared=true` counts selections from both entry links. Adding one trooper
 via link-alpha (+10pts) then one via link-beta (total 2 troopers → +20pts) confirms
 cross-link counting.
+
+### `shared=false` on Repeats
+
+**Behavior:** Analogous to conditions. When a repeat has `shared=false` (the default) and
+`childId` references a shared entry, the engine matches by composite entry-link ID, so no
+selections match the raw `childId`. The repeat multiplier stays at zero regardless of how
+many selections exist via entry links.
+
+**Spec evidence:** `modifier-repeat-not-shared-per-link` — adding troopers via two entry
+links does not change the Squad's cost (stays at 50pts base), contrasting with
+`modifier-repeat-shared-counting` where `shared=true` increments cost per trooper.
 
 ## Same-Constraint-ID Side Effect
 
@@ -143,7 +169,9 @@ side effect. Using unique IDs makes spec behavior unambiguous.
 | `constraint-entry-link-merged` | Shared entry constraint + link constraint merge |
 | `constraint-entry-link-own` | Link-only constraint (no shared entry constraint) |
 | `condition-shared-counting` | Condition with shared=true counts across entry links |
+| `condition-not-shared-per-link` | Condition with shared=false: childId can't match composite IDs, condition never fires |
 | `modifier-repeat-shared-counting` | Repeat with shared=true counts across entry links |
+| `modifier-repeat-not-shared-per-link` | Repeat with shared=false: childId can't match composite IDs, multiplier stays zero |
 
 ## Changes from Review
 
@@ -157,3 +185,10 @@ side effect. Using unique IDs makes spec behavior unambiguous.
    entry links (previously unverified claim).
 5. **Documented same-constraint-ID side effect** — explicit in `constraint-shared-linked`
    description and this document.
+6. **Fixed adapter constraintId attribution bug** — errorIdMap in BattleScribeEngine was
+   overwriting entries for the same shared entry, causing all errors to be attributed to the
+   shared=true constraint's ID. Fixed with multimap and value-matching resolution.
+7. **Added `condition-not-shared-per-link`** — proves shared=false on conditions effectively
+   disables cross-link childId matching.
+8. **Added `modifier-repeat-not-shared-per-link`** — proves shared=false on repeats
+   effectively disables cross-link childId matching.

@@ -5,12 +5,10 @@ description: >
   entry accessed via two entry links. Two constraints on one
   sharedSelectionEntry: con-max-per-link (shared=false, max=2) counts each
   link independently; con-max-shared (shared=true, max=3) counts ALL
-  selections across links. Steps prove each fires at the correct threshold.
-  Note: BattleScribe attributes all errors on a shared entry to the
-  shared=true constraint's ID — we distinguish via messageContains.
+  selections across links. Steps prove each fires at the correct threshold
+  with the correct constraintId.
 tags:
   - validation-errors
-  - same-constraint-id
 
 setup:
   gameSystem:
@@ -75,13 +73,11 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-alpha
 
-  # Only per-link constraint fires (maximum 2)
-  # BS engine side effect: constraintId reported as con-max-shared
+  # Only per-link constraint fires (3 > max 2)
   - expectedState:
       errors:
         - on: selection shared-unit
-          from: shared-unit/con-max-shared
-          messageContains: maximum 2
+          from: shared-unit/con-max-per-link
       forces:
         - selectionCount: 3
 
@@ -91,15 +87,13 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-beta
 
-  # Both constraints now fire: per-link (maximum 2) and shared (maximum 3)
+  # Both constraints now fire: per-link (max 2) and shared (max 3)
   - expectedState:
       errors:
         - on: selection shared-unit
-          from: shared-unit/con-max-shared
-          messageContains: maximum 2
+          from: shared-unit/con-max-per-link
         - on: selection shared-unit
           from: shared-unit/con-max-shared
-          messageContains: maximum 3
       forces:
         - selectionCount: 4
 
@@ -113,10 +107,8 @@ steps:
   - expectedState:
       errors:
         - on: selection shared-unit
-          from: shared-unit/con-max-shared
-          messageContains: maximum 2
+          from: shared-unit/con-max-per-link
         - on: selection shared-unit
           from: shared-unit/con-max-shared
-          messageContains: maximum 3
       forces:
         - selectionCount: 5

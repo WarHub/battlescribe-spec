@@ -1,0 +1,91 @@
+id: condition-not-shared-per-link
+category: condition
+description: >
+  Condition with shared=false does NOT count selections of a shared entry
+  accessed via entry links. When childId references a shared entry and
+  shared=false, the engine matches by composite entry-link ID (not the base
+  shared ID), so no selections match. Contrast: condition-shared-counting
+  shows that shared=true resolves to the base ID and counts across links.
+  This proves shared=false effectively disables cross-link counting.
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-trigger
+          name: Trigger
+          type: unit
+      entryLinks:
+        - id: link-alpha
+          name: Alpha Trigger
+          targetId: shared-trigger
+          type: selectionEntry
+        - id: link-beta
+          name: Beta Trigger
+          targetId: shared-trigger
+          type: selectionEntry
+      selectionEntries:
+        - id: se-target
+          name: Target
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Activated
+              conditions:
+                - type: atLeast
+                  value: 2
+                  field: selections
+                  scope: force
+                  childId: shared-trigger
+                  shared: false
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-target
+
+  # 1 selection via link-alpha, 1 via link-beta = 2 total shared-trigger
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  # NOT activated — shared=false means childId matches by composite ID,
+  # so "shared-trigger" doesn't match "link-alpha::shared-trigger"
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
+            - name: Trigger
+            - name: Trigger
+
+  # Even 2 selections from same link — still not activated
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Target
+            - name: Trigger
+            - name: Trigger
+            - name: Trigger
