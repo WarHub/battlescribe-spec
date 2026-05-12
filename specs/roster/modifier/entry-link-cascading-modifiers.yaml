@@ -1,7 +1,6 @@
 id: entry-link-cascading-modifiers
 category: modifier
 description: EntryLink with set-name modifier overrides the target entry name
-tags: []
 
 setup:
   gameSystem:

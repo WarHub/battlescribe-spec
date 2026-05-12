@@ -1,7 +1,6 @@
 id: modifier-rule-description
 category: modifier
 description: Modifier can set a Rule's description field (STRING modifier on rule description)
-tags: []
 
 setup:
   gameSystem:

@@ -1,7 +1,6 @@
 id: entry-link-with-cost
 category: selection
 description: EntryLink with costs selects the target entry which uses its own base cost
-tags: []
 
 setup:
   gameSystem:

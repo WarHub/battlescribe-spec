@@ -1,7 +1,6 @@
 id: infogroup-hidden
 category: selection
 description: A hidden infoGroup filters its profiles and rules from selection state
-tags: []
 
 setup:
   gameSystem:

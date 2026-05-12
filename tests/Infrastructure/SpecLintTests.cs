@@ -78,6 +78,7 @@ public sealed class SpecLintTests
         violations.AddRange(CheckExpectedStatePropertyOrdering(lines));
         violations.AddRange(CheckNoLegacyAssertSteps(text));
         violations.AddRange(CheckNoLegacyErrorFields(text));
+        violations.AddRange(CheckNoEmptyTagFields(lines));
 
         // Look up the cached spec (loaded once per test session)
         var entry = SpecsByPath.Value[specPath];
@@ -371,6 +372,49 @@ public sealed class SpecLintTests
             }
         }
     }
+
+    // ── No empty tags declarations ───────────────────────────────────
+
+    private static IEnumerable<string> CheckNoEmptyTagFields(string[] lines)
+    {
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (IsEmptyTagsDeclaration(lines, i))
+            {
+                yield return $"line {i + 1}: remove empty 'tags' field (omit the field instead)";
+            }
+        }
+    }
+
+    private static bool IsEmptyTagsDeclaration(string[] lines, int index)
+    {
+        var stripped = lines[index].Trim();
+        if (stripped is "tags: []" or "tags: ~")
+        {
+            return true;
+        }
+
+        if (stripped != "tags:")
+        {
+            return false;
+        }
+
+        var currentIndent = GetIndentationWidth(lines[index]);
+        for (var i = index + 1; i < lines.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(lines[i]))
+            {
+                continue;
+            }
+
+            return GetIndentationWidth(lines[i]) <= currentIndent;
+        }
+
+        return true;
+    }
+
+    private static int GetIndentationWidth(string line) =>
+        line.TakeWhile(ch => ch is ' ' or '\t').Count();
 
     // ── Required fields ──────────────────────────────────────────────
 

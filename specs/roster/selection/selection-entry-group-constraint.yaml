@@ -1,7 +1,6 @@
 id: selection-entry-group-constraint
 category: selection
 description: SelectionEntryGroup can have constraints limiting how many entries can be selected from it
-tags: []
 
 setup:
   gameSystem:

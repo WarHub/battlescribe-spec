@@ -1,7 +1,6 @@
 id: cost-type-limit
 category: cost
 description: A cost type with a default limit still appears in roster costs
-tags: []
 
 setup:
   gameSystem:

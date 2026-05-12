@@ -1,7 +1,6 @@
 id: rule-publication
 category: selection
 description: Rule on a selection preserves its publicationId
-tags: []
 
 setup:
   gameSystem:

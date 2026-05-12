@@ -1,7 +1,6 @@
 id: profile-multiple-on-entry
 category: selection
 description: An entry with two profiles of the same type produces both profiles in selection state
-tags: []
 
 setup:
   gameSystem:

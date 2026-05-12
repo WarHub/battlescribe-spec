@@ -1,7 +1,6 @@
 id: selection-publication-and-page
 category: selection
 description: Selection entry with both publicationId and page preserves both fields
-tags: []
 
 setup:
   gameSystem:

@@ -1,7 +1,6 @@
 id: profile-inherited-from-link
 category: selection
 description: Selecting an entry with a profile includes that profile in selection state
-tags: []
 
 setup:
   gameSystem:

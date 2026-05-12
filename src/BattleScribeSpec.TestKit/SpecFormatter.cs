@@ -12,6 +12,7 @@ namespace BattleScribeSpec;
 ///   1. Trailing whitespace stripped from every line
 ///   2. Redundant <c>engines: {}</c> lines removed
 ///   3. Redundant <c>hidden: false</c> lines removed
+///   3a. Empty <c>tag:</c> / <c>tag: []</c> / <c>tag: ~</c> lines removed
 ///   4. <c>expectedState:</c> property blocks zone-sorted: errors/errorsContain → … → forces → engines
 ///   5. Blank line inserted before <c>setup:</c> when preceded by non-blank content
 ///   6. Blank line inserted before each step item (<c>  - action:</c> / <c>  - expectedState:</c>)
@@ -109,8 +110,9 @@ public static class SpecFormatter
         var lines = text.Split('\n');
         var result = new List<string>(lines.Length);
 
-        foreach (var line in lines)
+        for (var i = 0; i < lines.Length; i++)
         {
+            var line = lines[i];
             var trimmed = line.TrimEnd();
             var stripped = trimmed.Trim();
 
@@ -120,11 +122,47 @@ public static class SpecFormatter
                 continue;
             }
 
+            // Skip empty tags declarations
+            if (IsEmptyTagsDeclaration(lines, i))
+            {
+                continue;
+            }
+
             result.Add(trimmed);
         }
 
         return string.Join("\n", result);
     }
+
+    private static bool IsEmptyTagsDeclaration(string[] lines, int index)
+    {
+        var stripped = lines[index].Trim();
+        if (stripped is "tags: []" or "tags: ~")
+        {
+            return true;
+        }
+
+        if (stripped != "tags:")
+        {
+            return false;
+        }
+
+        var currentIndent = GetIndentationWidth(lines[index]);
+        for (var i = index + 1; i < lines.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(lines[i]))
+            {
+                continue;
+            }
+
+            return GetIndentationWidth(lines[i]) <= currentIndent;
+        }
+
+        return true;
+    }
+
+    private static int GetIndentationWidth(string line) =>
+        line.TakeWhile(ch => ch is ' ' or '\t').Count();
 
     // ── Pass 2: reorder expectedState property blocks ─────────────────────
 

@@ -1,7 +1,6 @@
 id: modifier-field-constraint-value
 category: modifier
 description: Modifier can target a constraint ID as field, changing the constraint's value
-tags: []
 
 setup:
   gameSystem:

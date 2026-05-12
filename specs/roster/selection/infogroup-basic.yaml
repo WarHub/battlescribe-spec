@@ -1,7 +1,6 @@
 id: infogroup-basic
 category: selection
 description: An entry with an infoGroup containing a profile and a rule produces both in selection state
-tags: []
 
 setup:
   gameSystem:

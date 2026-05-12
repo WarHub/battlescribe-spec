@@ -1,7 +1,6 @@
 id: entry-link-with-constraint
 category: selection
 description: EntryLink with a max constraint limits how many times the linked entry can be selected
-tags: []
 
 setup:
   gameSystem:

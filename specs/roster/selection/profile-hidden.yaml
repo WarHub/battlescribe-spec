@@ -1,7 +1,6 @@
 id: profile-hidden
 category: selection
 description: A profile with hidden true is filtered from selection state (not exposed)
-tags: []
 
 setup:
   gameSystem:

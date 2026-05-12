@@ -1,7 +1,6 @@
 id: cost-type-hidden
 category: cost
 description: Hidden cost types are omitted from roster cost aggregation
-tags: []
 
 setup:
   gameSystem:

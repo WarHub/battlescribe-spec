@@ -1,7 +1,6 @@
 id: selection-collective-deselect
 category: selection
 description: Deselecting a collective entry removes it from all sibling instances
-tags: []
 
 setup:
   gameSystem:

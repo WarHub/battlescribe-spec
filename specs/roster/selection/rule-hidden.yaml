@@ -1,7 +1,6 @@
 id: rule-hidden
 category: selection
 description: A rule with hidden true is filtered from selection state (not exposed)
-tags: []
 
 setup:
   gameSystem:

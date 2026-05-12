@@ -1,7 +1,6 @@
 id: selection-entry-group-default
 category: selection
 description: SelectionEntryGroup with defaultSelectionEntryId auto-selects the default entry
-tags: []
 
 setup:
   gameSystem:
