@@ -127,16 +127,17 @@ cause as conditions.
 
 **Spec evidence:** `modifier-repeat-shared-flag`
 
-## Same-Constraint-ID Side Effect
+## Same-Constraint-ID Side Effect (Historical)
 
-Using the same constraint ID on multiple separate (non-shared) entries with `shared=true`
-does NOT cause cross-entry counting. Each entry's constraint independently evaluates
-its own selections. When violated, each produces its own separate error.
+Using the same constraint ID on multiple separate (non-shared) entries causes NR to
+deduplicate errors (reporting only one), while BattleScribe reports each independently.
+This was a data bug in the spec — constraint IDs should be unique per entry.
 
-**Spec evidence:** `constraint-shared-linked`
+**Fix:** The `constraint-shared-linked` spec now uses unique IDs (`con-min-a`, `con-min-b`)
+and both engines agree: each entry produces its own independent error.
 
-**Recommendation:** Avoid duplicate constraint IDs unless explicitly testing this side
-effect. Unique IDs make spec behavior unambiguous.
+**Recommendation:** Always use unique constraint IDs. Duplicate IDs produce undefined
+deduplication behavior that differs across engines.
 
 ## Spec Coverage Summary
 
@@ -145,7 +146,7 @@ effect. Unique IDs make spec behavior unambiguous.
 | `constraint-entry-link-shared-counting` | Two links → shared max counted across both; error fires at aggregate limit |
 | `constraint-entry-link-shared-target` | Single link → shared entry with shared constraint; error fires at limit |
 | `constraint-shared-flag` | shared=true vs shared=false on same entry; both constraints error-proven |
-| `constraint-shared-linked` | Same constraint ID on separate entries → independent errors |
+| `constraint-shared-linked` | Two entries with independent min constraints → independent errors |
 | `constraint-entry-link-merged` | Shared entry constraint + link constraint merge |
 | `constraint-entry-link-own` | Link-only constraint (no shared entry constraint) |
 | `condition-shared-flag` | shared=true counts across links; shared=false never fires in BS; NR diverges |
