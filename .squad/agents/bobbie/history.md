@@ -13,6 +13,8 @@
 - After editing specs: run `pwsh -File tools\format-specs.ps1` then `dotnet test --filter "DisplayName~SpecLint"`
 - Debugger: `dotnet run --project src/BattleScribeSpec.Debugger -- {spec-id}` for step-by-step inspection
 - Setup data must be minimal but complete; expectedState assertions specific but not brittle
+- Formatter logic lives in `src/BattleScribeSpec.TestKit/SpecFormatter.cs` (Pass 1: `StripTrailingWhitespaceAndRedundantLines`). To add a new "remove redundant field" rule: add the stripped pattern to the `is` match in Pass 1 AND add a corresponding `CheckNo*` method in `SpecLintTests.cs`, wired into `AllLintChecks`.
+- Worktrees need `git submodule update --init` — the `.deps/wham` submodule is not automatically initialized in new worktrees.
 - 312 roster specs across 17 categories; 10 gamedata specs in 1 category (as of creation)
 - Collective, import, publication flags are key domain concepts in the BS data model
 
@@ -48,6 +50,47 @@
 - Holden's technical analysis evaluated 3 scope options; Bobbie's domain analysis clarified the problem space.
 - **Option 2 chosen:** Roster loading + editor round-trip.
 - **MVP for Epic #18:** Phase 1 scope (13 priority specs) now documented. Bobbie to implement specs in priority order.
+
+## Research: Issue #177 — `shared` Flag Semantics (2026-05-08)
+
+**Key Finding:** The `shared` flag on constraints/conditions/repeats controls HOW the engine identifies selections when counting — by the shared entry's original ID (cross-link) vs the composite link ID (per-link).
+
+**Behavior summary:**
+- `shared=true` on constraints: counts selections across ALL entry links referencing the same shared entry (unified limit)
+- `shared=false` on constraints: each entry link counts independently (per-link limit)
+- `shared=true` on conditions: same semantic — counts across all links for condition evaluation
+- `shared=true` on repeats: analogous (documented, not yet spec'd)
+
+**Existing specs reviewed (all correct):**
+- `constraint-shared`, `constraint-shared-deduplication`, `constraint-shared-linked`
+- `constraint-entry-link-shared-counting` (the strongest proof of shared counting behavior)
+- `constraint-entry-link-shared-target`
+
+**New specs created:**
+- `condition-shared-counting`: proves shared=true on conditions counts across entry links
+- `constraint-not-shared-per-link`: proves shared=false means independent per-link counting
+- `condition-not-shared-per-link`: proves shared=false on conditions never fires (childId mismatch)
+- `modifier-repeat-not-shared-per-link`: proves shared=false on repeats keeps multiplier at zero
+
+### PR #208 Extended Work (2026-05-12)
+
+**Adapter bug fixed:** `BattleScribeEngine.CollectElementErrors` used `errorIdMap[entryId]` as single-value dict, overwriting when multiple constraints exist on same shared entry. Changed to multimap + value-matching via `ResolveConstraintFromEntry`.
+
+**shared=false deeper discovery:**
+- Constraints: per-link counting (independent limits) — works as expected
+- Conditions/Repeats: effectively DISABLED when childId references a shared entry via links. Engine matches by composite entry-link ID (e.g., `link-alpha::shared-trigger`) which never matches raw childId (`shared-trigger`). This is NOT per-link counting — it's no counting at all.
+- NR ignores shared=false on conditions/repeats entirely — always behaves as shared=true. Both new specs skip NR.
+
+**NR compatibility fix:** Removed `messageContains` from `constraint-not-shared-per-link` — NR uses "max N" vs BS "maximum N". With adapter fix, constraintId alone is sufficient to distinguish errors.
+
+**Key paths:**
+- `ProtocolMessages.cs:553` — `Shared` on ProtocolConstraint
+- `ProtocolMessages.cs:602` — `Shared` on ProtocolCondition
+- `ProtocolMessages.cs:634` — `Shared` on ProtocolRepeat
+- `JavaModelFactory.cs:997` — `c.setShared(shared)` on constraint creation
+- `JavaModelFactory.cs:1058` — `c.setShared(shared)` on condition creation
+
+**PR:** #208
 - **Phase 1 scenarios (first 5 specs):** Create SelectionEntry, Set entry name, Create SelectionEntryGroup, Delete leaf entry, Duplicate ID error detection.
 
 ## Research: Shared Flag Semantics (2026-05-12)
@@ -89,3 +132,13 @@
 - New expected-state fields exercised: `errorCount`, `gameSystemId`, `costCount`, `hidden` (force), `childForces`, `childForceCount`, `childCount` (selection).
 
 **Outcome:** All lint checks pass, schema valid, BS engine conformance passes. NR frozen tests are pre-existing failures (Playwright browser not installed in environment). Closes #197.
+## PR #208 Review Redesign (2026-05-10)
+
+- `shared=true` on separate non-shared entries with different constraint IDs is a no-op — no cross-entry counting occurs. Only same-ID + shared=true enables cross-entry behavior.
+- BS engine attributes ALL constraint errors on a shared entry to the `shared=true` constraint's ID, even when multiple constraints with different shared flags exist. Use `messageContains` to distinguish them.
+- `shared=true` on repeats is confirmed to work analogously to conditions — counts selections across all entry links referencing the same shared entry.
+- Specs that only prove "no error" are weak — always add an error-proving step that exceeds the limit.
+- The `duplicate-ids` tag in specs opts out of the SetupIdValidator duplicate ID check.
+- **Adapter constraintId bug (fixed):** BattleScribeEngine's `errorIdMap` used `Dictionary<string, (...)>` keyed by entryId, overwriting when multiple constraints existed on the same shared entry. Fixed by changing to `Dictionary<string, List<string>>` (multimap) and adding `ResolveConstraintFromEntry` for value-matching resolution. The "all errors attributed to shared=true constraint ID" was an adapter bug, NOT actual BS engine behavior.
+- `shared=false` on conditions/repeats with `childId` referencing a shared entry effectively disables cross-link matching — the engine matches by composite entry-link ID, which never matches the raw `childId`. This is consistent behavior, not a bug.
+- When editing adapter code in a git worktree, changes must be made to the WORKTREE path (e.g., `D:\repos\battlescribe-spec-177\src\...`), not the main repo path.
