@@ -1,0 +1,168 @@
+id: modifier-repeat-shared-flag
+category: modifier
+description: >
+  Contrasts shared=true vs shared=false on a modifier repeat referencing a
+  shared entry via two entry links. With shared=true, the engine counts
+  selections across all links by base shared ID, so repeats accumulate from
+  both links. With shared=false, the engine matches by composite entry-link
+  ID which never matches the base childId, so the repeat multiplier stays
+  at zero regardless of selection count.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-model
+          name: Trooper
+          type: model
+      entryLinks:
+        - id: link-alpha
+          name: Alpha Trooper
+          targetId: shared-model
+          type: selectionEntry
+        - id: link-beta
+          name: Beta Trooper
+          targetId: shared-model
+          type: selectionEntry
+      selectionEntries:
+        - id: se-squad-shared
+          name: Squad Shared
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+          modifiers:
+            - type: increment
+              field: pts
+              value: "10"
+              repeats:
+                - value: 1
+                  repeats: 1
+                  field: selections
+                  scope: force
+                  childId: shared-model
+                  shared: true
+        - id: se-squad-not-shared
+          name: Squad Not Shared
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+          modifiers:
+            - type: increment
+              field: pts
+              value: "10"
+              repeats:
+                - value: 1
+                  repeats: 1
+                  field: selections
+                  scope: force
+                  childId: shared-model
+                  shared: false
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-squad-shared
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-squad-not-shared
+
+  # No troopers yet — both squads cost 50pts base
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad Not Shared
+              costs:
+                - typeId: pts
+                  value: 50
+            - name: Squad Shared
+              costs:
+                - typeId: pts
+                  value: 50
+
+  # 1 trooper via link-alpha
+  # shared=true: +10pts on Squad Shared (1 repeat)
+  # shared=false: no increment on Squad Not Shared (0 repeats)
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad Not Shared
+              costs:
+                - typeId: pts
+                  value: 50
+            - name: Squad Shared
+              costs:
+                - typeId: pts
+                  value: 60
+            - name: Trooper
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad Not Shared
+                  costs:
+                    - typeId: pts
+                      value: 60
+                - name: Squad Shared
+                  costs:
+                    - typeId: pts
+                      value: 60
+                - name: Trooper
+
+  # 1 trooper via link-beta — shared counting: 1+1=2 troopers
+  # shared=true: +20pts on Squad Shared (2 repeats)
+  # shared=false: still no increment on Squad Not Shared
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad Not Shared
+              costs:
+                - typeId: pts
+                  value: 50
+            - name: Squad Shared
+              costs:
+                - typeId: pts
+                  value: 70
+            - name: Trooper
+            - name: Trooper
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad Not Shared
+                  costs:
+                    - typeId: pts
+                      value: 70
+                - name: Squad Shared
+                  costs:
+                    - typeId: pts
+                      value: 70
+                - name: Trooper
+                - name: Trooper

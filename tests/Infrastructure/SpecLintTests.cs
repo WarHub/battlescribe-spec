@@ -508,6 +508,7 @@ public sealed class SpecLintTests
         "entry-id", "entryGroup",
         "collective", "deselect", "validation",
         "entry-group",
+        "same-constraint-id",
     ];
 
     private static IEnumerable<string> CheckKnownTags(SpecFile spec)
