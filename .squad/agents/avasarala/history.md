@@ -54,6 +54,18 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+## Learnings
+
+### SkipEngines behavior (2026-05-12)
+- Storing `new ActionOutputs()` for a skipped step only prevents "step not found" errors.
+- `ExpressionResolver.ResolveField` **throws** when `ForceId`/`SelectionId` is null — it does NOT return null.
+- Spec authors must not reference skipped-step output fields from downstream steps when those engines skip the step.
+
+### decisions.md Required field detection (2026-05-12)
+- The `KitchenSinkCoversAllProtocolTypes` lint test uses **hard-coded lists** (`RequiredExpectedStateFields`, `RequiredExpectedForceFields`, `RequiredExpectedSelectionFields`), not reflection-based nullability.
+- These lists deliberately include nullable fields (`Page`, `Hidden`, `PublicationId`, `CustomName`, `CustomNotes`) because kitchen-sink must demonstrate all observable fields.
+
+
 ## Work Completed: Unparented Issue Triage (2026-05-08)
 
 **Task:** Audit all non-epic issues and recommend parent epic assignments.
@@ -72,3 +84,18 @@
 - #16 is error validation coverage (NR/BS divergence handling)
 - #17 is developer experience (tooling, debugging, automation)
 - #18 is data editor conformance (all subsystems)
+
+## Session 2026-05-12: PR #209 Review Rebase
+
+**Date:** 2026-05-12T20:19:43+02:00
+
+Participated in PR #209 (kitchen-sink protocol coverage) comprehensive review session with Copilot CLI.
+
+- Addressed 4 review comment threads across 3 agents
+- Rebased squad/197 onto origin/main
+- Merged 2 inbox decisions into decisions.md
+- Pre-push tests: 1369/0 (passing)
+
+See .squad/log/2026-05-12T20-19-43-pr209-review-rebase.md for details.
+
+---

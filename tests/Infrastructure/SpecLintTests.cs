@@ -1,4 +1,7 @@
+using System.Collections;
+using System.Reflection;
 using System.Text.RegularExpressions;
+using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Tests;
@@ -696,6 +699,303 @@ public sealed class SpecLintTests
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ── Kitchen-sink coverage ────────────────────────────────────────
+
+    /// <summary>
+    /// Protocol types excluded from the kitchen-sink setup coverage check.
+    /// </summary>
+    private static readonly HashSet<Type> KitchenSinkProtocolTypeExclusions =
+    [
+        // ProtocolError is a wire-level response type, not inline YAML setup data.
+        typeof(ProtocolError),
+        // ProtocolDataFile is only used with SetupFromFilesCommand (file-based data source path),
+        // not the inline YAML setup path used in kitchen-sink.
+        typeof(ProtocolDataFile),
+        // ProtocolJsonContext is the source-generated JSON serializer context — not a data type.
+        typeof(ProtocolJsonContext),
+        // ProtocolSerializer is a static utility class (abstract+sealed in IL) — not a data type.
+        // Already excluded by !t.IsAbstract, listed here for completeness.
+        // typeof(ProtocolSerializer), // static class — not reachable via typeof in this context
+    ];
+
+    /// <summary>
+    /// ExpectedStateDef fields that protocol-kitchen-sink must exercise at least once.
+    /// </summary>
+    private static readonly string[] RequiredExpectedStateFields =
+    [
+        "Name",             // roster name
+        "ForceCount",
+        // "SelectionCount" — checked below as OR with ExpectedForceDef.SelectionCount
+        "Forces",
+        "CostCount",
+        "Costs",
+        "CostLimits",
+        "CostLimitCount",
+        "GameSystemName",
+        "GameSystemId",
+        // "Errors" or "ErrorsContain" — checked separately below as an OR condition
+        "ErrorCount",
+    ];
+
+    /// <summary>
+    /// ExpectedForceDef fields that protocol-kitchen-sink must exercise at least once.
+    /// </summary>
+    private static readonly string[] RequiredExpectedForceFields =
+    [
+        "Name", "EntryId", "CatalogueName", "CatalogueId",
+        "CategoryCount", "Categories", "Publications",
+        "SelectionCount", "Selections",
+        "Rules", "Profiles",
+        "CustomName", "CustomNotes",
+        "ChildForceCount", "ChildForces",
+        "AvailableEntryCount",
+        "PublicationId", "Page", "Hidden",
+    ];
+
+    /// <summary>
+    /// ExpectedSelectionDef fields that protocol-kitchen-sink must exercise at least once.
+    /// </summary>
+    private static readonly string[] RequiredExpectedSelectionFields =
+    [
+        "Name", "Type", "Number", "EntryId", "EntryGroupId",
+        "Costs", "Profiles", "Rules", "Categories",
+        "Children", "ChildCount",
+        "Page", "PublicationId", "PublicationName",
+        "CustomName", "CustomNotes", "Hidden",
+    ];
+
+    [Fact]
+    public void KitchenSinkCoversAllProtocolTypes()
+    {
+        var entry = AllSpecsLazy.Value.FirstOrDefault(x => x.Spec?.Id == "protocol-kitchen-sink");
+        Assert.NotNull(entry?.Spec);
+
+        var violations = new List<string>();
+        violations.AddRange(CheckKitchenSinkSetupTypeCoverage(entry.Spec!));
+        violations.AddRange(CheckKitchenSinkActionCoverage(entry.Spec!));
+        violations.AddRange(CheckKitchenSinkExpectedStateFieldCoverage(entry.Spec!));
+
+        Assert.True(violations.Count == 0,
+            $"protocol-kitchen-sink is missing coverage:\n  {string.Join("\n  ", violations)}");
+    }
+
+    private static IEnumerable<string> CheckKitchenSinkSetupTypeCoverage(SpecFile spec)
+    {
+        // Discover all concrete Protocol* data types in the BattleScribeSpec.Protocol namespace.
+        var protocolAssembly = typeof(ProtocolGameSystem).Assembly;
+        var expectedTypes = protocolAssembly.GetTypes()
+            .Where(t =>
+                t.Namespace == "BattleScribeSpec.Protocol" &&
+                t.Name.StartsWith("Protocol", StringComparison.Ordinal) &&
+                !t.IsAbstract &&
+                !KitchenSinkProtocolTypeExclusions.Contains(t))
+            .ToList();
+
+        // Walk the setup object graph to find all instantiated types.
+        var found = CollectInstantiatedTypes(spec.Setup);
+
+        foreach (var expectedType in expectedTypes.OrderBy(t => t.Name))
+        {
+            // Use IsAssignableFrom to also match subclasses (e.g. GameSystemDef : ProtocolGameSystem).
+            if (!found.Any(t => expectedType.IsAssignableFrom(t)))
+            {
+                yield return $"[setup type] {expectedType.Name} not instantiated in kitchen-sink setup data";
+            }
+        }
+    }
+
+    private static IEnumerable<string> CheckKitchenSinkActionCoverage(SpecFile spec)
+    {
+        // "dump" is a meta-action for the debugger — it does NOT correspond to an adapter
+        // protocol message and is intentionally excluded from coverage checks.
+        var actionsForCoverage = KnownActions.Except(["dump"]).ToHashSet();
+
+        var usedActions = (spec.Steps ?? [])
+            .Select(s => s.Action)
+            .Where(a => a is not null)
+            .ToHashSet()!;
+
+        foreach (var action in actionsForCoverage.OrderBy(a => a))
+        {
+            if (!usedActions.Contains(action))
+            {
+                yield return $"[action] '{action}' not exercised in kitchen-sink steps";
+            }
+        }
+    }
+
+    private static IEnumerable<string> CheckKitchenSinkExpectedStateFieldCoverage(SpecFile spec)
+    {
+        var allExpected = (spec.Steps ?? [])
+            .Select(s => s.ExpectedState)
+            .Where(e => e is not null)
+            .Select(e => e!)
+            .ToList();
+
+        // ── ExpectedStateDef fields ──
+        var usedStateFields = CollectUsedFields(allExpected);
+
+        foreach (var field in RequiredExpectedStateFields)
+        {
+            if (!usedStateFields.Contains(field))
+            {
+                yield return $"[ExpectedStateDef] field '{field}' never set in any expectedState step";
+            }
+        }
+
+        // "Errors" and "ErrorsContain" satisfy the same requirement — at least one must appear.
+        if (!usedStateFields.Contains("Errors") && !usedStateFields.Contains("ErrorsContain"))
+        {
+            yield return "[ExpectedStateDef] neither 'Errors' nor 'ErrorsContain' used in any expectedState step";
+        }
+
+        // ── ExpectedForceDef fields ──
+        var allForces = allExpected
+            .SelectMany(e => e.Forces ?? [])
+            .ToList();
+        var usedForceFields = CollectUsedFields(allForces);
+
+        // SelectionCount satisfies at top-level (roster total) OR force level.
+        if (!usedStateFields.Contains("SelectionCount") && !usedForceFields.Contains("SelectionCount"))
+        {
+            yield return "[ExpectedStateDef/ExpectedForceDef] field 'SelectionCount' never set at top level or force level";
+        }
+
+        foreach (var field in RequiredExpectedForceFields)
+        {
+            if (!usedForceFields.Contains(field))
+            {
+                yield return $"[ExpectedForceDef] field '{field}' never set in any force assertion";
+            }
+        }
+
+        // ── ExpectedSelectionDef fields (top-level + nested children) ──
+        var allSelections = CollectAllSelections(allForces);
+        var usedSelectionFields = CollectUsedFields(allSelections);
+
+        foreach (var field in RequiredExpectedSelectionFields)
+        {
+            if (!usedSelectionFields.Contains(field))
+            {
+                yield return $"[ExpectedSelectionDef] field '{field}' never set in any selection assertion";
+            }
+        }
+    }
+
+    // ── Reflection helpers ───────────────────────────────────────────
+
+    private static HashSet<Type> CollectInstantiatedTypes(object? obj)
+    {
+        var found = new HashSet<Type>();
+        CollectTypesRecursive(obj, found, new HashSet<object>(ReferenceEqualityComparer.Instance));
+        return found;
+    }
+
+    private static void CollectTypesRecursive(object? obj, HashSet<Type> found, HashSet<object> visited)
+    {
+        if (obj is null)
+        {
+            return;
+        }
+
+        if (obj is string || obj.GetType().IsPrimitive || obj.GetType().IsEnum)
+        {
+            return;
+        }
+
+        if (!visited.Add(obj))
+        {
+            return;
+        }
+
+        found.Add(obj.GetType());
+
+        if (obj is IEnumerable enumerable)
+        {
+            foreach (var item in enumerable)
+            {
+                CollectTypesRecursive(item, found, visited);
+            }
+
+            return;
+        }
+
+        foreach (var prop in obj.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (!prop.CanRead || prop.GetIndexParameters().Length > 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                var value = prop.GetValue(obj);
+                CollectTypesRecursive(value, found, visited);
+            }
+            catch { /* ignore reflection errors */ }
+        }
+    }
+
+    private static HashSet<string> CollectUsedFields<T>(IEnumerable<T> items) where T : class
+    {
+        var used = new HashSet<string>();
+        foreach (var item in items)
+        {
+            foreach (var prop in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!prop.CanRead)
+                {
+                    continue;
+                }
+
+                var val = prop.GetValue(item);
+                if (val is not null)
+                {
+                    used.Add(prop.Name);
+                }
+            }
+        }
+
+        return used;
+    }
+
+    /// <summary>
+    /// Recursively collects all ExpectedSelectionDef instances (top-level + nested children).
+    /// </summary>
+    private static List<ExpectedSelectionDef> CollectAllSelections(IEnumerable<ExpectedForceDef> forces)
+    {
+        var result = new List<ExpectedSelectionDef>();
+        foreach (var force in forces)
+        {
+            CollectForceRecursive(force, result);
+        }
+
+        return result;
+
+        static void CollectForceRecursive(ExpectedForceDef force, List<ExpectedSelectionDef> result)
+        {
+            CollectSelectionsRecursive(force.Selections, result);
+            foreach (var child in force.ChildForces ?? [])
+            {
+                CollectForceRecursive(child, result);
+            }
+        }
+
+        static void CollectSelectionsRecursive(List<ExpectedSelectionDef>? selections, List<ExpectedSelectionDef> result)
+        {
+            if (selections is null)
+            {
+                return;
+            }
+
+            foreach (var sel in selections)
+            {
+                result.Add(sel);
+                CollectSelectionsRecursive(sel.Children, result);
             }
         }
     }

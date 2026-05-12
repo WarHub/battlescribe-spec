@@ -1,9 +1,12 @@
 id: protocol-kitchen-sink
 category: protocol
 description: >
-  Comprehensive smoke test exercising many Protocol setup types, multiple
-  action types, and a broad set of state assertion fields for adapter
-  protocol adherence.
+  Comprehensive smoke test exercising all Protocol setup types (including
+  ProtocolModifierGroup, ProtocolConditionGroup, ProtocolRepeat), all action
+  types (addForce, addChildForce, removeForce, duplicateForce, selectEntry,
+  selectChildEntry, deselectSelection, setSelectionCount, duplicateSelection,
+  setCostLimit, setCustomization), and a broad set of state assertion fields
+  for adapter protocol adherence.
 
 setup:
   gameSystem:
@@ -70,6 +73,12 @@ setup:
             value: 3
             field: forces
             scope: roster
+        forceEntries:
+          - id: fe-platoon
+            name: Platoon
+      - id: fe-hidden-detachment
+        name: Hidden Detachment
+        hidden: true
     categoryEntries:
       - id: cat-hq
         name: HQ
@@ -249,6 +258,10 @@ setup:
                 - name: pts
                   typeId: ct-pts
                   value: 5
+            - id: se-inf-hidden-upgrade
+              name: Hidden Upgrade
+              type: upgrade
+              hidden: true
           selectionEntryGroups:
             - id: seg-inf-weapons
               name: Weapon Options
@@ -329,6 +342,35 @@ setup:
                   field: selections
                   scope: force
                   childId: se-infantry
+            - type: set
+              field: hidden
+              value: "false"
+              conditions:
+                - type: atLeast
+                  value: 99
+                  field: selections
+                  scope: force
+                  childId: se-infantry
+              repeats:
+                - value: 1
+                  repeats: 1
+                  field: selections
+                  scope: force
+                  childId: se-infantry
+                  shared: true
+          modifierGroups:
+            - conditionGroups:
+                - type: or
+                  conditions:
+                    - type: atLeast
+                      value: 99
+                      field: selections
+                      scope: parent
+                      childId: se-infantry
+              modifiers:
+                - type: set
+                  field: hidden
+                  value: "false"
           selectionEntryGroups:
             - id: seg-cmd-traits
               name: Command Traits
@@ -721,10 +763,128 @@ steps:
       forces:
         - selectionCount: 4
 
+  # Step 8b: selectChildEntry hidden upgrade — exercises ExpectedSelectionDef.Hidden + childCount
+  - action: selectChildEntry
+    id: select-hidden-upgrade
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-infantry-2.selectionId }}
+    entryId: se-inf-hidden-upgrade
+
+  - expectedState:
+      errorsContain:
+        - on: selection se-infantry
+          from: se-infantry/hidden
+      forces:
+        - selections:
+            - name: Commander
+            - name: Infantry Squad
+              childCount: 1
+              children:
+                - name: Hidden Upgrade
+                  hidden: true
+            - name: Infantry Squad
+              children:
+                - name: Trooper
+                  number: 2
+            - name: Required Unit
+      engines:
+        newrecruit:
+          # NR reports the hidden-entry error on the upgrade itself, not the parent.
+          errorsContain:
+            - on: selection se-inf-hidden-upgrade
+              from: se-inf-hidden-upgrade/hidden
+
+  # Step 8c: deselectSelection — remove hidden upgrade (clean up before setCostLimit)
+  - action: deselectSelection
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-hidden-upgrade.selectionId }}
+
+  - expectedState:
+      forces:
+        - selectionCount: 4
+
   # Step 9: setCostLimit — set pts limit low to generate cost limit error
   - action: setCostLimit
     costTypeId: ct-pts
     value: 200
+
+  # Step 9a: verify errorsContain (cost limit error present as a subset)
+  - expectedState:
+      errorsContain:
+        - on: roster
+          from: costLimits/ct-pts
+
+  # Step 9b: addForce hidden detachment — exercises ExpectedForceDef.Hidden
+  - action: addForce
+    id: add-hidden-detachment
+    forceEntryId: fe-hidden-detachment
+    catalogueId: cat-1
+
+  - expectedState:
+      errorCount: 1
+      forceCount: 2
+      forces:
+        - name: Battalion
+          selectionCount: 4
+        - name: Hidden Detachment
+          hidden: true
+          selectionCount: 0
+
+  # Step 9c: removeForce — exercises removeForce action, restores single-force state
+  - action: removeForce
+    forceId: ${{ steps.add-hidden-detachment.forceId }}
+
+  - expectedState:
+      errorCount: 1
+      forceCount: 1
+
+  # Step 9d: addChildForce — exercises addChildForce + ExpectedForceDef.ChildForces
+
+  - action: addChildForce
+    id: add-platoon
+    forceEntryId: fe-platoon
+    forceId: ${{ steps.add-battalion.forceId }}
+    catalogueId: cat-1
+
+  - expectedState:
+      errorCount: 1
+      forceCount: 1
+      forces:
+        - childForceCount: 1
+          childForces:
+            - name: Platoon
+              entryId: fe-platoon
+
+  # Step 9e: removeForce — remove the child platoon force (clean up)
+  - action: removeForce
+    forceId: ${{ steps.add-platoon.forceId }}
+
+  - expectedState:
+      errorCount: 1
+      forces:
+        - childForceCount: 0
+
+  # Step 9f: duplicateForce — exercises duplicateForce action (NR only; BS doesn't support this)
+  - action: duplicateForce
+    id: duplicate-battalion
+    forceId: ${{ steps.add-battalion.forceId }}
+    skipEngines: [battlescribe]
+
+  - expectedState:
+      errorCount: 1
+      forceCount: 2
+      engines:
+        battlescribe:
+          forceCount: 1
+
+  # Step 9g: removeForce — clean up duplicate (restore single-force state)
+  - action: removeForce
+    forceId: ${{ steps.duplicate-battalion.forceId }}
+    skipEngines: [battlescribe]
+
+  - expectedState:
+      errorCount: 1
+      forceCount: 1
 
   # Step 10: comprehensive final assertion — full roster state
   #   After steps above, the roster has:
@@ -734,17 +894,19 @@ steps:
   #   - Total pts: 100 + 100 + 120 + 0 = 320 (Commander=100, Inf#2=100, Inf-dupe=120, Required=0)
   #   - Total power: 4 + 5 + 5 + 0 = 14
   #   - Cost limit at 200pts → cost limit error
+  #   - New assertions: errorCount, gameSystemId, costCount, childCount
   # ── Airgapped final assertion ──
   # Every field below is verified against the actual BS and NR engine debugger dumps.
   # The NR override restates the full force tree because ForEngine() merge is top-level only.
   - expectedState:
-      errorsContain:
-        - on: roster
-          from: costLimits/ct-pts
+      errorCount: 1
+      name: protocol-kitchen-sink
+      gameSystemId: ks-gs
+      gameSystemName: Kitchen Sink GS
+      costCount: 2
       costs:
         - typeId: ct-pts
         - typeId: ct-power
-      gameSystemName: Kitchen Sink GS
       costLimitCount: 1
       costLimits:
         - typeId: ct-pts
@@ -968,6 +1130,7 @@ steps:
                   primary: true
                   profiles: []
                   rules: []
+              childCount: 1
               children:
                 - name: Trooper
                   entryId: se-inf-trooper
@@ -1236,6 +1399,7 @@ steps:
                       primary: true
                       profiles: []
                       rules: []
+                  childCount: 1
                   children:
                     - name: Trooper
                       entryId: se-inf-trooper

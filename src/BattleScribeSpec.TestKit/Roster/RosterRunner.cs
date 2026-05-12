@@ -171,6 +171,16 @@ public sealed class RosterRunner
 
     private void ExecuteAction(StepDef step, int stepIndex)
     {
+        // Skip this step for engines listed in SkipEngines
+        if (step.SkipEngines?.Contains(_engineName, StringComparer.OrdinalIgnoreCase) == true)
+        {
+            if (step.Id is { Length: > 0 } skippedId)
+            {
+                _exprResolver.StoreOutputs(skippedId, new ActionOutputs());
+            }
+            return;
+        }
+
         // Resolve expressions in instance ID fields
         var forceId = _exprResolver.Resolve(step.ForceId);
         var selectionId = _exprResolver.Resolve(step.SelectionId);
