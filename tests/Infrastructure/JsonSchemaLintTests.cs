@@ -10,45 +10,39 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Unit")]
 public sealed class JsonSchemaLintTests
 {
-    private const string ThisFileRelativePath = "tests\\Infrastructure\\JsonSchemaLintTests.cs";
-    private const string SupportedMetaschemaUri = "https://json-schema.org/draft/2020-12/schema";
-
     private static readonly JsonSchema SupportedMetaschema = MetaSchemas.Draft202012;
+    private static readonly Uri SupportedMetaschemaUri = MetaSchemas.Draft202012.BaseUri
+        ?? throw new InvalidOperationException("MetaSchemas.Draft202012 has no BaseUri.");
     private static readonly string RepoRoot = FindRepoRoot();
     private static readonly string DocsDirectory = FindDocsDirectory();
 
     private static string FindRepoRoot([CallerFilePath] string callerFilePath = "")
     {
-        if (string.IsNullOrWhiteSpace(callerFilePath))
+        if (!Path.IsPathRooted(callerFilePath))
         {
-            throw new InvalidOperationException("Caller file path was not provided for JSON schema lint path discovery.");
+            throw new InvalidOperationException(
+                $"[CallerFilePath] returned a non-rooted path '{callerFilePath}'. " +
+                "Ensure the project is not built with a PathMap that strips the absolute path.");
         }
 
-        var normalizedCallerPath = callerFilePath.Replace('/', '\\');
-        if (Path.IsPathRooted(normalizedCallerPath)
-            && normalizedCallerPath.EndsWith(ThisFileRelativePath, StringComparison.OrdinalIgnoreCase))
+        var dir = Path.GetDirectoryName(callerFilePath);
+        while (dir is not null)
         {
-            return normalizedCallerPath[..^ThisFileRelativePath.Length].TrimEnd('\\');
-        }
-
-        var baseDirectory = AppContext.BaseDirectory;
-        while (baseDirectory is not null)
-        {
-            if (File.Exists(Path.Combine(baseDirectory, normalizedCallerPath)))
+            if (Directory.EnumerateFiles(dir, "*.slnx").Any())
             {
-                return baseDirectory;
+                return dir.Replace('\\', '/');
             }
 
-            baseDirectory = Path.GetDirectoryName(baseDirectory);
+            dir = Path.GetDirectoryName(dir);
         }
 
         throw new DirectoryNotFoundException(
-            $"Could not determine repository root from caller path '{callerFilePath}' and base directory '{AppContext.BaseDirectory}'.");
+            $"Could not find repository root (no *.slnx marker found) while traversing parents of '{callerFilePath}'.");
     }
 
     private static string FindDocsDirectory()
     {
-        var docsDirectory = Path.Combine(RepoRoot, "docs");
+        var docsDirectory = Path.Combine(RepoRoot, "docs").Replace('\\', '/');
         if (!Directory.Exists(docsDirectory))
         {
             throw new DirectoryNotFoundException($"JSON schema lint could not find docs directory '{docsDirectory}'.");
@@ -70,18 +64,18 @@ public sealed class JsonSchemaLintTests
             }
 
             var schemaUri = schemaProperty.GetString();
-            if (!string.Equals(schemaUri, SupportedMetaschemaUri, StringComparison.Ordinal))
+            if (!string.Equals(schemaUri, SupportedMetaschemaUri.OriginalString, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            files.Add(file, Path.GetRelativePath(RepoRoot, file).Replace('\\', '/'));
+            files.Add(file.Replace('\\', '/'), Path.GetRelativePath(RepoRoot, file).Replace('\\', '/'));
         }
 
         if (files.Count == 0)
         {
             throw new InvalidOperationException(
-                $"No JSON Schema files declaring supported metaschema '{SupportedMetaschemaUri}' were found under '{DocsDirectory}'.");
+                $"No JSON Schema files declaring supported metaschema '{SupportedMetaschemaUri.OriginalString}' were found under '{DocsDirectory}'.");
         }
 
         return files;
@@ -101,7 +95,7 @@ public sealed class JsonSchemaLintTests
         if (!result.IsValid)
         {
             var errors = CollectErrorMessages(result);
-            Assert.Fail($"{relPath} failed metaschema validation ({SupportedMetaschemaUri}):\n{string.Join("\n", errors)}");
+            Assert.Fail($"{relPath} failed metaschema validation ({SupportedMetaschemaUri.OriginalString}):\n{string.Join("\n", errors)}");
         }
     }
 
@@ -113,15 +107,15 @@ public sealed class JsonSchemaLintTests
         }
         catch (UnauthorizedAccessException ex)
         {
-            throw new InvalidOperationException($"Failed to read JSON file '{Path.GetRelativePath(RepoRoot, filePath)}'.", ex);
+            throw new InvalidOperationException($"Failed to read JSON file '{Path.GetRelativePath(RepoRoot, filePath).Replace('\\', '/')}'.", ex);
         }
         catch (IOException ex)
         {
-            throw new InvalidOperationException($"Failed to read JSON file '{Path.GetRelativePath(RepoRoot, filePath)}'.", ex);
+            throw new InvalidOperationException($"Failed to read JSON file '{Path.GetRelativePath(RepoRoot, filePath).Replace('\\', '/')}'.", ex);
         }
         catch (JsonException ex)
         {
-            throw new InvalidOperationException($"Failed to parse JSON file '{Path.GetRelativePath(RepoRoot, filePath)}'.", ex);
+            throw new InvalidOperationException($"Failed to parse JSON file '{Path.GetRelativePath(RepoRoot, filePath).Replace('\\', '/')}'.", ex);
         }
     }
 
