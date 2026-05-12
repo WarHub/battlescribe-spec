@@ -1,4 +1,4 @@
-id: constraint-not-shared-per-link
+id: constraint-shared-flag
 category: constraint
 description: >
   Contrasts shared=true vs shared=false on constraints of the same shared

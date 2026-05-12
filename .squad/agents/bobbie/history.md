@@ -49,3 +49,17 @@
 - **Option 2 chosen:** Roster loading + editor round-trip.
 - **MVP for Epic #18:** Phase 1 scope (13 priority specs) now documented. Bobbie to implement specs in priority order.
 - **Phase 1 scenarios (first 5 specs):** Create SelectionEntry, Set entry name, Create SelectionEntryGroup, Delete leaf entry, Duplicate ID error detection.
+
+## Research: Shared Flag NR Behavior (2026-05-12)
+
+**Finding:** NR ignores `shared=false` on conditions and repeats — it always uses shared counting (equivalent to `shared=true`).
+
+- **CatXmlGenerator correctly emits `shared` attribute** for conditions, repeats, AND constraints. No adapter bug in XML serialization.
+- **NR engine behavior:** With `shared=false`, BS matches by composite entry-link ID (e.g., `link-alpha::shared-trigger`), so conditions/repeats referencing the base `childId` never match → condition never fires / repeat stays at 0. NR ignores this distinction entirely and always resolves to the base shared ID.
+- **Resolution:** Used per-engine `engines: newrecruit:` overrides on `expectedState` assertions to test NR's actual behavior alongside BS's correct behavior. No whole-spec `newrecruit: skip` needed.
+
+**Spec changes:**
+- Merged `condition-shared-counting` + `condition-not-shared-per-link` → `condition-shared-flag` (tests both shared=true and shared=false in one scenario, with NR overrides)
+- Merged `modifier-repeat-shared-counting` + `modifier-repeat-not-shared-per-link` → `modifier-repeat-shared-flag` (same approach)
+- Renamed `constraint-not-shared-per-link` → `constraint-shared-flag` (kept separate from `constraint-entry-link-shared-counting` which tests scope=roster vs scope=force — genuinely different scenario)
+- All specs pass on BS and NR frozen
