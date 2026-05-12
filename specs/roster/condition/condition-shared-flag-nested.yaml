@@ -1,0 +1,143 @@
+id: condition-shared-flag-nested
+category: condition
+description: >
+  Tests how shared=false on conditions behaves when the condition-holder is
+  nested inside a parent unit selection (Container), contrasting with the
+  top-level case in condition-shared-flag.yaml.
+
+  In NR, find("force", shared=false) returns this.parent — for nested entries,
+  this is the Container (a unit selection), not the force. NR's reactive
+  counting system propagates base shared-entry ID counters only up to the
+  force scope; intermediate unit selections only track composite entry-link
+  IDs. So Container.do_get("::selections::shared-trigger") = 0 regardless of
+  how many triggers are inside Container. The condition never fires.
+
+  The result: both engines agree — nested shared=false never fires — but for
+  different reasons. BattleScribe: childId can't match composite IDs. NR:
+  scope is Container, and Container has no base-ID counter for the shared
+  entry.
+
+  Contrast with condition-shared-flag.yaml (top-level): there, NR's
+  this.parent IS the force, which DOES have a base-ID counter, so NR fires
+  the shared=false condition when cross-link count reaches the threshold.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      sharedSelectionEntries:
+        - id: shared-trigger
+          name: Trigger
+          type: unit
+      entryLinks:
+        - id: link-beta
+          name: Beta Trigger
+          targetId: shared-trigger
+          type: selectionEntry
+      selectionEntries:
+        - id: se-container
+          name: Container
+          type: unit
+          selectionEntries:
+            - id: se-target
+              name: Target
+              type: upgrade
+              modifiers:
+                - type: set
+                  field: name
+                  value: Activated
+                  conditions:
+                    - type: atLeast
+                      value: 2
+                      field: selections
+                      scope: force
+                      childId: shared-trigger
+                      shared: false
+          entryLinks:
+            - id: link-alpha
+              name: Alpha Trigger
+              targetId: shared-trigger
+              type: selectionEntry
+            - id: link-alpha-2
+              name: Alpha Trigger 2
+              targetId: shared-trigger
+              type: selectionEntry
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-container
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-container
+
+  - action: selectChildEntry
+    id: select-target
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-container.selectionId }}
+    entryId: se-target
+
+  # 1 Beta Trigger at force level (OUTSIDE container)
+  # NR: container count = 0 (Beta is outside), condition does NOT fire
+  # BS: shared=false → composite ID never matches → count = 0 → does NOT fire
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-beta
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Container
+              children:
+                - name: Target
+            - name: Trigger
+
+  # 1 Alpha Trigger INSIDE container — cross-link total = 2, container count = 1
+  # NR nested: find("force", false) → Container; Container base-ID counter = 0 → does NOT fire
+  # Contrast: top-level (condition-shared-flag.yaml) has scope = force → force base-ID counter
+  #   = 2 → NR fires. Here, the Container scope has no base-ID counter → doesn't fire.
+  # BS: shared=false → composite ID → count = 0 → does NOT fire
+  # Both engines agree: condition not met
+  - action: selectChildEntry
+    id: select-alpha-1
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-container.selectionId }}
+    entryId: link-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Container
+              children:
+                - name: Target
+                - name: Trigger
+            - name: Trigger
+
+  # 2nd Alpha Trigger INSIDE container — container total = 2 triggers, force total = 3
+  # NR: Container base-ID counter stays 0 → still does NOT fire
+  #   (NR propagates base-ID counters only to force, not to intermediate unit selections)
+  # BS: shared=false → composite ID → count = 0 → does NOT fire
+  # Both engines agree: condition never fires for nested shared=false
+  - action: selectChildEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-container.selectionId }}
+    entryId: link-alpha-2
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Container
+              children:
+                - name: Target
+                - name: Trigger
+                - name: Trigger
+            - name: Trigger
