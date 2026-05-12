@@ -88,7 +88,36 @@ Remove-Item $tmp
 ### Status
 ✓ Complete. All 11 bodies restored. Skill extracted.
 
-## Work Completed: KitchenSinkCoversAllProtocolTypes lint test (2026-05-08)
+## Work Completed: Fix Copilot Review Comments in SpecLintTests.cs (2026-05-12)
+
+**Task:** Address two Copilot review comments on `tests/Infrastructure/SpecLintTests.cs`.
+
+### Fix 1 — CollectAllSelections recursion (line 951)
+
+**Problem:** `CollectAllSelections` only traversed top-level forces + one level of ChildForces. Grandchild forces and deeper were not collected.
+**Fix:** Extracted `CollectForceRecursive` local function that calls itself for each child force. Now ChildForces are traversed to any depth.
+
+### Fix 2 — KitchenSinkProtocolTypeExclusions dead entries (line 691)
+
+**Problem:** The exclusion set contained 11 non-`Protocol*` types (SetupCommand, ActionCommand, SetupResult, etc.). Because the filter uses `t.Name.StartsWith("Protocol")`, these can never appear in `expectedTypes` and their exclusion entries are unreachable dead code.
+**Fix:** Removed all 11 non-Protocol* entries. Kept only `ProtocolError`, `ProtocolDataFile`, and `ProtocolJsonContext` — the three Protocol-prefixed types that are intentionally excluded.
+
+### Bonus fix — stray git conflict marker in protocol-kitchen-sink.yaml
+
+**Discovery:** The spec had a stray `>>>>>>> 368b288 (...)` conflict marker at line 11 causing a YAML parse error. The `KitchenSinkCoversAllProtocolTypes` test was silently failing with `Assert.NotNull() Failure` because the spec failed to load.
+**Fix:** Removed the stray marker. Then ran `pwsh tools/format-specs.ps1` to also clean the empty `tags: []` field that lint caught.
+
+### Test outcome
+
+- **KitchenSink lint test:** ✅ Passes
+- **pre-push full suite:** ✅ 1369 passed, 54 skipped, 0 failed
+
+### Key learnings
+
+- Always try `dotnet run --project src/BattleScribeSpec.Debugger -- {spec-id}` first when a KitchenSink test fails with a null spec — it immediately shows YAML parse errors.
+- A single stray conflict marker (`>>>>>>>` without matching `<<<<<<<`) causes a cryptic YAML block scalar parse error. Git conflict scanning should be part of lint.
+- `KitchenSinkProtocolTypeExclusions` should only contain `Protocol*`-prefixed types — other types cannot match the `StartsWith("Protocol")` filter used in `CheckKitchenSinkSetupTypeCoverage`.
+
 
 **Task:** Implement `KitchenSinkCoversAllProtocolTypes` fact in `SpecLintTests.cs` per issue #197.
 
@@ -114,3 +143,17 @@ Three coverage checks enforced on `protocol-kitchen-sink.yaml`:
 - `[ExpectedStateDef] field 'Name' never set`
 
 **Status:** ✅ Complete. Committed on branch `alex/kitchen-sink-lint-test`.
+## Session 2026-05-12: PR #209 Review Rebase
+
+**Date:** 2026-05-12T20:19:43+02:00
+
+Participated in PR #209 (kitchen-sink protocol coverage) comprehensive review session with Copilot CLI.
+
+- Addressed 4 review comment threads across 3 agents
+- Rebased squad/197 onto origin/main
+- Merged 2 inbox decisions into decisions.md
+- Pre-push tests: 1369/0 (passing)
+
+See .squad/log/2026-05-12T20-19-43-pr209-review-rebase.md for details.
+
+---
