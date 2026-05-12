@@ -331,7 +331,9 @@ public static class NewRecruitActions
     /// Deselect (decrement) a selection by uid.
     /// Uses decrementAmount() which reduces the per-model count by 1
     /// (matching BS's deselect semantics). Falls back to delete() when
-    /// decrementAmount is not available.
+    /// decrementAmount is not available. When decrementAmount reduces
+    /// the count to 0, delete() is called to fully remove the instance
+    /// so NR validation errors are cleared.
     /// </summary>
     public static async Task DeselectSelectionAsync(IPage page, string forceUid, string selectionUid)
     {
@@ -349,6 +351,12 @@ public static class NewRecruitActions
 
                     if (typeof sel.decrementAmount === 'function') {
                         sel.decrementAmount();
+                        // If the amount reaches 0, delete the instance entirely so
+                        // NR's validation system clears any associated errors.
+                        if (typeof sel.getAmount === 'function' && sel.getAmount() === 0
+                            && typeof sel.delete === 'function') {
+                            sel.delete();
+                        }
                     } else if (typeof sel.delete === 'function') {
                         sel.delete();
                     } else {

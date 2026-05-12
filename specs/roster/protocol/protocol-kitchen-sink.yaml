@@ -787,6 +787,12 @@ steps:
                 - name: Trooper
                   number: 2
             - name: Required Unit
+      engines:
+        newrecruit:
+          # NR reports the hidden-entry error on the upgrade itself, not the parent.
+          errorsContain:
+            - on: selection se-inf-hidden-upgrade
+              from: se-inf-hidden-upgrade/hidden
 
   # Step 8c: deselectSelection — remove hidden upgrade (clean up before setCostLimit)
   - action: deselectSelection
