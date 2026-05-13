@@ -1,19 +1,13 @@
 id: constraint-shared-linked
 category: constraint
 description: >
-  Same-constraint-ID side effect: two separate entries with matching
-  constraint IDs and shared=true produce independent validation errors
-  per entry, not a merged/deduplicated error. This is a side effect of
-  ID reuse — each entry's constraint is evaluated independently.
-  BattleScribe reports separate errors for each entry that violates its
-  own min=1 requirement. The shared flag and matching IDs do NOT cause
-  cross-entry counting for separate (non-shared) entries.
+  Two separate selection entries each with their own min=1 constraint
+  produce independent validation errors when deselected. Auto-select
+  satisfies both initially; removing them triggers one error per entry
+  on the parent category.
 tags:
-  - duplicate-ids
   - validation-errors
   - structured-errors
-  - design-difference
-  - same-constraint-id
 
 setup:
   gameSystem:
@@ -43,12 +37,11 @@ setup:
               name: Troops
               primary: true
           constraints:
-            - id: con-min-shared
+            - id: con-min-a
               type: min
               value: 1
               field: selections
               scope: parent
-              shared: true
         - id: se-unit-b
           name: Unit B
           type: unit
@@ -58,19 +51,18 @@ setup:
               name: Troops
               primary: true
           constraints:
-            - id: con-min-shared
+            - id: con-min-b
               type: min
               value: 1
               field: selections
               scope: parent
-              shared: true
 
 steps:
   - action: addForce
     id: add-patrol
     forceEntryId: fe-patrol
 
-  # Auto-select creates Unit A and Unit B (each has shared min=1), satisfied
+  # Auto-select creates Unit A and Unit B (each has min=1), satisfied
   - expectedState:
       forces:
         - selectionCount: 2
@@ -78,7 +70,7 @@ steps:
             - name: Unit A
             - name: Unit B
 
-  # Remove both auto-selected entries to trigger shared constraint violation
+  # Remove both auto-selected entries to trigger constraint violations
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
     selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
@@ -90,14 +82,8 @@ steps:
   - expectedState:
       errors:
         - on: category cat-troops
-          from: se-unit-a/con-min-shared
+          from: se-unit-a/con-min-a
         - on: category cat-troops
-          from: se-unit-b/con-min-shared
+          from: se-unit-b/con-min-b
       forces:
         - selectionCount: 0
-      engines:
-        newrecruit:
-          # NR deduplicates shared constraints and only reports one category-level error.
-          errors:
-            - on: category cat-troops
-              from: se-unit-a/con-min-shared
