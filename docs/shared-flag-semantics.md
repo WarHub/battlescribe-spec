@@ -131,13 +131,15 @@ cause as conditions.
 
 Using the same constraint ID on multiple separate (non-shared) entries causes NR to
 deduplicate errors (reporting only one), while BattleScribe reports each independently.
-This was a data bug in the spec — constraint IDs should be unique per entry.
+This was a data bug in the spec — constraint IDs must be globally unique within a
+setup (game system + catalogues). The spec framework enforces this via `SetupIdValidator`,
+rejecting duplicate IDs unless the spec is explicitly tagged `duplicate-ids`.
 
 **Fix:** The `constraint-shared-linked` spec now uses unique IDs (`con-min-a`, `con-min-b`)
 and both engines agree: each entry produces its own independent error.
 
-**Recommendation:** Always use unique constraint IDs. Duplicate IDs produce undefined
-deduplication behavior that differs across engines.
+**Recommendation:** Always use globally unique constraint IDs. Duplicate IDs produce
+undefined deduplication behavior that differs across engines.
 
 ## Spec Coverage Summary
 
