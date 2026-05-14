@@ -1,0 +1,73 @@
+id: condition-include-child-selections
+category: condition
+description: Condition with includeChildSelections traverses into child selections
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+        - id: se-support
+          name: Support
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Trooper Support
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: force
+                  childId: se-trooper
+                  includeChildSelections: true
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-support
+
+  # No Troopers yet — condition not met, name unchanged
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+            - name: Support
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  # Trooper is a child of Squad, not a direct force selection.
+  # includeChildSelections=true traverses into Squad's children and finds it.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+            - name: Trooper Support

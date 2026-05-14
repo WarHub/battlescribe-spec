@@ -1,0 +1,82 @@
+id: modifier-repeat-include-child-forces
+category: modifier
+description: Repeat with includeChildForces counts entries from child forces
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-detach
+            name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-warrior
+          name: Warrior
+          type: unit
+        - id: se-commander
+          name: Commander
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+          modifiers:
+            - type: increment
+              field: pts
+              value: "10"
+              repeats:
+                - value: 1
+                  repeats: 1
+                  field: selections
+                  scope: force
+                  childId: se-warrior
+                  includeChildForces: true
+
+steps:
+  - action: addForce
+    id: add-army
+    forceEntryId: fe-army
+
+  - action: addChildForce
+    id: add-detachment
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-detach
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-warrior
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-warrior
+
+  - action: selectEntry
+    forceId: ${{ steps.add-army.forceId }}
+    entryId: se-commander
+
+  # includeChildForces=true on the repeat means it counts Warriors in child forces.
+  # 2 Warriors in Detachment (child force), value=1, repeats=1: floor(2/1) × 1 = 2
+  # Commander cost: 50 + 10×2 = 70
+  - expectedState:
+      forces:
+        - selections:
+            - name: Commander
+              costs:
+                - typeId: pts
+                  value: 70
+          childForceCount: 1
+          childForces:
+            - selectionCount: 2
+              selections:
+                - name: Warrior
+                - name: Warrior

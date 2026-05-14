@@ -1,6 +1,7 @@
 id: constraint-include-child-selections
 category: constraint
-description: Constraint with includeChildSelections counts child selections too
+description: Constraint with includeChildSelections counts nested child selections toward limit
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:
@@ -14,37 +15,70 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-parent
+        - id: se-squad
           name: Squad
           type: unit
-          constraints:
-            - id: c1
-              type: max
-              value: 3
-              field: selections
-              scope: parent
-              includeChildSelections: true
           selectionEntries:
-            - id: se-child
-              name: Trooper
-              type: model
+            - id: se-special
+              name: Special Weapon
+              type: upgrade
+              constraints:
+                - id: c1
+                  type: max
+                  value: 2
+                  field: selections
+                  scope: force
+                  includeChildSelections: true
 
 steps:
   - action: addForce
     id: add-detachment
     forceEntryId: fe-1
 
-  - expectedState:
-      forces:
-        - selectionCount: 0
-
-  # includeChildSelections=true means the max counts parent + child selections
   - action: selectEntry
+    id: select-squad-1
     forceId: ${{ steps.add-detachment.forceId }}
-    entryId: se-parent
+    entryId: se-squad
 
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad-1.selectionId }}
+    entryId: se-special
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad-1.selectionId }}
+    entryId: se-special
+
+  # 1 Special Weapon selection with number=2 in Squad#1
   - expectedState:
       forces:
         - selectionCount: 1
           selections:
             - name: Squad
+              children:
+                - name: Special Weapon
+                  number: 2
+
+  - action: selectEntry
+    id: select-squad-2
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad-2.selectionId }}
+    entryId: se-special
+
+  # 2 + 1 = 3 Special Weapons total (number=2 in Squad#1 + number=1 in Squad#2).
+  # includeChildSelections traverses into all Squads' children to count.
+  # Exceeds max=2.
+  - expectedState:
+      errors:
+        - on: selection se-special
+          from: se-special/c1
+      forces:
+        - selectionCount: 2
+      engines:
+        newrecruit:
+          errors: []
