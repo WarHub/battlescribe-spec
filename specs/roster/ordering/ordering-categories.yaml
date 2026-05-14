@@ -80,8 +80,8 @@ steps:
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-zulu-unit
 
-  # Selections appear in category definition order (Zulu → Alpha → Mike), not alphabetically.
-  # BS sorts all selections alphabetically regardless of primary category (design difference).
+  # NR returns selections in category definition order (Zulu → Alpha → Mike).
+  # BS adapter sorts all selections alphabetically (render-layer ordering), ignoring category.
   - expectedState:
       forces:
         - categoryCount: 4
