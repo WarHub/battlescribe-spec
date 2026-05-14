@@ -5,10 +5,10 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// Single-engine fixture for sequential live NR tests and smoke tests.
 /// Gated by NR_ENGINE_URL env var (same as before).
-/// Shared by <see cref="SequentialLiveNewRecruitConformanceTests"/> and
-/// <see cref="LiveNewRecruitSmokeTests"/>.
+/// Shared by <see cref="SequentialLiveNrRosterConformanceTests"/> and
+/// <see cref="LiveNrRosterSmokeTests"/>.
 /// </summary>
-public sealed class SequentialLiveNewRecruitFixture : IAsyncLifetime
+public sealed class SequentialLiveNrRosterFixture : IAsyncLifetime
 {
     public NewRecruitRosterEngine? Engine { get; private set; }
     public bool Available => Engine is not null;
@@ -36,7 +36,7 @@ public sealed class SequentialLiveNewRecruitFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition("SequentialLiveNewRecruit")]
-public class SequentialLiveNewRecruitCollection : ICollectionFixture<SequentialLiveNewRecruitFixture>
+[CollectionDefinition("SequentialLiveNrRoster")]
+public class SequentialLiveNrRosterCollection : ICollectionFixture<SequentialLiveNrRosterFixture>
 {
 }

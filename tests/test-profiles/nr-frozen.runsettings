@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Run frozen New Recruit conformance tests using pre-recorded HAR snapshot. -->
+<!-- Run frozen New Recruit roster conformance tests using pre-recorded HAR snapshot. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>FullyQualifiedName~FrozenNewRecruitConformanceTests</TestCaseFilter>
+    <TestCaseFilter>Engine=FrozenNrRoster</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

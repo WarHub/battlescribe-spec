@@ -5,6 +5,6 @@
     <EnvironmentVariables>
       <NR_EDITOR_URL>https://giloushaker.github.io/nr-editor/</NR_EDITOR_URL>
     </EnvironmentVariables>
-    <TestCaseFilter>FullyQualifiedName~LiveNewRecruitGameData</TestCaseFilter>
+    <TestCaseFilter>Engine=LiveNrGameData</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

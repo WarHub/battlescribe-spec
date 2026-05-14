@@ -8,7 +8,7 @@ namespace BattleScribeSpec.Tests;
 /// an extra browser during normal test runs.
 /// Useful for debugging individual spec failures without parallel noise.
 /// </summary>
-public sealed class SequentialFrozenNewRecruitFixture : IAsyncLifetime
+public sealed class SequentialFrozenNrRosterFixture : IAsyncLifetime
 {
     public NewRecruitRosterEngine? Engine { get; private set; }
     public bool Available => Engine is not null;
@@ -51,7 +51,7 @@ public sealed class SequentialFrozenNewRecruitFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition("SequentialFrozenNewRecruit")]
-public class SequentialFrozenNewRecruitCollection : ICollectionFixture<SequentialFrozenNewRecruitFixture>
+[CollectionDefinition("SequentialFrozenNrRoster")]
+public class SequentialFrozenNrRosterCollection : ICollectionFixture<SequentialFrozenNrRosterFixture>
 {
 }

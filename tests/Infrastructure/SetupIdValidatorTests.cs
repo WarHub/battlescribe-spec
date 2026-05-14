@@ -1,6 +1,6 @@
 namespace BattleScribeSpec.Tests;
 
-[Trait("Category", "Unit")]
+[Trait("Category", "Lint")]
 public sealed class SetupIdValidatorTests
 {
     [Fact]

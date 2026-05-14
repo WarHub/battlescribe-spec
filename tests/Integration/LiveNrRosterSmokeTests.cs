@@ -9,14 +9,15 @@ namespace BattleScribeSpec.Tests;
 /// Exercises the full pipeline: CatXmlGenerator → NR data loading → actions → state reading.
 /// Skipped when NR_ENGINE_URL is not set.
 /// </summary>
-[Collection("SequentialLiveNewRecruit")]
+[Collection("SequentialLiveNrRoster")]
 [Trait("Category", "Smoke")]
-public sealed class LiveNewRecruitSmokeTests
+[Trait("Engine", "LiveNrRoster")]
+public sealed class LiveNrRosterSmokeTests
 {
     private readonly ITestOutputHelper _output;
-    private readonly SequentialLiveNewRecruitFixture _fixture;
+    private readonly SequentialLiveNrRosterFixture _fixture;
 
-    public LiveNewRecruitSmokeTests(ITestOutputHelper output, SequentialLiveNewRecruitFixture fixture)
+    public LiveNrRosterSmokeTests(ITestOutputHelper output, SequentialLiveNrRosterFixture fixture)
     {
         _output = output;
         _fixture = fixture;

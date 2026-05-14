@@ -1,5 +1,6 @@
 namespace BattleScribeSpec.Tests;
 
+[Trait("Category", "Unit")]
 public sealed class TagFilterTests
 {
     [Fact]

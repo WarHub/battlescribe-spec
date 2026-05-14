@@ -7,6 +7,6 @@
       <NR_HEADLESS>false</NR_HEADLESS>
       <NR_VISUAL>true</NR_VISUAL>
     </EnvironmentVariables>
-    <TestCaseFilter>FullyQualifiedName~NewRecruitConformanceTests|FullyQualifiedName~NrIntegrationTests|FullyQualifiedName~NewRecruitSmokeTests</TestCaseFilter>
+    <TestCaseFilter>Engine=LiveNrRoster</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

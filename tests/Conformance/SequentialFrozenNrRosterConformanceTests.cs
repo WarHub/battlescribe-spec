@@ -7,15 +7,15 @@ namespace BattleScribeSpec.Tests;
 /// Useful for debugging individual spec failures without parallel noise.
 /// Skipped by default — set NR_SEQUENTIAL=true to run.
 /// </summary>
-[Collection("SequentialFrozenNewRecruit")]
+[Collection("SequentialFrozenNrRoster")]
 [Trait("Category", "Conformance")]
-[Trait("Engine", "FrozenNewRecruit")]
+[Trait("Engine", "FrozenNrRoster")]
 [Trait("Mode", "Sequential")]
-public sealed class SequentialFrozenNewRecruitConformanceTests : ConformanceTestBase
+public sealed class SequentialFrozenNrRosterConformanceTests : ConformanceTestBase
 {
-    private readonly SequentialFrozenNewRecruitFixture _fixture;
+    private readonly SequentialFrozenNrRosterFixture _fixture;
 
-    public SequentialFrozenNewRecruitConformanceTests(ITestOutputHelper output, SequentialFrozenNewRecruitFixture fixture)
+    public SequentialFrozenNrRosterConformanceTests(ITestOutputHelper output, SequentialFrozenNrRosterFixture fixture)
         : base(output)
     {
         _fixture = fixture;
@@ -35,5 +35,5 @@ public sealed class SequentialFrozenNewRecruitConformanceTests : ConformanceTest
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void FrozenNewRecruitEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void FrozenNrRosterEngine(string specPath, string specName) => RunSpec(specPath, specName);
 }

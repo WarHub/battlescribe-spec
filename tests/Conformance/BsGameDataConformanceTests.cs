@@ -8,10 +8,10 @@ namespace BattleScribeSpec.Tests;
 /// correctly — serving as the reference implementation against which NR Editor is compared.
 /// </summary>
 [Trait("Category", "Conformance")]
-[Trait("Engine", "BattleScribeGameData")]
-public sealed class BattleScribeGameDataConformanceTests : GameDataConformanceTestBase
+[Trait("Engine", "BsGameData")]
+public sealed class BsGameDataConformanceTests : GameDataConformanceTestBase
 {
-    public BattleScribeGameDataConformanceTests(ITestOutputHelper output) : base(output) { }
+    public BsGameDataConformanceTests(ITestOutputHelper output) : base(output) { }
 
     protected override string EngineName => "battlescribe";
     protected override string LogPrefix => "[BS-DATA] ";
@@ -20,5 +20,5 @@ public sealed class BattleScribeGameDataConformanceTests : GameDataConformanceTe
 
     [Theory]
     [MemberData(nameof(AllGameDataSpecs))]
-    public void BattleScribeEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void BsGameDataEngine(string specPath, string specName) => RunSpec(specPath, specName);
 }

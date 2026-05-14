@@ -2,6 +2,6 @@
 <!-- Run frozen NR Editor GameData conformance tests using local static file serving. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>FullyQualifiedName~FrozenNewRecruitGameDataConformanceTests</TestCaseFilter>
+    <TestCaseFilter>Engine=FrozenNrGameData</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

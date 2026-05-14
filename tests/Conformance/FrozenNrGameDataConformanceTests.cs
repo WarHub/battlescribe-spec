@@ -6,19 +6,19 @@ namespace BattleScribeSpec.Tests;
 /// Runs GameData specs against a frozen NR Editor snapshot (static file serving).
 /// Fully offline and deterministic. Skipped when .testdata/nr-editor/ is missing.
 ///
-/// Uses the same spec set as <see cref="LiveNewRecruitGameDataConformanceTests"/>
+/// Uses the same spec set as <see cref="LiveNrGameDataConformanceTests"/>
 /// but served from local files instead of a live deployment.
 /// </summary>
-[Collection("FrozenNewRecruitGameData")]
+[Collection("FrozenNrGameData")]
 [Trait("Category", "Conformance")]
-[Trait("Engine", "FrozenNrEditor")]
-public sealed class FrozenNewRecruitGameDataConformanceTests : GameDataConformanceTestBase
+[Trait("Engine", "FrozenNrGameData")]
+public sealed class FrozenNrGameDataConformanceTests : GameDataConformanceTestBase
 {
-    private readonly FrozenNewRecruitGameDataFixture _fixture;
+    private readonly FrozenNrGameDataFixture _fixture;
 
-    public FrozenNewRecruitGameDataConformanceTests(
+    public FrozenNrGameDataConformanceTests(
         ITestOutputHelper output,
-        FrozenNewRecruitGameDataFixture fixture)
+        FrozenNrGameDataFixture fixture)
         : base(output)
     {
         _fixture = fixture;

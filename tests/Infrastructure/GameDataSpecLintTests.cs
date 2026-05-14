@@ -12,7 +12,7 @@ namespace BattleScribeSpec.Tests;
 /// reports all its violations in one message. Cross-spec checks remain separate
 /// <see cref="FactAttribute"/> methods.
 /// </summary>
-[Trait("Category", "Unit")]
+[Trait("Category", "Lint")]
 public sealed class GameDataSpecLintTests
 {
     private static readonly string? SpecsDir = SpecLoader.FindGameDataSpecsDirectory();

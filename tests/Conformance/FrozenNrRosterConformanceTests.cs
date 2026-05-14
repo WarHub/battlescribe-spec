@@ -8,17 +8,17 @@ namespace BattleScribeSpec.Tests;
 /// Fully offline and deterministic. Uses parallel execution with a browser context pool.
 /// Skipped when the HAR file doesn't exist or NR_FROZEN_SKIP=true.
 /// </summary>
-[Collection("FrozenNewRecruit")]
+[Collection("FrozenNrRoster")]
 [Trait("Category", "Conformance")]
-[Trait("Engine", "FrozenNewRecruit")]
-public sealed class FrozenNewRecruitConformanceTests
+[Trait("Engine", "FrozenNrRoster")]
+public sealed class FrozenNrRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
-    private readonly FrozenNewRecruitFixture _fixture;
+    private readonly FrozenNrRosterFixture _fixture;
     private const string EngineName = "newrecruit";
     private const string LogPrefix = "[FROZEN] ";
 
-    public FrozenNewRecruitConformanceTests(ITestOutputHelper output, FrozenNewRecruitFixture fixture)
+    public FrozenNrRosterConformanceTests(ITestOutputHelper output, FrozenNrRosterFixture fixture)
     {
         _output = output;
         _fixture = fixture;
