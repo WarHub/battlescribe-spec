@@ -108,6 +108,7 @@ public sealed class SpecLintTests
             violations.AddRange(CheckEverySpecHasSetup(entry.Spec));
             violations.AddRange(CheckLastStepIsExpectedState(entry.Spec));
             violations.AddRange(CheckAllErrorAssertionsHaveFrom(entry.Spec));
+            violations.AddRange(CheckNoRedundantCountAssertions(entry.Spec));
         }
 
         Assert.True(violations.Count == 0,
@@ -700,6 +701,141 @@ public sealed class SpecLintTests
                     }
                 }
             }
+        }
+    }
+
+    // ── expectedState: no redundant *Count alongside asserted list ───
+
+    private static IEnumerable<string> CheckNoRedundantCountAssertions(SpecFile spec)
+    {
+        if (spec.Steps is null)
+        {
+            yield break;
+        }
+
+        for (var i = 0; i < spec.Steps.Count; i++)
+        {
+            if (spec.Steps[i].ExpectedState is not { } expectedState)
+            {
+                continue;
+            }
+
+            foreach (var violation in CheckNoRedundantCountAssertions(expectedState, $"step {i + 1} expectedState"))
+            {
+                yield return violation;
+            }
+        }
+    }
+
+    private static IEnumerable<string> CheckNoRedundantCountAssertions(ExpectedStateDef expectedState, string path)
+    {
+        foreach (var violation in CheckRedundantCountPair(expectedState.Forces is not null, expectedState.ForceCount is not null, "forces", "forceCount", path))
+        {
+            yield return violation;
+        }
+
+        foreach (var violation in CheckRedundantCountPair(expectedState.Costs is not null, expectedState.CostCount is not null, "costs", "costCount", path))
+        {
+            yield return violation;
+        }
+
+        foreach (var violation in CheckRedundantCountPair(expectedState.CostLimits is not null, expectedState.CostLimitCount is not null, "costLimits", "costLimitCount", path))
+        {
+            yield return violation;
+        }
+
+        foreach (var violation in CheckRedundantCountPair(expectedState.Errors is not null, expectedState.ErrorCount is not null, "errors", "errorCount", path))
+        {
+            yield return violation;
+        }
+
+        if (expectedState.Forces is { } forces)
+        {
+            for (var i = 0; i < forces.Count; i++)
+            {
+                foreach (var violation in CheckNoRedundantCountAssertions(forces[i], $"{path}.forces[{i + 1}]"))
+                {
+                    yield return violation;
+                }
+            }
+        }
+
+        if (expectedState.Engines is { } engines)
+        {
+            foreach (var (engineName, engineExpectedState) in engines)
+            {
+                foreach (var violation in CheckNoRedundantCountAssertions(engineExpectedState, $"{path}.engines.{engineName}"))
+                {
+                    yield return violation;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> CheckNoRedundantCountAssertions(ExpectedForceDef expectedForce, string path)
+    {
+        foreach (var violation in CheckRedundantCountPair(expectedForce.Selections is not null, expectedForce.SelectionCount is not null, "selections", "selectionCount", path))
+        {
+            yield return violation;
+        }
+
+        foreach (var violation in CheckRedundantCountPair(expectedForce.ChildForces is not null, expectedForce.ChildForceCount is not null, "childForces", "childForceCount", path))
+        {
+            yield return violation;
+        }
+
+        foreach (var violation in CheckRedundantCountPair(expectedForce.Categories is not null, expectedForce.CategoryCount is not null, "categories", "categoryCount", path))
+        {
+            yield return violation;
+        }
+
+        if (expectedForce.ChildForces is { } childForces)
+        {
+            for (var i = 0; i < childForces.Count; i++)
+            {
+                foreach (var violation in CheckNoRedundantCountAssertions(childForces[i], $"{path}.childForces[{i + 1}]"))
+                {
+                    yield return violation;
+                }
+            }
+        }
+
+        if (expectedForce.Selections is { } selections)
+        {
+            for (var i = 0; i < selections.Count; i++)
+            {
+                foreach (var violation in CheckNoRedundantCountAssertions(selections[i], $"{path}.selections[{i + 1}]"))
+                {
+                    yield return violation;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> CheckNoRedundantCountAssertions(ExpectedSelectionDef expectedSelection, string path)
+    {
+        foreach (var violation in CheckRedundantCountPair(expectedSelection.Children is not null, expectedSelection.ChildCount is not null, "children", "childCount", path))
+        {
+            yield return violation;
+        }
+
+        if (expectedSelection.Children is { } children)
+        {
+            for (var i = 0; i < children.Count; i++)
+            {
+                foreach (var violation in CheckNoRedundantCountAssertions(children[i], $"{path}.children[{i + 1}]"))
+                {
+                    yield return violation;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> CheckRedundantCountPair(bool hasListAssertion, bool hasCountAssertion, string field, string countField, string path)
+    {
+        if (hasListAssertion && hasCountAssertion)
+        {
+            yield return $"{path}: '{countField}' is redundant when '{field}' is also asserted";
         }
     }
 

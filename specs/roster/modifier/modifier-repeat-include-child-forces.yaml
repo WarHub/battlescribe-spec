@@ -74,9 +74,7 @@ steps:
               costs:
                 - typeId: pts
                   value: 70
-          childForceCount: 1
           childForces:
-            - selectionCount: 2
-              selections:
+            - selections:
                 - name: Warrior
                 - name: Warrior

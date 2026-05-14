@@ -84,8 +84,7 @@ steps:
         - typeId: pts
           value: 98
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Devastator Squad
               type: unit
               children:

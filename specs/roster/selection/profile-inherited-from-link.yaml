@@ -54,8 +54,7 @@ steps:
   # Selecting se-shared creates a selection with its profile included.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Linked Blade
               profiles:
                 - name: Blade Profile

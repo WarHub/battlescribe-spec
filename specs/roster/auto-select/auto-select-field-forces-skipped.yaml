@@ -47,8 +47,7 @@ steps:
         - on: roster
           from: se-forces-min/con-min-forces
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Selections Min Unit
               type: unit
               number: 1
@@ -56,8 +55,7 @@ steps:
         # NR auto-selects both entries (doesn't distinguish field=forces vs field=selections)
         newrecruit:
           forces:
-            - selectionCount: 2
-              selections:
+            - selections:
                 - name: Forces Min Unit
                   type: unit
                   number: 1

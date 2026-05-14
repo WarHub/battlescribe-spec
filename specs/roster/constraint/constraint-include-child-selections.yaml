@@ -53,8 +53,7 @@ steps:
   # 1 Special Weapon selection with number=2 in Squad#1
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Squad
               children:
                 - name: Special Weapon

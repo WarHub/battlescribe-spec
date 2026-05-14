@@ -45,6 +45,5 @@ steps:
   # returns false on both BS and NR.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Watcher

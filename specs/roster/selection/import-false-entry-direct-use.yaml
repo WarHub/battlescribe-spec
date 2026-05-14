@@ -34,7 +34,6 @@ steps:
   - expectedState:
       forces:
         - name: Patrol
-          selectionCount: 1
           selections:
             - name: Public Unit
               type: unit
@@ -46,7 +45,6 @@ steps:
   - expectedState:
       forces:
         - name: Patrol
-          selectionCount: 2
           selections:
             - name: Internal Unit
               type: unit

@@ -46,8 +46,7 @@ steps:
         # NR auto-selects the entry and doesn't evaluate field=forces constraints
         newrecruit:
           forces:
-            - selectionCount: 1
-              selections:
+            - selections:
                 - name: Unit A
           errors: []
 
@@ -62,15 +61,13 @@ steps:
         - on: roster
           from: se-unit/con-force-field
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A
       engines:
         # NR: 2 selections (auto-selected + manually selected), no force-field errors
         newrecruit:
           forces:
-            - selectionCount: 2
-              selections:
+            - selections:
                 - name: Unit A
                 - name: Unit A
           errors: []

@@ -90,8 +90,7 @@ steps:
         - typeId: pts
           value: 52
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Battle Mech
               type: unit
               children:

@@ -43,8 +43,7 @@ steps:
   # 1 selection in force, atLeast 2 → false on both engines
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A
 
   # Add second instance — now 2 selections in force
@@ -56,14 +55,12 @@ steps:
   # NR: null childId on force scope → counts all → atLeast 2 → true → "Triggered"
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Unit A
             - name: Unit A
       engines:
         newrecruit:
           forces:
-            - selectionCount: 2
-              selections:
+            - selections:
                 - name: Triggered
                 - name: Triggered

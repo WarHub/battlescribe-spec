@@ -48,7 +48,6 @@ steps:
     forceId: ${{ steps.add-patrol-a.forceId }}
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Patrol
 

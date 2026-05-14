@@ -103,8 +103,7 @@ steps:
         - typeId: pts
           value: 27
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Faction Soldier
               type: unit
               children:

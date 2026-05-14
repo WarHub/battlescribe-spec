@@ -97,8 +97,7 @@ steps:
         - typeId: pts
           value: 30
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Heavy Trooper
               type: unit
               children:

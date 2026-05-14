@@ -41,6 +41,5 @@ steps:
   # returns 0 (doesn't count self), so modifier doesn't fire
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Self Check

@@ -64,14 +64,10 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Veteran Squad
-          childForceCount: 1
           childForces:
             - selectionCount: 0
-              childForceCount: 1
               childForces:
-                - selectionCount: 1
-                  selections:
+                - selections:
                     - name: Deep Trigger

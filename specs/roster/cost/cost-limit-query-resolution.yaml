@@ -54,8 +54,7 @@ steps:
   # This affects conditions that reference cost-type values.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit
               costs:
                 - typeId: ct-pts

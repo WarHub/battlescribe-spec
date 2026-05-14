@@ -43,12 +43,10 @@ steps:
   # NR: on force scope, null childId → counts all selections → atLeast 1 → true → modifier fires
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A
       engines:
         newrecruit:
           forces:
-            - selectionCount: 1
-              selections:
+            - selections:
                 - name: Should Not Apply

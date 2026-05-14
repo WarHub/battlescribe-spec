@@ -29,7 +29,6 @@ steps:
       forceCount: 1
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Patrol
           selectionCount: 0

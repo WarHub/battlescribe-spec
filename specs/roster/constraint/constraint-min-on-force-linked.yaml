@@ -48,8 +48,7 @@ steps:
   # Auto-select creates 2 Unit A (min=2, scope=force), constraint satisfied
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Unit A
             - name: Unit A
 

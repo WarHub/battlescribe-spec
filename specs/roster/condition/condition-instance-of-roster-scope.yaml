@@ -42,6 +42,5 @@ steps:
   # instanceOf with roster scope returns false, so modifier should NOT apply
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A

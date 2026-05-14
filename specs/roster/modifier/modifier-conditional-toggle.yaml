@@ -40,8 +40,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Active Alpha
   # Deselect Alpha
   - action: deselectSelection

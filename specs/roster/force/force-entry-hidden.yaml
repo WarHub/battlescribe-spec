@@ -35,7 +35,6 @@ steps:
     forceEntryId: fe-hidden
 
   - expectedState:
-      forceCount: 2
       forces:
         - name: Hidden Detachment
           hidden: true

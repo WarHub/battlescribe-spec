@@ -44,12 +44,10 @@ steps:
   # NR: missing childId on parent scope → counts "self" → atLeast 1 → true → modifier fires
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit
       engines:
         newrecruit:
           forces:
-            - selectionCount: 1
-              selections:
+            - selections:
                 - name: Self Counted

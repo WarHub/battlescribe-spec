@@ -43,8 +43,7 @@ steps:
   # is also auto-selected because it has min=1.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               type: unit
               children:

@@ -49,8 +49,7 @@ steps:
         - typeId: pts
           value: 10
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Squad
               type: unit
               children:

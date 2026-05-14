@@ -56,11 +56,8 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Child Forces Included
-          childForceCount: 1
           childForces:
-            - selectionCount: 1
-              selections:
+            - selections:
                 - name: Child Trigger

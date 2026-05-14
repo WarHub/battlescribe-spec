@@ -57,8 +57,7 @@ steps:
   # At entry link max=2, below shared max=4 — no errors
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Heavy Support
             - name: Heavy Support
 

@@ -58,8 +58,7 @@ steps:
   # Two selections — at the max=2 limit, no errors
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Elite Guard
             - name: Elite Guard
 

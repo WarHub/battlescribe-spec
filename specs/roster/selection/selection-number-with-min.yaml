@@ -47,8 +47,7 @@ steps:
   # auto-selected with number=3 to satisfy the min constraint.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               children:
                 - name: Trooper

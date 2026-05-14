@@ -35,7 +35,6 @@ steps:
   - expectedState:
       forces:
         - name: Army
-          childForceCount: 1
           childForces:
             - name: Detachment
 
@@ -45,7 +44,6 @@ steps:
     forceId: ${{ steps.add-detachment.forceId }}
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Army
           childForceCount: 0

@@ -55,8 +55,7 @@ steps:
   # Parent Unit selected → Bolt Pistol auto-selected via entry link default.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               children:
                 - name: Bolt Pistol

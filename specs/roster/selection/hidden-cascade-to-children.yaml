@@ -38,8 +38,7 @@ steps:
         - on: selection se-squad
           from: se-squad/hidden
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Hidden Squad
               hidden: true
       engines:

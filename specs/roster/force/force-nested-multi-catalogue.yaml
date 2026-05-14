@@ -44,10 +44,8 @@ steps:
     catalogueId: cat-b
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Army
-          childForceCount: 1
           childForces:
             - name: Detachment
 

@@ -47,6 +47,5 @@ steps:
   # 200 pts < max 500 pts — cost constraint satisfied
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Expensive Unit

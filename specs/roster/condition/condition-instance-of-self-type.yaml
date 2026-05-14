@@ -45,6 +45,5 @@ steps:
   # matching childId="unit" → instanceOf fires → name set.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Type Matched

@@ -55,7 +55,6 @@ steps:
         - typeId: pts
           value: 50
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Costed Unit
             - name: Free Unit

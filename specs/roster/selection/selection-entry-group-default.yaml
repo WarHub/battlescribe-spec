@@ -47,8 +47,7 @@ steps:
   # With defaultSelectionEntryId and min=1, the engine auto-selects Sword.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               children:
                 - name: Sword

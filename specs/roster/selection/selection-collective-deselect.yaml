@@ -50,8 +50,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Squad
               children:
                 - name: Shared Weapon
@@ -64,8 +63,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Squad
               children:
                 - name: Trooper

@@ -52,8 +52,7 @@ steps:
   # One selection within max=1 — no errors.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               children:
                 - name: Sword
@@ -69,8 +68,7 @@ steps:
         - on: selection se-parent
           from: seg-weapons/con-max-1
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               children:
                 - name: Axe

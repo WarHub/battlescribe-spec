@@ -44,8 +44,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: None Present
 
   # Add Unit B → equalTo 0 for se-other is now false → modifier not applied
@@ -55,7 +54,6 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Unit A
             - name: Unit B

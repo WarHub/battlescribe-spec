@@ -50,6 +50,5 @@ steps:
   # Both engines agree — condition never fires.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Detector

@@ -111,10 +111,8 @@ steps:
     entryId: se-squad
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Patrol
-          selectionCount: 2
           selections:
             - name: Captain
               type: unit
@@ -145,17 +143,14 @@ steps:
       costs:
         - typeId: ct-pts
           value: 300
-      forceCount: 2
       forces:
         - name: Patrol
-          selectionCount: 2
           selections:
             - name: Captain
               children:
                 - name: Power Sword
             - name: Squad
         - name: Patrol
-          selectionCount: 2
           selections:
             - name: Captain
               children:
@@ -170,7 +165,6 @@ steps:
       costs:
         - typeId: ct-pts
           value: 150
-      forceCount: 1
       forces:
         - name: Patrol
           selectionCount: 2

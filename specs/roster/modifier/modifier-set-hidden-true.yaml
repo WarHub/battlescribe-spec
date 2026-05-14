@@ -59,8 +59,7 @@ steps:
         - on: selection se-hidden
           from: se-hidden/hidden
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Hidden Unit
               hidden: true
             - name: Normal Unit

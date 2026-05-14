@@ -12,6 +12,5 @@ steps:
     catalogueId: e0af-67df-9d63-8fb7
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: "Army Roster"

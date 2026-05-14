@@ -43,8 +43,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 3
-          selections:
+        - selections:
             - name: Infantry Squad
               type: unit
             - name: Power Sword

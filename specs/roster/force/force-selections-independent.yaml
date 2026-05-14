@@ -46,11 +46,8 @@ steps:
       costs:
         - typeId: pts
           value: 200
-      forceCount: 2
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A

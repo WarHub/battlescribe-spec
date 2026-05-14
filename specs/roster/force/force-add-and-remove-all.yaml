@@ -26,7 +26,6 @@ steps:
     forceEntryId: fe-2
 
   - expectedState:
-      forceCount: 2
       forces:
         - name: Battalion
         - name: Patrol
@@ -35,7 +34,6 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Battalion
 

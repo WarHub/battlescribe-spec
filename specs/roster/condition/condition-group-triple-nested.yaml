@@ -73,8 +73,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 5
-          selections:
+        - selections:
             - name: Trooper
             - name: Trooper
             - name: Trooper

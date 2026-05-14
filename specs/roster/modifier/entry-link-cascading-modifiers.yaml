@@ -39,6 +39,5 @@ steps:
   # The entryLink's modifier applies only when selecting through the link.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Warrior

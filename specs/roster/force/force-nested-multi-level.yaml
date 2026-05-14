@@ -39,7 +39,6 @@ steps:
   - expectedState:
       forces:
         - name: Army
-          childForceCount: 1
           childForces:
             - name: Division
               childForceCount: 0
@@ -54,10 +53,8 @@ steps:
   - expectedState:
       forces:
         - name: Army
-          childForceCount: 1
           childForces:
             - name: Division
-              childForceCount: 1
               childForces:
                 - name: Platoon
 
@@ -76,6 +73,5 @@ steps:
               selectionCount: 0
               childForces:
                 - name: Platoon
-                  selectionCount: 1
                   selections:
                     - name: Soldier

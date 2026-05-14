@@ -46,6 +46,5 @@ steps:
   # exists, so condition is false → name stays "Detector".
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Detector

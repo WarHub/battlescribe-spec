@@ -49,8 +49,7 @@ steps:
         - typeId: pts
           value: 15
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Plasma Rifle
               costs:
                 - typeId: pts

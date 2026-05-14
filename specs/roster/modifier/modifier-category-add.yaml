@@ -50,8 +50,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Veteran Squad
               categories:
                 - name: Elites

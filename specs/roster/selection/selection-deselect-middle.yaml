@@ -52,7 +52,6 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Alpha
             - name: Gamma
