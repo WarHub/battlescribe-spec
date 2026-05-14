@@ -82,17 +82,21 @@ steps:
 
   # NR returns selections in category definition order (Zulu → Alpha → Mike).
   # BS adapter sorts all selections alphabetically (render-layer ordering), ignoring category.
+  # NR doesn't include an "Uncategorised" category slot; BS does.
   - expectedState:
       forces:
-        - categoryCount: 4
-          selections:
+        - selections:
             - name: Zulu Unit
             - name: Alpha Unit
             - name: Mike Unit
       engines:
         battlescribe:
           forces:
-            - selections:
+            - categoryCount: 4
+              selections:
                 - name: Alpha Unit
                 - name: Mike Unit
                 - name: Zulu Unit
+        newrecruit:
+          forces:
+            - categoryCount: 3
