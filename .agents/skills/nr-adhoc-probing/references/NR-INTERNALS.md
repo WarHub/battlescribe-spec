@@ -354,6 +354,60 @@ Creates a **new sibling node** with `amount=0`. Used by NR UI for:
 | Add second Squad to force | `selector.addInstance()` | ~~`setAmount({}, 2)`~~ |
 | Duplicate a unit | `selector.addInstance()` + copy | ~~`setAmount`~~ |
 
+## Cost-Field Repeat Divergence (Infinite Loop Bug)
+
+**Discovered May 2026.** When two entries have modifier repeats counting each
+other's cost (mutual cross-reference), both engines fail to detect the loop:
+
+- **NR**: Diverges to `Infinity` within a single operation (reactive fixed-point
+  iteration with no recursion guard). Causes `JsonException` when serializing.
+- **BS**: Costs escalate unboundedly across roster mutations (each add/remove
+  triggers re-evaluation with inflated costs from previous passes). No error
+  is reported.
+
+### Reproduction
+
+Two selection entries Alpha and Beta, each with a modifier repeat:
+- Alpha: for each 10 pts of Beta → increment Alpha's cost by 50
+- Beta: for each 10 pts of Alpha → increment Beta's cost by 50
+
+Both start at base cost 100.
+
+**NR behavior** (single operation):
+```
+Iteration 1: Beta sees Alpha=100 → 10 reps → 600
+             Alpha sees Beta=600 → 60 reps → 3100
+Iteration 2: Beta sees Alpha=3100 → 310 reps → 15600
+             Alpha sees Beta=15600 → ...
+→ Both costs diverge to Infinity
+```
+
+**BS behavior** (escalation across mutations):
+```
++Alpha       → Alpha=100
++Beta        → Alpha=100, Beta=600         (total: 700)
++Beta#2      → Alpha=3100, Betas=15600     (total: 34,300)
++Beta#3      → Alpha=156100, Betas=780600  (total: 2,497,900)
+```
+
+Each roster mutation amplifies costs further. No upper bound.
+
+### Impact
+
+Neither engine has a guard against unbounded cost escalation from mutual
+cost-field repeat references. Engines must terminate safely in all cases —
+unbounded loops/escalation are never acceptable. Both should detect the
+cycle and report a validation error instead of applying the looping modifiers.
+
+### Related
+
+- Spec: `modifier/modifier-repeat-cost-mutual-reference` (tagged
+  `newrecruit-bug` + `battlescribe-bug`, skipped for NR, BS overrides
+  show escalating values)
+- Self-referencing repeats (single entry type counting its own cost) do converge
+  in NR — see `modifier/modifier-repeat-cost-self-reference` for the fixed-point
+  values vs BS's single-pass results.
+
 ## Custom Name & Notes — Premium Feature
 
 NR supports `customName` and `note` on instance nodes. These are premium
