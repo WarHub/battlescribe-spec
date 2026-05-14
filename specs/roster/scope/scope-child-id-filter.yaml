@@ -48,13 +48,15 @@ steps:
       forces:
         - selectionCount: 2
           selections:
-            - name: Target Unit
+            # Default: effective-name (post-modifier) alphabetical order.
+            # "Active Watcher" < "Target Unit".
             - name: Active Watcher
+            - name: Target Unit
       engines:
-        # BS and NR order these two selections differently after the modifier fires.
-        # BattleScribe expects Active Watcher before Target Unit.
-        battlescribe:
+        # NR sorts by original (pre-modifier) name, not effective name.
+        # Original names: "Target Unit" < "Watcher" → Target Unit before Active Watcher.
+        newrecruit:
           forces:
             - selections:
-                - name: Active Watcher
                 - name: Target Unit
+                - name: Active Watcher
