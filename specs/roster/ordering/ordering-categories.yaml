@@ -1,9 +1,11 @@
 id: ordering-categories
 category: ordering
-tags: [categoryEntry, engine-limitation]
-engines:
-  newrecruit: skip
-description: Categories on a force keep the force entry definition order
+tags: [categoryEntry, design-difference]
+description: >
+  Categories on a force keep the force entry definition order (not alphabetical).
+  Verified by selecting entries from each category and asserting that selections
+  appear in category definition order (Zulu → Alpha → Mike), not alphabetically
+  (which would be Alpha → Mike → Zulu).
 
 setup:
   gameSystem:
@@ -33,33 +35,64 @@ setup:
     - id: cat-1
       name: Cat
       gameSystemId: test-gs
+      selectionEntries:
+        - id: se-zulu-unit
+          name: Zulu Unit
+          type: unit
+          categoryLinks:
+            - id: cl-se-zulu
+              targetId: cat-zulu
+              name: Zulu Category
+              primary: true
+        - id: se-alpha-unit
+          name: Alpha Unit
+          type: unit
+          categoryLinks:
+            - id: cl-se-alpha
+              targetId: cat-alpha
+              name: Alpha Category
+              primary: true
+        - id: se-mike-unit
+          name: Mike Unit
+          type: unit
+          categoryLinks:
+            - id: cl-se-mike
+              targetId: cat-mike
+              name: Mike Category
+              primary: true
 
 steps:
   - action: addForce
     id: add-detachment
     forceEntryId: fe-1
 
-  - action: setCustomization
+  # Select in alphabetical name order (Alpha, Mike, Zulu) to show that category
+  # definition order (Zulu=1st, Alpha=2nd, Mike=3rd) overrides selection order.
+  - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    categoryEntryId: cat-zulu
-    customNotes: Zulu Category
+    entryId: se-alpha-unit
 
-  - action: setCustomization
+  - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    categoryEntryId: cat-alpha
-    customNotes: Alpha Category
+    entryId: se-mike-unit
 
-  - action: setCustomization
+  - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
-    categoryEntryId: cat-mike
-    customNotes: Mike Category
+    entryId: se-zulu-unit
 
-  # Category assertions normally match by name, so customNotes act as index-based markers here.
+  # Selections appear in category definition order (Zulu → Alpha → Mike), not alphabetically.
+  # BS sorts all selections alphabetically regardless of primary category (design difference).
   - expectedState:
       forces:
         - categoryCount: 4
-          categories:
-            - {}
-            - customNotes: Zulu Category
-            - customNotes: Alpha Category
-            - customNotes: Mike Category
+          selections:
+            - name: Zulu Unit
+            - name: Alpha Unit
+            - name: Mike Unit
+      engines:
+        battlescribe:
+          forces:
+            - selections:
+                - name: Alpha Unit
+                - name: Mike Unit
+                - name: Zulu Unit
