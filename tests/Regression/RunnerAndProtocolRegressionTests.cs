@@ -181,6 +181,128 @@ public class RunnerAndProtocolRegressionTests
     }
 
     [Fact]
+    public void SpecRunner_AssertsCosts_ExactSet_RosterLevel()
+    {
+        var engine = new FakeEngine
+        {
+            State = new RosterState(
+                "roster", "gs", [],
+                [new CostState("pts", "pts", 50), new CostState("PL", "pl", 3)],
+                [])
+        };
+        var runner = new RosterRunner(engine);
+        var spec = new SpecFile
+        {
+            Id = "costs-exact",
+            Category = "runner",
+            Description = "asserting costs should be exact-set — extra costs are failures",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps =
+            [
+                new StepDef
+                {
+                    ExpectedState = new ExpectedStateDef
+                    {
+                        Costs = [new ExpectedCostDef { TypeId = "pts", Value = 50 }]
+                    }
+                }
+            ]
+        };
+
+        var result = runner.Run(spec);
+
+        Assert.False(result.Passed);
+        Assert.Contains(result.Failures, f => f.Contains("expected 1 cost(s) but got 2"));
+    }
+
+    [Fact]
+    public void SpecRunner_AssertsCostLimits_ExactSet_RosterLevel()
+    {
+        var engine = new FakeEngine
+        {
+            State = new RosterState(
+                "roster", "gs", [], [],
+                [],
+                CostLimits: [new CostState("pts", "pts", 1000), new CostState("PL", "pl", 50)])
+        };
+        var runner = new RosterRunner(engine);
+        var spec = new SpecFile
+        {
+            Id = "costlimits-exact",
+            Category = "runner",
+            Description = "asserting costLimits should be exact-set — extra limits are failures",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps =
+            [
+                new StepDef
+                {
+                    ExpectedState = new ExpectedStateDef
+                    {
+                        CostLimits = [new ExpectedCostDef { TypeId = "pts", Value = 1000 }]
+                    }
+                }
+            ]
+        };
+
+        var result = runner.Run(spec);
+
+        Assert.False(result.Passed);
+        Assert.Contains(result.Failures, f => f.Contains("expected 1 costLimit(s) but got 2"));
+    }
+
+    [Fact]
+    public void SpecRunner_AssertsCosts_ExactSet_SelectionLevel()
+    {
+        var engine = new FakeEngine
+        {
+            State = new RosterState(
+                "roster", "gs",
+                [new ForceState(Id: null, "Force", "cat",
+                    [new SelectionState(Id: null, "Unit", "se-1", "unit", 1, Hidden: false,
+                        Costs: [new CostState("pts", "pts", 10), new CostState("PL", "pl", 1)],
+                        Children: [])])],
+                [],
+                [])
+        };
+        var runner = new RosterRunner(engine);
+        var spec = new SpecFile
+        {
+            Id = "sel-costs-exact",
+            Category = "runner",
+            Description = "asserting selection costs should be exact-set",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps =
+            [
+                new StepDef
+                {
+                    ExpectedState = new ExpectedStateDef
+                    {
+                        Forces =
+                        [
+                            new ExpectedForceDef
+                            {
+                                Selections =
+                                [
+                                    new ExpectedSelectionDef
+                                    {
+                                        Name = "Unit",
+                                        Costs = [new ExpectedCostDef { TypeId = "pts", Value = 10 }]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            ]
+        };
+
+        var result = runner.Run(spec);
+
+        Assert.False(result.Passed);
+        Assert.Contains(result.Failures, f => f.Contains("expected 1 cost(s) but got 2"));
+    }
+
+    [Fact]
     public void CatXmlGenerator_ThrowsOnEmptyCatalogueArray()
     {
         var gameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" };

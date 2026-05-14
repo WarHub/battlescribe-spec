@@ -536,6 +536,25 @@ steps:
                       typeId: ct-pts
                       value: 10
             - name: Required Unit
+      engines:
+        # BS returns all game system cost types, including zero-value ones (power=0 for Trooper).
+        # NR omits zero-value costs from selection state.
+        battlescribe:
+          forces:
+            - selections:
+                - name: Infantry Squad
+                  children:
+                    - name: Trooper
+                      type: model
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 10
+                        - name: power
+                          typeId: ct-power
+                          value: 0
+                - name: Required Unit
 
   - expectedState:
       forces:
@@ -707,6 +726,25 @@ steps:
                       typeId: ct-pts
                       value: 20
             - name: Required Unit
+      engines:
+        # BS returns all game system cost types, including zero-value ones (power=0 for Trooper at count=2).
+        # NR omits zero-value costs from selection state.
+        battlescribe:
+          forces:
+            - selections:
+                - name: Commander
+                - name: Infantry Squad
+                  children:
+                    - name: Trooper
+                      number: 2
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 20
+                        - name: power
+                          typeId: ct-power
+                          value: 0
+                - name: Required Unit
 
   # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
   #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)

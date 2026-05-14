@@ -46,3 +46,16 @@ steps:
                 - name: cat pts
                   typeId: cat-pts
                   value: 50
+      engines:
+        # BS tracks all game system cost types on each selection, including zero-value ones.
+        # NR omits zero-value costs from selection state.
+        battlescribe:
+          forces:
+            - selections:
+                - name: Marine
+                  costs:
+                    - name: cat pts
+                      typeId: cat-pts
+                      value: 50
+                    - typeId: pts
+                      value: 0
