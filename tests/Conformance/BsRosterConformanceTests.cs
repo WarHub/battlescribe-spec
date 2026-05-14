@@ -7,10 +7,10 @@ namespace BattleScribeSpec.Tests;
 /// To add a new engine, create another test class with the same pattern and a different IRosterEngine.
 /// </summary>
 [Trait("Category", "Conformance")]
-[Trait("Engine", "BattleScribe")]
-public sealed class SpecConformanceTests : ConformanceTestBase
+[Trait("Engine", "BsRoster")]
+public sealed class BsRosterConformanceTests : ConformanceTestBase
 {
-    public SpecConformanceTests(ITestOutputHelper output) : base(output) { }
+    public BsRosterConformanceTests(ITestOutputHelper output) : base(output) { }
 
     protected override string EngineName => "battlescribe";
 
@@ -18,5 +18,5 @@ public sealed class SpecConformanceTests : ConformanceTestBase
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void BattleScribeEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void BsRosterEngine(string specPath, string specName) => RunSpec(specPath, specName);
 }

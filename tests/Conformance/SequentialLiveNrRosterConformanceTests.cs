@@ -7,15 +7,15 @@ namespace BattleScribeSpec.Tests;
 /// Useful for debugging individual spec failures without parallel noise.
 /// Skipped by default — set NR_SEQUENTIAL=true and NR_ENGINE_URL to run.
 /// </summary>
-[Collection("SequentialLiveNewRecruit")]
+[Collection("SequentialLiveNrRoster")]
 [Trait("Category", "Conformance")]
-[Trait("Engine", "LiveNewRecruit")]
+[Trait("Engine", "LiveNrRoster")]
 [Trait("Mode", "Sequential")]
-public sealed class SequentialLiveNewRecruitConformanceTests : ConformanceTestBase
+public sealed class SequentialLiveNrRosterConformanceTests : ConformanceTestBase
 {
-    private readonly SequentialLiveNewRecruitFixture _fixture;
+    private readonly SequentialLiveNrRosterFixture _fixture;
 
-    public SequentialLiveNewRecruitConformanceTests(ITestOutputHelper output, SequentialLiveNewRecruitFixture fixture)
+    public SequentialLiveNrRosterConformanceTests(ITestOutputHelper output, SequentialLiveNrRosterFixture fixture)
         : base(output)
     {
         _fixture = fixture;
@@ -35,5 +35,5 @@ public sealed class SequentialLiveNewRecruitConformanceTests : ConformanceTestBa
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void LiveNewRecruitEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void LiveNrRosterEngine(string specPath, string specName) => RunSpec(specPath, specName);
 }

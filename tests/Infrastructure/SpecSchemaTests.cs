@@ -8,7 +8,7 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// Validates all spec YAML files against the JSON Schema in docs/spec-schema.json.
 /// </summary>
-[Trait("Category", "Unit")]
+[Trait("Category", "Lint")]
 public sealed class SpecSchemaTests
 {
     private static readonly string? SpecsDir = SpecLoader.FindRosterSpecsDirectory();

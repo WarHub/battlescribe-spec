@@ -9,16 +9,16 @@ namespace BattleScribeSpec.Tests;
 /// GameData specs that don't have "nr-editor" in their engines 'skip' list
 /// will run. Specs can mark engines as expected failures with engines.nr-editor: fail.
 /// </summary>
-[Collection("LiveNewRecruitGameData")]
+[Collection("LiveNrGameData")]
 [Trait("Category", "Conformance")]
-[Trait("Engine", "NrEditor")]
-public sealed class LiveNewRecruitGameDataConformanceTests : GameDataConformanceTestBase
+[Trait("Engine", "LiveNrGameData")]
+public sealed class LiveNrGameDataConformanceTests : GameDataConformanceTestBase
 {
-    private readonly LiveNewRecruitGameDataFixture _fixture;
+    private readonly LiveNrGameDataFixture _fixture;
 
-    public LiveNewRecruitGameDataConformanceTests(
+    public LiveNrGameDataConformanceTests(
         ITestOutputHelper output,
-        LiveNewRecruitGameDataFixture fixture)
+        LiveNrGameDataFixture fixture)
         : base(output)
     {
         _fixture = fixture;

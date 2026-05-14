@@ -78,6 +78,6 @@ pwsh -File tools/format-specs.ps1                                               
 | `src/BattleScribeSpec.TestKit/Protocol/AdapterHandler.cs` | Action dispatch |
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
-| `tests/Infrastructure/FrozenNewRecruitGameDataFixture.cs` | Frozen NR Editor GameData fixture |
+| `tests/Infrastructure/FrozenNrGameDataFixture.cs` | Frozen NR Editor GameData fixture |
 | `tools/format-specs.ps1` | Spec formatter |
 

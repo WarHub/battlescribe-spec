@@ -15,7 +15,7 @@ namespace BattleScribeSpec.Tests;
 /// reports all its violations in one message. Cross-spec checks (e.g. duplicate IDs)
 /// remain separate <see cref="FactAttribute"/> methods.
 /// </summary>
-[Trait("Category", "Unit")]
+[Trait("Category", "Lint")]
 public sealed class SpecLintTests
 {
     private static readonly string? SpecsDir = SpecLoader.FindRosterSpecsDirectory();

@@ -2,6 +2,6 @@
 <!-- Run all tests except those requiring live NR or sequential mode. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>FullyQualifiedName!~Sequential&amp;FullyQualifiedName!~LiveNewRecruit&amp;FullyQualifiedName!~NrIntegration</TestCaseFilter>
+    <TestCaseFilter>Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Mode!=Sequential</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

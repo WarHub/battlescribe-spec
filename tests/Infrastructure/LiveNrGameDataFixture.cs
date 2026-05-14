@@ -11,7 +11,7 @@ namespace BattleScribeSpec.Tests;
 ///   NR_HEADLESS    — "false" to show the browser (default: true)
 ///   NR_SLOW_MO     — milliseconds to slow down Playwright actions (for debugging)
 /// </summary>
-public sealed class LiveNewRecruitGameDataFixture : IAsyncLifetime
+public sealed class LiveNrGameDataFixture : IAsyncLifetime
 {
     public NewRecruitGameDataEngine? Engine { get; private set; }
     public bool Available => Engine is not null;
@@ -38,7 +38,7 @@ public sealed class LiveNewRecruitGameDataFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition("LiveNewRecruitGameData")]
-public class LiveNewRecruitGameDataCollection : ICollectionFixture<LiveNewRecruitGameDataFixture>
+[CollectionDefinition("LiveNrGameData")]
+public class LiveNrGameDataCollection : ICollectionFixture<LiveNrGameDataFixture>
 {
 }

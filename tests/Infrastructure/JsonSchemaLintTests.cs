@@ -7,7 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// Lint tests that validate JSON schema files in docs/ against the JSON Schema draft 2020-12 metaschema.
 /// </summary>
-[Trait("Category", "Unit")]
+[Trait("Category", "Lint")]
 public sealed class JsonSchemaLintTests
 {
     private static readonly JsonSchema SupportedMetaschema = MetaSchemas.Draft202012;

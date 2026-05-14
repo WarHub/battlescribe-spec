@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Run BattleScribe engine conformance tests. -->
+<!-- Run BattleScribe engine roster conformance tests. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>FullyQualifiedName~SpecConformanceTests</TestCaseFilter>
+    <TestCaseFilter>Engine=BsRoster</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

@@ -16,7 +16,7 @@ namespace BattleScribeSpec.Tests;
 ///   NR_SLOW_MO     — milliseconds to slow down Playwright actions (for debugging)
 ///   NR_FROZEN_SKIP — "true" to skip frozen tests entirely
 /// </summary>
-public sealed class FrozenNewRecruitGameDataFixture : IAsyncLifetime
+public sealed class FrozenNrGameDataFixture : IAsyncLifetime
 {
     public NewRecruitGameDataEngine? Engine { get; private set; }
     public bool Available => Engine is not null;
@@ -48,7 +48,7 @@ public sealed class FrozenNewRecruitGameDataFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition("FrozenNewRecruitGameData")]
-public class FrozenNewRecruitGameDataCollection : ICollectionFixture<FrozenNewRecruitGameDataFixture>
+[CollectionDefinition("FrozenNrGameData")]
+public class FrozenNrGameDataCollection : ICollectionFixture<FrozenNrGameDataFixture>
 {
 }

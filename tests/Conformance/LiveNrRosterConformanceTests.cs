@@ -8,17 +8,17 @@ namespace BattleScribeSpec.Tests;
 /// Uses parallel execution with a browser context pool.
 /// Skipped when NR_ENGINE_URL is not set.
 /// </summary>
-[Collection("LiveNewRecruit")]
+[Collection("LiveNrRoster")]
 [Trait("Category", "Conformance")]
-[Trait("Engine", "LiveNewRecruit")]
-public sealed class LiveNewRecruitConformanceTests
+[Trait("Engine", "LiveNrRoster")]
+public sealed class LiveNrRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
-    private readonly LiveNewRecruitFixture _fixture;
+    private readonly LiveNrRosterFixture _fixture;
     private const string EngineName = "newrecruit";
     private const string LogPrefix = "[LIVE] ";
 
-    public LiveNewRecruitConformanceTests(ITestOutputHelper output, LiveNewRecruitFixture fixture)
+    public LiveNrRosterConformanceTests(ITestOutputHelper output, LiveNrRosterFixture fixture)
     {
         _output = output;
         _fixture = fixture;
