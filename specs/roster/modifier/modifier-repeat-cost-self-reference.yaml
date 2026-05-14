@@ -1,0 +1,130 @@
+id: modifier-repeat-cost-self-reference
+category: modifier
+tags: [newrecruit-bug, battlescribe-bug]
+description: >
+  Repeat counting cost of same entry type creates a self-referencing loop.
+  Engines should detect the cycle and report a validation error without
+  applying the looping modifier. Both engines instead resolve the loop:
+  BS single-pass excludes self (converges trivially), NR reactive fixed-point
+  counts self and iterates to convergence.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 100
+          modifiers:
+            # For each 50 pts of se-unit in force, increment pts by 10.
+            # This references the same entry type — self-referencing loop.
+            - type: increment
+              field: pts
+              value: "10"
+              repeats:
+                - value: 50
+                  repeats: 1
+                  field: pts
+                  scope: force
+                  childId: se-unit
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  # Single instance: self-referencing loop should be detected
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit
+
+  # Ideal: engine detects the self-referencing loop, reports error,
+  # does not apply the modifier → base cost preserved.
+  - expectedState:
+      errorCount: 1
+      costs:
+        - typeId: pts
+          value: 100
+      engines:
+        # BS: excludes self from count → 0 reps → base cost. No error reported.
+        battlescribe:
+          errorCount: 0
+          costs:
+            - typeId: pts
+              value: 100
+        # NR: counts self, iterates to convergence: 120/50=2 reps → 100+20=120. No error.
+        newrecruit:
+          errorCount: 0
+          costs:
+            - typeId: pts
+              value: 120
+
+  # Two instances: loop amplifies — each counts other's modified cost
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit
+
+  # Ideal: loop detected, modifier not applied, base costs preserved.
+  - expectedState:
+      errorCount: 1
+      costs:
+        - typeId: pts
+          value: 200
+      forces:
+        - selections:
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 100
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 100
+      engines:
+        # BS: single-pass, each sees other's modified cost (100) → 2 reps → 120 each
+        battlescribe:
+          errorCount: 0
+          costs:
+            - typeId: pts
+              value: 240
+          forces:
+            - selections:
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 120
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 120
+        # NR: reactive fixed-point converges at 160 each (total 320/50=6 reps)
+        newrecruit:
+          errorCount: 0
+          costs:
+            - typeId: pts
+              value: 320
+          forces:
+            - selections:
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 160
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 160

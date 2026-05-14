@@ -1,0 +1,70 @@
+id: modifier-repeat-cost-field
+category: modifier
+description: Repeat with field set to a cost type ID counts total cost of matching selections in scope
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-expensive
+          name: Expensive
+          type: model
+          costs:
+            - name: pts
+              typeId: pts
+              value: 200
+        - id: se-unit
+          name: Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+          modifiers:
+            # For each 100 pts of se-expensive in force, increment by 10
+            - type: increment
+              field: pts
+              value: "10"
+              repeats:
+                - value: 100
+                  repeats: 1
+                  field: pts
+                  scope: force
+                  childId: se-expensive
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-expensive
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit
+
+  # se-expensive costs 200 pts in force → floor(200/100) × 1 = 2 repetitions → 50 + 10×2 = 70
+  - expectedState:
+      forces:
+        - selections:
+            - name: Expensive
+              costs:
+                - typeId: pts
+                  value: 200
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 70

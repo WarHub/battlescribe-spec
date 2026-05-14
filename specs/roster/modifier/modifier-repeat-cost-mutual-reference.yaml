@@ -1,0 +1,180 @@
+id: modifier-repeat-cost-mutual-reference
+category: modifier
+tags: [newrecruit-bug, battlescribe-bug]
+description: >
+  Two entries with repeats counting each other's cost form a feedback loop.
+  Engines should detect the cycle, leave costs at base values, and report
+  an error. Neither engine does this today: BattleScribe costs escalate with
+  each roster mutation (no loop detection), and NewRecruit diverges to
+  infinity within a single operation.
+
+  The base expectedState below is the conformance target for future engines.
+  The engines.battlescribe override records current legacy behavior.
+
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-alpha
+          name: Alpha
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 100
+          modifiers:
+            # For each 10 pts of Beta in force, increment Alpha's cost by 50
+            - type: increment
+              field: pts
+              value: "50"
+              repeats:
+                - value: 10
+                  repeats: 1
+                  field: pts
+                  scope: force
+                  childId: se-beta
+        - id: se-beta
+          name: Beta
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 100
+          modifiers:
+            # For each 10 pts of Alpha in force, increment Beta's cost by 50
+            - type: increment
+              field: pts
+              value: "50"
+              repeats:
+                - value: 10
+                  repeats: 1
+                  field: pts
+                  scope: force
+                  childId: se-alpha
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  # Add Alpha — no loop yet, all engines agree
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-alpha
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 100
+      forces:
+        - selections:
+            - name: Alpha
+              costs:
+                - typeId: pts
+                  value: 100
+
+  # Add Beta — closes the mutual reference loop.
+  # Ideal: engine detects the cycle, does not apply looping modifiers,
+  # reports a validation error.
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-beta
+
+  - expectedState:
+      errorCount: 1
+      costs:
+        - typeId: pts
+          value: 200
+      forces:
+        - selections:
+            - name: Alpha
+              costs:
+                - typeId: pts
+                  value: 100
+            - name: Beta
+              costs:
+                - typeId: pts
+                  value: 100
+      engines:
+        # BS doesn't detect the loop. Beta's modifier fires on creation
+        # (sees Alpha=100 → 10 reps → 600). Alpha's modifier is not
+        # re-evaluated, so Alpha stays at 100. No error reported.
+        battlescribe:
+          errorCount: 0
+          costs:
+            - typeId: pts
+              value: 700
+          forces:
+            - selections:
+                - name: Alpha
+                  costs:
+                    - typeId: pts
+                      value: 100
+                - name: Beta
+                  costs:
+                    - typeId: pts
+                      value: 600
+
+  # Add a second Beta — triggers full re-evaluation in BS, costs escalate.
+  # This demonstrates the unbounded growth: each mutation amplifies costs.
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-beta
+
+  - expectedState:
+      errorCount: 1
+      costs:
+        - typeId: pts
+          value: 300
+      forces:
+        - selections:
+            - name: Alpha
+              costs:
+                - typeId: pts
+                  value: 100
+            - name: Beta
+              costs:
+                - typeId: pts
+                  value: 100
+            - name: Beta
+              costs:
+                - typeId: pts
+                  value: 100
+      engines:
+        # BS escalation: adding second Beta triggers re-eval of all entries.
+        # Alpha: sees Beta total=600 (old) → 60 reps → 3,100
+        # Betas: see Alpha=3,100 (new) → 310 reps → 15,600 each
+        # Total jumps from 700 to 34,300.
+        battlescribe:
+          errorCount: 0
+          costs:
+            - typeId: pts
+              value: 34300
+          forces:
+            - selections:
+                - name: Alpha
+                  costs:
+                    - typeId: pts
+                      value: 3100
+                - name: Beta
+                  costs:
+                    - typeId: pts
+                      value: 15600
+                - name: Beta
+                  costs:
+                    - typeId: pts
+                      value: 15600
