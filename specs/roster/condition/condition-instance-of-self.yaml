@@ -44,6 +44,5 @@ steps:
   # from se-unit, so instanceOf matches → modifier fires.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Self Matched

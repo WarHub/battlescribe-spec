@@ -51,8 +51,7 @@ steps:
   # Group children can be selected independently as child selections.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               children:
                 - name: Axe

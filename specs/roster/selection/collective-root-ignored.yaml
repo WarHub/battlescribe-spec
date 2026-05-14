@@ -53,8 +53,7 @@ steps:
         - typeId: pts
           value: 100
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Support Unit
               number: 1
               costs:

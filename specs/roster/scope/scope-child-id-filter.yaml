@@ -46,8 +46,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             # Default: effective-name (post-modifier) alphabetical order.
             # "Active Watcher" < "Target Unit".
             - name: Active Watcher

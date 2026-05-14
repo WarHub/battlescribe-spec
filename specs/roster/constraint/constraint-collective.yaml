@@ -65,8 +65,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 4
-          selections:
+        - selections:
             - name: Unit A
             - name: Unit A
             - name: Unit B

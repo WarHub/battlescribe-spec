@@ -14,10 +14,8 @@ steps:
 
   # After force creation, mandatory entries are auto-selected
   - expectedState:
-      forceCount: 1
       forces:
         - name: "Army Roster"
-          selectionCount: 3
           selections:
             - name: "Battle Size"
               type: upgrade
@@ -36,7 +34,6 @@ steps:
           value: 80
       forces:
         - name: "Army Roster"
-          selectionCount: 4
           selections:
             - name: "Battle Size"
               type: upgrade
@@ -61,6 +58,13 @@ steps:
                   type: upgrade
                 - name: "Show/Hide Options"
                   type: upgrade
+        # NR tracks all cost types, including unused ones at value=0.
+        newrecruit:
+          costs:
+            - name: "pts"
+              value: 80
+            - name: "c5fb-5b9b-89f6-86c"
+              value: 0
 
   - action: selectEntry
     forceId: ${{ steps.add-force.forceId }}
@@ -72,7 +76,6 @@ steps:
           value: 160
       forces:
         - name: "Army Roster"
-          selectionCount: 5
           selections:
             - name: "Battle Size"
               type: upgrade
@@ -98,6 +101,13 @@ steps:
                   type: unit
                 - name: "Show/Hide Options"
                   type: upgrade
+        # NR tracks all cost types, including unused ones at value=0.
+        newrecruit:
+          costs:
+            - name: "pts"
+              value: 160
+            - name: "c5fb-5b9b-89f6-86c"
+              value: 0
 
   - action: selectEntry
     forceId: ${{ steps.add-force.forceId }}
@@ -111,3 +121,11 @@ steps:
       forces:
         - name: "Army Roster"
           selectionCount: 6
+      engines:
+        # NR tracks all cost types, including unused ones at value=0.
+        newrecruit:
+          costs:
+            - name: "pts"
+              value: 240
+            - name: "c5fb-5b9b-89f6-86c"
+              value: 0

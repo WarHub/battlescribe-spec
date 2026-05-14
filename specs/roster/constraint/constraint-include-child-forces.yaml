@@ -51,13 +51,10 @@ steps:
   - expectedState:
       forces:
         - name: Army
-          selectionCount: 1
           selections:
             - name: Squad
-          childForceCount: 1
           childForces:
             - name: Detachment
-              selectionCount: 1
               selections:
                 - name: Squad
 
@@ -74,7 +71,6 @@ steps:
       forces:
         - name: Army
           selectionCount: 1
-          childForceCount: 1
           childForces:
             - selectionCount: 2
       engines:

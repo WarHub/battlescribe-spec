@@ -34,7 +34,6 @@ steps:
   # (force-level entries always create new selections).
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Stratagem
             - name: Stratagem

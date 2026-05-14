@@ -36,8 +36,7 @@ steps:
   # Optional Unit (no min constraint) is not.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Mandatory Unit
               type: unit
               number: 1

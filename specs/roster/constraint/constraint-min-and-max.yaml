@@ -52,8 +52,7 @@ steps:
   # Auto-select creates 1 Unit A (min=1), min satisfied, below max=2
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A
 
   # 2 total (at max=2 limit), both constraints satisfied

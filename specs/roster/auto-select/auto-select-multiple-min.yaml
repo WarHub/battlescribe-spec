@@ -38,8 +38,7 @@ steps:
   # selections, each with number=1.
   - expectedState:
       forces:
-        - selectionCount: 3
-          selections:
+        - selections:
             - name: Trooper
               type: model
               number: 1

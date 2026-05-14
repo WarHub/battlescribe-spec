@@ -42,8 +42,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Basic Unit
 
   - action: selectEntry
@@ -52,14 +51,12 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Catalogue Trigger
             - name: Modified
       engines:
         newrecruit:
           forces:
-            - selectionCount: 2
-              selections:
+            - selections:
                 - name: Modified
                 - name: Catalogue Trigger

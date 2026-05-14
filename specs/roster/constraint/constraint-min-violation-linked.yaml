@@ -47,8 +47,7 @@ steps:
   # Auto-select creates 1 Unit A (min=1), no errors
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A
 
   # Remove auto-selected entry to trigger structured min violation error

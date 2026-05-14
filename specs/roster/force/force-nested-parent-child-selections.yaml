@@ -43,7 +43,6 @@ steps:
   - expectedState:
       forces:
         - name: Army
-          selectionCount: 1
           selections:
             - name: Infantry
           childForces:
@@ -59,11 +58,9 @@ steps:
   - expectedState:
       forces:
         - name: Army
-          selectionCount: 1
           selections:
             - name: Infantry
           childForces:
             - name: Detachment
-              selectionCount: 1
               selections:
                 - name: Tank

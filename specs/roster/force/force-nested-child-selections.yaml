@@ -38,13 +38,10 @@ steps:
     entryId: se-1
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Army
           selectionCount: 0
-          childForceCount: 1
           childForces:
             - name: Detachment
-              selectionCount: 1
               selections:
                 - name: Squad

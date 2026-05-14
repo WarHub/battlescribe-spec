@@ -50,8 +50,7 @@ steps:
   # Collective child entries are replicated across sibling model selections.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Squad
               children:
                 - name: Shared Weapon

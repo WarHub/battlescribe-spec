@@ -47,8 +47,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Detector
 
   # Add a model-type entry - instanceOf checks for type 'model' in force
@@ -61,7 +60,6 @@ steps:
   # of type "model", so the condition returns false. Both engines agree.
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Basic Model
             - name: Detector

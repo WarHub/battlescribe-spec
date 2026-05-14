@@ -37,7 +37,6 @@ steps:
     catalogueId: cat-b
 
   - expectedState:
-      forceCount: 2
       forces:
         - name: Patrol
         - name: Patrol

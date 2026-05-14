@@ -27,6 +27,5 @@ steps:
 
   - expectedState:
       name: roster-name-and-metadata
-      forceCount: 1
       forces:
         - name: Formation

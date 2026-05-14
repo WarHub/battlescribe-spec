@@ -82,8 +82,7 @@ steps:
         - typeId: pts
           value: 65
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Mech Warrior
               type: unit
               children:

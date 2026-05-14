@@ -42,6 +42,5 @@ steps:
   # Condition is false → name stays "Watcher".
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Watcher

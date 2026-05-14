@@ -46,8 +46,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Commander
               categories:
                 - name: HQ
@@ -55,8 +54,7 @@ steps:
       engines:
         newrecruit:
           forces:
-            - selectionCount: 1
-              selections:
+            - selections:
                 - name: Commander
                   hidden: true
                   categories:

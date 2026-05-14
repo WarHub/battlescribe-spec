@@ -46,8 +46,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Command Squad
               children:
                 - name: Sergeant

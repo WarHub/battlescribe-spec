@@ -19,6 +19,5 @@ steps:
     forceEntryId: fe-patrol
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Patrol

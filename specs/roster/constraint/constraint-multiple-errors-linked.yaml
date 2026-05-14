@@ -66,8 +66,7 @@ steps:
   # Auto-select creates Unit A (min=1) and HQ Leader (min=1), both satisfied
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Unit A
             - name: HQ Leader
       engines:

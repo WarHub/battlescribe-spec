@@ -28,7 +28,6 @@ steps:
     forceEntryId: fe-army
   # Adding the top-level "Army" force. It has a nested "Detachment" force entry.
   - expectedState:
-      forceCount: 1
       forces:
         - name: Army
           childForceCount: 0
@@ -39,9 +38,7 @@ steps:
     forceEntryId: fe-detach
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Army
-          childForceCount: 1
           childForces:
             - name: Detachment

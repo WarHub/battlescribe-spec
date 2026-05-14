@@ -50,6 +50,5 @@ steps:
   # Group constraint limits selection from the group to max 1.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Warrior

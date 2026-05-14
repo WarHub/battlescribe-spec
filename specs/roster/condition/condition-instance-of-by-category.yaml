@@ -61,8 +61,7 @@ steps:
   # Only detector selected, no HQ-category selection yet → instanceOf false
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Detector
 
   # Select Commander (has HQ category link) — should trigger instanceOf, renaming Detector to "HQ Found"
@@ -72,8 +71,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: HQ Found
             - name: Commander
               categories:

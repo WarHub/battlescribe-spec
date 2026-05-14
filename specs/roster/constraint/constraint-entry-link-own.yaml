@@ -49,8 +49,7 @@ steps:
   # At max=2 limit — no errors
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Strike Team
             - name: Strike Team
 

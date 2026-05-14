@@ -57,8 +57,7 @@ steps:
         - on: selection se-parent
           from: seg-weapons/con-max
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               children:
                 - name: Sword

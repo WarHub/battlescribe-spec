@@ -54,7 +54,6 @@ steps:
 
   # Before selecting blocker: both forces visible
   - expectedState:
-      forceCount: 2
       forces:
         - name: Patrol
         - name: Special Detachment
@@ -65,7 +64,6 @@ steps:
 
   # After selecting blocker: Special Detachment becomes hidden
   - expectedState:
-      forceCount: 2
       forces:
         - name: Patrol
         - name: Special Detachment

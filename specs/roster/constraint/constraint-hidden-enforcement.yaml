@@ -54,8 +54,7 @@ steps:
         - on: selection se-hidden
           from: se-hidden/hidden
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Hidden Unit
               hidden: true
       engines:
@@ -75,8 +74,7 @@ steps:
         - on: selection se-hidden
           from: se-hidden/hidden
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Hidden Unit
               hidden: true
             - name: Visible Unit
@@ -84,7 +82,6 @@ steps:
         # NR only has the manually-selected Visible Unit
         newrecruit:
           forces:
-            - selectionCount: 1
-              selections:
+            - selections:
                 - name: Visible Unit
           errors: []

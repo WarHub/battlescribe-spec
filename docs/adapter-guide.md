@@ -207,7 +207,7 @@ that wraps the BattleScribe engine. It's a small amount of code thanks to the
 - **One JSON object per line** — no pretty-printing in the protocol
 - **Stderr is yours** — use it for debug logging without interfering with the protocol
 - **State is per-session** — a new adapter process is started for each spec
-- **Exact matching** — state values (names, IDs, costs) must match exactly
+- **Exact matching** — state values (names, IDs, cost values) must match exactly. When `costs` or `costLimits` are asserted in `expectedState`, the assertion is an **exact set**: extra cost types beyond those listed will fail the assertion. The same is true for all list assertions (`forces`, `selections`, `profiles`, `rules`, `categories`, `publications`). Exception: `errorsContain` is explicitly a subset match, and individual `characteristics` within profiles are matched by name without requiring an exact set.
 
 ## DataSource Specs
 

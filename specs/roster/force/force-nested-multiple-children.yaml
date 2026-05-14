@@ -43,10 +43,8 @@ steps:
     forceEntryId: fe-vanguard
 
   - expectedState:
-      forceCount: 1
       forces:
         - name: Army
-          childForceCount: 2
           childForces:
             - name: Patrol
             - name: Vanguard
@@ -66,13 +64,10 @@ steps:
       forces:
         - name: Army
           selectionCount: 0
-          childForceCount: 2
           childForces:
             - name: Patrol
-              selectionCount: 1
               selections:
                 - name: Scout
             - name: Vanguard
-              selectionCount: 1
               selections:
                 - name: Veteran

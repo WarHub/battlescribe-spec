@@ -420,13 +420,11 @@ steps:
 
   - expectedState:
       gameSystemName: Kitchen Sink GS
-      forceCount: 1
       forces:
         - name: Battalion
           entryId: fe-battalion
           catalogueId: cat-1
           catalogueName: Test Catalogue
-          categoryCount: 4
           categories:
             - name: Uncategorised
               entryId: "(No Category)"
@@ -441,7 +439,6 @@ steps:
               name: Supplement
             - id: pub-core
               name: Core Rulebook
-          selectionCount: 1
           selections:
             - name: Required Unit
               type: unit
@@ -456,7 +453,6 @@ steps:
             - name: Battalion
               entryId: fe-battalion
               catalogueId: cat-1
-              selectionCount: 1
               selections:
                 - name: Required Unit
                   type: unit
@@ -474,8 +470,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Infantry Squad
               entryId: se-infantry
               type: unit
@@ -541,6 +536,32 @@ steps:
                       typeId: ct-pts
                       value: 10
             - name: Required Unit
+      engines:
+        # BS returns all game system cost types, including zero-value ones (power=0 for Trooper).
+        # NR omits zero-value costs from selection state.
+        battlescribe:
+          forces:
+            - selections:
+                - name: Infantry Squad
+                  children:
+                    - name: Trooper
+                      type: model
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 10
+                        - name: power
+                          typeId: ct-power
+                          value: 0
+                - name: Required Unit
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Infantry Squad
+              childCount: 1
+            - name: Required Unit
 
   # Step 4: selectEntry Commander — assert infoGroup profiles/rules, infoLink data
   - action: selectEntry
@@ -550,8 +571,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 3
-          selections:
+        - selections:
             - name: Commander
               entryId: se-commander
               type: unit
@@ -706,6 +726,25 @@ steps:
                       typeId: ct-pts
                       value: 20
             - name: Required Unit
+      engines:
+        # BS returns all game system cost types, including zero-value ones (power=0 for Trooper at count=2).
+        # NR omits zero-value costs from selection state.
+        battlescribe:
+          forces:
+            - selections:
+                - name: Commander
+                - name: Infantry Squad
+                  children:
+                    - name: Trooper
+                      number: 2
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 20
+                        - name: power
+                          typeId: ct-power
+                          value: 0
+                - name: Required Unit
 
   # Step 6: selectEntry Infantry Squad again (trigger) — 2nd Infantry triggers
   #   Commander's conditional modifier (atLeast 2 Infantry → +25 pts)
@@ -716,8 +755,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 4
-          selections:
+        - selections:
             - name: Commander
               costs:
                 - name: pts
@@ -739,8 +777,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 5
-          selections:
+        - selections:
             - name: Commander
             - name: Infantry Squad
               children:
@@ -778,7 +815,6 @@ steps:
         - selections:
             - name: Commander
             - name: Infantry Squad
-              childCount: 1
               children:
                 - name: Hidden Upgrade
                   hidden: true
@@ -822,7 +858,6 @@ steps:
 
   - expectedState:
       errorCount: 1
-      forceCount: 2
       forces:
         - name: Battalion
           selectionCount: 4
@@ -848,10 +883,8 @@ steps:
 
   - expectedState:
       errorCount: 1
-      forceCount: 1
       forces:
-        - childForceCount: 1
-          childForces:
+        - childForces:
             - name: Platoon
               entryId: fe-platoon
 
@@ -903,16 +936,13 @@ steps:
       name: protocol-kitchen-sink
       gameSystemId: ks-gs
       gameSystemName: Kitchen Sink GS
-      costCount: 2
       costs:
         - typeId: ct-pts
         - typeId: ct-power
-      costLimitCount: 1
       costLimits:
         - typeId: ct-pts
           name: pts
           value: 200
-      forceCount: 1
       forces:
         - name: Battalion
           entryId: fe-battalion
@@ -922,7 +952,6 @@ steps:
           availableEntryCount: 5
           customName: Alpha Strike Force
           customNotes: Main battle group
-          selectionCount: 4
           childForceCount: 0
           profiles: []
           rules:
@@ -932,7 +961,6 @@ steps:
               description: This army is battle-forged
               page: "5"
               publicationId: pub-core
-          categoryCount: 4
           categories:
             - name: Uncategorised
               entryId: "(No Category)"
@@ -1130,7 +1158,6 @@ steps:
                   primary: true
                   profiles: []
                   rules: []
-              childCount: 1
               children:
                 - name: Trooper
                   entryId: se-inf-trooper
@@ -1198,7 +1225,6 @@ steps:
               # NR: availableEntryCount not returned by NR engine (omitted)
               customName: Alpha Strike Force
               customNotes: Main battle group
-              selectionCount: 4
               childForceCount: 0
               profiles: []
               rules:
@@ -1209,7 +1235,6 @@ steps:
                   publicationId: pub-core
                 - name: Combat Doctrine
                   description: Re-roll hit rolls of 1
-              categoryCount: 4
               categories:
                 # NR: "Uncategorized" uses US spelling (BS uses UK "Uncategorised")
                 - name: Uncategorized
@@ -1399,7 +1424,6 @@ steps:
                       primary: true
                       profiles: []
                       rules: []
-                  childCount: 1
                   children:
                     - name: Trooper
                       entryId: se-inf-trooper
@@ -1445,3 +1469,10 @@ steps:
                       primary: true
                       profiles: []
                       rules: []
+
+  - expectedState:
+      errorCount: 1
+      costCount: 2
+      costLimitCount: 1
+      forces:
+        - categoryCount: 4

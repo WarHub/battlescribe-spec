@@ -48,6 +48,5 @@ steps:
   # Both engines agree — condition never fires regardless of catalogue matching.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Detector

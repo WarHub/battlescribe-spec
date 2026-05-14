@@ -48,6 +48,5 @@ steps:
         - on: roster
           from: costLimits/ct-pts
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A

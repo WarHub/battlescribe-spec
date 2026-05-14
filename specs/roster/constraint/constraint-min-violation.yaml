@@ -44,8 +44,7 @@ steps:
   # Auto-select creates 1 Unit A (min=1), constraint satisfied
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A
 
   # Remove auto-selected entry to trigger min violation

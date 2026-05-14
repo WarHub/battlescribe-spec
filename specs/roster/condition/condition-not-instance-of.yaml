@@ -43,8 +43,7 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: No B Exists
 
   # Select Unit B. The notInstanceOf condition checks the Force element itself
@@ -57,7 +56,6 @@ steps:
 
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: No B Exists
             - name: Unit B

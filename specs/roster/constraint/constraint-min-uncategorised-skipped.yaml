@@ -33,6 +33,5 @@ steps:
   # by validation traversal — so the min constraint produces no error.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A

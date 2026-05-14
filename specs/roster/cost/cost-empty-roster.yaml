@@ -27,6 +27,5 @@ steps:
 
   # Before any selections, force has zero selections
   - expectedState:
-      forceCount: 1
       forces:
         - selectionCount: 0

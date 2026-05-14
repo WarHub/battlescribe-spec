@@ -1,6 +1,6 @@
 id: cost-type-hidden
 category: cost
-description: Hidden cost types are omitted from roster cost aggregation
+description: Hidden cost types appear in roster cost aggregation alongside visible ones; the hidden flag affects display only
 
 setup:
   gameSystem:
@@ -39,9 +39,11 @@ steps:
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
-  # Hidden cost types (cp) are omitted from the roster-level cost list.
-  # Only the visible pts cost should appear in roster state costs.
+  # Both visible and hidden cost types appear in roster costs;
+  # the hidden flag affects only display, not aggregation.
   - expectedState:
       costs:
         - typeId: pts
           value: 100.0
+        - typeId: cp
+          value: 1

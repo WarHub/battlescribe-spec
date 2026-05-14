@@ -66,6 +66,5 @@ steps:
         - on: selection se-unit-a
           from: se-unit-a/con-cost-max
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A

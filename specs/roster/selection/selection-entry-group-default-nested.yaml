@@ -66,8 +66,7 @@ steps:
   # Light Armor auto-selected (inner default).
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Parent Unit
               children:
                 - name: Armor

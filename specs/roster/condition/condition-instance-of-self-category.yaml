@@ -57,6 +57,5 @@ steps:
   # link to cat-hq → instanceOf matches → modifier fires.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: HQ Confirmed

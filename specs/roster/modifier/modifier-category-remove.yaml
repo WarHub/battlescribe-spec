@@ -48,8 +48,7 @@ steps:
   # See category/category-uncategorized-fallback for this design difference.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Veteran Squad
               categories: []
       engines:

@@ -329,6 +329,12 @@ public sealed class RosterRunner
                     AssertEqual(stepIndex, $"cost[{matchKey}].value", v, actual.Value);
                 }
             }
+
+            if (state.Costs.Count > expectedCosts.Count)
+            {
+                _errors.Add($"Step {stepIndex}: expected {expectedCosts.Count} cost(s) but got {state.Costs.Count}: " +
+                    $"[{string.Join(", ", state.Costs.Select(c => $"{c.Name}={c.Value}"))}]");
+            }
         }
 
         if (expected.CostLimitCount is { } clc)
@@ -338,6 +344,7 @@ public sealed class RosterRunner
 
         if (expected.CostLimits is { } expectedCostLimits)
         {
+            var actualCostLimits = state.CostLimits ?? [];
             foreach (var ecl in expectedCostLimits)
             {
                 CostState? actual;
@@ -345,12 +352,12 @@ public sealed class RosterRunner
                 if (ecl.TypeId is { Length: > 0 } typeId)
                 {
                     matchKey = typeId;
-                    actual = state.CostLimits?.FirstOrDefault(c => c.TypeId == typeId);
+                    actual = actualCostLimits.FirstOrDefault(c => c.TypeId == typeId);
                 }
                 else if (ecl.Name is { Length: > 0 } name)
                 {
                     matchKey = name;
-                    actual = state.CostLimits?.FirstOrDefault(c => c.Name == name);
+                    actual = actualCostLimits.FirstOrDefault(c => c.Name == name);
                 }
                 else
                 {
@@ -366,6 +373,12 @@ public sealed class RosterRunner
                 {
                     AssertEqual(stepIndex, $"costLimit[{matchKey}].value", v, actual.Value);
                 }
+            }
+
+            if (actualCostLimits.Count > expectedCostLimits.Count)
+            {
+                _errors.Add($"Step {stepIndex}: expected {expectedCostLimits.Count} costLimit(s) but got {actualCostLimits.Count}: " +
+                    $"[{string.Join(", ", actualCostLimits.Select(c => $"{c.Name}={c.Value}"))}]");
             }
         }
 
@@ -750,6 +763,12 @@ public sealed class RosterRunner
                     {
                         AssertEqual(stepIndex, $"{selPrefix}.cost[{matchKey}]", v, ac.Value);
                     }
+                }
+
+                if (a.Costs.Count > eCosts.Count)
+                {
+                    _errors.Add($"Step {stepIndex}: {selPrefix} expected {eCosts.Count} cost(s) but got {a.Costs.Count}: " +
+                        $"[{string.Join(", ", a.Costs.Select(c => $"{c.Name}={c.Value}"))}]");
                 }
             }
 

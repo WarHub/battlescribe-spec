@@ -65,8 +65,7 @@ steps:
   # Auto-select creates Unit A and Unit B (each has min=1), satisfied
   - expectedState:
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Unit A
             - name: Unit B
 

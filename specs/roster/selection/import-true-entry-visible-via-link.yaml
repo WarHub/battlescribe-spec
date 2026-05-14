@@ -42,7 +42,6 @@ steps:
   - expectedState:
       forces:
         - name: Patrol
-          selectionCount: 1
           selections:
             - name: Faction Unit
               type: unit

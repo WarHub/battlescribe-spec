@@ -38,8 +38,6 @@ steps:
     entryId: se-unit
 
   - expectedState:
-      forceCount: 1
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Force Counted

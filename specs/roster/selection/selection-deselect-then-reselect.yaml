@@ -61,6 +61,5 @@ steps:
         - typeId: pts
           value: 50.0
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Unit A

@@ -52,8 +52,7 @@ steps:
         - typeId: pts
           value: 100
       forces:
-        - selectionCount: 2
-          selections:
+        - selections:
             - name: Squad Alpha
               type: unit
               costs:

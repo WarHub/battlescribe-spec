@@ -34,8 +34,7 @@ steps:
         - on: selection se-1
           from: se-1/hidden
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Hidden Unit
               hidden: true
       engines:

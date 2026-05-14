@@ -70,6 +70,5 @@ steps:
         - on: selection se-1
           from: se-1/c1
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Elite

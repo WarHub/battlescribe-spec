@@ -45,6 +45,5 @@ steps:
   # making Power Blade and Thunder Maul available as selectable children.
   - expectedState:
       forces:
-        - selectionCount: 1
-          selections:
+        - selections:
             - name: Host Unit
