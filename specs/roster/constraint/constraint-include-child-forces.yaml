@@ -1,6 +1,7 @@
 id: constraint-include-child-forces
 category: constraint
-description: Constraint with includeChildForces applies across nested force hierarchy
+description: Constraint with includeChildForces counts selections across parent and child forces
+tags: [newrecruit-bug]
 
 setup:
   gameSystem:
@@ -11,13 +12,13 @@ setup:
         name: Army
         forceEntries:
           - id: fe-detach
-            name: Sub-Detachment
+            name: Detachment
   catalogues:
     - id: cat-1
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-1
+        - id: se-squad
           name: Squad
           type: unit
           constraints:
@@ -33,20 +34,49 @@ steps:
     id: add-army
     forceEntryId: fe-army
 
-  - expectedState:
-      forceCount: 1
-      forces:
-        - name: Army
-          selectionCount: 0
+  - action: addChildForce
+    id: add-detachment
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-detach
 
-  # includeChildForces=true means the max limit counts across parent and child forces
   - action: selectEntry
     forceId: ${{ steps.add-army.forceId }}
-    entryId: se-1
+    entryId: se-squad
 
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # 1 Squad in Army + 1 in Detachment = 2 total (at max=2 from Army's perspective)
   - expectedState:
       forces:
         - name: Army
           selectionCount: 1
           selections:
             - name: Squad
+          childForceCount: 1
+          childForces:
+            - name: Detachment
+              selectionCount: 1
+              selections:
+                - name: Squad
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # 1 in Army + 2 in Detachment = 3 total — exceeds max=2.
+  # includeChildForces traverses into Detachment to count its Squads too.
+  - expectedState:
+      errors:
+        - on: selection se-squad
+          from: se-squad/con-1
+      forces:
+        - name: Army
+          selectionCount: 1
+          childForceCount: 1
+          childForces:
+            - selectionCount: 2
+      engines:
+        newrecruit:
+          errors: []
