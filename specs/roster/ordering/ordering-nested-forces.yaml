@@ -1,0 +1,55 @@
+id: ordering-nested-forces
+category: ordering
+tags: [childForce, design-difference]
+description: Child forces are ordered by their definition order
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-army
+        name: Army
+        forceEntries:
+          - id: fe-zulu
+            name: Zulu Wing
+          - id: fe-alpha
+            name: Alpha Wing
+          - id: fe-mike
+            name: Mike Wing
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+
+steps:
+  - action: addForce
+    id: add-army
+    forceEntryId: fe-army
+
+  - action: addChildForce
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-mike
+
+  - action: addChildForce
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-zulu
+
+  - action: addChildForce
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-alpha
+
+  # NR keeps definition order; BS render-layer output sorts child forces alphabetically.
+  - expectedState:
+      forces:
+        - childForces:
+            - name: Zulu Wing
+            - name: Alpha Wing
+            - name: Mike Wing
+      engines:
+        battlescribe:
+          forces:
+            - childForces:
+                - name: Alpha Wing
+                - name: Mike Wing
+                - name: Zulu Wing

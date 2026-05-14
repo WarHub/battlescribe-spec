@@ -1,0 +1,64 @@
+id: ordering-nested-selections
+category: ordering
+tags: [selection, nested]
+description: Child selections within a parent are ordered alphabetically by name
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-parent
+          name: Command Squad
+          type: unit
+          selectionEntries:
+            - id: se-zulu
+              name: Zulu Banner
+              type: upgrade
+            - id: se-alpha
+              name: Alpha Blade
+              type: upgrade
+            - id: se-mike
+              name: Mike Scope
+              type: upgrade
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-parent
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-parent
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-parent.selectionId }}
+    entryId: se-zulu
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-parent.selectionId }}
+    entryId: se-mike
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-parent.selectionId }}
+    entryId: se-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Command Squad
+              children:
+                - name: Alpha Blade
+                - name: Mike Scope
+                - name: Zulu Banner

@@ -1,24 +1,23 @@
-id: selection-ordering-numeric
-category: selection
-tags: [design-difference]
-description: >
-  NewRecruit sorts embedded numbers numerically, so "Unit 2" sorts before
-  "Unit 10". BattleScribe sorts lexicographically, so "Unit 10" sorts
-  before "Unit 2".
+id: ordering-selections-natural-sort
+category: ordering
+tags: [selection, number, design-difference]
+description: Selections with numeric names use natural sort ordering
 
 setup:
   gameSystem:
     id: test-gs
-    name: Test Game System
+    name: Test GS
     forceEntries:
-      - id: fe-patrol
-        name: Patrol
-
+      - id: fe-1
+        name: Detachment
   catalogues:
     - id: cat-1
-      name: Test Catalogue
+      name: Cat
       gameSystemId: test-gs
       selectionEntries:
+        - id: se-unit-20
+          name: Unit 20
+          type: unit
         - id: se-unit-2
           name: Unit 2
           type: unit
@@ -31,29 +30,33 @@ setup:
 
 steps:
   - action: addForce
-    id: add-patrol
-    forceEntryId: fe-patrol
+    id: add-detachment
+    forceEntryId: fe-1
 
   - action: selectEntry
-    forceId: ${{ steps.add-patrol.forceId }}
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit-20
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-unit-2
 
   - action: selectEntry
-    forceId: ${{ steps.add-patrol.forceId }}
+    forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-unit-10
 
   - action: selectEntry
-    forceId: ${{ steps.add-patrol.forceId }}
+    forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-unit-1
 
-  # NR: numeric-aware sort → Unit 1, Unit 2, Unit 10
-  # BS: lexicographic sort → Unit 1, Unit 10, Unit 2
+  # NR uses numeric-aware ordering; BS compares names lexicographically.
   - expectedState:
       forces:
         - selections:
             - name: Unit 1
             - name: Unit 2
             - name: Unit 10
+            - name: Unit 20
       engines:
         battlescribe:
           forces:
@@ -61,3 +64,4 @@ steps:
                 - name: Unit 1
                 - name: Unit 10
                 - name: Unit 2
+                - name: Unit 20

@@ -1,0 +1,58 @@
+id: ordering-selections-alphabetical
+category: ordering
+tags: [selection]
+description: Selections within a force are ordered alphabetically by name
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-zulu
+          name: Zulu Squad
+          type: unit
+        - id: se-alpha
+          name: Alpha Squad
+          type: unit
+        - id: se-mike
+          name: Mike Squad
+          type: unit
+        - id: se-bravo
+          name: Bravo Squad
+          type: unit
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-zulu
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-alpha
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-mike
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-bravo
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Alpha Squad
+            - name: Bravo Squad
+            - name: Mike Squad
+            - name: Zulu Squad

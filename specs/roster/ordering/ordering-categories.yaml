@@ -1,0 +1,102 @@
+id: ordering-categories
+category: ordering
+tags: [categoryEntry, design-difference]
+description: >
+  Categories on a force keep the force entry definition order (not alphabetical).
+  Verified by selecting entries from each category and asserting that selections
+  appear in category definition order (Zulu → Alpha → Mike), not alphabetically
+  (which would be Alpha → Mike → Zulu).
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-zulu
+        name: Zulu Category
+      - id: cat-alpha
+        name: Alpha Category
+      - id: cat-mike
+        name: Mike Category
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-zulu
+            targetId: cat-zulu
+            name: Zulu Category
+          - id: cl-alpha
+            targetId: cat-alpha
+            name: Alpha Category
+          - id: cl-mike
+            targetId: cat-mike
+            name: Mike Category
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-zulu-unit
+          name: Zulu Unit
+          type: unit
+          categoryLinks:
+            - id: cl-se-zulu
+              targetId: cat-zulu
+              name: Zulu Category
+              primary: true
+        - id: se-alpha-unit
+          name: Alpha Unit
+          type: unit
+          categoryLinks:
+            - id: cl-se-alpha
+              targetId: cat-alpha
+              name: Alpha Category
+              primary: true
+        - id: se-mike-unit
+          name: Mike Unit
+          type: unit
+          categoryLinks:
+            - id: cl-se-mike
+              targetId: cat-mike
+              name: Mike Category
+              primary: true
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  # Select in alphabetical name order (Alpha, Mike, Zulu) to show that category
+  # definition order (Zulu=1st, Alpha=2nd, Mike=3rd) overrides selection order.
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-alpha-unit
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-mike-unit
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-zulu-unit
+
+  # NR returns selections in category definition order (Zulu → Alpha → Mike).
+  # BS adapter sorts all selections alphabetically (render-layer ordering), ignoring category.
+  # NR doesn't include an "Uncategorised" category slot; BS does.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Zulu Unit
+            - name: Alpha Unit
+            - name: Mike Unit
+      engines:
+        battlescribe:
+          forces:
+            - categoryCount: 4
+              selections:
+                - name: Alpha Unit
+                - name: Mike Unit
+                - name: Zulu Unit
+        newrecruit:
+          forces:
+            - categoryCount: 3

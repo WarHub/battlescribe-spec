@@ -1,0 +1,61 @@
+id: ordering-modifier-changed-name
+category: ordering
+tags: [selection, design-difference]
+description: A modifier-changed selection name reorders by its effective name
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-renamed
+          name: Zulu Renamed
+          type: unit
+          modifiers:
+            - type: set
+              field: name
+              value: Bravo Renamed
+        - id: se-alpha
+          name: Alpha Static
+          type: unit
+        - id: se-charlie
+          name: Charlie Static
+          type: unit
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-charlie
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-renamed
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-alpha
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Alpha Static
+            - name: Bravo Renamed
+            - name: Charlie Static
+      engines:
+        newrecruit:
+          forces:
+            - selections:
+                - name: Alpha Static
+                - name: Charlie Static
+                - name: Bravo Renamed
