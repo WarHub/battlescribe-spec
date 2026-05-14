@@ -1,0 +1,65 @@
+id: ordering-categories
+category: ordering
+tags: [categoryEntry, engine-limitation]
+engines:
+  newrecruit: skip
+description: Categories on a force keep the force entry definition order
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    categoryEntries:
+      - id: cat-zulu
+        name: Zulu Category
+      - id: cat-alpha
+        name: Alpha Category
+      - id: cat-mike
+        name: Mike Category
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-zulu
+            targetId: cat-zulu
+            name: Zulu Category
+          - id: cl-alpha
+            targetId: cat-alpha
+            name: Alpha Category
+          - id: cl-mike
+            targetId: cat-mike
+            name: Mike Category
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: setCustomization
+    forceId: ${{ steps.add-detachment.forceId }}
+    categoryEntryId: cat-zulu
+    customNotes: Zulu Category
+
+  - action: setCustomization
+    forceId: ${{ steps.add-detachment.forceId }}
+    categoryEntryId: cat-alpha
+    customNotes: Alpha Category
+
+  - action: setCustomization
+    forceId: ${{ steps.add-detachment.forceId }}
+    categoryEntryId: cat-mike
+    customNotes: Mike Category
+
+  # Category assertions normally match by name, so customNotes act as index-based markers here.
+  - expectedState:
+      forces:
+        - categoryCount: 4
+          categories:
+            - {}
+            - customNotes: Zulu Category
+            - customNotes: Alpha Category
+            - customNotes: Mike Category
