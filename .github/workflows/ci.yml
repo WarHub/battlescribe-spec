@@ -47,7 +47,7 @@ jobs:
         run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
 
       - name: Test
-        run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "FullyQualifiedName!~NewRecruit&FullyQualifiedName!~FrozenNewRecruit"
+        run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "Engine!=FrozenNrRoster&Engine!=FrozenNrGameData&Engine!=LiveNrRoster&Engine!=LiveNrGameData"
 
       - name: End-to-end spec runner test
         run: |
@@ -97,14 +97,14 @@ jobs:
       - name: Build
         run: dotnet build
 
-      - name: Run frozen NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FullyQualifiedName~FrozenNewRecruitConformanceTests&FullyQualifiedName!~Sequential" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+      - name: Run frozen NR roster conformance tests
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrRoster&Mode!=Sequential" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
           NR_PARALLEL: 4
 
       - name: Run frozen NR Editor GameData tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FullyQualifiedName~FrozenNewRecruitGameDataConformanceTests" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrGameData" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
 
@@ -138,13 +138,13 @@ jobs:
         run: dotnet build
 
       - name: Run NR smoke tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitSmokeTests" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=LiveNrRoster&Category=Smoke" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true
 
       - name: Run NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=LiveNrRoster&Category=Conformance" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true
