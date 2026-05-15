@@ -20,6 +20,9 @@ public sealed class BsRosterApp : IAsyncDisposable
     /// <summary>The TCP port the agent is listening on, or null if not started.</summary>
     public int? AgentPort { get; private set; }
 
+    /// <summary>Path to the BattleScribe data directory within the isolated home.</summary>
+    public string DataDirectoryPath => Path.Combine(_homePath, "BattleScribe", "data");
+
     public BsRosterApp(string javaPath, string rosterEditorJarPath, string agentJarPath, string? isolatedHomePath = null)
     {
         _javaPath = javaPath;

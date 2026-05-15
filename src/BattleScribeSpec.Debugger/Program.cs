@@ -1,4 +1,5 @@
 using BattleScribeSpec;
+using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Roster;
 
@@ -156,6 +157,12 @@ if (exportXmlDir is not null)
     return 0;
 }
 
+// ===== BS UI Probe mode =====
+if (engineName is "bs-ui")
+{
+    return await RunBsUiProbe(spec, dumpAll, json);
+}
+
 // ===== Create engine =====
 Console.Error.WriteLine($"Engine: {engineName}");
 IRosterEngine engine;
@@ -220,6 +227,157 @@ using (engine)
 }
 
 // ===== Helpers =====
+
+async Task<int> RunBsUiProbe(SpecFile spec, bool dumpAll, bool json)
+{
+    if (spec.Setup.DataSource is { Length: > 0 })
+    {
+        Console.Error.WriteLine("Error: --engine bs-ui does not support dataSource specs yet.");
+        return 1;
+    }
+
+    var options = ResolveBsUiOptions();
+
+    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+
+    // Generate XML files
+    var xmlFiles = new List<(string FileName, string Content)>
+    {
+        ("system.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem))
+    };
+    foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues))
+    {
+        xmlFiles.Add((fileName, xml));
+    }
+
+    Console.Error.WriteLine($"BS UI Probe — launching with {xmlFiles.Count} data file(s)");
+
+    await using var probe = new BsUiProbe(options);
+    await probe.LaunchAsync(xmlFiles, Console.Error);
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("═══ Scene Graph Dump ═══");
+    await probe.DumpTreeAsync(Console.Out);
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("═══ Windows ═══");
+    await probe.DumpWindowsAsync(Console.Out);
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("BS UI probe complete. BattleScribe is running.");
+    Console.Error.WriteLine("Press Enter to shut down...");
+    Console.In.ReadLine();
+
+    return 0;
+}
+
+BsUiOptions ResolveBsUiOptions()
+{
+    // Resolve paths from environment variables or conventional locations
+    var javaPath = Environment.GetEnvironmentVariable("BS_UI_JAVA_PATH");
+    var appDir = Environment.GetEnvironmentVariable("BS_UI_APP_DIR");
+    var agentJar = Environment.GetEnvironmentVariable("BS_UI_AGENT_JAR");
+
+    // Fallback: look for conventional locations relative to repo root
+    var repoRoot = FindRepoRoot();
+
+    if (javaPath is null && repoRoot is not null)
+    {
+        // Try platform-specific JRE paths under .testdata
+        var jreDir = Path.Combine(repoRoot, ".testdata", "battlescribe-app");
+        if (OperatingSystem.IsWindows())
+        {
+            var winJava = Path.Combine(jreDir, "jre-win", "bin", "java.exe");
+            if (File.Exists(winJava))
+            {
+                javaPath = winJava;
+            }
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            var macJava = Path.Combine(jreDir, "jre-mac", "bin", "java");
+            if (File.Exists(macJava))
+            {
+                javaPath = macJava;
+            }
+        }
+        else
+        {
+            var linuxJava = Path.Combine(jreDir, "jre", "bin", "java");
+            if (File.Exists(linuxJava))
+            {
+                javaPath = linuxJava;
+            }
+        }
+    }
+
+    if (appDir is null && repoRoot is not null)
+    {
+        var candidate = Path.Combine(repoRoot, ".testdata", "battlescribe-app");
+        if (Directory.Exists(candidate))
+        {
+            appDir = candidate;
+        }
+    }
+
+    if (agentJar is null && repoRoot is not null)
+    {
+        var candidate = Path.Combine(repoRoot, "src", "bs-ui-java-agent", "bs-ui-java-agent.jar");
+        if (File.Exists(candidate))
+        {
+            agentJar = candidate;
+        }
+    }
+
+    if (javaPath is null)
+    {
+        throw new InvalidOperationException(
+            "Java path not found. Set BS_UI_JAVA_PATH env var or place JRE at .testdata/battlescribe-app/jre-{platform}/");
+    }
+
+    var rosterEditorJar = appDir is not null
+        ? Path.Combine(appDir, "RosterEditor.jar")
+        : throw new InvalidOperationException(
+            "BS app directory not found. Set BS_UI_APP_DIR env var or place app at .testdata/battlescribe-app/");
+
+    if (!File.Exists(rosterEditorJar))
+    {
+        throw new InvalidOperationException($"RosterEditor.jar not found at: {rosterEditorJar}");
+    }
+
+    if (agentJar is null || !File.Exists(agentJar))
+    {
+        throw new InvalidOperationException(
+            "Agent JAR not found. Set BS_UI_AGENT_JAR env var or build with: pwsh -File src/bs-ui-java-agent/build.ps1");
+    }
+
+    Console.Error.WriteLine($"  Java: {javaPath}");
+    Console.Error.WriteLine($"  App: {rosterEditorJar}");
+    Console.Error.WriteLine($"  Agent: {agentJar}");
+
+    return new BsUiOptions
+    {
+        JavaPath = javaPath,
+        RosterEditorJarPath = rosterEditorJar,
+        AgentJarPath = agentJar,
+    };
+}
+
+static string? FindRepoRoot()
+{
+    var dir = Directory.GetCurrentDirectory();
+    while (dir is not null)
+    {
+        if (Directory.Exists(Path.Combine(dir, ".git")))
+        {
+            return dir;
+        }
+
+        dir = Path.GetDirectoryName(dir);
+    }
+
+    return null;
+}
 
 SpecFile LoadSpec(string input)
 {
@@ -299,7 +457,7 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
             }
 
         default:
-            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs' or 'nr'.");
+            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs', 'nr', or 'bs-ui'.");
     }
 }
 
@@ -375,7 +533,7 @@ static void PrintUsage()
                           or "-" for stdin
 
         Options:
-          --engine <name> Engine to use: bs (default), nr
+          --engine <name> Engine to use: bs (default), nr, bs-ui (probe mode)
           --dump          Dump state after every step (default: after last step only)
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)
@@ -390,6 +548,7 @@ static void PrintUsage()
           bs-spec-debug selection-page
           bs-spec-debug --engine nr --dump specs/protocol/protocol-kitchen-sink.yaml
           bs-spec-debug --export-xml ./output/ cost/cost-hidden-limit-validation
+          bs-spec-debug --engine bs-ui selection/selection-page
           cat spec.yaml | bs-spec-debug -
           bs-spec-debug --format
           bs-spec-debug --format --check specs/roster/

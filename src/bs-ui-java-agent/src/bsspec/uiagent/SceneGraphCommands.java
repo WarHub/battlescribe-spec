@@ -31,14 +31,22 @@ public class SceneGraphCommands {
                 return getWindows();
             case "findNode":
                 return findNode(params);
+            case "findAllNodes":
+                return findAllNodes(params);
             case "getNodeInfo":
                 return getNodeInfo(params);
             case "clickNode":
                 return clickNode(params);
+            case "fireButton":
+                return fireButton(params);
             case "getChildren":
                 return getChildren(params);
             case "getNodeText":
                 return getNodeText(params);
+            case "findNodeByText":
+                return findNodeByText(params);
+            case "setNodeText":
+                return setNodeText(params);
             default:
                 throw new IllegalArgumentException("Unknown method: " + method);
         }
@@ -172,6 +180,102 @@ public class SceneGraphCommands {
             return "null";
         }
         return jsonString(extractTextContent(node));
+    }
+
+    private String findAllNodes(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+
+        if (selector == null) {
+            throw new IllegalArgumentException("Missing 'selector' param");
+        }
+
+        Scene scene = findScene(windowTitle);
+        if (scene == null) {
+            return "[]";
+        }
+
+        var nodes = scene.getRoot().lookupAll(selector);
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (Node node : nodes) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            sb.append(nodeToJson(node));
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    private String fireButton(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("Node not found: " + selector);
+        }
+        if (!(node instanceof javafx.scene.control.ButtonBase)) {
+            throw new IllegalArgumentException("Node is not a ButtonBase: " + node.getClass().getSimpleName());
+        }
+        ((javafx.scene.control.ButtonBase) node).fire();
+        return "{\"fired\":true}";
+    }
+
+    private String findNodeByText(String params) {
+        String text = extractStr(params, "text");
+        String nodeType = extractStr(params, "nodeType");
+        String windowTitle = extractStr(params, "windowTitle");
+
+        if (text == null) {
+            throw new IllegalArgumentException("Missing 'text' param");
+        }
+
+        Scene scene = findScene(windowTitle);
+        if (scene == null) {
+            return "null";
+        }
+
+        Node found = findNodeByTextRecursive(scene.getRoot(), text, nodeType);
+        if (found == null) {
+            return "null";
+        }
+        return nodeToJson(found);
+    }
+
+    private Node findNodeByTextRecursive(Node node, String text, String nodeType) {
+        String nodeText = extractTextContent(node);
+        if (nodeText != null && nodeText.contains(text)) {
+            if (nodeType == null || node.getClass().getSimpleName().equals(nodeType)) {
+                return node;
+            }
+        }
+        if (node instanceof Parent) {
+            for (Node child : ((Parent) node).getChildrenUnmodifiable()) {
+                Node found = findNodeByTextRecursive(child, text, nodeType);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String setNodeText(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        String text = extractStr(params, "text");
+
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("Node not found: " + selector);
+        }
+        if (!(node instanceof TextInputControl)) {
+            throw new IllegalArgumentException("Node is not a text input: " + node.getClass().getSimpleName());
+        }
+        ((TextInputControl) node).setText(text != null ? text : "");
+        return "{\"set\":true}";
     }
 
     // --- Helpers ---

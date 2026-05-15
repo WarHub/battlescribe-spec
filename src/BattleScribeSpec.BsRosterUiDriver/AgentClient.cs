@@ -109,6 +109,102 @@ public sealed class AgentClient : IDisposable
         return await CallAsync("clickNode", parameters);
     }
 
+    /// <summary>Fires a ButtonBase control directly (more reliable than click).</summary>
+    public async Task FireButtonAsync(string selector, string? windowTitle = null)
+    {
+        var parameters = new JsonObject { ["selector"] = selector };
+        if (windowTitle is not null)
+        {
+            parameters["windowTitle"] = windowTitle;
+        }
+
+        await CallAsync("fireButton", parameters);
+    }
+
+    /// <summary>Finds all nodes matching a CSS selector.</summary>
+    public async Task<JsonNode?> FindAllNodesAsync(string selector, string? windowTitle = null)
+    {
+        var parameters = new JsonObject { ["selector"] = selector };
+        if (windowTitle is not null)
+        {
+            parameters["windowTitle"] = windowTitle;
+        }
+
+        return await CallAsync("findAllNodes", parameters);
+    }
+
+    /// <summary>Finds a node by its text content, optionally filtered by type.</summary>
+    public async Task<JsonNode?> FindNodeByTextAsync(string text, string? nodeType = null, string? windowTitle = null)
+    {
+        var parameters = new JsonObject { ["text"] = text };
+        if (nodeType is not null)
+        {
+            parameters["nodeType"] = nodeType;
+        }
+
+        if (windowTitle is not null)
+        {
+            parameters["windowTitle"] = windowTitle;
+        }
+
+        return await CallAsync("findNodeByText", parameters);
+    }
+
+    /// <summary>Sets text content of a TextInputControl.</summary>
+    public async Task SetNodeTextAsync(string selector, string text, string? windowTitle = null)
+    {
+        var parameters = new JsonObject { ["selector"] = selector, ["text"] = text };
+        if (windowTitle is not null)
+        {
+            parameters["windowTitle"] = windowTitle;
+        }
+
+        await CallAsync("setNodeText", parameters);
+    }
+
+    /// <summary>Polls for a node to appear, retrying until timeout.</summary>
+    public async Task<JsonNode?> WaitForNodeAsync(string selector, string? windowTitle = null, int timeoutMs = 10000, int pollIntervalMs = 250)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            var result = await FindNodeAsync(selector, windowTitle);
+            if (result is not null)
+            {
+                return result;
+            }
+
+            await Task.Delay(pollIntervalMs);
+        }
+
+        return null;
+    }
+
+    /// <summary>Polls for a window with the given title to appear.</summary>
+    public async Task<bool> WaitForWindowAsync(string titleFragment, int timeoutMs = 30000, int pollIntervalMs = 500)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            var windows = await GetWindowsAsync();
+            if (windows is JsonArray arr)
+            {
+                foreach (var w in arr)
+                {
+                    var title = w?["title"]?.GetValue<string>();
+                    if (title is not null && title.Contains(titleFragment))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            await Task.Delay(pollIntervalMs);
+        }
+
+        return false;
+    }
+
     /// <summary>Gets the text content of a node.</summary>
     public async Task<string?> GetNodeTextAsync(string selector, string? windowTitle = null)
     {
