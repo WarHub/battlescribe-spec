@@ -251,6 +251,44 @@ public sealed class AgentClient : IDisposable
         return await CallAsync("getRosterState");
     }
 
+    /// <summary>Selects an entry under the specified force.</summary>
+    public async Task<JsonNode?> SelectEntryAsync(string forceId, string entryId)
+    {
+        return await CallAsync("selectEntry", new JsonObject { ["forceId"] = forceId, ["entryId"] = entryId });
+    }
+
+    /// <summary>Removes an existing selection.</summary>
+    public async Task<JsonNode?> DeselectEntryAsync(string forceId, string selectionId)
+    {
+        return await CallAsync("deselectEntry", new JsonObject { ["forceId"] = forceId, ["selectionId"] = selectionId });
+    }
+
+    /// <summary>Sets the count for a selection via the engine API.</summary>
+    public async Task<JsonNode?> SetSelectionCountAsync(string forceId, string selectionId, int count)
+    {
+        return await CallAsync(
+            "setSelectionCount",
+            new JsonObject { ["forceId"] = forceId, ["selectionId"] = selectionId, ["count"] = count });
+    }
+
+    /// <summary>Duplicates an existing selection.</summary>
+    public async Task<JsonNode?> DuplicateSelectionAsync(string forceId, string selectionId)
+    {
+        return await CallAsync("duplicateSelection", new JsonObject { ["forceId"] = forceId, ["selectionId"] = selectionId });
+    }
+
+    /// <summary>Sets a roster cost limit by cost type ID.</summary>
+    public async Task<JsonNode?> SetCostLimitAsync(string costTypeId, double value)
+    {
+        return await CallAsync("setCostLimit", new JsonObject { ["costTypeId"] = costTypeId, ["value"] = value });
+    }
+
+    /// <summary>Gets current validation errors from the engine.</summary>
+    public async Task<JsonNode?> GetValidationErrorsAsync()
+    {
+        return await CallAsync("getValidationErrors");
+    }
+
     // --- ComboBox / TreeView commands ---
 
     /// <summary>Gets items from a ComboBox.</summary>
@@ -259,7 +297,7 @@ public sealed class AgentClient : IDisposable
         var p = new JsonObject { ["selector"] = selector };
         if (windowTitle is not null)
         {
-            p["window"] = windowTitle;
+            p["windowTitle"] = windowTitle;
         }
         return await CallAsync("getComboBoxItems", p);
     }
@@ -282,7 +320,7 @@ public sealed class AgentClient : IDisposable
         }
         if (windowTitle is not null)
         {
-            p["window"] = windowTitle;
+            p["windowTitle"] = windowTitle;
         }
         return await CallAsync("selectComboBoxItem", p);
     }
@@ -296,7 +334,7 @@ public sealed class AgentClient : IDisposable
         var p = new JsonObject { ["selector"] = selector, ["maxDepth"] = maxDepth };
         if (windowTitle is not null)
         {
-            p["window"] = windowTitle;
+            p["windowTitle"] = windowTitle;
         }
         return await CallAsync("getTreeItems", p);
     }
@@ -310,7 +348,7 @@ public sealed class AgentClient : IDisposable
         var p = new JsonObject { ["selector"] = selector, ["text"] = text };
         if (windowTitle is not null)
         {
-            p["window"] = windowTitle;
+            p["windowTitle"] = windowTitle;
         }
         return await CallAsync("selectTreeItem", p);
     }
@@ -324,9 +362,80 @@ public sealed class AgentClient : IDisposable
         var p = new JsonObject { ["selector"] = selector, ["text"] = text };
         if (windowTitle is not null)
         {
-            p["window"] = windowTitle;
+            p["windowTitle"] = windowTitle;
         }
         return await CallAsync("expandTreeItem", p);
+    }
+
+    /// <summary>Clicks (or double-clicks) a tree item by text. Double-click on catalogue tree adds entry.</summary>
+    public async Task<JsonNode?> ClickTreeItemAsync(
+        string selector,
+        string text,
+        bool doubleClick = false,
+        string? windowTitle = null)
+    {
+        var p = new JsonObject { ["selector"] = selector, ["text"] = text };
+        if (doubleClick)
+        {
+            p["doubleClick"] = "true";
+        }
+        if (windowTitle is not null)
+        {
+            p["windowTitle"] = windowTitle;
+        }
+        return await CallAsync("clickTreeItem", p);
+    }
+
+    /// <summary>Presses a key on the focused or specified node.</summary>
+    public async Task<JsonNode?> PressKeyAsync(
+        string key,
+        string? selector = null,
+        string? windowTitle = null)
+    {
+        var p = new JsonObject { ["key"] = key };
+        if (selector is not null)
+        {
+            p["selector"] = selector;
+        }
+        if (windowTitle is not null)
+        {
+            p["windowTitle"] = windowTitle;
+        }
+        return await CallAsync("pressKey", p);
+    }
+
+    /// <summary>Gets the current value of a Spinner control.</summary>
+    public async Task<JsonNode?> GetSpinnerValueAsync(string selector, string? windowTitle = null)
+    {
+        var p = new JsonObject { ["selector"] = selector };
+        if (windowTitle is not null)
+        {
+            p["windowTitle"] = windowTitle;
+        }
+        return await CallAsync("getSpinnerValue", p);
+    }
+
+    /// <summary>Sets a Spinner value by steps (increment/decrement) or direct value.</summary>
+    public async Task<JsonNode?> SetSpinnerValueAsync(
+        string selector,
+        int? steps = null,
+        int? value = null,
+        string? windowTitle = null)
+    {
+        var p = new JsonObject { ["selector"] = selector };
+        if (steps is not null)
+        {
+            p["steps"] = steps.Value;
+        }
+        if (value is not null)
+        {
+            p["value"] = value.Value;
+        }
+        if (windowTitle is not null)
+        {
+            p["windowTitle"] = windowTitle;
+        }
+        return await CallAsync("setSpinnerValue", p);
     }
 }
 

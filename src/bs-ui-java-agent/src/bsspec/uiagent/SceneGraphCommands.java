@@ -6,6 +6,8 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.text.Text;
@@ -63,6 +65,14 @@ public class SceneGraphCommands {
                 return selectTreeItem(params);
             case "expandTreeItem":
                 return expandTreeItem(params);
+            case "clickTreeItem":
+                return clickTreeItem(params);
+            case "pressKey":
+                return pressKey(params);
+            case "getSpinnerValue":
+                return getSpinnerValue(params);
+            case "setSpinnerValue":
+                return setSpinnerValue(params);
             // Engine access commands
             case "listBsClasses":
                 return engineAccessor.listBsClasses();
@@ -72,6 +82,8 @@ public class SceneGraphCommands {
                 return engineAccessor.findEngine();
             case "getRosterState":
                 return engineAccessor.getRosterState();
+            case "getValidationErrors":
+                return engineAccessor.getValidationErrors();
             case "readStaticFields":
                 return engineAccessor.readStaticFields(extractStr(params, "className"));
             case "dumpNodeProperties":
@@ -155,26 +167,55 @@ public class SceneGraphCommands {
     private String clickNode(String params) {
         String selector = extractStr(params, "selector");
         String windowTitle = extractStr(params, "windowTitle");
-        Node node = resolveNode(selector, windowTitle);
+        String text = extractStr(params, "text");
+        boolean doubleClick = "true".equals(extractStr(params, "doubleClick"));
+        int clickCount = doubleClick ? 2 : 1;
+
+        Node node;
+        if (text != null) {
+            Scene scene = findScene(windowTitle);
+            if (scene == null) {
+                throw new IllegalArgumentException("Window not found: " + windowTitle);
+            }
+            node = findNodeByTextRecursive(scene.getRoot(), text, null);
+        } else {
+            node = resolveNode(selector, windowTitle);
+        }
         if (node == null) {
-            throw new IllegalArgumentException("Node not found: " + selector);
+            throw new IllegalArgumentException("Node not found: " + (text != null ? "text=" + text : selector));
         }
 
         var bounds = node.localToScreen(node.getBoundsInLocal());
         double x = bounds.getMinX() + bounds.getWidth() / 2;
         double y = bounds.getMinY() + bounds.getHeight() / 2;
 
-        // Fire a mouse click event
+        // Fire mouse events: press, release, click (with correct clickCount)
+        node.fireEvent(new MouseEvent(
+                MouseEvent.MOUSE_PRESSED,
+                bounds.getWidth() / 2, bounds.getHeight() / 2,
+                x, y,
+                MouseButton.PRIMARY, clickCount,
+                false, false, false, false,
+                true, false, false,
+                true, false, false, null));
+        node.fireEvent(new MouseEvent(
+                MouseEvent.MOUSE_RELEASED,
+                bounds.getWidth() / 2, bounds.getHeight() / 2,
+                x, y,
+                MouseButton.PRIMARY, clickCount,
+                false, false, false, false,
+                true, false, false,
+                true, false, false, null));
         node.fireEvent(new MouseEvent(
                 MouseEvent.MOUSE_CLICKED,
                 bounds.getWidth() / 2, bounds.getHeight() / 2,
                 x, y,
-                MouseButton.PRIMARY, 1,
+                MouseButton.PRIMARY, clickCount,
                 false, false, false, false,
                 true, false, false,
                 true, false, false, null));
 
-        return "{\"clicked\":true,\"x\":" + x + ",\"y\":" + y + "}";
+        return "{\"clicked\":true,\"doubleClick\":" + doubleClick + ",\"x\":" + x + ",\"y\":" + y + "}";
     }
 
     private String getChildren(String params) {
@@ -478,6 +519,187 @@ public class SceneGraphCommands {
         return null;
     }
 
+    /**
+     * Click (or double-click) a tree item by text. This selects the item first,
+     * scrolls it into view, then fires mouse events on the visible cell.
+     * For catalogue entries, double-click triggers "select entry" (add to roster).
+     */
+    @SuppressWarnings("unchecked")
+    private String clickTreeItem(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        String text = extractStr(params, "text");
+        boolean doubleClick = "true".equals(extractStr(params, "doubleClick"));
+        int clickCount = doubleClick ? 2 : 1;
+
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("TreeView not found: " + selector);
+        }
+        if (!(node instanceof TreeView)) {
+            throw new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName());
+        }
+        TreeView<Object> tree = (TreeView<Object>) node;
+        TreeItem<Object> item = findTreeItemByText(tree.getRoot(), text);
+        if (item == null) {
+            return "{\"clicked\":false,\"error\":\"Item not found: " + text + "\"}";
+        }
+
+        // Select the item first (this also scrolls to it)
+        int itemIndex = tree.getRow(item);
+        tree.getSelectionModel().select(item);
+        tree.scrollTo(itemIndex);
+
+        // Find the visible cell rendering this item by scanning VirtualFlow cells
+        Node cellNode = null;
+        for (Node child : tree.lookupAll(".tree-cell")) {
+            if (child instanceof javafx.scene.control.TreeCell) {
+                javafx.scene.control.TreeCell<?> cell = (javafx.scene.control.TreeCell<?>) child;
+                if (cell.getTreeItem() == item && !cell.isEmpty()) {
+                    cellNode = cell;
+                    break;
+                }
+            }
+        }
+
+        if (cellNode == null) {
+            // Fallback: fire on the tree itself at the item's position
+            cellNode = tree;
+        }
+
+        var bounds = cellNode.localToScreen(cellNode.getBoundsInLocal());
+        if (bounds == null) {
+            return "{\"clicked\":false,\"error\":\"Node bounds not available (window not visible?)\"}";
+        }
+        double x = bounds.getMinX() + bounds.getWidth() / 2;
+        double y = bounds.getMinY() + bounds.getHeight() / 2;
+        double localX = bounds.getWidth() / 2;
+        double localY = bounds.getHeight() / 2;
+
+        cellNode.fireEvent(new MouseEvent(
+                MouseEvent.MOUSE_PRESSED, localX, localY, x, y,
+                MouseButton.PRIMARY, clickCount,
+                false, false, false, false,
+                true, false, false, true, false, false, null));
+        cellNode.fireEvent(new MouseEvent(
+                MouseEvent.MOUSE_RELEASED, localX, localY, x, y,
+                MouseButton.PRIMARY, clickCount,
+                false, false, false, false,
+                true, false, false, true, false, false, null));
+        cellNode.fireEvent(new MouseEvent(
+                MouseEvent.MOUSE_CLICKED, localX, localY, x, y,
+                MouseButton.PRIMARY, clickCount,
+                false, false, false, false,
+                true, false, false, true, false, false, null));
+
+        return "{\"clicked\":true,\"doubleClick\":" + doubleClick
+                + ",\"text\":" + jsonString(item.getValue() != null ? item.getValue().toString() : null)
+                + ",\"cellFound\":" + (cellNode != tree)
+                + "}";
+    }
+
+    /**
+     * Press a key on the currently focused node or a specified node.
+     * key: KeyCode name (e.g., "DELETE", "ENTER", "ESCAPE")
+     */
+    private String pressKey(String params) {
+        String keyName = extractStr(params, "key");
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+
+        KeyCode keyCode;
+        try {
+            keyCode = KeyCode.valueOf(keyName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown key: " + keyName);
+        }
+
+        Node target;
+        if (selector != null) {
+            target = resolveNode(selector, windowTitle);
+            if (target == null) {
+                throw new IllegalArgumentException("Node not found: " + selector);
+            }
+        } else {
+            Scene scene = findScene(windowTitle);
+            if (scene == null) {
+                throw new IllegalArgumentException("No scene found");
+            }
+            target = scene.getFocusOwner();
+            if (target == null) {
+                target = scene.getRoot();
+            }
+        }
+
+        target.fireEvent(new KeyEvent(
+                KeyEvent.KEY_PRESSED, "", "", keyCode,
+                false, false, false, false));
+        target.fireEvent(new KeyEvent(
+                KeyEvent.KEY_RELEASED, "", "", keyCode,
+                false, false, false, false));
+
+        return "{\"pressed\":true,\"key\":\"" + keyCode.getName() + "\"}";
+    }
+
+    /**
+     * Get the current value of a Spinner control.
+     */
+    @SuppressWarnings("unchecked")
+    private String getSpinnerValue(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("Node not found: " + selector);
+        }
+        if (!(node instanceof Spinner)) {
+            throw new IllegalArgumentException("Node is not a Spinner: " + node.getClass().getSimpleName());
+        }
+        Spinner<?> spinner = (Spinner<?>) node;
+        Object value = spinner.getValue();
+        return "{\"value\":" + (value != null ? value.toString() : "null")
+                + ",\"editable\":" + spinner.isEditable() + "}";
+    }
+
+    /**
+     * Set the value of a Spinner control by incrementing/decrementing or setting directly.
+     * steps: number of steps to increment (positive) or decrement (negative)
+     * value: direct integer value to set (alternative to steps)
+     */
+    @SuppressWarnings("unchecked")
+    private String setSpinnerValue(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        int steps = extractInt(params, "steps", 0);
+        int value = extractInt(params, "value", -1);
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("Node not found: " + selector);
+        }
+        if (!(node instanceof Spinner)) {
+            throw new IllegalArgumentException("Node is not a Spinner: " + node.getClass().getSimpleName());
+        }
+        Spinner<Object> spinner = (Spinner<Object>) node;
+        if (value >= 0) {
+            // Try direct value factory set
+            SpinnerValueFactory<Object> factory = spinner.getValueFactory();
+            if (factory.getClass().getSimpleName().equals("IntegerSpinnerValueFactory")) {
+                try {
+                    var setValueMethod = factory.getClass().getMethod("setValue", Object.class);
+                    setValueMethod.invoke(factory, value);
+                } catch (Exception e) {
+                    factory.setValue((Object) Integer.valueOf(value));
+                }
+            } else {
+                factory.setValue((Object) Integer.valueOf(value));
+            }
+        } else if (steps != 0) {
+            spinner.getValueFactory().increment(steps);
+        }
+        Object newValue = spinner.getValue();
+        return "{\"value\":" + (newValue != null ? newValue.toString() : "null") + "}";
+    }
+
     private String dumpNodeProperties(String params) {
         String selector = extractStr(params, "selector");
         String windowTitle = extractStr(params, "windowTitle");
@@ -673,32 +895,43 @@ public class SceneGraphCommands {
                 // fall through
             }
         }
-        // Try non-string number
+
+        String raw = extractNumberToken(json, key);
+        if (raw != null) {
+            try {
+                return Integer.parseInt(raw);
+            } catch (NumberFormatException e) {
+                // fall through
+            }
+        }
+        return defaultValue;
+    }
+
+
+    private static String extractNumberToken(String json, String key) {
         String pattern = "\"" + key + "\"";
         int idx = json.indexOf(pattern);
         if (idx < 0) {
-            return defaultValue;
+            return null;
         }
         int colon = json.indexOf(':', idx + pattern.length());
         if (colon < 0) {
-            return defaultValue;
+            return null;
         }
         int start = colon + 1;
         while (start < json.length() && json.charAt(start) == ' ') {
             start++;
         }
         int end = start;
-        while (end < json.length() && Character.isDigit(json.charAt(end))) {
-            end++;
-        }
-        if (end > start) {
-            try {
-                return Integer.parseInt(json.substring(start, end));
-            } catch (NumberFormatException e) {
-                // fall through
+        while (end < json.length()) {
+            char ch = json.charAt(end);
+            if ((ch >= '0' && ch <= '9') || ch == '-' || ch == '+' || ch == '.') {
+                end++;
+                continue;
             }
+            break;
         }
-        return defaultValue;
+        return end > start ? json.substring(start, end) : null;
     }
 
     private static String jsonString(String value) {

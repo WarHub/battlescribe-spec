@@ -1,11 +1,17 @@
 package bsspec.uiagent;
 
 import java.lang.instrument.Instrumentation;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Discovers and accesses the BattleScribe roster engine running in the same JVM.
@@ -391,6 +397,31 @@ public class EngineAccessor {
         }
     }
 
+
+    public String getValidationErrors() {
+        if (engineInstance == null) {
+            return errorJson("Engine not found. Call findEngine first.");
+        }
+
+        try {
+            Object roster = getCurrentRoster();
+            if (roster == null) {
+                return "[]";
+            }
+
+            StringBuilder sb = new StringBuilder("[");
+            boolean[] first = new boolean[] { true };
+            collectValidationErrors(roster, "roster", sb, first);
+            for (Object force : toJavaList(callListGetter(roster, "getForces"))) {
+                collectForceValidationErrors(force, sb, first);
+            }
+            sb.append("]");
+            return sb.toString();
+        } catch (Exception e) {
+            return errorJson("getValidationErrors failed: " + buildExceptionMessage(e));
+        }
+    }
+
     /**
      * Reads roster state including forces, selections, costs.
      */
@@ -515,10 +546,517 @@ public class EngineAccessor {
 
     // --- Reflection helpers ---
 
+    private Object getCurrentRoster() throws Exception {
+        ensureEngineFound();
+        return getRosterMethod != null ? getRosterMethod.invoke(engineInstance) : null;
+    }
+
+    private void ensureEngineFound() {
+        if (engineInstance == null || engineClass == null || getRosterMethod == null) {
+            throw new IllegalStateException("Engine not found. Call findEngine first.");
+        }
+    }
+
+    private Object findForceById(String forceId) throws Exception {
+        Object roster = getCurrentRoster();
+        for (Object force : toJavaList(callListGetter(roster, "getForces"))) {
+            Object found = findForceByIdRecursive(force, forceId);
+            if (found != null) {
+                return found;
+            }
+        }
+        throw new IllegalArgumentException("Force '" + forceId + "' not found.");
+    }
+
+    private Object findForceByIdRecursive(Object force, String forceId) {
+        if (matchesId(callGetter(force, "getId"), forceId)) {
+            return force;
+        }
+        for (Object child : toJavaList(callListGetter(force, "getForces"))) {
+            Object found = findForceByIdRecursive(child, forceId);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private Object findSelectionById(Object force, String selectionId) {
+        Object found = tryFindSelectionById(force, selectionId);
+        if (found != null) {
+            return found;
+        }
+        throw new IllegalArgumentException(
+                "Selection '" + selectionId + "' not found under force '" + callGetter(force, "getId") + "'.");
+    }
+
+    private Object tryFindSelectionById(Object force, String selectionId) {
+        for (Object selection : toJavaList(callListGetter(force, "getSelections"))) {
+            Object found = findSelectionByIdRecursive(selection, selectionId);
+            if (found != null) {
+                return found;
+            }
+        }
+        for (Object childForce : toJavaList(callListGetter(force, "getForces"))) {
+            Object found = tryFindSelectionById(childForce, selectionId);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private Object findSelectionByIdRecursive(Object selection, String selectionId) {
+        if (matchesId(callGetter(selection, "getId"), selectionId)) {
+            return selection;
+        }
+        for (Object child : toJavaList(callListGetter(selection, "getSelections"))) {
+            Object found = findSelectionByIdRecursive(child, selectionId);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private Object findSelectionParent(Object force, String selectionId) {
+        return tryFindSelectionParent(force, selectionId);
+    }
+
+    private Object tryFindSelectionParent(Object force, String selectionId) {
+        for (Object selection : toJavaList(callListGetter(force, "getSelections"))) {
+            if (matchesId(callGetter(selection, "getId"), selectionId)) {
+                return force;
+            }
+            Object found = findSelectionParentRecursive(selection, selectionId);
+            if (found != null) {
+                return found;
+            }
+        }
+        for (Object childForce : toJavaList(callListGetter(force, "getForces"))) {
+            Object found = tryFindSelectionParent(childForce, selectionId);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private Object findSelectionParentRecursive(Object selection, String selectionId) {
+        for (Object child : toJavaList(callListGetter(selection, "getSelections"))) {
+            if (matchesId(callGetter(child, "getId"), selectionId)) {
+                return selection;
+            }
+            Object found = findSelectionParentRecursive(child, selectionId);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private Object findAvailableEntryForParent(Object parent, String entryId) throws Exception {
+        Class<?> selectionClass = findClass("net.battlescribe.model.roster.Selection");
+        Class<?> selectionEntryClass = findClass("net.battlescribe.model.data.SelectionEntry");
+        if (selectionEntryClass == null) {
+            return null;
+        }
+
+        if (selectionClass != null && selectionClass.isInstance(parent)) {
+            String parentEntryId = callGetter(parent, "getEntryId");
+            Object parentEntry = findEntryById(parentEntryId);
+            return parentEntry != null ? findObjectById(selectionEntryClass, entryId, parentEntry) : null;
+        }
+
+        Method method = findMethod(engineClass, "a", new Class<?>[] { parent.getClass() }, List.class);
+        if (method == null) {
+            return null;
+        }
+        Object entries = method.invoke(engineInstance, parent);
+        return findObjectById(selectionEntryClass, entryId, entries);
+    }
+
+    private Object resolveEntryForSelection(Object force, Object selection) throws Exception {
+        Object forceContext = getForceContext(force);
+        if (forceContext == null) {
+            return null;
+        }
+
+        String entryId = callGetter(selection, "getEntryId");
+        Method method = findMethod(forceContext.getClass(), "i", new Class<?>[] { String.class }, Object.class);
+        if (method == null) {
+            return null;
+        }
+
+        for (String candidate : candidateIds(entryId)) {
+            Object found = method.invoke(forceContext, candidate);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private Object findEntryById(String entryId) throws Exception {
+        Class<?> selectionEntryClass = findClass("net.battlescribe.model.data.SelectionEntry");
+        if (selectionEntryClass == null) {
+            return null;
+        }
+
+        Object roster = getCurrentRoster();
+        if (roster != null) {
+            for (Object force : toJavaList(callListGetter(roster, "getForces"))) {
+                Object found = findEntryByIdInForce(force, entryId, selectionEntryClass);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+
+        return findObjectById(selectionEntryClass, entryId, engineInstance, roster);
+    }
+
+    private Object findEntryByIdInForce(Object force, String entryId, Class<?> selectionEntryClass) throws Exception {
+        Object forceContext = getForceContext(force);
+        if (forceContext != null) {
+            Method method = findMethod(forceContext.getClass(), "i", new Class<?>[] { String.class }, Object.class);
+            if (method != null) {
+                for (String candidate : candidateIds(entryId)) {
+                    Object found = method.invoke(forceContext, candidate);
+                    if (selectionEntryClass.isInstance(found)) {
+                        return found;
+                    }
+                }
+            }
+        }
+
+        Object available = findAvailableEntryForParent(force, entryId);
+        if (available != null) {
+            return available;
+        }
+
+        for (Object childForce : toJavaList(callListGetter(force, "getForces"))) {
+            Object found = findEntryByIdInForce(childForce, entryId, selectionEntryClass);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private Object findCostTypeById(String costTypeId) throws Exception {
+        Class<?> costTypeClass = findClass("net.battlescribe.model.data.CostType");
+        if (costTypeClass == null) {
+            return null;
+        }
+        return findObjectById(costTypeClass, costTypeId, engineInstance, getCurrentRoster());
+    }
+
+    private Object getForceContext(Object force) throws Exception {
+        Method method = findMethod(engineClass, "e", new Class<?>[] { force.getClass() }, Object.class);
+        if (method == null) {
+            return null;
+        }
+        return method.invoke(engineInstance, force);
+    }
+
+    private void collectForceValidationErrors(Object force, StringBuilder sb, boolean[] first) throws Exception {
+        collectValidationErrors(force, "force", sb, first);
+        for (Object category : toJavaList(callListGetter(force, "getCategories"))) {
+            collectValidationErrors(category, "category", sb, first);
+        }
+        for (Object selection : toJavaList(callListGetter(force, "getSelections"))) {
+            collectSelectionValidationErrors(selection, sb, first);
+        }
+        for (Object childForce : toJavaList(callListGetter(force, "getForces"))) {
+            collectForceValidationErrors(childForce, sb, first);
+        }
+    }
+
+    private void collectSelectionValidationErrors(Object selection, StringBuilder sb, boolean[] first) throws Exception {
+        collectValidationErrors(selection, "selection", sb, first);
+        for (Object category : toJavaList(callListGetter(selection, "getCategories"))) {
+            collectValidationErrors(category, "category", sb, first);
+        }
+        for (Object child : toJavaList(callListGetter(selection, "getSelections"))) {
+            collectSelectionValidationErrors(child, sb, first);
+        }
+    }
+
+    private void collectValidationErrors(Object element, String ownerType, StringBuilder sb, boolean[] first)
+            throws Exception {
+        Object errors = callListGetter(element, "getValidationErrors");
+        Object errorIds = callListGetter(element, "getValidationErrorIds");
+        List<String> errorIdList = extractStrings(errorIds);
+        for (Object error : toJavaList(errors)) {
+            if (!first[0]) {
+                sb.append(",");
+            }
+            first[0] = false;
+            sb.append("{");
+            sb.append("\"message\":").append(jsonStr(extractValidationMessage(error)));
+            sb.append(",\"ownerType\":").append(jsonStr(ownerType));
+            sb.append(",\"ownerId\":").append(jsonStr(callGetter(element, "getId")));
+            String ownerEntryId = callGetter(element, "getEntryId");
+            if (ownerEntryId != null) {
+                sb.append(",\"ownerEntryId\":").append(jsonStr(ownerEntryId));
+            }
+            if (!errorIdList.isEmpty()) {
+                sb.append(",\"errorIds\":").append(serializeStringList(errorIdList));
+            }
+            sb.append("}");
+        }
+    }
+
+    private String extractValidationMessage(Object error) {
+        if (error == null) {
+            return null;
+        }
+        try {
+            Method method = findMethod(error.getClass(), "b", 0);
+            if (method != null) {
+                Object value = method.invoke(error);
+                if (value != null) {
+                    return value.toString();
+                }
+            }
+        } catch (Exception e) {
+            // fall back to toString
+        }
+        return error.toString();
+    }
+
+    private List<String> collectSelectionIdsByEntry(Object parent, String entryId) {
+        List<String> result = new ArrayList<String>();
+        for (Object child : toJavaList(callListGetter(parent, "getSelections"))) {
+            if (matchesId(callGetter(child, "getEntryId"), entryId)) {
+                String id = callGetter(child, "getId");
+                if (id != null) {
+                    result.add(id);
+                }
+            }
+        }
+        return result;
+    }
+
+    private Object findObjectById(Class<?> targetClass, String id, Object... roots) throws Exception {
+        if (targetClass == null || id == null) {
+            return null;
+        }
+
+        Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
+        ArrayDeque<Object> pending = new ArrayDeque<Object>();
+        for (Object root : roots) {
+            if (root != null) {
+                pending.add(root);
+            }
+        }
+
+        while (!pending.isEmpty()) {
+            Object current = pending.removeFirst();
+            if (current == null || isLeafValue(current) || !visited.add(current)) {
+                continue;
+            }
+
+            if (targetClass.isInstance(current) && matchesId(callGetter(current, "getId"), id)) {
+                return current;
+            }
+
+            if (current instanceof Iterable) {
+                for (Object item : (Iterable<?>) current) {
+                    if (item != null) {
+                        pending.addLast(item);
+                    }
+                }
+                continue;
+            }
+            if (current instanceof Map) {
+                for (Object item : ((Map<?, ?>) current).values()) {
+                    if (item != null) {
+                        pending.addLast(item);
+                    }
+                }
+                continue;
+            }
+            if (current.getClass().isArray()) {
+                int len = Array.getLength(current);
+                for (int i = 0; i < len; i++) {
+                    Object item = Array.get(current, i);
+                    if (item != null) {
+                        pending.addLast(item);
+                    }
+                }
+                continue;
+            }
+            if (!shouldTraverseObject(current.getClass())) {
+                continue;
+            }
+
+            Class<?> c = current.getClass();
+            while (c != null && c != Object.class) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) {
+                        continue;
+                    }
+                    try {
+                        f.setAccessible(true);
+                        Object value = f.get(current);
+                        if (value != null && !isLeafValue(value)) {
+                            pending.addLast(value);
+                        }
+                    } catch (Exception e) {
+                        // ignore inaccessible fields
+                    }
+                }
+                c = c.getSuperclass();
+            }
+        }
+
+        return null;
+    }
+
+    private boolean shouldTraverseObject(Class<?> cls) {
+        if (cls == null) {
+            return false;
+        }
+        String name = cls.getName();
+        return name.startsWith("net.battlescribe.")
+                || name.startsWith("java.util.")
+                || cls.isArray();
+    }
+
+    private boolean isLeafValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        Class<?> cls = value.getClass();
+        return value instanceof String
+                || value instanceof Number
+                || value instanceof Boolean
+                || value instanceof Character
+                || value instanceof Class
+                || cls.isEnum();
+    }
+
+    private List<String> candidateIds(String id) {
+        List<String> result = new ArrayList<String>();
+        if (id == null || id.isEmpty()) {
+            return result;
+        }
+        result.add(id);
+        if (id.contains("::")) {
+            String[] parts = id.split("::");
+            for (String part : parts) {
+                if (!part.isEmpty() && !result.contains(part)) {
+                    result.add(part);
+                }
+            }
+        }
+        return result;
+    }
+
+    private boolean matchesId(String actualId, String expectedId) {
+        if (actualId == null || expectedId == null) {
+            return false;
+        }
+        if (actualId.equals(expectedId)) {
+            return true;
+        }
+        for (String candidate : candidateIds(actualId)) {
+            if (candidate.equals(expectedId)) {
+                return true;
+            }
+        }
+        for (String candidate : candidateIds(expectedId)) {
+            if (candidate.equals(actualId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<String> extractIds(Object values) {
+        List<String> ids = new ArrayList<String>();
+        for (Object value : toJavaList(values)) {
+            String id = callGetter(value, "getId");
+            if (id != null) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
+    private List<String> extractStrings(Object values) {
+        List<String> result = new ArrayList<String>();
+        for (Object value : toJavaList(values)) {
+            if (value != null) {
+                result.add(value.toString());
+            }
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> toJavaList(Object value) {
+        if (value == null) {
+            return Collections.emptyList();
+        }
+        if (value instanceof List) {
+            return (List<Object>) value;
+        }
+        if (value instanceof Iterable) {
+            List<Object> result = new ArrayList<Object>();
+            for (Object item : (Iterable<?>) value) {
+                result.add(item);
+            }
+            return result;
+        }
+        try {
+            Method sizeMethod = value.getClass().getMethod("size");
+            Method getMethod = value.getClass().getMethod("get", int.class);
+            int size = ((Number) sizeMethod.invoke(value)).intValue();
+            List<Object> result = new ArrayList<Object>(size);
+            for (int i = 0; i < size; i++) {
+                result.add(getMethod.invoke(value, Integer.valueOf(i)));
+            }
+            return result;
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
+
+    private String serializeStringList(List<String> values) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append(jsonStr(values.get(i)));
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    private String errorJson(String message) {
+        return "{\"error\":" + jsonStr(message) + "}";
+    }
+
+    private String buildExceptionMessage(Exception e) {
+        String msg = e.getClass().getSimpleName() + ": " + e.getMessage();
+        if (e instanceof java.lang.reflect.InvocationTargetException) {
+            Throwable cause = ((java.lang.reflect.InvocationTargetException) e).getTargetException();
+            if (cause != null) {
+                msg += " [cause: " + cause.getClass().getSimpleName() + ": " + cause.getMessage() + "]";
+            }
+        }
+        return msg;
+    }
+
     private void cacheRosterAccess() {
         try {
             // The method a() on the engine (or base class c) returns the Roster
             getRosterMethod = engineClass.getMethod("a");
+            getRosterMethod.setAccessible(true);
             rosterClass = getRosterMethod.getReturnType();
         } catch (Exception e) {
             System.err.println("[bs-ui-agent] Failed to cache roster access: " + e.getMessage());
@@ -526,17 +1064,27 @@ public class EngineAccessor {
     }
 
     private String callGetter(Object obj, String methodName) {
+        Object result = callGetterObject(obj, methodName);
+        return result != null ? result.toString() : null;
+    }
+
+    private Object callGetterObject(Object obj, String methodName) {
+        if (obj == null) {
+            return null;
+        }
         try {
             Method m = findMethod(obj.getClass(), methodName);
             if (m == null) return null;
-            Object result = m.invoke(obj);
-            return result != null ? result.toString() : null;
+            return m.invoke(obj);
         } catch (Exception e) {
             return null;
         }
     }
 
     private Object callListGetter(Object obj, String methodName) {
+        if (obj == null) {
+            return null;
+        }
         try {
             Method m = findMethod(obj.getClass(), methodName);
             if (m == null) return null;
@@ -547,11 +1095,14 @@ public class EngineAccessor {
     }
 
     private Method findMethod(Class<?> cls, String name) {
-        // Search current class and superclasses
+        return findMethod(cls, name, 0);
+    }
+
+    private Method findMethod(Class<?> cls, String name, int paramCount) {
         Class<?> c = cls;
-        while (c != null) {
+        while (c != null && c != Object.class) {
             for (Method m : c.getDeclaredMethods()) {
-                if (m.getName().equals(name) && m.getParameterCount() == 0) {
+                if (m.getName().equals(name) && m.getParameterCount() == paramCount) {
                     m.setAccessible(true);
                     return m;
                 }
@@ -559,6 +1110,55 @@ public class EngineAccessor {
             c = c.getSuperclass();
         }
         return null;
+    }
+
+    private Method findMethod(Class<?> cls, String preferredName, Class<?>[] paramTypes, Class<?> returnType) {
+        Class<?> c = cls;
+        while (c != null && c != Object.class) {
+            for (Method m : c.getDeclaredMethods()) {
+                if (preferredName != null && !m.getName().equals(preferredName)) {
+                    continue;
+                }
+                if (m.getParameterCount() != paramTypes.length) {
+                    continue;
+                }
+                if (returnType != null && !wrapPrimitive(returnType).isAssignableFrom(wrapPrimitive(m.getReturnType()))) {
+                    continue;
+                }
+                Class<?>[] params = m.getParameterTypes();
+                boolean match = true;
+                for (int i = 0; i < params.length; i++) {
+                    Class<?> expected = wrapPrimitive(paramTypes[i]);
+                    Class<?> actual = wrapPrimitive(params[i]);
+                    if (!actual.isAssignableFrom(expected) && !expected.isAssignableFrom(actual)) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    m.setAccessible(true);
+                    return m;
+                }
+            }
+            c = c.getSuperclass();
+        }
+        return null;
+    }
+
+    private Class<?> wrapPrimitive(Class<?> cls) {
+        if (cls == null || !cls.isPrimitive()) {
+            return cls;
+        }
+        if (cls == Boolean.TYPE) return Boolean.class;
+        if (cls == Byte.TYPE) return Byte.class;
+        if (cls == Character.TYPE) return Character.class;
+        if (cls == Short.TYPE) return Short.class;
+        if (cls == Integer.TYPE) return Integer.class;
+        if (cls == Long.TYPE) return Long.class;
+        if (cls == Float.TYPE) return Float.class;
+        if (cls == Double.TYPE) return Double.class;
+        if (cls == Void.TYPE) return Void.class;
+        return cls;
     }
 
     private Class<?> findClass(String name) {
