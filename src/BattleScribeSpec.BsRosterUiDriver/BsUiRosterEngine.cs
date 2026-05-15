@@ -387,6 +387,11 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         await FireButtonAsync("#btnNewRoster", MainWindowTitle, async: true);
         await WaitForWindowAsync(NewRosterWindowTitle);
+
+        // Select game system — even with one option, BS may need an explicit selection event
+        await SelectComboBoxItemAsync("#cboGameSystem", _gameSystem!.Name, NewRosterWindowTitle, fallbackToFirst: true);
+        await Task.Delay(300); // Allow UI to enable Add Force button
+
         await ApplyPendingCostLimitsAsync(NewRosterWindowTitle);
 
         await FireButtonAsync("#btnAddForce", NewRosterWindowTitle, async: true);
@@ -408,6 +413,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         var catalogueName = ResolveCatalogueName(catalogueId);
         await SelectComboBoxItemAsync("#cboCatalogue", catalogueName, AddForceWindowTitle, fallbackToFirst: true);
+        await Task.Delay(300); // Allow force entries to populate after catalogue selection
         await SelectComboBoxItemAsync("#cboForceEntry", FindForceEntryName(forceEntryId), AddForceWindowTitle);
         await FireButtonAsync("#btnDone", AddForceWindowTitle);
         await WaitForWindowToCloseAsync(AddForceWindowTitle);
@@ -1287,7 +1293,15 @@ public sealed class BsUiRosterEngine : IRosterEngine
             return false;
         }
 
-        return windows.Any(w => w?["title"]?.GetValue<string>()?.Contains(title, StringComparison.Ordinal) == true);
+        // Use exact match or "starts with" to avoid matching main window title
+        // (e.g. "New Roster" dialog vs "Roster Editor 2.03.21 - New Roster (GS v1)")
+        return windows.Any(w =>
+        {
+            var windowTitle = w?["title"]?.GetValue<string>();
+            return windowTitle is not null &&
+                   (string.Equals(windowTitle, title, StringComparison.Ordinal) ||
+                    windowTitle.StartsWith(title + " ", StringComparison.Ordinal));
+        });
     }
 
     private static RosterState MapRosterState(AgentRosterState dto, IReadOnlyList<ValidationErrorState> validationErrors)
