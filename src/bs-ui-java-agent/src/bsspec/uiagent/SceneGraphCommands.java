@@ -813,6 +813,8 @@ public class SceneGraphCommands {
     /**
      * Click a control found by its sibling label text. Used for adding child entries.
      * For Spinners: increments by 1 step. For CheckBoxes: toggles. For Buttons: fires.
+     * The actual interaction is scheduled via Platform.runLater to avoid deadlocks
+     * when the change triggers BS engine operations on the FX thread.
      * Params: text (label text to match), windowTitle (optional), controlType (optional)
      */
     private String clickControlByLabel(String params) {
@@ -837,15 +839,14 @@ public class SceneGraphCommands {
                 if (sibling instanceof Spinner) {
                     @SuppressWarnings("unchecked")
                     Spinner<Object> spinner = (Spinner<Object>) sibling;
-                    spinner.getValueFactory().increment(1);
-                    Object newVal = spinner.getValue();
+                    // Schedule increment asynchronously to avoid blocking the JSON-RPC response
+                    Platform.runLater(() -> spinner.getValueFactory().increment(1));
                     return "{\"clicked\":true,\"controlType\":\"spinner\",\"action\":\"increment\"" +
-                            ",\"newValue\":" + (newVal != null ? newVal.toString() : "null") +
                             ",\"labelText\":" + jsonString(labelText) + "}";
                 }
                 if (sibling instanceof Button) {
                     Button button = (Button) sibling;
-                    button.fire();
+                    Platform.runLater(() -> button.fire());
                     return "{\"clicked\":true,\"controlType\":\"button\",\"action\":\"fire\"" +
                             ",\"labelText\":" + jsonString(labelText) + "}";
                 }
@@ -858,9 +859,8 @@ public class SceneGraphCommands {
             CheckBox cb = (CheckBox) cbNode;
             String cbText = cb.getText();
             if (cbText != null && cbText.contains(text)) {
-                cb.fire(); // toggle
+                Platform.runLater(() -> cb.fire());
                 return "{\"clicked\":true,\"controlType\":\"checkbox\",\"action\":\"toggle\"" +
-                        ",\"selected\":" + cb.isSelected() +
                         ",\"labelText\":" + jsonString(cbText) + "}";
             }
         }
