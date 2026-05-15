@@ -495,6 +495,15 @@ public class EngineAccessor {
         sb.append(",\"name\":").append(jsonStr(callGetter(sel, "getName")));
         sb.append(",\"entryId\":").append(jsonStr(callGetter(sel, "getEntryId")));
 
+        // Type (enum → lowercase name)
+        try {
+            Method m = sel.getClass().getMethod("getType");
+            Object type = m.invoke(sel);
+            sb.append(",\"type\":").append(jsonStr(type != null ? type.toString().toLowerCase() : null));
+        } catch (Exception e) {
+            sb.append(",\"type\":null");
+        }
+
         // Number (getNumber returns int)
         try {
             Method m = sel.getClass().getMethod("getNumber");

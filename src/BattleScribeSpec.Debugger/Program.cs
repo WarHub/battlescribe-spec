@@ -158,8 +158,9 @@ if (exportXmlDir is not null)
 }
 
 // ===== BS UI Probe mode =====
-if (engineName is "bs-ui")
+if (engineName is "bs-ui" && dumpAll && spec.Steps.Count == 0)
 {
+    // Probe-only mode (no spec steps, just dump tree)
     return await RunBsUiProbe(spec, dumpAll, json);
 }
 
@@ -456,6 +457,13 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
                 return nrEngine;
             }
 
+        case "bs-ui":
+            {
+                var bsUiOptions = ResolveBsUiOptions();
+                Console.Error.WriteLine($"BS UI mode: {bsUiOptions.RosterEditorJarPath}");
+                return new BsUiRosterEngine(bsUiOptions);
+            }
+
         default:
             throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs', 'nr', or 'bs-ui'.");
     }
@@ -533,7 +541,7 @@ static void PrintUsage()
                           or "-" for stdin
 
         Options:
-          --engine <name> Engine to use: bs (default), nr, bs-ui (probe mode)
+          --engine <name> Engine to use: bs (default), nr, bs-ui
           --dump          Dump state after every step (default: after last step only)
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)

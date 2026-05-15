@@ -1327,7 +1327,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             dto.Id,
             dto.Name ?? string.Empty,
             dto.EntryId,
-            Type: null,
+            Type: dto.Type,
             dto.Number,
             dto.Hidden,
             [.. (dto.Costs ?? []).Select(MapCostState)],
@@ -1497,6 +1497,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         public string? Id { get; set; }
         public string? Name { get; set; }
         public string? EntryId { get; set; }
+        public string? Type { get; set; }
         public int Number { get; set; }
         public bool Hidden { get; set; }
         public List<AgentCostState>? Costs { get; set; }
