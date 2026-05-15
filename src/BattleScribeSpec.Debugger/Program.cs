@@ -3,6 +3,7 @@ using BattleScribeSpec;
 using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.Debugger;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
 
 // ===== Parse arguments =====
@@ -42,6 +43,7 @@ for (var i = 0; i < args.Length; i++)
             {
                 "bs" => "battlescribe",
                 "nr" => "newrecruit",
+                "nr-ui" => "nr-ui",
                 var name => name
             };
             break;
@@ -594,8 +596,28 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
                 return new BsUiRosterEngine(bsUiOptions) { KeepAlive = keepAlive };
             }
 
+        case "nr-ui":
+            {
+                var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
+                NrRosterUiEngine uiEngine;
+                if (url is { Length: > 0 })
+                {
+                    Console.Error.WriteLine($"NR UI live mode: {url}");
+                    uiEngine = await NrRosterUiEngine.CreateAsync(url, headless);
+                }
+                else
+                {
+                    var harFile = HarRecorder.FindFrozenHarFile() ?? throw new InvalidOperationException(
+                            "NR UI engine requires NR_ENGINE_URL env var (live mode) or .testdata/newrecruit-har/newrecruit.har (frozen mode).");
+
+                    Console.Error.WriteLine($"NR UI frozen mode: {harFile}");
+                    uiEngine = await NrRosterUiEngine.CreateFrozenAsync(harFile, headless: headless);
+                }
+                return uiEngine;
+            }
+
         default:
-            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs', 'nr', or 'bs-ui'.");
+            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs', 'nr', 'bs-ui', or 'nr-ui'.");
     }
 }
 
@@ -677,7 +699,7 @@ static void PrintUsage()
                           or "-" for stdin
 
         Options:
-          --engine <name> Engine to use: bs (default), nr, bs-ui
+          --engine <name> Engine to use: bs (default), nr, bs-ui, nr-ui
           --dump          Dump state after every step (default: after last step only)
           --probe         Run bs-ui probe mode (bs-ui engine only)
           --json          Output state as JSON instead of pretty tree
