@@ -1003,7 +1003,7 @@ steps:
                 - name: power
                   typeId: ct-power
                   value: 4
-              profiles:
+              profiles: &cmd-profiles
                 - name: Power Armor
                   typeId: pt-unit
                   typeName: Unit Stats
@@ -1039,12 +1039,12 @@ steps:
                     - name: D
                       typeId: char-d
                       value: "1"
-              rules:
+              rules: &cmd-rules
                 - name: Fearless
                   description: This unit automatically passes morale tests
                 - name: Inspiring Leader
                   description: Friendly units within 6 inches re-roll morale
-              categories:
+              categories: &cmd-categories
                 - name: HQ
                   entryId: cat-hq
                   primary: true
@@ -1075,7 +1075,7 @@ steps:
                 - name: power
                   typeId: ct-power
                   value: 5
-              profiles:
+              profiles: &inf-profiles
                 - name: Infantry
                   typeId: pt-unit
                   typeName: Unit Stats
@@ -1095,12 +1095,12 @@ steps:
                     - name: W
                       typeId: char-w
                       value: "1"
-              rules:
+              rules: &inf-rules
                 - name: Orders
                   description: Can receive orders from officers
                   page: "43"
                   publicationId: pub-core
-              categories:
+              categories: &inf-cat-troops
                 - name: Troops
                   entryId: cat-troops
                   primary: true
@@ -1121,37 +1121,9 @@ steps:
                 - name: power
                   typeId: ct-power
                   value: 5
-              profiles:
-                - name: Infantry
-                  typeId: pt-unit
-                  typeName: Unit Stats
-                  characteristics:
-                    - name: WS
-                      typeId: char-ws
-                      value: "4+"
-                    - name: BS
-                      typeId: char-bs
-                      value: "4+"
-                    - name: S
-                      typeId: char-s
-                      value: "3"
-                    - name: T
-                      typeId: char-t
-                      value: "3"
-                    - name: W
-                      typeId: char-w
-                      value: "1"
-              rules:
-                - name: Orders
-                  description: Can receive orders from officers
-                  page: "43"
-                  publicationId: pub-core
-              categories:
-                - name: Troops
-                  entryId: cat-troops
-                  primary: true
-                  profiles: []
-                  rules: []
+              profiles: *inf-profiles
+              rules: *inf-rules
+              categories: *inf-cat-troops
               children:
                 - name: Trooper
                   entryId: se-inf-trooper
@@ -1169,7 +1141,7 @@ steps:
               entryId: se-required
               type: unit
               number: 1
-              profiles:
+              profiles: &req-profiles
                 - name: Boltgun
                   typeId: pt-weapon
                   typeName: Weapon
@@ -1186,10 +1158,10 @@ steps:
                     - name: D
                       typeId: char-d
                       value: "1"
-              rules:
+              rules: &req-rules
                 - name: Rapid Fire
                   description: Double shots at half range
-              categories:
+              categories: &req-cat-elites
                 - name: Elites
                   entryId: cat-elites
                   primary: true
@@ -1262,53 +1234,9 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 4
-                  profiles:
-                    - name: Power Armor
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "3+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "3+"
-                        - name: S
-                          typeId: char-s
-                          value: "4"
-                        - name: T
-                          typeId: char-t
-                          value: "4"
-                        - name: W
-                          typeId: char-w
-                          value: "2"
-                    - name: Power Sword
-                      typeId: pt-weapon
-                      typeName: Weapon
-                      characteristics:
-                        - name: Range
-                          typeId: char-range
-                          value: Melee
-                        - name: Str
-                          typeId: char-str
-                          value: "5"
-                        - name: AP
-                          typeId: char-ap
-                          value: "-3"
-                        - name: D
-                          typeId: char-d
-                          value: "1"
-                  rules:
-                    - name: Fearless
-                      description: This unit automatically passes morale tests
-                    - name: Inspiring Leader
-                      description: Friendly units within 6 inches re-roll morale
-                  categories:
-                    - name: HQ
-                      entryId: cat-hq
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *cmd-profiles
+                  rules: *cmd-rules
+                  categories: *cmd-categories
                   children:
                     # BS: zero-fills all referenced cost types even when undeclared
                     - name: Bold
@@ -1341,37 +1269,9 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 5
-                  profiles:
-                    - name: Infantry
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "4+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "4+"
-                        - name: S
-                          typeId: char-s
-                          value: "3"
-                        - name: T
-                          typeId: char-t
-                          value: "3"
-                        - name: W
-                          typeId: char-w
-                          value: "1"
-                  rules:
-                    - name: Orders
-                      description: Can receive orders from officers
-                      page: "43"
-                      publicationId: pub-core
-                  categories:
-                    - name: Troops
-                      entryId: cat-troops
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *inf-profiles
+                  rules: *inf-rules
+                  categories: *inf-cat-troops
                 # ── Infantry Squad (duplicated) ──
                 - name: Infantry Squad
                   entryId: se-infantry
@@ -1387,37 +1287,9 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 5
-                  profiles:
-                    - name: Infantry
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "4+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "4+"
-                        - name: S
-                          typeId: char-s
-                          value: "3"
-                        - name: T
-                          typeId: char-t
-                          value: "3"
-                        - name: W
-                          typeId: char-w
-                          value: "1"
-                  rules:
-                    - name: Orders
-                      description: Can receive orders from officers
-                      page: "43"
-                      publicationId: pub-core
-                  categories:
-                    - name: Troops
-                      entryId: cat-troops
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *inf-profiles
+                  rules: *inf-rules
+                  categories: *inf-cat-troops
                   children:
                     # BS: zero-fills power cost even though Trooper only declares pts
                     - name: Trooper
@@ -1447,32 +1319,9 @@ steps:
                     - name: pts
                       typeId: ct-pts
                       value: 0
-                  profiles:
-                    - name: Boltgun
-                      typeId: pt-weapon
-                      typeName: Weapon
-                      characteristics:
-                        - name: Range
-                          typeId: char-range
-                          value: "24"
-                        - name: Str
-                          typeId: char-str
-                          value: "4"
-                        - name: AP
-                          typeId: char-ap
-                          value: "0"
-                        - name: D
-                          typeId: char-d
-                          value: "1"
-                  rules:
-                    - name: Rapid Fire
-                      description: Double shots at half range
-                  categories:
-                    - name: Elites
-                      entryId: cat-elites
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *req-profiles
+                  rules: *req-rules
+                  categories: *req-cat-elites
         newrecruit:
           # NR override must restate the full force tree because ForEngine() merge
           # replaces `forces` entirely (top-level only, no deep merge).
@@ -1536,53 +1385,9 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 4
-                  profiles:
-                    - name: Power Armor
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "3+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "3+"
-                        - name: S
-                          typeId: char-s
-                          value: "4"
-                        - name: T
-                          typeId: char-t
-                          value: "4"
-                        - name: W
-                          typeId: char-w
-                          value: "2"
-                    - name: Power Sword
-                      typeId: pt-weapon
-                      typeName: Weapon
-                      characteristics:
-                        - name: Range
-                          typeId: char-range
-                          value: Melee
-                        - name: Str
-                          typeId: char-str
-                          value: "5"
-                        - name: AP
-                          typeId: char-ap
-                          value: "-3"
-                        - name: D
-                          typeId: char-d
-                          value: "1"
-                  rules:
-                    - name: Fearless
-                      description: This unit automatically passes morale tests
-                    - name: Inspiring Leader
-                      description: Friendly units within 6 inches re-roll morale
-                  categories:
-                    - name: HQ
-                      entryId: cat-hq
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *cmd-profiles
+                  rules: *cmd-rules
+                  categories: *cmd-categories
                   children:
                     - name: Bold
                       entryId: se-cmd-trait-bold
@@ -1607,37 +1412,9 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 5
-                  profiles:
-                    - name: Infantry
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "4+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "4+"
-                        - name: S
-                          typeId: char-s
-                          value: "3"
-                        - name: T
-                          typeId: char-t
-                          value: "3"
-                        - name: W
-                          typeId: char-w
-                          value: "1"
-                  rules:
-                    - name: Orders
-                      description: Can receive orders from officers
-                      page: "43"
-                      publicationId: pub-core
-                  categories:
-                    - name: Troops
-                      entryId: cat-troops
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *inf-profiles
+                  rules: *inf-rules
+                  categories: *inf-cat-troops
                 # ── Infantry Squad (duplicated) ──
                 - name: Infantry Squad
                   entryId: se-infantry
@@ -1653,37 +1430,9 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 5
-                  profiles:
-                    - name: Infantry
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "4+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "4+"
-                        - name: S
-                          typeId: char-s
-                          value: "3"
-                        - name: T
-                          typeId: char-t
-                          value: "3"
-                        - name: W
-                          typeId: char-w
-                          value: "1"
-                  rules:
-                    - name: Orders
-                      description: Can receive orders from officers
-                      page: "43"
-                      publicationId: pub-core
-                  categories:
-                    - name: Troops
-                      entryId: cat-troops
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *inf-profiles
+                  rules: *inf-rules
+                  categories: *inf-cat-troops
                   children:
                     - name: Trooper
                       entryId: se-inf-trooper
@@ -1701,32 +1450,9 @@ steps:
                   entryId: se-required
                   type: unit
                   number: 1
-                  profiles:
-                    - name: Boltgun
-                      typeId: pt-weapon
-                      typeName: Weapon
-                      characteristics:
-                        - name: Range
-                          typeId: char-range
-                          value: "24"
-                        - name: Str
-                          typeId: char-str
-                          value: "4"
-                        - name: AP
-                          typeId: char-ap
-                          value: "0"
-                        - name: D
-                          typeId: char-d
-                          value: "1"
-                  rules:
-                    - name: Rapid Fire
-                      description: Double shots at half range
-                  categories:
-                    - name: Elites
-                      entryId: cat-elites
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *req-profiles
+                  rules: *req-rules
+                  categories: *req-cat-elites
 
   - expectedState:
       errorCount: 1
