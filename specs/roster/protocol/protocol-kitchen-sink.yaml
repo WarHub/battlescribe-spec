@@ -1003,7 +1003,7 @@ steps:
                 - name: power
                   typeId: ct-power
                   value: 4
-              profiles:
+              profiles: &cmd-profiles
                 - name: Power Armor
                   typeId: pt-unit
                   typeName: Unit Stats
@@ -1039,12 +1039,12 @@ steps:
                     - name: D
                       typeId: char-d
                       value: "1"
-              rules:
+              rules: &cmd-rules
                 - name: Fearless
                   description: This unit automatically passes morale tests
                 - name: Inspiring Leader
                   description: Friendly units within 6 inches re-roll morale
-              categories:
+              categories: &cmd-categories
                 - name: HQ
                   entryId: cat-hq
                   primary: true
@@ -1056,13 +1056,7 @@ steps:
                   type: upgrade
                   number: 1
                   entryGroupId: seg-cmd-traits
-                  costs:
-                    - name: power
-                      typeId: ct-power
-                      value: 0
-                    - name: pts
-                      typeId: ct-pts
-                      value: 0
+                  costs: []
                   profiles: []
                   rules: []
                   categories: []
@@ -1081,7 +1075,7 @@ steps:
                 - name: power
                   typeId: ct-power
                   value: 5
-              profiles:
+              profiles: &inf-profiles
                 - name: Infantry
                   typeId: pt-unit
                   typeName: Unit Stats
@@ -1101,12 +1095,12 @@ steps:
                     - name: W
                       typeId: char-w
                       value: "1"
-              rules:
+              rules: &inf-rules
                 - name: Orders
                   description: Can receive orders from officers
                   page: "43"
                   publicationId: pub-core
-              categories:
+              categories: &inf-cat-troops
                 - name: Troops
                   entryId: cat-troops
                   primary: true
@@ -1127,37 +1121,9 @@ steps:
                 - name: power
                   typeId: ct-power
                   value: 5
-              profiles:
-                - name: Infantry
-                  typeId: pt-unit
-                  typeName: Unit Stats
-                  characteristics:
-                    - name: WS
-                      typeId: char-ws
-                      value: "4+"
-                    - name: BS
-                      typeId: char-bs
-                      value: "4+"
-                    - name: S
-                      typeId: char-s
-                      value: "3"
-                    - name: T
-                      typeId: char-t
-                      value: "3"
-                    - name: W
-                      typeId: char-w
-                      value: "1"
-              rules:
-                - name: Orders
-                  description: Can receive orders from officers
-                  page: "43"
-                  publicationId: pub-core
-              categories:
-                - name: Troops
-                  entryId: cat-troops
-                  primary: true
-                  profiles: []
-                  rules: []
+              profiles: *inf-profiles
+              rules: *inf-rules
+              categories: *inf-cat-troops
               children:
                 - name: Trooper
                   entryId: se-inf-trooper
@@ -1167,9 +1133,6 @@ steps:
                     - name: pts
                       typeId: ct-pts
                       value: 20
-                    - name: power
-                      typeId: ct-power
-                      value: 0
                   profiles: []
                   rules: []
                   categories: []
@@ -1178,14 +1141,7 @@ steps:
               entryId: se-required
               type: unit
               number: 1
-              costs:
-                - name: power
-                  typeId: ct-power
-                  value: 0
-                - name: pts
-                  typeId: ct-pts
-                  value: 0
-              profiles:
+              profiles: &req-profiles
                 - name: Boltgun
                   typeId: pt-weapon
                   typeName: Weapon
@@ -1202,16 +1158,170 @@ steps:
                     - name: D
                       typeId: char-d
                       value: "1"
-              rules:
+              rules: &req-rules
                 - name: Rapid Fire
                   description: Double shots at half range
-              categories:
+              categories: &req-cat-elites
                 - name: Elites
                   entryId: cat-elites
                   primary: true
                   profiles: []
                   rules: []
       engines:
+        battlescribe:
+          # BS override restates the full force tree because ForEngine() merge
+          # replaces `forces` entirely (top-level only, no deep merge).
+          # BS emits zero-filled costs for all referenced cost types, even when
+          # an entry doesn't declare that cost. Entries that differ from DEFAULT
+          # are annotated with a "# BS:" comment.
+          forces:
+            - name: Battalion
+              entryId: fe-battalion
+              catalogueName: Test Catalogue
+              publicationId: pub-core
+              page: "10"
+              availableEntryCount: 5
+              customName: Alpha Strike Force
+              customNotes: Main battle group
+              childForceCount: 0
+              profiles: []
+              rules:
+                - name: Combat Doctrine
+                  description: Re-roll hit rolls of 1
+                - name: Battle-forged
+                  description: This army is battle-forged
+                  page: "5"
+                  publicationId: pub-core
+              categories:
+                - name: Uncategorised
+                  entryId: "(No Category)"
+                  primary: false
+                  profiles: []
+                  rules: []
+                - name: HQ
+                  entryId: cat-hq
+                  primary: false
+                  customNotes: HQ deployment notes
+                  profiles: []
+                  rules: []
+                - name: Troops
+                  entryId: cat-troops
+                  primary: false
+                  profiles: []
+                  rules: []
+                - name: Elites
+                  entryId: cat-elites
+                  primary: false
+                  profiles: []
+                  rules: []
+              publications:
+                - id: pub-supplement
+                  name: Supplement
+                - id: pub-core
+                  name: Core Rulebook
+              selections:
+                # ── Commander ──
+                - name: Commander
+                  entryId: se-commander
+                  type: unit
+                  number: 1
+                  customName: The General
+                  customNotes: Veteran commander
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 100
+                    - name: power
+                      typeId: ct-power
+                      value: 4
+                  profiles: *cmd-profiles
+                  rules: *cmd-rules
+                  categories: *cmd-categories
+                  children:
+                    # BS: zero-fills all referenced cost types even when undeclared
+                    - name: Bold
+                      entryId: se-cmd-trait-bold
+                      type: upgrade
+                      number: 1
+                      entryGroupId: seg-cmd-traits
+                      costs:
+                        - name: power
+                          typeId: ct-power
+                          value: 0
+                        - name: pts
+                          typeId: ct-pts
+                          value: 0
+                      profiles: []
+                      rules: []
+                      categories: []
+                # ── Infantry Squad (first, from addSelection) ──
+                - name: Infantry Squad
+                  entryId: se-infantry
+                  type: unit
+                  number: 1
+                  page: "42"
+                  publicationId: pub-core
+                  publicationName: Core Rulebook
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 100
+                    - name: power
+                      typeId: ct-power
+                      value: 5
+                  profiles: *inf-profiles
+                  rules: *inf-rules
+                  categories: *inf-cat-troops
+                # ── Infantry Squad (duplicated) ──
+                - name: Infantry Squad
+                  entryId: se-infantry
+                  type: unit
+                  number: 1
+                  page: "42"
+                  publicationId: pub-core
+                  publicationName: Core Rulebook
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 100
+                    - name: power
+                      typeId: ct-power
+                      value: 5
+                  profiles: *inf-profiles
+                  rules: *inf-rules
+                  categories: *inf-cat-troops
+                  children:
+                    # BS: zero-fills power cost even though Trooper only declares pts
+                    - name: Trooper
+                      entryId: se-inf-trooper
+                      type: model
+                      number: 2
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 20
+                        - name: power
+                          typeId: ct-power
+                          value: 0
+                      profiles: []
+                      rules: []
+                      categories: []
+                # ── Required Unit ──
+                # BS: zero-fills both cost types even though Required Unit declares none
+                - name: Required Unit
+                  entryId: se-required
+                  type: unit
+                  number: 1
+                  costs:
+                    - name: power
+                      typeId: ct-power
+                      value: 0
+                    - name: pts
+                      typeId: ct-pts
+                      value: 0
+                  profiles: *req-profiles
+                  rules: *req-rules
+                  categories: *req-cat-elites
         newrecruit:
           # NR override must restate the full force tree because ForEngine() merge
           # replaces `forces` entirely (top-level only, no deep merge).
@@ -1275,60 +1385,15 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 4
-                  profiles:
-                    - name: Power Armor
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "3+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "3+"
-                        - name: S
-                          typeId: char-s
-                          value: "4"
-                        - name: T
-                          typeId: char-t
-                          value: "4"
-                        - name: W
-                          typeId: char-w
-                          value: "2"
-                    - name: Power Sword
-                      typeId: pt-weapon
-                      typeName: Weapon
-                      characteristics:
-                        - name: Range
-                          typeId: char-range
-                          value: Melee
-                        - name: Str
-                          typeId: char-str
-                          value: "5"
-                        - name: AP
-                          typeId: char-ap
-                          value: "-3"
-                        - name: D
-                          typeId: char-d
-                          value: "1"
-                  rules:
-                    - name: Fearless
-                      description: This unit automatically passes morale tests
-                    - name: Inspiring Leader
-                      description: Friendly units within 6 inches re-roll morale
-                  categories:
-                    - name: HQ
-                      entryId: cat-hq
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *cmd-profiles
+                  rules: *cmd-rules
+                  categories: *cmd-categories
                   children:
                     - name: Bold
                       entryId: se-cmd-trait-bold
                       type: upgrade
                       number: 1
                       # NR: entryGroupId not exposed by NR engine (omitted)
-                      # NR: zero-value costs are omitted by NR (BS returns [{power:0},{pts:0}])
                       profiles: []
                       rules: []
                       categories: []
@@ -1347,37 +1412,9 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 5
-                  profiles:
-                    - name: Infantry
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "4+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "4+"
-                        - name: S
-                          typeId: char-s
-                          value: "3"
-                        - name: T
-                          typeId: char-t
-                          value: "3"
-                        - name: W
-                          typeId: char-w
-                          value: "1"
-                  rules:
-                    - name: Orders
-                      description: Can receive orders from officers
-                      page: "43"
-                      publicationId: pub-core
-                  categories:
-                    - name: Troops
-                      entryId: cat-troops
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *inf-profiles
+                  rules: *inf-rules
+                  categories: *inf-cat-troops
                 # ── Infantry Squad (duplicated) ──
                 - name: Infantry Squad
                   entryId: se-infantry
@@ -1393,43 +1430,14 @@ steps:
                     - name: power
                       typeId: ct-power
                       value: 5
-                  profiles:
-                    - name: Infantry
-                      typeId: pt-unit
-                      typeName: Unit Stats
-                      characteristics:
-                        - name: WS
-                          typeId: char-ws
-                          value: "4+"
-                        - name: BS
-                          typeId: char-bs
-                          value: "4+"
-                        - name: S
-                          typeId: char-s
-                          value: "3"
-                        - name: T
-                          typeId: char-t
-                          value: "3"
-                        - name: W
-                          typeId: char-w
-                          value: "1"
-                  rules:
-                    - name: Orders
-                      description: Can receive orders from officers
-                      page: "43"
-                      publicationId: pub-core
-                  categories:
-                    - name: Troops
-                      entryId: cat-troops
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *inf-profiles
+                  rules: *inf-rules
+                  categories: *inf-cat-troops
                   children:
                     - name: Trooper
                       entryId: se-inf-trooper
                       type: model
                       number: 2
-                      # NR: zero-value costs omitted (BS returns [{pts:20},{power:0}], NR returns [{pts:20}] only)
                       costs:
                         - name: pts
                           typeId: ct-pts
@@ -1442,33 +1450,9 @@ steps:
                   entryId: se-required
                   type: unit
                   number: 1
-                  # NR: zero-value costs omitted entirely (BS returns [{power:0},{pts:0}])
-                  profiles:
-                    - name: Boltgun
-                      typeId: pt-weapon
-                      typeName: Weapon
-                      characteristics:
-                        - name: Range
-                          typeId: char-range
-                          value: "24"
-                        - name: Str
-                          typeId: char-str
-                          value: "4"
-                        - name: AP
-                          typeId: char-ap
-                          value: "0"
-                        - name: D
-                          typeId: char-d
-                          value: "1"
-                  rules:
-                    - name: Rapid Fire
-                      description: Double shots at half range
-                  categories:
-                    - name: Elites
-                      entryId: cat-elites
-                      primary: true
-                      profiles: []
-                      rules: []
+                  profiles: *req-profiles
+                  rules: *req-rules
+                  categories: *req-cat-elites
 
   - expectedState:
       errorCount: 1
