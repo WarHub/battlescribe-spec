@@ -92,6 +92,8 @@ public class SceneGraphCommands {
                 return findControlByLabel(params);
             case "clickControlByLabel":
                 return clickControlByLabel(params);
+            case "patchSupporterPass":
+                return engineAccessor.patchSupporterPass();
             default:
                 throw new IllegalArgumentException("Unknown method: " + method);
         }

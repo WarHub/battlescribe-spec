@@ -353,14 +353,34 @@ public sealed class BsUiRosterEngine : IRosterEngine
         var targetId = selectionId ?? forceId;
         await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(targetId), MainWindowTitle);
 
-        if (!await TryFireButtonAsync("#btnCustomiseName", MainWindowTitle) &&
+        if (!await TryFireButtonAsync("#btnCustomiseName", MainWindowTitle, async: true) &&
             !await TryClickTextAsync("Customise Name", MainWindowTitle, "Button"))
         {
             throw new InvalidOperationException("Could not open customization dialog.");
         }
 
-        var windowTitle = await WaitForFirstWindowAsync(["Customise", "Customize", "Name"])
-            ?? throw new TimeoutException("Customization dialog did not appear.");
+        // If the supporter popup appears instead of the customization dialog, dismiss it and retry
+        var windowTitle = await WaitForFirstWindowAsync(["Customise", "Customize", "Name", "Support BattleScribe"]);
+        if (windowTitle is not null && windowTitle.Contains("Support", StringComparison.OrdinalIgnoreCase))
+        {
+            // Dismiss the supporter popup
+            if (!await TryClickTextAsync("MAYBE LATER", windowTitle, "Button") &&
+                !await TryFireButtonAsync("#btnNegative", windowTitle))
+            {
+                await TryClickTextAsync("Maybe Later", windowTitle);
+            }
+            await WaitForWindowToCloseAsync(windowTitle);
+
+            // Retry opening customization - the supporter check may still block
+            throw new InvalidOperationException(
+                "Customise Name requires a supporter pass and the supporter patch did not take effect. " +
+                "The supporter popup was dismissed but the feature is unavailable.");
+        }
+
+        if (windowTitle is null)
+        {
+            throw new TimeoutException("Customization dialog did not appear.");
+        }
 
         if (customName is not null)
         {
@@ -872,6 +892,26 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
 
         _engineLocated = true;
+
+        // Patch supporter pass to unlock premium features (customise name, etc.)
+        await PatchSupporterPassAsync();
+    }
+
+    private async Task PatchSupporterPassAsync()
+    {
+        try
+        {
+            var result = await _Client.CallAsync("patchSupporterPass");
+            var patched = result?["patched"]?.GetValue<bool>() == true;
+            if (!patched)
+            {
+                Console.Error.WriteLine($"[bs-ui] Warning: could not patch supporter pass: {result?.ToJsonString()}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[bs-ui] Warning: patchSupporterPass failed: {ex.Message}");
+        }
     }
 
     private async Task HandleStartupDialogsAsync()

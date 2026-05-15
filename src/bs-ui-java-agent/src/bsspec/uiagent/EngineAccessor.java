@@ -1179,6 +1179,290 @@ public class EngineAccessor {
         return null;
     }
 
+    /**
+     * Patches the supporter pass check on the main window controller to always return true.
+     * Strategy: find the controller, walk its class hierarchy for a field holding supporter pass(es),
+     * and inject a valid one. Falls back to direct method override via field patching.
+     */
+    public String patchSupporterPass() {
+        List<String> log = new ArrayList<>();
+
+        // Strategy: Use Instrumentation to retransform the class, patching
+        // hasValidSupporterPass() to always return true (iconst_1, ireturn)
+        try {
+            Method hasValid = null;
+            Class<?> targetClass = null;
+
+            // Find the method in the class hierarchy
+            Class<?> controllerClass = findClass("net.battlescribe.desktop.rostereditor.RosterEditorWindowController");
+            if (controllerClass != null) {
+                hasValid = findMethodInHierarchy(controllerClass, "hasValidSupporterPass");
+            }
+            if (hasValid == null) {
+                // Try finding it in all loaded classes
+                for (Class<?> cls : instrumentation.getAllLoadedClasses()) {
+                    if (cls.getName().contains("BattleScribeWindowController")) {
+                        hasValid = findMethodInHierarchy(cls, "hasValidSupporterPass");
+                        if (hasValid != null) break;
+                    }
+                }
+            }
+
+            if (hasValid == null) {
+                log.add("method_not_found");
+                return buildPatchResult(false, log);
+            }
+
+            targetClass = hasValid.getDeclaringClass();
+            log.add("target:" + targetClass.getName());
+
+            // Check if already patched
+            javafx.scene.Scene scene = findMainScene();
+            if (scene != null) {
+                Object controller = findControllerInstance(controllerClass, scene);
+                if (controller != null) {
+                    hasValid.setAccessible(true);
+                    boolean current = (boolean) hasValid.invoke(controller);
+                    if (current) {
+                        log.add("already_valid");
+                        return buildPatchResult(true, log);
+                    }
+                }
+            }
+
+            // Retransform the class to patch the method bytecode
+            if (!instrumentation.isRetransformClassesSupported()) {
+                log.add("retransform_not_supported");
+                return buildPatchResult(false, log);
+            }
+            if (!instrumentation.isModifiableClass(targetClass)) {
+                log.add("class_not_modifiable");
+                return buildPatchResult(false, log);
+            }
+
+            final String methodName = "hasValidSupporterPass";
+            final Class<?> finalTargetClass = targetClass;
+
+            java.lang.instrument.ClassFileTransformer transformer =
+                new java.lang.instrument.ClassFileTransformer() {
+                    @Override
+                    public byte[] transform(ClassLoader loader, String className,
+                            Class<?> classBeingRedefined, java.security.ProtectionDomain protectionDomain,
+                            byte[] classfileBuffer) {
+                        if (classBeingRedefined != finalTargetClass) return null;
+                        return patchMethodToReturnTrue(classfileBuffer, methodName);
+                    }
+                };
+
+            instrumentation.addTransformer(transformer, true);
+            try {
+                instrumentation.retransformClasses(targetClass);
+                log.add("retransformed");
+            } finally {
+                instrumentation.removeTransformer(transformer);
+            }
+
+            // Verify the patch worked
+            if (scene != null) {
+                Object controller = findControllerInstance(controllerClass, scene);
+                if (controller != null) {
+                    hasValid.setAccessible(true);
+                    boolean after = (boolean) hasValid.invoke(controller);
+                    log.add("after_patch=" + after);
+                    return buildPatchResult(after, log);
+                }
+            }
+            // Can't verify but retransformation succeeded
+            return buildPatchResult(true, log);
+
+        } catch (Throwable e) {
+            java.io.StringWriter sw = new java.io.StringWriter();
+            e.printStackTrace(new java.io.PrintWriter(sw));
+            log.add("error:" + e.getClass().getSimpleName() + ":" + e.getMessage());
+            log.add("stack:" + sw.toString().replace("\n", " | ").replace("\"", "'"));
+            return buildPatchResult(false, log);
+        }
+    }
+
+    private Object findControllerInstance(Class<?> controllerClass, javafx.scene.Scene scene) {
+        if (scene == null || controllerClass == null) return null;
+        javafx.scene.Node btnNode = scene.getRoot().lookup("#btnNewRoster");
+        if (btnNode instanceof javafx.scene.control.ButtonBase) {
+            javafx.event.EventHandler<?> handler = ((javafx.scene.control.ButtonBase) btnNode).getOnAction();
+            if (handler != null) {
+                Object c = extractControllerFromHandler(handler, controllerClass);
+                if (c != null) return c;
+            }
+        }
+        return findControllerFromNode(scene.getRoot(), controllerClass);
+    }
+
+    /**
+     * Patches a method in raw class bytes to always return true (iconst_1, ireturn).
+     * Rebuilds the Code attribute to be minimal (no StackMapTable, no exception table).
+     */
+    private byte[] patchMethodToReturnTrue(byte[] classBytes, String targetMethodName) {
+        try {
+            // Parse constant pool to find the method name's UTF8 index
+            int pos = 8; // skip magic(4) + minor(2) + major(2)
+            int cpCount = readU2(classBytes, pos);
+            pos += 2;
+
+            // Build a map of constant pool UTF8 entries
+            String[] utf8Entries = new String[cpCount];
+            for (int i = 1; i < cpCount; i++) {
+                int tag = classBytes[pos] & 0xFF;
+                pos++;
+                switch (tag) {
+                    case 1: // CONSTANT_Utf8
+                        int len = readU2(classBytes, pos);
+                        pos += 2;
+                        utf8Entries[i] = new String(classBytes, pos, len, "UTF-8");
+                        pos += len;
+                        break;
+                    case 7: case 8: case 16: case 19: case 20: // 2-byte refs
+                        pos += 2;
+                        break;
+                    case 3: case 4: case 9: case 10: case 11: case 12:
+                    case 17: case 18: // 4-byte
+                        pos += 4;
+                        break;
+                    case 5: case 6: // 8-byte (long/double) - takes 2 slots
+                        pos += 8;
+                        i++; // skip next slot
+                        break;
+                    case 15: // MethodHandle
+                        pos += 3;
+                        break;
+                    default:
+                        return null; // unknown tag, bail out
+                }
+            }
+
+            // Skip access_flags(2) + this_class(2) + super_class(2)
+            pos += 6;
+            // Skip interfaces
+            int interfaceCount = readU2(classBytes, pos);
+            pos += 2 + interfaceCount * 2;
+            // Skip fields
+            int fieldCount = readU2(classBytes, pos);
+            pos += 2;
+            for (int i = 0; i < fieldCount; i++) {
+                pos += 6; // access_flags + name_index + descriptor_index
+                int attrCount = readU2(classBytes, pos);
+                pos += 2;
+                for (int j = 0; j < attrCount; j++) {
+                    pos += 2; // attr_name_index
+                    int attrLen = readU4(classBytes, pos);
+                    pos += 4 + attrLen;
+                }
+            }
+
+            // Now at methods - find the target and rebuild class bytes
+            int methodCount = readU2(classBytes, pos);
+            pos += 2;
+            for (int i = 0; i < methodCount; i++) {
+                int nameIndex = readU2(classBytes, pos + 2);
+                int descIndex = readU2(classBytes, pos + 4);
+                pos += 6;
+
+                String mName = (nameIndex > 0 && nameIndex < cpCount) ? utf8Entries[nameIndex] : null;
+                String mDesc = (descIndex > 0 && descIndex < cpCount) ? utf8Entries[descIndex] : null;
+
+                int attrCount = readU2(classBytes, pos);
+                pos += 2;
+
+                if (targetMethodName.equals(mName) && "()Z".equals(mDesc)) {
+                    // Found the method! Rebuild class bytes with new Code attribute
+                    for (int j = 0; j < attrCount; j++) {
+                        int attrNameIndex = readU2(classBytes, pos);
+                        int attrLen = readU4(classBytes, pos + 2);
+                        String attrName = (attrNameIndex > 0 && attrNameIndex < cpCount)
+                            ? utf8Entries[attrNameIndex] : null;
+
+                        if ("Code".equals(attrName)) {
+                            // Build new Code attribute content:
+                            // max_stack=1, max_locals=1, code_length=2,
+                            // code=[iconst_1, ireturn], exception_table_count=0, attributes_count=0
+                            byte[] newCodeContent = new byte[] {
+                                0, 1,       // max_stack = 1
+                                0, 1,       // max_locals = 1
+                                0, 0, 0, 2, // code_length = 2
+                                0x04,       // iconst_1
+                                (byte) 0xAC, // ireturn
+                                0, 0,       // exception_table_length = 0
+                                0, 0        // attributes_count = 0
+                            };
+                            int newAttrLen = newCodeContent.length; // 14
+
+                            // Build new class bytes: everything before this attr's length,
+                            // then new length + content, then everything after original attr
+                            int attrHeaderStart = pos; // attr_name_index position
+                            int attrDataStart = pos + 6; // start of attr content
+                            int attrEnd = pos + 6 + attrLen; // end of original attr
+
+                            byte[] result = new byte[classBytes.length - attrLen + newAttrLen];
+                            // Copy everything up to attr_name_index (inclusive) + 2 bytes
+                            System.arraycopy(classBytes, 0, result, 0, pos + 2);
+                            // Write new attr_length
+                            result[pos + 2] = (byte) ((newAttrLen >> 24) & 0xFF);
+                            result[pos + 3] = (byte) ((newAttrLen >> 16) & 0xFF);
+                            result[pos + 4] = (byte) ((newAttrLen >> 8) & 0xFF);
+                            result[pos + 5] = (byte) (newAttrLen & 0xFF);
+                            // Write new Code content
+                            System.arraycopy(newCodeContent, 0, result, pos + 6, newAttrLen);
+                            // Copy everything after original Code attribute
+                            System.arraycopy(classBytes, attrEnd, result, pos + 6 + newAttrLen,
+                                classBytes.length - attrEnd);
+                            return result;
+                        }
+                        pos += 6 + attrLen;
+                    }
+                } else {
+                    // Skip this method's attributes
+                    for (int j = 0; j < attrCount; j++) {
+                        pos += 2;
+                        int attrLen = readU4(classBytes, pos);
+                        pos += 4 + attrLen;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // bytecode patching failed
+        }
+        return null; // return null means "don't transform"
+    }
+
+    private static int readU2(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+    }
+
+    private static int readU4(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 24) | ((data[offset + 1] & 0xFF) << 16)
+             | ((data[offset + 2] & 0xFF) << 8) | (data[offset + 3] & 0xFF);
+    }
+
+    private Method findMethodInHierarchy(Class<?> cls, String methodName) {
+        while (cls != null && !cls.getName().equals("java.lang.Object")) {
+            try {
+                return cls.getDeclaredMethod(methodName);
+            } catch (NoSuchMethodException e) {
+                cls = cls.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    private String buildPatchResult(boolean patched, List<String> log) {
+        StringBuilder sb = new StringBuilder("{\"patched\":").append(patched).append(",\"log\":[");
+        for (int i = 0; i < log.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append("\"").append(escapeJson(log.get(i))).append("\"");
+        }
+        sb.append("]}");
+        return sb.toString();
+    }
+
     private static String jsonStr(String value) {
         if (value == null) return "null";
         return "\"" + escapeJson(value) + "\"";

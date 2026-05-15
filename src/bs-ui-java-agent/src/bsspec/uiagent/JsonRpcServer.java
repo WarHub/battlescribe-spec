@@ -79,10 +79,17 @@ public class JsonRpcServer {
         }
 
         try {
-            // Execute on JavaFX Application Thread and wait for result
-            String result = executeOnFxThread(() -> commands.dispatch(method, params));
+            String result;
+            // patchSupporterPass uses Instrumentation.retransformClasses which must NOT
+            // run on the FX thread (it would deadlock)
+            if ("patchSupporterPass".equals(method)) {
+                result = commands.dispatch(method, params);
+            } else {
+                // Execute on JavaFX Application Thread and wait for result
+                result = executeOnFxThread(() -> commands.dispatch(method, params));
+            }
             return successResponse(id, result);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             return errorResponse(id, -32603, e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
