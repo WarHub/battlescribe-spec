@@ -229,8 +229,28 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         EnsureRosterLoaded();
         var before = await ReadRosterStateAsync();
-        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(parentSelectionId), MainWindowTitle);
-        await ClickTreeItemAsync(["#treeCatalogue"], TreeIdToken(entryId), MainWindowTitle, doubleClick: true);
+
+        // In BS Desktop, child entries appear in the edit panel as Spinners/CheckBoxes/Buttons
+        // when the parent Selection is selected in the roster tree (not in the catalogue tree).
+        await ClickTreeItemAsync(["#treeRoster"], TreeIdToken(parentSelectionId), MainWindowTitle, doubleClick: false);
+        await Task.Delay(500);
+
+        // Find the child entry's name for label matching in the edit panel
+        var entryName = _entryNamesById.GetValueOrDefault(entryId) ?? entryId;
+
+        // Click the control (Spinner increment / CheckBox toggle / Button fire) by label text
+        var result = await _Client.CallAsync("clickControlByLabel", new System.Text.Json.Nodes.JsonObject
+        {
+            ["text"] = entryName,
+            ["windowTitle"] = MainWindowTitle
+        });
+        var clicked = result?["clicked"]?.GetValue<bool>() ?? false;
+        if (!clicked)
+        {
+            throw new TimeoutException(
+                $"Could not find edit panel control for child entry '{entryName}' (id={entryId}). " +
+                $"Result: {result?.ToJsonString()}");
+        }
 
         return await WaitForSelectionOutputsAsync(before, forceId, parentSelectionId, entryId);
     }

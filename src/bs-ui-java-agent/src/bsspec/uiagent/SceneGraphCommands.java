@@ -88,6 +88,10 @@ public class SceneGraphCommands {
                 return engineAccessor.readStaticFields(extractStr(params, "className"));
             case "dumpNodeProperties":
                 return dumpNodeProperties(params);
+            case "findControlByLabel":
+                return findControlByLabel(params);
+            case "clickControlByLabel":
+                return clickControlByLabel(params);
             default:
                 throw new IllegalArgumentException("Unknown method: " + method);
         }
@@ -741,6 +745,127 @@ public class SceneGraphCommands {
         }
         sb.append("}");
         return sb.toString();
+    }
+
+    /**
+     * Find a control (Spinner, CheckBox, or Button) in the scene by looking for it adjacent
+     * to a Label whose text contains the specified text. Used for edit panel child entries.
+     * Params: text (label text to match), windowTitle (optional), controlType (optional: spinner, checkbox, button)
+     * Returns: JSON with found control info (type, index, value if applicable)
+     */
+    private String findControlByLabel(String params) {
+        String text = extractStr(params, "text");
+        String windowTitle = extractStr(params, "windowTitle");
+        String controlType = extractStr(params, "controlType"); // optional filter
+
+        Scene scene = findScene(windowTitle);
+        if (scene == null) return "{\"error\":\"no scene\"}";
+
+        // Find all Labels in the scene
+        for (Node labelNode : scene.getRoot().lookupAll(".label")) {
+            if (!(labelNode instanceof Label)) continue;
+            Label label = (Label) labelNode;
+            String labelText = label.getText();
+            if (labelText == null || !labelText.contains(text)) continue;
+
+            // Found a matching label. Look at its parent (usually an HBox) for sibling controls.
+            Parent parent = label.getParent();
+            if (parent == null) continue;
+
+            for (Node sibling : parent.getChildrenUnmodifiable()) {
+                if (sibling == label) continue;
+                if (sibling instanceof Spinner) {
+                    if (controlType != null && !controlType.equals("spinner")) continue;
+                    Spinner<?> spinner = (Spinner<?>) sibling;
+                    Object val = spinner.getValue();
+                    return "{\"found\":true,\"controlType\":\"spinner\",\"labelText\":" + jsonString(labelText) +
+                            ",\"value\":" + (val != null ? val.toString() : "null") +
+                            ",\"parentClass\":\"" + parent.getClass().getSimpleName() + "\"}";
+                }
+                if (sibling instanceof Button) {
+                    if (controlType != null && !controlType.equals("button")) continue;
+                    return "{\"found\":true,\"controlType\":\"button\",\"labelText\":" + jsonString(labelText) +
+                            ",\"parentClass\":\"" + parent.getClass().getSimpleName() + "\"}";
+                }
+            }
+
+            // Also check: the label itself might BE a CheckBox (CheckBox extends ButtonBase which shows text)
+            if (parent instanceof CheckBox) {
+                // Actually CheckBox IS a Labeled with text
+            }
+        }
+
+        // Also check CheckBoxes directly (they have text built-in, no separate label)
+        for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
+            if (!(cbNode instanceof CheckBox)) continue;
+            CheckBox cb = (CheckBox) cbNode;
+            String cbText = cb.getText();
+            if (cbText != null && cbText.contains(text)) {
+                if (controlType != null && !controlType.equals("checkbox")) continue;
+                return "{\"found\":true,\"controlType\":\"checkbox\",\"labelText\":" + jsonString(cbText) +
+                        ",\"selected\":" + cb.isSelected() + "}";
+            }
+        }
+
+        return "{\"found\":false,\"searchedText\":" + jsonString(text) + "}";
+    }
+
+    /**
+     * Click a control found by its sibling label text. Used for adding child entries.
+     * For Spinners: increments by 1 step. For CheckBoxes: toggles. For Buttons: fires.
+     * Params: text (label text to match), windowTitle (optional), controlType (optional)
+     */
+    private String clickControlByLabel(String params) {
+        String text = extractStr(params, "text");
+        String windowTitle = extractStr(params, "windowTitle");
+
+        Scene scene = findScene(windowTitle);
+        if (scene == null) return "{\"error\":\"no scene\"}";
+
+        // Try spinners first (in HBox with Label)
+        for (Node labelNode : scene.getRoot().lookupAll(".label")) {
+            if (!(labelNode instanceof Label)) continue;
+            Label label = (Label) labelNode;
+            String labelText = label.getText();
+            if (labelText == null || !labelText.contains(text)) continue;
+
+            Parent parent = label.getParent();
+            if (parent == null) continue;
+
+            for (Node sibling : parent.getChildrenUnmodifiable()) {
+                if (sibling == label) continue;
+                if (sibling instanceof Spinner) {
+                    @SuppressWarnings("unchecked")
+                    Spinner<Object> spinner = (Spinner<Object>) sibling;
+                    spinner.getValueFactory().increment(1);
+                    Object newVal = spinner.getValue();
+                    return "{\"clicked\":true,\"controlType\":\"spinner\",\"action\":\"increment\"" +
+                            ",\"newValue\":" + (newVal != null ? newVal.toString() : "null") +
+                            ",\"labelText\":" + jsonString(labelText) + "}";
+                }
+                if (sibling instanceof Button) {
+                    Button button = (Button) sibling;
+                    button.fire();
+                    return "{\"clicked\":true,\"controlType\":\"button\",\"action\":\"fire\"" +
+                            ",\"labelText\":" + jsonString(labelText) + "}";
+                }
+            }
+        }
+
+        // Try CheckBoxes (text is built-in)
+        for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
+            if (!(cbNode instanceof CheckBox)) continue;
+            CheckBox cb = (CheckBox) cbNode;
+            String cbText = cb.getText();
+            if (cbText != null && cbText.contains(text)) {
+                cb.fire(); // toggle
+                return "{\"clicked\":true,\"controlType\":\"checkbox\",\"action\":\"toggle\"" +
+                        ",\"selected\":" + cb.isSelected() +
+                        ",\"labelText\":" + jsonString(cbText) + "}";
+            }
+        }
+
+        return "{\"clicked\":false,\"error\":\"Control not found for text: " + text + "\"}";
     }
 
     // --- Helpers ---
