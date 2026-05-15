@@ -198,15 +198,14 @@ public sealed class BattleScribeEngine : IDisposable
         {
             _autoSelectDone = true;
             SelectDefaultRootEntries();
+            // x() creates selections without calling t() (the full refresh).
+            // The desktop's setRoster(z=true) calls a(true,true)+v()+d()+w() after x().
+            // We call t() which performs u()+a(false,true)+v()+d()+w() — this refreshes
+            // all CHANGED selections (auto-selected entries are marked changed).
+            // selectRootForce already called t() before x(), so this second t() only
+            // processes the newly auto-selected entries.
+            Refresh();
         }
-
-        // x() creates selections without calling t() (the full refresh).
-        // The desktop's setRoster(z=true) calls a(true,true)+v()+d()+w() after x().
-        // We call t() which performs u()+a(false,true)+v()+d()+w() — this refreshes
-        // all CHANGED selections (auto-selected entries are marked changed).
-        // selectRootForce already called t() before x(), so this second t() only
-        // processes the newly auto-selected entries.
-        Refresh();
 
         return (force, JavaListToStringErrors(errors));
     }

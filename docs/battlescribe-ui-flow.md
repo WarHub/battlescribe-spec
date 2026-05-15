@@ -69,12 +69,12 @@ UI: RosterEditorWindowController.setNumSelections(parent, entry, newCount)
   delta = this.b.b(parent, entry, newCount)     // getNumChanges (f.java:895)
   if isDuplicate(entry) → delta = 0 → NO-OP
   if delta > 0:
-    for i in 0..delta:
+    for i in range(delta):                        // repeat exactly delta times
       this.a(parent, entry, false)              // calls selectEntry
         → this.b.b(parent, entry)              // selectEntry → t() each time
   if delta < 0:
     selection = this.b.c(parent, entry)         // getCurrentSelection
-    for i in 0..|delta|:
+    for i in range(abs(delta)):                 // repeat exactly |delta| times
       this.a(selection, false)                  // calls deselectEntry
         → this.b.m(selection)                  // deselectEntry → t() each time
 ```
