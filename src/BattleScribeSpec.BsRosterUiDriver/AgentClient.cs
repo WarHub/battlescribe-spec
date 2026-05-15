@@ -15,6 +15,12 @@ public sealed class AgentClient : IDisposable
     private readonly StreamWriter _writer;
     private int _nextId;
 
+    /// <summary>
+    /// Default timeout for a single JSON-RPC call. Set to <see cref="Timeout.InfiniteTimeSpan"/>
+    /// to disable. Default is 30 seconds.
+    /// </summary>
+    public TimeSpan CallTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
     public AgentClient(TcpClient client)
     {
         _client = client;
@@ -24,7 +30,7 @@ public sealed class AgentClient : IDisposable
     }
 
     /// <summary>Sends a JSON-RPC request and returns the result.</summary>
-    public async Task<JsonNode?> CallAsync(string method, JsonObject? parameters = null)
+    public async Task<JsonNode?> CallAsync(string method, JsonObject? parameters = null, CancellationToken cancellationToken = default)
     {
         var id = Interlocked.Increment(ref _nextId);
 
@@ -42,10 +48,33 @@ public sealed class AgentClient : IDisposable
 
         var json = request.ToJsonString();
         await _writer.WriteLineAsync(json);
-        await _writer.FlushAsync();
+        await _writer.FlushAsync(cancellationToken);
 
-        var responseLine = await _reader.ReadLineAsync()
-            ?? throw new InvalidOperationException("Agent connection closed.");
+        // Apply per-call timeout unless caller supplies their own cancellation
+        using var timeoutCts = CallTimeout != Timeout.InfiniteTimeSpan
+            ? new CancellationTokenSource(CallTimeout)
+            : new CancellationTokenSource();
+        using var linked = cancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken)
+            : null;
+        var effectiveToken = linked?.Token ?? timeoutCts.Token;
+
+        string? responseLine;
+        try
+        {
+            responseLine = await _reader.ReadLineAsync(effectiveToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Agent did not respond to '{method}' within {CallTimeout.TotalSeconds:F0}s. " +
+                "The JavaFX thread may be blocked (deadlock).");
+        }
+
+        if (responseLine is null)
+        {
+            throw new InvalidOperationException("Agent connection closed.");
+        }
 
         var response = JsonNode.Parse(responseLine)
             ?? throw new InvalidOperationException("Invalid JSON response from agent.");

@@ -96,7 +96,14 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
 
         _disposed = true;
-        RunAsync(CleanupAsync);
+        try
+        {
+            CleanupAsync().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Best effort during dispose
+        }
         GC.SuppressFinalize(this);
     }
 
@@ -1487,11 +1494,71 @@ public sealed class BsUiRosterEngine : IRosterEngine
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
+    /// <summary>
+    /// Maximum time allowed for a single engine action (e.g. addForce, selectEntry).
+    /// If an action exceeds this, a diagnostic dump is captured and a TimeoutException is thrown.
+    /// Default is 60 seconds. Set via <c>BS_UI_ACTION_TIMEOUT</c> env var (in seconds).
+    /// </summary>
+    public static TimeSpan ActionTimeout { get; set; } = TimeSpan.FromSeconds(
+        int.TryParse(Environment.GetEnvironmentVariable("BS_UI_ACTION_TIMEOUT"), out var envTimeout) && envTimeout > 0
+            ? envTimeout
+            : 60);
+
     private AgentClient _Client => _client ?? throw new InvalidOperationException("Agent client is not connected.");
 
-    private static T RunAsync<T>(Func<Task<T>> func) => func().GetAwaiter().GetResult();
+    private T RunAsync<T>(Func<Task<T>> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
+    {
+        try
+        {
+            return RunWithTimeoutAsync(func, actionName ?? "unknown").GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
+        {
+            CaptureAndRethrow(ex, actionName ?? "unknown");
+            throw; // unreachable but required
+        }
+    }
 
-    private static void RunAsync(Func<Task> func) => func().GetAwaiter().GetResult();
+    private void RunAsync(Func<Task> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
+    {
+        try
+        {
+            RunWithTimeoutAsync(async () => { await func(); return 0; }, actionName ?? "unknown").GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
+        {
+            CaptureAndRethrow(ex, actionName ?? "unknown");
+            throw; // unreachable but required
+        }
+    }
+
+    private static async Task<T> RunWithTimeoutAsync<T>(Func<Task<T>> func, string actionName)
+    {
+        using var cts = new CancellationTokenSource(ActionTimeout);
+        var task = func();
+        var completed = await Task.WhenAny(task, Task.Delay(Timeout.InfiniteTimeSpan, cts.Token));
+        if (completed != task)
+        {
+            throw new TimeoutException(
+                $"Action '{actionName}' exceeded the {ActionTimeout.TotalSeconds:F0}s timeout. " +
+                "The BattleScribe UI may be unresponsive.");
+        }
+        return await task;
+    }
+
+    private void CaptureAndRethrow(Exception ex, string actionName)
+    {
+        // Best-effort diagnostic capture — don't let it mask the original exception
+        try
+        {
+            BsUiDiagnostics.CaptureAsync(_client, _specId ?? "unknown", actionName, ex)
+                .GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Ignore diagnostic capture failures
+        }
+    }
 
     private sealed class AgentRosterState
     {
