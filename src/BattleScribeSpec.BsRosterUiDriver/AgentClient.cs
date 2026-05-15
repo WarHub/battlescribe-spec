@@ -110,12 +110,17 @@ public sealed class AgentClient : IDisposable
     }
 
     /// <summary>Fires a ButtonBase control directly (more reliable than click).</summary>
-    public async Task FireButtonAsync(string selector, string? windowTitle = null)
+    public async Task FireButtonAsync(string selector, string? windowTitle = null, bool async = false)
     {
         var parameters = new JsonObject { ["selector"] = selector };
         if (windowTitle is not null)
         {
             parameters["windowTitle"] = windowTitle;
+        }
+
+        if (async)
+        {
+            parameters["async"] = "true";
         }
 
         await CallAsync("fireButton", parameters);
@@ -251,38 +256,6 @@ public sealed class AgentClient : IDisposable
         return await CallAsync("getRosterState");
     }
 
-    /// <summary>Selects an entry under the specified force.</summary>
-    public async Task<JsonNode?> SelectEntryAsync(string forceId, string entryId)
-    {
-        return await CallAsync("selectEntry", new JsonObject { ["forceId"] = forceId, ["entryId"] = entryId });
-    }
-
-    /// <summary>Removes an existing selection.</summary>
-    public async Task<JsonNode?> DeselectEntryAsync(string forceId, string selectionId)
-    {
-        return await CallAsync("deselectEntry", new JsonObject { ["forceId"] = forceId, ["selectionId"] = selectionId });
-    }
-
-    /// <summary>Sets the count for a selection via the engine API.</summary>
-    public async Task<JsonNode?> SetSelectionCountAsync(string forceId, string selectionId, int count)
-    {
-        return await CallAsync(
-            "setSelectionCount",
-            new JsonObject { ["forceId"] = forceId, ["selectionId"] = selectionId, ["count"] = count });
-    }
-
-    /// <summary>Duplicates an existing selection.</summary>
-    public async Task<JsonNode?> DuplicateSelectionAsync(string forceId, string selectionId)
-    {
-        return await CallAsync("duplicateSelection", new JsonObject { ["forceId"] = forceId, ["selectionId"] = selectionId });
-    }
-
-    /// <summary>Sets a roster cost limit by cost type ID.</summary>
-    public async Task<JsonNode?> SetCostLimitAsync(string costTypeId, double value)
-    {
-        return await CallAsync("setCostLimit", new JsonObject { ["costTypeId"] = costTypeId, ["value"] = value });
-    }
-
     /// <summary>Gets current validation errors from the engine.</summary>
     public async Task<JsonNode?> GetValidationErrorsAsync()
     {
@@ -390,7 +363,11 @@ public sealed class AgentClient : IDisposable
     public async Task<JsonNode?> PressKeyAsync(
         string key,
         string? selector = null,
-        string? windowTitle = null)
+        string? windowTitle = null,
+        bool ctrl = false,
+        bool alt = false,
+        bool shift = false,
+        bool meta = false)
     {
         var p = new JsonObject { ["key"] = key };
         if (selector is not null)
@@ -400,6 +377,22 @@ public sealed class AgentClient : IDisposable
         if (windowTitle is not null)
         {
             p["windowTitle"] = windowTitle;
+        }
+        if (ctrl)
+        {
+            p["ctrl"] = true;
+        }
+        if (alt)
+        {
+            p["alt"] = true;
+        }
+        if (shift)
+        {
+            p["shift"] = true;
+        }
+        if (meta)
+        {
+            p["meta"] = true;
         }
         return await CallAsync("pressKey", p);
     }

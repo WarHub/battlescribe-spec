@@ -1,0 +1,1498 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Xml.Linq;
+using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
+
+namespace BattleScribeSpec.BsRosterUiDriver;
+
+public sealed class BsUiRosterEngine : IRosterEngine
+{
+    private const string MainWindowTitle = "Roster Editor";
+    private const string ConfirmWindowTitle = "Confirm";
+    private const string NewRosterWindowTitle = "New Roster";
+    private const string EditRosterWindowTitle = "Edit Roster";
+    private const string AddForceWindowTitle = "Add Force";
+    private const string CountSpinnerSelector = "Spinner";
+    private const string BattleScribeVersion = "2.03";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    private readonly BsUiOptions _options;
+    private readonly Dictionary<string, ProtocolCatalogue> _cataloguesById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _forceNamesById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _entryNamesById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _costNamesById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, decimal> _pendingCostLimits = new(StringComparer.Ordinal);
+
+    private BsRosterApp? _app;
+    private AgentClient? _client;
+    private ProtocolGameSystem? _gameSystem;
+    private string? _specId;
+    private bool _engineLocated;
+    private bool _disposed;
+
+    public BsUiRosterEngine(BsUiOptions options)
+    {
+        _options = options;
+    }
+
+    public void SetTestContext(string specId) => _specId = specId;
+
+    public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
+        => RunAsync(() => SetupAsync(gameSystem, catalogues));
+
+    public ActionOutputs AddForce(string forceEntryId, string catalogueId)
+        => RunAsync(() => AddForceAsync(forceEntryId, catalogueId));
+
+    public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
+        => RunAsync(() => AddChildForceAsync(parentForceId, forceEntryId, catalogueId));
+
+    public void RemoveForce(string forceId)
+        => RunAsync(() => RemoveForceAsync(forceId));
+
+    public ActionOutputs SelectEntry(string forceId, string entryId)
+        => RunAsync(() => SelectEntryAsync(forceId, entryId));
+
+    public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
+        => RunAsync(() => SelectChildEntryAsync(forceId, parentSelectionId, entryId));
+
+    public void DeselectSelection(string forceId, string selectionId)
+        => RunAsync(() => DeselectSelectionAsync(forceId, selectionId));
+
+    public void SetSelectionCount(string forceId, string selectionId, int count)
+        => RunAsync(() => SetSelectionCountAsync(forceId, selectionId, count));
+
+    public ActionOutputs DuplicateSelection(string forceId, string selectionId)
+        => RunAsync(() => DuplicateSelectionAsync(forceId, selectionId));
+
+    public ActionOutputs DuplicateForce(string forceId)
+        => RunAsync(() => DuplicateForceAsync(forceId));
+
+    public void SetCostLimit(string costTypeId, decimal value)
+        => RunAsync(() => SetCostLimitAsync(costTypeId, value));
+
+    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
+        => RunAsync(() => SetCustomizationAsync(forceId, selectionId, categoryEntryId, customName, customNotes));
+
+    public RosterState GetRosterState()
+        => RunAsync(GetRosterStateAsync);
+
+    public IReadOnlyList<ValidationErrorState> GetValidationErrors()
+        => RunAsync(GetValidationErrorsAsync);
+
+    public void Cleanup()
+        => RunAsync(CleanupAsync);
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        RunAsync(CleanupAsync);
+        GC.SuppressFinalize(this);
+    }
+
+    private async Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
+    {
+        ThrowIfDisposed();
+        await CleanupAsync();
+
+        _gameSystem = gameSystem;
+        _engineLocated = false;
+        _pendingCostLimits.Clear();
+        _cataloguesById.Clear();
+        _forceNamesById.Clear();
+        _entryNamesById.Clear();
+        _costNamesById.Clear();
+
+        foreach (var catalogue in catalogues)
+        {
+            _cataloguesById[catalogue.Id] = catalogue;
+        }
+
+        IndexDefinitions(gameSystem, catalogues);
+
+        try
+        {
+            _app = new BsRosterApp(
+                _options.JavaPath,
+                _options.RosterEditorJarPath,
+                _options.AgentJarPath,
+                _options.IsolatedHomePath);
+
+            var files = BuildXmlFiles(gameSystem, catalogues);
+            await StageDataFilesAsync(_app.DataDirectoryPath, gameSystem, catalogues, files);
+
+            await _app.StartAsync();
+            _client = await _app.ConnectAsync();
+            _ = await _client.PingAsync();
+
+            if (!await _client.WaitForWindowAsync(MainWindowTitle, timeoutMs: 30000))
+            {
+                throw new TimeoutException("Roster Editor window did not appear within 30 seconds.");
+            }
+
+            await HandleStartupDialogsAsync();
+            return [];
+        }
+        catch (Exception ex)
+        {
+            await CleanupAsync();
+            return [ex.Message];
+        }
+    }
+
+    private async Task<ActionOutputs> AddForceAsync(string forceEntryId, string catalogueId)
+    {
+        EnsureSetup();
+        var before = await ReadRosterStateOrEmptyAsync();
+
+        if (before.Forces.Count == 0)
+        {
+            await CreateRosterAsync(forceEntryId, catalogueId);
+        }
+        else
+        {
+            await OpenEditRosterAsync();
+            await AddForceInDialogAsync(forceEntryId, catalogueId, EditRosterWindowTitle);
+            await CloseRosterDialogAsync(EditRosterWindowTitle);
+        }
+
+        var expectedForceName = FindForceEntryName(forceEntryId);
+        var after = await WaitForRosterStateAsync(state =>
+            FindAddedForce(before, state, parentForceId: null, expectedForceName, catalogueId) is not null);
+
+        var createdForce = FindAddedForce(before, after, parentForceId: null, expectedForceName, catalogueId)
+            ?? throw new InvalidOperationException($"Unable to locate force created for '{forceEntryId}'.");
+
+        return BuildForceOutputs(createdForce);
+    }
+
+    private async Task<ActionOutputs> AddChildForceAsync(string parentForceId, string forceEntryId, string catalogueId)
+    {
+        EnsureRosterLoaded();
+        var before = await ReadRosterStateAsync();
+
+        await OpenEditRosterAsync();
+        await SelectTreeItemAsync(["#treeRoster", "#treeForces"], TreeIdToken(parentForceId), EditRosterWindowTitle);
+        await AddForceInDialogAsync(forceEntryId, catalogueId, EditRosterWindowTitle);
+        await CloseRosterDialogAsync(EditRosterWindowTitle);
+
+        var expectedForceName = FindForceEntryName(forceEntryId);
+        var after = await WaitForRosterStateAsync(state =>
+            FindAddedForce(before, state, parentForceId, expectedForceName, catalogueId) is not null);
+
+        var createdForce = FindAddedForce(before, after, parentForceId, expectedForceName, catalogueId)
+            ?? throw new InvalidOperationException($"Unable to locate child force created for '{forceEntryId}'.");
+
+        return BuildForceOutputs(createdForce);
+    }
+
+    private async Task RemoveForceAsync(string forceId)
+    {
+        EnsureRosterLoaded();
+        var before = await ReadRosterStateAsync();
+
+        await OpenEditRosterAsync();
+        await SelectTreeItemAsync(["#treeRoster", "#treeForces"], TreeIdToken(forceId), EditRosterWindowTitle);
+        if (!await TryFireButtonAsync("#btnRemoveForce", EditRosterWindowTitle) &&
+            !await TryClickTextAsync("Remove Force", EditRosterWindowTitle, "Button") &&
+            !await TryClickTextAsync("Remove", EditRosterWindowTitle, "Button"))
+        {
+            await PressKeyAsync("DELETE", "#treeRoster", EditRosterWindowTitle);
+        }
+
+        await CloseRosterDialogAsync(EditRosterWindowTitle);
+        _ = await WaitForRosterStateAsync(state => FindForceById(state.Forces, forceId) is null);
+        _ = before;
+    }
+
+    private async Task<ActionOutputs> SelectEntryAsync(string forceId, string entryId)
+    {
+        EnsureRosterLoaded();
+        var before = await ReadRosterStateAsync();
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(forceId), MainWindowTitle);
+        await ClickTreeItemAsync(["#treeCatalogue"], TreeIdToken(entryId), MainWindowTitle, doubleClick: true);
+
+        return await WaitForSelectionOutputsAsync(before, forceId, parentSelectionId: null, entryId);
+    }
+
+    private async Task<ActionOutputs> SelectChildEntryAsync(string forceId, string parentSelectionId, string entryId)
+    {
+        EnsureRosterLoaded();
+        var before = await ReadRosterStateAsync();
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(parentSelectionId), MainWindowTitle);
+        await ClickTreeItemAsync(["#treeCatalogue"], TreeIdToken(entryId), MainWindowTitle, doubleClick: true);
+
+        return await WaitForSelectionOutputsAsync(before, forceId, parentSelectionId, entryId);
+    }
+
+    private async Task DeselectSelectionAsync(string forceId, string selectionId)
+    {
+        EnsureRosterLoaded();
+        _ = forceId;
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(selectionId), MainWindowTitle);
+        await PressKeyAsync("DELETE", "#treeRoster", MainWindowTitle);
+        _ = await WaitForRosterStateAsync(state => FindSelectionById(state.Forces, selectionId) is null);
+    }
+
+    private async Task SetSelectionCountAsync(string forceId, string selectionId, int count)
+    {
+        EnsureRosterLoaded();
+        _ = forceId;
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(selectionId), MainWindowTitle);
+        await _Client.SetSpinnerValueAsync(CountSpinnerSelector, value: count, windowTitle: MainWindowTitle);
+        _ = await WaitForRosterStateAsync(state => FindSelectionById(state.Forces, selectionId)?.Number == count);
+    }
+
+    private async Task<ActionOutputs> DuplicateSelectionAsync(string forceId, string selectionId)
+    {
+        EnsureRosterLoaded();
+        _ = forceId;
+        var before = await ReadRosterStateAsync();
+        var original = FindSelectionById(before.Forces, selectionId)
+            ?? throw new InvalidOperationException($"Selection '{selectionId}' not found.");
+
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(selectionId), MainWindowTitle);
+        await PressKeyAsync("D", "#treeRoster", MainWindowTitle, ctrl: true);
+
+        var after = await WaitForRosterStateAsync(state =>
+            FindDuplicatedSelection(before, state, original) is not null);
+
+        var duplicated = FindDuplicatedSelection(before, after, original)
+            ?? throw new InvalidOperationException($"Unable to locate duplicated selection for '{selectionId}'.");
+
+        return new ActionOutputs { SelectionId = duplicated.Id };
+    }
+
+    private async Task<ActionOutputs> DuplicateForceAsync(string forceId)
+    {
+        EnsureRosterLoaded();
+        var before = await ReadRosterStateAsync();
+        var original = FindForceById(before.Forces, forceId)
+            ?? throw new InvalidOperationException($"Force '{forceId}' not found.");
+
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(forceId), MainWindowTitle);
+        await PressKeyAsync("D", "#treeRoster", MainWindowTitle, ctrl: true);
+
+        var after = await WaitForRosterStateAsync(state =>
+            FindDuplicatedForce(before, state, original) is not null);
+
+        var duplicated = FindDuplicatedForce(before, after, original)
+            ?? throw new InvalidOperationException($"Unable to locate duplicated force for '{forceId}'.");
+
+        return new ActionOutputs { ForceId = duplicated.Id };
+    }
+
+    private async Task SetCostLimitAsync(string costTypeId, decimal value)
+    {
+        EnsureSetup();
+        _pendingCostLimits[costTypeId] = value;
+
+        var current = await ReadRosterStateOrEmptyAsync();
+        if (current.Forces.Count == 0)
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            "Setting cost limits after roster creation is not supported by the current BS UI driver.");
+    }
+
+    private async Task SetCustomizationAsync(
+        string forceId,
+        string? selectionId,
+        string? categoryEntryId,
+        string? customName,
+        string? customNotes)
+    {
+        EnsureRosterLoaded();
+
+        if (categoryEntryId is not null)
+        {
+            throw new NotSupportedException("Category customization is not supported by the current BS UI driver.");
+        }
+
+        var targetId = selectionId ?? forceId;
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(targetId), MainWindowTitle);
+
+        if (!await TryFireButtonAsync("#btnCustomiseName", MainWindowTitle) &&
+            !await TryClickTextAsync("Customise Name", MainWindowTitle, "Button"))
+        {
+            throw new InvalidOperationException("Could not open customization dialog.");
+        }
+
+        var windowTitle = await WaitForFirstWindowAsync(["Customise", "Customize", "Name"])
+            ?? throw new TimeoutException("Customization dialog did not appear.");
+
+        if (customName is not null)
+        {
+            await SetTextAsync(["#txtName", "#txtCustomName", "TextField"], customName, windowTitle);
+        }
+
+        if (customNotes is not null)
+        {
+            await SetTextAsync(["#txtNotes", "#txtCustomNotes", "TextArea"], customNotes, windowTitle);
+        }
+
+        if (!await TryFireButtonAsync("#btnDone", windowTitle, async: true) &&
+            !await TryClickTextAsync("Done", windowTitle, "Button") &&
+            !await TryClickTextAsync("OK", windowTitle, "Button"))
+        {
+            throw new InvalidOperationException("Could not confirm customization dialog.");
+        }
+
+        await WaitForWindowToCloseAsync(windowTitle);
+    }
+
+    private async Task<RosterState> GetRosterStateAsync()
+        => await ReadRosterStateOrEmptyAsync();
+
+    private async Task<IReadOnlyList<ValidationErrorState>> GetValidationErrorsAsync()
+    {
+        EnsureSetup();
+        if (!_engineLocated)
+        {
+            return [];
+        }
+
+        return await ReadValidationErrorsAsync();
+    }
+
+    private async Task CleanupAsync()
+    {
+        _engineLocated = false;
+
+        _client?.Dispose();
+        _client = null;
+
+        if (_app is not null)
+        {
+            await _app.DisposeAsync();
+            _app = null;
+        }
+    }
+
+    private async Task CreateRosterAsync(string forceEntryId, string catalogueId)
+    {
+        await FireButtonAsync("#btnNewRoster", MainWindowTitle, async: true);
+        await WaitForWindowAsync(NewRosterWindowTitle);
+        await ApplyPendingCostLimitsAsync(NewRosterWindowTitle);
+
+        await FireButtonAsync("#btnAddForce", NewRosterWindowTitle, async: true);
+        await WaitForWindowAsync(AddForceWindowTitle);
+        await AddForceInDialogAsync(forceEntryId, catalogueId, AddForceWindowTitle);
+
+        await FireButtonAsync("#btnDone", NewRosterWindowTitle, async: true);
+        await WaitForWindowToCloseAsync(NewRosterWindowTitle);
+        await EnsureEngineLocatedAsync();
+    }
+
+    private async Task AddForceInDialogAsync(string forceEntryId, string catalogueId, string hostWindowTitle)
+    {
+        if (!string.Equals(hostWindowTitle, AddForceWindowTitle, StringComparison.Ordinal))
+        {
+            await FireButtonAsync("#btnAddForce", hostWindowTitle, async: true);
+            await WaitForWindowAsync(AddForceWindowTitle);
+        }
+
+        var catalogueName = ResolveCatalogueName(catalogueId);
+        await SelectComboBoxItemAsync("#cboCatalogue", catalogueName, AddForceWindowTitle, fallbackToFirst: true);
+        await SelectComboBoxItemAsync("#cboForceEntry", FindForceEntryName(forceEntryId), AddForceWindowTitle);
+        await FireButtonAsync("#btnDone", AddForceWindowTitle);
+        await WaitForWindowToCloseAsync(AddForceWindowTitle);
+    }
+
+    private async Task OpenEditRosterAsync()
+    {
+        if (!await TryFireButtonAsync("#btnEditRoster", MainWindowTitle, async: true) &&
+            !await TryClickTextAsync("Edit Roster", MainWindowTitle, "Button"))
+        {
+            throw new InvalidOperationException("Could not open Edit Roster dialog.");
+        }
+
+        await WaitForWindowAsync(EditRosterWindowTitle);
+    }
+
+    private async Task CloseRosterDialogAsync(string windowTitle)
+    {
+        if (!await TryFireButtonAsync("#btnDone", windowTitle, async: true) &&
+            !await TryClickTextAsync("Done", windowTitle, "Button") &&
+            !await TryClickTextAsync("OK", windowTitle, "Button"))
+        {
+            throw new InvalidOperationException($"Could not close '{windowTitle}' dialog.");
+        }
+
+        await WaitForWindowToCloseAsync(windowTitle);
+        await EnsureEngineLocatedAsync();
+    }
+
+    private async Task<ActionOutputs> WaitForSelectionOutputsAsync(
+        RosterState before,
+        string forceId,
+        string? parentSelectionId,
+        string entryId)
+    {
+        var after = await WaitForRosterStateAsync(state =>
+            BuildSelectionOutputs(before, state, forceId, parentSelectionId, entryId) is not null);
+
+        return BuildSelectionOutputs(before, after, forceId, parentSelectionId, entryId)
+            ?? throw new InvalidOperationException($"Unable to locate selection created for '{entryId}'.");
+    }
+
+    private static ActionOutputs? BuildSelectionOutputs(
+        RosterState before,
+        RosterState after,
+        string forceId,
+        string? parentSelectionId,
+        string entryId)
+    {
+        var beforeForce = FindForceById(before.Forces, forceId);
+        var afterForce = FindForceById(after.Forces, forceId);
+        if (afterForce is null)
+        {
+            return null;
+        }
+
+        var beforeParentSelections = GetParentSelections(beforeForce, parentSelectionId);
+        var afterParentSelections = GetParentSelections(afterForce, parentSelectionId);
+        if (afterParentSelections is null)
+        {
+            return null;
+        }
+
+        var created = FindCreatedSelection(beforeParentSelections, afterParentSelections, entryId);
+        if (created is null)
+        {
+            return null;
+        }
+
+        var outputs = new ActionOutputs
+        {
+            SelectionId = created.Id,
+        };
+
+        var beforeSelf = created.Id is null || beforeParentSelections is null
+            ? null
+            : beforeParentSelections.FirstOrDefault(x => string.Equals(x.Id, created.Id, StringComparison.Ordinal));
+        var selectionMap = CollectNewChildSelectionIds(beforeSelf, created);
+        if (selectionMap.Count > 0)
+        {
+            outputs.Selections = selectionMap;
+        }
+
+        return outputs;
+    }
+
+    private static IReadOnlyList<SelectionState>? GetParentSelections(ForceState? force, string? parentSelectionId)
+    {
+        if (force is null)
+        {
+            return null;
+        }
+
+        if (parentSelectionId is null)
+        {
+            return force.Selections;
+        }
+
+        return FindSelectionById(force, parentSelectionId)?.Children;
+    }
+
+    private static SelectionState? FindCreatedSelection(
+        IReadOnlyList<SelectionState>? beforeSelections,
+        IReadOnlyList<SelectionState> afterSelections,
+        string entryId)
+    {
+        var beforeById = beforeSelections?
+            .Where(s => s.Id is not null)
+            .ToDictionary(s => s.Id!, s => s, StringComparer.Ordinal)
+            ?? new Dictionary<string, SelectionState>(StringComparer.Ordinal);
+
+        var newById = afterSelections
+            .Where(s => s.Id is not null && !beforeById.ContainsKey(s.Id!))
+            .Where(s => string.Equals(s.EntryId, entryId, StringComparison.Ordinal))
+            .ToList();
+        if (newById.Count > 0)
+        {
+            return newById[0];
+        }
+
+        return afterSelections.FirstOrDefault(s =>
+            string.Equals(s.EntryId, entryId, StringComparison.Ordinal) &&
+            s.Id is not null &&
+            beforeById.TryGetValue(s.Id, out var previous) &&
+            s.Number != previous.Number);
+    }
+
+    private static Dictionary<string, string> CollectNewChildSelectionIds(SelectionState? before, SelectionState after)
+    {
+        var beforeIds = new HashSet<string>(EnumerateSelections(before).Select(s => s.Id).OfType<string>(), StringComparer.Ordinal);
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var child in EnumerateSelections(after))
+        {
+            if (child.Id is null || beforeIds.Contains(child.Id) || child.EntryId is null)
+            {
+                continue;
+            }
+
+            result.TryAdd(child.EntryId, child.Id);
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<SelectionState> EnumerateSelections(SelectionState? selection)
+    {
+        if (selection is null)
+        {
+            yield break;
+        }
+
+        yield return selection;
+        foreach (var child in selection.Children)
+        {
+            foreach (var nested in EnumerateSelections(child))
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    private static ForceState? FindAddedForce(
+        RosterState before,
+        RosterState after,
+        string? parentForceId,
+        string expectedForceName,
+        string catalogueId)
+    {
+        var beforeForces = parentForceId is null
+            ? before.Forces
+            : FindForceById(before.Forces, parentForceId)?.ChildForces;
+        var afterForces = parentForceId is null
+            ? after.Forces
+            : FindForceById(after.Forces, parentForceId)?.ChildForces;
+
+        if (afterForces is null)
+        {
+            return null;
+        }
+
+        var beforeIds = new HashSet<string>(FlattenForces(beforeForces).Select(f => f.Id).OfType<string>(), StringComparer.Ordinal);
+        var newForces = FlattenForces(afterForces)
+            .Where(f => f.Id is not null && !beforeIds.Contains(f.Id!))
+            .ToList();
+
+        return newForces.FirstOrDefault(f =>
+                   string.Equals(f.CatalogueId, catalogueId, StringComparison.Ordinal) &&
+                   string.Equals(f.Name, expectedForceName, StringComparison.Ordinal))
+               ?? newForces.FirstOrDefault(f => string.Equals(f.CatalogueId, catalogueId, StringComparison.Ordinal))
+               ?? newForces.FirstOrDefault();
+    }
+
+    private static ForceState? FindDuplicatedForce(RosterState before, RosterState after, ForceState original)
+    {
+        var beforeIds = new HashSet<string>(FlattenForces(before.Forces).Select(f => f.Id).OfType<string>(), StringComparer.Ordinal);
+        return FlattenForces(after.Forces)
+            .Where(f => f.Id is not null && !beforeIds.Contains(f.Id!))
+            .FirstOrDefault(f =>
+                string.Equals(f.Name, original.Name, StringComparison.Ordinal) &&
+                string.Equals(f.CatalogueId, original.CatalogueId, StringComparison.Ordinal));
+    }
+
+    private static SelectionState? FindDuplicatedSelection(RosterState before, RosterState after, SelectionState original)
+    {
+        var beforeIds = new HashSet<string>(FlattenSelections(before.Forces).Select(s => s.Id).OfType<string>(), StringComparer.Ordinal);
+        return FlattenSelections(after.Forces)
+            .Where(s => s.Id is not null && !beforeIds.Contains(s.Id!))
+            .FirstOrDefault(s =>
+                string.Equals(s.EntryId, original.EntryId, StringComparison.Ordinal) &&
+                string.Equals(s.Name, original.Name, StringComparison.Ordinal));
+    }
+
+    private static IEnumerable<ForceState> FlattenForces(IEnumerable<ForceState>? forces)
+    {
+        if (forces is null)
+        {
+            yield break;
+        }
+
+        foreach (var force in forces)
+        {
+            yield return force;
+            if (force.ChildForces is null)
+            {
+                continue;
+            }
+
+            foreach (var child in FlattenForces(force.ChildForces))
+            {
+                yield return child;
+            }
+        }
+    }
+
+    private static IEnumerable<SelectionState> FlattenSelections(IEnumerable<ForceState> forces)
+    {
+        foreach (var force in forces)
+        {
+            foreach (var selection in FlattenSelections(force.Selections))
+            {
+                yield return selection;
+            }
+
+            if (force.ChildForces is null)
+            {
+                continue;
+            }
+
+            foreach (var selection in FlattenSelections(force.ChildForces))
+            {
+                yield return selection;
+            }
+        }
+    }
+
+    private static IEnumerable<SelectionState> FlattenSelections(IEnumerable<SelectionState> selections)
+    {
+        foreach (var selection in selections)
+        {
+            yield return selection;
+            foreach (var child in FlattenSelections(selection.Children))
+            {
+                yield return child;
+            }
+        }
+    }
+
+    private static ActionOutputs BuildForceOutputs(ForceState force)
+    {
+        var outputs = new ActionOutputs { ForceId = force.Id };
+        var selections = new Dictionary<string, string>(StringComparer.Ordinal);
+        CollectForceSelectionIds(force, selections);
+        if (selections.Count > 0)
+        {
+            outputs.Selections = selections;
+        }
+
+        return outputs;
+    }
+
+    private static void CollectForceSelectionIds(ForceState force, Dictionary<string, string> selections)
+    {
+        foreach (var selection in force.Selections)
+        {
+            CollectSelectionIds(selection, selections);
+        }
+
+        if (force.ChildForces is null)
+        {
+            return;
+        }
+
+        foreach (var childForce in force.ChildForces)
+        {
+            CollectForceSelectionIds(childForce, selections);
+        }
+    }
+
+    private static void CollectSelectionIds(SelectionState selection, Dictionary<string, string> selections)
+    {
+        if (selection.Id is not null && selection.EntryId is not null)
+        {
+            selections.TryAdd(selection.EntryId, selection.Id);
+        }
+
+        foreach (var child in selection.Children)
+        {
+            CollectSelectionIds(child, selections);
+        }
+    }
+
+    private async Task<RosterState> WaitForRosterStateAsync(Func<RosterState, bool> predicate, int timeoutMs = 10000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        Exception? lastError = null;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                var state = await ReadRosterStateAsync();
+                if (predicate(state))
+                {
+                    return state;
+                }
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException(lastError?.Message ?? "Timed out waiting for roster mutation.");
+    }
+
+    private async Task<RosterState> ReadRosterStateAsync()
+    {
+        EnsureRosterLoaded();
+        var result = await _Client.GetRosterStateAsync();
+        var json = ExtractJson(result);
+        if (TryExtractError(result, out var error))
+        {
+            throw new InvalidOperationException(error);
+        }
+
+        var dto = JsonSerializer.Deserialize<AgentRosterState>(json, JsonOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize roster state from agent.");
+
+        var validationErrors = await ReadValidationErrorsAsync();
+        return MapRosterState(dto, validationErrors);
+    }
+
+    private async Task<RosterState> ReadRosterStateOrEmptyAsync()
+    {
+        if (_client is null || _gameSystem is null)
+        {
+            return EmptyRosterState();
+        }
+
+        try
+        {
+            if (!_engineLocated)
+            {
+                return EmptyRosterState();
+            }
+
+            return await ReadRosterStateAsync();
+        }
+        catch
+        {
+            return EmptyRosterState();
+        }
+    }
+
+    private async Task<IReadOnlyList<ValidationErrorState>> ReadValidationErrorsAsync()
+    {
+        var result = await _Client.GetValidationErrorsAsync();
+        if (TryExtractError(result, out var error))
+        {
+            throw new InvalidOperationException(error);
+        }
+
+        var json = ExtractJson(result);
+        return JsonSerializer.Deserialize<List<ValidationErrorState>>(json, JsonOptions) ?? [];
+    }
+
+    private RosterState EmptyRosterState()
+    {
+        if (_gameSystem is null)
+        {
+            return new RosterState("", "", [], [], []);
+        }
+
+        var rosterName = string.IsNullOrWhiteSpace(_specId) ? "Spec Test" : _specId;
+        var costLimits = _pendingCostLimits.Count == 0
+            ? null
+            : _pendingCostLimits.Select(x => new CostState(_costNamesById.GetValueOrDefault(x.Key, x.Key), x.Key, x.Value)).ToList();
+
+        return new RosterState(
+            rosterName,
+            _gameSystem.Id,
+            [],
+            [],
+            [],
+            CostLimits: costLimits,
+            GameSystemName: _gameSystem.Name);
+    }
+
+    private async Task EnsureEngineLocatedAsync()
+    {
+        if (_engineLocated)
+        {
+            return;
+        }
+
+        var result = await _Client.FindEngineAsync();
+        if (TryExtractError(result, out var error))
+        {
+            throw new InvalidOperationException(error);
+        }
+
+        var found = result?["found"]?.GetValue<bool>() == true;
+        if (!found)
+        {
+            throw new InvalidOperationException(result?["error"]?.GetValue<string>() ?? "BattleScribe engine instance not found.");
+        }
+
+        _engineLocated = true;
+    }
+
+    private async Task HandleStartupDialogsAsync()
+    {
+        await Task.Delay(1500);
+        if (await HasWindowAsync(ConfirmWindowTitle) && await TryFireButtonAsync("#btnNegative", ConfirmWindowTitle))
+        {
+            await WaitForWindowToCloseAsync(ConfirmWindowTitle);
+        }
+    }
+
+    private async Task ApplyPendingCostLimitsAsync(string windowTitle)
+    {
+        if (_pendingCostLimits.Count == 0)
+        {
+            return;
+        }
+
+        if (_pendingCostLimits.Count > 1)
+        {
+            throw new NotSupportedException(
+                "Multiple cost limits are not supported by the current BS UI driver setup flow.");
+        }
+
+        var limit = _pendingCostLimits.Single();
+        _ = limit;
+        await _Client.SetSpinnerValueAsync(CountSpinnerSelector, value: DecimalToSpinnerValue(limit.Value), windowTitle: windowTitle);
+    }
+
+    private static async Task StageDataFilesAsync(
+        string dataDirectoryPath,
+        ProtocolGameSystem gameSystem,
+        IReadOnlyList<ProtocolCatalogue> catalogues,
+        IReadOnlyList<(string FileName, string Content)> files)
+    {
+        Directory.CreateDirectory(dataDirectoryPath);
+        var gameSystemDirectory = Path.Combine(dataDirectoryPath, gameSystem.Id);
+        if (Directory.Exists(gameSystemDirectory))
+        {
+            Directory.Delete(gameSystemDirectory, recursive: true);
+        }
+
+        Directory.CreateDirectory(gameSystemDirectory);
+
+        foreach (var (fileName, content) in files)
+        {
+            var filePath = Path.Combine(gameSystemDirectory, fileName);
+            await File.WriteAllTextAsync(filePath, content);
+        }
+
+        var indexPath = Path.Combine(gameSystemDirectory, "index.bsi");
+        await File.WriteAllTextAsync(indexPath, BuildIndexXml(gameSystem, catalogues, files));
+    }
+
+    private static string BuildIndexXml(
+        ProtocolGameSystem gameSystem,
+        IReadOnlyList<ProtocolCatalogue> catalogues,
+        IReadOnlyList<(string FileName, string Content)> files)
+    {
+        var catalogueFiles = files.Where(x => x.FileName.EndsWith(".cat", StringComparison.Ordinal)).ToList();
+        XNamespace ns = "http://www.battlescribe.net/schema/dataIndexSchema";
+        var entries = new List<XElement>
+        {
+            new(
+                ns + "dataIndexEntry",
+                new XAttribute("filePath", "system.gst"),
+                new XAttribute("dataType", "gamesystem"),
+                new XAttribute("dataId", gameSystem.Id),
+                new XAttribute("dataName", gameSystem.Name),
+                new XAttribute("dataBattleScribeVersion", BattleScribeVersion),
+                new XAttribute("dataRevision", 1)),
+        };
+
+        for (var i = 0; i < catalogues.Count; i++)
+        {
+            var fileName = i < catalogueFiles.Count ? catalogueFiles[i].FileName : $"catalogue{i}.cat";
+            entries.Add(
+                new XElement(
+                    ns + "dataIndexEntry",
+                    new XAttribute("filePath", fileName),
+                    new XAttribute("dataType", "catalogue"),
+                    new XAttribute("dataId", catalogues[i].Id),
+                    new XAttribute("dataName", catalogues[i].Name),
+                    new XAttribute("dataBattleScribeVersion", BattleScribeVersion),
+                    new XAttribute("dataRevision", 1)));
+        }
+
+        var root = new XElement(
+            ns + "dataIndex",
+            new XAttribute("battleScribeVersion", BattleScribeVersion),
+            new XAttribute("name", gameSystem.Name),
+            new XElement(ns + "dataIndexEntries", entries));
+
+        return new XDocument(new XDeclaration("1.0", "utf-8", "yes"), root).ToString();
+    }
+
+    private static IReadOnlyList<(string FileName, string Content)> BuildXmlFiles(
+        ProtocolGameSystem gameSystem,
+        ProtocolCatalogue[] catalogues)
+    {
+        var files = new List<(string FileName, string Content)>
+        {
+            ("system.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem)),
+        };
+
+        foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues))
+        {
+            files.Add((fileName, xml));
+        }
+
+        return files;
+    }
+
+    private void IndexDefinitions(ProtocolGameSystem gameSystem, IEnumerable<ProtocolCatalogue> catalogues)
+    {
+        if (gameSystem.CostTypes is not null)
+        {
+            foreach (var costType in gameSystem.CostTypes)
+            {
+                _costNamesById[costType.Id] = costType.Name;
+            }
+        }
+
+        IndexForceEntries(gameSystem.ForceEntries);
+        IndexSelectionContainer(gameSystem.SelectionEntries, gameSystem.EntryLinks, gameSystem.SharedSelectionEntries, gameSystem.SharedSelectionEntryGroups);
+
+        foreach (var catalogue in catalogues)
+        {
+            IndexForceEntries(catalogue.ForceEntries);
+            IndexSelectionContainer(catalogue.SelectionEntries, catalogue.EntryLinks, catalogue.SharedSelectionEntries, catalogue.SharedSelectionEntryGroups);
+            if (catalogue.CostTypes is null)
+            {
+                continue;
+            }
+
+            foreach (var costType in catalogue.CostTypes)
+            {
+                _costNamesById[costType.Id] = costType.Name;
+            }
+        }
+    }
+
+    private void IndexForceEntries(IEnumerable<ProtocolForceEntry>? forceEntries)
+    {
+        if (forceEntries is null)
+        {
+            return;
+        }
+
+        foreach (var forceEntry in forceEntries)
+        {
+            _forceNamesById[forceEntry.Id] = forceEntry.Name;
+            IndexForceEntries(forceEntry.ForceEntries);
+        }
+    }
+
+    private void IndexSelectionContainer(
+        IEnumerable<ProtocolSelectionEntry>? selectionEntries,
+        IEnumerable<ProtocolEntryLink>? entryLinks,
+        IEnumerable<ProtocolSelectionEntry>? sharedSelectionEntries,
+        IEnumerable<ProtocolSelectionEntryGroup>? sharedSelectionEntryGroups)
+    {
+        IndexSelectionEntries(selectionEntries);
+        IndexEntryLinks(entryLinks);
+        IndexSelectionEntries(sharedSelectionEntries);
+        IndexSelectionEntryGroups(sharedSelectionEntryGroups);
+    }
+
+    private void IndexSelectionEntries(IEnumerable<ProtocolSelectionEntry>? selectionEntries)
+    {
+        if (selectionEntries is null)
+        {
+            return;
+        }
+
+        foreach (var selectionEntry in selectionEntries)
+        {
+            _entryNamesById[selectionEntry.Id] = selectionEntry.Name;
+            IndexSelectionEntries(selectionEntry.SelectionEntries);
+            IndexEntryLinks(selectionEntry.EntryLinks);
+            IndexSelectionEntryGroups(selectionEntry.SelectionEntryGroups);
+        }
+    }
+
+    private void IndexSelectionEntryGroups(IEnumerable<ProtocolSelectionEntryGroup>? groups)
+    {
+        if (groups is null)
+        {
+            return;
+        }
+
+        foreach (var group in groups)
+        {
+            _entryNamesById[group.Id] = group.Name;
+            IndexSelectionEntries(group.SelectionEntries);
+            IndexEntryLinks(group.EntryLinks);
+            IndexSelectionEntryGroups(group.SelectionEntryGroups);
+        }
+    }
+
+    private void IndexEntryLinks(IEnumerable<ProtocolEntryLink>? entryLinks)
+    {
+        if (entryLinks is null)
+        {
+            return;
+        }
+
+        foreach (var entryLink in entryLinks)
+        {
+            _entryNamesById[entryLink.Id] = entryLink.Name;
+        }
+    }
+
+    private string FindForceEntryName(string forceEntryId)
+        => _forceNamesById.TryGetValue(forceEntryId, out var name)
+            ? name
+            : throw new InvalidOperationException($"Force entry '{forceEntryId}' not found in setup data.");
+
+    private string ResolveCatalogueName(string catalogueId)
+        => _cataloguesById.TryGetValue(catalogueId, out var catalogue)
+            ? catalogue.Name
+            : throw new InvalidOperationException($"Catalogue '{catalogueId}' not found in setup data.");
+
+    private async Task SelectComboBoxItemAsync(
+        string selector,
+        string desiredText,
+        string windowTitle,
+        bool fallbackToFirst = false)
+    {
+        var items = await _Client.GetComboBoxItemsAsync(selector, windowTitle) as JsonObject
+            ?? throw new InvalidOperationException($"ComboBox '{selector}' not found in '{windowTitle}'.");
+
+        var available = items["items"] as JsonArray ?? [];
+        var best = available
+            .Select(x => new
+            {
+                Text = x?["text"]?.GetValue<string>(),
+                Index = x?["index"]?.GetValue<int>() ?? -1,
+            })
+            .FirstOrDefault(x => string.Equals(x.Text, desiredText, StringComparison.Ordinal))
+            ?? available
+                .Select(x => new
+                {
+                    Text = x?["text"]?.GetValue<string>(),
+                    Index = x?["index"]?.GetValue<int>() ?? -1,
+                })
+                .FirstOrDefault(x => x.Text?.Contains(desiredText, StringComparison.Ordinal) == true)
+            ?? (fallbackToFirst && available.Count > 0
+                ? new { Text = available[0]?["text"]?.GetValue<string>(), Index = available[0]?["index"]?.GetValue<int>() ?? 0 }
+                : null);
+
+        if (best is null || best.Index < 0)
+        {
+            throw new InvalidOperationException(
+                $"Item '{desiredText}' not found in combo '{selector}' ({string.Join(", ", available.Select(x => x?["text"]?.GetValue<string>()))}).");
+        }
+
+        _ = await _Client.SelectComboBoxItemAsync(selector, index: best.Index, windowTitle: windowTitle);
+    }
+
+    private async Task SelectTreeItemAsync(IEnumerable<string> selectors, string text, string windowTitle)
+    {
+        foreach (var selector in selectors)
+        {
+            try
+            {
+                _ = await _Client.SelectTreeItemAsync(selector, text, windowTitle);
+                return;
+            }
+            catch
+            {
+                // try next selector
+            }
+        }
+
+        throw new InvalidOperationException($"Tree item '{text}' not found in '{windowTitle}'.");
+    }
+
+    private async Task ClickTreeItemAsync(IEnumerable<string> selectors, string text, string windowTitle, bool doubleClick)
+    {
+        foreach (var selector in selectors)
+        {
+            try
+            {
+                _ = await _Client.ClickTreeItemAsync(selector, text, doubleClick, windowTitle);
+                return;
+            }
+            catch
+            {
+                // try next selector
+            }
+        }
+
+        throw new InvalidOperationException($"Tree item '{text}' not found in '{windowTitle}'.");
+    }
+
+    private async Task SetTextAsync(IEnumerable<string> selectors, string text, string windowTitle)
+    {
+        foreach (var selector in selectors)
+        {
+            try
+            {
+                await _Client.SetNodeTextAsync(selector, text, windowTitle);
+                return;
+            }
+            catch
+            {
+                // try next selector
+            }
+        }
+
+        throw new InvalidOperationException($"No editable text field found in '{windowTitle}'.");
+    }
+
+    private async Task FireButtonAsync(string selector, string windowTitle, bool async = false)
+    {
+        if (!await TryFireButtonAsync(selector, windowTitle, async))
+        {
+            throw new InvalidOperationException($"Button '{selector}' not found in '{windowTitle}'.");
+        }
+    }
+
+    private async Task<bool> TryFireButtonAsync(string selector, string windowTitle, bool async = false)
+    {
+        var node = await _Client.FindNodeAsync(selector, windowTitle);
+        if (node is null)
+        {
+            return false;
+        }
+
+        var parameters = new JsonObject
+        {
+            ["selector"] = selector,
+            ["windowTitle"] = windowTitle,
+        };
+
+        if (async)
+        {
+            parameters["async"] = "true";
+        }
+
+        _ = await _Client.CallAsync("fireButton", parameters);
+        return true;
+    }
+
+    private async Task<bool> TryClickTextAsync(string text, string windowTitle, string? nodeType = null)
+    {
+        var parameters = new JsonObject
+        {
+            ["text"] = text,
+            ["windowTitle"] = windowTitle,
+        };
+
+        if (nodeType is not null)
+        {
+            parameters["nodeType"] = nodeType;
+        }
+
+        var found = await _Client.CallAsync("findNodeByText", parameters);
+        if (found is null)
+        {
+            return false;
+        }
+
+        _ = await _Client.CallAsync("clickNode", new JsonObject
+        {
+            ["text"] = text,
+            ["windowTitle"] = windowTitle,
+        });
+        return true;
+    }
+
+    private async Task PressKeyAsync(string key, string selector, string windowTitle, bool ctrl = false)
+    {
+        var parameters = new JsonObject
+        {
+            ["key"] = key,
+            ["selector"] = selector,
+            ["windowTitle"] = windowTitle,
+        };
+
+        if (ctrl)
+        {
+            parameters["ctrl"] = true;
+        }
+
+        _ = await _Client.CallAsync("pressKey", parameters);
+    }
+
+    private async Task WaitForWindowAsync(string title)
+    {
+        if (!await _Client.WaitForWindowAsync(title, timeoutMs: 30000))
+        {
+            throw new TimeoutException($"Window '{title}' did not appear.");
+        }
+    }
+
+    private async Task<string?> WaitForFirstWindowAsync(IEnumerable<string> titleFragments, int timeoutMs = 10000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            var windows = await _Client.GetWindowsAsync() as JsonArray;
+            if (windows is not null)
+            {
+                foreach (var title in windows.Select(w => w?["title"]?.GetValue<string>()))
+                {
+                    if (title is null)
+                    {
+                        continue;
+                    }
+
+                    if (titleFragments.Any(fragment => title.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return title;
+                    }
+                }
+            }
+
+            await Task.Delay(200);
+        }
+
+        return null;
+    }
+
+    private async Task WaitForWindowToCloseAsync(string title, int timeoutMs = 10000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!await HasWindowAsync(title))
+            {
+                return;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException($"Window '{title}' did not close.");
+    }
+
+    private async Task<bool> HasWindowAsync(string title)
+    {
+        if (await _Client.GetWindowsAsync() is not JsonArray windows)
+        {
+            return false;
+        }
+
+        return windows.Any(w => w?["title"]?.GetValue<string>()?.Contains(title, StringComparison.Ordinal) == true);
+    }
+
+    private static RosterState MapRosterState(AgentRosterState dto, IReadOnlyList<ValidationErrorState> validationErrors)
+        => new(
+            dto.Name ?? string.Empty,
+            dto.GameSystemId ?? string.Empty,
+            [.. (dto.Forces ?? []).Select(MapForceState)],
+            [.. (dto.Costs ?? []).Select(MapCostState)],
+            validationErrors,
+            CostLimits: dto.CostLimits is null ? null : [.. dto.CostLimits.Select(MapCostState)],
+            GameSystemName: dto.GameSystemName);
+
+    private static ForceState MapForceState(AgentForceState dto)
+        => new(
+            dto.Id,
+            dto.Name ?? string.Empty,
+            dto.CatalogueId,
+            [.. (dto.Selections ?? []).Select(MapSelectionState)],
+            ChildForces: dto.ChildForces is null ? null : [.. dto.ChildForces.Select(MapForceState)]);
+
+    private static SelectionState MapSelectionState(AgentSelectionState dto)
+        => new(
+            dto.Id,
+            dto.Name ?? string.Empty,
+            dto.EntryId,
+            Type: null,
+            dto.Number,
+            dto.Hidden,
+            [.. (dto.Costs ?? []).Select(MapCostState)],
+            [.. (dto.Children ?? []).Select(MapSelectionState)]);
+
+    private static CostState MapCostState(AgentCostState dto)
+        => new(dto.Name ?? string.Empty, dto.TypeId ?? string.Empty, dto.Value);
+
+    private static string ExtractJson(JsonNode? result)
+        => result switch
+        {
+            JsonValue value when value.TryGetValue<string>(out var text) => text,
+            null => "null",
+            _ => result.ToJsonString(),
+        };
+
+    private static bool TryExtractError(JsonNode? result, out string error)
+    {
+        error = string.Empty;
+        if (result is JsonObject obj && obj["error"] is JsonValue errorNode)
+        {
+            error = errorNode.GetValue<string>();
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string TreeIdToken(string id) => $":{id}:";
+
+    private static int DecimalToSpinnerValue(decimal value)
+    {
+        if (decimal.Truncate(value) != value)
+        {
+            throw new NotSupportedException("Spinner-based cost limit editing only supports integer values.");
+        }
+
+        return decimal.ToInt32(value);
+    }
+
+    private static ForceState? FindForceById(IEnumerable<ForceState> forces, string forceId)
+    {
+        foreach (var force in forces)
+        {
+            if (string.Equals(force.Id, forceId, StringComparison.Ordinal))
+            {
+                return force;
+            }
+
+            if (force.ChildForces is null)
+            {
+                continue;
+            }
+
+            var child = FindForceById(force.ChildForces, forceId);
+            if (child is not null)
+            {
+                return child;
+            }
+        }
+
+        return null;
+    }
+
+    private static SelectionState? FindSelectionById(IEnumerable<ForceState> forces, string selectionId)
+    {
+        foreach (var force in forces)
+        {
+            var selection = FindSelectionById(force, selectionId);
+            if (selection is not null)
+            {
+                return selection;
+            }
+        }
+
+        return null;
+    }
+
+    private static SelectionState? FindSelectionById(ForceState force, string selectionId)
+    {
+        foreach (var selection in force.Selections)
+        {
+            var found = FindSelectionById(selection, selectionId);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        if (force.ChildForces is null)
+        {
+            return null;
+        }
+
+        return FindSelectionById(force.ChildForces, selectionId);
+    }
+
+    private static SelectionState? FindSelectionById(SelectionState selection, string selectionId)
+    {
+        if (string.Equals(selection.Id, selectionId, StringComparison.Ordinal))
+        {
+            return selection;
+        }
+
+        foreach (var child in selection.Children)
+        {
+            var found = FindSelectionById(child, selectionId);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private void EnsureSetup()
+    {
+        ThrowIfDisposed();
+        if (_gameSystem is null || _client is null)
+        {
+            throw new InvalidOperationException("Engine has not been set up.");
+        }
+    }
+
+    private void EnsureRosterLoaded()
+    {
+        EnsureSetup();
+        if (!_engineLocated)
+        {
+            throw new InvalidOperationException("Roster has not been created yet.");
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
+    private AgentClient _Client => _client ?? throw new InvalidOperationException("Agent client is not connected.");
+
+    private static T RunAsync<T>(Func<Task<T>> func) => func().GetAwaiter().GetResult();
+
+    private static void RunAsync(Func<Task> func) => func().GetAwaiter().GetResult();
+
+    private sealed class AgentRosterState
+    {
+        public string? Name { get; set; }
+        public string? GameSystemId { get; set; }
+        public string? GameSystemName { get; set; }
+        public List<AgentCostState>? Costs { get; set; }
+        public List<AgentCostState>? CostLimits { get; set; }
+        public List<AgentForceState>? Forces { get; set; }
+    }
+
+    private sealed class AgentForceState
+    {
+        public string? Id { get; set; }
+        public string? Name { get; set; }
+        public string? CatalogueId { get; set; }
+        public List<AgentSelectionState>? Selections { get; set; }
+        public List<AgentForceState>? ChildForces { get; set; }
+    }
+
+    private sealed class AgentSelectionState
+    {
+        public string? Id { get; set; }
+        public string? Name { get; set; }
+        public string? EntryId { get; set; }
+        public int Number { get; set; }
+        public bool Hidden { get; set; }
+        public List<AgentCostState>? Costs { get; set; }
+        public List<AgentSelectionState>? Children { get; set; }
+    }
+
+    private sealed class AgentCostState
+    {
+        public string? Name { get; set; }
+        public string? TypeId { get; set; }
+        public decimal Value { get; set; }
+    }
+}

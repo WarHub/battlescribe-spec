@@ -606,6 +606,10 @@ public class SceneGraphCommands {
         String keyName = extractStr(params, "key");
         String selector = extractStr(params, "selector");
         String windowTitle = extractStr(params, "windowTitle");
+        boolean ctrl = extractBool(params, "ctrl");
+        boolean alt = extractBool(params, "alt");
+        boolean shift = extractBool(params, "shift");
+        boolean meta = extractBool(params, "meta");
 
         KeyCode keyCode;
         try {
@@ -633,10 +637,10 @@ public class SceneGraphCommands {
 
         target.fireEvent(new KeyEvent(
                 KeyEvent.KEY_PRESSED, "", "", keyCode,
-                false, false, false, false));
+                shift, ctrl, alt, meta));
         target.fireEvent(new KeyEvent(
                 KeyEvent.KEY_RELEASED, "", "", keyCode,
-                false, false, false, false));
+                shift, ctrl, alt, meta));
 
         return "{\"pressed\":true,\"key\":\"" + keyCode.getName() + "\"}";
     }
@@ -907,6 +911,22 @@ public class SceneGraphCommands {
         return defaultValue;
     }
 
+    private static boolean extractBool(String json, String key) {
+        String pattern = "\"" + key + "\"";
+        int idx = json.indexOf(pattern);
+        if (idx < 0) {
+            return false;
+        }
+        int colon = json.indexOf(':', idx + pattern.length());
+        if (colon < 0) {
+            return false;
+        }
+        int start = colon + 1;
+        while (start < json.length() && json.charAt(start) == ' ') {
+            start++;
+        }
+        return json.startsWith("true", start) || json.startsWith("\"true\"", start);
+    }
 
     private static String extractNumberToken(String json, String key) {
         String pattern = "\"" + key + "\"";
