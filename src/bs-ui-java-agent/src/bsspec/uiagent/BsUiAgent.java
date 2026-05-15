@@ -23,7 +23,8 @@ public class BsUiAgent {
         }
 
         try {
-            JsonRpcServer server = new JsonRpcServer(requestedPort);
+            EngineAccessor engineAccessor = new EngineAccessor(inst);
+            JsonRpcServer server = new JsonRpcServer(requestedPort, engineAccessor);
             int actualPort = server.getPort();
             System.out.println("BSUI_AGENT_PORT=" + actualPort);
             System.out.flush();

@@ -21,6 +21,12 @@ import java.util.List;
  */
 public class SceneGraphCommands {
 
+    private final EngineAccessor engineAccessor;
+
+    public SceneGraphCommands(EngineAccessor engineAccessor) {
+        this.engineAccessor = engineAccessor;
+    }
+
     public String dispatch(String method, String params) {
         switch (method) {
             case "ping":
@@ -47,6 +53,19 @@ public class SceneGraphCommands {
                 return findNodeByText(params);
             case "setNodeText":
                 return setNodeText(params);
+            // Engine access commands
+            case "listBsClasses":
+                return engineAccessor.listBsClasses();
+            case "inspectClass":
+                return engineAccessor.inspectClass(extractStr(params, "className"));
+            case "findEngine":
+                return engineAccessor.findEngine();
+            case "getRosterState":
+                return engineAccessor.getRosterState();
+            case "readStaticFields":
+                return engineAccessor.readStaticFields(extractStr(params, "className"));
+            case "dumpNodeProperties":
+                return dumpNodeProperties(params);
             default:
                 throw new IllegalArgumentException("Unknown method: " + method);
         }
@@ -276,6 +295,45 @@ public class SceneGraphCommands {
         }
         ((TextInputControl) node).setText(text != null ? text : "");
         return "{\"set\":true}";
+    }
+
+    private String dumpNodeProperties(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "window");
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            // If no selector, dump root node properties
+            Scene scene = findScene(windowTitle);
+            if (scene == null) return "{\"error\":\"no scene\"}";
+            node = scene.getRoot();
+        }
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"nodeType\":\"").append(node.getClass().getName()).append("\"");
+        sb.append(",\"id\":").append(jsonString(node.getId()));
+        // Node properties map
+        sb.append(",\"properties\":{");
+        boolean first = true;
+        for (Object key : node.getProperties().keySet()) {
+            if (!first) sb.append(",");
+            first = false;
+            Object val = node.getProperties().get(key);
+            sb.append(jsonString(String.valueOf(key))).append(":");
+            if (val == null) {
+                sb.append("null");
+            } else {
+                sb.append("{\"type\":\"").append(val.getClass().getName()).append("\"");
+                sb.append(",\"toString\":").append(jsonString(val.toString())).append("}");
+            }
+        }
+        sb.append("}");
+        // userData
+        Object ud = node.getUserData();
+        if (ud != null) {
+            sb.append(",\"userData\":{\"type\":\"").append(ud.getClass().getName()).append("\"");
+            sb.append(",\"toString\":").append(jsonString(ud.toString())).append("}");
+        }
+        sb.append("}");
+        return sb.toString();
     }
 
     // --- Helpers ---

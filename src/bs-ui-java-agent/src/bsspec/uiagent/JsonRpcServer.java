@@ -19,10 +19,11 @@ import javafx.application.Platform;
 public class JsonRpcServer {
 
     private final ServerSocket serverSocket;
-    private final SceneGraphCommands commands = new SceneGraphCommands();
+    private final SceneGraphCommands commands;
 
-    public JsonRpcServer(int port) throws IOException {
+    public JsonRpcServer(int port, EngineAccessor engineAccessor) throws IOException {
         this.serverSocket = new ServerSocket(port, 1, java.net.InetAddress.getLoopbackAddress());
+        this.commands = new SceneGraphCommands(engineAccessor);
     }
 
     public int getPort() {
