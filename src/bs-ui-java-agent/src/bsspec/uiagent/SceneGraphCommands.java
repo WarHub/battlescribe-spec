@@ -53,6 +53,16 @@ public class SceneGraphCommands {
                 return findNodeByText(params);
             case "setNodeText":
                 return setNodeText(params);
+            case "getComboBoxItems":
+                return getComboBoxItems(params);
+            case "selectComboBoxItem":
+                return selectComboBoxItem(params);
+            case "getTreeItems":
+                return getTreeItems(params);
+            case "selectTreeItem":
+                return selectTreeItem(params);
+            case "expandTreeItem":
+                return expandTreeItem(params);
             // Engine access commands
             case "listBsClasses":
                 return engineAccessor.listBsClasses();
@@ -231,6 +241,7 @@ public class SceneGraphCommands {
     private String fireButton(String params) {
         String selector = extractStr(params, "selector");
         String windowTitle = extractStr(params, "windowTitle");
+        String async = extractStr(params, "async");
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("Node not found: " + selector);
@@ -238,7 +249,14 @@ public class SceneGraphCommands {
         if (!(node instanceof javafx.scene.control.ButtonBase)) {
             throw new IllegalArgumentException("Node is not a ButtonBase: " + node.getClass().getSimpleName());
         }
-        ((javafx.scene.control.ButtonBase) node).fire();
+        javafx.scene.control.ButtonBase button = (javafx.scene.control.ButtonBase) node;
+        if ("true".equals(async)) {
+            // Fire asynchronously — schedule on FX thread so this call returns immediately.
+            // This is needed when the button opens a modal dialog (showAndWait).
+            Platform.runLater(() -> button.fire());
+            return "{\"fired\":true,\"async\":true}";
+        }
+        button.fire();
         return "{\"fired\":true}";
     }
 
@@ -297,9 +315,172 @@ public class SceneGraphCommands {
         return "{\"set\":true}";
     }
 
+    private String getComboBoxItems(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("ComboBox not found: " + selector);
+        }
+        if (!(node instanceof ComboBox)) {
+            throw new IllegalArgumentException("Node is not a ComboBox: " + node.getClass().getSimpleName());
+        }
+        @SuppressWarnings("unchecked")
+        ComboBox<Object> combo = (ComboBox<Object>) node;
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"selectedIndex\":").append(combo.getSelectionModel().getSelectedIndex());
+        Object selected = combo.getSelectionModel().getSelectedItem();
+        sb.append(",\"selectedText\":").append(jsonString(selected != null ? selected.toString() : null));
+        sb.append(",\"items\":[");
+        for (int i = 0; i < combo.getItems().size(); i++) {
+            if (i > 0) sb.append(",");
+            Object item = combo.getItems().get(i);
+            sb.append("{\"index\":").append(i);
+            sb.append(",\"text\":").append(jsonString(item != null ? item.toString() : null));
+            sb.append("}");
+        }
+        sb.append("]}");
+        return sb.toString();
+    }
+
+    private String selectComboBoxItem(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        String text = extractStr(params, "text");
+        int index = extractInt(params, "index", -1);
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("ComboBox not found: " + selector);
+        }
+        if (!(node instanceof ComboBox)) {
+            throw new IllegalArgumentException("Node is not a ComboBox: " + node.getClass().getSimpleName());
+        }
+        @SuppressWarnings("unchecked")
+        ComboBox<Object> combo = (ComboBox<Object>) node;
+        if (index >= 0) {
+            combo.getSelectionModel().select(index);
+        } else if (text != null) {
+            for (int i = 0; i < combo.getItems().size(); i++) {
+                Object item = combo.getItems().get(i);
+                if (item != null && item.toString().contains(text)) {
+                    combo.getSelectionModel().select(i);
+                    break;
+                }
+            }
+        }
+        Object selected = combo.getSelectionModel().getSelectedItem();
+        return "{\"selectedIndex\":" + combo.getSelectionModel().getSelectedIndex()
+                + ",\"selectedText\":" + jsonString(selected != null ? selected.toString() : null) + "}";
+    }
+
+    @SuppressWarnings("unchecked")
+    private String getTreeItems(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        int maxDepth = extractInt(params, "maxDepth", 3);
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("TreeView not found: " + selector);
+        }
+        if (!(node instanceof TreeView)) {
+            throw new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName());
+        }
+        TreeView<Object> tree = (TreeView<Object>) node;
+        TreeItem<Object> root = tree.getRoot();
+        if (root == null) return "{\"root\":null}";
+        StringBuilder sb = new StringBuilder("{\"root\":");
+        serializeTreeItem(root, sb, 0, maxDepth);
+        sb.append(",\"showRoot\":").append(tree.isShowRoot());
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private void serializeTreeItem(TreeItem<Object> item, StringBuilder sb, int depth, int maxDepth) {
+        sb.append("{");
+        Object val = item.getValue();
+        sb.append("\"text\":").append(jsonString(val != null ? val.toString() : null));
+        sb.append(",\"expanded\":").append(item.isExpanded());
+        sb.append(",\"leaf\":").append(item.isLeaf());
+        if (depth < maxDepth && !item.getChildren().isEmpty()) {
+            sb.append(",\"children\":[");
+            for (int i = 0; i < item.getChildren().size(); i++) {
+                if (i > 0) sb.append(",");
+                serializeTreeItem(item.getChildren().get(i), sb, depth + 1, maxDepth);
+            }
+            sb.append("]");
+        } else if (!item.getChildren().isEmpty()) {
+            sb.append(",\"childCount\":").append(item.getChildren().size());
+        }
+        sb.append("}");
+    }
+
+    @SuppressWarnings("unchecked")
+    private String selectTreeItem(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        String text = extractStr(params, "text");
+        int index = extractInt(params, "index", -1);
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("TreeView not found: " + selector);
+        }
+        if (!(node instanceof TreeView)) {
+            throw new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName());
+        }
+        TreeView<Object> tree = (TreeView<Object>) node;
+        if (index >= 0) {
+            tree.getSelectionModel().select(index);
+        } else if (text != null) {
+            TreeItem<Object> found = findTreeItemByText(tree.getRoot(), text);
+            if (found != null) {
+                tree.getSelectionModel().select(found);
+            } else {
+                return "{\"selected\":false,\"error\":\"Item not found: " + text + "\"}";
+            }
+        }
+        TreeItem<Object> sel = tree.getSelectionModel().getSelectedItem();
+        return "{\"selected\":true,\"selectedText\":"
+                + jsonString(sel != null && sel.getValue() != null ? sel.getValue().toString() : null) + "}";
+    }
+
+    @SuppressWarnings("unchecked")
+    private String expandTreeItem(String params) {
+        String selector = extractStr(params, "selector");
+        String windowTitle = extractStr(params, "windowTitle");
+        String text = extractStr(params, "text");
+        Node node = resolveNode(selector, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("TreeView not found: " + selector);
+        }
+        if (!(node instanceof TreeView)) {
+            throw new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName());
+        }
+        TreeView<Object> tree = (TreeView<Object>) node;
+        TreeItem<Object> item = findTreeItemByText(tree.getRoot(), text);
+        if (item == null) {
+            return "{\"expanded\":false,\"error\":\"Item not found: " + text + "\"}";
+        }
+        item.setExpanded(true);
+        return "{\"expanded\":true,\"text\":"
+                + jsonString(item.getValue() != null ? item.getValue().toString() : null) + "}";
+    }
+
+    private TreeItem<Object> findTreeItemByText(TreeItem<Object> item, String text) {
+        if (item == null) return null;
+        Object val = item.getValue();
+        if (val != null && val.toString().contains(text)) {
+            return item;
+        }
+        for (TreeItem<Object> child : item.getChildren()) {
+            TreeItem<Object> found = findTreeItemByText(child, text);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
     private String dumpNodeProperties(String params) {
         String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "window");
+        String windowTitle = extractStr(params, "windowTitle");
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             // If no selector, dump root node properties
