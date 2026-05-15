@@ -198,9 +198,14 @@ public sealed class BattleScribeEngine : IDisposable
         {
             _autoSelectDone = true;
             SelectDefaultRootEntries();
+            // x() creates selections without calling t() (the full refresh).
+            // The desktop's setRoster(z=true) calls a(true,true)+v()+d()+w() after x().
+            // We call t() which performs u()+a(false,true)+v()+d()+w() — this refreshes
+            // all CHANGED selections (auto-selected entries are marked changed).
+            // selectRootForce already called t() before x(), so this second t() only
+            // processes the newly auto-selected entries.
+            Refresh();
         }
-
-        Validate();
 
         return (force, JavaListToStringErrors(errors));
     }
@@ -238,13 +243,31 @@ public sealed class BattleScribeEngine : IDisposable
     }
 
     /// <summary>
-    /// Set the number of selections for an entry under a parent.
+    /// Set the number of selections for an entry under a parent (atomic engine API).
+    /// Note: The BattleScribe desktop UI does NOT use this method for count changes.
+    /// Instead, it loops individual selectEntry/deselectEntry calls. This method exists
+    /// for direct engine access but callers should prefer the loop approach via
+    /// <see cref="BattleScribeRosterEngine.SetSelectionCount"/> for UI-accurate behavior.
     /// </summary>
     public void SetNumSelections(BaseSelectionParent parent, SelectionEntry entry, int count)
     {
         EnsureInitialized();
+        // The engine's setNumSelections (f.java:880) calls t() internally,
+        // which includes the full refresh cycle (costs + validation + cache clear).
         _engine.a(parent, entry, count);
-        Validate();
+    }
+
+    /// <summary>
+    /// Get the number of changes needed to reach a target count for an entry.
+    /// Returns delta (positive = add, negative = remove, 0 = no-op/isDuplicate).
+    /// The engine's getNumChanges enforces min/max constraints and returns 0 for
+    /// isDuplicate entries (which cannot have their count changed).
+    /// </summary>
+    public int GetNumChanges(BaseSelectionParent parent, SelectionEntry entry, int targetCount)
+    {
+        EnsureInitialized();
+        // _engine.b(parent, entry, count) = getNumChanges (f.java:895)
+        return _engine.b(parent, entry, targetCount);
     }
 
     /// <summary>
@@ -2287,7 +2310,7 @@ public sealed class BattleScribeEngine : IDisposable
         var childForce = _engine.b(parentForce, _gameSystem, catalogue, linkedCatMap, childForceEntry, favourites, errors) ?? throw new InvalidOperationException("Java engine returned null when creating child force.");
 
         _forceCatalogueMap[childForce] = catalogue;
-        Validate();
+        // selectForce (f.java:868) calls t() internally — no need for explicit Validate().
         return childForce;
     }
 
@@ -2357,6 +2380,38 @@ public sealed class BattleScribeEngine : IDisposable
     }
 
     private MethodInfo? _validateMethod;
+
+    /// <summary>
+    /// Calls the engine's private synchronized t() method (full refresh).
+    /// This is the main refresh cycle that the engine calls after every mutation:
+    ///   t() { u(); a(false,true); v(); d(); w(); }
+    /// Where:
+    ///   u() = mark dependent entries as changed via dependency graph
+    ///   a(false,true) = cost refresh (single-pass over CHANGED selections)
+    ///   v() = validate constraints
+    ///   d() = clear query cache
+    ///   w() = clear all 'changed' flags
+    /// Most public engine methods (selectEntry, deselectEntry, setNumSelections,
+    /// selectRootForce, selectForce, deselectForce) call t() internally.
+    /// We only need to call it explicitly after x() (auto-select defaults) which
+    /// creates selections without triggering a refresh.
+    /// </summary>
+    /// <remarks>
+    /// WARNING: This uses reflection on an obfuscated private method name "t".
+    /// The method signature is: private synchronized void t() in net.battlescribe.engine.a.f
+    /// (decompiled source reference: BattleScribeEngine f.java line 150).
+    /// </remarks>
+    private void Refresh()
+    {
+        _refreshMethod ??= _engine.GetType().GetMethod("t",
+            BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+            binder: null, types: Type.EmptyTypes, modifiers: null) ?? throw new InvalidOperationException(
+                "Could not find engine method t() for refresh.");
+
+        _refreshMethod.Invoke(_engine, null);
+    }
+
+    private MethodInfo? _refreshMethod;
 
     [MemberNotNull(nameof(_gameSystem))]
     private void EnsureInitialized()

@@ -1,6 +1,9 @@
 id: modifier-repeat-cost-field
 category: modifier
-description: Repeat with field set to a cost type ID counts total cost of matching selections in scope
+description: >
+  Repeat with field set to a cost type ID counts total cost of matching
+  selections in scope. Also validates setSelectionCount produces correct
+  costs when a cost-field repeat references the changed entry.
 
 setup:
   gameSystem:
@@ -17,13 +20,17 @@ setup:
       name: Cat
       gameSystemId: test-gs
       selectionEntries:
-        - id: se-expensive
-          name: Expensive
-          type: model
-          costs:
-            - name: pts
-              typeId: pts
-              value: 200
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-expensive
+              name: Expensive
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 200
         - id: se-unit
           name: Unit
           type: unit
@@ -42,6 +49,7 @@ setup:
                   field: pts
                   scope: force
                   childId: se-expensive
+                  includeChildSelections: true
 
 steps:
   - action: addForce
@@ -49,22 +57,76 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-squad
     forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-expensive
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
     entryId: se-expensive
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-unit
 
-  # se-expensive costs 200 pts in force → floor(200/100) × 1 = 2 repetitions → 50 + 10×2 = 70
+  # se-expensive costs 200 pts in force -> floor(200/100) x 1 = 2 repetitions -> 50 + 10x2 = 70
   - expectedState:
       forces:
         - selections:
-            - name: Expensive
-              costs:
-                - typeId: pts
-                  value: 200
+            - name: Squad
+              children:
+                - name: Expensive
+                  number: 1
+                  costs:
+                    - typeId: pts
+                      value: 200
             - name: Unit
               costs:
                 - typeId: pts
                   value: 70
+
+  # Increase Expensive count via setSelectionCount (exercises the loop-based path).
+  # Expensive x2 = 400 pts in force -> floor(400/100) x 1 = 4 repetitions -> 50 + 10x4 = 90
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-expensive.selectionId }}
+    count: 2
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Expensive
+                  number: 2
+                  costs:
+                    - typeId: pts
+                      value: 400
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 90
+
+  # Increase Expensive count again.
+  # Expensive x3 = 600 pts in force -> floor(600/100) x 1 = 6 repetitions -> 50 + 10x6 = 110
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-expensive.selectionId }}
+    count: 3
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Expensive
+                  number: 3
+                  costs:
+                    - typeId: pts
+                      value: 600
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 110

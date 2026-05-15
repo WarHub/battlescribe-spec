@@ -147,7 +147,29 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 $"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
         // Find the parent of this selection (the container that holds it)
         var parent = FindSelectionParent(force, selectionId);
-        Engine.SetNumSelections(parent, dataEntry, count);
+
+        // Match the BattleScribe desktop UI behavior exactly:
+        // The UI's count spinner calls getNumChanges to compute delta, then loops
+        // individual selectEntry (for increase) or deselectEntry (for decrease) calls.
+        // Each call triggers a full t() refresh cycle, producing intermediate cost states
+        // visible to self-referencing repeat modifiers.
+        // This differs from the engine's atomic setNumSelections which does all changes
+        // in one shot with a single t() refresh — we intentionally avoid that API here.
+        var delta = Engine.GetNumChanges(parent, dataEntry, count);
+        if (delta > 0)
+        {
+            for (var i = 0; i < delta; i++)
+            {
+                Engine.SelectEntry(parent, dataEntry);
+            }
+        }
+        else if (delta < 0)
+        {
+            for (var i = 0; i < -delta; i++)
+            {
+                Engine.DeselectEntry(selection);
+            }
+        }
     }
 
     public ActionOutputs DuplicateSelection(string forceId, string selectionId)
