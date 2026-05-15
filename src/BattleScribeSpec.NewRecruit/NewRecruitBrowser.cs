@@ -132,6 +132,17 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     }
 
     /// <summary>
+    /// Navigate to any NR route via Vue Router client-side navigation.
+    /// Preserves page JS state (unlike GotoAsync which reloads the page).
+    /// Also dismisses any dialogs that might appear after navigation.
+    /// </summary>
+    public async Task NavigateToRouteAsync(string route)
+    {
+        await VueRouterPushAsync(route);
+        await DismissDialogsAsync();
+    }
+
+    /// <summary>
     /// Navigate to the roster editor for a specific list.
     /// Uses Vue Router client-side navigation — avoids a full page reload
     /// (which is slower in live mode and breaks HAR replay in frozen mode).

@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\src\BattleScribeSpec.BattleScribe\BattleScribeSpec.BattleScribe.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
+    <ProjectReference Include="..\src\BattleScribeSpec.NrRosterUiDriver\BattleScribeSpec.NrRosterUiDriver.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.Debugger\BattleScribeSpec.Debugger.csproj" />
   </ItemGroup>
 
