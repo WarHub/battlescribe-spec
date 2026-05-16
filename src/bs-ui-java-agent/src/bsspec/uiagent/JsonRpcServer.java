@@ -89,7 +89,7 @@ public class JsonRpcServer {
                     || "threadDump".equals(method) || "rebuildCatalogueTree".equals(method)
                     || "addForceViaEngine".equals(method) || "removeForceViaEngine".equals(method)
                     || "deselectEntryViaEngine".equals(method)
-                    || "setRosterName".equals(method)) {
+                    || "setRosterName".equals(method) || "exportRosterXml".equals(method)) {
                 result = commands.dispatch(method, params);
             } else {
                 // Execute on JavaFX Application Thread and wait for result

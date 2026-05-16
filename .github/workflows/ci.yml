@@ -108,6 +108,52 @@ jobs:
         env:
           NR_HEADLESS: true
 
+  bs-ui:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[bs-ui-test]')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download BattleScribe app
+        run: |
+          pwsh -Command '
+            $config = Get-Content testdata.json -Raw | ConvertFrom-Json
+            $entry = $config."battlescribe-app"
+            $destDir = ".testdata/battlescribe-app"
+            if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force }
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            gh release download $($entry.tag) -R $($entry.repo) -D $destDir --pattern $($entry.pattern)
+            $zip = Get-ChildItem $destDir -Filter "*.zip" | Select-Object -First 1
+            unzip -q $zip.FullName -d $destDir
+            Remove-Item $zip.FullName -Force
+          '
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build bs-ui-java-agent
+        run: pwsh -File src/bs-ui-java-agent/build.ps1 -JavaHome .testdata/battlescribe-app/jre
+
+      - name: Build
+        run: dotnet build
+
+      - name: Run kitchen-sink via BS UI driver
+        run: |
+          xvfb-run -a dotnet run --project src/BattleScribeSpec.Debugger -- \
+            --engine bs-ui protocol/protocol-kitchen-sink
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bs-ui-diagnostics
+          path: artifacts/bs-ui-diagnostics/
+
   nr-conformance:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[nr-test]')
     runs-on: ubuntu-latest
@@ -175,9 +221,10 @@ jobs:
         needs.build-and-test.result == 'failure'
         || needs.script-tests.result == 'failure'
         || needs.nr-frozen.result == 'failure'
+        || needs.bs-ui.result == 'failure'
         || needs.nr-conformance.result == 'failure'
       )
-    needs: [build-and-test, script-tests, nr-frozen, nr-conformance]
+    needs: [build-and-test, script-tests, nr-frozen, bs-ui, nr-conformance]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -220,6 +267,7 @@ jobs:
           if ('${{ needs.build-and-test.result }}' -eq 'failure') { $failed += 'build-and-test' }
           if ('${{ needs.script-tests.result }}' -eq 'failure') { $failed += 'script-tests' }
           if ('${{ needs.nr-frozen.result }}' -eq 'failure') { $failed += 'nr-frozen' }
+          if ('${{ needs.bs-ui.result }}' -eq 'failure') { $failed += 'bs-ui' }
           if ('${{ needs.nr-conformance.result }}' -eq 'failure') { $failed += 'nr-conformance' }
           $failedList = ($failed | ForEach-Object { "- $_" }) -join "`n"
           $body = @"

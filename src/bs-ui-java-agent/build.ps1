@@ -13,8 +13,13 @@ $OutDir = Join-Path $ScriptDir 'out'
 $JarName = 'bs-ui-java-agent.jar'
 
 if ($JavaHome) {
-    $javac = Join-Path $JavaHome 'bin\javac.exe'
-    $jar = Join-Path $JavaHome 'bin\jar.exe'
+    if ($IsLinux -or $IsMacOS) {
+        $javac = Join-Path $JavaHome 'bin/javac'
+        $jar = Join-Path $JavaHome 'bin/jar'
+    } else {
+        $javac = Join-Path $JavaHome 'bin\javac.exe'
+        $jar = Join-Path $JavaHome 'bin\jar.exe'
+    }
 } else {
     $javac = 'javac'
     $jar = 'jar'

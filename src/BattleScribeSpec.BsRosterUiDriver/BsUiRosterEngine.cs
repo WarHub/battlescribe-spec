@@ -1079,6 +1079,17 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
     }
 
+    /// <summary>Exports the current roster as BattleScribe XML (.ros format).</summary>
+    public async Task<string?> ExportRosterXmlAsync()
+    {
+        ThrowIfDisposed();
+        if (_client is null)
+        {
+            throw new InvalidOperationException("Not connected to BattleScribe app.");
+        }
+        return await _client.ExportRosterXmlAsync();
+    }
+
     private async Task HandleStartupDialogsAsync()
     {
         await Task.Delay(1500);

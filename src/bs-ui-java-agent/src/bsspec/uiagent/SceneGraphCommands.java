@@ -84,6 +84,8 @@ public class SceneGraphCommands {
                 return engineAccessor.findEngine();
             case "getRosterState":
                 return engineAccessor.getRosterState();
+            case "exportRosterXml":
+                return engineAccessor.exportRosterXml();
             case "setRosterName":
                 return engineAccessor.setRosterName(params);
             case "getValidationErrors":

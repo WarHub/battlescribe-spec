@@ -476,6 +476,47 @@ public class EngineAccessor {
         }
     }
 
+    /**
+     * Exports the current roster as BattleScribe XML (.ros format).
+     * Uses the DataUtils serializer (net.battlescribe.a.c.e) method:
+     *   public static void a(Roster roster, OutputStream outputStream)
+     */
+    public String exportRosterXml() {
+        if (engineInstance == null) {
+            return errorJson("Engine not found. Call findEngine first.");
+        }
+        try {
+            Object roster = getRosterMethod.invoke(engineInstance);
+            if (roster == null) {
+                return errorJson("No roster loaded.");
+            }
+            // Find DataUtils class (net.battlescribe.a.c.e)
+            Class<?> dataUtilsClass = Class.forName("net.battlescribe.a.c.e");
+            // Find the write method: public static void a(Roster, OutputStream)
+            Class<?> rosterClass = roster.getClass();
+            Method writeMethod = null;
+            for (Method m : dataUtilsClass.getDeclaredMethods()) {
+                if (m.getName().equals("a")
+                        && m.getParameterCount() == 2
+                        && m.getParameterTypes()[0].isAssignableFrom(rosterClass)
+                        && m.getParameterTypes()[1] == java.io.OutputStream.class
+                        && m.getReturnType() == void.class) {
+                    writeMethod = m;
+                    break;
+                }
+            }
+            if (writeMethod == null) {
+                return errorJson("DataUtils write method not found.");
+            }
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream(65536);
+            writeMethod.invoke(null, roster, baos);
+            String xml = baos.toString("UTF-8");
+            return "{\"xml\":" + jsonStr(xml) + "}";
+        } catch (Exception e) {
+            return errorJson("exportRosterXml: " + buildExceptionMessage(e));
+        }
+    }
+
 
     public String getValidationErrors() {
         if (engineInstance == null) {

@@ -285,6 +285,13 @@ public sealed class AgentClient : IDisposable
         return await CallAsync("getRosterState");
     }
 
+    /// <summary>Exports the current roster as BattleScribe XML (.ros format).</summary>
+    public async Task<string?> ExportRosterXmlAsync()
+    {
+        var result = await CallAsync("exportRosterXml");
+        return result?["xml"]?.GetValue<string>();
+    }
+
     /// <summary>Gets current validation errors from the engine.</summary>
     public async Task<JsonNode?> GetValidationErrorsAsync()
     {

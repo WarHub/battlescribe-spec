@@ -10,6 +10,7 @@ var dumpAll = false;
 var json = false;
 var headless = true;
 string? exportXmlDir = null;
+string? exportRosterDir = null;
 var formatMode = false;
 var formatCheck = false;
 string? formatDir = null;
@@ -48,6 +49,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--export-xml" when i + 1 < args.Length:
             exportXmlDir = args[++i];
+            break;
+        case "--export-roster" when i + 1 < args.Length:
+            exportRosterDir = args[++i];
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -205,6 +209,30 @@ using (engine)
 
         StateDumper.Dump(state, errors, Console.Out, dumpOptions);
         Console.Out.Flush();
+
+        // Export roster XML on the last step (before Cleanup disconnects the agent)
+        if (isLastStep && exportRosterDir is not null && engine is BsUiRosterEngine bsUiEngine)
+        {
+            try
+            {
+                Directory.CreateDirectory(exportRosterDir);
+                var xml = bsUiEngine.ExportRosterXmlAsync().GetAwaiter().GetResult();
+                if (xml is not null)
+                {
+                    var rosterFile = Path.Combine(exportRosterDir, $"{spec.Id}.ros");
+                    File.WriteAllText(rosterFile, xml);
+                    Console.Error.WriteLine($"Exported roster to: {rosterFile}");
+                }
+                else
+                {
+                    Console.Error.WriteLine("Warning: exportRosterXml returned null.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Warning: roster export failed: {ex.Message}");
+            }
+        }
     };
 
     Console.Error.WriteLine($"Running {stepCount} steps...");
@@ -548,6 +576,7 @@ static void PrintUsage()
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
+          --export-roster <dir>  Export final roster as .ros XML (bs-ui engine only)
           --format [<dir>]    Format all *.yaml files under <dir> (default: specs/roster/)
           --check             With --format: report issues without fixing (exit 1 if any)
           -h, --help      Show this help
