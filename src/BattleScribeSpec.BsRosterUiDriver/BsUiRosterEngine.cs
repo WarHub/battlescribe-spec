@@ -93,7 +93,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         => RunAsync(GetValidationErrorsAsync);
 
     public void Cleanup()
-        => RunAsync(CleanupAsync);
+        => RunAsync(() => CleanupAsync());
 
     public void Dispose()
     {
@@ -105,7 +105,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _disposed = true;
         try
         {
-            CleanupAsync().GetAwaiter().GetResult();
+            CleanupAsync(force: true).GetAwaiter().GetResult();
         }
         catch
         {
@@ -592,11 +592,11 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return await ReadValidationErrorsAsync();
     }
 
-    private async Task CleanupAsync()
+    private async Task CleanupAsync(bool force = false)
     {
         _engineLocated = false;
 
-        if (KeepAlive)
+        if (KeepAlive && !force)
         {
             // Warm start: keep app/_client alive, just reset engine state
             return;
@@ -1916,6 +1916,10 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private async Task<T> RunWithRetryAsync<T>(Func<Task<T>> func, string actionName)
     {
+        // NOTE: Retries are only safe because a timeout/transient failure typically means
+        // the app is unresponsive and needs restart. The full setup flow will re-initialize
+        // if the connection is lost. Non-transient errors (InvalidOperationException) are
+        // never retried.
         var attempts = MaxRetries + 1;
         for (var attempt = 1; attempt <= attempts; attempt++)
         {

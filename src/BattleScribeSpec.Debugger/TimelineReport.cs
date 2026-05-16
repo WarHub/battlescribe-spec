@@ -29,7 +29,12 @@ public sealed class TimelineReport
     /// <summary>Generates and writes the HTML report to the specified path.</summary>
     public void Write(string filePath, bool passed, IReadOnlyList<string>? failures)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        var dir = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
         File.WriteAllText(filePath, GenerateHtml(passed, failures), Utf8NoBom);
     }
 
@@ -420,9 +425,7 @@ public sealed class TimelineReport
         builder.AppendLine("            <h3>Screenshot</h3>");
         if (screenshotDataUrl is not null)
         {
-            builder.AppendLine($"            <a href=\"{screenshotDataUrl}\" target=\"_blank\" rel=\"noopener noreferrer\">");
-            builder.AppendLine($"              <img src=\"{screenshotDataUrl}\" alt=\"Screenshot for step {step.Index}\" />");
-            builder.AppendLine("            </a>");
+            builder.AppendLine($"              <img src=\"{screenshotDataUrl}\" alt=\"Screenshot for step {step.Index}\" style=\"cursor:zoom-in\" onclick=\"window.open(this.src)\" />");
         }
         else
         {
@@ -495,32 +498,44 @@ public sealed class TimelineReport
     private static void AppendForce(StringBuilder builder, ForceState force, string indent)
     {
         var totalSelections = CountSelections(force.Selections);
-        builder.AppendLine($"{indent}<li><strong>{Encode(force.Name)}</strong> <span class=\"muted\">({totalSelections} selections)</span></li>");
+        builder.Append($"{indent}<li><strong>{Encode(force.Name)}</strong> <span class=\"muted\">({totalSelections} selections)</span>");
         if (force.Selections.Count > 0)
         {
-            builder.AppendLine($"{indent}<ul>");
+            builder.AppendLine();
+            builder.AppendLine($"{indent}  <ul>");
             foreach (var selection in force.Selections)
             {
-                AppendSelection(builder, selection, indent + "  ");
+                AppendSelection(builder, selection, indent + "    ");
             }
 
-            builder.AppendLine($"{indent}</ul>");
+            builder.AppendLine($"{indent}  </ul>");
+            builder.AppendLine($"{indent}</li>");
+        }
+        else
+        {
+            builder.AppendLine("</li>");
         }
     }
 
     private static void AppendSelection(StringBuilder builder, SelectionState selection, string indent)
     {
         var label = selection.Number != 1 ? $"{selection.Name} ×{selection.Number}" : selection.Name;
-        builder.AppendLine($"{indent}<li>{Encode(label)}</li>");
+        builder.Append($"{indent}<li>{Encode(label)}");
         if (selection.Children.Count > 0)
         {
-            builder.AppendLine($"{indent}<ul>");
+            builder.AppendLine();
+            builder.AppendLine($"{indent}  <ul>");
             foreach (var child in selection.Children)
             {
-                AppendSelection(builder, child, indent + "  ");
+                AppendSelection(builder, child, indent + "    ");
             }
 
-            builder.AppendLine($"{indent}</ul>");
+            builder.AppendLine($"{indent}  </ul>");
+            builder.AppendLine($"{indent}</li>");
+        }
+        else
+        {
+            builder.AppendLine("</li>");
         }
     }
 
