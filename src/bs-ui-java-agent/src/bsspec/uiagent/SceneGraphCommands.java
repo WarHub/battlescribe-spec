@@ -2,10 +2,12 @@ package bsspec.uiagent;
 
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
+import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
@@ -14,7 +16,12 @@ import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 /**
@@ -86,6 +93,8 @@ public class SceneGraphCommands {
                 return engineAccessor.getRosterState();
             case "exportRosterXml":
                 return engineAccessor.exportRosterXml();
+            case "captureScreenshot":
+                return captureScreenshot(params);
             case "setRosterName":
                 return engineAccessor.setRosterName(params);
             case "getValidationErrors":
@@ -173,6 +182,33 @@ public class SceneGraphCommands {
         }
         sb.append("]");
         return sb.toString();
+    }
+
+    private String captureScreenshot(String params) {
+        String windowTitle = extractStr(params, "windowTitle");
+        Scene scene = findScene(windowTitle);
+        if (scene == null) {
+            return "{\"error\":\"No scene found\"}";
+        }
+
+        WritableImage image = scene.snapshot(null);
+        BufferedImage buffered = SwingFXUtils.fromFXImage(image, null);
+        if (buffered == null) {
+            return "{\"error\":\"Failed to capture scene\"}";
+        }
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            if (!ImageIO.write(buffered, "png", baos)) {
+                throw new IOException("No PNG writer available");
+            }
+            String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+            return "{\"png\":" + jsonString(base64)
+                    + ",\"width\":" + (int) image.getWidth()
+                    + ",\"height\":" + (int) image.getHeight()
+                    + "}";
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to encode screenshot", e);
+        }
     }
 
     private String dumpTree(String params) {

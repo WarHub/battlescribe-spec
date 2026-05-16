@@ -1090,6 +1090,18 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return await _client.ExportRosterXmlAsync();
     }
 
+    /// <summary>Captures a screenshot of the current JavaFX scene as PNG bytes.</summary>
+    public async Task<byte[]?> CaptureScreenshotAsync()
+    {
+        ThrowIfDisposed();
+        if (_client is null)
+        {
+            Console.Error.WriteLine("[bs-ui] Warning: cannot capture screenshot — not connected.");
+            return null;
+        }
+        return await _client.CaptureScreenshotAsync();
+    }
+
     private async Task HandleStartupDialogsAsync()
     {
         await Task.Delay(1500);
@@ -1831,31 +1843,55 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private AgentClient _Client => _client ?? throw new InvalidOperationException("Agent client is not connected.");
 
+    /// <summary>
+    /// Maximum number of retry attempts for transient failures (timeout, agent communication).
+    /// Set to 0 to disable retries. Default is 1 (one retry after initial failure).
+    /// </summary>
+    public static int MaxRetries { get; set; } =
+        int.TryParse(Environment.GetEnvironmentVariable("BS_UI_MAX_RETRIES"), out var envRetries) && envRetries >= 0
+            ? envRetries
+            : 1;
+
+    /// <summary>Delay between retry attempts.</summary>
+    public static TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(2);
+
     private T RunAsync<T>(Func<Task<T>> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
     {
-        try
-        {
-            return RunWithTimeoutAsync(func, actionName ?? "unknown").GetAwaiter().GetResult();
-        }
-        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
-        {
-            CaptureAndRethrow(ex, actionName ?? "unknown");
-            throw; // unreachable but required
-        }
+        return RunWithRetryAsync(func, actionName ?? "unknown").GetAwaiter().GetResult();
     }
 
     private void RunAsync(Func<Task> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
     {
-        try
-        {
-            RunWithTimeoutAsync(async () => { await func(); return 0; }, actionName ?? "unknown").GetAwaiter().GetResult();
-        }
-        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
-        {
-            CaptureAndRethrow(ex, actionName ?? "unknown");
-            throw; // unreachable but required
-        }
+        RunWithRetryAsync(async () => { await func(); return 0; }, actionName ?? "unknown").GetAwaiter().GetResult();
     }
+
+    private async Task<T> RunWithRetryAsync<T>(Func<Task<T>> func, string actionName)
+    {
+        var attempts = MaxRetries + 1;
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                return await RunWithTimeoutAsync(func, actionName);
+            }
+            catch (Exception ex) when (IsTransient(ex) && attempt < attempts)
+            {
+                Console.Error.WriteLine(
+                    $"[bs-ui] Action '{actionName}' failed (attempt {attempt}/{attempts}): " +
+                    $"{ex.GetType().Name}: {ex.Message}. Retrying in {RetryDelay.TotalSeconds:F0}s...");
+                await Task.Delay(RetryDelay);
+            }
+            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
+            {
+                CaptureAndRethrow(ex, actionName);
+                throw; // unreachable but required
+            }
+        }
+        throw new InvalidOperationException("Unreachable");
+    }
+
+    private static bool IsTransient(Exception ex) =>
+        ex is TimeoutException or OperationCanceledException or AgentException;
 
     private static async Task<T> RunWithTimeoutAsync<T>(Func<Task<T>> func, string actionName)
     {

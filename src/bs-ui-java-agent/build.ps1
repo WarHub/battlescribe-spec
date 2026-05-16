@@ -33,7 +33,7 @@ New-Item -ItemType Directory -Path (Join-Path $OutDir 'classes') -Force | Out-Nu
 
 $sources = Get-ChildItem -Path $SrcDir -Filter '*.java' -Recurse | ForEach-Object { $_.FullName }
 
-& $javac --add-modules javafx.controls -d (Join-Path $OutDir 'classes') @sources
+& $javac --add-modules javafx.controls,javafx.swing -d (Join-Path $OutDir 'classes') @sources
 if ($LASTEXITCODE -ne 0) {
     throw 'javac failed'
 }

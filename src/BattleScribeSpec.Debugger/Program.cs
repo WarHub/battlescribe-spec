@@ -11,6 +11,7 @@ var json = false;
 var headless = true;
 string? exportXmlDir = null;
 string? exportRosterDir = null;
+string? screenshotsDir = null;
 var formatMode = false;
 var formatCheck = false;
 string? formatDir = null;
@@ -52,6 +53,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--export-roster" when i + 1 < args.Length:
             exportRosterDir = args[++i];
+            break;
+        case "--screenshots" when i + 1 < args.Length:
+            screenshotsDir = args[++i];
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -196,6 +200,27 @@ using (engine)
         var isDumpAction = step.Action == "dump";
         var isLastStep = stepIndex == lastStepIndex;
         var shouldDump = isDumpAction || dumpAll || isLastStep;
+
+        // Capture screenshot at every step if screenshots dir is set (bs-ui engine only)
+        if (screenshotsDir is not null && engine is BsUiRosterEngine screenshotEngine)
+        {
+            try
+            {
+                Directory.CreateDirectory(screenshotsDir);
+                var pngBytes = screenshotEngine.CaptureScreenshotAsync().GetAwaiter().GetResult();
+                if (pngBytes is not null)
+                {
+                    var actionName = SanitizeFileName(step.Action ?? "assert");
+                    var fileName = $"{stepIndex:D3}_{actionName}.png";
+                    var filePath = Path.Combine(screenshotsDir, fileName);
+                    File.WriteAllBytes(filePath, pngBytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[screenshots] Step {stepIndex} capture failed: {ex.Message}");
+            }
+        }
 
         if (!shouldDump)
         {
@@ -560,6 +585,12 @@ static string DescribeStep(StepDef step)
     return "(unknown)";
 }
 
+static string SanitizeFileName(string name)
+{
+    var invalid = Path.GetInvalidFileNameChars();
+    return new string([.. name.Select(c => invalid.Contains(c) ? '_' : c)]);
+}
+
 static void PrintUsage()
 {
     Console.Error.WriteLine("""
@@ -577,6 +608,7 @@ static void PrintUsage()
           --no-headless   Show browser window (NR engine only)
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
           --export-roster <dir>  Export final roster as .ros XML (bs-ui engine only)
+          --screenshots <dir>  Capture screenshot at each step (bs-ui engine only)
           --format [<dir>]    Format all *.yaml files under <dir> (default: specs/roster/)
           --check             With --format: report issues without fixing (exit 1 if any)
           -h, --help      Show this help

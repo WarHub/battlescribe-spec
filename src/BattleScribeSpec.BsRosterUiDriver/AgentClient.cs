@@ -292,6 +292,14 @@ public sealed class AgentClient : IDisposable
         return result?["xml"]?.GetValue<string>();
     }
 
+    /// <summary>Captures a screenshot of the current JavaFX scene as PNG bytes.</summary>
+    public async Task<byte[]?> CaptureScreenshotAsync()
+    {
+        var result = await CallAsync("captureScreenshot");
+        var base64 = result?["png"]?.GetValue<string>();
+        return base64 is not null ? Convert.FromBase64String(base64) : null;
+    }
+
     /// <summary>Gets current validation errors from the engine.</summary>
     public async Task<JsonNode?> GetValidationErrorsAsync()
     {
