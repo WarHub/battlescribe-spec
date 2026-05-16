@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
   schedule:
     - cron: '0 8 * * 1'
@@ -12,6 +12,7 @@ on:
 
 jobs:
   build-and-test:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
 
     steps:
@@ -61,6 +62,7 @@ jobs:
             --workers 2
 
   script-tests:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
 
     steps:
@@ -70,6 +72,7 @@ jobs:
         run: node --test scripts/har-diff.test.mjs
 
   nr-frozen:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
 
     steps:
@@ -109,7 +112,14 @@ jobs:
           NR_HEADLESS: true
 
   bs-ui:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[bs-ui-test]')
+    if: >-
+      github.event.pull_request.draft != true
+      && (
+        github.event_name == 'pull_request'
+        || github.event_name == 'workflow_dispatch'
+        || github.event_name == 'schedule'
+        || contains(github.event.head_commit.message, '[bs-ui-test]')
+      )
     runs-on: ubuntu-latest
 
     steps:
