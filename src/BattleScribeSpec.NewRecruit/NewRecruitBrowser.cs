@@ -205,6 +205,36 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         {
             // Consent dialog may not be present — that's fine
         }
+
+        try
+        {
+            // CookieFirst consent root (fc-consent-root) may block UI interactions
+            var fcRoot = Page.Locator(".fc-consent-root");
+            try
+            {
+                await fcRoot.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 1_000 });
+            }
+            catch
+            {
+                return;
+            }
+
+            // Try "Do not consent" / reject buttons inside CookieFirst dialog
+            var rejectBtn = fcRoot.GetByRole(AriaRole.Button, new() { Name = "Do not consent" })
+                .Or(fcRoot.GetByRole(AriaRole.Button, new() { Name = "Reject" }))
+                .Or(fcRoot.GetByRole(AriaRole.Button, new() { Name = "Decline" }));
+            try
+            {
+                await rejectBtn.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 500 });
+                await rejectBtn.First.ClickAsync();
+                await fcRoot.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 3_000 });
+            }
+            catch { /* button may not be visible — that's fine */ }
+        }
+        catch
+        {
+            // CookieFirst dialog may not be present — that's fine
+        }
     }
 
     /// <summary>

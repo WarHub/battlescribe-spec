@@ -13,7 +13,7 @@ public sealed class LiveNrUiRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly LiveNrUiRosterFixture _fixture;
-    private const string EngineName = "nr-ui";
+    private const string EngineName = "newrecruit";
     private const string LogPrefix = "[LIVE-UI] ";
 
     public LiveNrUiRosterConformanceTests(ITestOutputHelper output, LiveNrUiRosterFixture fixture)

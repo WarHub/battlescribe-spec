@@ -30,6 +30,11 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private readonly Dictionary<string, string> _forceEntryNames = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _entryNames = new(StringComparer.Ordinal);
 
+    // Tracks child selection uid → (parentSelectionUid, entryName) so SetSelectionCount
+    // can route child entries to the options panel rather than the unitRow.
+    private readonly Dictionary<string, (string ParentUid, string EntryName)> _childSelectionParent
+        = new(StringComparer.Ordinal);
+
     private NrRosterUiEngine(NewRecruitBrowser browser)
     {
         Browser = browser;
@@ -68,7 +73,13 @@ public sealed class NrRosterUiEngine : IRosterEngine
         BuildEntryLookups(gameSystem, catalogues);
 
         var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-        var catFiles = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+
+        // Load non-library catalogues before library ones so NR uses the primary (non-library)
+        // catalogue as the default when associating a force entry with a book.
+        var sortedCatalogues = catalogues
+            .OrderBy(c => c.Library == true ? 1 : 0)
+            .ToArray();
+        var catFiles = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, sortedCatalogues);
         var allFiles = new List<(string FileName, string Content)>
         {
             ("system.gst", gstXml),
@@ -95,14 +106,18 @@ public sealed class NrRosterUiEngine : IRosterEngine
             }
         }
 
-        // Create a new roster via NR UI and navigate to the editor
-        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, gameSystem);
+        // Create a new roster via NR UI and navigate to the editor.
+        // Prefer the first non-library catalogue so NR uses it (not a library catalogue) as
+        // the roster's primary book, which determines the catalogueId for forces added via UI.
+        var preferredCatalogueId = catalogues.FirstOrDefault(c => c.Library != true)?.Id;
+        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, gameSystem, preferredCatalogueId);
         _listId = listId;
 
         if (listId is not null)
         {
             await Browser.NavigateToEditorAsync(listId);
             await NrUiSetup.WaitForEditorLoadedAsync(Browser.Page);
+            await NrUiSetup.BypassSupporterPaywallAsync(Browser.Page);
         }
 
         return [];
@@ -129,6 +144,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         {
             await Browser.NavigateToEditorAsync(listId);
             await NrUiSetup.WaitForEditorLoadedAsync(Browser.Page);
+            await NrUiSetup.BypassSupporterPaywallAsync(Browser.Page);
         }
 
         return [];
@@ -141,10 +157,31 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> AddForceAsync(string forceEntryId, string catalogueId)
     {
-        _ = catalogueId;
         var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
-        var uid = await NrUiActions.AddForceByNameAsync(Browser.Page, name);
-        return new ActionOutputs { ForceId = uid };
+        var uid = await NrUiActions.AddForceByNameAsync(Browser.Page, name, forceEntryId, catalogueId);
+
+        // Capture any auto-added selections (e.g. from min=1 constraints).
+        // NR adds selections asynchronously: the selection appears immediately (s.id=null)
+        // then ~2s later the entry id is populated. After clicking "Add Force", the editor
+        // can also briefly re-hydrate (currentList.army replaced), during which getForceSelections
+        // returns empty. Poll for up to 8s without early breaks to handle both timing scenarios.
+        Dictionary<string, string> selections = [];
+        if (uid is not null)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(8);
+            while (DateTime.UtcNow < deadline)
+            {
+                selections = await NrUiActions.GetForceSelectionsAsync(Browser.Page, uid);
+                if (selections.Count > 0)
+                {
+                    break;
+                }
+
+                await Browser.Page.WaitForTimeoutAsync(400);
+            }
+        }
+
+        return new ActionOutputs { ForceId = uid, Selections = selections.Count > 0 ? selections : null };
     }
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
@@ -152,9 +189,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> AddChildForceAsync(string parentForceId, string forceEntryId, string catalogueId)
     {
-        _ = catalogueId;
         var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
-        var uid = await NrUiActions.AddChildForceByNameAsync(Browser.Page, parentForceId, name);
+        var uid = await NrUiActions.AddChildForceByNameAsync(Browser.Page, parentForceId, name, forceEntryId, catalogueId);
         return new ActionOutputs { ForceId = uid };
     }
 
@@ -166,8 +202,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> SelectEntryAsync(string forceId, string entryId)
     {
-        var name = _entryNames.GetValueOrDefault(entryId, entryId);
-        var uid = await NrUiActions.SelectEntryByNameAsync(Browser.Page, forceId, name);
+        var name = ResolveEntryName(entryId);
+        var uid = await NrUiActions.SelectEntryByNameAsync(Browser.Page, forceId, entryId, name);
         return new ActionOutputs { SelectionId = uid };
     }
 
@@ -177,9 +213,42 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private async Task<ActionOutputs> SelectChildEntryAsync(string forceId, string parentSelectionId, string entryId)
     {
         _ = forceId;
-        var name = _entryNames.GetValueOrDefault(entryId, entryId);
-        var uid = await NrUiActions.SelectChildEntryByNameAsync(Browser.Page, parentSelectionId, name);
+        var name = ResolveEntryName(entryId);
+        var uid = await NrUiActions.SelectChildEntryByNameAsync(Browser.Page, parentSelectionId, name, entryId);
+        if (uid is not null)
+        {
+            _childSelectionParent[uid] = (parentSelectionId, name);
+        }
+
         return new ActionOutputs { SelectionId = uid };
+    }
+
+    /// <summary>
+    /// Resolves a spec entry ID (possibly composite e.g. "groupLink::linkId::targetId")
+    /// to its display name by checking <see cref="_entryNames"/> from right-to-left on each
+    /// "::" segment. Falls back to the raw entry ID if no match is found.
+    /// </summary>
+    private string ResolveEntryName(string entryId)
+    {
+        if (_entryNames.TryGetValue(entryId, out var name))
+        {
+            return name;
+        }
+
+        // Composite ID: try each segment right-to-left
+        if (entryId.Contains("::"))
+        {
+            var segments = entryId.Split("::");
+            for (var i = segments.Length - 1; i >= 0; i--)
+            {
+                if (_entryNames.TryGetValue(segments[i], out var segName))
+                {
+                    return segName;
+                }
+            }
+        }
+
+        return entryId;
     }
 
     public void DeselectSelection(string forceId, string selectionId)
@@ -191,7 +260,15 @@ public sealed class NrRosterUiEngine : IRosterEngine
     public void SetSelectionCount(string forceId, string selectionId, int count)
     {
         _ = forceId;
-        NrUiActions.SetSelectionCountAsync(Browser.Page, selectionId, count).GetAwaiter().GetResult();
+        if (_childSelectionParent.TryGetValue(selectionId, out var info))
+        {
+            NrUiActions.SetChildEntryCountByNameAsync(Browser.Page, info.ParentUid, info.EntryName, count).GetAwaiter().GetResult();
+        }
+        else
+        {
+            // Root selection — JS-based fallback (no single count spinner in NR UI)
+            NrUiActions.SetSelectionCountAsync(Browser.Page, selectionId, count).GetAwaiter().GetResult();
+        }
     }
 
     public ActionOutputs DuplicateSelection(string forceId, string selectionId)
@@ -236,6 +313,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         _loadedSystemId = null;
         _forceEntryNames.Clear();
         _entryNames.Clear();
+        _childSelectionParent.Clear();
     }
 
     public void Dispose()

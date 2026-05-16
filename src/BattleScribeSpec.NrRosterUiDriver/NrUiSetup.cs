@@ -60,9 +60,10 @@ public static class NrUiSetup
     public static async Task<string?> CreateRosterAsync(
         IPage page,
         string rosterName,
-        ProtocolGameSystem? gameSystem)
+        ProtocolGameSystem? gameSystem,
+        string? preferredCatalogueId = null)
     {
-        return await CreateRosterViaJsAsync(page, rosterName, gameSystem);
+        return await CreateRosterViaJsAsync(page, rosterName, gameSystem, preferredCatalogueId);
     }
 
     /// <summary>
@@ -72,12 +73,13 @@ public static class NrUiSetup
     private static async Task<string?> CreateRosterViaJsAsync(
         IPage page,
         string rosterName,
-        ProtocolGameSystem? gameSystem)
+        ProtocolGameSystem? gameSystem,
+        string? preferredCatalogueId = null)
     {
         var systemId = gameSystem?.Id;
 
         var result = await page.EvaluateAsync<string?>("""
-            async ([systemId, rosterName]) => {
+            async ([systemId, rosterName, preferredCatalogueId]) => {
                 try {
                     const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
                     if (!pinia) return 'ERROR:Pinia not found';
@@ -96,9 +98,31 @@ public static class NrUiSetup
                     const playableBooks = sys.books?.array?.filter(b => b.playable) || [];
                     if (!playableBooks.length) return 'ERROR:No playable books';
 
-                    const pb = playableBooks[0];
+                    // Pick the preferred catalogue book if specified (e.g. the non-library catalogue).
+                    // NR internally orders library catalogues before non-library ones regardless of
+                    // load order, so we must explicitly seek the preferred (non-library) book.
+                    let pb = preferredCatalogueId
+                        ? (playableBooks.find(b => b.bsid === preferredCatalogueId || b.id === preferredCatalogueId)
+                            ?? playableBooks.find(b => !b.library)
+                            ?? playableBooks[0])
+                        : (playableBooks.find(b => !b.library) ?? playableBooks[0]);
                     const bd = await sys.getBook(pb.id);
                     if (!bd) return 'ERROR:Failed to load book';
+
+                    // Load ALL playable books (for multi-catalogue AddForce support)
+                    const allBooks = [];
+                    for (const bk of playableBooks) {
+                        const bkData = await sys.getBook(bk.id);
+                        if (bkData) {
+                            bkData.catalogue.costIndex = {};
+                            const bkGs = bkData.catalogue.gameSystem;
+                            if (bkGs?.costTypes) {
+                                for (const ct of bkGs.costTypes)
+                                    bkData.catalogue.costIndex[ct.id] = ct;
+                            }
+                            allBooks.push({ bookData: bkData, bookRef: bk });
+                        }
+                    }
 
                     bd.catalogue.costIndex = {};
                     const gs = bd.catalogue.gameSystem;
@@ -148,7 +172,9 @@ public static class NrUiSetup
 
                     window.__bsspec = {
                         army: roster, book: bd,
-                        books: [bd], bookCatalogueIds: [pb.bsid || ''], row
+                        books: allBooks.map(b => b.bookData),
+                        bookCatalogueIds: allBooks.map(b => b.bookRef.bsid || ''),
+                        row
                     };
 
                     return listKey;
@@ -156,7 +182,7 @@ public static class NrUiSetup
                     return 'ERROR:' + e.message + '\n' + e.stack;
                 }
             }
-            """, new object?[] { systemId, rosterName });
+            """, new object?[] { systemId, rosterName, preferredCatalogueId });
 
         if (result?.StartsWith("ERROR:", StringComparison.Ordinal) == true)
         {
@@ -192,6 +218,25 @@ public static class NrUiSetup
                 if (window.__bsspec && ls?.currentList?.army) {
                     window.__bsspec.army = ls.currentList.army;
                     window.__bsspec.book = ls.currentList.book;
+                }
+            }
+            """);
+    }
+
+    /// <summary>
+    /// Bypasses NR's supporter/premium paywall by setting a fake user with supporter:true.
+    /// This enables Custom Names/Notes editing in the UI which is otherwise locked behind a paywall.
+    /// Call once after the editor is loaded.
+    /// </summary>
+    public static async Task BypassSupporterPaywallAsync(IPage page)
+    {
+        await page.EvaluateAsync("""
+            () => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const userStore = pinia?._s?.get('userStore');
+                if (userStore) {
+                    userStore.user = { supporter: true, name: 'SpecTest', _id: 'spec-test-supporter' };
                 }
             }
             """);
