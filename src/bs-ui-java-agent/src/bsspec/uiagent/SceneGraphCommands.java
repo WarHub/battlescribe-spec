@@ -63,6 +63,8 @@ public class SceneGraphCommands {
                 return getTreeItems(params);
             case "selectTreeItem":
                 return selectTreeItem(params);
+            case "clearTreeSelection":
+                return clearTreeSelection(params);
             case "expandTreeItem":
                 return expandTreeItem(params);
             case "clickTreeItem":
@@ -92,11 +94,52 @@ public class SceneGraphCommands {
                 return findControlByLabel(params);
             case "clickControlByLabel":
                 return clickControlByLabel(params);
+            case "setSpinnerValueByLabel":
+                return setSpinnerValueByLabel(params);
             case "patchSupporterPass":
                 return engineAccessor.patchSupporterPass();
+            case "setCategoryCustomNotes":
+                return engineAccessor.setCategoryCustomNotes(params);
+            case "selectEntryViaEngine":
+                return engineAccessor.selectEntryViaEngine(params);
+            case "setSelectionCount":
+                return engineAccessor.setSelectionCount(params);
+            case "setCostLimit":
+                return engineAccessor.setCostLimit(params);
+            case "rebuildCatalogueTree":
+                return engineAccessor.rebuildCatalogueTree(params);
+            case "waitForEngine":
+                return engineAccessor.waitForEngine(params);
+            case "threadDump":
+                return threadDump();
             default:
                 throw new IllegalArgumentException("Unknown method: " + method);
         }
+    }
+
+    private String threadDump() {
+        StringBuilder sb = new StringBuilder("{\"threads\":[");
+        boolean first = true;
+        for (java.util.Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
+            Thread t = entry.getKey();
+            StackTraceElement[] stack = entry.getValue();
+            if (!first) sb.append(",");
+            first = false;
+            sb.append("{\"name\":\"").append(jsonEscape(t.getName()))
+              .append("\",\"state\":\"").append(t.getState())
+              .append("\",\"stack\":[");
+            for (int i = 0; i < Math.min(stack.length, 15); i++) {
+                if (i > 0) sb.append(",");
+                sb.append("\"").append(jsonEscape(stack[i].toString())).append("\"");
+            }
+            sb.append("]}");
+        }
+        sb.append("]}");
+        return sb.toString();
+    }
+
+    private String jsonEscape(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
     }
 
     private String getWindows() {
@@ -358,7 +401,15 @@ public class SceneGraphCommands {
         if (!(node instanceof TextInputControl)) {
             throw new IllegalArgumentException("Node is not a text input: " + node.getClass().getSimpleName());
         }
-        ((TextInputControl) node).setText(text != null ? text : "");
+        TextInputControl textInput = (TextInputControl) node;
+        textInput.setText(text != null ? text : "");
+        // Fire a synthetic KEY_RELEASED event so that onKeyReleased handlers are triggered.
+        // BattleScribe's CustomiseSelectionWindowController uses onKeyReleased to persist changes.
+        javafx.scene.input.KeyEvent keyEvent = new javafx.scene.input.KeyEvent(
+            javafx.scene.input.KeyEvent.KEY_RELEASED,
+            "", "", javafx.scene.input.KeyCode.UNDEFINED,
+            false, false, false, false);
+        textInput.fireEvent(keyEvent);
         return "{\"set\":true}";
     }
 
@@ -488,6 +539,22 @@ public class SceneGraphCommands {
         TreeItem<Object> sel = tree.getSelectionModel().getSelectedItem();
         return "{\"selected\":true,\"selectedText\":"
                 + jsonString(sel != null && sel.getValue() != null ? sel.getValue().toString() : null) + "}";
+    }
+
+    @SuppressWarnings("unchecked")
+    private String clearTreeSelection(String params) {
+        String treeId = extractStr(params, "treeId");
+        String windowTitle = extractStr(params, "windowTitle");
+        Node node = resolveNode(treeId, windowTitle);
+        if (node == null) {
+            throw new IllegalArgumentException("TreeView not found: " + treeId);
+        }
+        if (!(node instanceof TreeView)) {
+            throw new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName());
+        }
+        TreeView<Object> tree = (TreeView<Object>) node;
+        tree.getSelectionModel().clearSelection();
+        return "{\"cleared\":true}";
     }
 
     @SuppressWarnings("unchecked")
@@ -822,6 +889,7 @@ public class SceneGraphCommands {
     private String clickControlByLabel(String params) {
         String text = extractStr(params, "text");
         String windowTitle = extractStr(params, "windowTitle");
+        String action = extractStr(params, "action"); // "increment" or "decrement", default increment
 
         Scene scene = findScene(windowTitle);
         if (scene == null) return "{\"error\":\"no scene\"}";
@@ -841,9 +909,14 @@ public class SceneGraphCommands {
                 if (sibling instanceof Spinner) {
                     @SuppressWarnings("unchecked")
                     Spinner<Object> spinner = (Spinner<Object>) sibling;
-                    // Schedule increment asynchronously to avoid blocking the JSON-RPC response
-                    Platform.runLater(() -> spinner.getValueFactory().increment(1));
-                    return "{\"clicked\":true,\"controlType\":\"spinner\",\"action\":\"increment\"" +
+                    boolean decrement = "decrement".equals(action);
+                    if (decrement) {
+                        Platform.runLater(() -> spinner.getValueFactory().decrement(1));
+                    } else {
+                        Platform.runLater(() -> spinner.getValueFactory().increment(1));
+                    }
+                    String act = decrement ? "decrement" : "increment";
+                    return "{\"clicked\":true,\"controlType\":\"spinner\",\"action\":\"" + act + "\"" +
                             ",\"labelText\":" + jsonString(labelText) + "}";
                 }
                 if (sibling instanceof Button) {
@@ -868,6 +941,64 @@ public class SceneGraphCommands {
         }
 
         return "{\"clicked\":false,\"error\":\"Control not found for text: " + text + "\"}";
+    }
+
+    /**
+     * Set a Spinner's value by its sibling label text. Used for setSelectionCount via parent's edit panel.
+     * Finds the Spinner adjacent to the matching Label, then sets its value via Platform.runLater.
+     * Params: text (label text to match), value (integer target), windowTitle (optional)
+     */
+    @SuppressWarnings("unchecked")
+    private String setSpinnerValueByLabel(String params) {
+        String text = extractStr(params, "text");
+        int value = extractInt(params, "value", -1);
+        String windowTitle = extractStr(params, "windowTitle");
+
+        if (value < 0) {
+            return "{\"error\":\"Missing or invalid 'value' parameter.\"}";
+        }
+
+        Scene scene = findScene(windowTitle);
+        if (scene == null) return "{\"error\":\"no scene\"}";
+
+        for (Node labelNode : scene.getRoot().lookupAll(".label")) {
+            if (!(labelNode instanceof Label)) continue;
+            Label label = (Label) labelNode;
+            String labelText = label.getText();
+            if (labelText == null || !labelText.contains(text)) continue;
+
+            Parent parent = label.getParent();
+            if (parent == null) continue;
+
+            for (Node sibling : parent.getChildrenUnmodifiable()) {
+                if (sibling == label) continue;
+                if (sibling instanceof Spinner) {
+                    Spinner<Object> spinner = (Spinner<Object>) sibling;
+                    Object currentVal = spinner.getValue();
+                    int currentInt = (currentVal instanceof Number) ? ((Number) currentVal).intValue() : 0;
+                    if (currentInt == value) {
+                        return "{\"set\":true,\"controlType\":\"spinner\",\"labelText\":" + jsonString(labelText) +
+                                ",\"previousValue\":" + currentInt + ",\"value\":" + value + ",\"noChange\":true}";
+                    }
+                    // Set value directly (we're already on FX thread) to trigger change listeners synchronously
+                    int delta = value - currentInt;
+                    long startMs = System.currentTimeMillis();
+                    SpinnerValueFactory<Object> factory = spinner.getValueFactory();
+                    if (delta > 0) {
+                        for (int i = 0; i < delta; i++) factory.increment(1);
+                    } else {
+                        for (int i = 0; i < -delta; i++) factory.decrement(1);
+                    }
+                    long elapsedMs = System.currentTimeMillis() - startMs;
+                    System.err.println("[bs-ui-agent] setSpinnerValueByLabel: increment took " + elapsedMs + "ms");
+                    return "{\"set\":true,\"controlType\":\"spinner\",\"labelText\":" + jsonString(labelText) +
+                            ",\"previousValue\":" + currentInt + ",\"value\":" + value +
+                            ",\"elapsedMs\":" + elapsedMs + "}";
+                }
+            }
+        }
+
+        return "{\"set\":false,\"error\":\"Spinner not found for label text: " + text + "\"}";
     }
 
     // --- Helpers ---

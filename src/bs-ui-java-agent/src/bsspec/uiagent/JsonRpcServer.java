@@ -80,9 +80,13 @@ public class JsonRpcServer {
 
         try {
             String result;
-            // patchSupporterPass uses Instrumentation.retransformClasses which must NOT
-            // run on the FX thread (it would deadlock)
-            if ("patchSupporterPass".equals(method)) {
+            // Commands that must NOT run on the FX thread:
+            // - patchSupporterPass: uses Instrumentation.retransformClasses
+            // - waitForEngine: blocks until bg engine op completes; FX must stay free
+            // - threadDump: diagnostic; must work even when FX thread is frozen
+            // - rebuildCatalogueTree: schedules FX work internally; must run off-FX to avoid deadlock
+            if ("patchSupporterPass".equals(method) || "waitForEngine".equals(method)
+                    || "threadDump".equals(method) || "rebuildCatalogueTree".equals(method)) {
                 result = commands.dispatch(method, params);
             } else {
                 // Execute on JavaFX Application Thread and wait for result
@@ -109,7 +113,9 @@ public class JsonRpcServer {
         });
 
         try {
-            return future.get();
+            return future.get(60, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new RuntimeException("FX thread did not respond within 60s (likely blocked/deadlocked)");
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof Exception) {

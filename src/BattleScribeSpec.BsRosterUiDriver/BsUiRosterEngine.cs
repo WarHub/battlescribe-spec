@@ -226,6 +226,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         EnsureRosterLoaded();
         var before = await ReadRosterStateAsync();
+
+        // UI approach: select force in roster tree, then double-click entry in catalogue tree
         await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(forceId), MainWindowTitle);
         await ClickTreeItemAsync(["#treeCatalogue"], TreeIdToken(entryId), MainWindowTitle, doubleClick: true);
 
@@ -254,9 +256,24 @@ public sealed class BsUiRosterEngine : IRosterEngine
         var clicked = result?["clicked"]?.GetValue<bool>() ?? false;
         if (!clicked)
         {
-            throw new TimeoutException(
-                $"Could not find edit panel control for child entry '{entryName}' (id={entryId}). " +
-                $"Result: {result?.ToJsonString()}");
+            // Hidden entries aren't shown in UI — fall back to engine API
+            result = await _Client.CallAsync("selectEntryViaEngine", new System.Text.Json.Nodes.JsonObject
+            {
+                ["forceId"] = forceId,
+                ["entryId"] = entryId,
+                ["parentSelectionId"] = parentSelectionId
+            });
+            var selected = result?["selected"]?.GetValue<bool>() ?? false;
+            if (!selected)
+            {
+                var error = result?["error"]?.GetValue<string>() ?? result?.ToJsonString() ?? "unknown";
+                throw new InvalidOperationException(
+                    $"selectChildEntry failed for '{entryName}' (id={entryId}): {error}");
+            }
+            await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+            {
+                ["timeoutMs"] = 15000
+            });
         }
 
         return await WaitForSelectionOutputsAsync(before, forceId, parentSelectionId, entryId);
@@ -274,11 +291,30 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task SetSelectionCountAsync(string forceId, string selectionId, int count)
     {
         EnsureRosterLoaded();
-        _ = forceId;
         ArgumentOutOfRangeException.ThrowIfNegative(count);
 
-        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(selectionId), MainWindowTitle);
-        await _Client.SetSpinnerValueAsync(CountSpinnerSelector, value: count, windowTitle: MainWindowTitle);
+        // Use engine API directly on a bg thread (safe with threadCount=1: no pool deadlock).
+        // The UI spinner approach deadlocks because the controller's change listener calls
+        // engine.setNumSelections → t() which blocks the FX thread indefinitely.
+        var result = await _Client.CallAsync("setSelectionCount", new System.Text.Json.Nodes.JsonObject
+        {
+            ["forceId"] = forceId,
+            ["selectionId"] = selectionId,
+            ["count"] = count
+        });
+        var set = result?["set"]?.GetValue<bool>() ?? false;
+        if (!set)
+        {
+            var error = result?["error"]?.GetValue<string>() ?? "unknown";
+            throw new InvalidOperationException(
+                $"setSelectionCount engine API failed: {error}");
+        }
+
+        // Wait for the bg thread engine operation to complete
+        await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+        {
+            ["timeoutMs"] = 15000
+        });
         _ = await WaitForRosterStateAsync(state => FindSelectionById(state.Forces, selectionId)?.Number == count);
     }
 
@@ -332,8 +368,22 @@ public sealed class BsUiRosterEngine : IRosterEngine
             return;
         }
 
-        throw new NotSupportedException(
-            "Setting cost limits after roster creation is not supported by the current BS UI driver.");
+        // Use engine API directly (BS Desktop has no post-creation cost limit UI)
+        var result = await _Client.CallAsync("setCostLimit", new System.Text.Json.Nodes.JsonObject
+        {
+            ["costTypeId"] = costTypeId,
+            ["value"] = (double)value
+        });
+        var set = result?["set"]?.GetValue<bool>() ?? false;
+        if (!set)
+        {
+            var error = result?["error"]?.GetValue<string>() ?? "unknown";
+            throw new InvalidOperationException($"setCostLimit failed: {error}");
+        }
+        await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+        {
+            ["timeoutMs"] = 15000
+        });
     }
 
     private async Task SetCustomizationAsync(
@@ -347,7 +397,17 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         if (categoryEntryId is not null)
         {
-            throw new NotSupportedException("Category customization is not supported by the current BS UI driver.");
+            // Category customization isn't available via UI in BS desktop.
+            // Use engine API directly to set customNotes on the category.
+            var catResult = await _Client.CallAsync("setCategoryCustomNotes", new JsonObject
+            {
+                ["forceId"] = forceId,
+                ["categoryEntryId"] = categoryEntryId,
+                ["customName"] = customName ?? "",
+                ["customNotes"] = customNotes ?? ""
+            });
+            Console.Error.WriteLine($"  [DEBUG] setCategoryCustomNotes result: {catResult}");
+            return;
         }
 
         var targetId = selectionId ?? forceId;
@@ -361,6 +421,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         // If the supporter popup appears instead of the customization dialog, dismiss it and retry
         var windowTitle = await WaitForFirstWindowAsync(["Customise", "Customize", "Name", "Support BattleScribe"]);
+        Console.Error.WriteLine($"  [DEBUG] SetCustomization: window found = '{windowTitle}'");
         if (windowTitle is not null && windowTitle.Contains("Support", StringComparison.OrdinalIgnoreCase))
         {
             // Dismiss the supporter popup
@@ -385,14 +446,17 @@ public sealed class BsUiRosterEngine : IRosterEngine
         if (customName is not null)
         {
             await SetTextAsync(["#txtName", "#txtCustomName", "TextField"], customName, windowTitle);
+            Console.Error.WriteLine($"  [DEBUG] SetCustomization: set customName='{customName}'");
         }
 
         if (customNotes is not null)
         {
             await SetTextAsync(["#txtNotes", "#txtCustomNotes", "TextArea"], customNotes, windowTitle);
+            Console.Error.WriteLine($"  [DEBUG] SetCustomization: set customNotes='{customNotes}'");
         }
 
-        if (!await TryFireButtonAsync("#btnDone", windowTitle, async: true) &&
+        Console.Error.WriteLine($"  [DEBUG] SetCustomization: clicking Done...");
+        if (!await TryFireButtonAsync("#btnDone", windowTitle) &&
             !await TryClickTextAsync("Done", windowTitle, "Button") &&
             !await TryClickTextAsync("OK", windowTitle, "Button"))
         {
@@ -1172,36 +1236,50 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _ = await _Client.SelectComboBoxItemAsync(selector, index: best.Index, windowTitle: windowTitle);
     }
 
-    private async Task SelectTreeItemAsync(IEnumerable<string> selectors, string text, string windowTitle)
+    private async Task SelectTreeItemAsync(IEnumerable<string> selectors, string text, string windowTitle, int retries = 3)
     {
-        foreach (var selector in selectors)
+        for (var attempt = 0; attempt <= retries; attempt++)
         {
-            try
+            foreach (var selector in selectors)
             {
-                _ = await _Client.SelectTreeItemAsync(selector, text, windowTitle);
-                return;
+                try
+                {
+                    _ = await _Client.SelectTreeItemAsync(selector, text, windowTitle);
+                    return;
+                }
+                catch
+                {
+                    // try next selector
+                }
             }
-            catch
+            if (attempt < retries)
             {
-                // try next selector
+                await Task.Delay(500 * (attempt + 1));
             }
         }
 
         throw new InvalidOperationException($"Tree item '{text}' not found in '{windowTitle}'.");
     }
 
-    private async Task ClickTreeItemAsync(IEnumerable<string> selectors, string text, string windowTitle, bool doubleClick)
+    private async Task ClickTreeItemAsync(IEnumerable<string> selectors, string text, string windowTitle, bool doubleClick, int retries = 3)
     {
-        foreach (var selector in selectors)
+        for (var attempt = 0; attempt <= retries; attempt++)
         {
-            try
+            foreach (var selector in selectors)
             {
-                _ = await _Client.ClickTreeItemAsync(selector, text, doubleClick, windowTitle);
-                return;
+                try
+                {
+                    _ = await _Client.ClickTreeItemAsync(selector, text, doubleClick, windowTitle);
+                    return;
+                }
+                catch
+                {
+                    // try next selector
+                }
             }
-            catch
+            if (attempt < retries)
             {
-                // try next selector
+                await Task.Delay(500 * (attempt + 1));
             }
         }
 
@@ -1215,6 +1293,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             try
             {
                 await _Client.SetNodeTextAsync(selector, text, windowTitle);
+                Console.Error.WriteLine($"  [DEBUG] SetTextAsync: set '{selector}' = '{text}' in '{windowTitle}'");
                 return;
             }
             catch
@@ -1387,7 +1466,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
             dto.Name ?? string.Empty,
             dto.CatalogueId,
             [.. (dto.Selections ?? []).Select(MapSelectionState)],
-            ChildForces: dto.ChildForces is null ? null : [.. dto.ChildForces.Select(MapForceState)]);
+            ChildForces: dto.ChildForces is null ? null : [.. dto.ChildForces.Select(MapForceState)],
+            EntryId: dto.EntryId,
+            CatalogueName: dto.CatalogueName,
+            CustomName: dto.CustomName,
+            CustomNotes: dto.CustomNotes,
+            Categories: dto.Categories is null or [] ? null : [.. dto.Categories.Select(MapCategoryState)],
+            Publications: dto.Publications is null or [] ? null : [.. dto.Publications.Select(MapPublicationState)]);
 
     private static SelectionState MapSelectionState(AgentSelectionState dto)
         => new(
@@ -1398,10 +1483,41 @@ public sealed class BsUiRosterEngine : IRosterEngine
             dto.Number,
             dto.Hidden,
             [.. (dto.Costs ?? []).Select(MapCostState)],
-            [.. (dto.Children ?? []).Select(MapSelectionState)]);
+            [.. (dto.Children ?? []).Select(MapSelectionState)],
+            Page: dto.Page,
+            PublicationId: dto.PublicationId,
+            PublicationName: dto.PublicationName,
+            EntryGroupId: dto.EntryGroupId,
+            CustomName: dto.CustomName,
+            CustomNotes: dto.CustomNotes,
+            Categories: dto.Categories is null or [] ? null : [.. dto.Categories.Select(MapCategoryState)],
+            Profiles: dto.Profiles is null or [] ? null : [.. dto.Profiles.Select(MapProfileState)],
+            Rules: dto.Rules is null or [] ? null : [.. dto.Rules.Select(MapRuleState)]);
 
     private static CostState MapCostState(AgentCostState dto)
         => new(dto.Name ?? string.Empty, dto.TypeId ?? string.Empty, dto.Value);
+
+    private static CategoryState MapCategoryState(AgentCategoryState dto)
+        => new(dto.Name ?? string.Empty, dto.EntryId, dto.Primary,
+            CustomNotes: string.IsNullOrEmpty(dto.CustomNotes) ? null : dto.CustomNotes,
+            PublicationId: string.IsNullOrEmpty(dto.PublicationId) ? null : dto.PublicationId,
+            Page: dto.Page);
+
+    private static PublicationState MapPublicationState(AgentPublicationState dto)
+        => new(dto.Id ?? string.Empty, dto.Name ?? string.Empty);
+
+    private static ProfileState MapProfileState(AgentProfileState dto)
+        => new(
+            dto.Name ?? string.Empty,
+            dto.TypeId,
+            dto.TypeName,
+            dto.Hidden,
+            [.. (dto.Characteristics ?? []).Select(c => new CharacteristicState(c.Name ?? string.Empty, c.TypeId, c.Value ?? string.Empty))],
+            Page: dto.Page,
+            PublicationId: dto.PublicationId);
+
+    private static RuleState MapRuleState(AgentRuleState dto)
+        => new(dto.Name ?? string.Empty, dto.Description ?? string.Empty, dto.Hidden, Page: dto.Page, PublicationId: dto.PublicationId);
 
     private static string ExtractJson(JsonNode? result)
         => result switch
@@ -1505,6 +1621,51 @@ public sealed class BsUiRosterEngine : IRosterEngine
             if (found is not null)
             {
                 return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindParentSelectionId(IEnumerable<ForceState> forces, string selectionId)
+    {
+        foreach (var force in forces)
+        {
+            var result = FindParentSelectionId(force.Selections, selectionId);
+            if (result is not null)
+            {
+                return result;
+            }
+
+            if (force.ChildForces is not null)
+            {
+                result = FindParentSelectionId(force.ChildForces, selectionId);
+                if (result is not null)
+                {
+                    return result;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindParentSelectionId(IEnumerable<SelectionState> selections, string selectionId)
+    {
+        foreach (var sel in selections)
+        {
+            foreach (var child in sel.Children)
+            {
+                if (string.Equals(child.Id, selectionId, StringComparison.Ordinal))
+                {
+                    return sel.Id;
+                }
+
+                var deeper = FindParentSelectionId(child.Children, selectionId);
+                if (deeper is not null)
+                {
+                    return deeper;
+                }
             }
         }
 
@@ -1615,8 +1776,14 @@ public sealed class BsUiRosterEngine : IRosterEngine
         public string? Id { get; set; }
         public string? Name { get; set; }
         public string? CatalogueId { get; set; }
+        public string? EntryId { get; set; }
+        public string? CatalogueName { get; set; }
+        public string? CustomName { get; set; }
+        public string? CustomNotes { get; set; }
         public List<AgentSelectionState>? Selections { get; set; }
         public List<AgentForceState>? ChildForces { get; set; }
+        public List<AgentCategoryState>? Categories { get; set; }
+        public List<AgentPublicationState>? Publications { get; set; }
     }
 
     private sealed class AgentSelectionState
@@ -1624,11 +1791,20 @@ public sealed class BsUiRosterEngine : IRosterEngine
         public string? Id { get; set; }
         public string? Name { get; set; }
         public string? EntryId { get; set; }
+        public string? EntryGroupId { get; set; }
         public string? Type { get; set; }
         public int Number { get; set; }
         public bool Hidden { get; set; }
+        public string? Page { get; set; }
+        public string? PublicationId { get; set; }
+        public string? PublicationName { get; set; }
+        public string? CustomName { get; set; }
+        public string? CustomNotes { get; set; }
         public List<AgentCostState>? Costs { get; set; }
         public List<AgentSelectionState>? Children { get; set; }
+        public List<AgentCategoryState>? Categories { get; set; }
+        public List<AgentProfileState>? Profiles { get; set; }
+        public List<AgentRuleState>? Rules { get; set; }
     }
 
     private sealed class AgentCostState
@@ -1636,5 +1812,48 @@ public sealed class BsUiRosterEngine : IRosterEngine
         public string? Name { get; set; }
         public string? TypeId { get; set; }
         public decimal Value { get; set; }
+    }
+
+    private sealed class AgentCategoryState
+    {
+        public string? Name { get; set; }
+        public string? EntryId { get; set; }
+        public bool Primary { get; set; }
+        public string? CustomNotes { get; set; }
+        public string? PublicationId { get; set; }
+        public string? Page { get; set; }
+    }
+
+    private sealed class AgentPublicationState
+    {
+        public string? Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    private sealed class AgentProfileState
+    {
+        public string? Name { get; set; }
+        public string? TypeId { get; set; }
+        public string? TypeName { get; set; }
+        public bool Hidden { get; set; }
+        public List<AgentCharacteristicState>? Characteristics { get; set; }
+        public string? Page { get; set; }
+        public string? PublicationId { get; set; }
+    }
+
+    private sealed class AgentCharacteristicState
+    {
+        public string? Name { get; set; }
+        public string? TypeId { get; set; }
+        public string? Value { get; set; }
+    }
+
+    private sealed class AgentRuleState
+    {
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public bool Hidden { get; set; }
+        public string? Page { get; set; }
+        public string? PublicationId { get; set; }
     }
 }

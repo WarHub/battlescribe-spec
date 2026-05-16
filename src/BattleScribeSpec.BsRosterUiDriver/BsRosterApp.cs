@@ -45,10 +45,23 @@ public sealed class BsRosterApp : IAsyncDisposable
             Arguments = args,
             UseShellExecute = false,
             RedirectStandardOutput = true,
+            RedirectStandardError = true,
         };
 
         _process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start BattleScribe process.");
+
+        // Drain stderr in background to prevent pipe buffer from filling
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _process.StandardError.ReadLineAsync()
+                    is not null)
+                { }
+            }
+            catch { /* process exited */ }
+        });
 
         // Wait for the agent to print its port
         var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
@@ -63,6 +76,17 @@ public sealed class BsRosterApp : IAsyncDisposable
             if (line.StartsWith("BSUI_AGENT_PORT=", StringComparison.Ordinal))
             {
                 AgentPort = int.Parse(line["BSUI_AGENT_PORT=".Length..]);
+                // Continue draining stdout in background to prevent pipe buffer deadlock
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        while (await _process.StandardOutput.ReadLineAsync()
+                            is not null)
+                        { }
+                    }
+                    catch { /* process exited */ }
+                });
                 return;
             }
         }

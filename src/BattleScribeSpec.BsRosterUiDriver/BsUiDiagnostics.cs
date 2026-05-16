@@ -70,6 +70,18 @@ public sealed class BsUiDiagnostics
                     }
 
                     sb.AppendLine();
+                    sb.AppendLine("─── THREAD DUMP ────────────────────────────────────────");
+                    try
+                    {
+                        var threadDump = await client.CallAsync("threadDump", null);
+                        sb.AppendLine(FormatJson(threadDump));
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine($"  [Failed to get thread dump: {ex.GetType().Name}: {ex.Message}]");
+                    }
+
+                    sb.AppendLine();
                     sb.AppendLine("─── SCENE GRAPH (depth=5) ──────────────────────────────");
                     try
                     {

@@ -180,7 +180,9 @@ catch (Exception ex)
 using (engine)
 {
     var dumpOptions = new DumpOptions(Json: json);
-    var runner = new RosterRunner(engine, new DataSourceResolver(), engineName);
+    // bs-ui engine uses "battlescribe" assertion overrides since it IS the BattleScribe engine
+    var assertionEngineName = engineName == "bs-ui" ? "battlescribe" : engineName;
+    var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngineName);
 
     var stepCount = spec.Steps.Count;
     var lastStepIndex = stepCount - 1;
