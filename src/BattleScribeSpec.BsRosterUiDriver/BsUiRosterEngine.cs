@@ -36,6 +36,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private bool _engineLocated;
     private bool _disposed;
 
+    /// <summary>
+    /// When true, <see cref="Cleanup"/> preserves the running app and agent connection
+    /// so subsequent <see cref="Setup"/> calls reuse the same JVM instance (warm start).
+    /// Useful for iterative debugging where JVM startup time is significant.
+    /// </summary>
+    public bool KeepAlive { get; set; }
+
     public BsUiRosterEngine(BsUiOptions options)
     {
         _options = options;
@@ -129,6 +136,31 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         try
         {
+            // Warm start: reuse running app if available
+            if (KeepAlive && _app is not null && _client is not null)
+            {
+                try
+                {
+                    _ = await _client.PingAsync();
+                    Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
+
+                    // Restage data files and reload
+                    var warmFiles = BuildXmlFiles(gameSystem, catalogues);
+                    await StageDataFilesAsync(_app.DataDirectoryPath, gameSystem, catalogues, warmFiles);
+
+                    return [];
+                }
+                catch
+                {
+                    Console.Error.WriteLine("[bs-ui] Warm start: existing instance unresponsive, starting fresh.");
+                    // Fall through to cold start
+                    _client.Dispose();
+                    _client = null;
+                    await _app.DisposeAsync();
+                    _app = null;
+                }
+            }
+
             _app = new BsRosterApp(
                 _options.JavaPath,
                 _options.RosterEditorJarPath,
@@ -563,6 +595,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task CleanupAsync()
     {
         _engineLocated = false;
+
+        if (KeepAlive)
+        {
+            // Warm start: keep app/client alive, just reset engine state
+            return;
+        }
 
         _client?.Dispose();
         _client = null;

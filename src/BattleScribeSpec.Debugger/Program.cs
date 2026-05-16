@@ -12,6 +12,7 @@ var headless = true;
 string? exportXmlDir = null;
 string? exportRosterDir = null;
 string? screenshotsDir = null;
+var keepAlive = false;
 var formatMode = false;
 var formatCheck = false;
 string? formatDir = null;
@@ -56,6 +57,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--screenshots" when i + 1 < args.Length:
             screenshotsDir = args[++i];
+            break;
+        case "--keep-alive":
+            keepAlive = true;
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -516,7 +520,7 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
             {
                 var bsUiOptions = ResolveBsUiOptions();
                 Console.Error.WriteLine($"BS UI mode: {bsUiOptions.RosterEditorJarPath}");
-                return new BsUiRosterEngine(bsUiOptions);
+                return new BsUiRosterEngine(bsUiOptions) { KeepAlive = keepAlive };
             }
 
         default:
@@ -609,6 +613,7 @@ static void PrintUsage()
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
           --export-roster <dir>  Export final roster as .ros XML (bs-ui engine only)
           --screenshots <dir>  Capture screenshot at each step (bs-ui engine only)
+          --keep-alive     Keep BattleScribe app running between runs (bs-ui only)
           --format [<dir>]    Format all *.yaml files under <dir> (default: specs/roster/)
           --check             With --format: report issues without fixing (exit 1 if any)
           -h, --help      Show this help
