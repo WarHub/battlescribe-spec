@@ -86,7 +86,10 @@ public class JsonRpcServer {
             // - threadDump: diagnostic; must work even when FX thread is frozen
             // - rebuildCatalogueTree: schedules FX work internally; must run off-FX to avoid deadlock
             if ("patchSupporterPass".equals(method) || "waitForEngine".equals(method)
-                    || "threadDump".equals(method) || "rebuildCatalogueTree".equals(method)) {
+                    || "threadDump".equals(method) || "rebuildCatalogueTree".equals(method)
+                    || "addForceViaEngine".equals(method) || "removeForceViaEngine".equals(method)
+                    || "deselectEntryViaEngine".equals(method)
+                    || "setRosterName".equals(method)) {
                 result = commands.dispatch(method, params);
             } else {
                 // Execute on JavaFX Application Thread and wait for result

@@ -8,6 +8,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,7 @@ public class EngineAccessor {
 
     // Cached references
     private Object engineInstance;
+    private Object controllerInstance;
     private Class<?> engineClass;
     private Class<?> rosterClass;
     private Method getRosterMethod;
@@ -156,6 +158,7 @@ public class EngineAccessor {
                     Object controller = extractControllerFromHandler(handler, controllerClass);
                     if (controller != null) {
                         tried.add("controller:found_via_handler");
+                        controllerInstance = controller;
                         Object eng = readEngineFromController(controller, controllerClass);
                         if (eng != null) {
                             engineInstance = eng;
@@ -178,6 +181,7 @@ public class EngineAccessor {
             Object controller = findControllerFromNode(root, controllerClass);
             if (controller != null) {
                 tried.add("controller:found_via_properties");
+                controllerInstance = controller;
                 Object eng = readEngineFromController(controller, controllerClass);
                 if (eng != null) {
                     engineInstance = eng;
@@ -451,6 +455,27 @@ public class EngineAccessor {
         }
     }
 
+    public String setRosterName(String params) {
+        if (engineInstance == null) {
+            return errorJson("Engine not found. Call findEngine first.");
+        }
+        try {
+            String name = extractStr(params, "name");
+            if (name == null || name.isEmpty()) {
+                return errorJson("Missing 'name' parameter.");
+            }
+            Object roster = getRosterMethod.invoke(engineInstance);
+            if (roster == null) {
+                return errorJson("No roster loaded.");
+            }
+            Method setNameMethod = roster.getClass().getMethod("setName", String.class);
+            setNameMethod.invoke(roster, name);
+            return "{\"set\":true}";
+        } catch (Exception e) {
+            return errorJson("setRosterName: " + e.getMessage());
+        }
+    }
+
 
     public String getValidationErrors() {
         if (engineInstance == null) {
@@ -521,6 +546,13 @@ public class EngineAccessor {
         sb.append(",\"catalogueName\":").append(jsonStr(callGetter(force, "getCatalogueName")));
         sb.append(",\"customName\":").append(jsonStr(callGetter(force, "getCustomName")));
         sb.append(",\"customNotes\":").append(jsonStr(callGetter(force, "getCustomNotes")));
+        sb.append(",\"hidden\":").append(resolveForceHidden(force));
+        sb.append(",\"publicationId\":").append(jsonStr(callGetter(force, "getPublicationId")));
+        sb.append(",\"page\":").append(jsonStr(callGetter(force, "getPage")));
+
+        // Rules — Force.getRules() returns List<Rule>
+        Object ruleList = callListGetter(force, "getRules");
+        sb.append(",\"rules\":").append(serializeRuleList(ruleList));
 
         // Categories — Force.getCategories() returns List<Category>
         Object catList = callListGetter(force, "getCategories");
@@ -531,7 +563,7 @@ public class EngineAccessor {
         sb.append(",\"publications\":").append(serializePublicationList(pubList));
 
         // Build publication name lookup from force publications
-        java.util.Map<String, String> pubNameMap = new java.util.HashMap<>();
+        Map<String, String> pubNameMap = new HashMap<String, String>();
         if (pubList != null) {
             int pubSize = (int) pubList.getClass().getMethod("size").invoke(pubList);
             for (int i = 0; i < pubSize; i++) {
@@ -546,7 +578,7 @@ public class EngineAccessor {
 
         // Selections
         Object selList = callListGetter(force, "getSelections");
-        sb.append(",\"selections\":").append(serializeSelectionList(selList, pubNameMap));
+        sb.append(",\"selections\":").append(serializeSelectionList(selList, pubNameMap, force));
 
         // Child forces
         Object childForces = callListGetter(force, "getForces");
@@ -569,11 +601,11 @@ public class EngineAccessor {
         return sb.toString();
     }
 
-    private String serializeSelectionList(Object list, java.util.Map<String, String> pubNameMap) throws Exception {
+    private String serializeSelectionList(Object list, Map<String, String> pubNameMap, Object force) throws Exception {
         if (list == null) return "[]";
         int size = (int) list.getClass().getMethod("size").invoke(list);
         // Sort selections alphabetically by name (case-insensitive) to match BattleScribe render-layer ordering
-        java.util.List<Object> items = new java.util.ArrayList<>(size);
+        List<Object> items = new ArrayList<Object>(size);
         for (int i = 0; i < size; i++) {
             items.add(list.getClass().getMethod("get", int.class).invoke(list, i));
         }
@@ -589,13 +621,13 @@ public class EngineAccessor {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < items.size(); i++) {
             if (i > 0) sb.append(",");
-            sb.append(serializeSelection(items.get(i), pubNameMap));
+            sb.append(serializeSelection(items.get(i), pubNameMap, force));
         }
         sb.append("]");
         return sb.toString();
     }
 
-    private String serializeSelection(Object sel, java.util.Map<String, String> pubNameMap) throws Exception {
+    private String serializeSelection(Object sel, Map<String, String> pubNameMap, Object force) throws Exception {
         StringBuilder sb = new StringBuilder("{");
         sb.append("\"id\":").append(jsonStr(callGetter(sel, "getId")));
         sb.append(",\"name\":").append(jsonStr(callGetter(sel, "getName")));
@@ -628,20 +660,15 @@ public class EngineAccessor {
             sb.append(",\"number\":1");
         }
 
-        // Hidden
-        try {
-            Method m = sel.getClass().getMethod("isHidden");
-            sb.append(",\"hidden\":").append(m.invoke(sel));
-        } catch (Exception e) {
-            sb.append(",\"hidden\":false");
-        }
+        boolean selHidden = resolveSelectionHidden(force, sel);
+        sb.append(",\"hidden\":").append(selHidden);
 
         // Costs
         sb.append(",\"costs\":").append(serializeCostList(callListGetter(sel, "getCosts")));
 
         // Child selections
         Object children = callListGetter(sel, "getSelections");
-        sb.append(",\"children\":").append(serializeSelectionList(children, pubNameMap));
+        sb.append(",\"children\":").append(serializeSelectionList(children, pubNameMap, force));
 
         sb.append("}");
         return sb.toString();
@@ -801,6 +828,16 @@ public class EngineAccessor {
             }
         }
         throw new IllegalArgumentException("Force '" + forceId + "' not found.");
+    }
+
+    private Object findForceContainingSelection(String selectionId) throws Exception {
+        Object roster = getCurrentRoster();
+        for (Object force : toJavaList(callListGetter(roster, "getForces"))) {
+            if (tryFindSelectionById(force, selectionId) != null) {
+                return force;
+            }
+        }
+        return null;
     }
 
     private Object findForceByIdRecursive(Object force, String forceId) {
@@ -987,12 +1024,557 @@ public class EngineAccessor {
         return findObjectById(costTypeClass, costTypeId, engineInstance, getCurrentRoster());
     }
 
-    private Object getForceContext(Object force) throws Exception {
-        Method method = findMethod(engineClass, "e", new Class<?>[] { force.getClass() }, Object.class);
-        if (method == null) {
+    private Object getCurrentGameSystem() throws Exception {
+        Object roster = getCurrentRoster();
+        Object gameSystem = callGetterObject(roster, "getGameSystem");
+        if (gameSystem != null) {
+            return gameSystem;
+        }
+        // Try exact type name match on engine instance fields
+        gameSystem = findFieldValueByTypeName(engineInstance, "net.battlescribe.model.data.GameSystem");
+        if (gameSystem != null) {
+            return gameSystem;
+        }
+        // Search controller fields (controller manages the data model)
+        if (controllerInstance != null) {
+            gameSystem = findFieldValueByTypeName(controllerInstance, "net.battlescribe.model.data.GameSystem");
+            if (gameSystem != null) {
+                return gameSystem;
+            }
+            // Broader search on controller
+            gameSystem = findFieldValueByTypeNameContains(controllerInstance, "GameSystem");
+            if (gameSystem != null) {
+                return gameSystem;
+            }
+            // Search all fields of controller recursively (1 level deep)
+            Class<?> cls = controllerInstance.getClass();
+            while (cls != null && cls != Object.class) {
+                for (java.lang.reflect.Field field : cls.getDeclaredFields()) {
+                    try {
+                        field.setAccessible(true);
+                        Object value = field.get(controllerInstance);
+                        if (value != null && !isLeafValue(value)) {
+                            Object gs = findFieldValueByTypeNameContains(value, "GameSystem");
+                            if (gs != null) {
+                                return gs;
+                            }
+                        }
+                    } catch (Exception e) { /* ignore */ }
+                }
+                cls = cls.getSuperclass();
+            }
+        }
+        // Try via CatalogueManager
+        Object catMgr = getCatalogueManager();
+        if (catMgr != null) {
+            gameSystem = findFieldValueByTypeNameContains(catMgr, "GameSystem");
+            if (gameSystem != null) {
+                return gameSystem;
+            }
+        }
+        // Last resort: get gameSystemId from roster and BFS from engine/controller
+        String gsId = callGetter(roster, "getGameSystemId");
+        if (gsId != null && controllerInstance != null) {
+            // Search for an object with matching getId()
+            gameSystem = findObjectWithId(controllerInstance, gsId, "GameSystem");
+            if (gameSystem != null) {
+                return gameSystem;
+            }
+        }
+        return null;
+    }
+
+    private Object findObjectWithId(Object root, String targetId, String typeHint) {
+        if (root == null) return null;
+        Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
+        ArrayDeque<Object> queue = new ArrayDeque<>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            Object current = queue.removeFirst();
+            if (current == null || !visited.add(current) || isLeafValue(current)) continue;
+            // Check if this object has getId matching and class contains hint
+            if (current.getClass().getName().contains(typeHint)) {
+                String id = callGetter(current, "getId");
+                if (targetId.equals(id)) {
+                    return current;
+                }
+            }
+            // Expand: handle collections specially
+            if (visited.size() > 10000) break;
+            if (current instanceof java.util.Collection) {
+                for (Object item : (java.util.Collection<?>) current) {
+                    if (item != null && !visited.contains(item)) queue.add(item);
+                }
+            } else if (current instanceof java.util.Map) {
+                for (Object value : ((java.util.Map<?,?>) current).values()) {
+                    if (value != null && !visited.contains(value)) queue.add(value);
+                }
+            } else {
+                // Expand fields
+                Class<?> cls = current.getClass();
+                String className = cls.getName();
+                // Only traverse net.battlescribe classes and java.util classes
+                if (!className.startsWith("net.battlescribe.") && !className.startsWith("java.util.")) continue;
+                while (cls != null && cls != Object.class) {
+                    for (java.lang.reflect.Field field : cls.getDeclaredFields()) {
+                        try {
+                            field.setAccessible(true);
+                            Object value = field.get(current);
+                            if (value != null && !isLeafValue(value) && !visited.contains(value)) {
+                                queue.add(value);
+                            }
+                        } catch (Exception e) { /* ignore */ }
+                    }
+                    cls = cls.getSuperclass();
+                }
+            }
+        }
+        return null;
+    }
+
+    private Object findFieldValueByTypeNameContains(Object target, String typeFragment) {
+        if (target == null) return null;
+        Class<?> cls = target.getClass();
+        while (cls != null && cls != Object.class) {
+            for (java.lang.reflect.Field field : cls.getDeclaredFields()) {
+                try {
+                    field.setAccessible(true);
+                    Object value = field.get(target);
+                    if (value != null && value.getClass().getName().contains(typeFragment)) {
+                        return value;
+                    }
+                } catch (Exception e) { /* ignore */ }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
+    private Object getCatalogueManager() {
+        try {
+            Method method = findMethod(engineClass, "d", new Class<?>[0], Object.class);
+            if (method != null) {
+                Object manager = method.invoke(engineInstance);
+                if (manager != null && "net.battlescribe.engine.a.d".equals(manager.getClass().getName())) {
+                    return manager;
+                }
+            }
+        } catch (Exception e) {
+            // Fall back to field scan below.
+        }
+        return findFieldValueByTypeName(engineInstance, "net.battlescribe.engine.a.d");
+    }
+
+    private Object findCatalogueById(String catalogueId) throws Exception {
+        Class<?> catalogueClass = findClass("net.battlescribe.model.data.Catalogue");
+        if (catalogueClass == null) {
             return null;
         }
-        return method.invoke(engineInstance, force);
+        Object roster = getCurrentRoster();
+        Object catalogueManager = getCatalogueManager();
+        return findObjectById(catalogueClass, catalogueId, catalogueManager, engineInstance, roster);
+    }
+
+    private Object findForceEntryById(String forceEntryId, Object gameSystem, Object catalogue) throws Exception {
+        Class<?> forceEntryClass = findClass("net.battlescribe.model.data.ForceEntry");
+        if (forceEntryClass == null) {
+            return null;
+        }
+        Object roster = getCurrentRoster();
+        return findObjectById(forceEntryClass, forceEntryId, gameSystem, catalogue, engineInstance, roster);
+    }
+
+    private Object findFieldValueByTypeName(Object target, String typeName) {
+        if (target == null || typeName == null) {
+            return null;
+        }
+        Class<?> cls = target.getClass();
+        while (cls != null && cls != Object.class) {
+            for (Field field : cls.getDeclaredFields()) {
+                try {
+                    field.setAccessible(true);
+                    Object value = field.get(target);
+                    if (value != null && typeName.equals(value.getClass().getName())) {
+                        return value;
+                    }
+                } catch (Exception e) {
+                    // Ignore inaccessible fields and continue.
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
+    private Object getForceContext(Object force) throws Exception {
+        // Try exact type match first
+        Method method = findMethod(engineClass, "e", new Class<?>[] { force.getClass() }, Object.class);
+        if (method != null) {
+            return method.invoke(engineInstance, force);
+        }
+        // Fallback: find "e" with 1 parameter, any type (the engine likely has only one such method)
+        Class<?> c = engineClass;
+        while (c != null && c != Object.class) {
+            for (Method m : c.getDeclaredMethods()) {
+                if ("e".equals(m.getName()) && m.getParameterCount() == 1
+                        && !m.getReturnType().isPrimitive() && m.getReturnType() != Void.class) {
+                    Class<?> paramType = m.getParameterTypes()[0];
+                    if (paramType.isInstance(force)) {
+                        m.setAccessible(true);
+                        return m.invoke(engineInstance, force);
+                    }
+                }
+            }
+            c = c.getSuperclass();
+        }
+        return null;
+    }
+
+    private boolean resolveForceHidden(Object force) {
+        try {
+            Object forceContext = getForceContext(force);
+            if (forceContext == null) {
+                return false;
+            }
+            // Get original ForceEntry via forceContext.e(force.getEntryId())
+            String forceEntryId = callGetter(force, "getEntryId");
+            if (forceEntryId == null) {
+                return false;
+            }
+            Method getForceEntryMethod = findMethod(forceContext.getClass(), "e", new Class<?>[] { String.class }, Object.class);
+            if (getForceEntryMethod == null) {
+                return false;
+            }
+            Object originalForceEntry = null;
+            for (String candidate : candidateIds(forceEntryId)) {
+                originalForceEntry = getForceEntryMethod.invoke(forceContext, candidate);
+                if (originalForceEntry != null) break;
+            }
+            if (originalForceEntry == null) {
+                return false;
+            }
+            // Resolve: engine.a(forceContext, force, originalEntry, true)
+            Method resolveMethod = null;
+            Class<?> ec = engineClass;
+            while (ec != null && ec != Object.class) {
+                for (Method m : ec.getDeclaredMethods()) {
+                    if ("a".equals(m.getName()) && m.getParameterCount() == 4) {
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (pts[0].isInstance(forceContext) && pts[1].isInstance(force)
+                                && pts[2].isInstance(originalForceEntry) && pts[3] == boolean.class
+                                && !m.getReturnType().isPrimitive()) {
+                            m.setAccessible(true);
+                            resolveMethod = m;
+                            break;
+                        }
+                    }
+                }
+                if (resolveMethod != null) break;
+                ec = ec.getSuperclass();
+            }
+            if (resolveMethod == null) {
+                return false;
+            }
+            Object resolved = resolveMethod.invoke(engineInstance, forceContext, force, originalForceEntry, true);
+            if (resolved != null) {
+                Method isHidden = findMethod(resolved.getClass(), "isHidden", 0);
+                if (isHidden != null) {
+                    Object result = isHidden.invoke(resolved);
+                    if (result instanceof Boolean) {
+                        return ((Boolean) result).booleanValue();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // fall through
+        }
+        return false;
+    }
+
+    private boolean resolveSelectionHidden(Object force, Object selection) {
+        try {
+            Object resolvedEntry = resolveModifiedSelectionEntry(force, selection);
+            if (resolvedEntry != null) {
+                Method isHiddenMethod = findMethod(resolvedEntry.getClass(), "isHidden", 0);
+                if (isHiddenMethod != null) {
+                    Object hidden = isHiddenMethod.invoke(resolvedEntry);
+                    if (hidden instanceof Boolean) {
+                        return ((Boolean) hidden).booleanValue();
+                    }
+                    if (hidden != null) {
+                        return Boolean.parseBoolean(hidden.toString());
+                    }
+                }
+                // Try "getHidden" or field "hidden" as fallbacks
+                Method getHidden = findMethod(resolvedEntry.getClass(), "getHidden", 0);
+                if (getHidden != null) {
+                    Object hidden = getHidden.invoke(resolvedEntry);
+                    if (hidden instanceof Boolean) {
+                        return ((Boolean) hidden).booleanValue();
+                    }
+                }
+            } else {
+                String entryId = callGetter(selection, "getEntryId");
+                System.err.println("[agent] resolveSelectionHidden: resolvedEntry is null for entryId=" + entryId);
+            }
+        } catch (Exception e) {
+            System.err.println("[agent] resolveSelectionHidden error: " + e.getMessage());
+        }
+
+        try {
+            Method method = selection.getClass().getMethod("isHidden");
+            Object hidden = method.invoke(selection);
+            if (hidden instanceof Boolean) {
+                return ((Boolean) hidden).booleanValue();
+            }
+            return hidden != null && Boolean.parseBoolean(hidden.toString());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Object resolveModifiedSelectionEntry(Object force, Object selection) throws Exception {
+        if (force == null || engineInstance == null || engineClass == null) {
+            return null;
+        }
+
+        Object forceContext = getForceContext(force);
+        if (forceContext == null) {
+            System.err.println("[agent] resolveModifiedEntry: forceContext null");
+            return null;
+        }
+
+        String entryId = callGetter(selection, "getEntryId");
+        if (entryId == null) {
+            return null;
+        }
+
+        Method getEntryMethod = findMethod(forceContext.getClass(), "i", new Class<?>[] { String.class }, Object.class);
+        if (getEntryMethod == null) {
+            // Try broader search
+            Class<?> fcClass = forceContext.getClass();
+            while (fcClass != null && fcClass != Object.class) {
+                for (Method m : fcClass.getDeclaredMethods()) {
+                    if ("i".equals(m.getName()) && m.getParameterCount() == 1
+                            && m.getParameterTypes()[0] == String.class
+                            && !m.getReturnType().isPrimitive()) {
+                        m.setAccessible(true);
+                        getEntryMethod = m;
+                        break;
+                    }
+                }
+                if (getEntryMethod != null) break;
+                fcClass = fcClass.getSuperclass();
+            }
+            if (getEntryMethod == null) {
+                System.err.println("[agent] resolveModifiedEntry: no method 'i(String)' on " + forceContext.getClass().getName());
+                return null;
+            }
+        }
+
+        Object originalEntry = null;
+        for (String candidate : candidateIds(entryId)) {
+            originalEntry = getEntryMethod.invoke(forceContext, candidate);
+            if (originalEntry != null) {
+                break;
+            }
+        }
+        if (originalEntry == null) {
+            System.err.println("[agent] resolveModifiedEntry: originalEntry null for entryId=" + entryId);
+            return null;
+        }
+
+        // Find engine.a(ForceContext, Selection, Entry, boolean) → resolved entry
+        // The return type must be a data class (not roster Selection)
+        Method resolveMethod = null;
+        Class<?> ec = engineClass;
+        while (ec != null && ec != Object.class) {
+            for (Method m : ec.getDeclaredMethods()) {
+                if ("a".equals(m.getName()) && m.getParameterCount() == 4) {
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts[0].isInstance(forceContext) && pts[1].isInstance(selection)
+                            && pts[2].isInstance(originalEntry) && pts[3] == boolean.class
+                            && !m.getReturnType().isPrimitive()
+                            && !m.getReturnType().getName().contains(".roster.")) {
+                        m.setAccessible(true);
+                        resolveMethod = m;
+                        break;
+                    }
+                }
+            }
+            if (resolveMethod != null) break;
+            ec = ec.getSuperclass();
+        }
+        if (resolveMethod == null) {
+            System.err.println("[agent] resolveModifiedEntry: no method 'a(FC,Sel,Entry,bool)' on engine. "
+                    + "FC=" + forceContext.getClass().getName()
+                    + " Sel=" + selection.getClass().getName()
+                    + " Entry=" + originalEntry.getClass().getName());
+            return null;
+        }
+        return resolveMethod.invoke(engineInstance, forceContext, selection, originalEntry, true);
+    }
+
+    private static final class ValidationRef {
+        private final String entryId;
+        private final String constraintId;
+
+        private ValidationRef(String entryId, String constraintId) {
+            this.entryId = entryId;
+            this.constraintId = constraintId;
+        }
+    }
+
+    private Map<String, List<String>> parseValidationErrorIds(List<String> errorIds) {
+        Map<String, List<String>> errorIdMap = new HashMap<String, List<String>>();
+        for (String errorId : errorIds) {
+            if (errorId == null) {
+                continue;
+            }
+            String[] parts = errorId.split("::", 3);
+            if (parts.length >= 3) {
+                List<String> constraintIds = errorIdMap.get(parts[1]);
+                if (constraintIds == null) {
+                    constraintIds = new ArrayList<String>();
+                    errorIdMap.put(parts[1], constraintIds);
+                }
+                constraintIds.add(parts[2]);
+            }
+        }
+        return errorIdMap;
+    }
+
+    private ValidationRef resolveValidationRef(Map<String, List<String>> errorIdMap, String ownerType, String message, String ownerEntryId) {
+        String lowerMessage = message != null ? message.toLowerCase() : null;
+
+        if ("roster".equals(ownerType)) {
+            ValidationRef rosterCostLimitRef = resolveRosterCostLimitRef(errorIdMap, lowerMessage);
+            if (rosterCostLimitRef != null) {
+                return rosterCostLimitRef;
+            }
+        }
+
+        for (Map.Entry<String, List<String>> entry : errorIdMap.entrySet()) {
+            String candidateEntryId = entry.getKey();
+            if ("costLimits".equals(candidateEntryId)) {
+                continue;
+            }
+            String entryName = getEntryName(candidateEntryId);
+            if (containsIgnoreCase(message, entryName)) {
+                return new ValidationRef(candidateEntryId, pickConstraintId(entry.getValue(), lowerMessage));
+            }
+        }
+
+        // Hidden error: "(hidden)" in message → entryId from errorIdMap or ownerEntryId
+        if (lowerMessage != null && lowerMessage.contains("(hidden)")) {
+            for (Map.Entry<String, List<String>> entry : errorIdMap.entrySet()) {
+                if (!"costLimits".equals(entry.getKey())) {
+                    return new ValidationRef(entry.getKey(), "hidden");
+                }
+            }
+            // Fallback: use ownerEntryId as the entry reference
+            if (ownerEntryId != null) {
+                return new ValidationRef(ownerEntryId, "hidden");
+            }
+        }
+
+        // Cost limit fallback for roster errors
+        if ("roster".equals(ownerType)) {
+            List<String> constraintIds = errorIdMap.get("costLimits");
+            if (constraintIds != null && !constraintIds.isEmpty()) {
+                return new ValidationRef("costLimits", constraintIds.get(0));
+            }
+            // Fallback: if message contains "over" or "limit" and we can find cost type
+            if (lowerMessage != null && (lowerMessage.contains("over") || lowerMessage.contains("limit"))) {
+                String costTypeId = extractCostTypeIdFromMessage(lowerMessage);
+                if (costTypeId != null) {
+                    return new ValidationRef("costLimits", costTypeId);
+                }
+            }
+        }
+
+        return new ValidationRef(null, null);
+    }
+
+    private ValidationRef resolveRosterCostLimitRef(Map<String, List<String>> errorIdMap, String lowerMessage) {
+        List<String> constraintIds = errorIdMap.get("costLimits");
+        if (constraintIds == null || constraintIds.isEmpty()) {
+            return null;
+        }
+
+        boolean looksLikeCostLimit = lowerMessage == null
+                || lowerMessage.contains("over")
+                || lowerMessage.contains("too much");
+        if (!looksLikeCostLimit) {
+            return null;
+        }
+
+        for (String constraintId : constraintIds) {
+            String costTypeName = getCostTypeName(constraintId);
+            if (costTypeName != null && containsIgnoreCase(lowerMessage, costTypeName.toLowerCase())) {
+                return new ValidationRef("costLimits", constraintId);
+            }
+        }
+
+        if (constraintIds.size() == 1) {
+            return new ValidationRef("costLimits", constraintIds.get(0));
+        }
+        return null;
+    }
+
+    private String pickConstraintId(List<String> constraintIds, String lowerMessage) {
+        if (constraintIds == null || constraintIds.isEmpty()) {
+            return null;
+        }
+        if (lowerMessage != null && lowerMessage.contains("(hidden)")) {
+            return "hidden";
+        }
+        return constraintIds.get(0);
+    }
+
+    private boolean containsIgnoreCase(String message, String candidate) {
+        if (message == null || candidate == null || candidate.isEmpty()) {
+            return false;
+        }
+        return message.toLowerCase().contains(candidate.toLowerCase());
+    }
+
+    private String getEntryName(String entryId) {
+        try {
+            Object entry = findEntryById(entryId);
+            return entry != null ? callGetter(entry, "getName") : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String getCostTypeName(String costTypeId) {
+        try {
+            Object costType = findCostTypeById(costTypeId);
+            return costType != null ? callGetter(costType, "getName") : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String extractCostTypeIdFromMessage(String lowerMessage) {
+        // Search gameSystem costTypes for one whose name appears in the message
+        try {
+            Object gs = getCurrentGameSystem();
+            if (gs == null) return null;
+            Object costTypes = callListGetter(gs, "getCostTypes");
+            if (costTypes == null) return null;
+            for (Object ct : toJavaList(costTypes)) {
+                String id = callGetter(ct, "getId");
+                String name = callGetter(ct, "getName");
+                if (name != null && lowerMessage.contains(name.toLowerCase())) {
+                    return id;
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return null;
     }
 
     private void collectForceValidationErrors(Object force, StringBuilder sb, boolean[] first) throws Exception {
@@ -1023,18 +1605,27 @@ public class EngineAccessor {
         Object errors = callListGetter(element, "getValidationErrors");
         Object errorIds = callListGetter(element, "getValidationErrorIds");
         List<String> errorIdList = extractStrings(errorIds);
+        Map<String, List<String>> errorIdMap = parseValidationErrorIds(errorIdList);
+        String ownerEntryId = callGetter(element, "getEntryId");
         for (Object error : toJavaList(errors)) {
             if (!first[0]) {
                 sb.append(",");
             }
             first[0] = false;
+            String message = extractValidationMessage(error);
+            ValidationRef validationRef = resolveValidationRef(errorIdMap, ownerType, message, ownerEntryId);
             sb.append("{");
-            sb.append("\"message\":").append(jsonStr(extractValidationMessage(error)));
+            sb.append("\"message\":").append(jsonStr(message));
             sb.append(",\"ownerType\":").append(jsonStr(ownerType));
             sb.append(",\"ownerId\":").append(jsonStr(callGetter(element, "getId")));
-            String ownerEntryId = callGetter(element, "getEntryId");
             if (ownerEntryId != null) {
                 sb.append(",\"ownerEntryId\":").append(jsonStr(ownerEntryId));
+            }
+            if (validationRef.entryId != null) {
+                sb.append(",\"entryId\":").append(jsonStr(validationRef.entryId));
+            }
+            if (validationRef.constraintId != null) {
+                sb.append(",\"constraintId\":").append(jsonStr(validationRef.constraintId));
             }
             if (!errorIdList.isEmpty()) {
                 sb.append(",\"errorIds\":").append(serializeStringList(errorIdList));
@@ -1630,6 +2221,169 @@ public class EngineAccessor {
     }
 
     /**
+     * Adds a new root force via the engine API.
+     * params: { "catalogueId": "...", "forceEntryId": "..." }
+     */
+    public String addForceViaEngine(String params) {
+        try {
+            ensureEngineFound();
+            String catalogueId = extractStr(params, "catalogueId");
+            String forceEntryId = extractStr(params, "forceEntryId");
+            String parentForceId = extractStr(params, "parentForceId");
+            if (catalogueId == null || catalogueId.isEmpty()) {
+                return errorJson("Missing 'catalogueId' parameter.");
+            }
+            if (forceEntryId == null || forceEntryId.isEmpty()) {
+                return errorJson("Missing 'forceEntryId' parameter.");
+            }
+
+            Object gameSystem = getCurrentGameSystem();
+            if (gameSystem == null) {
+                StringBuilder diag = new StringBuilder("GameSystem not found. Controller fields: ");
+                if (controllerInstance != null) {
+                    Class<?> c = controllerInstance.getClass();
+                    while (c != null && c != Object.class) {
+                        for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                            try {
+                                f.setAccessible(true);
+                                Object v = f.get(controllerInstance);
+                                diag.append(f.getName()).append("=")
+                                    .append(v != null ? v.getClass().getName() : "null").append("; ");
+                            } catch (Exception ex) { /* ignore */ }
+                        }
+                        c = c.getSuperclass();
+                    }
+                }
+                return errorJson(diag.toString());
+            }
+
+            Object catalogue = findCatalogueById(catalogueId);
+            if (catalogue == null) {
+                return errorJson("Catalogue not found: " + catalogueId);
+            }
+
+            Object forceEntry = findForceEntryById(forceEntryId, gameSystem, catalogue);
+            if (forceEntry == null) {
+                return errorJson("ForceEntry not found: " + forceEntryId);
+            }
+
+            final Object gs = gameSystem;
+            final Object cat = catalogue;
+            final Object fe = forceEntry;
+            final Map<Object, Object> linkedCatalogues = new HashMap<Object, Object>();
+            final List<Object> favourites = new ArrayList<Object>();
+            final List<Object> errors = new ArrayList<Object>();
+
+            // Child force: engine.b(parentForce, gameSystem, catalogue, linkedCats, forceEntry, favourites, errors)
+            if (parentForceId != null && !parentForceId.isEmpty()) {
+                Object parentForce = findForceById(parentForceId);
+                if (parentForce == null) {
+                    return errorJson("Parent force not found: " + parentForceId);
+                }
+
+                Method childForceMethod = findAddChildForceMethod(parentForce, gameSystem, catalogue, forceEntry);
+                if (childForceMethod == null) {
+                    return errorJson("Engine addChildForce method not found (7-param b()).");
+                }
+                childForceMethod.setAccessible(true);
+
+                final Object pf = parentForce;
+                final Method method = childForceMethod;
+                final CountDownLatch latch = new CountDownLatch(1);
+                engineOpLatch = latch;
+                new Thread(() -> {
+                    try {
+                        resetEngineLoadingFlag();
+                        method.invoke(engineInstance, pf, gs, cat, linkedCatalogues, fe, favourites, errors);
+                        System.err.println("[agent] addForceViaEngine(child): parentForceId=" + parentForceId
+                                + " forceEntryId=" + forceEntryId + " done");
+                    } catch (Exception ex) {
+                        System.err.println("[agent] addForceViaEngine(child) error: " + ex.getMessage());
+                        ex.printStackTrace(System.err);
+                    } finally {
+                        resetEngineLoadingFlag();
+                        latch.countDown();
+                    }
+                }, "bs-addChildForce").start();
+
+                return "{\"added\":true}";
+            }
+
+            // Root force: engine.b(gameSystem, catalogue, linkedCats, forceEntry, favourites, errors)
+            Method addForceMethod = findAddForceMethod(gameSystem, catalogue, forceEntry);
+            if (addForceMethod == null) {
+                return errorJson("Engine addForce method not found.");
+            }
+            addForceMethod.setAccessible(true);
+
+            final Method method = addForceMethod;
+            final CountDownLatch latch = new CountDownLatch(1);
+            engineOpLatch = latch;
+            new Thread(() -> {
+                try {
+                    resetEngineLoadingFlag();
+                    method.invoke(engineInstance, gs, cat, linkedCatalogues, fe, favourites, errors);
+                    System.err.println("[agent] addForceViaEngine: catalogueId=" + catalogueId
+                            + " forceEntryId=" + forceEntryId + " done");
+                } catch (Exception ex) {
+                    System.err.println("[agent] addForceViaEngine error: " + ex.getMessage());
+                    ex.printStackTrace(System.err);
+                } finally {
+                    resetEngineLoadingFlag();
+                    latch.countDown();
+                }
+            }, "bs-addForce").start();
+
+            return "{\"added\":true}";
+        } catch (Exception e) {
+            return errorJson("addForceViaEngine: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Removes a force via the engine API.
+     * params: { "forceId": "..." }
+     */
+    public String removeForceViaEngine(String params) {
+        try {
+            ensureEngineFound();
+            String forceId = extractStr(params, "forceId");
+            if (forceId == null || forceId.isEmpty()) {
+                return errorJson("Missing 'forceId' parameter.");
+            }
+
+            Object force = findForceById(forceId);
+            Method removeForceMethod = findRemoveForceMethod(force);
+            if (removeForceMethod == null) {
+                return errorJson("Engine removeForce method not found.");
+            }
+            removeForceMethod.setAccessible(true);
+
+            final Object f = force;
+            final Method method = removeForceMethod;
+            final CountDownLatch latch = new CountDownLatch(1);
+            engineOpLatch = latch;
+            new Thread(() -> {
+                try {
+                    resetEngineLoadingFlag();
+                    method.invoke(engineInstance, f);
+                    System.err.println("[agent] removeForceViaEngine: forceId=" + forceId + " done");
+                } catch (Exception ex) {
+                    System.err.println("[agent] removeForceViaEngine error: " + ex.getMessage());
+                    ex.printStackTrace(System.err);
+                } finally {
+                    resetEngineLoadingFlag();
+                    latch.countDown();
+                }
+            }, "bs-removeForce").start();
+
+            return "{\"removed\":true}";
+        } catch (Exception e) {
+            return errorJson("removeForceViaEngine: " + e.getMessage());
+        }
+    }
+
+    /**
      * Selects an entry via engine API on a bg thread. Fallback when catalogue tree UI is stale.
      * params: { "forceId": "...", "entryId": "..." }
      * Uses catMgr.R() to get available entries, then engine.b(force, entry) to select.
@@ -1759,6 +2513,70 @@ public class EngineAccessor {
      * Called when UI steering (spinner) isn't available (e.g., model-type child selections).
      * Uses async Platform.runLater for the engine calls to avoid FX thread starvation.
      */
+    /**
+     * Deselects a selection directly via engine.m(selection) — bypasses getNumChanges/isDuplicate.
+     * Params: forceId (String, optional), selectionId (String)
+     */
+    public String deselectEntryViaEngine(String params) {
+        try {
+            ensureEngineFound();
+            String forceId = extractStr(params, "forceId");
+            String selectionId = extractStr(params, "selectionId");
+            if (selectionId == null || selectionId.isEmpty()) {
+                return errorJson("selectionId is required.");
+            }
+
+            // Find the force containing this selection
+            Object force = null;
+            if (forceId != null && !forceId.isEmpty()) {
+                force = findForceById(forceId);
+            }
+            if (force == null) {
+                force = findForceContainingSelection(selectionId);
+            }
+            if (force == null) {
+                return errorJson("Force not found for selectionId '" + selectionId + "'.");
+            }
+
+            // Find the selection
+            Object selection = findSelectionById(force, selectionId);
+            if (selection == null) {
+                return errorJson("Selection '" + selectionId + "' not found.");
+            }
+
+            // Find engine.m(Selection) → void
+            Method deselectEntry = findDeselectEntryMethod(selection);
+            if (deselectEntry == null) {
+                return errorJson("Engine method deselectEntry (m) not found.");
+            }
+
+            System.err.println("[agent] deselectEntryViaEngine: selectionId=" + selectionId);
+
+            // Run on bg thread to avoid FX deadlock (engine.m → t() may interact with UI)
+            final Object sel = selection;
+            final Method dm = deselectEntry;
+            final CountDownLatch latch = new CountDownLatch(1);
+            engineOpLatch = latch;
+            new Thread(() -> {
+                try {
+                    System.err.println("[agent] deselectEntry: invoking...");
+                    dm.invoke(engineInstance, sel);
+                    System.err.println("[agent] deselectEntry: done");
+                } catch (Exception ex) {
+                    System.err.println("[agent] deselectEntry error: " + ex.getMessage());
+                    ex.printStackTrace(System.err);
+                } finally {
+                    resetEngineLoadingFlag();
+                    latch.countDown();
+                }
+            }, "bs-deselectEntry").start();
+
+            return "{\"deselected\":true}";
+        } catch (Exception e) {
+            return errorJson("deselectEntryViaEngine: " + e.getMessage());
+        }
+    }
+
     public String setSelectionCount(String params) {
         try {
             ensureEngineFound();
@@ -1769,7 +2587,16 @@ public class EngineAccessor {
                 return errorJson("Missing or invalid 'count' parameter.");
             }
 
-            Object force = findForceById(forceId);
+            Object force;
+            if (forceId != null && !forceId.isEmpty()) {
+                force = findForceById(forceId);
+            } else {
+                // Search all forces for the selection
+                force = findForceContainingSelection(selectionId);
+                if (force == null) {
+                    return errorJson("Could not find force containing selection '" + selectionId + "'.");
+                }
+            }
             Object selection = findSelectionById(force, selectionId);
 
             // Find parent of this selection (Force or parent Selection)
@@ -2047,6 +2874,71 @@ public class EngineAccessor {
         return null;
     }
 
+    private Method findAddForceMethod(Object gameSystem, Object catalogue, Object forceEntry) {
+        Class<?> cls = engineClass;
+        while (cls != null && cls != Object.class) {
+            for (Method method : cls.getDeclaredMethods()) {
+                if (!method.getName().equals("b") || method.getParameterCount() != 6) {
+                    continue;
+                }
+                Class<?>[] pts = method.getParameterTypes();
+                if (pts[0].isAssignableFrom(gameSystem.getClass())
+                        && pts[1].isAssignableFrom(catalogue.getClass())
+                        && Map.class.isAssignableFrom(pts[2])
+                        && pts[3].isAssignableFrom(forceEntry.getClass())
+                        && List.class.isAssignableFrom(pts[4])
+                        && List.class.isAssignableFrom(pts[5])) {
+                    method.setAccessible(true);
+                    return method;
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
+    // engine.b(parentForce, gameSystem, catalogue, linkedCats, forceEntry, favourites, errors) — 7 params
+    private Method findAddChildForceMethod(Object parentForce, Object gameSystem, Object catalogue, Object forceEntry) {
+        Class<?> cls = engineClass;
+        while (cls != null && cls != Object.class) {
+            for (Method method : cls.getDeclaredMethods()) {
+                if (!method.getName().equals("b") || method.getParameterCount() != 7) {
+                    continue;
+                }
+                Class<?>[] pts = method.getParameterTypes();
+                if (pts[0].isAssignableFrom(parentForce.getClass())
+                        && pts[1].isAssignableFrom(gameSystem.getClass())
+                        && pts[2].isAssignableFrom(catalogue.getClass())
+                        && Map.class.isAssignableFrom(pts[3])
+                        && pts[4].isAssignableFrom(forceEntry.getClass())
+                        && List.class.isAssignableFrom(pts[5])
+                        && List.class.isAssignableFrom(pts[6])) {
+                    method.setAccessible(true);
+                    return method;
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
+    private Method findRemoveForceMethod(Object force) {
+        Class<?> cls = engineClass;
+        while (cls != null && cls != Object.class) {
+            for (Method method : cls.getDeclaredMethods()) {
+                if (!method.getName().equals("g") || method.getParameterCount() != 1) {
+                    continue;
+                }
+                if (method.getParameterTypes()[0].isAssignableFrom(force.getClass())) {
+                    method.setAccessible(true);
+                    return method;
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
     /**
      * Resets the engine's "loading" flag (field 'b' on engine class 'f') to false.
      * After bg thread engine ops, the controller's observer re-enters the engine
@@ -2101,16 +2993,19 @@ public class EngineAccessor {
     }
 
     private Method findDeselectEntryMethod(Object selection) {
-        // engine.m(Selection) → void (1 param)
-        for (Method m : engineClass.getDeclaredMethods()) {
-            if (m.getName().equals("m") && m.getParameterCount() == 1
-                    && m.getReturnType() == void.class) {
-                Class<?>[] pts = m.getParameterTypes();
-                if (pts[0].isAssignableFrom(selection.getClass())) {
-                    m.setAccessible(true);
-                    return m;
+        // engine.m(Selection) → List (returns deselected selections) — may be on superclass
+        Class<?> cls = engineClass;
+        while (cls != null && cls != Object.class) {
+            for (Method m : cls.getDeclaredMethods()) {
+                if (m.getName().equals("m") && m.getParameterCount() == 1) {
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts[0].isAssignableFrom(selection.getClass())) {
+                        m.setAccessible(true);
+                        return m;
+                    }
                 }
             }
+            cls = cls.getSuperclass();
         }
         return null;
     }

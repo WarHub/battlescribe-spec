@@ -57,8 +57,10 @@ public sealed class BsRosterApp : IAsyncDisposable
             try
             {
                 while (await _process.StandardError.ReadLineAsync()
-                    is not null)
-                { }
+                    is { } line)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[BS] {line}");
+                }
             }
             catch { /* process exited */ }
         });

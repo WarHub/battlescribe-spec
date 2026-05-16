@@ -84,6 +84,8 @@ public class SceneGraphCommands {
                 return engineAccessor.findEngine();
             case "getRosterState":
                 return engineAccessor.getRosterState();
+            case "setRosterName":
+                return engineAccessor.setRosterName(params);
             case "getValidationErrors":
                 return engineAccessor.getValidationErrors();
             case "readStaticFields":
@@ -100,8 +102,14 @@ public class SceneGraphCommands {
                 return engineAccessor.patchSupporterPass();
             case "setCategoryCustomNotes":
                 return engineAccessor.setCategoryCustomNotes(params);
+            case "addForceViaEngine":
+                return engineAccessor.addForceViaEngine(params);
+            case "removeForceViaEngine":
+                return engineAccessor.removeForceViaEngine(params);
             case "selectEntryViaEngine":
                 return engineAccessor.selectEntryViaEngine(params);
+            case "deselectEntryViaEngine":
+                return engineAccessor.deselectEntryViaEngine(params);
             case "setSelectionCount":
                 return engineAccessor.setSelectionCount(params);
             case "setCostLimit":
@@ -337,7 +345,19 @@ public class SceneGraphCommands {
             throw new IllegalArgumentException("Node not found: " + selector);
         }
         if (!(node instanceof javafx.scene.control.ButtonBase)) {
-            throw new IllegalArgumentException("Node is not a ButtonBase: " + node.getClass().getSimpleName());
+            Node parent = node.getParent();
+            boolean found = false;
+            for (int i = 0; i < 5 && parent != null; i++) {
+                if (parent instanceof javafx.scene.control.ButtonBase) {
+                    node = parent;
+                    found = true;
+                    break;
+                }
+                parent = parent.getParent();
+            }
+            if (!found) {
+                throw new IllegalArgumentException("Node is not a ButtonBase: " + node.getClass().getSimpleName());
+            }
         }
         javafx.scene.control.ButtonBase button = (javafx.scene.control.ButtonBase) node;
         if ("true".equals(async)) {
