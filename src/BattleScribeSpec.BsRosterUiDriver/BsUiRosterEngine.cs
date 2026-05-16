@@ -144,7 +144,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
                     _ = await ConnectedClient.PingAsync();
                     Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
 
-                    // Restage data files and reload
+                    // Close any open roster to return to clean main window state.
+                    // This dismisses unsaved changes without saving.
+                    await CloseCurrentRosterIfOpenAsync();
+
+                    // Restage data files for the new run.
+                    // NOTE: The app's loaded game data is from the previous startup.
+                    // Warm start is only reliable for re-running the same game system.
                     var warmFiles = BuildXmlFiles(gameSystem, catalogues);
                     await StageDataFilesAsync(_app.DataDirectoryPath, gameSystem, catalogues, warmFiles);
 
@@ -670,6 +676,52 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         await WaitForWindowToCloseAsync(windowTitle);
         await EnsureEngineLocatedAsync();
+    }
+
+    /// <summary>
+    /// Closes any currently open roster to return to the clean main window.
+    /// Dismisses "save changes" confirmation without saving.
+    /// </summary>
+    private async Task CloseCurrentRosterIfOpenAsync()
+    {
+        // Check if a roster is currently loaded by reading state
+        var state = await ReadRosterStateOrEmptyAsync();
+        if (state.Forces.Count == 0)
+        {
+            // No roster open
+            return;
+        }
+
+        // Close via keyboard shortcut Ctrl+W or "Close" button
+        Console.Error.WriteLine("[bs-ui] Warm start: closing current roster...");
+        try
+        {
+            await ConnectedClient.CallAsync("pressKey", new System.Text.Json.Nodes.JsonObject
+            {
+                ["key"] = "W",
+                ["modifiers"] = new System.Text.Json.Nodes.JsonArray { (System.Text.Json.Nodes.JsonNode)"ctrl" },
+                ["windowTitle"] = MainWindowTitle
+            });
+        }
+        catch
+        {
+            // Ctrl+W not available, try Close button
+            if (!await TryFireButtonAsync("#btnClose", MainWindowTitle, async: true) &&
+                !await TryClickTextAsync("Close", MainWindowTitle, "Button"))
+            {
+                // No way to close — proceed anyway, AddForce handles existing rosters
+                return;
+            }
+        }
+
+        // Handle "save changes?" confirmation dialog
+        await Task.Delay(500);
+        if (await TryClickTextAsync("No", ConfirmWindowTitle, "Button") ||
+            await TryClickTextAsync("Don't Save", ConfirmWindowTitle, "Button") ||
+            await TryClickTextAsync("Discard", ConfirmWindowTitle, "Button"))
+        {
+            await Task.Delay(300);
+        }
     }
 
     private async Task<ActionOutputs> WaitForSelectionOutputsAsync(

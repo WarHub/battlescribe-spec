@@ -1253,16 +1253,29 @@ public class SceneGraphCommands {
                 sb.append(",");
             }
             firstSelection[0] = false;
-            appendSelection(child, sb);
-            appendVisibleSelections(child, sb, firstSelection);
+            appendSelectionWithChildren(child, sb);
         }
     }
 
-    private void appendSelection(TreeItem<Object> item, StringBuilder sb) {
+    private void appendSelectionWithChildren(TreeItem<Object> item, StringBuilder sb) {
         NameCount parsed = splitNameAndCount(treeItemText(item));
         sb.append("{\"name\":").append(jsonString(parsed.name));
         sb.append(",\"count\":").append(jsonString(parsed.count));
-        sb.append("}");
+        sb.append(",\"children\":[");
+        if (item.isExpanded() && !item.getChildren().isEmpty()) {
+            boolean[] first = new boolean[] { true };
+            for (TreeItem<Object> child : item.getChildren()) {
+                if (child == null) {
+                    continue;
+                }
+                if (!first[0]) {
+                    sb.append(",");
+                }
+                first[0] = false;
+                appendSelectionWithChildren(child, sb);
+            }
+        }
+        sb.append("]}");
     }
 
     private String treeItemText(TreeItem<Object> item) {
