@@ -2,7 +2,6 @@ package bsspec.uiagent;
 
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
-import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -212,22 +211,29 @@ public class SceneGraphCommands {
         }
 
         WritableImage image = scene.snapshot(null);
-        BufferedImage buffered = SwingFXUtils.fromFXImage(image, null);
-        if (buffered == null) {
-            return "{\"error\":\"Failed to capture scene\"}";
-        }
-
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            if (!ImageIO.write(buffered, "png", baos)) {
-                throw new IOException("No PNG writer available");
+        // Convert WritableImage to PNG using reflection to access SwingFXUtils
+        // (javafx.swing module may not be in JRE, so we use reflection)
+        try {
+            Class<?> swingFxClass = Class.forName("javafx.embed.swing.SwingFXUtils");
+            java.lang.reflect.Method fromFXImage = swingFxClass.getMethod("fromFXImage",
+                javafx.scene.image.Image.class, java.awt.image.BufferedImage.class);
+            Object buffered = fromFXImage.invoke(null, image, null);
+            if (buffered == null) {
+                return "{\"error\":\"Failed to capture scene\"}";
             }
-            String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
-            return "{\"png\":" + jsonString(base64)
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                if (!ImageIO.write((BufferedImage) buffered, "png", baos)) {
+                    throw new IOException("No PNG writer available");
+                }
+                String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+                return "{\"png\":" + jsonString(base64)
                     + ",\"width\":" + (int) image.getWidth()
-                    + ",\"height\":" + (int) image.getHeight()
-                    + "}";
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to encode screenshot", e);
+                    + ",\"height\":" + (int) image.getHeight() + "}";
+            }
+        } catch (ClassNotFoundException e) {
+            return "{\"error\":\"javafx.swing module not available for screenshots\"}";
+        } catch (Exception e) {
+            return "{\"error\":" + jsonString("Screenshot failed: " + e.getMessage()) + "}";
         }
     }
 

@@ -23,6 +23,9 @@
 .PARAMETER SkipPlaywright
     Skip Playwright browser installation.
 
+.PARAMETER IncludeOptional
+    Also download entries marked "optional": true in testdata.json (e.g. battlescribe-app).
+
 .EXAMPLE
     ./setup.ps1
 
@@ -31,10 +34,14 @@
 
 .EXAMPLE
     ./setup.ps1 -SkipPlaywright
+
+.EXAMPLE
+    ./setup.ps1 -IncludeOptional
 #>
 param(
     [switch]$Force,
-    [switch]$SkipPlaywright
+    [switch]$SkipPlaywright,
+    [switch]$IncludeOptional
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,6 +90,13 @@ if (Test-Path $configPath) {
         $entry = $config.$key
         $repo = $entry.repo
         $destDir = Join-Path $testdataDir $key
+
+        # Skip optional entries unless -IncludeOptional is set
+        $isOptional = $entry.PSObject.Properties['optional'] -and $entry.optional -eq $true
+        if ($isOptional -and -not $IncludeOptional) {
+            Write-Host "[$key] skipped (optional — use -IncludeOptional to download)" -ForegroundColor DarkGray
+            continue
+        }
 
         $entryType = if ($entry.PSObject.Properties['type']) { $entry.type } else { 'release' }
 
