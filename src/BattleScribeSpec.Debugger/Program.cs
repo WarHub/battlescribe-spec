@@ -1,5 +1,6 @@
 using BattleScribeSpec;
 using BattleScribeSpec.BsRosterUiDriver;
+using BattleScribeSpec.Debugger;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Roster;
 
@@ -12,6 +13,7 @@ var headless = true;
 string? exportXmlDir = null;
 string? exportRosterDir = null;
 string? screenshotsDir = null;
+string? reportPath = null;
 var keepAlive = false;
 var formatMode = false;
 var formatCheck = false;
@@ -60,6 +62,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--keep-alive":
             keepAlive = true;
+            break;
+        case "--report" when i + 1 < args.Length:
+            reportPath = args[++i];
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -198,6 +203,7 @@ using (engine)
 
     var stepCount = spec.Steps.Count;
     var lastStepIndex = stepCount - 1;
+    var timeline = reportPath is not null ? new TimelineReport(spec.Id) : null;
 
     runner.OnStepCompleted = (stepIndex, step, state, errors) =>
     {
@@ -205,19 +211,20 @@ using (engine)
         var isLastStep = stepIndex == lastStepIndex;
         var shouldDump = isDumpAction || dumpAll || isLastStep;
 
-        // Capture screenshot at every step if screenshots dir is set (bs-ui engine only)
-        if (screenshotsDir is not null && engine is BsUiRosterEngine screenshotEngine)
+        // Capture screenshot for screenshots dir and/or timeline report (bs-ui engine only)
+        byte[]? screenshotBytes = null;
+        if ((screenshotsDir is not null || timeline is not null) && engine is BsUiRosterEngine screenshotEngine)
         {
             try
             {
-                Directory.CreateDirectory(screenshotsDir);
-                var pngBytes = screenshotEngine.CaptureScreenshotAsync().GetAwaiter().GetResult();
-                if (pngBytes is not null)
+                screenshotBytes = screenshotEngine.CaptureScreenshotAsync().GetAwaiter().GetResult();
+                if (screenshotBytes is not null && screenshotsDir is not null)
                 {
+                    Directory.CreateDirectory(screenshotsDir);
                     var actionName = SanitizeFileName(step.Action ?? "assert");
                     var fileName = $"{stepIndex:D3}_{actionName}.png";
                     var filePath = Path.Combine(screenshotsDir, fileName);
-                    File.WriteAllBytes(filePath, pngBytes);
+                    File.WriteAllBytes(filePath, screenshotBytes);
                 }
             }
             catch (Exception ex)
@@ -225,6 +232,8 @@ using (engine)
                 Console.Error.WriteLine($"[screenshots] Step {stepIndex} capture failed: {ex.Message}");
             }
         }
+
+        timeline?.AddStep(stepIndex, step, state, errors, screenshotBytes);
 
         if (!shouldDump)
         {
@@ -281,6 +290,12 @@ using (engine)
         {
             Console.Error.WriteLine($"  {failure}");
         }
+    }
+
+    if (timeline is not null && reportPath is not null)
+    {
+        timeline.Write(reportPath, result.Failures.Count == 0, result.Failures);
+        Console.Error.WriteLine($"Timeline report: {reportPath}");
     }
 
     return result.Failures.Count == 0 ? 0 : 1;
@@ -613,6 +628,7 @@ static void PrintUsage()
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
           --export-roster <dir>  Export final roster as .ros XML (bs-ui engine only)
           --screenshots <dir>  Capture screenshot at each step (bs-ui engine only)
+          --report <file>  Generate HTML timeline report (bs-ui engine only)
           --keep-alive     Keep BattleScribe app running between runs (bs-ui only)
           --format [<dir>]    Format all *.yaml files under <dir> (default: specs/roster/)
           --check             With --format: report issues without fixing (exit 1 if any)

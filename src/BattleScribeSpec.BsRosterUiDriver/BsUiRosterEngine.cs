@@ -1140,6 +1140,17 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return await _client.CaptureScreenshotAsync();
     }
 
+    /// <summary>Reads the visible UI state from the Roster Editor window.</summary>
+    public async Task<JsonNode?> GetUiStateAsync()
+    {
+        ThrowIfDisposed();
+        if (_client is null)
+        {
+            return null;
+        }
+        return await _client.GetUiStateAsync();
+    }
+
     private async Task HandleStartupDialogsAsync()
     {
         await Task.Delay(1500);
