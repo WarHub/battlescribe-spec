@@ -1,5 +1,6 @@
 package bsspec.uiagent;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -28,6 +29,30 @@ import java.util.concurrent.CountDownLatch;
  */
 public class EngineAccessor {
 
+    private static final Gson GSON = new Gson();
+
+    private static class EngineOp {
+        final CountDownLatch latch = new CountDownLatch(1);
+        volatile String error;
+        volatile boolean completed;
+
+        void complete() {
+            completed = true;
+            latch.countDown();
+        }
+
+        void fail(String errorMessage) {
+            error = errorMessage;
+            completed = true;
+            latch.countDown();
+        }
+    }
+
+    @FunctionalInterface
+    private interface EngineOpAction {
+        void run() throws Exception;
+    }
+
     private final Instrumentation instrumentation;
 
     // Cached references
@@ -37,8 +62,8 @@ public class EngineAccessor {
     private Class<?> rosterClass;
     private Method getRosterMethod;
 
-    // Synchronization for async engine operations (selectEntry/deselectEntry)
-    private volatile CountDownLatch engineOpLatch;
+    // Synchronization for async engine operations (single-op-at-a-time by design)
+    private volatile EngineOp currentOp;
 
     public EngineAccessor(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
@@ -1758,6 +1783,9 @@ public class EngineAccessor {
             if (targetClass.isInstance(current) && matchesId(callGetter(current, "getId"), id)) {
                 return current;
             }
+            if (visited.size() > 10000) {
+                return null;
+            }
 
             if (current instanceof Iterable) {
                 for (Object item : (Iterable<?>) current) {
@@ -1947,6 +1975,27 @@ public class EngineAccessor {
             }
         }
         return msg;
+    }
+
+    private void startEngineOp(EngineOp op, String threadName, String errorLabel, EngineOpAction action) {
+        currentOp = op;
+        new Thread(() -> {
+            try {
+                action.run();
+                op.complete();
+            } catch (Exception ex) {
+                String errorMessage = errorLabel + ": " + buildExceptionMessage(ex);
+                System.err.println("[agent] " + errorMessage);
+                ex.printStackTrace(System.err);
+                op.fail(errorMessage);
+            }
+        }, threadName).start();
+    }
+
+    private void clearCurrentOp(EngineOp op) {
+        if (currentOp == op) {
+            currentOp = null;
+        }
     }
 
     private void cacheRosterAccess() {
@@ -2362,22 +2411,17 @@ public class EngineAccessor {
 
                 final Object pf = parentForce;
                 final Method method = childForceMethod;
-                final CountDownLatch latch = new CountDownLatch(1);
-                engineOpLatch = latch;
-                new Thread(() -> {
+                final EngineOp op = new EngineOp();
+                startEngineOp(op, "bs-addChildForce", "addForceViaEngine(child)", () -> {
                     try {
                         resetEngineLoadingFlag();
                         method.invoke(engineInstance, pf, gs, cat, linkedCatalogues, fe, favourites, errors);
                         System.err.println("[agent] addForceViaEngine(child): parentForceId=" + parentForceId
                                 + " forceEntryId=" + forceEntryId + " done");
-                    } catch (Exception ex) {
-                        System.err.println("[agent] addForceViaEngine(child) error: " + ex.getMessage());
-                        ex.printStackTrace(System.err);
                     } finally {
                         resetEngineLoadingFlag();
-                        latch.countDown();
                     }
-                }, "bs-addChildForce").start();
+                });
 
                 return "{\"added\":true}";
             }
@@ -2390,22 +2434,17 @@ public class EngineAccessor {
             addForceMethod.setAccessible(true);
 
             final Method method = addForceMethod;
-            final CountDownLatch latch = new CountDownLatch(1);
-            engineOpLatch = latch;
-            new Thread(() -> {
+            final EngineOp op = new EngineOp();
+            startEngineOp(op, "bs-addForce", "addForceViaEngine", () -> {
                 try {
                     resetEngineLoadingFlag();
                     method.invoke(engineInstance, gs, cat, linkedCatalogues, fe, favourites, errors);
                     System.err.println("[agent] addForceViaEngine: catalogueId=" + catalogueId
                             + " forceEntryId=" + forceEntryId + " done");
-                } catch (Exception ex) {
-                    System.err.println("[agent] addForceViaEngine error: " + ex.getMessage());
-                    ex.printStackTrace(System.err);
                 } finally {
                     resetEngineLoadingFlag();
-                    latch.countDown();
                 }
-            }, "bs-addForce").start();
+            });
 
             return "{\"added\":true}";
         } catch (Exception e) {
@@ -2435,21 +2474,16 @@ public class EngineAccessor {
 
             final Object f = force;
             final Method method = removeForceMethod;
-            final CountDownLatch latch = new CountDownLatch(1);
-            engineOpLatch = latch;
-            new Thread(() -> {
+            final EngineOp op = new EngineOp();
+            startEngineOp(op, "bs-removeForce", "removeForceViaEngine", () -> {
                 try {
                     resetEngineLoadingFlag();
                     method.invoke(engineInstance, f);
                     System.err.println("[agent] removeForceViaEngine: forceId=" + forceId + " done");
-                } catch (Exception ex) {
-                    System.err.println("[agent] removeForceViaEngine error: " + ex.getMessage());
-                    ex.printStackTrace(System.err);
                 } finally {
                     resetEngineLoadingFlag();
-                    latch.countDown();
                 }
-            }, "bs-removeForce").start();
+            });
 
             return "{\"removed\":true}";
         } catch (Exception e) {
@@ -2551,10 +2585,8 @@ public class EngineAccessor {
             // Use b(parent, entry) which calls t() for full refresh (validation, costs, flags).
             // Safe on bg thread with threadCount=1 (no pool deadlock) and pipe drain active.
             final Method createMethod = selectEntry;
-
-            final CountDownLatch latch = new CountDownLatch(1);
-            engineOpLatch = latch;
-            new Thread(() -> {
+            final EngineOp op = new EngineOp();
+            startEngineOp(op, "bs-selectEntry-api", "selectEntryViaEngine", () -> {
                 try {
                     System.err.println("[agent] selectEntryViaEngine: bg thread started, resetting loading flag...");
                     resetEngineLoadingFlag();
@@ -2568,14 +2600,10 @@ public class EngineAccessor {
                         catch (Exception ignore) {}
                     }
                     System.err.println("[agent] selectEntryViaEngine: done, returned " + resultSize + " selections");
-                } catch (Exception ex) {
-                    System.err.println("[agent] selectEntryViaEngine error: " + ex.getMessage());
-                    ex.printStackTrace(System.err);
                 } finally {
                     resetEngineLoadingFlag();
-                    latch.countDown();
                 }
-            }, "bs-selectEntry-api").start();
+            });
 
             return "{\"selected\":true}";
         } catch (Exception e) {
@@ -2631,21 +2659,16 @@ public class EngineAccessor {
             // Run on bg thread to avoid FX deadlock (engine.m → t() may interact with UI)
             final Object sel = selection;
             final Method dm = deselectEntry;
-            final CountDownLatch latch = new CountDownLatch(1);
-            engineOpLatch = latch;
-            new Thread(() -> {
+            final EngineOp op = new EngineOp();
+            startEngineOp(op, "bs-deselectEntry", "deselectEntryViaEngine", () -> {
                 try {
                     System.err.println("[agent] deselectEntry: invoking...");
                     dm.invoke(engineInstance, sel);
                     System.err.println("[agent] deselectEntry: done");
-                } catch (Exception ex) {
-                    System.err.println("[agent] deselectEntry error: " + ex.getMessage());
-                    ex.printStackTrace(System.err);
                 } finally {
                     resetEngineLoadingFlag();
-                    latch.countDown();
                 }
-            }, "bs-deselectEntry").start();
+            });
 
             return "{\"deselected\":true}";
         } catch (Exception e) {
@@ -2718,23 +2741,18 @@ public class EngineAccessor {
                 final Object p = parent, e = dataEntry;
                 final Method m = selectEntry;
                 final int d = delta;
-                final CountDownLatch latch = new CountDownLatch(1);
-                engineOpLatch = latch;
-                new Thread(() -> {
+                final EngineOp op = new EngineOp();
+                startEngineOp(op, "bs-selectEntry", "setSelectionCount(select)", () -> {
                     try {
                         for (int i = 0; i < d; i++) {
                             System.err.println("[agent] selectEntry: invoking (" + (i+1) + "/" + d + ")...");
                             m.invoke(engineInstance, p, e);
                             System.err.println("[agent] selectEntry: done (" + (i+1) + "/" + d + ")");
                         }
-                    } catch (Exception ex) {
-                        System.err.println("[agent] selectEntry error: " + ex.getClass().getSimpleName() + ": " + ex.getMessage());
-                        ex.printStackTrace(System.err);
                     } finally {
                         resetEngineLoadingFlag();
-                        latch.countDown();
                     }
-                }, "bs-selectEntry").start();
+                });
             } else {
                 Method deselectEntry = findDeselectEntryMethod(selection);
                 if (deselectEntry == null) {
@@ -2743,23 +2761,18 @@ public class EngineAccessor {
                 final Object sel = selection;
                 final Method dm = deselectEntry;
                 final int absDelta = -delta;
-                final CountDownLatch latch = new CountDownLatch(1);
-                engineOpLatch = latch;
-                new Thread(() -> {
+                final EngineOp op = new EngineOp();
+                startEngineOp(op, "bs-deselectEntry", "setSelectionCount(deselect)", () -> {
                     try {
                         for (int i = 0; i < absDelta; i++) {
                             System.err.println("[agent] deselectEntry: invoking (" + (i+1) + "/" + absDelta + ")...");
                             dm.invoke(engineInstance, sel);
                             System.err.println("[agent] deselectEntry: done (" + (i+1) + "/" + absDelta + ")");
                         }
-                    } catch (Exception ex) {
-                        System.err.println("[agent] deselectEntry error: " + ex.getMessage());
-                        ex.printStackTrace(System.err);
                     } finally {
                         resetEngineLoadingFlag();
-                        latch.countDown();
                     }
-                }, "bs-deselectEntry").start();
+                });
             }
 
             return "{\"set\":true,\"count\":" + count + ",\"delta\":" + delta + "}";
@@ -2808,21 +2821,16 @@ public class EngineAccessor {
             final Method method = setCostLimitMethod;
             final Object ct = costType;
             final double v = value;
-            final CountDownLatch latch = new CountDownLatch(1);
-            engineOpLatch = latch;
-            new Thread(() -> {
+            final EngineOp op = new EngineOp();
+            startEngineOp(op, "bs-setCostLimit", "setCostLimit", () -> {
                 try {
                     resetEngineLoadingFlag();
                     method.invoke(engineInstance, ct, v);
                     System.err.println("[agent] setCostLimit: done");
-                } catch (Exception ex) {
-                    System.err.println("[agent] setCostLimit error: " + ex.getMessage());
-                    ex.printStackTrace(System.err);
                 } finally {
                     resetEngineLoadingFlag();
-                    latch.countDown();
                 }
-            }, "bs-setCostLimit").start();
+            });
 
             return "{\"set\":true,\"costTypeId\":" + jsonStr(costTypeId) + ",\"value\":" + value + "}";
         } catch (Exception e) {
@@ -2906,33 +2914,43 @@ public class EngineAccessor {
     /**
      * Waits for any pending background engine operation to complete.
      * Must NOT run on the FX thread (would deadlock if the bg op needs FX).
-     * Accepts optional "timeoutMs" param (default 3000).
+     * Accepts optional "timeoutMs" param (default 15000).
      */
     public String waitForEngine(String params) {
         JsonObject paramsObject = parseParams(params);
-        CountDownLatch latch = engineOpLatch;
-        if (latch == null) {
-            return "{\"waited\":false,\"reason\":\"no pending operation\"}";
+        JsonObject response = new JsonObject();
+        EngineOp op = currentOp;
+        if (op == null) {
+            response.addProperty("waited", false);
+            response.addProperty("reason", "no pending operation");
+            return GSON.toJson(response);
         }
-        int timeoutMs = getInt(paramsObject, "timeoutMs", 3000);
+        int timeoutMs = getInt(paramsObject, "timeoutMs", 15000);
         try {
-            boolean done = latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
-            if (done) {
-                engineOpLatch = null;
-                // Wait for FX event queue to drain (process any Platform.runLater tasks
-                // queued by the bg thread's engine operation, like tree rebuilds)
-                CountDownLatch fxLatch = new CountDownLatch(1);
-                javafx.application.Platform.runLater(fxLatch::countDown);
-                fxLatch.await(5000, java.util.concurrent.TimeUnit.MILLISECONDS);
-                return "{\"waited\":true}";
-            } else {
-                // Interrupt the stuck thread to allow it to terminate
-                engineOpLatch = null;
-                return "{\"waited\":false,\"reason\":\"timeout\"}";
+            boolean finished = op.latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            response.addProperty("waited", true);
+            if (!finished) {
+                response.addProperty("timedOut", true);
+                return GSON.toJson(response);
             }
+
+            clearCurrentOp(op);
+
+            // Wait for FX event queue to drain (process any Platform.runLater tasks
+            // queued by the bg thread's engine operation, like tree rebuilds)
+            CountDownLatch fxLatch = new CountDownLatch(1);
+            javafx.application.Platform.runLater(fxLatch::countDown);
+            fxLatch.await(5000, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+            if (op.error != null) {
+                response.addProperty("error", op.error);
+            }
+            return GSON.toJson(response);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return "{\"waited\":false,\"reason\":\"interrupted\"}";
+            response.addProperty("waited", false);
+            response.addProperty("reason", "interrupted");
+            return GSON.toJson(response);
         }
     }
 
