@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.BsRosterUiDriver;
 
@@ -28,20 +29,20 @@ public sealed class BsUiProbe : IAsyncDisposable
     /// launches BS with the agent, connects, and handles startup dialogs.
     /// </summary>
     public async Task LaunchAsync(
+        ProtocolGameSystem gameSystem,
+        IReadOnlyList<ProtocolCatalogue> catalogues,
         IReadOnlyList<(string FileName, string Content)> xmlFiles,
         TextWriter? log = null)
     {
         log ??= TextWriter.Null;
 
-        // Stage XML files into the BS data directory
         var dataDir = _app.DataDirectoryPath;
-        Directory.CreateDirectory(dataDir);
-        foreach (var (fileName, content) in xmlFiles)
+        await BsUiDataStaging.StageDataFilesAsync(dataDir, gameSystem, catalogues, xmlFiles);
+        foreach (var (fileName, _) in xmlFiles)
         {
-            var filePath = Path.Combine(dataDir, fileName);
-            await File.WriteAllTextAsync(filePath, content);
             log.WriteLine($"  Staged: {fileName}");
         }
+        log.WriteLine("  Staged: index.bsi");
 
         // Launch BS
         log.WriteLine("Launching BattleScribe Roster Editor...");

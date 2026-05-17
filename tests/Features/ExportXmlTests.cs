@@ -134,6 +134,17 @@ public sealed class ExportXmlTests : IDisposable
         Assert.True(File.Exists(Path.Combine(nestedDir, "system.gst")));
     }
 
+    [Fact]
+    public async Task ExportXml_AcceptsProbeFlag()
+    {
+        var specPath = FindSpec("cost/cost-hidden-limit-validation");
+
+        var exitCode = await Program.RunAsync("--probe", "--export-xml", _outputDir, specPath);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(Path.Combine(_outputDir, "system.gst")));
+    }
+
     private static string FindSpec(string specId)
     {
         var specsDir = SpecLoader.FindRosterSpecsDirectory()

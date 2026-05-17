@@ -15,6 +15,7 @@ string? exportRosterDir = null;
 string? screenshotsDir = null;
 string? reportPath = null;
 var keepAlive = false;
+var probeMode = false;
 var formatMode = false;
 var formatCheck = false;
 string? formatDir = null;
@@ -44,6 +45,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--dump":
             dumpAll = true;
+            break;
+        case "--probe":
+            probeMode = true;
             break;
         case "--json":
             json = true;
@@ -175,10 +179,9 @@ if (exportXmlDir is not null)
 }
 
 // ===== BS UI Probe mode =====
-if (engineName is "bs-ui" && dumpAll && spec.Steps.Count == 0)
+if (probeMode && engineName is "bs-ui")
 {
-    // Probe-only mode (no spec steps, just dump tree)
-    return await RunBsUiProbe(spec, dumpAll, json);
+    return await RunBsUiProbe(spec);
 }
 
 // ===== Create engine =====
@@ -303,7 +306,7 @@ using (engine)
 
 // ===== Helpers =====
 
-async Task<int> RunBsUiProbe(SpecFile spec, bool dumpAll, bool json)
+async Task<int> RunBsUiProbe(SpecFile spec)
 {
     if (spec.Setup.DataSource is { Length: > 0 })
     {
@@ -328,7 +331,7 @@ async Task<int> RunBsUiProbe(SpecFile spec, bool dumpAll, bool json)
     Console.Error.WriteLine($"BS UI Probe — launching with {xmlFiles.Count} data file(s)");
 
     await using var probe = new BsUiProbe(options);
-    await probe.LaunchAsync(xmlFiles, Console.Error);
+    await probe.LaunchAsync(gameSystem, catalogues, xmlFiles, Console.Error);
 
     Console.Error.WriteLine();
     Console.Error.WriteLine("═══ Scene Graph Dump ═══");
@@ -623,6 +626,7 @@ static void PrintUsage()
         Options:
           --engine <name> Engine to use: bs (default), nr, bs-ui
           --dump          Dump state after every step (default: after last step only)
+          --probe         Run bs-ui probe mode (bs-ui engine only)
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
@@ -640,6 +644,7 @@ static void PrintUsage()
           bs-spec-debug selection-page
           bs-spec-debug --engine nr --dump specs/protocol/protocol-kitchen-sink.yaml
           bs-spec-debug --export-xml ./output/ cost/cost-hidden-limit-validation
+          bs-spec-debug --engine bs-ui --probe selection/selection-page
           bs-spec-debug --engine bs-ui selection/selection-page
           cat spec.yaml | bs-spec-debug -
           bs-spec-debug --format
