@@ -36,6 +36,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private bool _engineLocated;
     private bool _disposed;
 
+    /// <summary>
+    /// When true, <see cref="Cleanup"/> preserves the running app and agent connection
+    /// so subsequent <see cref="Setup"/> calls reuse the same JVM instance (warm start).
+    /// Useful for iterative debugging where JVM startup time is significant.
+    /// </summary>
+    public bool KeepAlive { get; set; }
+
     public BsUiRosterEngine(BsUiOptions options)
     {
         _options = options;
@@ -86,7 +93,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         => RunAsync(GetValidationErrorsAsync);
 
     public void Cleanup()
-        => RunAsync(CleanupAsync);
+        => RunAsync(() => CleanupAsync());
 
     public void Dispose()
     {
@@ -98,7 +105,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _disposed = true;
         try
         {
-            CleanupAsync().GetAwaiter().GetResult();
+            CleanupAsync(force: true).GetAwaiter().GetResult();
         }
         catch
         {
@@ -129,6 +136,37 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         try
         {
+            // Warm start: reuse running app if available
+            if (KeepAlive && _app is not null && _client is not null)
+            {
+                try
+                {
+                    _ = await ConnectedClient.PingAsync();
+                    Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
+
+                    // Close any open roster to return to clean main window state.
+                    // This dismisses unsaved changes without saving.
+                    await CloseCurrentRosterIfOpenAsync();
+
+                    // Restage data files for the new run.
+                    // NOTE: The app's loaded game data is from the previous startup.
+                    // Warm start is only reliable for re-running the same game system.
+                    var warmFiles = BuildXmlFiles(gameSystem, catalogues);
+                    await StageDataFilesAsync(_app.DataDirectoryPath, gameSystem, catalogues, warmFiles);
+
+                    return [];
+                }
+                catch
+                {
+                    Console.Error.WriteLine("[bs-ui] Warm start: existing instance unresponsive, starting fresh.");
+                    // Fall through to cold start
+                    ConnectedClient.Dispose();
+                    _client = null;
+                    await _app.DisposeAsync();
+                    _app = null;
+                }
+            }
+
             _app = new BsRosterApp(
                 _options.JavaPath,
                 _options.RosterEditorJarPath,
@@ -140,9 +178,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
             await _app.StartAsync();
             _client = await _app.ConnectAsync();
-            _ = await _client.PingAsync();
+            _ = await ConnectedClient.PingAsync();
 
-            if (!await _client.WaitForWindowAsync(MainWindowTitle, timeoutMs: 30000))
+            if (!await ConnectedClient.WaitForWindowAsync(MainWindowTitle, timeoutMs: 30000))
             {
                 throw new TimeoutException("Roster Editor window did not appear within 30 seconds.");
             }
@@ -272,7 +310,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         var entryName = _entryNamesById.GetValueOrDefault(entryId) ?? entryId;
 
         // Click the control (Spinner increment / CheckBox toggle / Button fire) by label text
-        var result = await _Client.CallAsync("clickControlByLabel", new System.Text.Json.Nodes.JsonObject
+        var result = await ConnectedClient.CallAsync("clickControlByLabel", new System.Text.Json.Nodes.JsonObject
         {
             ["text"] = entryName,
             ["windowTitle"] = MainWindowTitle
@@ -281,7 +319,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         if (!clicked)
         {
             // Hidden entries aren't shown in UI — fall back to engine API
-            result = await _Client.CallAsync("selectEntryViaEngine", new System.Text.Json.Nodes.JsonObject
+            result = await ConnectedClient.CallAsync("selectEntryViaEngine", new System.Text.Json.Nodes.JsonObject
             {
                 ["forceId"] = forceId,
                 ["entryId"] = entryId,
@@ -294,7 +332,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 throw new InvalidOperationException(
                     $"selectChildEntry failed for '{entryName}' (id={entryId}): {error}");
             }
-            await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+            await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
             {
                 ["timeoutMs"] = 15000
             });
@@ -308,7 +346,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         EnsureRosterLoaded();
         // Use dedicated deselectEntry command — bypasses getNumChanges/isDuplicate check
         // which returns 0 for shared entries, causing deselect to silently fail
-        var result = await _Client.CallAsync("deselectEntryViaEngine", new System.Text.Json.Nodes.JsonObject
+        var result = await ConnectedClient.CallAsync("deselectEntryViaEngine", new System.Text.Json.Nodes.JsonObject
         {
             ["forceId"] = forceId,
             ["selectionId"] = selectionId
@@ -319,7 +357,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             var error = result?["error"]?.GetValue<string>() ?? "unknown";
             throw new InvalidOperationException($"deselectSelection failed for '{selectionId}': {error}");
         }
-        await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
             ["timeoutMs"] = 15000
         });
@@ -334,7 +372,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         // Use engine API directly on a bg thread (safe with threadCount=1: no pool deadlock).
         // The UI spinner approach deadlocks because the controller's change listener calls
         // engine.setNumSelections → t() which blocks the FX thread indefinitely.
-        var result = await _Client.CallAsync("setSelectionCount", new System.Text.Json.Nodes.JsonObject
+        var result = await ConnectedClient.CallAsync("setSelectionCount", new System.Text.Json.Nodes.JsonObject
         {
             ["forceId"] = forceId,
             ["selectionId"] = selectionId,
@@ -349,7 +387,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
 
         // Wait for the bg thread engine operation to complete
-        await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
             ["timeoutMs"] = 15000
         });
@@ -407,7 +445,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
 
         // Use engine API directly (BS Desktop has no post-creation cost limit UI)
-        var result = await _Client.CallAsync("setCostLimit", new System.Text.Json.Nodes.JsonObject
+        var result = await ConnectedClient.CallAsync("setCostLimit", new System.Text.Json.Nodes.JsonObject
         {
             ["costTypeId"] = costTypeId,
             ["value"] = (double)value
@@ -418,7 +456,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             var error = result?["error"]?.GetValue<string>() ?? "unknown";
             throw new InvalidOperationException($"setCostLimit failed: {error}");
         }
-        await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
             ["timeoutMs"] = 15000
         });
@@ -435,14 +473,14 @@ public sealed class BsUiRosterEngine : IRosterEngine
         {
             args["parentForceId"] = parentForceId;
         }
-        var result = await _Client.CallAsync("addForceViaEngine", args);
+        var result = await ConnectedClient.CallAsync("addForceViaEngine", args);
         var added = result?["added"]?.GetValue<bool>() ?? false;
         if (!added)
         {
             var error = result?["error"]?.GetValue<string>() ?? result?.ToJsonString() ?? "unknown";
             throw new InvalidOperationException($"addForceViaEngine failed: {error}");
         }
-        await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
             ["timeoutMs"] = 15000
         });
@@ -450,7 +488,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private async Task RemoveForceViaEngineAsync(string forceId)
     {
-        var result = await _Client.CallAsync("removeForceViaEngine", new System.Text.Json.Nodes.JsonObject
+        var result = await ConnectedClient.CallAsync("removeForceViaEngine", new System.Text.Json.Nodes.JsonObject
         {
             ["forceId"] = forceId
         });
@@ -460,7 +498,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             var error = result?["error"]?.GetValue<string>() ?? result?.ToJsonString() ?? "unknown";
             throw new InvalidOperationException($"removeForceViaEngine failed: {error}");
         }
-        await _Client.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
+        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
             ["timeoutMs"] = 15000
         });
@@ -479,7 +517,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         {
             // Category customization isn't available via UI in BS desktop.
             // Use engine API directly to set customNotes on the category.
-            var catResult = await _Client.CallAsync("setCategoryCustomNotes", new JsonObject
+            var catResult = await ConnectedClient.CallAsync("setCategoryCustomNotes", new JsonObject
             {
                 ["forceId"] = forceId,
                 ["categoryEntryId"] = categoryEntryId,
@@ -560,9 +598,15 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return await ReadValidationErrorsAsync();
     }
 
-    private async Task CleanupAsync()
+    private async Task CleanupAsync(bool force = false)
     {
         _engineLocated = false;
+
+        if (KeepAlive && !force)
+        {
+            // Warm start: keep app/_client alive, just reset engine state
+            return;
+        }
 
         _client?.Dispose();
         _client = null;
@@ -632,6 +676,52 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         await WaitForWindowToCloseAsync(windowTitle);
         await EnsureEngineLocatedAsync();
+    }
+
+    /// <summary>
+    /// Closes any currently open roster to return to the clean main window.
+    /// Dismisses "save changes" confirmation without saving.
+    /// </summary>
+    private async Task CloseCurrentRosterIfOpenAsync()
+    {
+        // Check if a roster is currently loaded by reading state
+        var state = await ReadRosterStateOrEmptyAsync();
+        if (state.Forces.Count == 0)
+        {
+            // No roster open
+            return;
+        }
+
+        // Close via keyboard shortcut Ctrl+W or "Close" button
+        Console.Error.WriteLine("[bs-ui] Warm start: closing current roster...");
+        try
+        {
+            await ConnectedClient.CallAsync("pressKey", new System.Text.Json.Nodes.JsonObject
+            {
+                ["key"] = "W",
+                ["modifiers"] = new System.Text.Json.Nodes.JsonArray { (System.Text.Json.Nodes.JsonNode)"ctrl" },
+                ["windowTitle"] = MainWindowTitle
+            });
+        }
+        catch
+        {
+            // Ctrl+W not available, try Close button
+            if (!await TryFireButtonAsync("#btnClose", MainWindowTitle, async: true) &&
+                !await TryClickTextAsync("Close", MainWindowTitle, "Button"))
+            {
+                // No way to close — proceed anyway, AddForce handles existing rosters
+                return;
+            }
+        }
+
+        // Handle "save changes?" confirmation dialog
+        await Task.Delay(500);
+        if (await TryClickTextAsync("No", ConfirmWindowTitle, "Button") ||
+            await TryClickTextAsync("Don't Save", ConfirmWindowTitle, "Button") ||
+            await TryClickTextAsync("Discard", ConfirmWindowTitle, "Button"))
+        {
+            await Task.Delay(300);
+        }
     }
 
     private async Task<ActionOutputs> WaitForSelectionOutputsAsync(
@@ -946,7 +1036,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task<RosterState> ReadRosterStateAsync()
     {
         EnsureRosterLoaded();
-        var result = await _Client.GetRosterStateAsync();
+        var result = await ConnectedClient.GetRosterStateAsync();
         var json = ExtractJson(result);
         if (TryExtractError(result, out var error))
         {
@@ -984,7 +1074,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private async Task<IReadOnlyList<ValidationErrorState>> ReadValidationErrorsAsync()
     {
-        var result = await _Client.GetValidationErrorsAsync();
+        var result = await ConnectedClient.GetValidationErrorsAsync();
         if (TryExtractError(result, out var error))
         {
             throw new InvalidOperationException(error);
@@ -1023,7 +1113,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             return;
         }
 
-        var result = await _Client.FindEngineAsync();
+        var result = await ConnectedClient.FindEngineAsync();
         if (TryExtractError(result, out var error))
         {
             throw new InvalidOperationException(error);
@@ -1051,7 +1141,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         try
         {
-            var result = await _Client.CallAsync("patchSupporterPass");
+            var result = await ConnectedClient.CallAsync("patchSupporterPass");
             var patched = result?["patched"]?.GetValue<bool>() == true;
             if (!patched)
             {
@@ -1068,7 +1158,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         try
         {
-            await _Client.CallAsync("setRosterName", new System.Text.Json.Nodes.JsonObject
+            await ConnectedClient.CallAsync("setRosterName", new System.Text.Json.Nodes.JsonObject
             {
                 ["name"] = name
             });
@@ -1087,7 +1177,30 @@ public sealed class BsUiRosterEngine : IRosterEngine
         {
             throw new InvalidOperationException("Not connected to BattleScribe app.");
         }
-        return await _client.ExportRosterXmlAsync();
+        return await ConnectedClient.ExportRosterXmlAsync();
+    }
+
+    /// <summary>Captures a screenshot of the current JavaFX scene as PNG bytes.</summary>
+    public async Task<byte[]?> CaptureScreenshotAsync()
+    {
+        ThrowIfDisposed();
+        if (_client is null)
+        {
+            Console.Error.WriteLine("[bs-ui] Warning: cannot capture screenshot — not connected.");
+            return null;
+        }
+        return await ConnectedClient.CaptureScreenshotAsync();
+    }
+
+    /// <summary>Reads the visible UI state from the Roster Editor window.</summary>
+    public async Task<JsonNode?> GetUiStateAsync()
+    {
+        ThrowIfDisposed();
+        if (_client is null)
+        {
+            return null;
+        }
+        return await ConnectedClient.GetUiStateAsync();
     }
 
     private async Task HandleStartupDialogsAsync()
@@ -1114,7 +1227,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         var limit = _pendingCostLimits.Single();
         _ = limit;
-        await _Client.SetSpinnerValueAsync(CountSpinnerSelector, value: DecimalToSpinnerValue(limit.Value), windowTitle: windowTitle);
+        await ConnectedClient.SetSpinnerValueAsync(CountSpinnerSelector, value: DecimalToSpinnerValue(limit.Value), windowTitle: windowTitle);
     }
 
     private static async Task StageDataFilesAsync(
@@ -1317,7 +1430,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         string windowTitle,
         bool fallbackToFirst = false)
     {
-        var items = await _Client.GetComboBoxItemsAsync(selector, windowTitle) as JsonObject
+        var items = await ConnectedClient.GetComboBoxItemsAsync(selector, windowTitle) as JsonObject
             ?? throw new InvalidOperationException($"ComboBox '{selector}' not found in '{windowTitle}'.");
 
         var available = items["items"] as JsonArray ?? [];
@@ -1345,7 +1458,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 $"Item '{desiredText}' not found in combo '{selector}' ({string.Join(", ", available.Select(x => x?["text"]?.GetValue<string>()))}).");
         }
 
-        _ = await _Client.SelectComboBoxItemAsync(selector, index: best.Index, windowTitle: windowTitle);
+        _ = await ConnectedClient.SelectComboBoxItemAsync(selector, index: best.Index, windowTitle: windowTitle);
     }
 
     private async Task SelectTreeItemAsync(IEnumerable<string> selectors, string text, string windowTitle, int retries = 3)
@@ -1356,7 +1469,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             {
                 try
                 {
-                    _ = await _Client.SelectTreeItemAsync(selector, text, windowTitle);
+                    _ = await ConnectedClient.SelectTreeItemAsync(selector, text, windowTitle);
                     return;
                 }
                 catch
@@ -1381,7 +1494,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             {
                 try
                 {
-                    _ = await _Client.ClickTreeItemAsync(selector, text, doubleClick, windowTitle);
+                    _ = await ConnectedClient.ClickTreeItemAsync(selector, text, doubleClick, windowTitle);
                     return;
                 }
                 catch
@@ -1404,7 +1517,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         {
             try
             {
-                await _Client.SetNodeTextAsync(selector, text, windowTitle);
+                await ConnectedClient.SetNodeTextAsync(selector, text, windowTitle);
                 Console.Error.WriteLine($"  [DEBUG] SetTextAsync: set '{selector}' = '{text}' in '{windowTitle}'");
                 return;
             }
@@ -1429,7 +1542,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         try
         {
-            var node = await _Client.FindNodeAsync(selector, windowTitle);
+            var node = await ConnectedClient.FindNodeAsync(selector, windowTitle);
             if (node is null)
             {
                 return false;
@@ -1446,7 +1559,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 parameters["async"] = "true";
             }
 
-            _ = await _Client.CallAsync("fireButton", parameters);
+            _ = await ConnectedClient.CallAsync("fireButton", parameters);
             return true;
         }
         catch (AgentException)
@@ -1469,13 +1582,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
             parameters["nodeType"] = nodeType;
         }
 
-        var found = await _Client.CallAsync("findNodeByText", parameters);
+        var found = await ConnectedClient.CallAsync("findNodeByText", parameters);
         if (found is null)
         {
             return false;
         }
 
-        _ = await _Client.CallAsync("clickNode", new JsonObject
+        _ = await ConnectedClient.CallAsync("clickNode", new JsonObject
         {
             ["text"] = text,
             ["windowTitle"] = windowTitle,
@@ -1497,12 +1610,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
             parameters["ctrl"] = true;
         }
 
-        _ = await _Client.CallAsync("pressKey", parameters);
+        _ = await ConnectedClient.CallAsync("pressKey", parameters);
     }
 
     private async Task WaitForWindowAsync(string title)
     {
-        if (!await _Client.WaitForWindowAsync(title, timeoutMs: 30000))
+        if (!await ConnectedClient.WaitForWindowAsync(title, timeoutMs: 30000))
         {
             throw new TimeoutException($"Window '{title}' did not appear.");
         }
@@ -1513,7 +1626,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
-            var windows = await _Client.GetWindowsAsync() as JsonArray;
+            var windows = await ConnectedClient.GetWindowsAsync() as JsonArray;
             if (windows is not null)
             {
                 foreach (var title in windows.Select(w => w?["title"]?.GetValue<string>()))
@@ -1554,7 +1667,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private async Task<bool> HasWindowAsync(string title)
     {
-        if (await _Client.GetWindowsAsync() is not JsonArray windows)
+        if (await ConnectedClient.GetWindowsAsync() is not JsonArray windows)
         {
             return false;
         }
@@ -1829,33 +1942,61 @@ public sealed class BsUiRosterEngine : IRosterEngine
             ? envTimeout
             : 60);
 
-    private AgentClient _Client => _client ?? throw new InvalidOperationException("Agent client is not connected.");
+    private AgentClient ConnectedClient => _client ?? throw new InvalidOperationException("Agent client is not connected.");
+
+    /// <summary>
+    /// Maximum number of retry attempts for transient failures (timeout, agent communication).
+    /// Set to 0 to disable retries. Default is 1 (one retry after initial failure).
+    /// </summary>
+    public static int MaxRetries { get; set; } =
+        int.TryParse(Environment.GetEnvironmentVariable("BS_UI_MAX_RETRIES"), out var envRetries) && envRetries >= 0
+            ? envRetries
+            : 1;
+
+    /// <summary>Delay between retry attempts.</summary>
+    public static TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(2);
 
     private T RunAsync<T>(Func<Task<T>> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
     {
-        try
-        {
-            return RunWithTimeoutAsync(func, actionName ?? "unknown").GetAwaiter().GetResult();
-        }
-        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
-        {
-            CaptureAndRethrow(ex, actionName ?? "unknown");
-            throw; // unreachable but required
-        }
+        return RunWithRetryAsync(func, actionName ?? "unknown").GetAwaiter().GetResult();
     }
 
     private void RunAsync(Func<Task> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
     {
-        try
-        {
-            RunWithTimeoutAsync(async () => { await func(); return 0; }, actionName ?? "unknown").GetAwaiter().GetResult();
-        }
-        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
-        {
-            CaptureAndRethrow(ex, actionName ?? "unknown");
-            throw; // unreachable but required
-        }
+        RunWithRetryAsync(async () => { await func(); return 0; }, actionName ?? "unknown").GetAwaiter().GetResult();
     }
+
+    private async Task<T> RunWithRetryAsync<T>(Func<Task<T>> func, string actionName)
+    {
+        // NOTE: Retries are only safe because a timeout/transient failure typically means
+        // the app is unresponsive and needs restart. The full setup flow will re-initialize
+        // if the connection is lost. Non-transient errors (InvalidOperationException) are
+        // never retried.
+        var attempts = MaxRetries + 1;
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                return await RunWithTimeoutAsync(func, actionName);
+            }
+            catch (Exception ex) when (IsTransient(ex) && attempt < attempts)
+            {
+                Console.Error.WriteLine(
+                    $"[bs-ui] Action '{actionName}' failed (attempt {attempt}/{attempts}): " +
+                    $"{ex.GetType().Name}: {ex.Message}. Retrying in {RetryDelay.TotalSeconds:F0}s...");
+                await Task.Delay(RetryDelay);
+            }
+            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
+            {
+                CaptureAndRethrow(ex, actionName);
+                throw; // unreachable but required
+            }
+        }
+        throw new InvalidOperationException("Unreachable");
+    }
+
+    private static bool IsTransient(Exception ex) =>
+        ex is TimeoutException or OperationCanceledException or AgentException;
 
     private static async Task<T> RunWithTimeoutAsync<T>(Func<Task<T>> func, string actionName)
     {

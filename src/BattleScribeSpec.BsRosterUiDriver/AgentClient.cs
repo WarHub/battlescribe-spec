@@ -292,10 +292,42 @@ public sealed class AgentClient : IDisposable
         return result?["xml"]?.GetValue<string>();
     }
 
+    /// <summary>Captures a screenshot of the current JavaFX scene as PNG bytes.</summary>
+    public async Task<byte[]?> CaptureScreenshotAsync()
+    {
+        var result = await CallAsync("captureScreenshot");
+        var base64 = result?["png"]?.GetValue<string>();
+        return base64 is not null ? Convert.FromBase64String(base64) : null;
+    }
+
+    /// <summary>Reads the visible UI state (tree, costs, roster name) from the Roster Editor.</summary>
+    public async Task<JsonNode?> GetUiStateAsync()
+    {
+        return await CallAsync("getUiState");
+    }
+
     /// <summary>Gets current validation errors from the engine.</summary>
     public async Task<JsonNode?> GetValidationErrorsAsync()
     {
         return await CallAsync("getValidationErrors");
+    }
+
+    /// <summary>Starts recording user interactions in the Roster Editor UI.</summary>
+    public async Task StartRecordingAsync()
+    {
+        await CallAsync("startRecording");
+    }
+
+    /// <summary>Stops recording and returns the recorded actions as JSON.</summary>
+    public async Task<JsonNode?> StopRecordingAsync()
+    {
+        return await CallAsync("stopRecording");
+    }
+
+    /// <summary>Returns currently recorded actions without stopping.</summary>
+    public async Task<JsonNode?> GetRecordedActionsAsync()
+    {
+        return await CallAsync("getRecordedActions");
     }
 
     // --- ComboBox / TreeView commands ---

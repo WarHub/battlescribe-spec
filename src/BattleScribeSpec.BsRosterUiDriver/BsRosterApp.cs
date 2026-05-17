@@ -51,7 +51,8 @@ public sealed class BsRosterApp : IAsyncDisposable
         _process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start BattleScribe process.");
 
-        // Drain stderr in background to prevent pipe buffer from filling
+        // Collect stderr for diagnostics
+        var stderrLines = new System.Collections.Concurrent.ConcurrentQueue<string>();
         _ = Task.Run(async () =>
         {
             try
@@ -59,7 +60,8 @@ public sealed class BsRosterApp : IAsyncDisposable
                 while (await _process.StandardError.ReadLineAsync()
                     is { } line)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[BS] {line}");
+                    stderrLines.Enqueue(line);
+                    Console.Error.WriteLine($"[BS stderr] {line}");
                 }
             }
             catch { /* process exited */ }
@@ -93,7 +95,9 @@ public sealed class BsRosterApp : IAsyncDisposable
             }
         }
 
-        throw new TimeoutException($"Agent did not report port within {timeoutSeconds}s.");
+        var stderr = string.Join("\n", stderrLines);
+        var exitInfo = _process.HasExited ? $" (exit code: {_process.ExitCode})" : "";
+        throw new TimeoutException($"Agent did not report port within {timeoutSeconds}s.{exitInfo}\nStderr:\n{stderr}");
     }
 
     /// <summary>Creates a JSON-RPC client connected to the agent.</summary>

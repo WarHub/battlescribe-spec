@@ -6,6 +6,7 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
@@ -14,14 +15,31 @@ import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Scene graph operations dispatched by the JSON-RPC server.
  * All methods run on the JavaFX Application Thread.
  */
 public class SceneGraphCommands {
+
+    private static final Pattern TITLE_ROSTER_NAME_PATTERN = Pattern.compile("^.* - (.+?)(?: \\([^)]*\\))?$");
+    private static final Pattern LEADING_COUNT_PATTERN = Pattern.compile("^\\s*(\\d+)\\s*[x×]\\s*(.+?)\\s*$");
+    private static final Pattern TRAILING_COUNT_PATTERN = Pattern.compile("^\\s*(.+?)\\s*[x×]\\s*(\\d+)\\s*$");
+    private static final Pattern LEADING_NUMBER_PATTERN = Pattern.compile("^\\s*(\\d+)\\s+(.+?)\\s*$");
+    private static final Pattern COST_INLINE_PATTERN = Pattern.compile("(?i)^\\s*([A-Za-z][A-Za-z0-9 %/_-]{0,20})\\s*[:=]\\s*(-?\\d+(?:\\.\\d+)?)\\s*$");
+    private static final Pattern COST_SUFFIX_PATTERN = Pattern.compile("(?i)^\\s*(-?\\d+(?:\\.\\d+)?)\\s*([A-Za-z][A-Za-z0-9 %/_-]{0,20})\\s*$");
+    private static final Pattern NUMERIC_VALUE_PATTERN = Pattern.compile("^-?\\d+(?:\\.\\d+)?$");
 
     private final EngineAccessor engineAccessor;
 
@@ -86,6 +104,16 @@ public class SceneGraphCommands {
                 return engineAccessor.getRosterState();
             case "exportRosterXml":
                 return engineAccessor.exportRosterXml();
+            case "captureScreenshot":
+                return captureScreenshot(params);
+            case "getUiState":
+                return getUiState(params);
+            case "startRecording":
+                return startRecording(params);
+            case "stopRecording":
+                return stopRecording(params);
+            case "getRecordedActions":
+                return getRecordedActions(params);
             case "setRosterName":
                 return engineAccessor.setRosterName(params);
             case "getValidationErrors":
@@ -172,6 +200,84 @@ public class SceneGraphCommands {
             sb.append("}");
         }
         sb.append("]");
+        return sb.toString();
+    }
+
+    private String captureScreenshot(String params) {
+        String windowTitle = extractStr(params, "windowTitle");
+        Scene scene = findScene(windowTitle);
+        if (scene == null) {
+            return "{\"error\":\"No scene found\"}";
+        }
+
+        WritableImage image = scene.snapshot(null);
+        // Convert WritableImage to PNG using reflection to access SwingFXUtils
+        // (javafx.swing module may not be in JRE, so we use reflection)
+        try {
+            Class<?> swingFxClass = Class.forName("javafx.embed.swing.SwingFXUtils");
+            java.lang.reflect.Method fromFXImage = swingFxClass.getMethod("fromFXImage",
+                javafx.scene.image.Image.class, java.awt.image.BufferedImage.class);
+            Object buffered = fromFXImage.invoke(null, image, null);
+            if (buffered == null) {
+                return "{\"error\":\"Failed to capture scene\"}";
+            }
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                if (!ImageIO.write((BufferedImage) buffered, "png", baos)) {
+                    throw new IOException("No PNG writer available");
+                }
+                String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+                return "{\"png\":" + jsonString(base64)
+                    + ",\"width\":" + (int) image.getWidth()
+                    + ",\"height\":" + (int) image.getHeight() + "}";
+            }
+        } catch (ClassNotFoundException e) {
+            return "{\"error\":\"javafx.swing module not available for screenshots\"}";
+        } catch (Exception e) {
+            return "{\"error\":" + jsonString("Screenshot failed: " + e.getMessage()) + "}";
+        }
+    }
+
+    private String startRecording(String params) {
+        Scene scene = findScene(extractStr(params, "windowTitle"));
+        if (scene == null) {
+            return "{\"error\":\"No scene found\"}";
+        }
+
+        ActionRecorder.getInstance().startRecording(scene);
+        return "{\"status\":\"recording\"}";
+    }
+
+    private String stopRecording(String params) {
+        String actions = ActionRecorder.getInstance().stopRecording();
+        return "{\"actions\":" + actions + "}";
+    }
+
+    private String getRecordedActions(String params) {
+        String actions = ActionRecorder.getInstance().getActionsJson();
+        return "{\"recording\":" + ActionRecorder.getInstance().isRecording() + ",\"actions\":" + actions + "}";
+    }
+
+    private String getUiState(String params) {
+        String windowTitle = extractStr(params, "windowTitle");
+        Scene scene = findScene(windowTitle != null ? windowTitle : "Roster Editor");
+        if (scene == null && windowTitle != null) {
+            scene = findScene(windowTitle);
+        }
+        if (scene == null) {
+            return "{\"rosterName\":null,\"forces\":[],\"costs\":[]}";
+        }
+
+        TreeView<Object> rosterTree = findRosterTree(scene);
+        Map<String, String> costs = new LinkedHashMap<String, String>();
+        collectCosts(scene.getRoot(), costs);
+
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"rosterName\":").append(jsonString(readRosterName(scene)));
+        sb.append(",\"forces\":[");
+        appendVisibleForces(rosterTree, sb);
+        sb.append("],\"costs\":[");
+        appendCosts(costs, sb);
+        sb.append("]}");
         return sb.toString();
     }
 
@@ -1021,6 +1127,324 @@ public class SceneGraphCommands {
         }
 
         return "{\"set\":false,\"error\":\"Spinner not found for label text: " + text + "\"}";
+    }
+
+    private String readRosterName(Scene scene) {
+        String fromTitle = extractRosterNameFromTitle(getWindowTitle(scene));
+        if (fromTitle != null) {
+            return fromTitle;
+        }
+        return findRosterNameInScene(scene.getRoot());
+    }
+
+    private String extractRosterNameFromTitle(String title) {
+        if (title == null) {
+            return null;
+        }
+        Matcher matcher = TITLE_ROSTER_NAME_PATTERN.matcher(title.trim());
+        if (!matcher.matches()) {
+            return null;
+        }
+        String candidate = matcher.group(1);
+        if (candidate == null) {
+            return null;
+        }
+        candidate = candidate.trim();
+        if (candidate.isEmpty() || candidate.startsWith("Roster Editor")) {
+            return null;
+        }
+        return candidate;
+    }
+
+    private String findRosterNameInScene(Node node) {
+        if (node == null || !node.isVisible()) {
+            return null;
+        }
+        String id = node.getId();
+        String text = extractTextContent(node);
+        if (text != null) {
+            String trimmed = text.trim();
+            if (!trimmed.isEmpty() && id != null) {
+                String lowerId = id.toLowerCase();
+                if ((lowerId.contains("roster") || lowerId.contains("name"))
+                        && !trimmed.equalsIgnoreCase("Roster Editor")) {
+                    return trimmed;
+                }
+            }
+        }
+        if (node instanceof Parent) {
+            for (Node child : ((Parent) node).getChildrenUnmodifiable()) {
+                String childName = findRosterNameInScene(child);
+                if (childName != null) {
+                    return childName;
+                }
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private TreeView<Object> findRosterTree(Scene scene) {
+        if (scene == null) {
+            return null;
+        }
+        for (String selector : new String[] { "#treeRoster", "#treeForces" }) {
+            Node node = scene.getRoot().lookup(selector);
+            if (node instanceof TreeView && node.isVisible()) {
+                return (TreeView<Object>) node;
+            }
+        }
+        return findFirstVisibleTree(scene.getRoot());
+    }
+
+    @SuppressWarnings("unchecked")
+    private TreeView<Object> findFirstVisibleTree(Node node) {
+        if (node == null || !node.isVisible()) {
+            return null;
+        }
+        if (node instanceof TreeView) {
+            return (TreeView<Object>) node;
+        }
+        if (node instanceof Parent) {
+            for (Node child : ((Parent) node).getChildrenUnmodifiable()) {
+                TreeView<Object> tree = findFirstVisibleTree(child);
+                if (tree != null) {
+                    return tree;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void appendVisibleForces(TreeView<Object> tree, StringBuilder sb) {
+        if (tree == null) {
+            return;
+        }
+        TreeItem<Object> root = tree.getRoot();
+        if (root == null || root.getChildren().isEmpty()) {
+            return;
+        }
+        boolean firstForce = true;
+        for (TreeItem<Object> forceItem : root.getChildren()) {
+            if (forceItem == null) {
+                continue;
+            }
+            if (!firstForce) {
+                sb.append(",");
+            }
+            firstForce = false;
+            sb.append("{\"name\":").append(jsonString(treeItemText(forceItem)));
+            sb.append(",\"selections\":[");
+            boolean[] firstSelection = new boolean[] { true };
+            appendVisibleSelections(forceItem, sb, firstSelection);
+            sb.append("]}");
+        }
+    }
+
+    private void appendVisibleSelections(TreeItem<Object> parent, StringBuilder sb, boolean[] firstSelection) {
+        if (parent == null || !parent.isExpanded()) {
+            return;
+        }
+        for (TreeItem<Object> child : parent.getChildren()) {
+            if (child == null) {
+                continue;
+            }
+            if (!firstSelection[0]) {
+                sb.append(",");
+            }
+            firstSelection[0] = false;
+            appendSelectionWithChildren(child, sb);
+        }
+    }
+
+    private void appendSelectionWithChildren(TreeItem<Object> item, StringBuilder sb) {
+        NameCount parsed = splitNameAndCount(treeItemText(item));
+        sb.append("{\"name\":").append(jsonString(parsed.name));
+        sb.append(",\"count\":").append(jsonString(parsed.count));
+        sb.append(",\"children\":[");
+        if (item.isExpanded() && !item.getChildren().isEmpty()) {
+            boolean[] first = new boolean[] { true };
+            for (TreeItem<Object> child : item.getChildren()) {
+                if (child == null) {
+                    continue;
+                }
+                if (!first[0]) {
+                    sb.append(",");
+                }
+                first[0] = false;
+                appendSelectionWithChildren(child, sb);
+            }
+        }
+        sb.append("]}");
+    }
+
+    private String treeItemText(TreeItem<Object> item) {
+        if (item == null || item.getValue() == null) {
+            return null;
+        }
+        return item.getValue().toString();
+    }
+
+    private NameCount splitNameAndCount(String text) {
+        if (text == null) {
+            return new NameCount(null, "1");
+        }
+        String trimmed = text.trim();
+        Matcher leadingCount = LEADING_COUNT_PATTERN.matcher(trimmed);
+        if (leadingCount.matches()) {
+            return new NameCount(leadingCount.group(2).trim(), leadingCount.group(1));
+        }
+        Matcher trailingCount = TRAILING_COUNT_PATTERN.matcher(trimmed);
+        if (trailingCount.matches()) {
+            return new NameCount(trailingCount.group(1).trim(), trailingCount.group(2));
+        }
+        Matcher leadingNumber = LEADING_NUMBER_PATTERN.matcher(trimmed);
+        if (leadingNumber.matches()) {
+            return new NameCount(leadingNumber.group(2).trim(), leadingNumber.group(1));
+        }
+        return new NameCount(trimmed, "1");
+    }
+
+    private void collectCosts(Node node, Map<String, String> costs) {
+        if (node == null || !node.isVisible()) {
+            return;
+        }
+        String text = extractTextContent(node);
+        if (text != null) {
+            addCostFromText(text, costs);
+        }
+        if (node instanceof Parent) {
+            Parent parent = (Parent) node;
+            collectSiblingCosts(parent, costs);
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                collectCosts(child, costs);
+            }
+        }
+    }
+
+    private void collectSiblingCosts(Parent parent, Map<String, String> costs) {
+        List<Node> children = parent.getChildrenUnmodifiable();
+        for (int i = 0; i < children.size(); i++) {
+            Node first = children.get(i);
+            if (first == null || !first.isVisible()) {
+                continue;
+            }
+            String firstText = normalizedNodeText(first);
+            if (firstText == null) {
+                continue;
+            }
+            String costName = normalizeCostName(firstText);
+            if (costName != null) {
+                for (int j = i + 1; j < children.size(); j++) {
+                    Node second = children.get(j);
+                    if (second == null || !second.isVisible()) {
+                        continue;
+                    }
+                    String secondText = normalizedNodeText(second);
+                    if (secondText == null) {
+                        continue;
+                    }
+                    String numericValue = extractNumericValue(secondText);
+                    if (numericValue != null) {
+                        costs.put(costName, numericValue);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void addCostFromText(String rawText, Map<String, String> costs) {
+        String text = rawText.trim();
+        if (text.isEmpty()) {
+            return;
+        }
+
+        Matcher inlineMatcher = COST_INLINE_PATTERN.matcher(text);
+        if (inlineMatcher.matches()) {
+            String costName = normalizeCostName(inlineMatcher.group(1));
+            if (costName != null) {
+                costs.put(costName, inlineMatcher.group(2));
+            }
+            return;
+        }
+
+        Matcher suffixMatcher = COST_SUFFIX_PATTERN.matcher(text);
+        if (suffixMatcher.matches()) {
+            String costName = normalizeCostName(suffixMatcher.group(2));
+            if (costName != null) {
+                costs.put(costName, suffixMatcher.group(1));
+            }
+        }
+    }
+
+    private String normalizedNodeText(Node node) {
+        String text = extractTextContent(node);
+        if (text == null) {
+            return null;
+        }
+        text = text.trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private String normalizeCostName(String rawName) {
+        if (rawName == null) {
+            return null;
+        }
+        String normalized = rawName.trim().toLowerCase();
+        if (normalized.endsWith(":")) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
+        }
+        if (normalized.equals("pt") || normalized.equals("pts") || normalized.equals("point") || normalized.equals("points")) {
+            return "pts";
+        }
+        if (normalized.equals("power") || normalized.equals("power level")) {
+            return "power";
+        }
+        if (normalized.equals("pl")) {
+            return "pl";
+        }
+        if (normalized.equals("cp")) {
+            return "cp";
+        }
+        if (normalized.equals("ep")) {
+            return "ep";
+        }
+        if (normalized.equals("vp")) {
+            return "vp";
+        }
+        return null;
+    }
+
+    private String extractNumericValue(String text) {
+        if (text == null) {
+            return null;
+        }
+        String trimmed = text.trim();
+        return NUMERIC_VALUE_PATTERN.matcher(trimmed).matches() ? trimmed : null;
+    }
+
+    private void appendCosts(Map<String, String> costs, StringBuilder sb) {
+        boolean first = true;
+        for (Map.Entry<String, String> entry : costs.entrySet()) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            sb.append("{\"name\":").append(jsonString(entry.getKey()));
+            sb.append(",\"value\":").append(jsonString(entry.getValue()));
+            sb.append("}");
+        }
+    }
+
+    private static final class NameCount {
+        private final String name;
+        private final String count;
+
+        private NameCount(String name, String count) {
+            this.name = name;
+            this.count = count;
+        }
     }
 
     // --- Helpers ---

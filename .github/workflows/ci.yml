@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
   schedule:
     - cron: '0 8 * * 1'
@@ -12,6 +12,7 @@ on:
 
 jobs:
   build-and-test:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
 
     steps:
@@ -61,6 +62,7 @@ jobs:
             --workers 2
 
   script-tests:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
 
     steps:
@@ -70,6 +72,7 @@ jobs:
         run: node --test scripts/har-diff.test.mjs
 
   nr-frozen:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
 
     steps:
@@ -109,16 +112,35 @@ jobs:
           NR_HEADLESS: true
 
   bs-ui:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[bs-ui-test]')
+    if: >-
+      github.event.pull_request.draft != true
+      && (
+        github.event_name == 'pull_request'
+        || github.event_name == 'workflow_dispatch'
+        || github.event_name == 'schedule'
+        || contains(github.event.head_commit.message, '[bs-ui-test]')
+      )
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.WARHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
+          owner: WarHub
+          repositories: battlescribe-archive
 
       - name: Download BattleScribe app
         run: |
@@ -134,10 +156,17 @@ jobs:
             Remove-Item $zip.FullName -Force
           '
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup Liberica JDK (with JavaFX)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'liberica'
+          java-version: '11'
+          java-package: 'jdk+fx'
 
       - name: Build bs-ui-java-agent
-        run: pwsh -File src/bs-ui-java-agent/build.ps1 -JavaHome .testdata/battlescribe-app/jre
+        run: pwsh -File src/bs-ui-java-agent/build.ps1
 
       - name: Build
         run: dotnet build
@@ -145,7 +174,9 @@ jobs:
       - name: Run kitchen-sink via BS UI driver
         run: |
           xvfb-run -a dotnet run --project src/BattleScribeSpec.Debugger -- \
-            --engine bs-ui protocol/protocol-kitchen-sink
+            --engine bs-ui protocol-kitchen-sink
+        env:
+          BS_UI_JAVA_PATH: ${{ env.JAVA_HOME }}/bin/java
 
       - name: Upload diagnostics
         if: failure()
