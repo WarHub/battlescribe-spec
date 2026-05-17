@@ -28,7 +28,7 @@ import java.util.Set;
  */
 public class ActionRecorder {
 
-    private static ActionRecorder instance;
+    private static final ActionRecorder instance = new ActionRecorder();
 
     private final List<RecordedAction> actions = Collections.synchronizedList(new ArrayList<RecordedAction>());
     private Scene attachedScene;
@@ -39,9 +39,6 @@ public class ActionRecorder {
     private final Set<Runnable> detachCallbacks = new HashSet<>();
 
     public static ActionRecorder getInstance() {
-        if (instance == null) {
-            instance = new ActionRecorder();
-        }
         return instance;
     }
 

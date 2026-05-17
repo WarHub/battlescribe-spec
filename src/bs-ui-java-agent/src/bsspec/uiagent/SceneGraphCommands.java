@@ -389,6 +389,9 @@ public class SceneGraphCommands {
         }
 
         var bounds = node.localToScreen(node.getBoundsInLocal());
+        if (bounds == null) {
+            return "{\"error\":\"Node not visible on screen (localToScreen returned null)\"}";
+        }
         double x = bounds.getMinX() + bounds.getWidth() / 2;
         double y = bounds.getMinY() + bounds.getHeight() / 2;
 

@@ -4,6 +4,7 @@ namespace BattleScribeSpec.Tests;
 
 [Collection("SequentialLiveNrRoster")]
 [Trait("Category", "Integration")]
+[Trait("Engine", "LiveNrRoster")]
 public sealed class NrProbe
 {
     private readonly ITestOutputHelper _output;

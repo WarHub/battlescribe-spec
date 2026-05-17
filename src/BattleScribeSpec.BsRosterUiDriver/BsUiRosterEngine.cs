@@ -696,12 +696,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         Console.Error.WriteLine("[bs-ui] Warm start: closing current roster...");
         try
         {
-            await ConnectedClient.CallAsync("pressKey", new System.Text.Json.Nodes.JsonObject
-            {
-                ["key"] = "W",
-                ["modifiers"] = new System.Text.Json.Nodes.JsonArray { (System.Text.Json.Nodes.JsonNode)"ctrl" },
-                ["windowTitle"] = MainWindowTitle
-            });
+            _ = await ConnectedClient.PressKeyAsync("W", windowTitle: MainWindowTitle, ctrl: true);
         }
         catch
         {
