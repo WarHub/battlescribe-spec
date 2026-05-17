@@ -18,6 +18,7 @@ import javafx.scene.input.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 
@@ -37,6 +38,7 @@ public class ActionRecorder {
     // Listeners to detach on stop
     private EventHandler<MouseEvent> clickHandler;
     private final Set<Runnable> detachCallbacks = new HashSet<>();
+    private final Set<Parent> observedParents = Collections.newSetFromMap(new IdentityHashMap<Parent, Boolean>());
 
     public static ActionRecorder getInstance() {
         return instance;
@@ -70,20 +72,35 @@ public class ActionRecorder {
         // Attach value-change listeners to existing controls in the scene
         attachControlListeners(scene.getRoot());
 
-        // Listen for new nodes added to the scene graph
-        ListChangeListener<Node> childListener = change -> {
+        if (scene.getRoot() instanceof Parent) {
+            attachRecursiveChildListener((Parent) scene.getRoot());
+        }
+    }
+
+    private void attachRecursiveChildListener(Parent parent) {
+        if (!recording || !observedParents.add(parent)) {
+            return;
+        }
+
+        ListChangeListener<Node> listener = change -> {
             while (change.next()) {
                 if (change.wasAdded()) {
                     for (Node added : change.getAddedSubList()) {
                         attachControlListeners(added);
+                        if (added instanceof Parent) {
+                            attachRecursiveChildListener((Parent) added);
+                        }
                     }
                 }
             }
         };
-        if (scene.getRoot() instanceof Parent) {
-            ((Parent) scene.getRoot()).getChildrenUnmodifiable().addListener(childListener);
-            detachCallbacks.add(() ->
-                ((Parent) scene.getRoot()).getChildrenUnmodifiable().removeListener(childListener));
+        parent.getChildrenUnmodifiable().addListener(listener);
+        detachCallbacks.add(() -> parent.getChildrenUnmodifiable().removeListener(listener));
+
+        for (Node child : parent.getChildrenUnmodifiable()) {
+            if (child instanceof Parent) {
+                attachRecursiveChildListener((Parent) child);
+            }
         }
     }
 
@@ -152,6 +169,7 @@ public class ActionRecorder {
             }
         }
         detachCallbacks.clear();
+        observedParents.clear();
         attachedScene = null;
         clickHandler = null;
         return getActionsJson();

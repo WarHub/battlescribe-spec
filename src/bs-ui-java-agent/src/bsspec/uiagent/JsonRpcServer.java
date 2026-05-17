@@ -8,6 +8,10 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -21,6 +25,43 @@ import javafx.application.Platform;
  * <p>Protocol: each message is a single JSON line terminated by {@code \n}.
  */
 public class JsonRpcServer {
+
+    /**
+     * Scene graph inspection/automation commands must run on the JavaFX thread.
+     * Everything else defaults to a background thread so newly added engine/diagnostic
+     * methods do not deadlock when someone forgets to update dispatch logic.
+     */
+    private static final Set<String> FX_THREAD_METHODS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
+            "dumpTree",
+            "getWindows",
+            "findNode",
+            "findAllNodes",
+            "getNodeInfo",
+            "clickNode",
+            "fireButton",
+            "getChildren",
+            "getNodeText",
+            "findNodeByText",
+            "setNodeText",
+            "getComboBoxItems",
+            "selectComboBoxItem",
+            "getTreeItems",
+            "selectTreeItem",
+            "clearTreeSelection",
+            "expandTreeItem",
+            "clickTreeItem",
+            "pressKey",
+            "getSpinnerValue",
+            "setSpinnerValue",
+            "captureScreenshot",
+            "getUiState",
+            "startRecording",
+            "stopRecording",
+            "dumpNodeProperties",
+            "findControlByLabel",
+            "clickControlByLabel",
+            "setSpinnerValueByLabel"
+    )));
 
     private final ServerSocket serverSocket;
     private final SceneGraphCommands commands;
@@ -91,20 +132,10 @@ public class JsonRpcServer {
 
         try {
             String result;
-            // Commands that must NOT run on the FX thread:
-            // - patchSupporterPass: uses Instrumentation.retransformClasses
-            // - waitForEngine: blocks until bg engine op completes; FX must stay free
-            // - threadDump: diagnostic; must work even when FX thread is frozen
-            // - rebuildCatalogueTree: schedules FX work internally; must run off-FX to avoid deadlock
-            if ("patchSupporterPass".equals(method) || "waitForEngine".equals(method)
-                    || "threadDump".equals(method) || "rebuildCatalogueTree".equals(method)
-                    || "addForceViaEngine".equals(method) || "removeForceViaEngine".equals(method)
-                    || "deselectEntryViaEngine".equals(method)
-                    || "setRosterName".equals(method) || "exportRosterXml".equals(method)) {
-                result = commands.dispatch(method, params);
-            } else {
-                // Execute on JavaFX Application Thread and wait for result
+            if (FX_THREAD_METHODS.contains(method)) {
                 result = executeOnFxThread(() -> commands.dispatch(method, params));
+            } else {
+                result = commands.dispatch(method, params);
             }
             return successResponse(id, result);
         } catch (Throwable e) {
