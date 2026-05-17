@@ -1,5 +1,9 @@
 package bsspec.uiagent;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
@@ -47,7 +51,32 @@ public class SceneGraphCommands {
         this.engineAccessor = engineAccessor;
     }
 
+    private static JsonObject parseParams(String paramsJson) {
+        if (paramsJson == null || paramsJson.isEmpty()) {
+            return new JsonObject();
+        }
+
+        JsonElement paramsValue = new JsonParser().parse(paramsJson);
+        return paramsValue != null && paramsValue.isJsonObject() ? paramsValue.getAsJsonObject() : new JsonObject();
+    }
+
+    private static String getString(JsonObject params, String key, String defaultValue) {
+        JsonElement value = params.get(key);
+        return value != null && !value.isJsonNull() ? value.getAsString() : defaultValue;
+    }
+
+    private static int getInt(JsonObject params, String key, int defaultValue) {
+        JsonElement value = params.get(key);
+        return value != null && !value.isJsonNull() ? value.getAsInt() : defaultValue;
+    }
+
+    private static boolean getBoolean(JsonObject params, String key, boolean defaultValue) {
+        JsonElement value = params.get(key);
+        return value != null && !value.isJsonNull() ? value.getAsBoolean() : defaultValue;
+    }
+
     public String dispatch(String method, String params) {
+        JsonObject paramsObject = parseParams(params);
         switch (method) {
             case "ping":
                 return "\"pong\"";
@@ -97,7 +126,7 @@ public class SceneGraphCommands {
             case "listBsClasses":
                 return engineAccessor.listBsClasses();
             case "inspectClass":
-                return engineAccessor.inspectClass(extractStr(params, "className"));
+                return engineAccessor.inspectClass(getString(paramsObject, "className", null));
             case "findEngine":
                 return engineAccessor.findEngine();
             case "getRosterState":
@@ -119,7 +148,7 @@ public class SceneGraphCommands {
             case "getValidationErrors":
                 return engineAccessor.getValidationErrors();
             case "readStaticFields":
-                return engineAccessor.readStaticFields(extractStr(params, "className"));
+                return engineAccessor.readStaticFields(getString(paramsObject, "className", null));
             case "dumpNodeProperties":
                 return dumpNodeProperties(params);
             case "findControlByLabel":
@@ -204,7 +233,8 @@ public class SceneGraphCommands {
     }
 
     private String captureScreenshot(String params) {
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Scene scene = findScene(windowTitle);
         if (scene == null) {
             return "{\"error\":\"No scene found\"}";
@@ -238,7 +268,8 @@ public class SceneGraphCommands {
     }
 
     private String startRecording(String params) {
-        Scene scene = findScene(extractStr(params, "windowTitle"));
+        JsonObject paramsObject = parseParams(params);
+        Scene scene = findScene(getString(paramsObject, "windowTitle", null));
         if (scene == null) {
             return "{\"error\":\"No scene found\"}";
         }
@@ -248,17 +279,20 @@ public class SceneGraphCommands {
     }
 
     private String stopRecording(String params) {
+        JsonObject paramsObject = parseParams(params);
         String actions = ActionRecorder.getInstance().stopRecording();
         return "{\"actions\":" + actions + "}";
     }
 
     private String getRecordedActions(String params) {
+        JsonObject paramsObject = parseParams(params);
         String actions = ActionRecorder.getInstance().getActionsJson();
         return "{\"recording\":" + ActionRecorder.getInstance().isRecording() + ",\"actions\":" + actions + "}";
     }
 
     private String getUiState(String params) {
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Scene scene = findScene(windowTitle != null ? windowTitle : "Roster Editor");
         if (scene == null && windowTitle != null) {
             scene = findScene(windowTitle);
@@ -282,8 +316,9 @@ public class SceneGraphCommands {
     }
 
     private String dumpTree(String params) {
-        int maxDepth = extractInt(params, "maxDepth", 10);
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        int maxDepth = getInt(paramsObject, "maxDepth", 10);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
 
         Scene scene = findScene(windowTitle);
         if (scene == null) {
@@ -299,8 +334,9 @@ public class SceneGraphCommands {
     }
 
     private String findNode(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
 
         if (selector == null) {
             throw new IllegalArgumentException("Missing 'selector' param");
@@ -320,8 +356,9 @@ public class SceneGraphCommands {
     }
 
     private String getNodeInfo(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             return "null";
@@ -330,10 +367,11 @@ public class SceneGraphCommands {
     }
 
     private String clickNode(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        String text = extractStr(params, "text");
-        boolean doubleClick = "true".equals(extractStr(params, "doubleClick"));
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String text = getString(paramsObject, "text", null);
+        boolean doubleClick = getBoolean(paramsObject, "doubleClick", false);
         int clickCount = doubleClick ? 2 : 1;
 
         Node node;
@@ -384,8 +422,9 @@ public class SceneGraphCommands {
     }
 
     private String getChildren(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             return "[]";
@@ -408,8 +447,9 @@ public class SceneGraphCommands {
     }
 
     private String getNodeText(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             return "null";
@@ -418,8 +458,9 @@ public class SceneGraphCommands {
     }
 
     private String findAllNodes(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
 
         if (selector == null) {
             throw new IllegalArgumentException("Missing 'selector' param");
@@ -445,9 +486,10 @@ public class SceneGraphCommands {
     }
 
     private String fireButton(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        String async = extractStr(params, "async");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String async = getString(paramsObject, "async", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("Node not found: " + selector);
@@ -479,9 +521,10 @@ public class SceneGraphCommands {
     }
 
     private String findNodeByText(String params) {
-        String text = extractStr(params, "text");
-        String nodeType = extractStr(params, "nodeType");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String text = getString(paramsObject, "text", null);
+        String nodeType = getString(paramsObject, "nodeType", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
 
         if (text == null) {
             throw new IllegalArgumentException("Missing 'text' param");
@@ -518,9 +561,10 @@ public class SceneGraphCommands {
     }
 
     private String setNodeText(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        String text = extractStr(params, "text");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String text = getString(paramsObject, "text", null);
 
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
@@ -542,8 +586,9 @@ public class SceneGraphCommands {
     }
 
     private String getComboBoxItems(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("ComboBox not found: " + selector);
@@ -570,10 +615,11 @@ public class SceneGraphCommands {
     }
 
     private String selectComboBoxItem(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        String text = extractStr(params, "text");
-        int index = extractInt(params, "index", -1);
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String text = getString(paramsObject, "text", null);
+        int index = getInt(paramsObject, "index", -1);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("ComboBox not found: " + selector);
@@ -601,9 +647,10 @@ public class SceneGraphCommands {
 
     @SuppressWarnings("unchecked")
     private String getTreeItems(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        int maxDepth = extractInt(params, "maxDepth", 3);
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        int maxDepth = getInt(paramsObject, "maxDepth", 3);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("TreeView not found: " + selector);
@@ -642,10 +689,11 @@ public class SceneGraphCommands {
 
     @SuppressWarnings("unchecked")
     private String selectTreeItem(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        String text = extractStr(params, "text");
-        int index = extractInt(params, "index", -1);
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String text = getString(paramsObject, "text", null);
+        int index = getInt(paramsObject, "index", -1);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("TreeView not found: " + selector);
@@ -671,8 +719,9 @@ public class SceneGraphCommands {
 
     @SuppressWarnings("unchecked")
     private String clearTreeSelection(String params) {
-        String treeId = extractStr(params, "treeId");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String treeId = getString(paramsObject, "treeId", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(treeId, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("TreeView not found: " + treeId);
@@ -687,9 +736,10 @@ public class SceneGraphCommands {
 
     @SuppressWarnings("unchecked")
     private String expandTreeItem(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        String text = extractStr(params, "text");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String text = getString(paramsObject, "text", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("TreeView not found: " + selector);
@@ -727,10 +777,11 @@ public class SceneGraphCommands {
      */
     @SuppressWarnings("unchecked")
     private String clickTreeItem(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        String text = extractStr(params, "text");
-        boolean doubleClick = "true".equals(extractStr(params, "doubleClick"));
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String text = getString(paramsObject, "text", null);
+        boolean doubleClick = getBoolean(paramsObject, "doubleClick", false);
         int clickCount = doubleClick ? 2 : 1;
 
         Node node = resolveNode(selector, windowTitle);
@@ -804,13 +855,14 @@ public class SceneGraphCommands {
      * key: KeyCode name (e.g., "DELETE", "ENTER", "ESCAPE")
      */
     private String pressKey(String params) {
-        String keyName = extractStr(params, "key");
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        boolean ctrl = extractBool(params, "ctrl");
-        boolean alt = extractBool(params, "alt");
-        boolean shift = extractBool(params, "shift");
-        boolean meta = extractBool(params, "meta");
+        JsonObject paramsObject = parseParams(params);
+        String keyName = getString(paramsObject, "key", null);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        boolean ctrl = getBoolean(paramsObject, "ctrl", false);
+        boolean alt = getBoolean(paramsObject, "alt", false);
+        boolean shift = getBoolean(paramsObject, "shift", false);
+        boolean meta = getBoolean(paramsObject, "meta", false);
 
         KeyCode keyCode;
         try {
@@ -851,8 +903,9 @@ public class SceneGraphCommands {
      */
     @SuppressWarnings("unchecked")
     private String getSpinnerValue(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("Node not found: " + selector);
@@ -873,10 +926,11 @@ public class SceneGraphCommands {
      */
     @SuppressWarnings("unchecked")
     private String setSpinnerValue(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
-        int steps = extractInt(params, "steps", 0);
-        int value = extractInt(params, "value", -1);
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        int steps = getInt(paramsObject, "steps", 0);
+        int value = getInt(paramsObject, "value", -1);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             throw new IllegalArgumentException("Node not found: " + selector);
@@ -906,8 +960,9 @@ public class SceneGraphCommands {
     }
 
     private String dumpNodeProperties(String params) {
-        String selector = extractStr(params, "selector");
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
             // If no selector, dump root node properties
@@ -951,9 +1006,10 @@ public class SceneGraphCommands {
      * Returns: JSON with found control info (type, index, value if applicable)
      */
     private String findControlByLabel(String params) {
-        String text = extractStr(params, "text");
-        String windowTitle = extractStr(params, "windowTitle");
-        String controlType = extractStr(params, "controlType"); // optional filter
+        JsonObject paramsObject = parseParams(params);
+        String text = getString(paramsObject, "text", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String controlType = getString(paramsObject, "controlType", null); // optional filter
 
         Scene scene = findScene(windowTitle);
         if (scene == null) return "{\"error\":\"no scene\"}";
@@ -1015,9 +1071,10 @@ public class SceneGraphCommands {
      * Params: text (label text to match), windowTitle (optional), controlType (optional)
      */
     private String clickControlByLabel(String params) {
-        String text = extractStr(params, "text");
-        String windowTitle = extractStr(params, "windowTitle");
-        String action = extractStr(params, "action"); // "increment" or "decrement", default increment
+        JsonObject paramsObject = parseParams(params);
+        String text = getString(paramsObject, "text", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String action = getString(paramsObject, "action", null); // "increment" or "decrement", default increment
 
         Scene scene = findScene(windowTitle);
         if (scene == null) return "{\"error\":\"no scene\"}";
@@ -1078,9 +1135,10 @@ public class SceneGraphCommands {
      */
     @SuppressWarnings("unchecked")
     private String setSpinnerValueByLabel(String params) {
-        String text = extractStr(params, "text");
-        int value = extractInt(params, "value", -1);
-        String windowTitle = extractStr(params, "windowTitle");
+        JsonObject paramsObject = parseParams(params);
+        String text = getString(paramsObject, "text", null);
+        int value = getInt(paramsObject, "value", -1);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
 
         if (value < 0) {
             return "{\"error\":\"Missing or invalid 'value' parameter.\"}";
@@ -1571,92 +1629,6 @@ public class SceneGraphCommands {
         return null;
     }
 
-    // --- Minimal JSON/param helpers ---
-
-    private static String extractStr(String json, String key) {
-        String pattern = "\"" + key + "\"";
-        int idx = json.indexOf(pattern);
-        if (idx < 0) {
-            return null;
-        }
-        int colon = json.indexOf(':', idx + pattern.length());
-        if (colon < 0) {
-            return null;
-        }
-        int start = colon + 1;
-        while (start < json.length() && json.charAt(start) == ' ') {
-            start++;
-        }
-        if (start >= json.length() || json.charAt(start) != '"') {
-            return null;
-        }
-        int end = json.indexOf('"', start + 1);
-        return end > start ? json.substring(start + 1, end) : null;
-    }
-
-    private static int extractInt(String json, String key, int defaultValue) {
-        String val = extractStr(json, key);
-        if (val != null) {
-            try {
-                return Integer.parseInt(val);
-            } catch (NumberFormatException e) {
-                // fall through
-            }
-        }
-
-        String raw = extractNumberToken(json, key);
-        if (raw != null) {
-            try {
-                return Integer.parseInt(raw);
-            } catch (NumberFormatException e) {
-                // fall through
-            }
-        }
-        return defaultValue;
-    }
-
-    private static boolean extractBool(String json, String key) {
-        String pattern = "\"" + key + "\"";
-        int idx = json.indexOf(pattern);
-        if (idx < 0) {
-            return false;
-        }
-        int colon = json.indexOf(':', idx + pattern.length());
-        if (colon < 0) {
-            return false;
-        }
-        int start = colon + 1;
-        while (start < json.length() && json.charAt(start) == ' ') {
-            start++;
-        }
-        return json.startsWith("true", start) || json.startsWith("\"true\"", start);
-    }
-
-    private static String extractNumberToken(String json, String key) {
-        String pattern = "\"" + key + "\"";
-        int idx = json.indexOf(pattern);
-        if (idx < 0) {
-            return null;
-        }
-        int colon = json.indexOf(':', idx + pattern.length());
-        if (colon < 0) {
-            return null;
-        }
-        int start = colon + 1;
-        while (start < json.length() && json.charAt(start) == ' ') {
-            start++;
-        }
-        int end = start;
-        while (end < json.length()) {
-            char ch = json.charAt(end);
-            if ((ch >= '0' && ch <= '9') || ch == '-' || ch == '+' || ch == '.') {
-                end++;
-                continue;
-            }
-            break;
-        }
-        return end > start ? json.substring(start, end) : null;
-    }
 
     private static String jsonString(String value) {
         if (value == null) {

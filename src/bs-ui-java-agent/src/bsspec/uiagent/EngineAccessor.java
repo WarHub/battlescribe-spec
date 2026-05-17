@@ -1,5 +1,9 @@
 package bsspec.uiagent;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
@@ -38,6 +42,30 @@ public class EngineAccessor {
 
     public EngineAccessor(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
+    }
+
+    private static JsonObject parseParams(String paramsJson) {
+        if (paramsJson == null || paramsJson.isEmpty()) {
+            return new JsonObject();
+        }
+
+        JsonElement paramsValue = new JsonParser().parse(paramsJson);
+        return paramsValue != null && paramsValue.isJsonObject() ? paramsValue.getAsJsonObject() : new JsonObject();
+    }
+
+    private static String getString(JsonObject params, String key, String defaultValue) {
+        JsonElement value = params.get(key);
+        return value != null && !value.isJsonNull() ? value.getAsString() : defaultValue;
+    }
+
+    private static int getInt(JsonObject params, String key, int defaultValue) {
+        JsonElement value = params.get(key);
+        return value != null && !value.isJsonNull() ? value.getAsInt() : defaultValue;
+    }
+
+    private static double getDouble(JsonObject params, String key, double defaultValue) {
+        JsonElement value = params.get(key);
+        return value != null && !value.isJsonNull() ? value.getAsDouble() : defaultValue;
     }
 
     /**
@@ -456,11 +484,12 @@ public class EngineAccessor {
     }
 
     public String setRosterName(String params) {
+        JsonObject paramsObject = parseParams(params);
         if (engineInstance == null) {
             return errorJson("Engine not found. Call findEngine first.");
         }
         try {
-            String name = extractStr(params, "name");
+            String name = getString(paramsObject, "name", null);
             if (name == null || name.isEmpty()) {
                 return errorJson("Missing 'name' parameter.");
             }
@@ -1270,7 +1299,8 @@ public class EngineAccessor {
         }
         return null;
     }
-
+
+
     private boolean resolveForceHidden(Object force) {
         try {
             Object forceContext = getForceContext(force);
@@ -2227,12 +2257,13 @@ public class EngineAccessor {
      * Sets customName/customNotes on a category within a force, via engine model API.
      */
     public String setCategoryCustomNotes(String params) {
+        JsonObject paramsObject = parseParams(params);
         try {
             ensureEngineFound();
-            String forceId = extractStr(params, "forceId");
-            String categoryEntryId = extractStr(params, "categoryEntryId");
-            String customName = extractStr(params, "customName");
-            String customNotes = extractStr(params, "customNotes");
+            String forceId = getString(paramsObject, "forceId", null);
+            String categoryEntryId = getString(paramsObject, "categoryEntryId", null);
+            String customName = getString(paramsObject, "customName", null);
+            String customNotes = getString(paramsObject, "customNotes", null);
 
             Object force = findForceById(forceId);
             Object catList = callListGetter(force, "getCategories");
@@ -2266,11 +2297,12 @@ public class EngineAccessor {
      * params: { "catalogueId": "...", "forceEntryId": "..." }
      */
     public String addForceViaEngine(String params) {
+        JsonObject paramsObject = parseParams(params);
         try {
             ensureEngineFound();
-            String catalogueId = extractStr(params, "catalogueId");
-            String forceEntryId = extractStr(params, "forceEntryId");
-            String parentForceId = extractStr(params, "parentForceId");
+            String catalogueId = getString(paramsObject, "catalogueId", null);
+            String forceEntryId = getString(paramsObject, "forceEntryId", null);
+            String parentForceId = getString(paramsObject, "parentForceId", null);
             if (catalogueId == null || catalogueId.isEmpty()) {
                 return errorJson("Missing 'catalogueId' parameter.");
             }
@@ -2386,9 +2418,10 @@ public class EngineAccessor {
      * params: { "forceId": "..." }
      */
     public String removeForceViaEngine(String params) {
+        JsonObject paramsObject = parseParams(params);
         try {
             ensureEngineFound();
-            String forceId = extractStr(params, "forceId");
+            String forceId = getString(paramsObject, "forceId", null);
             if (forceId == null || forceId.isEmpty()) {
                 return errorJson("Missing 'forceId' parameter.");
             }
@@ -2430,11 +2463,12 @@ public class EngineAccessor {
      * Uses catMgr.R() to get available entries, then engine.b(force, entry) to select.
      */
     public String selectEntryViaEngine(String params) {
+        JsonObject paramsObject = parseParams(params);
         try {
             ensureEngineFound();
-            String forceId = extractStr(params, "forceId");
-            String entryId = extractStr(params, "entryId");
-            String parentSelectionId = extractStr(params, "parentSelectionId");
+            String forceId = getString(paramsObject, "forceId", null);
+            String entryId = getString(paramsObject, "entryId", null);
+            String parentSelectionId = getString(paramsObject, "parentSelectionId", null);
 
             Object force = findForceById(forceId);
             if (force == null) {
@@ -2559,10 +2593,11 @@ public class EngineAccessor {
      * Params: forceId (String, optional), selectionId (String)
      */
     public String deselectEntryViaEngine(String params) {
+        JsonObject paramsObject = parseParams(params);
         try {
             ensureEngineFound();
-            String forceId = extractStr(params, "forceId");
-            String selectionId = extractStr(params, "selectionId");
+            String forceId = getString(paramsObject, "forceId", null);
+            String selectionId = getString(paramsObject, "selectionId", null);
             if (selectionId == null || selectionId.isEmpty()) {
                 return errorJson("selectionId is required.");
             }
@@ -2619,11 +2654,12 @@ public class EngineAccessor {
     }
 
     public String setSelectionCount(String params) {
+        JsonObject paramsObject = parseParams(params);
         try {
             ensureEngineFound();
-            String forceId = extractStr(params, "forceId");
-            String selectionId = extractStr(params, "selectionId");
-            int count = extractIntFromJson(params, "count", -1);
+            String forceId = getString(paramsObject, "forceId", null);
+            String selectionId = getString(paramsObject, "selectionId", null);
+            int count = getInt(paramsObject, "count", -1);
             if (count < 0) {
                 return errorJson("Missing or invalid 'count' parameter.");
             }
@@ -2738,10 +2774,11 @@ public class EngineAccessor {
      * Runs the engine call on a bg thread (calls t() which logs to stdout).
      */
     public String setCostLimit(String params) {
+        JsonObject paramsObject = parseParams(params);
         try {
             ensureEngineFound();
-            String costTypeId = extractStr(params, "costTypeId");
-            double value = extractDoubleFromJson(params, "value", -1.0);
+            String costTypeId = getString(paramsObject, "costTypeId", null);
+            double value = getDouble(paramsObject, "value", -1.0);
             if (costTypeId == null || costTypeId.isEmpty()) {
                 return errorJson("Missing 'costTypeId' parameter.");
             }
@@ -2872,11 +2909,12 @@ public class EngineAccessor {
      * Accepts optional "timeoutMs" param (default 3000).
      */
     public String waitForEngine(String params) {
+        JsonObject paramsObject = parseParams(params);
         CountDownLatch latch = engineOpLatch;
         if (latch == null) {
             return "{\"waited\":false,\"reason\":\"no pending operation\"}";
         }
-        int timeoutMs = extractIntFromJson(params, "timeoutMs", 3000);
+        int timeoutMs = getInt(paramsObject, "timeoutMs", 3000);
         try {
             boolean done = latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
             if (done) {
@@ -3072,77 +3110,6 @@ public class EngineAccessor {
             }
         }
         return null;
-    }
-
-    private int extractIntFromJson(String json, String key, int defaultValue) {
-        String search = "\"" + key + "\":";
-        int idx = json.indexOf(search);
-        if (idx < 0) return defaultValue;
-        idx += search.length();
-        while (idx < json.length() && json.charAt(idx) == ' ') idx++;
-        if (idx >= json.length()) return defaultValue;
-        StringBuilder sb = new StringBuilder();
-        while (idx < json.length() && (Character.isDigit(json.charAt(idx)) || json.charAt(idx) == '-')) {
-            sb.append(json.charAt(idx));
-            idx++;
-        }
-        if (sb.length() == 0) return defaultValue;
-        try {
-            return Integer.parseInt(sb.toString());
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-
-    private double extractDoubleFromJson(String json, String key, double defaultValue) {
-        String search = "\"" + key + "\":";
-        int idx = json.indexOf(search);
-        if (idx < 0) return defaultValue;
-        idx += search.length();
-        while (idx < json.length() && json.charAt(idx) == ' ') idx++;
-        if (idx >= json.length()) return defaultValue;
-        StringBuilder sb = new StringBuilder();
-        while (idx < json.length() && (Character.isDigit(json.charAt(idx))
-                || json.charAt(idx) == '-' || json.charAt(idx) == '.')) {
-            sb.append(json.charAt(idx));
-            idx++;
-        }
-        if (sb.length() == 0) return defaultValue;
-        try {
-            return Double.parseDouble(sb.toString());
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-
-    private String extractStr(String json, String key) {
-        // Simple JSON string extraction (reuse from SceneGraphCommands pattern)
-        String search = "\"" + key + "\":";
-        int idx = json.indexOf(search);
-        if (idx < 0) return null;
-        idx += search.length();
-        while (idx < json.length() && json.charAt(idx) == ' ') idx++;
-        if (idx >= json.length()) return null;
-        if (json.charAt(idx) == 'n') return null; // null
-        if (json.charAt(idx) != '"') return null;
-        idx++;
-        StringBuilder sb = new StringBuilder();
-        while (idx < json.length() && json.charAt(idx) != '"') {
-            if (json.charAt(idx) == '\\' && idx + 1 < json.length()) {
-                idx++;
-                switch (json.charAt(idx)) {
-                    case 'n': sb.append('\n'); break;
-                    case 't': sb.append('\t'); break;
-                    case '"': sb.append('"'); break;
-                    case '\\': sb.append('\\'); break;
-                    default: sb.append(json.charAt(idx)); break;
-                }
-            } else {
-                sb.append(json.charAt(idx));
-            }
-            idx++;
-        }
-        return sb.toString();
     }
 
     /**

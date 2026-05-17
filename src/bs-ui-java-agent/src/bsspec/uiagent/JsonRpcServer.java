@@ -1,5 +1,9 @@
 package bsspec.uiagent;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -69,10 +73,17 @@ public class JsonRpcServer {
     }
 
     private String processRequest(String json) {
-        // Minimal JSON-RPC 2.0 parsing (no external dependencies)
-        String id = extractString(json, "id");
-        String method = extractString(json, "method");
-        String params = extractObject(json, "params");
+        JsonObject request;
+        try {
+            request = new JsonParser().parse(json).getAsJsonObject();
+        } catch (RuntimeException e) {
+            return errorResponse(null, -32700, "Parse error: " + e.getMessage());
+        }
+
+        String method = request.has("method") ? request.get("method").getAsString() : null;
+        String id = request.has("id") ? request.get("id").toString() : null;
+        JsonElement paramsElement = request.get("params");
+        String params = paramsElement != null ? paramsElement.toString() : "{}";
 
         if (method == null) {
             return errorResponse(id, -32600, "Invalid Request: missing 'method'");
@@ -128,70 +139,6 @@ public class JsonRpcServer {
         }
     }
 
-    // --- Minimal JSON helpers (no external dependencies) ---
-
-    private static String extractString(String json, String key) {
-        String pattern = "\"" + key + "\"";
-        int keyIdx = json.indexOf(pattern);
-        if (keyIdx < 0) {
-            return null;
-        }
-        int colonIdx = json.indexOf(':', keyIdx + pattern.length());
-        if (colonIdx < 0) {
-            return null;
-        }
-        // Find the value - could be string or number
-        int start = colonIdx + 1;
-        while (start < json.length() && json.charAt(start) == ' ') {
-            start++;
-        }
-        if (start >= json.length()) {
-            return null;
-        }
-        if (json.charAt(start) == '"') {
-            int end = json.indexOf('"', start + 1);
-            return end > start ? json.substring(start + 1, end) : null;
-        }
-        // Number or other literal
-        int end = start;
-        while (end < json.length() && json.charAt(end) != ',' && json.charAt(end) != '}') {
-            end++;
-        }
-        return json.substring(start, end).trim();
-    }
-
-    private static String extractObject(String json, String key) {
-        String pattern = "\"" + key + "\"";
-        int keyIdx = json.indexOf(pattern);
-        if (keyIdx < 0) {
-            return "{}";
-        }
-        int colonIdx = json.indexOf(':', keyIdx + pattern.length());
-        if (colonIdx < 0) {
-            return "{}";
-        }
-        int start = colonIdx + 1;
-        while (start < json.length() && json.charAt(start) == ' ') {
-            start++;
-        }
-        if (start >= json.length() || json.charAt(start) != '{') {
-            return "{}";
-        }
-        // Find matching closing brace
-        int depth = 0;
-        for (int i = start; i < json.length(); i++) {
-            if (json.charAt(i) == '{') {
-                depth++;
-            } else if (json.charAt(i) == '}') {
-                depth--;
-                if (depth == 0) {
-                    return json.substring(start, i + 1);
-                }
-            }
-        }
-        return "{}";
-    }
-
     static String successResponse(String id, String result) {
         return "{\"jsonrpc\":\"2.0\",\"id\":" + formatId(id) + ",\"result\":" + result + "}";
     }
@@ -203,15 +150,6 @@ public class JsonRpcServer {
     }
 
     private static String formatId(String id) {
-        if (id == null) {
-            return "null";
-        }
-        // If it looks like a number, return as-is
-        try {
-            Long.parseLong(id);
-            return id;
-        } catch (NumberFormatException e) {
-            return "\"" + id + "\"";
-        }
+        return id == null ? "null" : id;
     }
 }

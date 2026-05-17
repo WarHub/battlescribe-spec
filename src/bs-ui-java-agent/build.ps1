@@ -11,6 +11,12 @@ $ScriptDir = $PSScriptRoot
 $SrcDir = Join-Path $ScriptDir 'src'
 $OutDir = Join-Path $ScriptDir 'out'
 $JarName = 'bs-ui-java-agent.jar'
+# Compile against Gson; BattleScribe already provides it on the app runtime classpath.
+$GsonJar = Join-Path $ScriptDir 'lib\gson-2.1.jar'
+
+if (!(Test-Path $GsonJar)) {
+    throw "gson dependency not found: $GsonJar"
+}
 
 if ($JavaHome) {
     if ($IsLinux -or $IsMacOS) {
@@ -33,7 +39,7 @@ New-Item -ItemType Directory -Path (Join-Path $OutDir 'classes') -Force | Out-Nu
 
 $sources = Get-ChildItem -Path $SrcDir -Filter '*.java' -Recurse | ForEach-Object { $_.FullName }
 
-& $javac --add-modules javafx.controls -d (Join-Path $OutDir 'classes') @sources
+& $javac --add-modules javafx.controls -classpath $GsonJar -d (Join-Path $OutDir 'classes') @sources
 if ($LASTEXITCODE -ne 0) {
     throw 'javac failed'
 }

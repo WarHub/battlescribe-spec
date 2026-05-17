@@ -9,6 +9,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_DIR="$SCRIPT_DIR/src"
 OUT_DIR="$SCRIPT_DIR/out"
 JAR_NAME="bs-ui-java-agent.jar"
+# Compile against Gson; BattleScribe already provides it on the app runtime classpath.
+GSON_JAR="$SCRIPT_DIR/lib/gson-2.1.jar"
+
+if [[ ! -f "$GSON_JAR" ]]; then
+    echo "gson dependency not found: $GSON_JAR" >&2
+    exit 1
+fi
 
 JAVAC="${1:-javac}"
 JAR_CMD="${2:-jar}"
@@ -22,6 +29,7 @@ find "$SRC_DIR" -name '*.java' > "$OUT_DIR/sources.txt"
 
 "$JAVAC" \
     --add-modules javafx.controls \
+    -classpath "$GSON_JAR" \
     -d "$OUT_DIR/classes" \
     @"$OUT_DIR/sources.txt"
 
