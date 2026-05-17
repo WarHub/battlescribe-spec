@@ -48,56 +48,101 @@ public sealed class BsRosterApp : IAsyncDisposable
             RedirectStandardError = true,
         };
 
-        _process = Process.Start(startInfo)
+        var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start BattleScribe process.");
+        _process = process;
 
-        // Collect stderr for diagnostics
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+
         var stderrLines = new System.Collections.Concurrent.ConcurrentQueue<string>();
         _ = Task.Run(async () =>
         {
             try
             {
-                while (await _process.StandardError.ReadLineAsync()
+                while (await process.StandardError.ReadLineAsync(cts.Token)
                     is { } line)
                 {
                     stderrLines.Enqueue(line);
                     Console.Error.WriteLine($"[BS stderr] {line}");
                 }
             }
-            catch { /* process exited */ }
+            catch (OperationCanceledException)
+            {
+            }
+            catch
+            {
+                /* process exited */
+            }
         });
 
-        // Wait for the agent to print its port
-        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-        while (DateTime.UtcNow < deadline)
+        var exitTask = process.WaitForExitAsync();
+
+        while (!cts.Token.IsCancellationRequested)
         {
-            var line = await _process.StandardOutput.ReadLineAsync();
-            if (line is null)
+            if (process.HasExited)
+            {
+                var stderr = string.Join("\n", stderrLines);
+                throw new InvalidOperationException(
+                    $"BattleScribe process exited with code {process.ExitCode} before agent started.\nStderr: {stderr}");
+            }
+
+            var readTask = process.StandardOutput.ReadLineAsync(cts.Token).AsTask();
+            var completedTask = await Task.WhenAny(readTask, exitTask);
+
+            if (completedTask == exitTask)
+            {
+                var stderr = string.Join("\n", stderrLines);
+                throw new InvalidOperationException(
+                    $"BattleScribe process exited with code {process.ExitCode} before agent started.\nStderr: {stderr}");
+            }
+
+            string? line;
+            try
+            {
+                line = await readTask;
+            }
+            catch (OperationCanceledException)
             {
                 break;
             }
 
+            if (line is null)
+            {
+                if (process.HasExited)
+                {
+                    var stderr = string.Join("\n", stderrLines);
+                    throw new InvalidOperationException(
+                        $"BattleScribe process exited with code {process.ExitCode} before agent started.\nStderr: {stderr}");
+                }
+
+                break;
+            }
+
+            Console.Error.WriteLine($"[bs-app] {line}");
+
             if (line.StartsWith("BSUI_AGENT_PORT=", StringComparison.Ordinal))
             {
                 AgentPort = int.Parse(line["BSUI_AGENT_PORT=".Length..]);
-                // Continue draining stdout in background to prevent pipe buffer deadlock
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        while (await _process.StandardOutput.ReadLineAsync()
+                        while (await process.StandardOutput.ReadLineAsync()
                             is not null)
                         { }
                     }
-                    catch { /* process exited */ }
+                    catch
+                    {
+                        /* process exited */
+                    }
                 });
                 return;
             }
         }
 
-        var stderr = string.Join("\n", stderrLines);
-        var exitInfo = _process.HasExited ? $" (exit code: {_process.ExitCode})" : "";
-        throw new TimeoutException($"Agent did not report port within {timeoutSeconds}s.{exitInfo}\nStderr:\n{stderr}");
+        var stderrContent = string.Join("\n", stderrLines);
+        throw new TimeoutException(
+            $"BattleScribe agent did not start within {timeoutSeconds}s. Exit code: {(process.HasExited ? process.ExitCode : "still running")}. Stderr:\n{stderrContent}");
     }
 
     /// <summary>Creates a JSON-RPC client connected to the agent.</summary>
