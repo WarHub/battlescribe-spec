@@ -6,6 +6,32 @@ using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.BsRosterUiDriver;
 
+/// <summary>
+/// Drives the BattleScribe Roster Editor desktop application via a Java agent.
+/// <para>
+/// <b>Timeout architecture</b> — operations pass through multiple timeout layers:
+/// <list type="bullet">
+///   <item><b>AgentClient.CallTimeout (30s)</b> — Max time for a single JSON-RPC round-trip.
+///     If the agent doesn't respond within this window, the call throws.</item>
+///   <item><b>FX thread dispatch (60s)</b> — Java agent's <c>executeOnFxThread</c> timeout.
+///     If a UI command doesn't complete on the JavaFX Application Thread within 60s,
+///     the agent returns an error (likely deadlock).</item>
+///   <item><b>Engine op wait (15s)</b> — <c>waitForEngine</c> param <c>timeoutMs</c>.
+///     After dispatching an engine API call on a background thread, the agent waits
+///     up to 15s for it to complete before reporting timeout.</item>
+///   <item><b>Poll timeouts (10s)</b> — <c>WaitForRosterStateAsync</c>,
+///     <c>WaitForWindowToCloseAsync</c>, etc. poll the agent repeatedly
+///     until a condition is met or 10s elapses.</item>
+///   <item><b>Startup timeout (30s)</b> — <c>BsRosterApp.StartAsync</c> waits for
+///     the Java process to print the agent port line.</item>
+///   <item><b>Diagnostic timeout (5s)</b> — <c>BsUiDiagnostics</c> temporarily reduces
+///     CallTimeout to 5s to capture state even when the agent is partially stuck.</item>
+/// </list>
+/// For a typical UI action, the effective max wait is roughly:
+/// CallTimeout (30s) + poll (10s) = 40s before the .NET side gives up.
+/// For engine API actions: CallTimeout (30s) for dispatch + CallTimeout (30s) for waitForEngine = 60s worst case.
+/// </para>
+/// </summary>
 public sealed class BsUiRosterEngine : IRosterEngine
 {
     private const string MainWindowTitle = "Roster Editor";
@@ -13,6 +39,11 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private const string NewRosterWindowTitle = "New Roster";
     private const string EditRosterWindowTitle = "Edit Roster";
     private const string AddForceWindowTitle = "Add Force";
+
+    // Timeout constants — see class-level docs for the full timeout architecture.
+    private const int EngineOpWaitMs = 15_000;
+    private const int PollTimeoutMs = 10_000;
+    private const int WindowWaitMs = 30_000;
     private const string CountSpinnerSelector = "Spinner";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -178,7 +209,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             _client = await _app.ConnectAsync();
             _ = await ConnectedClient.PingAsync();
 
-            if (!await ConnectedClient.WaitForWindowAsync(MainWindowTitle, timeoutMs: 30000))
+            if (!await ConnectedClient.WaitForWindowAsync(MainWindowTitle, timeoutMs: WindowWaitMs))
             {
                 throw new TimeoutException("Roster Editor window did not appear within 30 seconds.");
             }
@@ -332,7 +363,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             }
             await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
             {
-                ["timeoutMs"] = 15000
+                ["timeoutMs"] = EngineOpWaitMs
             });
         }
 
@@ -357,7 +388,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
         await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
-            ["timeoutMs"] = 15000
+            ["timeoutMs"] = EngineOpWaitMs
         });
         _ = await WaitForRosterStateAsync(state => FindSelectionById(state.Forces, selectionId) is null);
     }
@@ -387,7 +418,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         // Wait for the bg thread engine operation to complete
         await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
-            ["timeoutMs"] = 15000
+            ["timeoutMs"] = EngineOpWaitMs
         });
         _ = await WaitForRosterStateAsync(state => FindSelectionById(state.Forces, selectionId)?.Number == count);
     }
@@ -456,7 +487,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
         await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
-            ["timeoutMs"] = 15000
+            ["timeoutMs"] = EngineOpWaitMs
         });
     }
 
@@ -480,7 +511,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
         await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
-            ["timeoutMs"] = 15000
+            ["timeoutMs"] = EngineOpWaitMs
         });
     }
 
@@ -498,7 +529,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
         await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
         {
-            ["timeoutMs"] = 15000
+            ["timeoutMs"] = EngineOpWaitMs
         });
     }
 
@@ -1000,7 +1031,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
     }
 
-    private async Task<RosterState> WaitForRosterStateAsync(Func<RosterState, bool> predicate, int timeoutMs = 10000)
+    private async Task<RosterState> WaitForRosterStateAsync(Func<RosterState, bool> predicate, int timeoutMs = PollTimeoutMs)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         Exception? lastError = null;
@@ -1548,13 +1579,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private async Task WaitForWindowAsync(string title)
     {
-        if (!await ConnectedClient.WaitForWindowAsync(title, timeoutMs: 30000))
+        if (!await ConnectedClient.WaitForWindowAsync(title, timeoutMs: WindowWaitMs))
         {
             throw new TimeoutException($"Window '{title}' did not appear.");
         }
     }
 
-    private async Task<string?> WaitForFirstWindowAsync(IEnumerable<string> titleFragments, int timeoutMs = 10000)
+    private async Task<string?> WaitForFirstWindowAsync(IEnumerable<string> titleFragments, int timeoutMs = PollTimeoutMs)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
@@ -1582,7 +1613,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return null;
     }
 
-    private async Task WaitForWindowToCloseAsync(string title, int timeoutMs = 10000)
+    private async Task WaitForWindowToCloseAsync(string title, int timeoutMs = PollTimeoutMs)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)

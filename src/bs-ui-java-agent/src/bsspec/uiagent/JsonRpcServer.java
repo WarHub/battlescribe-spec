@@ -143,6 +143,13 @@ public class JsonRpcServer {
         }
     }
 
+    /**
+     * Executes a task on the JavaFX Application Thread with a 60s timeout.
+     * This is part of the timeout architecture:
+     * - .NET CallTimeout (30s) > FX dispatch (60s) > engine op wait (15s)
+     * The FX timeout is intentionally longer than CallTimeout so the .NET side
+     * times out first with a clearer error message in normal scenarios.
+     */
     private String executeOnFxThread(java.util.concurrent.Callable<String> task) throws Exception {
         if (Platform.isFxApplicationThread()) {
             return task.call();
