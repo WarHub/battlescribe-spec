@@ -5,13 +5,15 @@
 .DESCRIPTION
     Initializes git submodules (wham — build dependency at .deps/wham).
 
-    Downloads external test data into .testdata/:
+    Downloads external test data into .testdata/ and other configured locations:
     - wh40k-9e (BSData) — real-world test data for integration tests (git clone)
-    - Artifacts pinned in testdata.json (e.g., newrecruit-har — frozen HAR snapshot)
+    - Artifacts pinned in testdata.json (e.g., newrecruit-har — frozen HAR snapshot,
+      battlescribe-app — extracted to lib/battlescribe)
 
     Installs Playwright browsers needed for New Recruit adapter tests.
 
-    Test data is downloaded/cloned into .testdata/<key>/.
+    Test data is downloaded/cloned into .testdata/<key>/ unless testdata.json overrides
+    the destination path.
     Already-present items are skipped.
 
     Requires the GitHub CLI (gh) for test data downloads.
@@ -23,9 +25,6 @@
 .PARAMETER SkipPlaywright
     Skip Playwright browser installation.
 
-.PARAMETER IncludeOptional
-    Also download entries marked "optional": true in testdata.json (e.g. battlescribe-app).
-
 .EXAMPLE
     ./setup.ps1
 
@@ -34,14 +33,10 @@
 
 .EXAMPLE
     ./setup.ps1 -SkipPlaywright
-
-.EXAMPLE
-    ./setup.ps1 -IncludeOptional
 #>
 param(
     [switch]$Force,
-    [switch]$SkipPlaywright,
-    [switch]$IncludeOptional
+    [switch]$SkipPlaywright
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,7 +54,7 @@ git -C $repoRoot submodule update --init --recursive
 if ($LASTEXITCODE -ne 0) { throw "Failed to initialize git submodules" }
 Write-Host "[OK] Git submodules initialized" -ForegroundColor Green
 
-# --- Test data (.testdata/) ---
+# --- Test data ---
 
 $configPath = Join-Path $repoRoot 'testdata.json'
 $testdataDir = Join-Path $repoRoot '.testdata'
@@ -89,13 +84,10 @@ if (Test-Path $configPath) {
     foreach ($key in $config.PSObject.Properties.Name) {
         $entry = $config.$key
         $repo = $entry.repo
-        $destDir = Join-Path $testdataDir $key
-
-        # Skip optional entries unless -IncludeOptional is set
-        $isOptional = $entry.PSObject.Properties['optional'] -and $entry.optional -eq $true
-        if ($isOptional -and -not $IncludeOptional) {
-            Write-Host "[$key] skipped (optional — use -IncludeOptional to download)" -ForegroundColor DarkGray
-            continue
+        $destDir = if ($entry.PSObject.Properties['path']) {
+            Join-Path $repoRoot $entry.path
+        } else {
+            Join-Path $testdataDir $key
         }
 
         $entryType = if ($entry.PSObject.Properties['type']) { $entry.type } else { 'release' }

@@ -147,7 +147,7 @@ jobs:
           pwsh -Command '
             $config = Get-Content testdata.json -Raw | ConvertFrom-Json
             $entry = $config."battlescribe-app"
-            $destDir = ".testdata/battlescribe-app"
+            $destDir = $entry.path
             if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force }
             New-Item -ItemType Directory -Path $destDir -Force | Out-Null
             gh release download $($entry.tag) -R $($entry.repo) -D $destDir --pattern $($entry.pattern)

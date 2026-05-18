@@ -13,6 +13,6 @@
     "repo": "WarHub/battlescribe-archive",
     "tag": "v2.03.21",
     "pattern": "BattleScribe_*_Linux.zip",
-    "optional": true
+    "path": "lib/battlescribe"
   }
 }

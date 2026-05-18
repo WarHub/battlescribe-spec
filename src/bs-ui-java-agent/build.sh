@@ -10,7 +10,7 @@ SRC_DIR="$SCRIPT_DIR/src"
 OUT_DIR="$SCRIPT_DIR/out"
 JAR_NAME="bs-ui-java-agent.jar"
 # Compile against Gson; BattleScribe already provides it on the app runtime classpath.
-GSON_JAR="$SCRIPT_DIR/lib/gson-2.1.jar"
+GSON_JAR="$SCRIPT_DIR/../../lib/battlescribe/lib/gson-2.1.jar"
 
 if [[ ! -f "$GSON_JAR" ]]; then
     echo "gson dependency not found: $GSON_JAR" >&2

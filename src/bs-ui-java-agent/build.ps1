@@ -12,7 +12,7 @@ $SrcDir = Join-Path $ScriptDir 'src'
 $OutDir = Join-Path $ScriptDir 'out'
 $JarName = 'bs-ui-java-agent.jar'
 # Compile against Gson; BattleScribe already provides it on the app runtime classpath.
-$GsonJar = Join-Path $ScriptDir 'lib\gson-2.1.jar'
+$GsonJar = Join-Path $ScriptDir '../../lib/battlescribe/lib/gson-2.1.jar'
 
 if (!(Test-Path $GsonJar)) {
     throw "gson dependency not found: $GsonJar"

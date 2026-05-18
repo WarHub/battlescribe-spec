@@ -361,8 +361,8 @@ BsUiOptions ResolveBsUiOptions()
 
     if (javaPath is null && repoRoot is not null)
     {
-        // Try platform-specific JRE paths under .testdata
-        var jreDir = Path.Combine(repoRoot, ".testdata", "battlescribe-app");
+        // Try platform-specific JRE paths under lib/battlescribe
+        var jreDir = Path.Combine(repoRoot, "lib", "battlescribe");
         if (OperatingSystem.IsWindows())
         {
             var winJava = Path.Combine(jreDir, "jre-win", "bin", "java.exe");
@@ -391,7 +391,7 @@ BsUiOptions ResolveBsUiOptions()
 
     if (appDir is null && repoRoot is not null)
     {
-        var candidate = Path.Combine(repoRoot, ".testdata", "battlescribe-app");
+        var candidate = Path.Combine(repoRoot, "lib", "battlescribe");
         if (Directory.Exists(candidate))
         {
             appDir = candidate;
@@ -410,13 +410,13 @@ BsUiOptions ResolveBsUiOptions()
     if (javaPath is null)
     {
         throw new InvalidOperationException(
-            "Java path not found. Set BS_UI_JAVA_PATH env var or place JRE at .testdata/battlescribe-app/jre-{platform}/");
+            "Java path not found. Set BS_UI_JAVA_PATH env var or place JRE at lib/battlescribe/jre-{platform}/");
     }
 
     var rosterEditorJar = appDir is not null
         ? Path.Combine(appDir, "RosterEditor.jar")
         : throw new InvalidOperationException(
-            "BS app directory not found. Set BS_UI_APP_DIR env var or place app at .testdata/battlescribe-app/");
+            "BS app directory not found. Set BS_UI_APP_DIR env var or place app at lib/battlescribe/");
 
     if (!File.Exists(rosterEditorJar))
     {
