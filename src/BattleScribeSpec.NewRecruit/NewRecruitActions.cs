@@ -527,13 +527,8 @@ public static class NewRecruitActions
         }
     }
 
-    public static async Task SetCustomizationAsync(IPage page, string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
+    public static async Task SetCustomizationAsync(IPage page, string forceId, string? selectionId, string? customName, string? customNotes)
     {
-        if (categoryEntryId is not null)
-        {
-            throw new NotSupportedException("Category customization is not supported.");
-        }
-
         var error = await page.EvaluateAsync<string?>("""
             ({forceId, selectionId, customName, customNotes}) => {
                 try {

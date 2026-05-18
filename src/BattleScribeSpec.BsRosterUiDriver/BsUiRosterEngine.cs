@@ -112,8 +112,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
     public void SetCostLimit(string costTypeId, decimal value)
         => RunAsync(() => SetCostLimitAsync(costTypeId, value));
 
-    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
-        => RunAsync(() => SetCustomizationAsync(forceId, selectionId, categoryEntryId, customName, customNotes));
+    public void SetCustomization(string forceId, string? selectionId, string? customName, string? customNotes)
+        => RunAsync(() => SetCustomizationAsync(forceId, selectionId, customName, customNotes));
 
     public RosterState GetRosterState()
         => RunAsync(GetRosterStateAsync);
@@ -468,17 +468,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task SetCustomizationAsync(
         string forceId,
         string? selectionId,
-        string? categoryEntryId,
         string? customName,
         string? customNotes)
     {
         EnsureRosterLoaded();
 
-        if (categoryEntryId is not null)
-        {
-            throw new NotSupportedException("Category customization is not supported by BattleScribe UI.");
-        }
-
+        // BattleScribe Desktop only enables btnCustomiseName for Selection instances,
+        // so the protocol intentionally supports force/selection customization only.
         var targetId = selectionId ?? forceId;
         await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(targetId), MainWindowTitle);
 
@@ -1622,7 +1618,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private static CategoryState MapCategoryState(AgentCategoryState dto)
         => new(dto.Name ?? string.Empty, dto.EntryId, dto.Primary,
-            CustomNotes: string.IsNullOrEmpty(dto.CustomNotes) ? null : dto.CustomNotes,
             PublicationId: string.IsNullOrEmpty(dto.PublicationId) ? null : dto.PublicationId,
             Page: dto.Page);
 
@@ -1979,7 +1974,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
         public string? Name { get; set; }
         public string? EntryId { get; set; }
         public bool Primary { get; set; }
-        public string? CustomNotes { get; set; }
         public string? PublicationId { get; set; }
         public string? Page { get; set; }
     }

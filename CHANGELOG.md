@@ -66,6 +66,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `delete()`, matching BattleScribe's deselect semantics (decrement per-model count
   by 1). Previously `delete()` would completely remove the selection regardless of
   current amount, breaking collective entries with scaled counts.
+- **Removed fake category customization support** — `setCustomization` no longer
+  accepts `categoryEntryId`, and category `customNotes` are no longer modeled in
+  roster state or assertions because BattleScribe Desktop never exposes category
+  customization in the real UI.
 - **NR adapter `getSelectionCount("root")` for number** — the adapter now reads
   selection number via `getSelectionCount("root")` which correctly multiplies through
   the parent chain. This handles collective entries (where internal `amount` stays at 1

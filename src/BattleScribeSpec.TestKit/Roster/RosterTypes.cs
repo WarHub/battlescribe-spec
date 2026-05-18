@@ -94,8 +94,7 @@ public record CategoryState(
     IReadOnlyList<ProfileState>? Profiles = null,
     IReadOnlyList<RuleState>? Rules = null,
     string? PublicationId = null,
-    string? Page = null,
-    string? CustomNotes = null);
+    string? Page = null);
 
 public record PublicationState(
     string Id,

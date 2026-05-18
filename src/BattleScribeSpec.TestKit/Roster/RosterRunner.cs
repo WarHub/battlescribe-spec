@@ -253,7 +253,6 @@ public sealed class RosterRunner
                 _engine.SetCustomization(
                     forceId ?? throw new InvalidOperationException($"Step {stepIndex}: setCustomization requires forceId"),
                     selectionId,
-                    step.CategoryEntryId,
                     step.CustomName,
                     step.CustomNotes);
                 break;
@@ -962,11 +961,6 @@ public sealed class RosterRunner
             if (ec.Page is not null)
             {
                 AssertEqual(stepIndex, $"{catPrefix}.page", ec.Page, ac.Page ?? "");
-            }
-
-            if (ec.CustomNotes is not null)
-            {
-                AssertEqual(stepIndex, $"{catPrefix}.customNotes", ec.CustomNotes, ac.CustomNotes ?? "");
             }
         }
         if (actualCount > expected.Count)

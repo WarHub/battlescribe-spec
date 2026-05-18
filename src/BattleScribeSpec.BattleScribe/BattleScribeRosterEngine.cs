@@ -196,14 +196,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         Engine.SetCostLimit(costType, value);
     }
 
-    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
+    public void SetCustomization(string forceId, string? selectionId, string? customName, string? customNotes)
     {
         var force = FindForceById(forceId);
-        if (categoryEntryId is not null)
-        {
-            throw new NotSupportedException("Category customization is not supported.");
-        }
-        else if (selectionId is not null)
+        if (selectionId is not null)
         {
             var selection = FindSelectionById(force, selectionId);
             if (customName is not null)
@@ -600,12 +596,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             Categories: [.. forceCategories.Select(c =>
             {
                 var catPubId = c.getPublicationId();
-                var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
                     c.getName() ?? "", c.getEntryId(), c.isPrimary(),
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
-                    Page: c.getPage(),
-                    CustomNotes: string.IsNullOrEmpty(catCustomNotes) ? null : catCustomNotes);
+                    Page: c.getPage());
             })],
             Publications: forcePublications.Count > 0
                 ? forcePublications.Select(p => new PublicationState(p.getId() ?? "", p.getName() ?? "")).ToList()
@@ -649,15 +643,13 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 var catProfiles = JavaListToList<net.battlescribe.model.data.Profile>(c.getProfiles());
                 var catRules = JavaListToList<net.battlescribe.model.data.Rule>(c.getRules());
                 var catPubId = c.getPublicationId();
-                var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
                     c.getName() ?? "", c.getEntryId(), c.isPrimary(),
                     Profiles: [.. catProfiles.Select(CaptureProfile)],
                     Rules: [.. catRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
                         string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId()))],
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
-                    Page: c.getPage(),
-                    CustomNotes: string.IsNullOrEmpty(catCustomNotes) ? null : catCustomNotes);
+                    Page: c.getPage());
             })],
             Page: sel.getPage(),
             PublicationId: string.IsNullOrEmpty(pubId) ? null : pubId,

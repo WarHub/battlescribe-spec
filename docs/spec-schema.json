@@ -124,7 +124,6 @@
         "value": { "type": "number" },
         "customName": { "type": "string" },
         "customNotes": { "type": "string" },
-        "categoryEntryId": { "type": "string" },
         "path": { "type": "string" },
         "skipEngines": {
           "type": "array",
@@ -1085,8 +1084,7 @@
           "items": { "$ref": "#/$defs/expectedRule" }
         },
         "publicationId": { "type": "string" },
-        "page": { "type": "string" },
-        "customNotes": { "type": "string" }
+        "page": { "type": "string" }
       }
     },
     "expectedPublication": {

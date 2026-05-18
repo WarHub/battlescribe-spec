@@ -113,8 +113,6 @@ public sealed class ActionCommand : ProtocolCommand
     public string? CustomName { get; set; }
 
     public string? CustomNotes { get; set; }
-
-    public string? CategoryEntryId { get; set; }
 }
 
 public sealed class GetStateCommand : ProtocolCommand

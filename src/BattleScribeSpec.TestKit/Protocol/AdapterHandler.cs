@@ -161,7 +161,6 @@ public static class AdapterHandler
                     engine.SetCustomization(
                         cmd.ForceId ?? throw new InvalidOperationException("setCustomization requires forceId"),
                         cmd.SelectionId,
-                        cmd.CategoryEntryId,
                         cmd.CustomName,
                         cmd.CustomNotes);
                     break;

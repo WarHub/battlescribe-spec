@@ -10,6 +10,11 @@ NR supports `customName` and `note` (custom notes) on both **force** and
 gated by the NR paywall, but the data model fully supports them regardless
 of subscription status.
 
+> **Important:** Category-level customization is not a real BattleScribe Desktop
+> feature. The Desktop UI only enables `btnCustomiseName` for `Selection`
+> instances, never for `Category` objects, so this repo intentionally models
+> customization only for forces and selections.
+
 ## Property Access
 
 Both properties exist directly on instance nodes (own properties):
