@@ -194,20 +194,6 @@ public class SceneGraphCommands {
                 return setSpinnerValueByLabel(params);
             case "patchSupporterPass":
                 return engineAccessor.patchSupporterPass();
-            case "setCategoryCustomNotes":
-                return engineAccessor.setCategoryCustomNotes(params);
-            case "addForceViaEngine":
-                return engineAccessor.addForceViaEngine(params);
-            case "removeForceViaEngine":
-                return engineAccessor.removeForceViaEngine(params);
-            case "selectEntryViaEngine":
-                return engineAccessor.selectEntryViaEngine(params);
-            case "deselectEntryViaEngine":
-                return engineAccessor.deselectEntryViaEngine(params);
-            case "setSelectionCount":
-                return engineAccessor.setSelectionCount(params);
-            case "setCostLimit":
-                return engineAccessor.setCostLimit(params);
             case "rebuildCatalogueTree":
                 return engineAccessor.rebuildCatalogueTree(params);
             case "waitForEngine":

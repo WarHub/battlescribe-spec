@@ -201,16 +201,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var force = FindForceById(forceId);
         if (categoryEntryId is not null)
         {
-            // Target a category on the force or selection
-            var categories = selectionId is not null
-                ? JavaListToList<net.battlescribe.model.roster.Category>(FindSelectionById(force, selectionId).getCategories())
-                : JavaListToList<net.battlescribe.model.roster.Category>(force.getCategories());
-            var cat = categories.FirstOrDefault(c => c.getEntryId() == categoryEntryId)
-                ?? throw new InvalidOperationException($"Category with entryId '{categoryEntryId}' not found.");
-            if (customNotes is not null)
-            {
-                cat.setCustomNotes(customNotes);
-            }
+            throw new NotSupportedException("Category customization is not supported.");
         }
         else if (selectionId is not null)
         {

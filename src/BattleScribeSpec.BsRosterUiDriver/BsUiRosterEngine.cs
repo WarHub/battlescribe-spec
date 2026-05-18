@@ -235,17 +235,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
         else
         {
-            try
-            {
-                await OpenEditRosterAsync();
-                await AddForceInDialogAsync(forceEntryId, catalogueId, EditRosterWindowTitle);
-                await CloseRosterDialogAsync(EditRosterWindowTitle);
-            }
-            catch
-            {
-                // Edit Roster dialog unavailable — fall back to engine API
-                await AddForceViaEngineAsync(forceEntryId, catalogueId);
-            }
+            await OpenEditRosterAsync();
+            await AddForceInDialogAsync(forceEntryId, catalogueId, EditRosterWindowTitle);
+            await CloseRosterDialogAsync(EditRosterWindowTitle);
         }
 
         var expectedForceName = FindForceEntryName(forceEntryId);
@@ -263,18 +255,10 @@ public sealed class BsUiRosterEngine : IRosterEngine
         EnsureRosterLoaded();
         var before = await ReadRosterStateAsync();
 
-        try
-        {
-            await OpenEditRosterAsync();
-            await SelectTreeItemAsync(["#treeRoster", "#treeForces"], TreeIdToken(parentForceId), EditRosterWindowTitle);
-            await AddForceInDialogAsync(forceEntryId, catalogueId, EditRosterWindowTitle);
-            await CloseRosterDialogAsync(EditRosterWindowTitle);
-        }
-        catch
-        {
-            // Edit Roster dialog unavailable — fall back to engine API
-            await AddForceViaEngineAsync(forceEntryId, catalogueId, parentForceId);
-        }
+        await OpenEditRosterAsync();
+        await SelectTreeItemAsync(["#treeRoster", "#treeForces"], TreeIdToken(parentForceId), EditRosterWindowTitle);
+        await AddForceInDialogAsync(forceEntryId, catalogueId, EditRosterWindowTitle);
+        await CloseRosterDialogAsync(EditRosterWindowTitle);
 
         var expectedForceName = FindForceEntryName(forceEntryId);
         var after = await WaitForRosterStateAsync(state =>
@@ -291,23 +275,15 @@ public sealed class BsUiRosterEngine : IRosterEngine
         EnsureRosterLoaded();
         var before = await ReadRosterStateAsync();
 
-        try
+        await OpenEditRosterAsync();
+        await SelectTreeItemAsync(["#treeRoster", "#treeForces"], TreeIdToken(forceId), EditRosterWindowTitle);
+        if (!await TryFireButtonAsync("#btnRemoveForce", EditRosterWindowTitle) &&
+            !await TryClickTextAsync("Remove Force", EditRosterWindowTitle, "Button") &&
+            !await TryClickTextAsync("Remove", EditRosterWindowTitle, "Button"))
         {
-            await OpenEditRosterAsync();
-            await SelectTreeItemAsync(["#treeRoster", "#treeForces"], TreeIdToken(forceId), EditRosterWindowTitle);
-            if (!await TryFireButtonAsync("#btnRemoveForce", EditRosterWindowTitle) &&
-                !await TryClickTextAsync("Remove Force", EditRosterWindowTitle, "Button") &&
-                !await TryClickTextAsync("Remove", EditRosterWindowTitle, "Button"))
-            {
-                await PressKeyAsync("DELETE", "#treeRoster", EditRosterWindowTitle);
-            }
-            await CloseRosterDialogAsync(EditRosterWindowTitle);
+            await PressKeyAsync("DELETE", "#treeRoster", EditRosterWindowTitle);
         }
-        catch
-        {
-            // Edit Roster dialog unavailable — fall back to engine API
-            await RemoveForceViaEngineAsync(forceId);
-        }
+        await CloseRosterDialogAsync(EditRosterWindowTitle);
 
         _ = await WaitForRosterStateAsync(state => FindForceById(state.Forces, forceId) is null);
         _ = before;
@@ -347,24 +323,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
         var clicked = result?["clicked"]?.GetValue<bool>() ?? false;
         if (!clicked)
         {
-            // Hidden entries aren't shown in UI — fall back to engine API
-            result = await ConnectedClient.CallAsync("selectEntryViaEngine", new System.Text.Json.Nodes.JsonObject
-            {
-                ["forceId"] = forceId,
-                ["entryId"] = entryId,
-                ["parentSelectionId"] = parentSelectionId
-            });
-            var selected = result?["selected"]?.GetValue<bool>() ?? false;
-            if (!selected)
-            {
-                var error = result?["error"]?.GetValue<string>() ?? result?.ToJsonString() ?? "unknown";
-                throw new InvalidOperationException(
-                    $"selectChildEntry failed for '{entryName}' (id={entryId}): {error}");
-            }
-            await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
-            {
-                ["timeoutMs"] = EngineOpWaitMs
-            });
+            throw new InvalidOperationException(
+                $"selectChildEntry: control not found for '{entryName}' (id={entryId}). Entry may be hidden in the UI.");
         }
 
         return await WaitForSelectionOutputsAsync(before, forceId, parentSelectionId, entryId);
@@ -373,24 +333,32 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task DeselectSelectionAsync(string forceId, string selectionId)
     {
         EnsureRosterLoaded();
-        // Use dedicated deselectEntry command — bypasses getNumChanges/isDuplicate check
-        // which returns 0 for shared entries, causing deselect to silently fail
-        var result = await ConnectedClient.CallAsync("deselectEntryViaEngine", new System.Text.Json.Nodes.JsonObject
+
+        var state = await ReadRosterStateAsync();
+        var selection = FindSelectionById(state.Forces, selectionId)
+            ?? throw new InvalidOperationException($"Selection '{selectionId}' not found.");
+
+        var entryName = _entryNamesById.GetValueOrDefault(selection.EntryId ?? string.Empty) ?? selection.Name ?? selectionId;
+        var parentId = FindSelectionParentId(state.Forces, selectionId) ?? forceId;
+
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(parentId), MainWindowTitle);
+        await Task.Delay(500);
+
+        var result = await ConnectedClient.CallAsync("clickControlByLabel", new System.Text.Json.Nodes.JsonObject
         {
-            ["forceId"] = forceId,
-            ["selectionId"] = selectionId
+            ["text"] = entryName,
+            ["windowTitle"] = MainWindowTitle,
+            ["action"] = "decrement"
         });
-        var deselected = result?["deselected"]?.GetValue<bool>() ?? false;
-        if (!deselected)
+        var clicked = result?["clicked"]?.GetValue<bool>() ?? false;
+
+        if (!clicked)
         {
-            var error = result?["error"]?.GetValue<string>() ?? "unknown";
-            throw new InvalidOperationException($"deselectSelection failed for '{selectionId}': {error}");
+            await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(selectionId), MainWindowTitle);
+            await PressKeyAsync("DELETE", "#treeRoster", MainWindowTitle);
         }
-        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
-        {
-            ["timeoutMs"] = EngineOpWaitMs
-        });
-        _ = await WaitForRosterStateAsync(state => FindSelectionById(state.Forces, selectionId) is null);
+
+        _ = await WaitForRosterStateAsync(s => FindSelectionById(s.Forces, selectionId) is null);
     }
 
     private async Task SetSelectionCountAsync(string forceId, string selectionId, int count)
@@ -398,29 +366,35 @@ public sealed class BsUiRosterEngine : IRosterEngine
         EnsureRosterLoaded();
         ArgumentOutOfRangeException.ThrowIfNegative(count);
 
-        // Use engine API directly on a bg thread (safe with threadCount=1: no pool deadlock).
-        // The UI spinner approach deadlocks because the controller's change listener calls
-        // engine.setNumSelections → t() which blocks the FX thread indefinitely.
-        var result = await ConnectedClient.CallAsync("setSelectionCount", new System.Text.Json.Nodes.JsonObject
+        var state = await ReadRosterStateAsync();
+        var selection = FindSelectionById(state.Forces, selectionId)
+            ?? throw new InvalidOperationException($"Selection '{selectionId}' not found.");
+
+        if (count == 0)
         {
-            ["forceId"] = forceId,
-            ["selectionId"] = selectionId,
-            ["count"] = count
+            await DeselectSelectionAsync(forceId, selectionId);
+            return;
+        }
+
+        var entryName = _entryNamesById.GetValueOrDefault(selection.EntryId ?? string.Empty) ?? selection.Name ?? selectionId;
+        var parentId = FindSelectionParentId(state.Forces, selectionId) ?? forceId;
+        await SelectTreeItemAsync(["#treeRoster"], TreeIdToken(parentId), MainWindowTitle);
+        await Task.Delay(500);
+
+        var result = await ConnectedClient.CallAsync("setSpinnerValueByLabel", new System.Text.Json.Nodes.JsonObject
+        {
+            ["text"] = entryName,
+            ["value"] = count,
+            ["windowTitle"] = MainWindowTitle
         });
         var set = result?["set"]?.GetValue<bool>() ?? false;
         if (!set)
         {
             var error = result?["error"]?.GetValue<string>() ?? "unknown";
-            throw new InvalidOperationException(
-                $"setSelectionCount engine API failed: {error}");
+            throw new InvalidOperationException($"setSelectionCount: spinner not found for '{entryName}': {error}");
         }
 
-        // Wait for the bg thread engine operation to complete
-        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
-        {
-            ["timeoutMs"] = EngineOpWaitMs
-        });
-        _ = await WaitForRosterStateAsync(state => FindSelectionById(state.Forces, selectionId)?.Number == count);
+        _ = await WaitForRosterStateAsync(s => FindSelectionById(s.Forces, selectionId)?.Number == count);
     }
 
     private async Task<ActionOutputs> DuplicateSelectionAsync(string forceId, string selectionId)
@@ -473,64 +447,22 @@ public sealed class BsUiRosterEngine : IRosterEngine
             return;
         }
 
-        // Use engine API directly (BS Desktop has no post-creation cost limit UI)
-        var result = await ConnectedClient.CallAsync("setCostLimit", new System.Text.Json.Nodes.JsonObject
+        var costName = _costNamesById.GetValueOrDefault(costTypeId) ?? costTypeId;
+        await OpenEditRosterAsync();
+
+        var result = await ConnectedClient.CallAsync("setSpinnerValueByLabel", new System.Text.Json.Nodes.JsonObject
         {
-            ["costTypeId"] = costTypeId,
-            ["value"] = (double)value
+            ["text"] = costName,
+            ["value"] = (int)value,
+            ["windowTitle"] = EditRosterWindowTitle
         });
         var set = result?["set"]?.GetValue<bool>() ?? false;
         if (!set)
         {
-            var error = result?["error"]?.GetValue<string>() ?? "unknown";
-            throw new InvalidOperationException($"setCostLimit failed: {error}");
+            await SetTextAsync([$"#{costTypeId}", costName], value.ToString(), EditRosterWindowTitle);
         }
-        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
-        {
-            ["timeoutMs"] = EngineOpWaitMs
-        });
-    }
 
-    private async Task AddForceViaEngineAsync(string forceEntryId, string catalogueId, string? parentForceId = null)
-    {
-        var args = new System.Text.Json.Nodes.JsonObject
-        {
-            ["forceEntryId"] = forceEntryId,
-            ["catalogueId"] = catalogueId
-        };
-        if (parentForceId is not null)
-        {
-            args["parentForceId"] = parentForceId;
-        }
-        var result = await ConnectedClient.CallAsync("addForceViaEngine", args);
-        var added = result?["added"]?.GetValue<bool>() ?? false;
-        if (!added)
-        {
-            var error = result?["error"]?.GetValue<string>() ?? result?.ToJsonString() ?? "unknown";
-            throw new InvalidOperationException($"addForceViaEngine failed: {error}");
-        }
-        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
-        {
-            ["timeoutMs"] = EngineOpWaitMs
-        });
-    }
-
-    private async Task RemoveForceViaEngineAsync(string forceId)
-    {
-        var result = await ConnectedClient.CallAsync("removeForceViaEngine", new System.Text.Json.Nodes.JsonObject
-        {
-            ["forceId"] = forceId
-        });
-        var removed = result?["removed"]?.GetValue<bool>() ?? false;
-        if (!removed)
-        {
-            var error = result?["error"]?.GetValue<string>() ?? result?.ToJsonString() ?? "unknown";
-            throw new InvalidOperationException($"removeForceViaEngine failed: {error}");
-        }
-        await ConnectedClient.CallAsync("waitForEngine", new System.Text.Json.Nodes.JsonObject
-        {
-            ["timeoutMs"] = EngineOpWaitMs
-        });
+        await CloseRosterDialogAsync(EditRosterWindowTitle);
     }
 
     private async Task SetCustomizationAsync(
@@ -544,17 +476,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         if (categoryEntryId is not null)
         {
-            // Category customization isn't available via UI in BS desktop.
-            // Use engine API directly to set customNotes on the category.
-            var catResult = await ConnectedClient.CallAsync("setCategoryCustomNotes", new JsonObject
-            {
-                ["forceId"] = forceId,
-                ["categoryEntryId"] = categoryEntryId,
-                ["customName"] = customName ?? "",
-                ["customNotes"] = customNotes ?? ""
-            });
-            Console.Error.WriteLine($"  [DEBUG] setCategoryCustomNotes result: {catResult}");
-            return;
+            throw new NotSupportedException("Category customization is not supported by BattleScribe UI.");
         }
 
         var targetId = selectionId ?? forceId;
@@ -1828,22 +1750,22 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return null;
     }
 
-    private static string? FindParentSelectionId(IEnumerable<ForceState> forces, string selectionId)
+    private static string? FindSelectionParentId(IReadOnlyList<ForceState> forces, string selectionId)
     {
         foreach (var force in forces)
         {
-            var result = FindParentSelectionId(force.Selections, selectionId);
-            if (result is not null)
+            var parentId = FindSelectionParentIdRecursive(force.Selections, selectionId);
+            if (parentId is not null)
             {
-                return result;
+                return parentId;
             }
 
             if (force.ChildForces is not null)
             {
-                result = FindParentSelectionId(force.ChildForces, selectionId);
-                if (result is not null)
+                parentId = FindSelectionParentId(force.ChildForces, selectionId);
+                if (parentId is not null)
                 {
-                    return result;
+                    return parentId;
                 }
             }
         }
@@ -1851,22 +1773,27 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return null;
     }
 
-    private static string? FindParentSelectionId(IEnumerable<SelectionState> selections, string selectionId)
+    private static string? FindSelectionParentIdRecursive(IReadOnlyList<SelectionState>? selections, string targetId)
     {
-        foreach (var sel in selections)
+        if (selections is null)
         {
-            foreach (var child in sel.Children)
-            {
-                if (string.Equals(child.Id, selectionId, StringComparison.Ordinal))
-                {
-                    return sel.Id;
-                }
+            return null;
+        }
 
-                var deeper = FindParentSelectionId(child.Children, selectionId);
-                if (deeper is not null)
+        foreach (var selection in selections)
+        {
+            foreach (var child in selection.Children)
+            {
+                if (string.Equals(child.Id, targetId, StringComparison.Ordinal))
                 {
-                    return deeper;
+                    return selection.Id;
                 }
+            }
+
+            var deeper = FindSelectionParentIdRecursive(selection.Children, targetId);
+            if (deeper is not null)
+            {
+                return deeper;
             }
         }
 
