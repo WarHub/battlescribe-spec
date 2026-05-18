@@ -142,19 +142,8 @@ jobs:
           owner: WarHub
           repositories: battlescribe-archive
 
-      - name: Download BattleScribe app
-        run: |
-          pwsh -Command '
-            $config = Get-Content testdata.json -Raw | ConvertFrom-Json
-            $entry = $config."battlescribe-app"
-            $destDir = $entry.path
-            if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force }
-            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-            gh release download $($entry.tag) -R $($entry.repo) -D $destDir --pattern $($entry.pattern)
-            $zip = Get-ChildItem $destDir -Filter "*.zip" | Select-Object -First 1
-            unzip -q $zip.FullName -d $destDir
-            Remove-Item $zip.FullName -Force
-          '
+      - name: Setup dependencies
+        run: pwsh ./setup.ps1 -SkipPlaywright
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
