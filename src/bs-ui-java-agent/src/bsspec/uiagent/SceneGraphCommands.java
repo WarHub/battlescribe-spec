@@ -1,6 +1,8 @@
 package bsspec.uiagent;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -73,6 +75,39 @@ public class SceneGraphCommands {
     private static boolean getBoolean(JsonObject params, String key, boolean defaultValue) {
         JsonElement value = params.get(key);
         return value != null && !value.isJsonNull() ? value.getAsBoolean() : defaultValue;
+    }
+
+    private static JsonElement parseJsonValue(String json) {
+        if (json == null) {
+            return JsonNull.INSTANCE;
+        }
+        return new JsonParser().parse(json);
+    }
+
+    private static void addDynamicProperty(JsonObject obj, String key, Object value) {
+        if (value == null) {
+            obj.add(key, JsonNull.INSTANCE);
+        } else if (value instanceof Number) {
+            obj.addProperty(key, (Number) value);
+        } else if (value instanceof Boolean) {
+            obj.addProperty(key, (Boolean) value);
+        } else if (value instanceof Character) {
+            obj.addProperty(key, (Character) value);
+        } else {
+            obj.addProperty(key, value.toString());
+        }
+    }
+
+    private static String jsonError(String message) {
+        JsonObject response = new JsonObject();
+        response.addProperty("error", message);
+        return response.toString();
+    }
+
+    private static String jsonBooleanResult(String key, boolean value) {
+        JsonObject response = new JsonObject();
+        response.addProperty(key, value);
+        return response.toString();
     }
 
     public String dispatch(String method, String params) {
@@ -185,51 +220,40 @@ public class SceneGraphCommands {
     }
 
     private String threadDump() {
-        StringBuilder sb = new StringBuilder("{\"threads\":[");
-        boolean first = true;
+        JsonObject response = new JsonObject();
+        JsonArray threads = new JsonArray();
         for (java.util.Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
             Thread t = entry.getKey();
             StackTraceElement[] stack = entry.getValue();
-            if (!first) sb.append(",");
-            first = false;
-            sb.append("{\"name\":\"").append(jsonEscape(t.getName()))
-              .append("\",\"state\":\"").append(t.getState())
-              .append("\",\"stack\":[");
+            JsonObject thread = new JsonObject();
+            thread.addProperty("name", t.getName());
+            thread.addProperty("state", t.getState().toString());
+            JsonArray frames = new JsonArray();
             for (int i = 0; i < Math.min(stack.length, 15); i++) {
-                if (i > 0) sb.append(",");
-                sb.append("\"").append(jsonEscape(stack[i].toString())).append("\"");
+                frames.add(stack[i].toString());
             }
-            sb.append("]}");
+            thread.add("stack", frames);
+            threads.add(thread);
         }
-        sb.append("]}");
-        return sb.toString();
-    }
-
-    private String jsonEscape(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
+        response.add("threads", threads);
+        return response.toString();
     }
 
     private String getWindows() {
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
+        JsonArray windows = new JsonArray();
         for (Window w : Window.getWindows()) {
-            if (!first) {
-                sb.append(",");
-            }
-            first = false;
-            sb.append("{");
-            sb.append("\"type\":\"").append(w.getClass().getSimpleName()).append("\"");
+            JsonObject item = new JsonObject();
+            item.addProperty("type", w.getClass().getSimpleName());
             if (w instanceof Stage) {
                 Stage s = (Stage) w;
-                sb.append(",\"title\":").append(jsonString(s.getTitle()));
-                sb.append(",\"showing\":").append(s.isShowing());
+                item.addProperty("title", s.getTitle());
+                item.addProperty("showing", s.isShowing());
             }
-            sb.append(",\"width\":").append(w.getWidth());
-            sb.append(",\"height\":").append(w.getHeight());
-            sb.append("}");
+            item.addProperty("width", w.getWidth());
+            item.addProperty("height", w.getHeight());
+            windows.add(item);
         }
-        sb.append("]");
-        return sb.toString();
+        return windows.toString();
     }
 
     private String captureScreenshot(String params) {
@@ -237,33 +261,33 @@ public class SceneGraphCommands {
         String windowTitle = getString(paramsObject, "windowTitle", null);
         Scene scene = findScene(windowTitle);
         if (scene == null) {
-            return "{\"error\":\"No scene found\"}";
+            return jsonError("No scene found");
         }
 
         WritableImage image = scene.snapshot(null);
-        // Convert WritableImage to PNG using reflection to access SwingFXUtils
-        // (javafx.swing module may not be in JRE, so we use reflection)
         try {
             Class<?> swingFxClass = Class.forName("javafx.embed.swing.SwingFXUtils");
             java.lang.reflect.Method fromFXImage = swingFxClass.getMethod("fromFXImage",
                 javafx.scene.image.Image.class, java.awt.image.BufferedImage.class);
             Object buffered = fromFXImage.invoke(null, image, null);
             if (buffered == null) {
-                return "{\"error\":\"Failed to capture scene\"}";
+                return jsonError("Failed to capture scene");
             }
             try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
                 if (!ImageIO.write((BufferedImage) buffered, "png", baos)) {
                     throw new IOException("No PNG writer available");
                 }
                 String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
-                return "{\"png\":" + jsonString(base64)
-                    + ",\"width\":" + (int) image.getWidth()
-                    + ",\"height\":" + (int) image.getHeight() + "}";
+                JsonObject response = new JsonObject();
+                response.addProperty("png", base64);
+                response.addProperty("width", (int) image.getWidth());
+                response.addProperty("height", (int) image.getHeight());
+                return response.toString();
             }
         } catch (ClassNotFoundException e) {
-            return "{\"error\":\"javafx.swing module not available for screenshots\"}";
+            return jsonError("javafx.swing module not available for screenshots");
         } catch (Exception e) {
-            return "{\"error\":" + jsonString("Screenshot failed: " + e.getMessage()) + "}";
+            return jsonError("Screenshot failed: " + e.getMessage());
         }
     }
 
@@ -271,23 +295,30 @@ public class SceneGraphCommands {
         JsonObject paramsObject = parseParams(params);
         Scene scene = findScene(getString(paramsObject, "windowTitle", null));
         if (scene == null) {
-            return "{\"error\":\"No scene found\"}";
+            return jsonError("No scene found");
         }
 
         ActionRecorder.getInstance().startRecording(scene);
-        return "{\"status\":\"recording\"}";
+        JsonObject response = new JsonObject();
+        response.addProperty("status", "recording");
+        return response.toString();
     }
 
     private String stopRecording(String params) {
         JsonObject paramsObject = parseParams(params);
         String actions = ActionRecorder.getInstance().stopRecording();
-        return "{\"actions\":" + actions + "}";
+        JsonObject response = new JsonObject();
+        response.add("actions", parseJsonValue(actions));
+        return response.toString();
     }
 
     private String getRecordedActions(String params) {
         JsonObject paramsObject = parseParams(params);
         String actions = ActionRecorder.getInstance().getActionsJson();
-        return "{\"recording\":" + ActionRecorder.getInstance().isRecording() + ",\"actions\":" + actions + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("recording", ActionRecorder.getInstance().isRecording());
+        response.add("actions", parseJsonValue(actions));
+        return response.toString();
     }
 
     private String getUiState(String params) {
@@ -297,22 +328,23 @@ public class SceneGraphCommands {
         if (scene == null && windowTitle != null) {
             scene = findScene(windowTitle);
         }
+
+        JsonObject response = new JsonObject();
         if (scene == null) {
-            return "{\"rosterName\":null,\"forces\":[],\"costs\":[]}";
+            response.add("rosterName", JsonNull.INSTANCE);
+            response.add("forces", new JsonArray());
+            response.add("costs", new JsonArray());
+            return response.toString();
         }
 
         TreeView<Object> rosterTree = findRosterTree(scene);
         Map<String, String> costs = new LinkedHashMap<String, String>();
         collectCosts(scene.getRoot(), costs);
 
-        StringBuilder sb = new StringBuilder("{");
-        sb.append("\"rosterName\":").append(jsonString(readRosterName(scene)));
-        sb.append(",\"forces\":[");
-        appendVisibleForces(rosterTree, sb);
-        sb.append("],\"costs\":[");
-        appendCosts(costs, sb);
-        sb.append("]}");
-        return sb.toString();
+        response.addProperty("rosterName", readRosterName(scene));
+        response.add("forces", getVisibleForces(rosterTree));
+        response.add("costs", costsToJson(costs));
+        return response.toString();
     }
 
     private String dumpTree(String params) {
@@ -322,15 +354,13 @@ public class SceneGraphCommands {
 
         Scene scene = findScene(windowTitle);
         if (scene == null) {
-            return "{\"error\":\"No scene found\"}";
+            return jsonError("No scene found");
         }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\"windowTitle\":").append(jsonString(getWindowTitle(scene)));
-        sb.append(",\"tree\":");
-        dumpNode(scene.getRoot(), sb, 0, maxDepth);
-        sb.append("}");
-        return sb.toString();
+        JsonObject response = new JsonObject();
+        response.addProperty("windowTitle", getWindowTitle(scene));
+        response.add("tree", dumpNode(scene.getRoot(), 0, maxDepth));
+        return response.toString();
     }
 
     private String findNode(String params) {
@@ -352,7 +382,7 @@ public class SceneGraphCommands {
             return "null";
         }
 
-        return nodeToJson(node);
+        return nodeToJsonObject(node).toString();
     }
 
     private String getNodeInfo(String params) {
@@ -363,7 +393,7 @@ public class SceneGraphCommands {
         if (node == null) {
             return "null";
         }
-        return nodeToJson(node);
+        return nodeToJsonObject(node).toString();
     }
 
     private String clickNode(String params) {
@@ -390,12 +420,11 @@ public class SceneGraphCommands {
 
         var bounds = node.localToScreen(node.getBoundsInLocal());
         if (bounds == null) {
-            return "{\"error\":\"Node not visible on screen (localToScreen returned null)\"}";
+            return jsonError("Node not visible on screen (localToScreen returned null)");
         }
         double x = bounds.getMinX() + bounds.getWidth() / 2;
         double y = bounds.getMinY() + bounds.getHeight() / 2;
 
-        // Fire mouse events: press, release, click (with correct clickCount)
         node.fireEvent(new MouseEvent(
                 MouseEvent.MOUSE_PRESSED,
                 bounds.getWidth() / 2, bounds.getHeight() / 2,
@@ -421,7 +450,12 @@ public class SceneGraphCommands {
                 true, false, false,
                 true, false, false, null));
 
-        return "{\"clicked\":true,\"doubleClick\":" + doubleClick + ",\"x\":" + x + ",\"y\":" + y + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("clicked", true);
+        response.addProperty("doubleClick", doubleClick);
+        response.addProperty("x", x);
+        response.addProperty("y", y);
+        return response.toString();
     }
 
     private String getChildren(String params) {
@@ -429,24 +463,15 @@ public class SceneGraphCommands {
         String selector = getString(paramsObject, "selector", null);
         String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(selector, windowTitle);
-        if (node == null) {
-            return "[]";
-        }
-        if (!(node instanceof Parent)) {
-            return "[]";
+        JsonArray children = new JsonArray();
+        if (node == null || !(node instanceof Parent)) {
+            return children.toString();
         }
 
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
         for (Node child : ((Parent) node).getChildrenUnmodifiable()) {
-            if (!first) {
-                sb.append(",");
-            }
-            first = false;
-            sb.append(nodeToJson(child));
+            children.add(nodeToJsonObject(child));
         }
-        sb.append("]");
-        return sb.toString();
+        return children.toString();
     }
 
     private String getNodeText(String params) {
@@ -457,7 +482,8 @@ public class SceneGraphCommands {
         if (node == null) {
             return "null";
         }
-        return jsonString(extractTextContent(node));
+        String text = extractTextContent(node);
+        return text == null ? "null" : new com.google.gson.JsonPrimitive(text).toString();
     }
 
     private String findAllNodes(String params) {
@@ -470,22 +496,16 @@ public class SceneGraphCommands {
         }
 
         Scene scene = findScene(windowTitle);
+        JsonArray nodesJson = new JsonArray();
         if (scene == null) {
-            return "[]";
+            return nodesJson.toString();
         }
 
         var nodes = scene.getRoot().lookupAll(selector);
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
         for (Node node : nodes) {
-            if (!first) {
-                sb.append(",");
-            }
-            first = false;
-            sb.append(nodeToJson(node));
+            nodesJson.add(nodeToJsonObject(node));
         }
-        sb.append("]");
-        return sb.toString();
+        return nodesJson.toString();
     }
 
     private String fireButton(String params) {
@@ -513,14 +533,15 @@ public class SceneGraphCommands {
             }
         }
         javafx.scene.control.ButtonBase button = (javafx.scene.control.ButtonBase) node;
+        JsonObject response = new JsonObject();
+        response.addProperty("fired", true);
         if ("true".equals(async)) {
-            // Fire asynchronously — schedule on FX thread so this call returns immediately.
-            // This is needed when the button opens a modal dialog (showAndWait).
             Platform.runLater(() -> button.fire());
-            return "{\"fired\":true,\"async\":true}";
+            response.addProperty("async", true);
+            return response.toString();
         }
         button.fire();
-        return "{\"fired\":true}";
+        return response.toString();
     }
 
     private String findNodeByText(String params) {
@@ -542,7 +563,7 @@ public class SceneGraphCommands {
         if (found == null) {
             return "null";
         }
-        return nodeToJson(found);
+        return nodeToJsonObject(found).toString();
     }
 
     private Node findNodeByTextRecursive(Node node, String text, String nodeType) {
@@ -585,7 +606,7 @@ public class SceneGraphCommands {
             "", "", javafx.scene.input.KeyCode.UNDEFINED,
             false, false, false, false);
         textInput.fireEvent(keyEvent);
-        return "{\"set\":true}";
+        return jsonBooleanResult("set", true);
     }
 
     private String getComboBoxItems(String params) {
@@ -601,20 +622,20 @@ public class SceneGraphCommands {
         }
         @SuppressWarnings("unchecked")
         ComboBox<Object> combo = (ComboBox<Object>) node;
-        StringBuilder sb = new StringBuilder("{");
-        sb.append("\"selectedIndex\":").append(combo.getSelectionModel().getSelectedIndex());
+        JsonObject response = new JsonObject();
+        response.addProperty("selectedIndex", combo.getSelectionModel().getSelectedIndex());
         Object selected = combo.getSelectionModel().getSelectedItem();
-        sb.append(",\"selectedText\":").append(jsonString(selected != null ? selected.toString() : null));
-        sb.append(",\"items\":[");
+        response.addProperty("selectedText", selected != null ? selected.toString() : null);
+        JsonArray items = new JsonArray();
         for (int i = 0; i < combo.getItems().size(); i++) {
-            if (i > 0) sb.append(",");
             Object item = combo.getItems().get(i);
-            sb.append("{\"index\":").append(i);
-            sb.append(",\"text\":").append(jsonString(item != null ? item.toString() : null));
-            sb.append("}");
+            JsonObject option = new JsonObject();
+            option.addProperty("index", i);
+            option.addProperty("text", item != null ? item.toString() : null);
+            items.add(option);
         }
-        sb.append("]}");
-        return sb.toString();
+        response.add("items", items);
+        return response.toString();
     }
 
     private String selectComboBoxItem(String params) {
@@ -644,8 +665,10 @@ public class SceneGraphCommands {
             }
         }
         Object selected = combo.getSelectionModel().getSelectedItem();
-        return "{\"selectedIndex\":" + combo.getSelectionModel().getSelectedIndex()
-                + ",\"selectedText\":" + jsonString(selected != null ? selected.toString() : null) + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("selectedIndex", combo.getSelectionModel().getSelectedIndex());
+        response.addProperty("selectedText", selected != null ? selected.toString() : null);
+        return response.toString();
     }
 
     @SuppressWarnings("unchecked")
@@ -663,31 +686,28 @@ public class SceneGraphCommands {
         }
         TreeView<Object> tree = (TreeView<Object>) node;
         TreeItem<Object> root = tree.getRoot();
-        if (root == null) return "{\"root\":null}";
-        StringBuilder sb = new StringBuilder("{\"root\":");
-        serializeTreeItem(root, sb, 0, maxDepth);
-        sb.append(",\"showRoot\":").append(tree.isShowRoot());
-        sb.append("}");
-        return sb.toString();
+        JsonObject response = new JsonObject();
+        response.add("root", root != null ? serializeTreeItem(root, 0, maxDepth) : JsonNull.INSTANCE);
+        response.addProperty("showRoot", tree.isShowRoot());
+        return response.toString();
     }
 
-    private void serializeTreeItem(TreeItem<Object> item, StringBuilder sb, int depth, int maxDepth) {
-        sb.append("{");
+    private JsonObject serializeTreeItem(TreeItem<Object> item, int depth, int maxDepth) {
+        JsonObject result = new JsonObject();
         Object val = item.getValue();
-        sb.append("\"text\":").append(jsonString(val != null ? val.toString() : null));
-        sb.append(",\"expanded\":").append(item.isExpanded());
-        sb.append(",\"leaf\":").append(item.isLeaf());
+        result.addProperty("text", val != null ? val.toString() : null);
+        result.addProperty("expanded", item.isExpanded());
+        result.addProperty("leaf", item.isLeaf());
         if (depth < maxDepth && !item.getChildren().isEmpty()) {
-            sb.append(",\"children\":[");
-            for (int i = 0; i < item.getChildren().size(); i++) {
-                if (i > 0) sb.append(",");
-                serializeTreeItem(item.getChildren().get(i), sb, depth + 1, maxDepth);
+            JsonArray children = new JsonArray();
+            for (TreeItem<Object> child : item.getChildren()) {
+                children.add(serializeTreeItem(child, depth + 1, maxDepth));
             }
-            sb.append("]");
+            result.add("children", children);
         } else if (!item.getChildren().isEmpty()) {
-            sb.append(",\"childCount\":").append(item.getChildren().size());
+            result.addProperty("childCount", item.getChildren().size());
         }
-        sb.append("}");
+        return result;
     }
 
     @SuppressWarnings("unchecked")
@@ -712,12 +732,17 @@ public class SceneGraphCommands {
             if (found != null) {
                 tree.getSelectionModel().select(found);
             } else {
-                return "{\"selected\":false,\"error\":\"Item not found: " + text + "\"}";
+                JsonObject response = new JsonObject();
+                response.addProperty("selected", false);
+                response.addProperty("error", "Item not found: " + text);
+                return response.toString();
             }
         }
         TreeItem<Object> sel = tree.getSelectionModel().getSelectedItem();
-        return "{\"selected\":true,\"selectedText\":"
-                + jsonString(sel != null && sel.getValue() != null ? sel.getValue().toString() : null) + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("selected", true);
+        response.addProperty("selectedText", sel != null && sel.getValue() != null ? sel.getValue().toString() : null);
+        return response.toString();
     }
 
     @SuppressWarnings("unchecked")
@@ -734,7 +759,7 @@ public class SceneGraphCommands {
         }
         TreeView<Object> tree = (TreeView<Object>) node;
         tree.getSelectionModel().clearSelection();
-        return "{\"cleared\":true}";
+        return jsonBooleanResult("cleared", true);
     }
 
     @SuppressWarnings("unchecked")
@@ -753,11 +778,16 @@ public class SceneGraphCommands {
         TreeView<Object> tree = (TreeView<Object>) node;
         TreeItem<Object> item = findTreeItemByText(tree.getRoot(), text);
         if (item == null) {
-            return "{\"expanded\":false,\"error\":\"Item not found: " + text + "\"}";
+            JsonObject response = new JsonObject();
+            response.addProperty("expanded", false);
+            response.addProperty("error", "Item not found: " + text);
+            return response.toString();
         }
         item.setExpanded(true);
-        return "{\"expanded\":true,\"text\":"
-                + jsonString(item.getValue() != null ? item.getValue().toString() : null) + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("expanded", true);
+        response.addProperty("text", item.getValue() != null ? item.getValue().toString() : null);
+        return response.toString();
     }
 
     private TreeItem<Object> findTreeItemByText(TreeItem<Object> item, String text) {
@@ -797,15 +827,16 @@ public class SceneGraphCommands {
         TreeView<Object> tree = (TreeView<Object>) node;
         TreeItem<Object> item = findTreeItemByText(tree.getRoot(), text);
         if (item == null) {
-            return "{\"clicked\":false,\"error\":\"Item not found: " + text + "\"}";
+            JsonObject response = new JsonObject();
+            response.addProperty("clicked", false);
+            response.addProperty("error", "Item not found: " + text);
+            return response.toString();
         }
 
-        // Select the item first (this also scrolls to it)
         int itemIndex = tree.getRow(item);
         tree.getSelectionModel().select(item);
         tree.scrollTo(itemIndex);
 
-        // Find the visible cell rendering this item by scanning VirtualFlow cells
         Node cellNode = null;
         for (Node child : tree.lookupAll(".tree-cell")) {
             if (child instanceof javafx.scene.control.TreeCell) {
@@ -818,13 +849,15 @@ public class SceneGraphCommands {
         }
 
         if (cellNode == null) {
-            // Fallback: fire on the tree itself at the item's position
             cellNode = tree;
         }
 
         var bounds = cellNode.localToScreen(cellNode.getBoundsInLocal());
         if (bounds == null) {
-            return "{\"clicked\":false,\"error\":\"Node bounds not available (window not visible?)\"}";
+            JsonObject response = new JsonObject();
+            response.addProperty("clicked", false);
+            response.addProperty("error", "Node bounds not available (window not visible?)");
+            return response.toString();
         }
         double x = bounds.getMinX() + bounds.getWidth() / 2;
         double y = bounds.getMinY() + bounds.getHeight() / 2;
@@ -847,10 +880,12 @@ public class SceneGraphCommands {
                 false, false, false, false,
                 true, false, false, true, false, false, null));
 
-        return "{\"clicked\":true,\"doubleClick\":" + doubleClick
-                + ",\"text\":" + jsonString(item.getValue() != null ? item.getValue().toString() : null)
-                + ",\"cellFound\":" + (cellNode != tree)
-                + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("clicked", true);
+        response.addProperty("doubleClick", doubleClick);
+        response.addProperty("text", item.getValue() != null ? item.getValue().toString() : null);
+        response.addProperty("cellFound", cellNode != tree);
+        return response.toString();
     }
 
     /**
@@ -898,7 +933,10 @@ public class SceneGraphCommands {
                 KeyEvent.KEY_RELEASED, "", "", keyCode,
                 shift, ctrl, alt, meta));
 
-        return "{\"pressed\":true,\"key\":\"" + keyCode.getName() + "\"}";
+        JsonObject response = new JsonObject();
+        response.addProperty("pressed", true);
+        response.addProperty("key", keyCode.getName());
+        return response.toString();
     }
 
     /**
@@ -918,8 +956,10 @@ public class SceneGraphCommands {
         }
         Spinner<?> spinner = (Spinner<?>) node;
         Object value = spinner.getValue();
-        return "{\"value\":" + (value != null ? value.toString() : "null")
-                + ",\"editable\":" + spinner.isEditable() + "}";
+        JsonObject response = new JsonObject();
+        addDynamicProperty(response, "value", value);
+        response.addProperty("editable", spinner.isEditable());
+        return response.toString();
     }
 
     /**
@@ -959,7 +999,9 @@ public class SceneGraphCommands {
             spinner.getValueFactory().increment(steps);
         }
         Object newValue = spinner.getValue();
-        return "{\"value\":" + (newValue != null ? newValue.toString() : "null") + "}";
+        JsonObject response = new JsonObject();
+        addDynamicProperty(response, "value", newValue);
+        return response.toString();
     }
 
     private String dumpNodeProperties(String params) {
@@ -968,38 +1010,37 @@ public class SceneGraphCommands {
         String windowTitle = getString(paramsObject, "windowTitle", null);
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
-            // If no selector, dump root node properties
             Scene scene = findScene(windowTitle);
-            if (scene == null) return "{\"error\":\"no scene\"}";
+            if (scene == null) return jsonError("no scene");
             node = scene.getRoot();
         }
-        StringBuilder sb = new StringBuilder("{");
-        sb.append("\"nodeType\":\"").append(node.getClass().getName()).append("\"");
-        sb.append(",\"id\":").append(jsonString(node.getId()));
-        // Node properties map
-        sb.append(",\"properties\":{");
-        boolean first = true;
+
+        JsonObject response = new JsonObject();
+        response.addProperty("nodeType", node.getClass().getName());
+        response.addProperty("id", node.getId());
+
+        JsonObject properties = new JsonObject();
         for (Object key : node.getProperties().keySet()) {
-            if (!first) sb.append(",");
-            first = false;
             Object val = node.getProperties().get(key);
-            sb.append(jsonString(String.valueOf(key))).append(":");
             if (val == null) {
-                sb.append("null");
+                properties.add(String.valueOf(key), JsonNull.INSTANCE);
             } else {
-                sb.append("{\"type\":\"").append(val.getClass().getName()).append("\"");
-                sb.append(",\"toString\":").append(jsonString(val.toString())).append("}");
+                JsonObject property = new JsonObject();
+                property.addProperty("type", val.getClass().getName());
+                property.addProperty("toString", val.toString());
+                properties.add(String.valueOf(key), property);
             }
         }
-        sb.append("}");
-        // userData
+        response.add("properties", properties);
+
         Object ud = node.getUserData();
         if (ud != null) {
-            sb.append(",\"userData\":{\"type\":\"").append(ud.getClass().getName()).append("\"");
-            sb.append(",\"toString\":").append(jsonString(ud.toString())).append("}");
+            JsonObject userData = new JsonObject();
+            userData.addProperty("type", ud.getClass().getName());
+            userData.addProperty("toString", ud.toString());
+            response.add("userData", userData);
         }
-        sb.append("}");
-        return sb.toString();
+        return response.toString();
     }
 
     /**
@@ -1012,19 +1053,17 @@ public class SceneGraphCommands {
         JsonObject paramsObject = parseParams(params);
         String text = getString(paramsObject, "text", null);
         String windowTitle = getString(paramsObject, "windowTitle", null);
-        String controlType = getString(paramsObject, "controlType", null); // optional filter
+        String controlType = getString(paramsObject, "controlType", null);
 
         Scene scene = findScene(windowTitle);
-        if (scene == null) return "{\"error\":\"no scene\"}";
+        if (scene == null) return jsonError("no scene");
 
-        // Find all Labels in the scene
         for (Node labelNode : scene.getRoot().lookupAll(".label")) {
             if (!(labelNode instanceof Label)) continue;
             Label label = (Label) labelNode;
             String labelText = label.getText();
             if (labelText == null || !labelText.contains(text)) continue;
 
-            // Found a matching label. Look at its parent (usually an HBox) for sibling controls.
             Parent parent = label.getParent();
             if (parent == null) continue;
 
@@ -1034,36 +1073,45 @@ public class SceneGraphCommands {
                     if (controlType != null && !controlType.equals("spinner")) continue;
                     Spinner<?> spinner = (Spinner<?>) sibling;
                     Object val = spinner.getValue();
-                    return "{\"found\":true,\"controlType\":\"spinner\",\"labelText\":" + jsonString(labelText) +
-                            ",\"value\":" + (val != null ? val.toString() : "null") +
-                            ",\"parentClass\":\"" + parent.getClass().getSimpleName() + "\"}";
+                    JsonObject response = new JsonObject();
+                    response.addProperty("found", true);
+                    response.addProperty("controlType", "spinner");
+                    response.addProperty("labelText", labelText);
+                    addDynamicProperty(response, "value", val);
+                    response.addProperty("parentClass", parent.getClass().getSimpleName());
+                    return response.toString();
                 }
                 if (sibling instanceof Button) {
                     if (controlType != null && !controlType.equals("button")) continue;
-                    return "{\"found\":true,\"controlType\":\"button\",\"labelText\":" + jsonString(labelText) +
-                            ",\"parentClass\":\"" + parent.getClass().getSimpleName() + "\"}";
+                    JsonObject response = new JsonObject();
+                    response.addProperty("found", true);
+                    response.addProperty("controlType", "button");
+                    response.addProperty("labelText", labelText);
+                    response.addProperty("parentClass", parent.getClass().getSimpleName());
+                    return response.toString();
                 }
-            }
-
-            // Also check: the label itself might BE a CheckBox (CheckBox extends ButtonBase which shows text)
-            if (parent instanceof CheckBox) {
-                // Actually CheckBox IS a Labeled with text
             }
         }
 
-        // Also check CheckBoxes directly (they have text built-in, no separate label)
         for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
             if (!(cbNode instanceof CheckBox)) continue;
             CheckBox cb = (CheckBox) cbNode;
             String cbText = cb.getText();
             if (cbText != null && cbText.contains(text)) {
                 if (controlType != null && !controlType.equals("checkbox")) continue;
-                return "{\"found\":true,\"controlType\":\"checkbox\",\"labelText\":" + jsonString(cbText) +
-                        ",\"selected\":" + cb.isSelected() + "}";
+                JsonObject response = new JsonObject();
+                response.addProperty("found", true);
+                response.addProperty("controlType", "checkbox");
+                response.addProperty("labelText", cbText);
+                response.addProperty("selected", cb.isSelected());
+                return response.toString();
             }
         }
 
-        return "{\"found\":false,\"searchedText\":" + jsonString(text) + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("found", false);
+        response.addProperty("searchedText", text);
+        return response.toString();
     }
 
     /**
@@ -1077,12 +1125,11 @@ public class SceneGraphCommands {
         JsonObject paramsObject = parseParams(params);
         String text = getString(paramsObject, "text", null);
         String windowTitle = getString(paramsObject, "windowTitle", null);
-        String action = getString(paramsObject, "action", null); // "increment" or "decrement", default increment
+        String action = getString(paramsObject, "action", null);
 
         Scene scene = findScene(windowTitle);
-        if (scene == null) return "{\"error\":\"no scene\"}";
+        if (scene == null) return jsonError("no scene");
 
-        // Try spinners first (in HBox with Label)
         for (Node labelNode : scene.getRoot().lookupAll(".label")) {
             if (!(labelNode instanceof Label)) continue;
             Label label = (Label) labelNode;
@@ -1103,32 +1150,45 @@ public class SceneGraphCommands {
                     } else {
                         Platform.runLater(() -> spinner.getValueFactory().increment(1));
                     }
-                    String act = decrement ? "decrement" : "increment";
-                    return "{\"clicked\":true,\"controlType\":\"spinner\",\"action\":\"" + act + "\"" +
-                            ",\"labelText\":" + jsonString(labelText) + "}";
+                    JsonObject response = new JsonObject();
+                    response.addProperty("clicked", true);
+                    response.addProperty("controlType", "spinner");
+                    response.addProperty("action", decrement ? "decrement" : "increment");
+                    response.addProperty("labelText", labelText);
+                    return response.toString();
                 }
                 if (sibling instanceof Button) {
                     Button button = (Button) sibling;
                     Platform.runLater(() -> button.fire());
-                    return "{\"clicked\":true,\"controlType\":\"button\",\"action\":\"fire\"" +
-                            ",\"labelText\":" + jsonString(labelText) + "}";
+                    JsonObject response = new JsonObject();
+                    response.addProperty("clicked", true);
+                    response.addProperty("controlType", "button");
+                    response.addProperty("action", "fire");
+                    response.addProperty("labelText", labelText);
+                    return response.toString();
                 }
             }
         }
 
-        // Try CheckBoxes (text is built-in)
         for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
             if (!(cbNode instanceof CheckBox)) continue;
             CheckBox cb = (CheckBox) cbNode;
             String cbText = cb.getText();
             if (cbText != null && cbText.contains(text)) {
                 Platform.runLater(() -> cb.fire());
-                return "{\"clicked\":true,\"controlType\":\"checkbox\",\"action\":\"toggle\"" +
-                        ",\"labelText\":" + jsonString(cbText) + "}";
+                JsonObject response = new JsonObject();
+                response.addProperty("clicked", true);
+                response.addProperty("controlType", "checkbox");
+                response.addProperty("action", "toggle");
+                response.addProperty("labelText", cbText);
+                return response.toString();
             }
         }
 
-        return "{\"clicked\":false,\"error\":\"Control not found for text: " + text + "\"}";
+        JsonObject response = new JsonObject();
+        response.addProperty("clicked", false);
+        response.addProperty("error", "Control not found for text: " + text);
+        return response.toString();
     }
 
     /**
@@ -1144,11 +1204,11 @@ public class SceneGraphCommands {
         String windowTitle = getString(paramsObject, "windowTitle", null);
 
         if (value < 0) {
-            return "{\"error\":\"Missing or invalid 'value' parameter.\"}";
+            return jsonError("Missing or invalid 'value' parameter.");
         }
 
         Scene scene = findScene(windowTitle);
-        if (scene == null) return "{\"error\":\"no scene\"}";
+        if (scene == null) return jsonError("no scene");
 
         for (Node labelNode : scene.getRoot().lookupAll(".label")) {
             if (!(labelNode instanceof Label)) continue;
@@ -1165,11 +1225,16 @@ public class SceneGraphCommands {
                     Spinner<Object> spinner = (Spinner<Object>) sibling;
                     Object currentVal = spinner.getValue();
                     int currentInt = (currentVal instanceof Number) ? ((Number) currentVal).intValue() : 0;
+                    JsonObject response = new JsonObject();
+                    response.addProperty("set", true);
+                    response.addProperty("controlType", "spinner");
+                    response.addProperty("labelText", labelText);
+                    response.addProperty("previousValue", currentInt);
+                    response.addProperty("value", value);
                     if (currentInt == value) {
-                        return "{\"set\":true,\"controlType\":\"spinner\",\"labelText\":" + jsonString(labelText) +
-                                ",\"previousValue\":" + currentInt + ",\"value\":" + value + ",\"noChange\":true}";
+                        response.addProperty("noChange", true);
+                        return response.toString();
                     }
-                    // Set value directly (we're already on FX thread) to trigger change listeners synchronously
                     int delta = value - currentInt;
                     long startMs = System.currentTimeMillis();
                     SpinnerValueFactory<Object> factory = spinner.getValueFactory();
@@ -1180,14 +1245,16 @@ public class SceneGraphCommands {
                     }
                     long elapsedMs = System.currentTimeMillis() - startMs;
                     System.err.println("[bs-ui-agent] setSpinnerValueByLabel: increment took " + elapsedMs + "ms");
-                    return "{\"set\":true,\"controlType\":\"spinner\",\"labelText\":" + jsonString(labelText) +
-                            ",\"previousValue\":" + currentInt + ",\"value\":" + value +
-                            ",\"elapsedMs\":" + elapsedMs + "}";
+                    response.addProperty("elapsedMs", elapsedMs);
+                    return response.toString();
                 }
             }
         }
 
-        return "{\"set\":false,\"error\":\"Spinner not found for label text: " + text + "\"}";
+        JsonObject response = new JsonObject();
+        response.addProperty("set", false);
+        response.addProperty("error", "Spinner not found for label text: " + text);
+        return response.toString();
     }
 
     private String readRosterName(Scene scene) {
@@ -1277,66 +1344,55 @@ public class SceneGraphCommands {
         return null;
     }
 
-    private void appendVisibleForces(TreeView<Object> tree, StringBuilder sb) {
+    private JsonArray getVisibleForces(TreeView<Object> tree) {
+        JsonArray forces = new JsonArray();
         if (tree == null) {
-            return;
+            return forces;
         }
         TreeItem<Object> root = tree.getRoot();
         if (root == null || root.getChildren().isEmpty()) {
-            return;
+            return forces;
         }
-        boolean firstForce = true;
         for (TreeItem<Object> forceItem : root.getChildren()) {
             if (forceItem == null) {
                 continue;
             }
-            if (!firstForce) {
-                sb.append(",");
-            }
-            firstForce = false;
-            sb.append("{\"name\":").append(jsonString(treeItemText(forceItem)));
-            sb.append(",\"selections\":[");
-            boolean[] firstSelection = new boolean[] { true };
-            appendVisibleSelections(forceItem, sb, firstSelection);
-            sb.append("]}");
+            JsonObject force = new JsonObject();
+            force.addProperty("name", treeItemText(forceItem));
+            force.add("selections", getVisibleSelections(forceItem));
+            forces.add(force);
         }
+        return forces;
     }
 
-    private void appendVisibleSelections(TreeItem<Object> parent, StringBuilder sb, boolean[] firstSelection) {
+    private JsonArray getVisibleSelections(TreeItem<Object> parent) {
+        JsonArray selections = new JsonArray();
         if (parent == null || !parent.isExpanded()) {
-            return;
+            return selections;
         }
         for (TreeItem<Object> child : parent.getChildren()) {
-            if (child == null) {
-                continue;
+            if (child != null) {
+                selections.add(selectionToJson(child));
             }
-            if (!firstSelection[0]) {
-                sb.append(",");
-            }
-            firstSelection[0] = false;
-            appendSelectionWithChildren(child, sb);
         }
+        return selections;
     }
 
-    private void appendSelectionWithChildren(TreeItem<Object> item, StringBuilder sb) {
+    private JsonObject selectionToJson(TreeItem<Object> item) {
         NameCount parsed = splitNameAndCount(treeItemText(item));
-        sb.append("{\"name\":").append(jsonString(parsed.name));
-        sb.append(",\"count\":").append(jsonString(parsed.count));
-        sb.append(",\"children\":[");
+        JsonObject selection = new JsonObject();
+        selection.addProperty("name", parsed.name);
+        selection.addProperty("count", parsed.count);
+        JsonArray children = new JsonArray();
         if (item.isExpanded() && !item.getChildren().isEmpty()) {
-            boolean[] first = new boolean[] { true };
             for (TreeItem<Object> child : item.getChildren()) {
-                if (child == null) {
-                    continue;
+                if (child != null) {
+                    children.add(selectionToJson(child));
                 }
-                if (!first[0]) {
-                    sb.append(",");
-                }
-                first[0] = false;
-                appendSelectionWithChildren(child, sb);
             }
         }
-        sb.append("]}");
+        selection.add("children", children);
+        return selection;
     }
 
     private String treeItemText(TreeItem<Object> item) {
@@ -1485,17 +1541,15 @@ public class SceneGraphCommands {
         return NUMERIC_VALUE_PATTERN.matcher(trimmed).matches() ? trimmed : null;
     }
 
-    private void appendCosts(Map<String, String> costs, StringBuilder sb) {
-        boolean first = true;
+    private JsonArray costsToJson(Map<String, String> costs) {
+        JsonArray result = new JsonArray();
         for (Map.Entry<String, String> entry : costs.entrySet()) {
-            if (!first) {
-                sb.append(",");
-            }
-            first = false;
-            sb.append("{\"name\":").append(jsonString(entry.getKey()));
-            sb.append(",\"value\":").append(jsonString(entry.getValue()));
-            sb.append("}");
+            JsonObject item = new JsonObject();
+            item.addProperty("name", entry.getKey());
+            item.addProperty("value", entry.getValue());
+            result.add(item);
         }
+        return result;
     }
 
     private static final class NameCount {
@@ -1550,73 +1604,43 @@ public class SceneGraphCommands {
         return null;
     }
 
-    private void dumpNode(Node node, StringBuilder sb, int depth, int maxDepth) {
-        sb.append("{");
-        sb.append("\"type\":\"").append(node.getClass().getSimpleName()).append("\"");
-        String id = node.getId();
-        if (id != null && !id.isEmpty()) {
-            sb.append(",\"id\":").append(jsonString(id));
-        }
-        var styleClasses = node.getStyleClass();
-        if (!styleClasses.isEmpty()) {
-            sb.append(",\"styleClasses\":[");
-            for (int i = 0; i < styleClasses.size(); i++) {
-                if (i > 0) {
-                    sb.append(",");
-                }
-                sb.append(jsonString(styleClasses.get(i)));
-            }
-            sb.append("]");
-        }
-        String text = extractTextContent(node);
-        if (text != null) {
-            sb.append(",\"text\":").append(jsonString(text));
-        }
-        sb.append(",\"visible\":").append(node.isVisible());
-        sb.append(",\"disabled\":").append(node.isDisabled());
-
+    private JsonObject dumpNode(Node node, int depth, int maxDepth) {
+        JsonObject result = nodeToJsonObject(node);
         if (depth < maxDepth && node instanceof Parent) {
             ObservableList<Node> children = ((Parent) node).getChildrenUnmodifiable();
             if (!children.isEmpty()) {
-                sb.append(",\"children\":[");
-                for (int i = 0; i < children.size(); i++) {
-                    if (i > 0) {
-                        sb.append(",");
-                    }
-                    dumpNode(children.get(i), sb, depth + 1, maxDepth);
+                JsonArray childrenJson = new JsonArray();
+                for (Node child : children) {
+                    childrenJson.add(dumpNode(child, depth + 1, maxDepth));
                 }
-                sb.append("]");
+                result.add("children", childrenJson);
             }
         }
-        sb.append("}");
+        return result;
     }
 
-    private String nodeToJson(Node node) {
-        StringBuilder sb = new StringBuilder("{");
-        sb.append("\"type\":\"").append(node.getClass().getSimpleName()).append("\"");
+    private JsonObject nodeToJsonObject(Node node) {
+        JsonObject result = new JsonObject();
+        result.addProperty("type", node.getClass().getSimpleName());
         String id = node.getId();
         if (id != null && !id.isEmpty()) {
-            sb.append(",\"id\":").append(jsonString(id));
+            result.addProperty("id", id);
         }
         var styleClasses = node.getStyleClass();
         if (!styleClasses.isEmpty()) {
-            sb.append(",\"styleClasses\":[");
-            for (int i = 0; i < styleClasses.size(); i++) {
-                if (i > 0) {
-                    sb.append(",");
-                }
-                sb.append(jsonString(styleClasses.get(i)));
+            JsonArray styles = new JsonArray();
+            for (String styleClass : styleClasses) {
+                styles.add(styleClass);
             }
-            sb.append("]");
+            result.add("styleClasses", styles);
         }
         String text = extractTextContent(node);
         if (text != null) {
-            sb.append(",\"text\":").append(jsonString(text));
+            result.addProperty("text", text);
         }
-        sb.append(",\"visible\":").append(node.isVisible());
-        sb.append(",\"disabled\":").append(node.isDisabled());
-        sb.append("}");
-        return sb.toString();
+        result.addProperty("visible", node.isVisible());
+        result.addProperty("disabled", node.isDisabled());
+        return result;
     }
 
     private static String extractTextContent(Node node) {
@@ -1633,22 +1657,4 @@ public class SceneGraphCommands {
     }
 
 
-    private static String jsonString(String value) {
-        if (value == null) {
-            return "null";
-        }
-        StringBuilder sb = new StringBuilder("\"");
-        for (char c : value.toCharArray()) {
-            switch (c) {
-                case '"': sb.append("\\\""); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
-                default: sb.append(c);
-            }
-        }
-        sb.append("\"");
-        return sb.toString();
-    }
 }

@@ -1,7 +1,9 @@
 package bsspec.uiagent;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -98,21 +100,18 @@ public class EngineAccessor {
      * Used for discovery/exploration.
      */
     public String listBsClasses() {
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
+        JsonArray classes = new JsonArray();
         for (Class<?> cls : instrumentation.getAllLoadedClasses()) {
             String name = cls.getName();
             if (name.startsWith("net.battlescribe.")) {
-                if (!first) sb.append(",");
-                first = false;
-                sb.append("{\"name\":\"").append(name).append("\"");
-                sb.append(",\"simple\":\"").append(cls.getSimpleName()).append("\"");
-                sb.append(",\"loader\":\"").append(cls.getClassLoader()).append("\"");
-                sb.append("}");
+                JsonObject item = new JsonObject();
+                item.addProperty("name", name);
+                item.addProperty("simple", cls.getSimpleName());
+                item.addProperty("loader", String.valueOf(cls.getClassLoader()));
+                classes.add(item);
             }
         }
-        sb.append("]");
-        return sb.toString();
+        return classes.toString();
     }
 
     /**
@@ -121,15 +120,14 @@ public class EngineAccessor {
     public String inspectClass(String className) {
         Class<?> cls = findClass(className);
         if (cls == null) {
-            return "{\"error\":\"Class not found: " + className + "\"}";
+            return errorJson("Class not found: " + className);
         }
 
-        StringBuilder sb = new StringBuilder("{");
-        sb.append("\"name\":\"").append(cls.getName()).append("\"");
-        sb.append(",\"superclass\":\"").append(cls.getSuperclass() != null ? cls.getSuperclass().getName() : "null").append("\"");
+        JsonObject result = new JsonObject();
+        result.addProperty("name", cls.getName());
+        result.addProperty("superclass", cls.getSuperclass() != null ? cls.getSuperclass().getName() : null);
 
-        // Fields (including inherited)
-        sb.append(",\"fields\":[");
+        JsonArray fields = new JsonArray();
         List<Field> allFields = new ArrayList<>();
         Class<?> c = cls;
         while (c != null && !c.getName().equals("java.lang.Object")) {
@@ -138,41 +136,33 @@ public class EngineAccessor {
             }
             c = c.getSuperclass();
         }
-        for (int i = 0; i < allFields.size(); i++) {
-            if (i > 0) sb.append(",");
-            Field f = allFields.get(i);
-            sb.append("{\"name\":\"").append(f.getName()).append("\"");
-            sb.append(",\"type\":\"").append(f.getType().getName()).append("\"");
-            sb.append(",\"modifiers\":\"").append(Modifier.toString(f.getModifiers())).append("\"");
-            sb.append(",\"declaringClass\":\"").append(f.getDeclaringClass().getSimpleName()).append("\"");
-            sb.append("}");
+        for (Field f : allFields) {
+            JsonObject field = new JsonObject();
+            field.addProperty("name", f.getName());
+            field.addProperty("type", f.getType().getName());
+            field.addProperty("modifiers", Modifier.toString(f.getModifiers()));
+            field.addProperty("declaringClass", f.getDeclaringClass().getSimpleName());
+            fields.add(field);
         }
-        sb.append("]");
+        result.add("fields", fields);
 
-        // Methods (non-Object, declared only)
-        sb.append(",\"methods\":[");
+        JsonArray methodsJson = new JsonArray();
         Method[] methods = cls.getDeclaredMethods();
-        boolean mFirst = true;
         for (Method m : methods) {
             if (m.getDeclaringClass() == Object.class) continue;
-            if (!mFirst) sb.append(",");
-            mFirst = false;
-            sb.append("{\"name\":\"").append(m.getName()).append("\"");
-            sb.append(",\"returnType\":\"").append(m.getReturnType().getName()).append("\"");
-            sb.append(",\"params\":[");
-            Class<?>[] params = m.getParameterTypes();
-            for (int j = 0; j < params.length; j++) {
-                if (j > 0) sb.append(",");
-                sb.append("\"").append(params[j].getName()).append("\"");
+            JsonObject method = new JsonObject();
+            method.addProperty("name", m.getName());
+            method.addProperty("returnType", m.getReturnType().getName());
+            JsonArray params = new JsonArray();
+            for (Class<?> param : m.getParameterTypes()) {
+                params.add(param.getName());
             }
-            sb.append("]");
-            sb.append(",\"modifiers\":\"").append(Modifier.toString(m.getModifiers())).append("\"");
-            sb.append("}");
+            method.add("params", params);
+            method.addProperty("modifiers", Modifier.toString(m.getModifiers()));
+            methodsJson.add(method);
         }
-        sb.append("]");
-
-        sb.append("}");
-        return sb.toString();
+        result.add("methods", methodsJson);
+        return result.toString();
     }
 
     /**
@@ -182,12 +172,19 @@ public class EngineAccessor {
      */
     public String findEngine() {
         if (engineInstance != null) {
-            return "{\"found\":true,\"engineClass\":\"" + engineClass.getName() + "\",\"cached\":true}";
+            JsonObject response = new JsonObject();
+            response.addProperty("found", true);
+            response.addProperty("engineClass", engineClass.getName());
+            response.addProperty("cached", true);
+            return response.toString();
         }
 
         engineClass = findClass("net.battlescribe.engine.a.f");
         if (engineClass == null) {
-            return "{\"found\":false,\"error\":\"Engine class net.battlescribe.engine.a.f not loaded\"}";
+            JsonObject response = new JsonObject();
+            response.addProperty("found", false);
+            response.addProperty("error", "Engine class net.battlescribe.engine.a.f not loaded");
+            return response.toString();
         }
 
         List<String> tried = new ArrayList<>();
@@ -217,8 +214,11 @@ public class EngineAccessor {
                             engineInstance = eng;
                             cacheRosterAccess();
                             patchEngineThreadCount(eng);
-                            return "{\"found\":true,\"engineClass\":\"" + engineClass.getName()
-                                    + "\",\"via\":\"handler.controller.b\"}";
+                            JsonObject response = new JsonObject();
+                            response.addProperty("found", true);
+                            response.addProperty("engineClass", engineClass.getName());
+                            response.addProperty("via", "handler.controller.b");
+                            return response.toString();
                         }
                         tried.add("engine_field_null_on_controller");
                     }
@@ -240,8 +240,11 @@ public class EngineAccessor {
                     engineInstance = eng;
                     cacheRosterAccess();
                     patchEngineThreadCount(eng);
-                    return "{\"found\":true,\"engineClass\":\"" + engineClass.getName()
-                            + "\",\"via\":\"controller.b\"}";
+                    JsonObject response = new JsonObject();
+                    response.addProperty("found", true);
+                    response.addProperty("engineClass", engineClass.getName());
+                    response.addProperty("via", "controller.b");
+                    return response.toString();
                 }
                 tried.add("engine_field_null");
             }
@@ -260,8 +263,11 @@ public class EngineAccessor {
                             engineInstance = eng;
                             cacheRosterAccess();
                             patchEngineThreadCount(eng);
-                            return "{\"found\":true,\"engineClass\":\"" + engineClass.getName()
-                                    + "\",\"via\":\"static:" + name + "." + f.getName() + "\"}";
+                            JsonObject response = new JsonObject();
+                            response.addProperty("found", true);
+                            response.addProperty("engineClass", engineClass.getName());
+                            response.addProperty("via", "static:" + name + "." + f.getName());
+                            return response.toString();
                         }
                     } catch (Exception e) {
                         tried.add("static_error:" + e.getMessage());
@@ -270,13 +276,10 @@ public class EngineAccessor {
             }
         }
 
-        StringBuilder sb = new StringBuilder("{\"found\":false,\"tried\":[");
-        for (int i = 0; i < tried.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append("\"").append(escapeJson(tried.get(i))).append("\"");
-        }
-        sb.append("]}");
-        return sb.toString();
+        JsonObject response = new JsonObject();
+        response.addProperty("found", false);
+        response.add("tried", toJsonArray(tried));
+        return response.toString();
     }
 
     /**
@@ -445,40 +448,42 @@ public class EngineAccessor {
     public String readStaticFields(String className) {
         Class<?> cls = findClass(className);
         if (cls == null) {
-            return "{\"error\":\"Class not found: " + className + "\"}";
+            return errorJson("Class not found: " + className);
         }
-        StringBuilder sb = new StringBuilder("{\"className\":\"" + cls.getName() + "\",\"fields\":[");
-        boolean first = true;
-        // Walk class hierarchy
+
+        JsonObject result = new JsonObject();
+        result.addProperty("className", cls.getName());
+        JsonArray fields = new JsonArray();
+
         Class<?> c = cls;
         while (c != null && !c.getName().equals("java.lang.Object")) {
             for (Field f : c.getDeclaredFields()) {
                 if (!Modifier.isStatic(f.getModifiers())) continue;
-                if (!first) sb.append(",");
-                first = false;
                 f.setAccessible(true);
-                sb.append("{\"name\":\"").append(f.getName()).append("\"");
-                sb.append(",\"type\":\"").append(f.getType().getName()).append("\"");
-                sb.append(",\"declaringClass\":\"").append(c.getSimpleName()).append("\"");
+                JsonObject field = new JsonObject();
+                field.addProperty("name", f.getName());
+                field.addProperty("type", f.getType().getName());
+                field.addProperty("declaringClass", c.getSimpleName());
                 try {
                     Object val = f.get(null);
                     if (val == null) {
-                        sb.append(",\"value\":null");
+                        field.add("value", JsonNull.INSTANCE);
                     } else {
-                        sb.append(",\"valueType\":\"").append(val.getClass().getName()).append("\"");
+                        field.addProperty("valueType", val.getClass().getName());
                         String str = val.toString();
                         if (str.length() > 200) str = str.substring(0, 200) + "...";
-                        sb.append(",\"value\":\"").append(escapeJson(str)).append("\"");
+                        field.addProperty("value", str);
                     }
                 } catch (Exception e) {
-                    sb.append(",\"error\":\"").append(escapeJson(e.getMessage())).append("\"");
+                    field.addProperty("error", e.getMessage());
                 }
-                sb.append("}");
+                fields.add(field);
             }
             c = c.getSuperclass();
         }
-        sb.append("]}");
-        return sb.toString();
+
+        result.add("fields", fields);
+        return result.toString();
     }
 
     /**
@@ -487,24 +492,17 @@ public class EngineAccessor {
      */
     public String getRosterState() {
         if (engineInstance == null) {
-            return "{\"error\":\"Engine not found. Call findEngine first.\"}";
+            return errorJson("Engine not found. Call findEngine first.");
         }
 
         try {
             Object roster = getRosterMethod.invoke(engineInstance);
             if (roster == null) {
-                return "{\"error\":\"No roster loaded\"}";
+                return errorJson("No roster loaded");
             }
-            return serializeRoster(roster);
+            return serializeRoster(roster).toString();
         } catch (Exception e) {
-            String msg = e.getClass().getSimpleName() + ": " + e.getMessage();
-            if (e instanceof java.lang.reflect.InvocationTargetException) {
-                Throwable cause = ((java.lang.reflect.InvocationTargetException) e).getTargetException();
-                if (cause != null) {
-                    msg += " [cause: " + cause.getClass().getSimpleName() + ": " + cause.getMessage() + "]";
-                }
-            }
-            return "{\"error\":\"" + escapeJson(msg) + "\"}";
+            return errorJson(buildExceptionMessage(e));
         }
     }
 
@@ -524,7 +522,7 @@ public class EngineAccessor {
             }
             Method setNameMethod = roster.getClass().getMethod("setName", String.class);
             setNameMethod.invoke(roster, name);
-            return "{\"set\":true}";
+            return jsonBooleanResult("set", true);
         } catch (Exception e) {
             return errorJson("setRosterName: " + e.getMessage());
         }
@@ -565,7 +563,9 @@ public class EngineAccessor {
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream(65536);
             writeMethod.invoke(null, roster, baos);
             String xml = baos.toString("UTF-8");
-            return "{\"xml\":" + jsonStr(xml) + "}";
+            JsonObject response = new JsonObject();
+            response.addProperty("xml", xml);
+            return response.toString();
         } catch (Exception e) {
             return errorJson("exportRosterXml: " + buildExceptionMessage(e));
         }
@@ -579,18 +579,16 @@ public class EngineAccessor {
 
         try {
             Object roster = getCurrentRoster();
+            JsonArray errors = new JsonArray();
             if (roster == null) {
-                return "[]";
+                return errors.toString();
             }
 
-            StringBuilder sb = new StringBuilder("[");
-            boolean[] first = new boolean[] { true };
-            collectValidationErrors(roster, "roster", sb, first);
+            collectValidationErrors(roster, "roster", errors);
             for (Object force : toJavaList(callListGetter(roster, "getForces"))) {
-                collectForceValidationErrors(force, sb, first);
+                collectForceValidationErrors(force, errors);
             }
-            sb.append("]");
-            return sb.toString();
+            return errors.toString();
         } catch (Exception e) {
             return errorJson("getValidationErrors failed: " + buildExceptionMessage(e));
         }
@@ -599,65 +597,50 @@ public class EngineAccessor {
     /**
      * Reads roster state including forces, selections, costs.
      */
-    private String serializeRoster(Object roster) throws Exception {
-        Class<?> rClass = roster.getClass();
-        StringBuilder sb = new StringBuilder("{");
-
-        sb.append("\"name\":").append(jsonStr(callGetter(roster, "getName")));
-        sb.append(",\"gameSystemId\":").append(jsonStr(callGetter(roster, "getGameSystemId")));
-        sb.append(",\"gameSystemName\":").append(jsonStr(callGetter(roster, "getGameSystemName")));
-
-        // Costs
-        sb.append(",\"costs\":").append(serializeCostList(callListGetter(roster, "getCosts")));
-        sb.append(",\"costLimits\":").append(serializeCostList(callListGetter(roster, "getCostLimits")));
-
-        // Forces
-        Object forcesList = callListGetter(roster, "getForces");
-        sb.append(",\"forces\":").append(serializeForceList(forcesList));
-
-        sb.append("}");
-        return sb.toString();
+    private JsonObject serializeRoster(Object roster) throws Exception {
+        JsonObject result = new JsonObject();
+        result.addProperty("name", callGetter(roster, "getName"));
+        result.addProperty("gameSystemId", callGetter(roster, "getGameSystemId"));
+        result.addProperty("gameSystemName", callGetter(roster, "getGameSystemName"));
+        result.add("costs", serializeCostList(callListGetter(roster, "getCosts")));
+        result.add("costLimits", serializeCostList(callListGetter(roster, "getCostLimits")));
+        result.add("forces", serializeForceList(callListGetter(roster, "getForces")));
+        return result;
     }
 
-    private String serializeForceList(Object list) throws Exception {
-        if (list == null) return "[]";
-        StringBuilder sb = new StringBuilder("[");
+    private JsonArray serializeForceList(Object list) throws Exception {
+        JsonArray forces = new JsonArray();
+        if (list == null) return forces;
         int size = (int) list.getClass().getMethod("size").invoke(list);
         for (int i = 0; i < size; i++) {
-            if (i > 0) sb.append(",");
             Object force = list.getClass().getMethod("get", int.class).invoke(list, i);
-            sb.append(serializeForce(force));
+            forces.add(serializeForce(force));
         }
-        sb.append("]");
-        return sb.toString();
+        return forces;
     }
 
-    private String serializeForce(Object force) throws Exception {
-        StringBuilder sb = new StringBuilder("{");
-        sb.append("\"id\":").append(jsonStr(callGetter(force, "getId")));
-        sb.append(",\"name\":").append(jsonStr(callGetter(force, "getName")));
-        sb.append(",\"catalogueId\":").append(jsonStr(callGetter(force, "getCatalogueId")));
-        sb.append(",\"entryId\":").append(jsonStr(callGetter(force, "getEntryId")));
-        sb.append(",\"catalogueName\":").append(jsonStr(callGetter(force, "getCatalogueName")));
-        sb.append(",\"customName\":").append(jsonStr(callGetter(force, "getCustomName")));
-        sb.append(",\"customNotes\":").append(jsonStr(callGetter(force, "getCustomNotes")));
-        sb.append(",\"hidden\":").append(resolveForceHidden(force));
-        sb.append(",\"publicationId\":").append(jsonStr(callGetter(force, "getPublicationId")));
-        sb.append(",\"page\":").append(jsonStr(callGetter(force, "getPage")));
+    private JsonObject serializeForce(Object force) throws Exception {
+        JsonObject result = new JsonObject();
+        result.addProperty("id", callGetter(force, "getId"));
+        result.addProperty("name", callGetter(force, "getName"));
+        result.addProperty("catalogueId", callGetter(force, "getCatalogueId"));
+        result.addProperty("entryId", callGetter(force, "getEntryId"));
+        result.addProperty("catalogueName", callGetter(force, "getCatalogueName"));
+        result.addProperty("customName", callGetter(force, "getCustomName"));
+        result.addProperty("customNotes", callGetter(force, "getCustomNotes"));
+        result.addProperty("hidden", resolveForceHidden(force));
+        result.addProperty("publicationId", callGetter(force, "getPublicationId"));
+        result.addProperty("page", callGetter(force, "getPage"));
 
-        // Rules — Force.getRules() returns List<Rule>
         Object ruleList = callListGetter(force, "getRules");
-        sb.append(",\"rules\":").append(serializeRuleList(ruleList));
+        result.add("rules", serializeRuleList(ruleList));
 
-        // Categories — Force.getCategories() returns List<Category>
         Object catList = callListGetter(force, "getCategories");
-        sb.append(",\"categories\":").append(serializeCategoryList(catList));
+        result.add("categories", serializeCategoryList(catList));
 
-        // Publications — Force.getPublications() returns ArrayList<Publication>
         Object pubList = callListGetter(force, "getPublications");
-        sb.append(",\"publications\":").append(serializePublicationList(pubList));
+        result.add("publications", serializePublicationList(pubList));
 
-        // Build publication name lookup from force publications
         Map<String, String> pubNameMap = new HashMap<String, String>();
         if (pubList != null) {
             int pubSize = (int) pubList.getClass().getMethod("size").invoke(pubList);
@@ -671,17 +654,11 @@ public class EngineAccessor {
             }
         }
 
-        // Selections
-        Object selList = callListGetter(force, "getSelections");
-        sb.append(",\"selections\":").append(serializeSelectionList(selList, pubNameMap, force));
+        result.add("selections", serializeSelectionList(callListGetter(force, "getSelections"), pubNameMap, force));
+        result.add("childForces", serializeForceList(callListGetter(force, "getForces")));
 
-        // Child forces
-        Object childForces = callListGetter(force, "getForces");
-        sb.append(",\"childForces\":").append(serializeForceList(childForces));
-
-        // Debug: dump class name if categories are empty (for troubleshooting)
         if (catList == null) {
-            sb.append(",\"_debug_class\":").append(jsonStr(force.getClass().getName()));
+            result.addProperty("_debug_class", force.getClass().getName());
             StringBuilder methods = new StringBuilder();
             for (Method m : force.getClass().getMethods()) {
                 if (m.getName().startsWith("get") && m.getParameterCount() == 0) {
@@ -689,17 +666,16 @@ public class EngineAccessor {
                     methods.append(m.getName());
                 }
             }
-            sb.append(",\"_debug_methods\":").append(jsonStr(methods.toString()));
+            result.addProperty("_debug_methods", methods.toString());
         }
 
-        sb.append("}");
-        return sb.toString();
+        return result;
     }
 
-    private String serializeSelectionList(Object list, Map<String, String> pubNameMap, Object force) throws Exception {
-        if (list == null) return "[]";
+    private JsonArray serializeSelectionList(Object list, Map<String, String> pubNameMap, Object force) throws Exception {
+        JsonArray selections = new JsonArray();
+        if (list == null) return selections;
         int size = (int) list.getClass().getMethod("size").invoke(list);
-        // Sort selections alphabetically by name (case-insensitive) to match BattleScribe render-layer ordering
         List<Object> items = new ArrayList<Object>(size);
         for (int i = 0; i < size; i++) {
             items.add(list.getClass().getMethod("get", int.class).invoke(list, i));
@@ -713,192 +689,172 @@ public class EngineAccessor {
                 return 0;
             }
         });
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < items.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append(serializeSelection(items.get(i), pubNameMap, force));
+        for (Object item : items) {
+            selections.add(serializeSelection(item, pubNameMap, force));
         }
-        sb.append("]");
-        return sb.toString();
+        return selections;
     }
 
-    private String serializeSelection(Object sel, Map<String, String> pubNameMap, Object force) throws Exception {
-        StringBuilder sb = new StringBuilder("{");
-        sb.append("\"id\":").append(jsonStr(callGetter(sel, "getId")));
-        sb.append(",\"name\":").append(jsonStr(callGetter(sel, "getName")));
-        sb.append(",\"entryId\":").append(jsonStr(callGetter(sel, "getEntryId")));
-        sb.append(",\"entryGroupId\":").append(jsonStr(callGetter(sel, "getEntryGroupId")));
-        sb.append(",\"page\":").append(jsonStr(callGetter(sel, "getPage")));
+    private JsonObject serializeSelection(Object sel, Map<String, String> pubNameMap, Object force) throws Exception {
+        JsonObject result = new JsonObject();
+        result.addProperty("id", callGetter(sel, "getId"));
+        result.addProperty("name", callGetter(sel, "getName"));
+        result.addProperty("entryId", callGetter(sel, "getEntryId"));
+        result.addProperty("entryGroupId", callGetter(sel, "getEntryGroupId"));
+        result.addProperty("page", callGetter(sel, "getPage"));
         String pubId = callGetter(sel, "getPublicationId");
-        sb.append(",\"publicationId\":").append(jsonStr(pubId));
-        sb.append(",\"publicationName\":").append(jsonStr(pubId != null ? pubNameMap.get(pubId) : null));
-        sb.append(",\"customName\":").append(jsonStr(callGetter(sel, "getCustomName")));
-        sb.append(",\"customNotes\":").append(jsonStr(callGetter(sel, "getCustomNotes")));
-        sb.append(",\"categories\":").append(serializeCategoryList(callListGetter(sel, "getCategories")));
-        sb.append(",\"profiles\":").append(serializeProfileList(callListGetter(sel, "getProfiles")));
-        sb.append(",\"rules\":").append(serializeRuleList(callListGetter(sel, "getRules")));
+        result.addProperty("publicationId", pubId);
+        result.addProperty("publicationName", pubId != null ? pubNameMap.get(pubId) : null);
+        result.addProperty("customName", callGetter(sel, "getCustomName"));
+        result.addProperty("customNotes", callGetter(sel, "getCustomNotes"));
+        result.add("categories", serializeCategoryList(callListGetter(sel, "getCategories")));
+        result.add("profiles", serializeProfileList(callListGetter(sel, "getProfiles")));
+        result.add("rules", serializeRuleList(callListGetter(sel, "getRules")));
 
-        // Type (enum → lowercase name)
         try {
             Method m = sel.getClass().getMethod("getType");
             Object type = m.invoke(sel);
-            sb.append(",\"type\":").append(jsonStr(type != null ? type.toString().toLowerCase() : null));
+            result.addProperty("type", type != null ? type.toString().toLowerCase() : null);
         } catch (Exception e) {
-            sb.append(",\"type\":null");
+            result.add("type", JsonNull.INSTANCE);
         }
 
-        // Number (getNumber returns int)
         try {
             Method m = sel.getClass().getMethod("getNumber");
-            sb.append(",\"number\":").append(m.invoke(sel));
+            Object number = m.invoke(sel);
+            if (number instanceof Number) {
+                result.addProperty("number", (Number) number);
+            } else {
+                result.addProperty("number", 1);
+            }
         } catch (Exception e) {
-            sb.append(",\"number\":1");
+            result.addProperty("number", 1);
         }
 
-        boolean selHidden = resolveSelectionHidden(force, sel);
-        sb.append(",\"hidden\":").append(selHidden);
-
-        // Costs
-        sb.append(",\"costs\":").append(serializeCostList(callListGetter(sel, "getCosts")));
-
-        // Child selections
-        Object children = callListGetter(sel, "getSelections");
-        sb.append(",\"children\":").append(serializeSelectionList(children, pubNameMap, force));
-
-        sb.append("}");
-        return sb.toString();
+        result.addProperty("hidden", resolveSelectionHidden(force, sel));
+        result.add("costs", serializeCostList(callListGetter(sel, "getCosts")));
+        result.add("children", serializeSelectionList(callListGetter(sel, "getSelections"), pubNameMap, force));
+        return result;
     }
 
-    private String serializeCostList(Object list) throws Exception {
-        if (list == null) return "[]";
-        StringBuilder sb = new StringBuilder("[");
+    private JsonArray serializeCostList(Object list) throws Exception {
+        JsonArray costs = new JsonArray();
+        if (list == null) return costs;
         int size = (int) list.getClass().getMethod("size").invoke(list);
         for (int i = 0; i < size; i++) {
-            if (i > 0) sb.append(",");
             Object cost = list.getClass().getMethod("get", int.class).invoke(list, i);
-            sb.append("{");
-            sb.append("\"name\":").append(jsonStr(callGetter(cost, "getName")));
-            sb.append(",\"typeId\":").append(jsonStr(callGetter(cost, "getTypeId")));
+            JsonObject item = new JsonObject();
+            item.addProperty("name", callGetter(cost, "getName"));
+            item.addProperty("typeId", callGetter(cost, "getTypeId"));
             try {
                 Method m = cost.getClass().getMethod("getValue");
-                sb.append(",\"value\":").append(m.invoke(cost));
+                Object value = m.invoke(cost);
+                if (value instanceof Number) {
+                    item.addProperty("value", (Number) value);
+                } else {
+                    item.addProperty("value", 0);
+                }
             } catch (Exception e) {
-                sb.append(",\"value\":0");
+                item.addProperty("value", 0);
             }
-            sb.append("}");
+            costs.add(item);
         }
-        sb.append("]");
-        return sb.toString();
+        return costs;
     }
 
-    private String serializeCategoryList(Object list) throws Exception {
-        if (list == null) return "[]";
-        StringBuilder sb = new StringBuilder("[");
+    private JsonArray serializeCategoryList(Object list) throws Exception {
+        JsonArray categoriesJson = new JsonArray();
+        if (list == null) return categoriesJson;
         List<Object> categories = toJavaList(list);
-        for (int i = 0; i < categories.size(); i++) {
-            if (i > 0) sb.append(",");
-            Object category = categories.get(i);
-            sb.append("{");
-            sb.append("\"name\":").append(jsonStr(callGetter(category, "getName")));
-            sb.append(",\"entryId\":").append(jsonStr(callGetter(category, "getEntryId")));
+        for (Object category : categories) {
+            JsonObject item = new JsonObject();
+            item.addProperty("name", callGetter(category, "getName"));
+            item.addProperty("entryId", callGetter(category, "getEntryId"));
             try {
                 Method m = findMethod(category.getClass(), "isPrimary");
-                sb.append(",\"primary\":").append(m != null ? m.invoke(category) : false);
+                item.addProperty("primary", m != null && Boolean.TRUE.equals(m.invoke(category)));
             } catch (Exception e) {
-                sb.append(",\"primary\":false");
+                item.addProperty("primary", false);
             }
-            sb.append(",\"customNotes\":").append(jsonStr(callGetter(category, "getCustomNotes")));
-            sb.append(",\"publicationId\":").append(jsonStr(callGetter(category, "getPublicationId")));
-            sb.append(",\"page\":").append(jsonStr(callGetter(category, "getPage")));
-            sb.append("}");
+            item.addProperty("customNotes", callGetter(category, "getCustomNotes"));
+            item.addProperty("publicationId", callGetter(category, "getPublicationId"));
+            item.addProperty("page", callGetter(category, "getPage"));
+            categoriesJson.add(item);
         }
-        sb.append("]");
-        return sb.toString();
+        return categoriesJson;
     }
 
-    private String serializePublicationList(Object list) throws Exception {
-        if (list == null) return "[]";
-        StringBuilder sb = new StringBuilder("[");
+    private JsonArray serializePublicationList(Object list) throws Exception {
+        JsonArray publicationsJson = new JsonArray();
+        if (list == null) return publicationsJson;
         List<Object> publications = toJavaList(list);
-        for (int i = 0; i < publications.size(); i++) {
-            if (i > 0) sb.append(",");
-            Object publication = publications.get(i);
-            sb.append("{");
-            sb.append("\"id\":").append(jsonStr(callGetter(publication, "getId")));
-            sb.append(",\"name\":").append(jsonStr(callGetter(publication, "getName")));
-            sb.append("}");
+        for (Object publication : publications) {
+            JsonObject item = new JsonObject();
+            item.addProperty("id", callGetter(publication, "getId"));
+            item.addProperty("name", callGetter(publication, "getName"));
+            publicationsJson.add(item);
         }
-        sb.append("]");
-        return sb.toString();
+        return publicationsJson;
     }
 
-    private String serializeProfileList(Object list) throws Exception {
-        if (list == null) return "[]";
-        StringBuilder sb = new StringBuilder("[");
+    private JsonArray serializeProfileList(Object list) throws Exception {
+        JsonArray profilesJson = new JsonArray();
+        if (list == null) return profilesJson;
         List<Object> profiles = toJavaList(list);
-        for (int i = 0; i < profiles.size(); i++) {
-            if (i > 0) sb.append(",");
-            Object profile = profiles.get(i);
-            sb.append("{");
-            sb.append("\"name\":").append(jsonStr(callGetter(profile, "getName")));
-            sb.append(",\"typeId\":").append(jsonStr(callGetter(profile, "getTypeId")));
-            sb.append(",\"typeName\":").append(jsonStr(callGetter(profile, "getTypeName")));
+        for (Object profile : profiles) {
+            JsonObject item = new JsonObject();
+            item.addProperty("name", callGetter(profile, "getName"));
+            item.addProperty("typeId", callGetter(profile, "getTypeId"));
+            item.addProperty("typeName", callGetter(profile, "getTypeName"));
             try {
                 Method m = findMethod(profile.getClass(), "isHidden");
-                sb.append(",\"hidden\":").append(m != null ? m.invoke(profile) : false);
+                item.addProperty("hidden", m != null && Boolean.TRUE.equals(m.invoke(profile)));
             } catch (Exception e) {
-                sb.append(",\"hidden\":false");
+                item.addProperty("hidden", false);
             }
-            sb.append(",\"page\":").append(jsonStr(callGetter(profile, "getPage")));
-            sb.append(",\"publicationId\":").append(jsonStr(callGetter(profile, "getPublicationId")));
-            sb.append(",\"publicationName\":").append(jsonStr(callGetter(profile, "getPublicationName")));
-            sb.append(",\"characteristics\":").append(serializeCharacteristicList(callListGetter(profile, "getCharacteristics")));
-            sb.append("}");
+            item.addProperty("page", callGetter(profile, "getPage"));
+            item.addProperty("publicationId", callGetter(profile, "getPublicationId"));
+            item.addProperty("publicationName", callGetter(profile, "getPublicationName"));
+            item.add("characteristics", serializeCharacteristicList(callListGetter(profile, "getCharacteristics")));
+            profilesJson.add(item);
         }
-        sb.append("]");
-        return sb.toString();
+        return profilesJson;
     }
 
-    private String serializeRuleList(Object list) throws Exception {
-        if (list == null) return "[]";
-        StringBuilder sb = new StringBuilder("[");
+    private JsonArray serializeRuleList(Object list) throws Exception {
+        JsonArray rulesJson = new JsonArray();
+        if (list == null) return rulesJson;
         List<Object> rules = toJavaList(list);
-        for (int i = 0; i < rules.size(); i++) {
-            if (i > 0) sb.append(",");
-            Object rule = rules.get(i);
-            sb.append("{");
-            sb.append("\"name\":").append(jsonStr(callGetter(rule, "getName")));
-            sb.append(",\"description\":").append(jsonStr(callGetter(rule, "getDescription")));
+        for (Object rule : rules) {
+            JsonObject item = new JsonObject();
+            item.addProperty("name", callGetter(rule, "getName"));
+            item.addProperty("description", callGetter(rule, "getDescription"));
             try {
                 Method m = findMethod(rule.getClass(), "isHidden");
-                sb.append(",\"hidden\":").append(m != null ? m.invoke(rule) : false);
+                item.addProperty("hidden", m != null && Boolean.TRUE.equals(m.invoke(rule)));
             } catch (Exception e) {
-                sb.append(",\"hidden\":false");
+                item.addProperty("hidden", false);
             }
-            sb.append(",\"page\":").append(jsonStr(callGetter(rule, "getPage")));
-            sb.append(",\"publicationId\":").append(jsonStr(callGetter(rule, "getPublicationId")));
-            sb.append(",\"publicationName\":").append(jsonStr(callGetter(rule, "getPublicationName")));
-            sb.append("}");
+            item.addProperty("page", callGetter(rule, "getPage"));
+            item.addProperty("publicationId", callGetter(rule, "getPublicationId"));
+            item.addProperty("publicationName", callGetter(rule, "getPublicationName"));
+            rulesJson.add(item);
         }
-        sb.append("]");
-        return sb.toString();
+        return rulesJson;
     }
 
-    private String serializeCharacteristicList(Object list) throws Exception {
-        if (list == null) return "[]";
-        StringBuilder sb = new StringBuilder("[");
+    private JsonArray serializeCharacteristicList(Object list) throws Exception {
+        JsonArray characteristicsJson = new JsonArray();
+        if (list == null) return characteristicsJson;
         List<Object> characteristics = toJavaList(list);
-        for (int i = 0; i < characteristics.size(); i++) {
-            if (i > 0) sb.append(",");
-            Object characteristic = characteristics.get(i);
-            sb.append("{");
-            sb.append("\"name\":").append(jsonStr(callGetter(characteristic, "getName")));
-            sb.append(",\"typeId\":").append(jsonStr(callGetter(characteristic, "getTypeId")));
-            sb.append(",\"value\":").append(jsonStr(callGetter(characteristic, "getValue")));
-            sb.append("}");
+        for (Object characteristic : characteristics) {
+            JsonObject item = new JsonObject();
+            item.addProperty("name", callGetter(characteristic, "getName"));
+            item.addProperty("typeId", callGetter(characteristic, "getTypeId"));
+            item.addProperty("value", callGetter(characteristic, "getValue"));
+            characteristicsJson.add(item);
         }
-        sb.append("]");
-        return sb.toString();
+        return characteristicsJson;
     }
 
     // --- Reflection helpers ---
@@ -1673,60 +1629,56 @@ public class EngineAccessor {
         return null;
     }
 
-    private void collectForceValidationErrors(Object force, StringBuilder sb, boolean[] first) throws Exception {
-        collectValidationErrors(force, "force", sb, first);
+    private void collectForceValidationErrors(Object force, JsonArray errors) throws Exception {
+        collectValidationErrors(force, "force", errors);
         for (Object category : toJavaList(callListGetter(force, "getCategories"))) {
-            collectValidationErrors(category, "category", sb, first);
+            collectValidationErrors(category, "category", errors);
         }
         for (Object selection : toJavaList(callListGetter(force, "getSelections"))) {
-            collectSelectionValidationErrors(selection, sb, first);
+            collectSelectionValidationErrors(selection, errors);
         }
         for (Object childForce : toJavaList(callListGetter(force, "getForces"))) {
-            collectForceValidationErrors(childForce, sb, first);
+            collectForceValidationErrors(childForce, errors);
         }
     }
 
-    private void collectSelectionValidationErrors(Object selection, StringBuilder sb, boolean[] first) throws Exception {
-        collectValidationErrors(selection, "selection", sb, first);
+    private void collectSelectionValidationErrors(Object selection, JsonArray errors) throws Exception {
+        collectValidationErrors(selection, "selection", errors);
         for (Object category : toJavaList(callListGetter(selection, "getCategories"))) {
-            collectValidationErrors(category, "category", sb, first);
+            collectValidationErrors(category, "category", errors);
         }
         for (Object child : toJavaList(callListGetter(selection, "getSelections"))) {
-            collectSelectionValidationErrors(child, sb, first);
+            collectSelectionValidationErrors(child, errors);
         }
     }
 
-    private void collectValidationErrors(Object element, String ownerType, StringBuilder sb, boolean[] first)
+    private void collectValidationErrors(Object element, String ownerType, JsonArray errors)
             throws Exception {
-        Object errors = callListGetter(element, "getValidationErrors");
+        Object elementErrors = callListGetter(element, "getValidationErrors");
         Object errorIds = callListGetter(element, "getValidationErrorIds");
         List<String> errorIdList = extractStrings(errorIds);
         Map<String, List<String>> errorIdMap = parseValidationErrorIds(errorIdList);
         String ownerEntryId = callGetter(element, "getEntryId");
-        for (Object error : toJavaList(errors)) {
-            if (!first[0]) {
-                sb.append(",");
-            }
-            first[0] = false;
+        for (Object error : toJavaList(elementErrors)) {
             String message = extractValidationMessage(error);
             ValidationRef validationRef = resolveValidationRef(errorIdMap, ownerType, message, ownerEntryId);
-            sb.append("{");
-            sb.append("\"message\":").append(jsonStr(message));
-            sb.append(",\"ownerType\":").append(jsonStr(ownerType));
-            sb.append(",\"ownerId\":").append(jsonStr(callGetter(element, "getId")));
+            JsonObject item = new JsonObject();
+            item.addProperty("message", message);
+            item.addProperty("ownerType", ownerType);
+            item.addProperty("ownerId", callGetter(element, "getId"));
             if (ownerEntryId != null) {
-                sb.append(",\"ownerEntryId\":").append(jsonStr(ownerEntryId));
+                item.addProperty("ownerEntryId", ownerEntryId);
             }
             if (validationRef.entryId != null) {
-                sb.append(",\"entryId\":").append(jsonStr(validationRef.entryId));
+                item.addProperty("entryId", validationRef.entryId);
             }
             if (validationRef.constraintId != null) {
-                sb.append(",\"constraintId\":").append(jsonStr(validationRef.constraintId));
+                item.addProperty("constraintId", validationRef.constraintId);
             }
             if (!errorIdList.isEmpty()) {
-                sb.append(",\"errorIds\":").append(serializeStringList(errorIdList));
+                item.add("errorIds", toJsonArray(errorIdList));
             }
-            sb.append("}");
+            errors.add(item);
         }
     }
 
@@ -1950,20 +1902,24 @@ public class EngineAccessor {
         }
     }
 
-    private String serializeStringList(List<String> values) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < values.size(); i++) {
-            if (i > 0) {
-                sb.append(",");
-            }
-            sb.append(jsonStr(values.get(i)));
+    private JsonArray toJsonArray(List<String> values) {
+        JsonArray array = new JsonArray();
+        for (String value : values) {
+            array.add(value);
         }
-        sb.append("]");
-        return sb.toString();
+        return array;
     }
 
     private String errorJson(String message) {
-        return "{\"error\":" + jsonStr(message) + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("error", message);
+        return response.toString();
+    }
+
+    private String jsonBooleanResult(String key, boolean value) {
+        JsonObject response = new JsonObject();
+        response.addProperty(key, value);
+        return response.toString();
     }
 
     private String buildExceptionMessage(Exception e) {
@@ -2332,7 +2288,7 @@ public class EngineAccessor {
                         Method m = findMethod(cat.getClass(), "setCustomNotes", 1);
                         if (m != null) m.invoke(cat, customNotes);
                     }
-                    return "{\"set\":true}";
+                    return jsonBooleanResult("set", true);
                 }
             }
             return errorJson("Category '" + categoryEntryId + "' not found in force.");
@@ -2423,7 +2379,7 @@ public class EngineAccessor {
                     }
                 });
 
-                return "{\"added\":true}";
+                return jsonBooleanResult("added", true);
             }
 
             // Root force: engine.b(gameSystem, catalogue, linkedCats, forceEntry, favourites, errors)
@@ -2446,7 +2402,7 @@ public class EngineAccessor {
                 }
             });
 
-            return "{\"added\":true}";
+            return jsonBooleanResult("added", true);
         } catch (Exception e) {
             return errorJson("addForceViaEngine: " + e.getMessage());
         }
@@ -2485,7 +2441,7 @@ public class EngineAccessor {
                 }
             });
 
-            return "{\"removed\":true}";
+            return jsonBooleanResult("removed", true);
         } catch (Exception e) {
             return errorJson("removeForceViaEngine: " + e.getMessage());
         }
@@ -2605,7 +2561,7 @@ public class EngineAccessor {
                 }
             });
 
-            return "{\"selected\":true}";
+            return jsonBooleanResult("selected", true);
         } catch (Exception e) {
             return errorJson("selectEntryViaEngine: " + e.getMessage());
         }
@@ -2670,7 +2626,7 @@ public class EngineAccessor {
                 }
             });
 
-            return "{\"deselected\":true}";
+            return jsonBooleanResult("deselected", true);
         } catch (Exception e) {
             return errorJson("deselectEntryViaEngine: " + e.getMessage());
         }
@@ -2727,7 +2683,11 @@ public class EngineAccessor {
                     + " entry=" + dataEntry.getClass().getSimpleName());
 
             if (delta == 0) {
-                return "{\"set\":true,\"count\":" + count + ",\"delta\":0}";
+                JsonObject response = new JsonObject();
+                response.addProperty("set", true);
+                response.addProperty("count", count);
+                response.addProperty("delta", 0);
+                return response.toString();
             }
 
             if (delta > 0) {
@@ -2775,7 +2735,11 @@ public class EngineAccessor {
                 });
             }
 
-            return "{\"set\":true,\"count\":" + count + ",\"delta\":" + delta + "}";
+            JsonObject response = new JsonObject();
+            response.addProperty("set", true);
+            response.addProperty("count", count);
+            response.addProperty("delta", delta);
+            return response.toString();
         } catch (Exception e) {
             return errorJson("setSelectionCount: " + e.getMessage());
         }
@@ -2832,7 +2796,11 @@ public class EngineAccessor {
                 }
             });
 
-            return "{\"set\":true,\"costTypeId\":" + jsonStr(costTypeId) + ",\"value\":" + value + "}";
+            JsonObject response = new JsonObject();
+            response.addProperty("set", true);
+            response.addProperty("costTypeId", costTypeId);
+            response.addProperty("value", value);
+            return response.toString();
         } catch (Exception e) {
             return errorJson("setCostLimit: " + e.getMessage());
         }
@@ -3287,23 +3255,9 @@ public class EngineAccessor {
     }
 
     private String buildPatchResult(boolean patched, List<String> log) {
-        StringBuilder sb = new StringBuilder("{\"patched\":").append(patched).append(",\"log\":[");
-        for (int i = 0; i < log.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append("\"").append(escapeJson(log.get(i))).append("\"");
-        }
-        sb.append("]}");
-        return sb.toString();
-    }
-
-    private static String jsonStr(String value) {
-        if (value == null) return "null";
-        return "\"" + escapeJson(value) + "\"";
-    }
-
-    private static String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+        JsonObject response = new JsonObject();
+        response.addProperty("patched", patched);
+        response.add("log", toJsonArray(log));
+        return response.toString();
     }
 }

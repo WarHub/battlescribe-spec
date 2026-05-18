@@ -1,6 +1,7 @@
 package bsspec.uiagent;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -178,16 +179,29 @@ public class JsonRpcServer {
     }
 
     static String successResponse(String id, String result) {
-        return "{\"jsonrpc\":\"2.0\",\"id\":" + formatId(id) + ",\"result\":" + result + "}";
+        JsonObject response = new JsonObject();
+        response.addProperty("jsonrpc", "2.0");
+        response.add("id", parseJsonValue(id));
+        response.add("result", parseJsonValue(result));
+        return response.toString();
     }
 
     static String errorResponse(String id, int code, String message) {
-        String escapedMsg = message.replace("\\", "\\\\").replace("\"", "\\\"");
-        return "{\"jsonrpc\":\"2.0\",\"id\":" + formatId(id)
-                + ",\"error\":{\"code\":" + code + ",\"message\":\"" + escapedMsg + "\"}}";
+        JsonObject response = new JsonObject();
+        response.addProperty("jsonrpc", "2.0");
+        response.add("id", parseJsonValue(id));
+
+        JsonObject error = new JsonObject();
+        error.addProperty("code", code);
+        error.addProperty("message", message);
+        response.add("error", error);
+        return response.toString();
     }
 
-    private static String formatId(String id) {
-        return id == null ? "null" : id;
+    private static JsonElement parseJsonValue(String json) {
+        if (json == null) {
+            return JsonNull.INSTANCE;
+        }
+        return new JsonParser().parse(json);
     }
 }
