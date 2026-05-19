@@ -208,6 +208,7 @@ public class RosterActions {
         String catalogueId = requireString(p, "catalogueId");
         String gameSystemName = requireString(p, "gameSystemName");
         int costLimit = getIntParam(p, "costLimit", -1);
+        String rosterName = getStringParam(p, "rosterName", null);
 
         // Fire "New Roster" button (async because it opens a modal dialog)
         runOnFx(() -> fireButtonAsync("#btnNewRoster", MAIN_WINDOW));
@@ -245,8 +246,17 @@ public class RosterActions {
         runOnFx(() -> fireButtonAsync("#btnDone", NEW_ROSTER_WINDOW));
         waitForWindowClose(NEW_ROSTER_WINDOW);
 
-        // Wait for engine to be available and read state
+        // Wait for engine to be available and set roster name via UI
         waitForEngineAvailable();
+        if (rosterName != null && !rosterName.isEmpty()) {
+            runOnFx(() -> openEditRoster());
+            waitForWindow(EDIT_ROSTER_WINDOW);
+            runOnFx(() -> {
+                setTextField(EDIT_ROSTER_WINDOW, rosterName, "#txtName");
+            });
+            runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
+            waitForWindowClose(EDIT_ROSTER_WINDOW);
+        }
         JsonObject after = readRosterState();
 
         // The first force is the only force
@@ -271,7 +281,7 @@ public class RosterActions {
         JsonObject before = readRosterState();
 
         // Open Edit Roster dialog
-        runOnFx(() -> fireButtonAsync("#btnEditRoster", MAIN_WINDOW));
+        runOnFx(() -> openEditRoster());
         waitForWindow(EDIT_ROSTER_WINDOW);
 
         // Open Add Force sub-dialog
@@ -311,7 +321,7 @@ public class RosterActions {
         JsonObject before = readRosterState();
 
         // Open Edit Roster, select parent force
-        runOnFx(() -> fireButtonAsync("#btnEditRoster", MAIN_WINDOW));
+        runOnFx(() -> openEditRoster());
         waitForWindow(EDIT_ROSTER_WINDOW);
 
         runOnFx(() -> selectTreeItemById("#treeForces", parentForceId, EDIT_ROSTER_WINDOW));
@@ -354,7 +364,7 @@ public class RosterActions {
         }
 
         // Open Edit Roster
-        runOnFx(() -> fireButtonAsync("#btnEditRoster", MAIN_WINDOW));
+        runOnFx(() -> openEditRoster());
         waitForWindow(EDIT_ROSTER_WINDOW);
 
         // Click the remove button on the force's tree cell (fires async, triggers confirm dialog)
@@ -395,7 +405,7 @@ public class RosterActions {
         if (value < 0) throw new RuntimeException("value must be >= 0");
 
         // Open Edit Roster
-        runOnFx(() -> fireButtonAsync("#btnEditRoster", MAIN_WINDOW));
+        runOnFx(() -> openEditRoster());
         waitForWindow(EDIT_ROSTER_WINDOW);
 
         // Set cost limit spinner by name
@@ -414,7 +424,9 @@ public class RosterActions {
 
     /**
      * Sets custom name and/or notes on a force or selection.
-     * Opens the customization dialog via the Customise Name button.
+     * Uses direct reflection to call showCustomiseSelectableDialog() on the
+     * RosterEditorWindowController, bypassing the supporter check entirely.
+     * The context menu code path in BS desktop proves this method works without supporter status.
      *
      * @param params JSON: {forceId, selectionId (optional), customName (optional), customNotes (optional)}
      */
@@ -433,11 +445,13 @@ public class RosterActions {
         runOnFx(() -> selectTreeItemById("#treeRoster", targetId, MAIN_WINDOW));
         sleep(300);
 
-        // Click the Customise Name button (async — it opens a modal)
-        runOnFx(() -> fireButtonAsync("#btnCustomiseName", MAIN_WINDOW));
+        // Call showCustomiseSelectableDialog via reflection on the controller.
+        // This is the same code path as the context menu "Customise Name..." item,
+        // which has NO supporter check (unlike the edit panel button).
+        runOnFx(() -> invokeShowCustomiseDialog(MAIN_WINDOW));
         sleep(500);
 
-        // Wait for the customization dialog — could be "Customise" or similar title
+        // Wait for the customization dialog
         String customizeWindow = waitForFirstWindow("Customise", "Customize", "Name");
         if (customizeWindow == null) {
             throw new RuntimeException("Customization dialog did not appear");
@@ -470,6 +484,63 @@ public class RosterActions {
     }
 
     /**
+     * Invokes showCustomiseSelectableDialog on the RosterEditorWindowController
+     * by getting the currently selected object from treeRoster and passing it.
+     * Uses Platform.runLater because showCustomiseSelectableDialog calls showAndWait()
+     * which blocks the FX thread until the dialog is closed.
+     * Must be called from the FX thread.
+     */
+    private void invokeShowCustomiseDialog(String windowTitle) {
+        Object controller = engineAccessor.getControllerInstance();
+        if (controller == null) {
+            throw new RuntimeException("Controller instance not available");
+        }
+
+        try {
+            // Get treeRoster field from controller
+            Scene scene = findScene(windowTitle);
+            if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+            Node treeNode = scene.getRoot().lookup("#treeRoster");
+            if (treeNode == null) throw new RuntimeException("#treeRoster not found");
+
+            // Call getSelectedObject() on the SortedTreeView
+            Method getSelectedObject = treeNode.getClass().getMethod("getSelectedObject");
+            Object selectedObject = getSelectedObject.invoke(treeNode);
+            if (selectedObject == null) {
+                throw new RuntimeException("No object selected in treeRoster");
+            }
+
+            // Find showCustomiseSelectableDialog method
+            Method showDialog = null;
+            for (Method m : controller.getClass().getMethods()) {
+                if (m.getName().equals("showCustomiseSelectableDialog") && m.getParameterCount() == 1) {
+                    showDialog = m;
+                    break;
+                }
+            }
+            if (showDialog == null) {
+                throw new RuntimeException("showCustomiseSelectableDialog method not found on controller");
+            }
+
+            // Use Platform.runLater because showCustomiseSelectableDialog calls showAndWait()
+            // which blocks the FX thread (modal dialog nested event loop).
+            final Method dialog = showDialog;
+            final Object selected = selectedObject;
+            Platform.runLater(() -> {
+                try {
+                    dialog.invoke(controller, selected);
+                } catch (Exception e) {
+                    throw new RuntimeException("showCustomiseSelectableDialog invocation failed: " + e.getMessage(), e);
+                }
+            });
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to invoke showCustomiseSelectableDialog: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Waits for the first window matching any of the given title substrings.
      * Returns the matched window title, or null if timeout.
      */
@@ -499,6 +570,7 @@ public class RosterActions {
 
     /**
      * Sets a TextField identified by CSS selectors. Tries each selector in order.
+     * After setting text, fires a synthetic KeyEvent to trigger any onKeyReleased handlers.
      * Must be called from the FX thread.
      */
     private void setTextField(String windowTitle, String text, String... selectors) {
@@ -509,6 +581,7 @@ public class RosterActions {
             Node node = scene.getRoot().lookup(selector);
             if (node instanceof TextField) {
                 ((TextField) node).setText(text);
+                fireKeyReleased(node);
                 return;
             }
         }
@@ -516,6 +589,7 @@ public class RosterActions {
         for (Node n : scene.getRoot().lookupAll("TextField")) {
             if (n instanceof TextField) {
                 ((TextField) n).setText(text);
+                fireKeyReleased(n);
                 return;
             }
         }
@@ -524,6 +598,7 @@ public class RosterActions {
 
     /**
      * Sets a TextArea identified by CSS selectors. Tries each selector in order.
+     * After setting text, fires a synthetic KeyEvent to trigger any onKeyReleased handlers.
      * Must be called from the FX thread.
      */
     private void setTextArea(String windowTitle, String text, String... selectors) {
@@ -534,6 +609,7 @@ public class RosterActions {
             Node node = scene.getRoot().lookup(selector);
             if (node instanceof TextArea) {
                 ((TextArea) node).setText(text);
+                fireKeyReleased(node);
                 return;
             }
         }
@@ -541,10 +617,23 @@ public class RosterActions {
         for (Node n : scene.getRoot().lookupAll("TextArea")) {
             if (n instanceof TextArea) {
                 ((TextArea) n).setText(text);
+                fireKeyReleased(n);
                 return;
             }
         }
         throw new RuntimeException("TextArea not found in " + windowTitle);
+    }
+
+    /**
+     * Fires a synthetic KEY_RELEASED event on a node to trigger onKeyReleased handlers.
+     * BattleScribe's CustomiseSelectionWindowController uses onKeyReleased to persist
+     * text field values back to the model object.
+     */
+    private void fireKeyReleased(Node node) {
+        KeyEvent released = new KeyEvent(
+                KeyEvent.KEY_RELEASED, "", "", KeyCode.SPACE,
+                false, false, false, false);
+        node.fireEvent(released);
     }
 
     /**
@@ -1247,6 +1336,35 @@ public class RosterActions {
     }
 
     /**
+     * Opens the Edit Roster dialog by clicking the #btnEditRoster label.
+     * In BattleScribe, #btnEditRoster is a Label with onMouseClicked (NOT a Button),
+     * so we fire mouse click events on it. Uses Platform.runLater because
+     * the click handler opens a modal dialog (showAndWait).
+     * Must be called from the FX thread.
+     */
+    private void openEditRoster() {
+        Scene scene = findScene(MAIN_WINDOW);
+        if (scene == null) throw new RuntimeException("Main window scene not found");
+        Node node = scene.getRoot().lookup("#btnEditRoster");
+        if (node == null) throw new RuntimeException("#btnEditRoster not found in main window");
+
+        // Schedule the click asynchronously — the handler opens a modal showAndWait dialog
+        Platform.runLater(() -> {
+            double x = node.getBoundsInLocal().getWidth() / 2;
+            double y = node.getBoundsInLocal().getHeight() / 2;
+            node.fireEvent(new MouseEvent(MouseEvent.MOUSE_PRESSED,
+                    x, y, x, y, MouseButton.PRIMARY, 1,
+                    false, false, false, false, true, false, false, false, false, false, null));
+            node.fireEvent(new MouseEvent(MouseEvent.MOUSE_RELEASED,
+                    x, y, x, y, MouseButton.PRIMARY, 1,
+                    false, false, false, false, false, false, false, false, false, false, null));
+            node.fireEvent(new MouseEvent(MouseEvent.MOUSE_CLICKED,
+                    x, y, x, y, MouseButton.PRIMARY, 1,
+                    false, false, false, false, false, false, false, false, false, false, null));
+        });
+    }
+
+    /**
      * Fires a ButtonBase by its CSS selector. Uses Platform.runLater internally
      * so the action can open a modal dialog without deadlocking.
      * Must be called from the FX thread.
@@ -1256,11 +1374,8 @@ public class RosterActions {
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
         Node node = scene.getRoot().lookup(selector);
         if (node == null) throw new RuntimeException("Button not found: " + selector + " in " + windowTitle);
-        if (node instanceof ButtonBase) {
-            Platform.runLater(() -> ((ButtonBase) node).fire());
-        } else {
-            throw new RuntimeException("Node " + selector + " is not a ButtonBase: " + node.getClass().getSimpleName());
-        }
+        ButtonBase btn = resolveButton(node, selector);
+        Platform.runLater(btn::fire);
     }
 
     /**
@@ -1271,11 +1386,39 @@ public class RosterActions {
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
         Node node = scene.getRoot().lookup(selector);
         if (node == null) throw new RuntimeException("Button not found: " + selector + " in " + windowTitle);
+        ButtonBase btn = resolveButton(node, selector);
+        btn.fire();
+    }
+
+    /**
+     * Resolves a node to a ButtonBase. If the node itself is a ButtonBase, returns it.
+     * If it's a Label/Node inside a ButtonBase (e.g., the button's text label), walks up
+     * the parent chain to find the enclosing ButtonBase.
+     * If neither works, searches scene for a ButtonBase with the same ID.
+     */
+    private ButtonBase resolveButton(Node node, String selector) {
         if (node instanceof ButtonBase) {
-            ((ButtonBase) node).fire();
-        } else {
-            throw new RuntimeException("Node " + selector + " is not a ButtonBase: " + node.getClass().getSimpleName());
+            return (ButtonBase) node;
         }
+        // Walk parent chain — the node might be a Label inside the Button
+        Node parent = node.getParent();
+        while (parent != null) {
+            if (parent instanceof ButtonBase) {
+                return (ButtonBase) parent;
+            }
+            parent = parent.getParent();
+        }
+        // Fallback: search all nodes matching this selector for a ButtonBase
+        Scene scene = node.getScene();
+        if (scene != null) {
+            for (Node n : scene.getRoot().lookupAll(selector)) {
+                if (n instanceof ButtonBase) {
+                    return (ButtonBase) n;
+                }
+            }
+        }
+        throw new RuntimeException("Node " + selector + " is not a ButtonBase: " + node.getClass().getSimpleName()
+                + " (and no ButtonBase found in parent chain or scene)");
     }
 
     /**
@@ -1912,6 +2055,13 @@ public class RosterActions {
 
     private static int getIntParam(JsonObject params, String key, int defaultValue) {
         return getIntField(params, key, defaultValue);
+    }
+
+    private static String getStringParam(JsonObject params, String key, String defaultValue) {
+        if (params.has(key) && !params.get(key).isJsonNull()) {
+            return params.get(key).getAsString();
+        }
+        return defaultValue;
     }
 
     private static void sleep(int ms) {

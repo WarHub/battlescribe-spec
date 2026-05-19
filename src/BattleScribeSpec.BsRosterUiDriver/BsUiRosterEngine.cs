@@ -2069,6 +2069,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
                     ["forceEntryId"] = forceEntryId,
                     ["catalogueId"] = parameters["catalogueId"]?.GetValue<string>(),
                     ["gameSystemName"] = gameSystemName ?? _gameSystem!.Name,
+                    ["rosterName"] = _specId,
                 };
                 // Apply pending cost limit if any
                 if (_pendingCostLimits.Count == 1)
