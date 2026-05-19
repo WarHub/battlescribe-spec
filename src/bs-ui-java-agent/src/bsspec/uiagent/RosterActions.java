@@ -69,6 +69,14 @@ public class RosterActions {
                 return duplicateForceAction(params);
             case "selectEntryAction":
                 return selectEntryAction(params);
+            case "createRosterAction":
+                return createRosterAction(params);
+            case "addForceAction":
+                return addForceAction(params);
+            case "addChildForceAction":
+                return addChildForceAction(params);
+            case "removeForceAction":
+                return removeForceAction(params);
             default:
                 throw new IllegalArgumentException("Unknown action: " + method);
         }
@@ -172,6 +180,191 @@ public class RosterActions {
 
         JsonObject created = findCreatedSelection(before, after, forceId, null, entryId);
         return buildSelectionOutputs(before, after, created).toString();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Phase 2: Dialog-based actions
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a new roster (first force). Opens the New Roster dialog,
+     * selects game system, optionally sets cost limit, adds a force, and closes.
+     *
+     * @param params JSON: {forceEntryId, catalogueId, gameSystemName, costLimit (optional int)}
+     */
+    public String createRosterAction(String params) {
+        JsonObject p = parseParams(params);
+        String forceEntryId = requireString(p, "forceEntryId");
+        String catalogueId = requireString(p, "catalogueId");
+        String gameSystemName = requireString(p, "gameSystemName");
+        int costLimit = getIntParam(p, "costLimit", -1);
+
+        // Fire "New Roster" button (async because it opens a modal dialog)
+        runOnFx(() -> fireButtonAsync("#btnNewRoster", MAIN_WINDOW));
+        waitForWindow(NEW_ROSTER_WINDOW);
+
+        // Select game system in the combo
+        runOnFx(() -> {
+            selectComboBoxItemByText("#cboGameSystem", gameSystemName, NEW_ROSTER_WINDOW);
+        });
+        sleep(300);
+
+        // Set cost limit if specified
+        if (costLimit >= 0) {
+            runOnFx(() -> {
+                setSpinnerInWindow(NEW_ROSTER_WINDOW, costLimit);
+            });
+        }
+
+        // Open Add Force dialog
+        runOnFx(() -> fireButtonAsync("#btnAddForce", NEW_ROSTER_WINDOW));
+        waitForWindow(ADD_FORCE_WINDOW);
+
+        // Select catalogue and force entry in Add Force dialog
+        runOnFx(() -> {
+            selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW);
+        });
+        sleep(300);
+        runOnFx(() -> {
+            selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
+            fireButton("#btnDone", ADD_FORCE_WINDOW);
+        });
+        waitForWindowClose(ADD_FORCE_WINDOW);
+
+        // Close New Roster dialog
+        runOnFx(() -> fireButtonAsync("#btnDone", NEW_ROSTER_WINDOW));
+        waitForWindowClose(NEW_ROSTER_WINDOW);
+
+        // Wait for engine to be available and read state
+        waitForEngineAvailable();
+        JsonObject after = readRosterState();
+
+        // The first force is the only force
+        JsonArray forces = after.has("forces") ? after.getAsJsonArray("forces") : new JsonArray();
+        if (forces.size() == 0) {
+            throw new RuntimeException("createRosterAction: no forces found after roster creation");
+        }
+        JsonObject createdForce = forces.get(0).getAsJsonObject();
+        return buildForceOutputs(createdForce).toString();
+    }
+
+    /**
+     * Adds a force via the Edit Roster dialog (roster already exists).
+     *
+     * @param params JSON: {forceEntryId, catalogueId}
+     */
+    public String addForceAction(String params) {
+        JsonObject p = parseParams(params);
+        String forceEntryId = requireString(p, "forceEntryId");
+        String catalogueId = requireString(p, "catalogueId");
+
+        JsonObject before = readRosterState();
+
+        // Open Edit Roster dialog
+        runOnFx(() -> fireButtonAsync("#btnEditRoster", MAIN_WINDOW));
+        waitForWindow(EDIT_ROSTER_WINDOW);
+
+        // Open Add Force sub-dialog
+        runOnFx(() -> fireButtonAsync("#btnAddForce", EDIT_ROSTER_WINDOW));
+        waitForWindow(ADD_FORCE_WINDOW);
+
+        // Select catalogue and force entry
+        runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW));
+        sleep(300);
+        runOnFx(() -> {
+            selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
+            fireButton("#btnDone", ADD_FORCE_WINDOW);
+        });
+        waitForWindowClose(ADD_FORCE_WINDOW);
+
+        // Close Edit Roster
+        runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
+        waitForWindowClose(EDIT_ROSTER_WINDOW);
+
+        // Poll for new force
+        JsonObject after = waitForStateChange(state -> findNewForce(before, state) != null);
+        JsonObject createdForce = findNewForce(before, after);
+        return buildForceOutputs(createdForce).toString();
+    }
+
+    /**
+     * Adds a child force under a parent force.
+     *
+     * @param params JSON: {parentForceId, forceEntryId, catalogueId}
+     */
+    public String addChildForceAction(String params) {
+        JsonObject p = parseParams(params);
+        String parentForceId = requireString(p, "parentForceId");
+        String forceEntryId = requireString(p, "forceEntryId");
+        String catalogueId = requireString(p, "catalogueId");
+
+        JsonObject before = readRosterState();
+
+        // Open Edit Roster, select parent force
+        runOnFx(() -> fireButtonAsync("#btnEditRoster", MAIN_WINDOW));
+        waitForWindow(EDIT_ROSTER_WINDOW);
+
+        runOnFx(() -> selectTreeItemById("#treeForces", parentForceId, EDIT_ROSTER_WINDOW));
+
+        // Add Force
+        runOnFx(() -> fireButtonAsync("#btnAddForce", EDIT_ROSTER_WINDOW));
+        waitForWindow(ADD_FORCE_WINDOW);
+
+        runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW));
+        sleep(300);
+        runOnFx(() -> {
+            selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
+            fireButton("#btnDone", ADD_FORCE_WINDOW);
+        });
+        waitForWindowClose(ADD_FORCE_WINDOW);
+
+        // Close Edit Roster
+        runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
+        waitForWindowClose(EDIT_ROSTER_WINDOW);
+
+        // Poll for new force (child of parent)
+        JsonObject after = waitForStateChange(state -> findNewForce(before, state) != null);
+        JsonObject createdForce = findNewForce(before, after);
+        return buildForceOutputs(createdForce).toString();
+    }
+
+    /**
+     * Removes a force via Edit Roster → click tree cell button (X) → confirm YES.
+     *
+     * @param params JSON: {forceId}
+     */
+    public String removeForceAction(String params) {
+        JsonObject p = parseParams(params);
+        String forceId = requireString(p, "forceId");
+
+        JsonObject before = readRosterState();
+        // Verify force exists
+        if (findForceById(before, forceId) == null) {
+            throw new RuntimeException("Force not found: " + forceId);
+        }
+
+        // Open Edit Roster
+        runOnFx(() -> fireButtonAsync("#btnEditRoster", MAIN_WINDOW));
+        waitForWindow(EDIT_ROSTER_WINDOW);
+
+        // Click the remove button on the force's tree cell (fires async, triggers confirm dialog)
+        runOnFx(() -> clickTreeCellButton("#treeForces", forceId, EDIT_ROSTER_WINDOW));
+        sleep(500);
+
+        // Dismiss confirmation dialog
+        runOnFx(() -> clickButtonByText("YES", CONFIRM_WINDOW));
+
+        // Close Edit Roster
+        sleep(300);
+        runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
+        waitForWindowClose(EDIT_ROSTER_WINDOW);
+
+        // Poll until force is gone
+        waitForStateChange(state -> findForceById(state, forceId) == null);
+
+        JsonObject result = new JsonObject();
+        result.addProperty("removed", true);
+        return result.toString();
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -429,6 +622,260 @@ public class RosterActions {
         target.fireEvent(clicked);
     }
 
+    /**
+     * Fires a ButtonBase by its CSS selector. Uses Platform.runLater internally
+     * so the action can open a modal dialog without deadlocking.
+     * Must be called from the FX thread.
+     */
+    private void fireButtonAsync(String selector, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+        Node node = scene.getRoot().lookup(selector);
+        if (node == null) throw new RuntimeException("Button not found: " + selector + " in " + windowTitle);
+        if (node instanceof ButtonBase) {
+            Platform.runLater(() -> ((ButtonBase) node).fire());
+        } else {
+            throw new RuntimeException("Node " + selector + " is not a ButtonBase: " + node.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Fires a ButtonBase synchronously. Must be called from the FX thread.
+     */
+    private void fireButton(String selector, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+        Node node = scene.getRoot().lookup(selector);
+        if (node == null) throw new RuntimeException("Button not found: " + selector + " in " + windowTitle);
+        if (node instanceof ButtonBase) {
+            ((ButtonBase) node).fire();
+        } else {
+            throw new RuntimeException("Node " + selector + " is not a ButtonBase: " + node.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Selects a ComboBox item by matching the item's getId() method via reflection.
+     * Must be called from the FX thread.
+     */
+    @SuppressWarnings("unchecked")
+    private void selectComboBoxItemById(String selector, String targetId, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+        Node node = scene.getRoot().lookup(selector);
+        if (node == null) throw new RuntimeException("ComboBox not found: " + selector + " in " + windowTitle);
+        if (!(node instanceof ComboBox)) throw new RuntimeException("Not a ComboBox: " + selector);
+
+        ComboBox<Object> combo = (ComboBox<Object>) node;
+        for (int i = 0; i < combo.getItems().size(); i++) {
+            Object item = combo.getItems().get(i);
+            if (item == null) continue;
+            String itemId = getObjectId(item);
+            if (targetId.equals(itemId)) {
+                combo.getSelectionModel().select(i);
+                return;
+            }
+        }
+        // Fallback: try toString().contains(targetId)
+        for (int i = 0; i < combo.getItems().size(); i++) {
+            Object item = combo.getItems().get(i);
+            if (item != null && item.toString().contains(targetId)) {
+                combo.getSelectionModel().select(i);
+                return;
+            }
+        }
+        throw new RuntimeException("ComboBox item with id '" + targetId + "' not found in " + selector);
+    }
+
+    /**
+     * Selects a ComboBox item by matching display text (substring).
+     * Must be called from the FX thread.
+     */
+    @SuppressWarnings("unchecked")
+    private void selectComboBoxItemByText(String selector, String text, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+        Node node = scene.getRoot().lookup(selector);
+        if (node == null) throw new RuntimeException("ComboBox not found: " + selector + " in " + windowTitle);
+        if (!(node instanceof ComboBox)) throw new RuntimeException("Not a ComboBox: " + selector);
+
+        ComboBox<Object> combo = (ComboBox<Object>) node;
+        for (int i = 0; i < combo.getItems().size(); i++) {
+            Object item = combo.getItems().get(i);
+            if (item != null && item.toString().contains(text)) {
+                combo.getSelectionModel().select(i);
+                return;
+            }
+        }
+        // If exact match not found, select first item as fallback
+        if (combo.getItems().size() > 0) {
+            combo.getSelectionModel().select(0);
+        }
+    }
+
+    /**
+     * Gets an object's ID by calling getId() via reflection.
+     */
+    private String getObjectId(Object obj) {
+        try {
+            Method getId = obj.getClass().getMethod("getId");
+            Object result = getId.invoke(obj);
+            return result != null ? result.toString() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Selects a tree item by ID token in a specific window (overload for dialogs).
+     * Must be called from the FX thread.
+     */
+    private void selectTreeItemById(String treeSelector, String id, String windowTitle) {
+        String token = ":" + id + ":";
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+        Node node = scene.getRoot().lookup(treeSelector);
+        if (node == null) throw new RuntimeException("TreeView not found: " + treeSelector + " in " + windowTitle);
+        if (!(node instanceof TreeView)) throw new RuntimeException("Not a TreeView: " + treeSelector);
+
+        @SuppressWarnings("unchecked")
+        TreeView<Object> tree = (TreeView<Object>) node;
+        TreeItem<Object> item = findTreeItemByText(tree.getRoot(), token);
+        if (item == null) throw new RuntimeException("Tree item not found for id: " + id + " in " + windowTitle);
+
+        tree.getSelectionModel().select(item);
+    }
+
+    /**
+     * Clicks the remove button (X) inside a tree cell. The button is fired via
+     * Platform.runLater because it typically triggers a modal confirmation dialog.
+     * Must be called from the FX thread.
+     */
+    @SuppressWarnings("unchecked")
+    private void clickTreeCellButton(String treeSelector, String id, String windowTitle) {
+        String token = ":" + id + ":";
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+        Node node = scene.getRoot().lookup(treeSelector);
+        if (node == null) throw new RuntimeException("TreeView not found: " + treeSelector);
+        if (!(node instanceof TreeView)) throw new RuntimeException("Not a TreeView: " + treeSelector);
+
+        TreeView<Object> tree = (TreeView<Object>) node;
+        TreeItem<Object> item = findTreeItemByText(tree.getRoot(), token);
+        if (item == null) throw new RuntimeException("Tree item not found for id: " + id);
+
+        // Select and scroll to the item to ensure cell is rendered
+        tree.getSelectionModel().select(item);
+        int row = tree.getRow(item);
+        tree.scrollTo(row);
+
+        // Find the tree cell and its embedded button
+        for (Node cellNode : tree.lookupAll(".tree-cell")) {
+            if (cellNode instanceof TreeCell) {
+                TreeCell<Object> cell = (TreeCell<Object>) cellNode;
+                if (cell.getTreeItem() == item && !cell.isEmpty()) {
+                    Node graphic = cell.getGraphic();
+                    if (graphic != null) {
+                        // Look for a Button in the graphic
+                        Button btn = findButtonInNode(graphic);
+                        if (btn != null) {
+                            Platform.runLater(btn::fire);
+                            return;
+                        }
+                    }
+                    // Also check cell children directly
+                    for (Node child : cell.getChildrenUnmodifiable()) {
+                        if (child instanceof Button) {
+                            Button b = (Button) child;
+                            Platform.runLater(b::fire);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        throw new RuntimeException("Remove button not found for force: " + id);
+    }
+
+    private Button findButtonInNode(Node node) {
+        if (node instanceof Button) return (Button) node;
+        if (node instanceof javafx.scene.Parent) {
+            for (Node child : ((javafx.scene.Parent) node).getChildrenUnmodifiable()) {
+                Button found = findButtonInNode(child);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Clicks a button by its text content in a specific window.
+     * Searches all ButtonBase nodes. Must be called from the FX thread.
+     */
+    private void clickButtonByText(String text, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) {
+            // Window might not be found by exact title, try all windows
+            for (Window w : Window.getWindows()) {
+                if (w instanceof Stage && ((Stage) w).getScene() != null) {
+                    Stage s = (Stage) w;
+                    if (s.getTitle() != null && s.getTitle().contains(windowTitle)) {
+                        scene = s.getScene();
+                        break;
+                    }
+                }
+            }
+        }
+        if (scene == null) throw new RuntimeException("Scene not found for: " + windowTitle);
+
+        // Search for button with matching text
+        for (Node node : scene.getRoot().lookupAll(".button")) {
+            if (node instanceof ButtonBase) {
+                ButtonBase btn = (ButtonBase) node;
+                String btnText = btn.getText();
+                if (btnText != null && btnText.contains(text)) {
+                    btn.fire();
+                    return;
+                }
+            }
+        }
+        throw new RuntimeException("Button with text '" + text + "' not found in " + windowTitle);
+    }
+
+    /**
+     * Sets the first Spinner found in a window to the given value.
+     * Must be called from the FX thread.
+     */
+    @SuppressWarnings("unchecked")
+    private void setSpinnerInWindow(String windowTitle, int value) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+
+        for (Node node : scene.getRoot().lookupAll("Spinner")) {
+            if (node instanceof Spinner) {
+                Spinner<Integer> spinner = (Spinner<Integer>) node;
+                spinner.getValueFactory().setValue(value);
+                return;
+            }
+        }
+        throw new RuntimeException("No Spinner found in " + windowTitle);
+    }
+
+    /**
+     * Waits for the engine to become available (findEngine succeeds).
+     */
+    private void waitForEngineAvailable() {
+        long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            String result = engineAccessor.findEngine();
+            if (result.contains("\"found\":true") || result.contains("\"found\": true")) {
+                return;
+            }
+            sleep(POLL_INTERVAL_MS);
+        }
+        throw new RuntimeException("Engine did not become available within " + WINDOW_TIMEOUT_MS + "ms");
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // Scene/Window Resolution (FX thread)
     // ═══════════════════════════════════════════════════════════════════
@@ -486,6 +933,65 @@ public class RosterActions {
             }
         }
         return null;
+    }
+
+    /**
+     * Finds any force in 'after' that wasn't in 'before'.
+     */
+    private JsonObject findNewForce(JsonObject before, JsonObject after) {
+        Set<String> beforeIds = collectAllForceIds(before);
+        for (JsonObject force : allForces(after)) {
+            String id = getStringField(force, "id");
+            if (id != null && !beforeIds.contains(id)) {
+                return force;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Builds the ActionOutputs JSON for a created force (forceId + child selections map).
+     */
+    private JsonObject buildForceOutputs(JsonObject force) {
+        JsonObject result = new JsonObject();
+        result.addProperty("forceId", getStringField(force, "id"));
+
+        // Collect all selection entryId → selectionId mappings in the force
+        JsonObject selections = new JsonObject();
+        collectAllSelectionEntryIds(force, selections);
+        if (selections.entrySet().size() > 0) {
+            result.add("selections", selections);
+        }
+        return result;
+    }
+
+    private void collectAllSelectionEntryIds(JsonObject scope, JsonObject result) {
+        JsonArray selections = scope.has("selections") ? scope.getAsJsonArray("selections") : null;
+        if (selections == null) return;
+        for (JsonElement el : selections) {
+            if (!el.isJsonObject()) continue;
+            JsonObject sel = el.getAsJsonObject();
+            String id = getStringField(sel, "id");
+            String entryId = getStringField(sel, "entryId");
+            if (id != null && entryId != null && !result.has(entryId)) {
+                result.addProperty(entryId, id);
+            }
+            collectAllSelectionEntryIds(sel, result);
+        }
+        // Also collect from children field
+        JsonArray children = scope.has("children") ? scope.getAsJsonArray("children") : null;
+        if (children != null) {
+            for (JsonElement el : children) {
+                if (!el.isJsonObject()) continue;
+                JsonObject child = el.getAsJsonObject();
+                String id = getStringField(child, "id");
+                String entryId = getStringField(child, "entryId");
+                if (id != null && entryId != null && !result.has(entryId)) {
+                    result.addProperty(entryId, id);
+                }
+                collectAllSelectionEntryIds(child, result);
+            }
+        }
     }
 
     /**
@@ -778,6 +1284,10 @@ public class RosterActions {
     private static int getIntField(JsonObject obj, String key, int defaultValue) {
         JsonElement el = obj.get(key);
         return (el != null && !el.isJsonNull()) ? el.getAsInt() : defaultValue;
+    }
+
+    private static int getIntParam(JsonObject params, String key, int defaultValue) {
+        return getIntField(params, key, defaultValue);
     }
 
     private static void sleep(int ms) {
