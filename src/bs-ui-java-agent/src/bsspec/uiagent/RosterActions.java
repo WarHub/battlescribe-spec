@@ -578,6 +578,9 @@ public class RosterActions {
         String forceId = requireString(p, "forceId");
         String parentSelectionId = requireString(p, "parentSelectionId");
         String entryId = requireString(p, "entryId");
+        // entryName passed from C# (resolved from catalog data)
+        String entryName = p.has("entryName") && !p.get("entryName").isJsonNull()
+                ? p.get("entryName").getAsString() : null;
 
         JsonObject before = readRosterState();
 
@@ -585,11 +588,14 @@ public class RosterActions {
         runOnFx(() -> selectTreeItemById("#treeRoster", parentSelectionId, MAIN_WINDOW));
         sleep(500);
 
-        // Resolve entry name from the engine's roster state
-        String entryName = resolveEntryName(before, entryId);
+        // Resolve entry name: prefer passed name, fall back to roster state lookup
+        if (entryName == null || entryName.isEmpty()) {
+            entryName = resolveEntryName(before, entryId);
+        }
 
         // Click the control by label (spinner increment, button fire, or checkbox toggle)
-        runOnFx(() -> clickControlByLabel(entryName, MAIN_WINDOW, null));
+        final String labelText = entryName;
+        runOnFx(() -> clickControlByLabel(labelText, MAIN_WINDOW, null));
 
         // Wait for a new child selection to appear under the parent
         JsonObject after = waitForStateChange(state -> {
@@ -619,6 +625,8 @@ public class RosterActions {
         JsonObject p = parseParams(params);
         String forceId = requireString(p, "forceId");
         String selectionId = requireString(p, "selectionId");
+        String passedEntryName = p.has("entryName") && !p.get("entryName").isJsonNull()
+                ? p.get("entryName").getAsString() : null;
 
         JsonObject state = readRosterState();
         JsonObject selection = findSelectionById(state, selectionId);
@@ -627,7 +635,7 @@ public class RosterActions {
         }
 
         String entryId = getStringField(selection, "entryId");
-        String entryName = resolveEntryName(state, entryId);
+        String entryName = passedEntryName != null ? passedEntryName : resolveEntryName(state, entryId);
         String parentId = findSelectionParentId(state, selectionId);
         if (parentId == null) parentId = forceId;
 
@@ -1123,12 +1131,22 @@ public class RosterActions {
         for (Window w : Window.getWindows()) {
             if (w instanceof Stage) {
                 Stage s = (Stage) w;
-                if (s.getTitle() != null && s.getTitle().contains(titleFragment) && s.isShowing()) {
+                String title = s.getTitle();
+                if (title != null && s.isShowing() && matchesWindowTitle(title, titleFragment)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * Matches window title using exact match or starts-with (with space separator)
+     * to avoid false positives when dialog names appear in the main window title.
+     * E.g., "New Roster" should NOT match "Roster Editor 2.03.21 - New Roster (GS v1)".
+     */
+    private boolean matchesWindowTitle(String actual, String expected) {
+        return actual.equals(expected) || actual.startsWith(expected + " ");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1421,11 +1439,11 @@ public class RosterActions {
     private void clickButtonByText(String text, String windowTitle) {
         Scene scene = findScene(windowTitle);
         if (scene == null) {
-            // Window might not be found by exact title, try all windows
+            // Window might not be found by exact title, try contains as last resort
             for (Window w : Window.getWindows()) {
                 if (w instanceof Stage && ((Stage) w).getScene() != null) {
                     Stage s = (Stage) w;
-                    if (s.getTitle() != null && s.getTitle().contains(windowTitle)) {
+                    if (s.getTitle() != null && matchesWindowTitle(s.getTitle(), windowTitle)) {
                         scene = s.getScene();
                         break;
                     }
@@ -1491,7 +1509,7 @@ public class RosterActions {
             if (w instanceof Stage) {
                 Stage s = (Stage) w;
                 if (windowTitle == null || windowTitle.isEmpty()
-                        || (s.getTitle() != null && s.getTitle().contains(windowTitle))) {
+                        || (s.getTitle() != null && matchesWindowTitle(s.getTitle(), windowTitle))) {
                     if (s.getScene() != null) {
                         return s.getScene();
                     }

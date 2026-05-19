@@ -72,6 +72,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// </summary>
     public bool KeepAlive { get; set; }
 
+    /// <summary>
+    /// When true, action methods (AddForce, SelectEntry, etc.) use the new high-level
+    /// Java-side RosterActions RPC (single call per action). When false, uses the existing
+    /// multi-step C# orchestration. Default is false (old path).
+    /// </summary>
+    public bool UseHighLevelActions { get; set; }
+
     public BsUiRosterEngine(BsUiOptions options)
     {
         _options = options;
@@ -83,37 +90,141 @@ public sealed class BsUiRosterEngine : IRosterEngine
         => RunAsync(() => SetupAsync(gameSystem, catalogues));
 
     public ActionOutputs AddForce(string forceEntryId, string catalogueId)
-        => RunAsync(() => AddForceAsync(forceEntryId, catalogueId));
+        => UseHighLevelActions
+            ? RunAsync(() => CallActionAsync<ActionOutputs>("addForceAction", new JsonObject
+            {
+                ["forceEntryId"] = forceEntryId,
+                ["catalogueId"] = catalogueId,
+            }, isFirstForce: true, forceEntryId: forceEntryId, gameSystemName: _gameSystem?.Name))
+            : RunAsync(() => AddForceAsync(forceEntryId, catalogueId));
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
-        => RunAsync(() => AddChildForceAsync(parentForceId, forceEntryId, catalogueId));
+        => UseHighLevelActions
+            ? RunAsync(() => CallActionAsync<ActionOutputs>("addChildForceAction", new JsonObject
+            {
+                ["parentForceId"] = parentForceId,
+                ["forceEntryId"] = forceEntryId,
+                ["catalogueId"] = catalogueId,
+            }))
+            : RunAsync(() => AddChildForceAsync(parentForceId, forceEntryId, catalogueId));
 
     public void RemoveForce(string forceId)
-        => RunAsync(() => RemoveForceAsync(forceId));
+    {
+        if (UseHighLevelActions)
+        {
+            RunAsync(() => CallActionAsync("removeForceAction", new JsonObject { ["forceId"] = forceId }));
+        }
+        else
+        {
+            RunAsync(() => RemoveForceAsync(forceId));
+        }
+    }
 
     public ActionOutputs SelectEntry(string forceId, string entryId)
-        => RunAsync(() => SelectEntryAsync(forceId, entryId));
+        => UseHighLevelActions
+            ? RunAsync(() => CallActionAsync<ActionOutputs>("selectEntryAction", new JsonObject
+            {
+                ["forceId"] = forceId,
+                ["entryId"] = entryId,
+            }))
+            : RunAsync(() => SelectEntryAsync(forceId, entryId));
 
     public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
-        => RunAsync(() => SelectChildEntryAsync(forceId, parentSelectionId, entryId));
+        => UseHighLevelActions
+            ? RunAsync(() => CallActionAsync<ActionOutputs>("selectChildEntryAction", new JsonObject
+            {
+                ["forceId"] = forceId,
+                ["parentSelectionId"] = parentSelectionId,
+                ["entryId"] = entryId,
+                ["entryName"] = _entryNamesById.GetValueOrDefault(entryId) ?? entryId,
+            }))
+            : RunAsync(() => SelectChildEntryAsync(forceId, parentSelectionId, entryId));
 
     public void DeselectSelection(string forceId, string selectionId)
-        => RunAsync(() => DeselectSelectionAsync(forceId, selectionId));
+    {
+        if (UseHighLevelActions)
+        {
+            RunAsync(() => CallActionAsync("deselectSelectionAction", new JsonObject
+            {
+                ["forceId"] = forceId,
+                ["selectionId"] = selectionId,
+            }));
+        }
+        else
+        {
+            RunAsync(() => DeselectSelectionAsync(forceId, selectionId));
+        }
+    }
 
     public void SetSelectionCount(string forceId, string selectionId, int count)
-        => RunAsync(() => SetSelectionCountAsync(forceId, selectionId, count));
+    {
+        if (UseHighLevelActions)
+        {
+            RunAsync(() => CallActionAsync("setSelectionCountAction", new JsonObject
+            {
+                ["forceId"] = forceId,
+                ["selectionId"] = selectionId,
+                ["count"] = count,
+            }));
+        }
+        else
+        {
+            RunAsync(() => SetSelectionCountAsync(forceId, selectionId, count));
+        }
+    }
 
     public ActionOutputs DuplicateSelection(string forceId, string selectionId)
-        => RunAsync(() => DuplicateSelectionAsync(forceId, selectionId));
+        => UseHighLevelActions
+            ? RunAsync(() => CallActionAsync<ActionOutputs>("duplicateSelectionAction", new JsonObject
+            {
+                ["forceId"] = forceId,
+                ["selectionId"] = selectionId,
+            }))
+            : RunAsync(() => DuplicateSelectionAsync(forceId, selectionId));
 
     public ActionOutputs DuplicateForce(string forceId)
-        => RunAsync(() => DuplicateForceAsync(forceId));
+        => UseHighLevelActions
+            ? RunAsync(() => CallActionAsync<ActionOutputs>("duplicateForceAction", new JsonObject
+            {
+                ["forceId"] = forceId,
+            }))
+            : RunAsync(() => DuplicateForceAsync(forceId));
 
     public void SetCostLimit(string costTypeId, decimal value)
-        => RunAsync(() => SetCostLimitAsync(costTypeId, value));
+    {
+        if (UseHighLevelActions)
+        {
+            var costName = _costNamesById.GetValueOrDefault(costTypeId) ?? costTypeId;
+            RunAsync(() => CallActionAsync("setCostLimitAction", new JsonObject
+            {
+                ["costTypeId"] = costTypeId,
+                ["costName"] = costName,
+                ["value"] = (int)value,
+            }));
+        }
+        else
+        {
+            RunAsync(() => SetCostLimitAsync(costTypeId, value));
+        }
+    }
 
     public void SetCustomization(string forceId, string? selectionId, string? customName, string? customNotes)
-        => RunAsync(() => SetCustomizationAsync(forceId, selectionId, customName, customNotes));
+    {
+        if (UseHighLevelActions)
+        {
+            RunAsync(() => CallActionAsync("setCustomizationAction", new JsonObject
+            {
+                ["forceId"] = forceId,
+                ["selectionId"] = selectionId,
+                ["customName"] = customName,
+                ["customNotes"] = customNotes,
+            }));
+        }
+        else
+        {
+            RunAsync(() => SetCustomizationAsync(forceId, selectionId, customName, customNotes));
+        }
+    }
 
     public RosterState GetRosterState()
         => RunAsync(GetRosterStateAsync);
@@ -276,17 +387,29 @@ public sealed class BsUiRosterEngine : IRosterEngine
         var before = await ReadRosterStateAsync();
 
         await OpenEditRosterAsync();
-        await SelectTreeItemAsync(["#treeRoster", "#treeForces"], TreeIdToken(forceId), EditRosterWindowTitle);
-        if (!await TryFireButtonAsync("#btnRemoveForce", EditRosterWindowTitle) &&
-            !await TryClickTextAsync("Remove Force", EditRosterWindowTitle, "Button") &&
-            !await TryClickTextAsync("Remove", EditRosterWindowTitle, "Button"))
-        {
-            await PressKeyAsync("DELETE", "#treeRoster", EditRosterWindowTitle);
-        }
+        // Edit Roster has a remove button (X icon) embedded in each Force tree cell
+        await RemoveForceViaButtonAsync(forceId);
         await CloseRosterDialogAsync(EditRosterWindowTitle);
 
         _ = await WaitForRosterStateAsync(state => FindForceById(state.Forces, forceId) is null);
         _ = before;
+    }
+
+    private async Task RemoveForceViaButtonAsync(string forceId)
+    {
+        // clickTreeCellButton fires the button async (Platform.runLater) and returns immediately.
+        // The button action triggers a "Confirm" dialog with YES/NO buttons (showAndWait).
+        // During showAndWait, Platform.runLater tasks are processed (nested event loop),
+        // so we can dismiss the dialog via subsequent RPC calls.
+        await ConnectedClient.CallAsync("clickTreeCellButton", new JsonObject
+        {
+            ["selector"] = "#treeForces",
+            ["windowTitle"] = EditRosterWindowTitle,
+            ["text"] = TreeIdToken(forceId),
+        });
+        // Wait for the confirm dialog to appear, then click YES
+        await Task.Delay(500);
+        await ClickDialogButtonAsync("YES", "Yes", "OK");
     }
 
     private async Task<ActionOutputs> SelectEntryAsync(string forceId, string entryId)
@@ -486,7 +609,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         // If the supporter popup appears instead of the customization dialog, dismiss it and retry
         var windowTitle = await WaitForFirstWindowAsync(["Customise", "Customize", "Name", "Support BattleScribe"]);
-        Console.Error.WriteLine($"  [DEBUG] SetCustomization: window found = '{windowTitle}'");
         if (windowTitle is not null && windowTitle.Contains("Support", StringComparison.OrdinalIgnoreCase))
         {
             // Dismiss the supporter popup
@@ -511,16 +633,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
         if (customName is not null)
         {
             await SetTextAsync(["#txtName", "#txtCustomName", "TextField"], customName, windowTitle);
-            Console.Error.WriteLine($"  [DEBUG] SetCustomization: set customName='{customName}'");
         }
 
         if (customNotes is not null)
         {
             await SetTextAsync(["#txtNotes", "#txtCustomNotes", "TextArea"], customNotes, windowTitle);
-            Console.Error.WriteLine($"  [DEBUG] SetCustomization: set customNotes='{customNotes}'");
         }
-
-        Console.Error.WriteLine($"  [DEBUG] SetCustomization: clicking Done...");
         if (!await TryFireButtonAsync("#btnDone", windowTitle) &&
             !await TryClickTextAsync("Done", windowTitle, "Button") &&
             !await TryClickTextAsync("OK", windowTitle, "Button"))
@@ -603,13 +721,63 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private async Task OpenEditRosterAsync()
     {
-        if (!await TryFireButtonAsync("#btnEditRoster", MainWindowTitle, async: true) &&
-            !await TryClickTextAsync("Edit Roster", MainWindowTitle, "Button"))
+        // #btnEditRoster is a Label with onMouseClicked (not a Button), so we click it directly.
+        // The toolbar also has an unnamed Button with onAction="#actEditRoster".
+        // Retry with delay — after some actions the UI may briefly rebuild.
+        for (var attempt = 0; attempt < 5; attempt++)
         {
-            throw new InvalidOperationException("Could not open Edit Roster dialog.");
+            if (await TryClickNodeAsync("#btnEditRoster", MainWindowTitle) ||
+                await TryFireButtonAsync("#btnEditRoster", MainWindowTitle, async: true) ||
+                await TryClickTextAsync("Edit Roster", MainWindowTitle, "Button"))
+            {
+                // BS may show a "save roster?" confirmation before opening Edit Roster.
+                // Dismiss it by clicking "No" if it appears.
+                await DismissSaveConfirmationAsync();
+                await WaitForWindowAsync(EditRosterWindowTitle);
+                return;
+            }
+
+            await Task.Delay(500);
         }
 
-        await WaitForWindowAsync(EditRosterWindowTitle);
+        throw new InvalidOperationException("Could not open Edit Roster dialog.");
+    }
+
+    /// <summary>
+    /// Dismisses "Continue? Roster has not been saved..." dialog if present.
+    /// Clicks NO to proceed without saving. Retries since the dialog may appear with a delay.
+    /// </summary>
+    private async Task DismissSaveConfirmationAsync()
+    {
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            await Task.Delay(300);
+            if (await TryClickTextAsync("No", "Continue?") ||
+                await TryFireButtonAsync("#btnNegative", "Continue?"))
+            {
+                await Task.Delay(300);
+                return;
+            }
+        }
+    }
+
+    private async Task ClickDialogButtonAsync(params string[] buttonTexts)
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            await Task.Delay(300);
+            foreach (var text in buttonTexts)
+            {
+                // Try with "Button" nodeType first, then without (for custom button classes)
+                if (await TryClickTextAsync(text, "Confirm", "Button") ||
+                    await TryClickTextAsync(text, "Confirm") ||
+                    await TryClickTextAsync(text, ""))
+                {
+                    return;
+                }
+            }
+        }
+        throw new InvalidOperationException($"Could not find button [{string.Join(", ", buttonTexts)}] in dialog.");
     }
 
     private async Task CloseRosterDialogAsync(string windowTitle)
@@ -621,6 +789,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
             throw new InvalidOperationException($"Could not close '{windowTitle}' dialog.");
         }
 
+        // BS may prompt "Roster has not been saved" — dismiss without saving
+        await DismissSaveConfirmationAsync();
         await WaitForWindowToCloseAsync(windowTitle);
         await EnsureEngineLocatedAsync();
     }
@@ -1145,6 +1315,28 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return await ConnectedClient.GetUiStateAsync();
     }
 
+    /// <summary>Starts recording user interactions in the Roster Editor UI.</summary>
+    public async Task StartRecordingAsync()
+    {
+        ThrowIfDisposed();
+        if (_client is null)
+        {
+            throw new InvalidOperationException("Not connected to BattleScribe app.");
+        }
+        await ConnectedClient.StartRecordingAsync();
+    }
+
+    /// <summary>Stops recording and returns the recorded actions as JSON.</summary>
+    public async Task<JsonNode?> StopRecordingAsync()
+    {
+        ThrowIfDisposed();
+        if (_client is null)
+        {
+            return null;
+        }
+        return await ConnectedClient.StopRecordingAsync();
+    }
+
     private async Task HandleStartupDialogsAsync()
     {
         await Task.Delay(1500);
@@ -1400,7 +1592,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
             try
             {
                 await ConnectedClient.SetNodeTextAsync(selector, text, windowTitle);
-                Console.Error.WriteLine($"  [DEBUG] SetTextAsync: set '{selector}' = '{text}' in '{windowTitle}'");
                 return;
             }
             catch
@@ -1447,6 +1638,30 @@ public sealed class BsUiRosterEngine : IRosterEngine
         catch (AgentException)
         {
             // Node found but not a ButtonBase (e.g., Label) — treat as not found
+            return false;
+        }
+    }
+
+    private async Task<bool> TryClickNodeAsync(string selector, string windowTitle)
+    {
+        try
+        {
+            var node = await ConnectedClient.FindNodeAsync(selector, windowTitle);
+            if (node is null)
+            {
+                return false;
+            }
+
+            _ = await ConnectedClient.CallAsync("clickNode", new JsonObject
+            {
+                ["selector"] = selector,
+                ["windowTitle"] = windowTitle,
+                ["async"] = "true",
+            });
+            return true;
+        }
+        catch (AgentException)
+        {
             return false;
         }
     }
@@ -1829,6 +2044,83 @@ public sealed class BsUiRosterEngine : IRosterEngine
             : 60);
 
     private AgentClient ConnectedClient => _client ?? throw new InvalidOperationException("Agent client is not connected.");
+
+    // ═══════════════════════════════════════════════════════════════════
+    // High-level action RPC (UseHighLevelActions path)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Calls a high-level Java-side RosterAction and deserializes the result.
+    /// </summary>
+    private async Task<T> CallActionAsync<T>(string method, JsonObject parameters,
+        bool isFirstForce = false, string? forceEntryId = null, string? gameSystemName = null)
+    {
+        EnsureSetup();
+
+        // Special case: first force uses createRosterAction instead of addForceAction
+        if (isFirstForce && method == "addForceAction")
+        {
+            var state = await ReadRosterStateOrEmptyAsync();
+            if (state.Forces.Count == 0)
+            {
+                method = "createRosterAction";
+                parameters = new JsonObject
+                {
+                    ["forceEntryId"] = forceEntryId,
+                    ["catalogueId"] = parameters["catalogueId"]?.GetValue<string>(),
+                    ["gameSystemName"] = gameSystemName ?? _gameSystem!.Name,
+                };
+                // Apply pending cost limit if any
+                if (_pendingCostLimits.Count == 1)
+                {
+                    parameters["costLimit"] = (int)_pendingCostLimits.Values.First();
+                }
+            }
+        }
+
+        // The action methods on the Java side run on a background thread with their own timeouts.
+        // Increase call timeout to match: Java has 30s window wait + 10s state poll per step.
+        var originalTimeout = ConnectedClient.CallTimeout;
+        ConnectedClient.CallTimeout = TimeSpan.FromSeconds(90);
+        try
+        {
+            var result = await ConnectedClient.CallAsync(method, parameters);
+            var json = result?.ToJsonString() ?? "{}";
+            var output = JsonSerializer.Deserialize<T>(json, JsonOptions)
+                ?? throw new InvalidOperationException($"{method} returned null result");
+
+            // Mark engine as located after first successful action that creates a roster
+            if (!_engineLocated && output is ActionOutputs { ForceId: not null })
+            {
+                _engineLocated = true;
+            }
+
+            return output;
+        }
+        finally
+        {
+            ConnectedClient.CallTimeout = originalTimeout;
+        }
+    }
+
+    /// <summary>
+    /// Calls a high-level Java-side RosterAction that returns no meaningful outputs.
+    /// </summary>
+    private async Task CallActionAsync(string method, JsonObject parameters)
+    {
+        EnsureSetup();
+
+        var originalTimeout = ConnectedClient.CallTimeout;
+        ConnectedClient.CallTimeout = TimeSpan.FromSeconds(90);
+        try
+        {
+            await ConnectedClient.CallAsync(method, parameters);
+        }
+        finally
+        {
+            ConnectedClient.CallTimeout = originalTimeout;
+        }
+    }
 
     /// <summary>
     /// Maximum number of retry attempts for transient failures (timeout, agent communication).
