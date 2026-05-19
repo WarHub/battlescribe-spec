@@ -606,6 +606,7 @@ public sealed class TimelineReport
         AddParameter(parameters, "forceId", step.ForceId);
         AddParameter(parameters, "selectionId", step.SelectionId);
         AddParameter(parameters, "entryId", step.EntryId);
+        AddParameter(parameters, "categoryEntryId", step.CategoryEntryId);
         AddParameter(parameters, "customName", step.CustomName);
         AddParameter(parameters, "customNotes", step.CustomNotes);
         AddParameter(parameters, "costTypeId", step.CostTypeId);

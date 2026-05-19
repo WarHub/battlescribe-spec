@@ -49,6 +49,10 @@ public class EngineAccessor {
         return controllerInstance;
     }
 
+    public Object getEngineInstance() {
+        return engineInstance;
+    }
+
     private static JsonObject parseParams(String paramsJson) {
         if (paramsJson == null || paramsJson.isEmpty()) {
             return new JsonObject();

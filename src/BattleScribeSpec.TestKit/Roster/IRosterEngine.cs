@@ -104,11 +104,9 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Set custom name and/or notes on a force or selection.
-    /// Category customization is intentionally unsupported because BattleScribe Desktop
-    /// only enables btnCustomiseName for Selection instances, not Category objects.
-    /// Targeting: if selectionId → selection; else → force.
+    /// Targeting: if selectionId → selection; else → force. categoryEntryId is unsupported.
     /// </summary>
-    void SetCustomization(string forceId, string? selectionId, string? customName, string? customNotes)
+    void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
         => throw new NotSupportedException("This engine does not support setCustomization.");
 
     /// <summary>

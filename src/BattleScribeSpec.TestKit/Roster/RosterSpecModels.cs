@@ -99,6 +99,12 @@ public sealed class StepDef
     /// </summary>
     public string? CustomNotes { get; set; }
 
+    /// <summary>
+    /// Category entry ID parameter on setCustomization.
+    /// Reserved for protocol compatibility; category customization is unsupported.
+    /// </summary>
+    public string? CategoryEntryId { get; set; }
+
     public string? Path { get; set; }
 
     /// <summary>
@@ -373,6 +379,8 @@ public sealed class ExpectedCategoryDef
     public string? PublicationId { get; set; }
 
     public string? Page { get; set; }
+
+    public string? CustomNotes { get; set; }
 }
 
 
