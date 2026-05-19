@@ -591,12 +591,7 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
             {
                 var bsUiOptions = ResolveBsUiOptions();
                 Console.Error.WriteLine($"BS UI mode: {bsUiOptions.RosterEditorJarPath}");
-                var useActions = Environment.GetEnvironmentVariable("BS_UI_ACTIONS") is "1" or "true";
-                if (useActions)
-                {
-                    Console.Error.WriteLine("[bs-ui] Using high-level RosterActions RPC path.");
-                }
-                return new BsUiRosterEngine(bsUiOptions) { KeepAlive = keepAlive, UseHighLevelActions = useActions };
+                return new BsUiRosterEngine(bsUiOptions) { KeepAlive = keepAlive };
             }
 
         default:
