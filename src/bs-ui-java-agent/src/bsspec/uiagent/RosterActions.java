@@ -77,6 +77,12 @@ public class RosterActions {
                 return addChildForceAction(params);
             case "removeForceAction":
                 return removeForceAction(params);
+            case "selectChildEntryAction":
+                return selectChildEntryAction(params);
+            case "deselectSelectionAction":
+                return deselectSelectionAction(params);
+            case "setSelectionCountAction":
+                return setSelectionCountAction(params);
             default:
                 throw new IllegalArgumentException("Unknown action: " + method);
         }
@@ -365,6 +371,417 @@ public class RosterActions {
         JsonObject result = new JsonObject();
         result.addProperty("removed", true);
         return result.toString();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Phase 3: Edit-panel actions (child entries, deselect, count)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Selects a child entry under a parent selection by clicking the edit panel control.
+     * Selects the parent in the roster tree, then finds the control labeled with the
+     * entry's name and clicks/increments it.
+     *
+     * @param params JSON: {forceId, parentSelectionId, entryId}
+     */
+    public String selectChildEntryAction(String params) {
+        JsonObject p = parseParams(params);
+        String forceId = requireString(p, "forceId");
+        String parentSelectionId = requireString(p, "parentSelectionId");
+        String entryId = requireString(p, "entryId");
+
+        JsonObject before = readRosterState();
+
+        // Select the parent selection in the roster tree
+        runOnFx(() -> selectTreeItemById("#treeRoster", parentSelectionId, MAIN_WINDOW));
+        sleep(500);
+
+        // Resolve entry name from the engine's roster state
+        String entryName = resolveEntryName(before, entryId);
+
+        // Click the control by label (spinner increment, button fire, or checkbox toggle)
+        runOnFx(() -> clickControlByLabel(entryName, MAIN_WINDOW, null));
+
+        // Wait for a new child selection to appear under the parent
+        JsonObject after = waitForStateChange(state -> {
+            JsonObject parent = findSelectionById(state, parentSelectionId);
+            if (parent == null) return false;
+            JsonObject beforeParent = findSelectionById(before, parentSelectionId);
+            if (beforeParent == null) return true;
+            return childSelectionCount(parent) > childSelectionCount(beforeParent);
+        });
+
+        // Find the new child selection (in after but not in before)
+        JsonObject createdSelection = findNewChildSelection(before, after, parentSelectionId, entryId);
+        JsonObject result = new JsonObject();
+        if (createdSelection != null) {
+            result.addProperty("selectionId", getStringField(createdSelection, "id"));
+        }
+        return result.toString();
+    }
+
+    /**
+     * Deselects (removes) a selection by clicking its edit panel control in decrement mode,
+     * or using Delete key if no decrement control is available.
+     *
+     * @param params JSON: {forceId, selectionId}
+     */
+    public String deselectSelectionAction(String params) {
+        JsonObject p = parseParams(params);
+        String forceId = requireString(p, "forceId");
+        String selectionId = requireString(p, "selectionId");
+
+        JsonObject state = readRosterState();
+        JsonObject selection = findSelectionById(state, selectionId);
+        if (selection == null) {
+            throw new RuntimeException("Selection not found: " + selectionId);
+        }
+
+        String entryId = getStringField(selection, "entryId");
+        String entryName = resolveEntryName(state, entryId);
+        String parentId = findSelectionParentId(state, selectionId);
+        if (parentId == null) parentId = forceId;
+
+        // Select the parent in the roster tree
+        final String parentIdFinal = parentId;
+        runOnFx(() -> selectTreeItemById("#treeRoster", parentIdFinal, MAIN_WINDOW));
+        sleep(500);
+
+        // Try decrement via control by label
+        final String finalEntryName = entryName;
+        AtomicReference<Boolean> clicked = new AtomicReference<>(false);
+        runOnFx(() -> {
+            clicked.set(tryClickControlByLabel(finalEntryName, MAIN_WINDOW, "decrement"));
+        });
+
+        if (!clicked.get()) {
+            // Fallback: select the selection itself and press DELETE
+            runOnFx(() -> {
+                selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW);
+            });
+            sleep(300);
+            runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
+        }
+
+        // Wait for selection to disappear
+        waitForStateChange(s -> findSelectionById(s, selectionId) == null);
+
+        JsonObject result = new JsonObject();
+        result.addProperty("removed", true);
+        return result.toString();
+    }
+
+    /**
+     * Sets the selection count (number) by finding the spinner in the edit panel.
+     * If count is 0, delegates to deselect.
+     *
+     * @param params JSON: {forceId, selectionId, count}
+     */
+    public String setSelectionCountAction(String params) {
+        JsonObject p = parseParams(params);
+        String forceId = requireString(p, "forceId");
+        String selectionId = requireString(p, "selectionId");
+        int count = getIntParam(p, "count", -1);
+        if (count < 0) throw new RuntimeException("count must be >= 0");
+
+        if (count == 0) {
+            // Deselect (remove) the selection
+            JsonObject deselectParams = new JsonObject();
+            deselectParams.addProperty("forceId", forceId);
+            deselectParams.addProperty("selectionId", selectionId);
+            return deselectSelectionAction(deselectParams.toString());
+        }
+
+        JsonObject state = readRosterState();
+        JsonObject selection = findSelectionById(state, selectionId);
+        if (selection == null) {
+            throw new RuntimeException("Selection not found: " + selectionId);
+        }
+
+        String entryId = getStringField(selection, "entryId");
+        String entryName = resolveEntryName(state, entryId);
+        String parentId = findSelectionParentId(state, selectionId);
+        if (parentId == null) parentId = forceId;
+
+        // Select the parent in the roster tree
+        final String parentIdFinal = parentId;
+        runOnFx(() -> selectTreeItemById("#treeRoster", parentIdFinal, MAIN_WINDOW));
+        sleep(500);
+
+        // Set spinner value by label
+        final String finalEntryName = entryName;
+        runOnFx(() -> setSpinnerValueByLabel(finalEntryName, count, MAIN_WINDOW));
+
+        // Wait for count to match
+        waitForStateChange(s -> {
+            JsonObject sel = findSelectionById(s, selectionId);
+            return sel != null && getIntField(sel, "number", -1) == count;
+        });
+
+        JsonObject result = new JsonObject();
+        result.addProperty("set", true);
+        result.addProperty("count", count);
+        return result.toString();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Edit-panel helpers (label-based control lookup)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Clicks the edit panel control (Spinner/Button/CheckBox) by its sibling label text.
+     * Must be called from the FX thread.
+     */
+    private void clickControlByLabel(String labelText, String windowTitle, String action) {
+        if (!tryClickControlByLabel(labelText, windowTitle, action)) {
+            throw new RuntimeException("Control not found for label: " + labelText);
+        }
+    }
+
+    /**
+     * Tries to click an edit panel control by label. Returns true if found and clicked.
+     * Must be called from the FX thread.
+     */
+    @SuppressWarnings("unchecked")
+    private boolean tryClickControlByLabel(String text, String windowTitle, String action) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) return false;
+
+        // Look for Label → sibling Spinner/Button
+        for (Node labelNode : scene.getRoot().lookupAll(".label")) {
+            if (!(labelNode instanceof Label)) continue;
+            Label label = (Label) labelNode;
+            String lt = label.getText();
+            if (lt == null || !lt.contains(text)) continue;
+
+            javafx.scene.Parent parent = label.getParent();
+            if (parent == null) continue;
+
+            for (Node sibling : parent.getChildrenUnmodifiable()) {
+                if (sibling == label) continue;
+                if (sibling instanceof Spinner) {
+                    Spinner<Object> spinner = (Spinner<Object>) sibling;
+                    boolean decrement = "decrement".equals(action);
+                    if (decrement) {
+                        spinner.getValueFactory().decrement(1);
+                    } else {
+                        spinner.getValueFactory().increment(1);
+                    }
+                    return true;
+                }
+                if (sibling instanceof Button) {
+                    ((Button) sibling).fire();
+                    return true;
+                }
+            }
+        }
+
+        // Look for CheckBox by text
+        for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
+            if (!(cbNode instanceof CheckBox)) continue;
+            CheckBox cb = (CheckBox) cbNode;
+            String cbText = cb.getText();
+            if (cbText != null && cbText.contains(text)) {
+                cb.fire();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Sets a Spinner's value by its sibling label. Increments/decrements to reach target.
+     * Must be called from the FX thread.
+     */
+    @SuppressWarnings("unchecked")
+    private void setSpinnerValueByLabel(String text, int value, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+
+        for (Node labelNode : scene.getRoot().lookupAll(".label")) {
+            if (!(labelNode instanceof Label)) continue;
+            Label label = (Label) labelNode;
+            String lt = label.getText();
+            if (lt == null || !lt.contains(text)) continue;
+
+            javafx.scene.Parent parent = label.getParent();
+            if (parent == null) continue;
+
+            for (Node sibling : parent.getChildrenUnmodifiable()) {
+                if (sibling == label) continue;
+                if (sibling instanceof Spinner) {
+                    Spinner<Object> spinner = (Spinner<Object>) sibling;
+                    Object currentVal = spinner.getValue();
+                    int currentInt = (currentVal instanceof Number) ? ((Number) currentVal).intValue() : 0;
+                    if (currentInt == value) return;
+                    int delta = value - currentInt;
+                    SpinnerValueFactory<Object> factory = spinner.getValueFactory();
+                    if (delta > 0) {
+                        for (int i = 0; i < delta; i++) factory.increment(1);
+                    } else {
+                        for (int i = 0; i < -delta; i++) factory.decrement(1);
+                    }
+                    return;
+                }
+            }
+        }
+        throw new RuntimeException("Spinner not found for label: " + text);
+    }
+
+    /**
+     * Resolves an entry name from an entryId by searching the roster state.
+     * Finds any selection with matching entryId and returns its name.
+     */
+    private String resolveEntryName(JsonObject rosterState, String entryId) {
+        // Search all forces for a selection with this entryId
+        for (JsonObject force : allForces(rosterState)) {
+            String name = findEntryNameInSelections(force, entryId);
+            if (name != null) return name;
+        }
+        // Fallback: use the entryId itself (might work for display)
+        return entryId;
+    }
+
+    private String findEntryNameInSelections(JsonObject scope, String entryId) {
+        JsonArray selections = scope.has("selections") ? scope.getAsJsonArray("selections") : null;
+        if (selections != null) {
+            for (JsonElement el : selections) {
+                if (!el.isJsonObject()) continue;
+                JsonObject sel = el.getAsJsonObject();
+                if (entryId.equals(getStringField(sel, "entryId"))) {
+                    return getStringField(sel, "name");
+                }
+                String found = findEntryNameInSelections(sel, entryId);
+                if (found != null) return found;
+            }
+        }
+        JsonArray children = scope.has("children") ? scope.getAsJsonArray("children") : null;
+        if (children != null) {
+            for (JsonElement el : children) {
+                if (!el.isJsonObject()) continue;
+                JsonObject child = el.getAsJsonObject();
+                if (entryId.equals(getStringField(child, "entryId"))) {
+                    return getStringField(child, "name");
+                }
+                String found = findEntryNameInSelections(child, entryId);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Gets the number of child selections in a selection/force.
+     */
+    private int childSelectionCount(JsonObject scope) {
+        int count = 0;
+        if (scope.has("selections")) {
+            count += scope.getAsJsonArray("selections").size();
+        }
+        if (scope.has("children")) {
+            count += scope.getAsJsonArray("children").size();
+        }
+        return count;
+    }
+
+    /**
+     * Finds a new child selection under parentSelectionId that wasn't there before.
+     */
+    private JsonObject findNewChildSelection(JsonObject before, JsonObject after,
+                                              String parentSelectionId, String entryId) {
+        JsonObject afterParent = findSelectionById(after, parentSelectionId);
+        if (afterParent == null) return null;
+        JsonObject beforeParent = findSelectionById(before, parentSelectionId);
+        Set<String> beforeIds = new HashSet<>();
+        if (beforeParent != null) {
+            collectChildSelectionIds(beforeParent, beforeIds);
+        }
+
+        return findNewChildInScope(afterParent, beforeIds, entryId);
+    }
+
+    private void collectChildSelectionIds(JsonObject scope, Set<String> ids) {
+        JsonArray selections = scope.has("selections") ? scope.getAsJsonArray("selections") : null;
+        if (selections != null) {
+            for (JsonElement el : selections) {
+                if (!el.isJsonObject()) continue;
+                String id = getStringField(el.getAsJsonObject(), "id");
+                if (id != null) ids.add(id);
+            }
+        }
+        JsonArray children = scope.has("children") ? scope.getAsJsonArray("children") : null;
+        if (children != null) {
+            for (JsonElement el : children) {
+                if (!el.isJsonObject()) continue;
+                String id = getStringField(el.getAsJsonObject(), "id");
+                if (id != null) ids.add(id);
+            }
+        }
+    }
+
+    private JsonObject findNewChildInScope(JsonObject scope, Set<String> beforeIds, String entryId) {
+        JsonArray selections = scope.has("selections") ? scope.getAsJsonArray("selections") : null;
+        if (selections != null) {
+            for (JsonElement el : selections) {
+                if (!el.isJsonObject()) continue;
+                JsonObject sel = el.getAsJsonObject();
+                String id = getStringField(sel, "id");
+                if (id != null && !beforeIds.contains(id)
+                        && entryId.equals(getStringField(sel, "entryId"))) {
+                    return sel;
+                }
+            }
+        }
+        JsonArray children = scope.has("children") ? scope.getAsJsonArray("children") : null;
+        if (children != null) {
+            for (JsonElement el : children) {
+                if (!el.isJsonObject()) continue;
+                JsonObject child = el.getAsJsonObject();
+                String id = getStringField(child, "id");
+                if (id != null && !beforeIds.contains(id)
+                        && entryId.equals(getStringField(child, "entryId"))) {
+                    return child;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Finds the parent selection ID of a given selection (traverses the roster tree).
+     */
+    private String findSelectionParentId(JsonObject rosterState, String selectionId) {
+        for (JsonObject force : allForces(rosterState)) {
+            String found = findParentIdInScope(force, selectionId, getStringField(force, "id"));
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private String findParentIdInScope(JsonObject scope, String selectionId, String scopeId) {
+        JsonArray selections = scope.has("selections") ? scope.getAsJsonArray("selections") : null;
+        if (selections != null) {
+            for (JsonElement el : selections) {
+                if (!el.isJsonObject()) continue;
+                JsonObject sel = el.getAsJsonObject();
+                String id = getStringField(sel, "id");
+                if (selectionId.equals(id)) return scopeId;
+                String found = findParentIdInScope(sel, selectionId, id);
+                if (found != null) return found;
+            }
+        }
+        JsonArray children = scope.has("children") ? scope.getAsJsonArray("children") : null;
+        if (children != null) {
+            for (JsonElement el : children) {
+                if (!el.isJsonObject()) continue;
+                JsonObject child = el.getAsJsonObject();
+                String id = getStringField(child, "id");
+                if (selectionId.equals(id)) return scopeId;
+                String found = findParentIdInScope(child, selectionId, id);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     // ═══════════════════════════════════════════════════════════════════
