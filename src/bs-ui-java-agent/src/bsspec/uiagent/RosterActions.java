@@ -83,6 +83,10 @@ public class RosterActions {
                 return deselectSelectionAction(params);
             case "setSelectionCountAction":
                 return setSelectionCountAction(params);
+            case "setCostLimitAction":
+                return setCostLimitAction(params);
+            case "setCustomizationAction":
+                return setCustomizationAction(params);
             default:
                 throw new IllegalArgumentException("Unknown action: " + method);
         }
@@ -371,6 +375,191 @@ public class RosterActions {
         JsonObject result = new JsonObject();
         result.addProperty("removed", true);
         return result.toString();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Phase 4: Specialized actions (cost limits, customization)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Sets a cost limit value via Edit Roster dialog.
+     * Opens Edit Roster, finds the spinner by cost name label, sets value, closes.
+     *
+     * @param params JSON: {costTypeId, costName, value}
+     */
+    public String setCostLimitAction(String params) {
+        JsonObject p = parseParams(params);
+        String costTypeId = requireString(p, "costTypeId");
+        String costName = requireString(p, "costName");
+        int value = getIntParam(p, "value", -1);
+        if (value < 0) throw new RuntimeException("value must be >= 0");
+
+        // Open Edit Roster
+        runOnFx(() -> fireButtonAsync("#btnEditRoster", MAIN_WINDOW));
+        waitForWindow(EDIT_ROSTER_WINDOW);
+
+        // Set cost limit spinner by name
+        runOnFx(() -> setSpinnerValueByLabel(costName, value, EDIT_ROSTER_WINDOW));
+
+        // Close Edit Roster
+        runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
+        waitForWindowClose(EDIT_ROSTER_WINDOW);
+
+        JsonObject result = new JsonObject();
+        result.addProperty("set", true);
+        result.addProperty("costTypeId", costTypeId);
+        result.addProperty("value", value);
+        return result.toString();
+    }
+
+    /**
+     * Sets custom name and/or notes on a force or selection.
+     * Opens the customization dialog via the Customise Name button.
+     *
+     * @param params JSON: {forceId, selectionId (optional), customName (optional), customNotes (optional)}
+     */
+    public String setCustomizationAction(String params) {
+        JsonObject p = parseParams(params);
+        String forceId = requireString(p, "forceId");
+        String selectionId = p.has("selectionId") && !p.get("selectionId").isJsonNull()
+                ? p.get("selectionId").getAsString() : null;
+        String customName = p.has("customName") && !p.get("customName").isJsonNull()
+                ? p.get("customName").getAsString() : null;
+        String customNotes = p.has("customNotes") && !p.get("customNotes").isJsonNull()
+                ? p.get("customNotes").getAsString() : null;
+
+        // Select the target (selection or force) in the roster tree
+        String targetId = selectionId != null ? selectionId : forceId;
+        runOnFx(() -> selectTreeItemById("#treeRoster", targetId, MAIN_WINDOW));
+        sleep(300);
+
+        // Click the Customise Name button (async — it opens a modal)
+        runOnFx(() -> fireButtonAsync("#btnCustomiseName", MAIN_WINDOW));
+        sleep(500);
+
+        // Wait for the customization dialog — could be "Customise" or similar title
+        String customizeWindow = waitForFirstWindow("Customise", "Customize", "Name");
+        if (customizeWindow == null) {
+            throw new RuntimeException("Customization dialog did not appear");
+        }
+
+        // Set custom name if provided
+        if (customName != null) {
+            final String cw = customizeWindow;
+            runOnFx(() -> setTextField(cw, customName, "#txtName", "#txtCustomName", "TextField"));
+        }
+
+        // Set custom notes if provided
+        if (customNotes != null) {
+            final String cw = customizeWindow;
+            runOnFx(() -> setTextArea(cw, customNotes, "#txtNotes", "#txtCustomNotes", "TextArea"));
+        }
+
+        // Confirm the dialog
+        final String cw = customizeWindow;
+        runOnFx(() -> {
+            if (!tryFireButton("#btnDone", cw)) {
+                clickButtonByText("Done", cw);
+            }
+        });
+        waitForWindowClose(customizeWindow);
+
+        JsonObject result = new JsonObject();
+        result.addProperty("set", true);
+        return result.toString();
+    }
+
+    /**
+     * Waits for the first window matching any of the given title substrings.
+     * Returns the matched window title, or null if timeout.
+     */
+    private String waitForFirstWindow(String... titlePatterns) {
+        long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            AtomicReference<String> found = new AtomicReference<>();
+            runOnFx(() -> {
+                for (Window w : Window.getWindows()) {
+                    if (!(w instanceof Stage)) continue;
+                    Stage s = (Stage) w;
+                    String title = s.getTitle();
+                    if (title == null) continue;
+                    for (String pattern : titlePatterns) {
+                        if (title.contains(pattern)) {
+                            found.set(title);
+                            return;
+                        }
+                    }
+                }
+            });
+            if (found.get() != null) return found.get();
+            sleep(POLL_INTERVAL_MS);
+        }
+        return null;
+    }
+
+    /**
+     * Sets a TextField identified by CSS selectors. Tries each selector in order.
+     * Must be called from the FX thread.
+     */
+    private void setTextField(String windowTitle, String text, String... selectors) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+
+        for (String selector : selectors) {
+            Node node = scene.getRoot().lookup(selector);
+            if (node instanceof TextField) {
+                ((TextField) node).setText(text);
+                return;
+            }
+        }
+        // Fallback: find any TextField
+        for (Node n : scene.getRoot().lookupAll("TextField")) {
+            if (n instanceof TextField) {
+                ((TextField) n).setText(text);
+                return;
+            }
+        }
+        throw new RuntimeException("TextField not found in " + windowTitle);
+    }
+
+    /**
+     * Sets a TextArea identified by CSS selectors. Tries each selector in order.
+     * Must be called from the FX thread.
+     */
+    private void setTextArea(String windowTitle, String text, String... selectors) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
+
+        for (String selector : selectors) {
+            Node node = scene.getRoot().lookup(selector);
+            if (node instanceof TextArea) {
+                ((TextArea) node).setText(text);
+                return;
+            }
+        }
+        // Fallback: find any TextArea
+        for (Node n : scene.getRoot().lookupAll("TextArea")) {
+            if (n instanceof TextArea) {
+                ((TextArea) n).setText(text);
+                return;
+            }
+        }
+        throw new RuntimeException("TextArea not found in " + windowTitle);
+    }
+
+    /**
+     * Tries to fire a button by CSS selector. Returns true if successful.
+     * Must be called from the FX thread.
+     */
+    private boolean tryFireButton(String selector, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) return false;
+        Node node = scene.getRoot().lookup(selector);
+        if (node instanceof ButtonBase) {
+            ((ButtonBase) node).fire();
+            return true;
+        }
+        return false;
     }
 
     // ═══════════════════════════════════════════════════════════════════
