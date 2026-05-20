@@ -8,19 +8,23 @@ actual BS desktop app** and controls it via a custom Java agent injected into th
 
 ## Architecture Overview
 
-The system has three layers:
+The system has four layers:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  BsUiRosterEngine (C#, IRosterEngine implementation)     │
-│  Translates spec actions → UI interaction sequences      │
+│  Thin dispatcher — maps IRosterEngine calls to *Action   │
+│  JSON-RPC methods with minimal local logic               │
 ├──────────────────────────────────────────────────────────┤
 │  AgentClient (C#, JSON-RPC 2.0 over TCP)                 │
-│  Typed async methods for each agent command               │
+│  Typed async methods for each agent command              │
 ├──────────────────────────────────────────────────────────┤
-│  bs-ui-java-agent (Java, loaded via -javaagent:)         │
-│  Runs inside the BattleScribe JVM, accesses scene graph  │
-│  and engine internals via reflection                      │
+│  RosterActions (Java, high-level orchestration)          │
+│  Full UI workflow automation: opens dialogs, fills forms,│
+│  polls for state changes, handles errors                 │
+├──────────────────────────────────────────────────────────┤
+│  SceneGraphCommands + EngineAccessor (Java, low-level)   │
+│  Scene graph queries, engine reflection, direct FX ops   │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -36,6 +40,7 @@ The system has three layers:
 | `src/BattleScribeSpec.BsRosterUiDriver/BsUiProbe.cs` | Interactive probe/debug mode |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/BsUiAgent.java` | Java agent entry point (`premain`) |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/JsonRpcServer.java` | TCP JSON-RPC server + FX thread dispatch |
+| `src/bs-ui-java-agent/src/bsspec/uiagent/RosterActions.java` | High-level action orchestration (UI workflow automation) |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/SceneGraphCommands.java` | Command implementations (scene graph) |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/EngineAccessor.java` | Engine discovery + reflection-based state reading |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/ActionRecorder.java` | UI interaction recording |
@@ -133,15 +138,18 @@ Standard error codes:
 
 ### Threading Model
 
-Commands are dispatched based on a hardcoded allowlist:
+Commands are dispatched through three routing paths:
 
-- **FX thread methods** — Must run on the JavaFX Application Thread (scene graph access).
-  Dispatched via `Platform.runLater()` with a **60-second timeout**. If the FX thread is
-  blocked (deadlock), the agent returns an error.
+- **FX thread methods** — Scene graph inspection/interaction commands that must run on the
+  JavaFX Application Thread. Dispatched via `Platform.runLater()` with a **60-second timeout**.
+  If the FX thread is blocked (deadlock), the agent returns an error.
 
-- **Background thread methods** — Run on the server's IO thread. Used for engine reflection
-  commands that could deadlock if run on the FX thread (e.g., engine calls that themselves
-  dispatch to FX thread).
+- **Action methods** — Methods whose names end in `Action` run on a background thread in
+  `RosterActions.dispatch()`. These orchestrate complete workflows and internally call
+  `SceneGraphCommands`-style operations on the FX thread as needed.
+
+- **Other methods** — Run on the server IO thread directly. This is used for engine
+  reflection/diagnostic operations that cannot safely run on the FX thread.
 
 ---
 
@@ -652,7 +660,7 @@ recursively serializes the entire roster tree.
         "publicationId": null,
         "page": null,
         "rules": [{"name": "Rule1", "description": "...", "hidden": false, "page": null, "publicationId": null, "publicationName": null}],
-        "categories": [{"name": "HQ", "entryId": "cat-entry-1", "primary": false, "customNotes": null, "publicationId": null, "page": null}],
+        "categories": [{"name": "HQ", "entryId": "cat-entry-1", "primary": false, "customName": null, "customNotes": null, "publicationId": null, "page": null}],
         "publications": [{"id": "pub-1", "name": "Codex"}],
         "selections": [
           {
@@ -709,9 +717,12 @@ serializer (`net.battlescribe.a.c.e.a(Roster, OutputStream)`).
   {"xml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<roster ...>...</roster>"}
   ```
 
-#### `setRosterName`
+#### `setRosterName` (deprecated, unused by `BsUiRosterEngine`)
 
 Sets the roster's name via `Roster.setName(String)`.
+
+This RPC still exists for low-level/manual use, but `BsUiRosterEngine` no longer calls it.
+Roster naming now happens as part of `createRosterAction` during roster creation.
 
 - **Thread**: Background
 - **Params**:
@@ -757,6 +768,46 @@ bytecode to `iconst_1, ireturn` (always return true).
 
 ---
 
+### High-Level Action RPCs
+
+These methods orchestrate complete UI workflows on the Java side. They run on a background
+thread and internally coordinate FX thread operations, window waits, and state polling.
+
+All action methods:
+- Are dispatched by `RosterActions.dispatch()` when the method name ends in `Action`
+- Run on the server's IO thread (NOT the FX thread)
+- Return JSON with at minimum a `success` field
+- May include `forceId` and/or `selectionId` for entity identification
+- Poll `getRosterState()` after mutations to confirm the state change took effect
+
+#### Available Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog |
+| `addForceAction` | `forceEntryId`, `catalogueId` | Adds a force via Edit Roster dialog |
+| `addChildForceAction` | `parentForceId`, `forceEntryId`, `catalogueId` | Adds a sub-force under an existing force |
+| `removeForceAction` | `forceId` | Removes a force via Edit Roster → X button → confirm |
+| `selectEntryAction` | `forceId`, `entryId` | Double-clicks a catalogue entry to add a selection |
+| `selectChildEntryAction` | `forceId`, `parentSelectionId`, `entryId`, `entryName` | Increments a child entry via the edit panel |
+| `deselectSelectionAction` | `forceId`, `selectionId` | Decrements/removes a selection |
+| `setSelectionCountAction` | `forceId`, `selectionId`, `count` | Sets selection count via spinner |
+| `duplicateSelectionAction` | `forceId`, `selectionId` | Duplicates via Ctrl+D |
+| `duplicateForceAction` | `forceId` | Duplicates via Ctrl+D |
+| `setCostLimitAction` | `costTypeId`, `costName`, `value` | Sets cost limit via Edit Roster spinner |
+| `setCustomizationAction` | `forceId`, `selectionId?`, `categoryEntryId?`, `customName?`, `customNotes?` | Sets custom name/notes via context menu. Supports forces, categories, and selections. |
+
+#### Action Patterns
+
+Actions follow common patterns:
+
+1. **Dialog actions** (createRoster, addForce, setCostLimit): Open Edit Roster → manipulate → Done → wait for dialog close
+2. **Tree actions** (selectEntry, duplicateSelection): Select in roster tree → perform action → poll for state change
+3. **Edit panel actions** (selectChildEntry, deselectSelection, setSelectionCount): Select parent → interact with edit panel → poll for state change
+4. **Context menu actions** (setCustomization): Select entity → right-click → select menu item → fill dialog → confirm
+
+---
+
 ### Diagnostics
 
 #### `threadDump`
@@ -793,24 +844,20 @@ Dumps all JVM threads with their current stack traces (up to 15 frames each).
 
 Operations pass through multiple timeout layers:
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ Layer                    │ Timeout │ Where                           │
-├─────────────────────────────────────────────────────────────────────┤
-│ Startup timeout          │ 30s     │ BsRosterApp.StartAsync          │
-│ AgentClient.CallTimeout  │ 30s     │ Per JSON-RPC round-trip         │
-│ FX thread dispatch       │ 60s     │ JsonRpcServer.executeOnFxThread │
-│ Engine op wait           │ 15s     │ waitForEngine (background ops)  │
-│ Poll timeouts            │ 10s     │ WaitForRosterState, WaitForWindow│
-│ Diagnostic timeout       │ 5s      │ BsUiDiagnostics (reduced)       │
-└─────────────────────────────────────────────────────────────────────┘
-```
+| Layer | Timeout | Where |
+|-------|---------|-------|
+| Startup timeout | 30s | BsRosterApp.StartAsync |
+| AgentClient.CallTimeout | 90s | Per *Action JSON-RPC round-trip |
+| AgentClient.CallTimeout | 30s | Per low-level JSON-RPC round-trip |
+| FX thread dispatch | 60s | JsonRpcServer.executeOnFxThread |
+| Window wait | 15s | RosterActions.waitForWindow |
+| State poll | 10s | RosterActions.waitForStateChange |
+| Diagnostic timeout | 5s | BsUiDiagnostics (reduced) |
 
-For a typical UI action, the effective max wait is:
-- **Simple action**: CallTimeout (30s) + poll (10s) = **40s**
-- **Engine API action**: CallTimeout (30s) for dispatch + CallTimeout (30s) for wait = **60s worst case**
+For a typical high-level action, the effective max wait is roughly:
+window wait (15s) + state poll (10s) = 25s on the Java side, well within the 90s RPC timeout.
 
-The FX dispatch timeout (60s) is intentionally longer than CallTimeout (30s) so the .NET
+The FX dispatch timeout (60s) is intentionally longer than the low-level CallTimeout (30s) so the .NET
 side times out first with a clearer error message.
 
 ---
@@ -834,37 +881,27 @@ partially stuck.
 
 ## BsUiRosterEngine — IRosterEngine Mapping
 
-The `BsUiRosterEngine` translates each `IRosterEngine` method into a sequence of UI
-interactions:
+The `BsUiRosterEngine` is now a thin dispatcher. Most UI workflow logic lives in Java-side
+`*Action` RPCs.
 
-| IRosterEngine Method | UI Sequence |
-|---------------------|-------------|
-| `Setup(gs, cats)` | Stage files → launch app → wait for window → dismiss dialogs |
-| `AddForce(forceEntryId, catId)` | If first force: New Roster → select game system → Add Force → select catalogue + force entry → Done. Otherwise: Edit Roster → Add Force → same. |
-| `AddChildForce(parentId, entryId, catId)` | Edit Roster → select parent in tree → Add Force → select → Done |
-| `RemoveForce(forceId)` | Edit Roster → click cell button (X) → confirm YES |
-| `SelectEntry(forceId, entryId)` | Select force in `#treeRoster` → double-click entry in `#treeCatalogue` |
-| `SelectChildEntry(forceId, parentId, entryId)` | Click parent in `#treeRoster` → `clickControlByLabel` in edit panel |
-| `DeselectSelection(forceId, selId)` | Click parent in tree → `clickControlByLabel(action: "decrement")`. Fallback: select in tree → press DELETE |
-| `SetSelectionCount(forceId, selId, count)` | Click parent in tree → `setSpinnerValueByLabel` |
-| `DuplicateSelection(forceId, selId)` | Select in tree → Ctrl+D |
-| `DuplicateForce(forceId)` | Select in tree → Ctrl+D |
-| `SetCostLimit(costTypeId, value)` | Edit Roster → `setSpinnerValueByLabel` for cost name |
-| `SetCustomization(forceId, selId, name, notes)` | Select in tree → fire `#btnCustomiseName` → fill text fields → Done |
-| `GetRosterState()` | `findEngine` (if needed) → `getRosterState` |
-| `GetValidationErrors()` | `getValidationErrors` |
+| IRosterEngine Method | Action RPC | What Java does |
+|---------------------|------------|----------------|
+| `Setup(gs, cats)` | (no RPC — C# handles launch) | Stage files → launch app → wait for window → dismiss dialogs → patch supporter |
+| `AddForce(forceEntryId, catId)` | `createRosterAction` (first) / `addForceAction` (subsequent) | Opens New/Edit Roster dialog → selects game system → adds force → selects catalogue + force entry → Done |
+| `AddChildForce(parentId, entryId, catId)` | `addChildForceAction` | Edit Roster → select parent in tree → Add Force → select → Done |
+| `RemoveForce(forceId)` | `removeForceAction` | Edit Roster → click cell button (X) → confirm YES |
+| `SelectEntry(forceId, entryId)` | `selectEntryAction` | Select force in roster tree → double-click entry in catalogue tree → poll for new selection |
+| `SelectChildEntry(forceId, parentId, entryId)` | `selectChildEntryAction` | Select parent in roster tree → `clickControlByLabel` in edit panel → poll for new selection |
+| `DeselectSelection(forceId, selId)` | `deselectSelectionAction` | Select parent in tree → decrement via `clickControlByLabel`. Fallback: select in tree → DELETE key |
+| `SetSelectionCount(forceId, selId, count)` | `setSelectionCountAction` | Select parent in tree → `setSpinnerValueByLabel` → poll for count match |
+| `DuplicateSelection(forceId, selId)` | `duplicateSelectionAction` | Select in roster tree → Ctrl+D → poll for new selection |
+| `DuplicateForce(forceId)` | `duplicateForceAction` | Select force in roster tree → Ctrl+D → poll for new force |
+| `SetCostLimit(costTypeId, value)` | `setCostLimitAction` | Edit Roster → `setSpinnerValueByLabel` for cost name → Done |
+| `SetCustomization(forceId, selId, catEntryId, name, notes)` | `setCustomizationAction` | Select entity in tree → right-click → "Customise Name..." → fill fields → Done. Supports forces, categories (via `categoryEntryId` tree navigation using `getEntryId()` reflection), and selections. |
+| `GetRosterState()` | `findEngine` + `getRosterState` | (low-level RPCs, not actions) |
+| `GetValidationErrors()` | `getValidationErrors` | (low-level RPC) |
 
-After each mutating action, the adapter **polls `getRosterState()`** (up to 10s) until the
-expected state change is detected (e.g., new force appears, selection count matches).
-
-### State Diffing
-
-The adapter uses before/after state comparison to identify created entities:
-- **Forces**: Finds a force in `after` that wasn't in `before`, matching by expected name
-  and catalogue ID.
-- **Selections**: Finds a selection in `after` that wasn't in `before`, matching by entry
-  ID and parent location.
-- **Duplicates**: Finds a new entity with the same name/entry as the original but different ID.
+State polling for mutation confirmation now happens inside the Java action implementations.
 
 ---
 
