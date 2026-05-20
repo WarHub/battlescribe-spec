@@ -1,0 +1,44 @@
+id: customization-category
+category: customization
+description: Setting customName and customNotes on a category
+engines:
+  newrecruit: skip
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-hq
+            targetId: cat-hq
+            name: HQ
+    categoryEntries:
+      - id: cat-hq
+        name: HQ
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - action: setCustomization
+    forceId: ${{ steps.add-patrol.forceId }}
+    categoryEntryId: cat-hq
+    customName: Command HQ
+    customNotes: Deployment zone alpha
+
+  - expectedState:
+      forces:
+        - categories:
+            - name: Uncategorised
+            - name: HQ
+              entryId: cat-hq
+              customName: Command HQ
+              customNotes: Deployment zone alpha

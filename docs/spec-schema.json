@@ -1086,6 +1086,7 @@
         },
         "publicationId": { "type": "string" },
         "page": { "type": "string" },
+        "customName": { "type": "string" },
         "customNotes": { "type": "string" }
       }
     },

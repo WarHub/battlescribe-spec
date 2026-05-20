@@ -380,6 +380,8 @@ public sealed class ExpectedCategoryDef
 
     public string? Page { get; set; }
 
+    public string? CustomName { get; set; }
+
     public string? CustomNotes { get; set; }
 }
 

@@ -681,10 +681,11 @@ steps:
         - customName: Alpha Strike Force
           customNotes: Main battle group
 
-  # Step 4e: setCustomization — set custom notes on force HQ category
+  # Step 4e: setCustomization — set custom name and notes on force HQ category
   - action: setCustomization
     forceId: ${{ steps.add-battalion.forceId }}
     categoryEntryId: cat-hq
+    customName: Command HQ
     customNotes: HQ deployment notes
 
   - expectedState:
@@ -693,6 +694,7 @@ steps:
             - name: Uncategorised
             - name: HQ
               entryId: cat-hq
+              customName: Command HQ
               customNotes: HQ deployment notes
             - name: Troops
             - name: Elites
@@ -934,6 +936,7 @@ steps:
             - name: HQ
               entryId: cat-hq
               primary: false
+              customName: Command HQ
               customNotes: HQ deployment notes
               profiles: []
               rules: []
@@ -1165,6 +1168,7 @@ steps:
                 - name: HQ
                   entryId: cat-hq
                   primary: false
+                  customName: Command HQ
                   customNotes: HQ deployment notes
                   profiles: []
                   rules: []

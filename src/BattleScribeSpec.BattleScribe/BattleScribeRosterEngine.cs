@@ -611,11 +611,13 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             Categories: [.. forceCategories.Select(c =>
             {
                 var catPubId = c.getPublicationId();
+                var catCustomName = c.getCustomName();
                 var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
                     c.getName() ?? "", c.getEntryId(), c.isPrimary(),
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
                     Page: c.getPage(),
+                    CustomName: string.IsNullOrEmpty(catCustomName) ? null : catCustomName,
                     CustomNotes: string.IsNullOrEmpty(catCustomNotes) ? null : catCustomNotes);
             })],
             Publications: forcePublications.Count > 0
@@ -660,6 +662,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 var catProfiles = JavaListToList<net.battlescribe.model.data.Profile>(c.getProfiles());
                 var catRules = JavaListToList<net.battlescribe.model.data.Rule>(c.getRules());
                 var catPubId = c.getPublicationId();
+                var catCustomName = c.getCustomName();
                 var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
                     c.getName() ?? "", c.getEntryId(), c.isPrimary(),
@@ -668,6 +671,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                         string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId()))],
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
                     Page: c.getPage(),
+                    CustomName: string.IsNullOrEmpty(catCustomName) ? null : catCustomName,
                     CustomNotes: string.IsNullOrEmpty(catCustomNotes) ? null : catCustomNotes);
             })],
             Page: sel.getPage(),

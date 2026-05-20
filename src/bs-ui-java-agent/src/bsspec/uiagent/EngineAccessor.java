@@ -623,6 +623,7 @@ public class EngineAccessor {
             } catch (Exception e) {
                 item.addProperty("primary", false);
             }
+            item.addProperty("customName", callGetter(category, "getCustomName"));
             item.addProperty("customNotes", callGetter(category, "getCustomNotes"));
             item.addProperty("publicationId", callGetter(category, "getPublicationId"));
             item.addProperty("page", callGetter(category, "getPage"));

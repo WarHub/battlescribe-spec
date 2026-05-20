@@ -964,6 +964,11 @@ public sealed class RosterRunner
                 AssertEqual(stepIndex, $"{catPrefix}.page", ec.Page, ac.Page ?? "");
             }
 
+            if (ec.CustomName is not null)
+            {
+                AssertEqual(stepIndex, $"{catPrefix}.customName", ec.CustomName, ac.CustomName ?? "");
+            }
+
             if (ec.CustomNotes is not null)
             {
                 AssertEqual(stepIndex, $"{catPrefix}.customNotes", ec.CustomNotes, ac.CustomNotes ?? "");

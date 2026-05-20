@@ -1,0 +1,42 @@
+id: customization-selection
+category: customization
+description: Setting customName and customNotes on a selection
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-commander
+          name: Commander
+          type: unit
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - action: selectEntry
+    id: select-cmd
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-commander
+
+  - action: setCustomization
+    forceId: ${{ steps.add-patrol.forceId }}
+    selectionId: ${{ steps.select-cmd.selectionId }}
+    customName: Captain Rex
+    customNotes: Leads the vanguard
+
+  - expectedState:
+      forces:
+        - selections:
+            - name: Commander
+              customName: Captain Rex
+              customNotes: Leads the vanguard
