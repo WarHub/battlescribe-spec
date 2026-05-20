@@ -45,7 +45,7 @@ public static class SpecValidator
         ["duplicateSelection"] = new(Required: ["forceId", "selectionId"], Optional: []),
         ["duplicateForce"] = new(Required: ["forceId"], Optional: []),
         ["setCostLimit"] = new(Required: ["costTypeId", "value"], Optional: []),
-        ["setCustomization"] = new(Required: ["forceId"], Optional: ["selectionId", "categoryEntryId", "customName", "customNotes"]),
+        ["setCustomization"] = new(Required: ["forceId"], Optional: ["selectionId", "customName", "customNotes", "categoryEntryId"]),
         ["dump"] = new(Required: [], Optional: []),
     };
 

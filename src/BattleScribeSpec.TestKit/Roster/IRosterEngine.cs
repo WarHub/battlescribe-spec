@@ -104,7 +104,8 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Set custom name and/or notes on a force, selection, or category.
-    /// Targeting: if categoryEntryId → category; if selectionId → selection; else → force.
+    /// Targeting: if categoryEntryId → category; else if selectionId → selection; else → force.
+    /// NR does not support category customization (silently ignored).
     /// </summary>
     void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
         => throw new NotSupportedException("This engine does not support setCustomization.");

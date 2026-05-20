@@ -5,13 +5,15 @@
 .DESCRIPTION
     Initializes git submodules (wham — build dependency at .deps/wham).
 
-    Downloads external test data into .testdata/:
+    Downloads external test data into .testdata/ and other configured locations:
     - wh40k-9e (BSData) — real-world test data for integration tests (git clone)
-    - Artifacts pinned in testdata.json (e.g., newrecruit-har — frozen HAR snapshot)
+    - Artifacts pinned in testdata.json (e.g., newrecruit-har — frozen HAR snapshot,
+      battlescribe-app — extracted to lib/battlescribe)
 
     Installs Playwright browsers needed for New Recruit adapter tests.
 
-    Test data is downloaded/cloned into .testdata/<key>/.
+    Test data is downloaded/cloned into .testdata/<key>/ unless testdata.json overrides
+    the destination path.
     Already-present items are skipped.
 
     Requires the GitHub CLI (gh) for test data downloads.
@@ -52,7 +54,7 @@ git -C $repoRoot submodule update --init --recursive
 if ($LASTEXITCODE -ne 0) { throw "Failed to initialize git submodules" }
 Write-Host "[OK] Git submodules initialized" -ForegroundColor Green
 
-# --- Test data (.testdata/) ---
+# --- Test data ---
 
 $configPath = Join-Path $repoRoot 'testdata.json'
 $testdataDir = Join-Path $repoRoot '.testdata'
@@ -82,13 +84,18 @@ if (Test-Path $configPath) {
     foreach ($key in $config.PSObject.Properties.Name) {
         $entry = $config.$key
         $repo = $entry.repo
-        $destDir = Join-Path $testdataDir $key
+        $destDir = if ($entry.PSObject.Properties['path']) {
+            Join-Path $repoRoot $entry.path
+        } else {
+            Join-Path $testdataDir $key
+        }
 
         $entryType = if ($entry.PSObject.Properties['type']) { $entry.type } else { 'release' }
 
         switch ($entryType) {
             'release' {
                 $tag = $entry.tag
+                $pattern = if ($entry.PSObject.Properties['pattern']) { $entry.pattern } else { $null }
                 Write-Host "[$key] release: $repo @ $tag" -ForegroundColor Cyan
 
                 $tagMarker = Join-Path $destDir '.tag'
@@ -101,8 +108,24 @@ if (Test-Path $configPath) {
                 New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
                 Write-Host "  Downloading release $tag from $repo..." -ForegroundColor Yellow
-                gh release download $tag -R $repo -D $destDir
+                $dlArgs = @('release', 'download', $tag, '-R', $repo, '-D', $destDir)
+                if ($pattern) { $dlArgs += @('--pattern', $pattern) }
+                gh @dlArgs
                 if ($LASTEXITCODE -ne 0) { throw "Failed to download release $tag from $repo" }
+
+                # Extract ZIP archives and remove the archive file
+                $zipFiles = Get-ChildItem -Path $destDir -Filter '*.zip'
+                foreach ($zip in $zipFiles) {
+                    Write-Host "  Extracting $($zip.Name)..." -ForegroundColor Yellow
+                    if ($IsLinux -or $IsMacOS) {
+                        # Use system unzip to preserve execute permissions
+                        & unzip -q $zip.FullName -d $destDir
+                        if ($LASTEXITCODE -ne 0) { throw "Failed to extract $($zip.Name)" }
+                    } else {
+                        Expand-Archive -Path $zip.FullName -DestinationPath $destDir -Force
+                    }
+                    Remove-Item $zip.FullName -Force
+                }
 
                 $tag | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
                 Write-Host "  [OK] Downloaded to $destDir" -ForegroundColor Green

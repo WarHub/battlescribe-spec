@@ -8,5 +8,11 @@
     "repo": "giloushaker/nr-editor",
     "ref": "gh-pages",
     "commit": "74e220793e8120f8e8efa151e94b3bb0c8e4a54e"
+  },
+  "battlescribe-app": {
+    "repo": "WarHub/battlescribe-archive",
+    "tag": "v2.03.21",
+    "pattern": "BattleScribe_*_Linux.zip",
+    "path": "lib/battlescribe"
   }
 }
