@@ -103,8 +103,9 @@ public interface IRosterEngine : IDisposable
     void SetCostLimit(string costTypeId, decimal value);
 
     /// <summary>
-    /// Set custom name and/or notes on a force or selection.
-    /// Targeting: if selectionId → selection; else → force. categoryEntryId is unsupported.
+    /// Set custom name and/or notes on a force, selection, or category.
+    /// Targeting: if categoryEntryId → category; else if selectionId → selection; else → force.
+    /// NR does not support category customization (silently ignored).
     /// </summary>
     void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
         => throw new NotSupportedException("This engine does not support setCustomization.");

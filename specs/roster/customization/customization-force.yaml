@@ -13,11 +13,19 @@ setup:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
 
 steps:
   - action: addForce
     id: add-patrol
     forceEntryId: fe-patrol
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit
 
   - action: setCustomization
     forceId: ${{ steps.add-patrol.forceId }}

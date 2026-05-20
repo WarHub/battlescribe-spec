@@ -100,8 +100,8 @@ public sealed class StepDef
     public string? CustomNotes { get; set; }
 
     /// <summary>
-    /// Category entry ID parameter on setCustomization.
-    /// Reserved for protocol compatibility; category customization is unsupported.
+    /// Category entry ID for setCustomization. Targets the named category in the force.
+    /// NR does not support category customization (silently ignored).
     /// </summary>
     public string? CategoryEntryId { get; set; }
 
