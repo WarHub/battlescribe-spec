@@ -103,12 +103,11 @@ public interface IRosterEngine : IDisposable
     void SetCostLimit(string costTypeId, decimal value);
 
     /// <summary>
-    /// Set custom name and/or notes on a force or selection.
-    /// Category customization is intentionally unsupported because BattleScribe Desktop
-    /// only enables btnCustomiseName for Selection instances, not Category objects.
-    /// Targeting: if selectionId → selection; else → force.
+    /// Set custom name and/or notes on a force, selection, or category.
+    /// Targeting: if categoryEntryId → category; else if selectionId → selection; else → force.
+    /// NR does not support category customization (silently ignored).
     /// </summary>
-    void SetCustomization(string forceId, string? selectionId, string? customName, string? customNotes)
+    void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
         => throw new NotSupportedException("This engine does not support setCustomization.");
 
     /// <summary>

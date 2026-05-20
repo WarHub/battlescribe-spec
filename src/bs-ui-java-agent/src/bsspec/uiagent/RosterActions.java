@@ -435,14 +435,22 @@ public class RosterActions {
         String forceId = requireString(p, "forceId");
         String selectionId = p.has("selectionId") && !p.get("selectionId").isJsonNull()
                 ? p.get("selectionId").getAsString() : null;
+        String categoryEntryId = p.has("categoryEntryId") && !p.get("categoryEntryId").isJsonNull()
+                ? p.get("categoryEntryId").getAsString() : null;
         String customName = p.has("customName") && !p.get("customName").isJsonNull()
                 ? p.get("customName").getAsString() : null;
         String customNotes = p.has("customNotes") && !p.get("customNotes").isJsonNull()
                 ? p.get("customNotes").getAsString() : null;
 
-        // Select the target (selection or force) in the roster tree
-        String targetId = selectionId != null ? selectionId : forceId;
-        runOnFx(() -> selectTreeItemById("#treeRoster", targetId, MAIN_WINDOW));
+        // Select the target in the roster tree
+        if (categoryEntryId != null) {
+            // Categories don't have :id: tokens in their display text.
+            // Find the category tree item by matching the backing object's getEntryId().
+            runOnFx(() -> selectCategoryTreeItem("#treeRoster", forceId, categoryEntryId));
+        } else {
+            String targetId = selectionId != null ? selectionId : forceId;
+            runOnFx(() -> selectTreeItemById("#treeRoster", targetId, MAIN_WINDOW));
+        }
         sleep(300);
 
         // Call showCustomiseSelectableDialog via reflection on the controller.
@@ -1511,6 +1519,46 @@ public class RosterActions {
         if (item == null) throw new RuntimeException("Tree item not found for id: " + id + " in " + windowTitle);
 
         tree.getSelectionModel().select(item);
+    }
+
+    /**
+     * Selects a category tree item by navigating: find force by :forceId: token,
+     * then find child whose backing object's getEntryId() matches categoryEntryId.
+     * Categories don't display :id: tokens in their text.
+     */
+    @SuppressWarnings("unchecked")
+    private void selectCategoryTreeItem(String treeSelector, String forceId, String categoryEntryId) {
+        Scene scene = findScene(MAIN_WINDOW);
+        if (scene == null) throw new RuntimeException("Main window scene not found");
+        Node node = scene.getRoot().lookup(treeSelector);
+        if (!(node instanceof TreeView)) throw new RuntimeException("TreeView not found: " + treeSelector);
+
+        TreeView<Object> tree = (TreeView<Object>) node;
+        // Find force tree item
+        String forceToken = ":" + forceId + ":";
+        TreeItem<Object> forceItem = findTreeItemByText(tree.getRoot(), forceToken);
+        if (forceItem == null) throw new RuntimeException("Force tree item not found for id: " + forceId);
+
+        // Find category among force's children by checking backing object's getEntryId()
+        TreeItem<Object> categoryItem = null;
+        for (TreeItem<Object> child : forceItem.getChildren()) {
+            Object val = child.getValue();
+            if (val == null) continue;
+            try {
+                Method m = val.getClass().getMethod("getEntryId");
+                Object entryId = m.invoke(val);
+                if (categoryEntryId.equals(entryId)) {
+                    categoryItem = child;
+                    break;
+                }
+            } catch (Exception e) {
+                // Not a category-like object, skip
+            }
+        }
+        if (categoryItem == null) {
+            throw new RuntimeException("Category tree item not found for entryId: " + categoryEntryId + " under force: " + forceId);
+        }
+        tree.getSelectionModel().select(categoryItem);
     }
 
     /**

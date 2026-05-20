@@ -460,9 +460,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             .GetAwaiter().GetResult();
     }
 
-    public void SetCustomization(string forceId, string? selectionId, string? customName, string? customNotes)
+    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
     {
-        NewRecruitActions.SetCustomizationAsync(Browser.Page, forceId, selectionId, customName, customNotes)
+        NewRecruitActions.SetCustomizationAsync(Browser.Page, forceId, selectionId, categoryEntryId, customName, customNotes)
             .GetAwaiter().GetResult();
     }
 

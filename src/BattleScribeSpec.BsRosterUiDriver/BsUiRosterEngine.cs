@@ -148,11 +148,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }));
     }
 
-    public void SetCustomization(string forceId, string? selectionId, string? customName, string? customNotes)
+    public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
         => RunAsync(() => CallActionAsync("setCustomizationAction", new JsonObject
         {
             ["forceId"] = forceId,
             ["selectionId"] = selectionId,
+            ["categoryEntryId"] = categoryEntryId,
             ["customName"] = customName,
             ["customNotes"] = customNotes,
         }));
@@ -780,6 +781,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private static CategoryState MapCategoryState(AgentCategoryState dto)
         => new(dto.Name ?? string.Empty, dto.EntryId, dto.Primary,
+            CustomName: string.IsNullOrEmpty(dto.CustomName) ? null : dto.CustomName,
+            CustomNotes: string.IsNullOrEmpty(dto.CustomNotes) ? null : dto.CustomNotes,
             PublicationId: string.IsNullOrEmpty(dto.PublicationId) ? null : dto.PublicationId,
             Page: dto.Page);
 
@@ -1152,6 +1155,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
         public string? Name { get; set; }
         public string? EntryId { get; set; }
         public bool Primary { get; set; }
+        public string? CustomName { get; set; }
+        public string? CustomNotes { get; set; }
         public string? PublicationId { get; set; }
         public string? Page { get; set; }
     }

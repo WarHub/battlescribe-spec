@@ -49,6 +49,10 @@ public class EngineAccessor {
         return controllerInstance;
     }
 
+    public Object getEngineInstance() {
+        return engineInstance;
+    }
+
     private static JsonObject parseParams(String paramsJson) {
         if (paramsJson == null || paramsJson.isEmpty()) {
             return new JsonObject();
@@ -619,6 +623,7 @@ public class EngineAccessor {
             } catch (Exception e) {
                 item.addProperty("primary", false);
             }
+            item.addProperty("customName", callGetter(category, "getCustomName"));
             item.addProperty("customNotes", callGetter(category, "getCustomNotes"));
             item.addProperty("publicationId", callGetter(category, "getPublicationId"));
             item.addProperty("page", callGetter(category, "getPage"));

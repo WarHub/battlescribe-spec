@@ -681,6 +681,33 @@ steps:
         - customName: Alpha Strike Force
           customNotes: Main battle group
 
+  # Step 4e: setCustomization — set custom name and notes on force HQ category
+  - action: setCustomization
+    forceId: ${{ steps.add-battalion.forceId }}
+    categoryEntryId: cat-hq
+    customName: Command HQ
+    customNotes: HQ deployment notes
+
+  - expectedState:
+      forces:
+        - categories:
+            - name: Uncategorised
+            - name: HQ
+              entryId: cat-hq
+              customName: Command HQ
+              customNotes: HQ deployment notes
+            - name: Troops
+            - name: Elites
+      engines:
+        newrecruit:
+          forces:
+            - categories:
+                - name: Uncategorized
+                - name: HQ
+                  entryId: cat-hq
+                - name: Troops
+                - name: Elites
+
   # Step 5: setSelectionCount— set Trooper child count to 2 via selectionId
   - action: setSelectionCount
     forceId: ${{ steps.add-battalion.forceId }}
@@ -909,6 +936,8 @@ steps:
             - name: HQ
               entryId: cat-hq
               primary: false
+              customName: Command HQ
+              customNotes: HQ deployment notes
               profiles: []
               rules: []
             - name: Troops
@@ -1139,6 +1168,8 @@ steps:
                 - name: HQ
                   entryId: cat-hq
                   primary: false
+                  customName: Command HQ
+                  customNotes: HQ deployment notes
                   profiles: []
                   rules: []
                 - name: Troops
