@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -555,7 +556,7 @@ public class SceneGraphCommands {
 
     private Node findNodeByTextRecursive(Node node, String text, String nodeType) {
         String nodeText = extractTextContent(node);
-        if (nodeText != null && nodeText.toLowerCase().contains(text.toLowerCase())) {
+        if (nodeText != null && nodeText.toLowerCase(Locale.ROOT).contains(text.toLowerCase(Locale.ROOT))) {
             if (nodeType == null || node.getClass().getSimpleName().equals(nodeType)) {
                 return node;
             }
@@ -1183,7 +1184,7 @@ public class SceneGraphCommands {
         if (text != null) {
             String trimmed = text.trim();
             if (!trimmed.isEmpty() && id != null) {
-                String lowerId = id.toLowerCase();
+                String lowerId = id.toLowerCase(Locale.ROOT);
                 if ((lowerId.contains("roster") || lowerId.contains("name"))
                         && !trimmed.equalsIgnoreCase("Roster Editor")) {
                     return trimmed;
@@ -1398,7 +1399,7 @@ public class SceneGraphCommands {
         if (rawName == null) {
             return null;
         }
-        String normalized = rawName.trim().toLowerCase();
+        String normalized = rawName.trim().toLowerCase(Locale.ROOT);
         if (normalized.endsWith(":")) {
             normalized = normalized.substring(0, normalized.length() - 1).trim();
         }

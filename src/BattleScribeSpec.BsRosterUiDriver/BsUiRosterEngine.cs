@@ -11,24 +11,22 @@ namespace BattleScribeSpec.BsRosterUiDriver;
 /// <para>
 /// <b>Timeout architecture</b> — operations pass through multiple timeout layers:
 /// <list type="bullet">
-///   <item><b>AgentClient.CallTimeout (30s)</b> — Max time for a single JSON-RPC round-trip.
-///     If the agent doesn't respond within this window, the call throws.</item>
+///   <item><b>AgentClient.CallTimeout (90s for actions)</b> — Max time for a single JSON-RPC
+///     round-trip. High-level *Action methods get 90s; other calls use 30s default.</item>
 ///   <item><b>FX thread dispatch (60s)</b> — Java agent's <c>executeOnFxThread</c> timeout.
 ///     If a UI command doesn't complete on the JavaFX Application Thread within 60s,
 ///     the agent returns an error (likely deadlock).</item>
-///   <item><b>Engine op wait (15s)</b> — <c>waitForEngine</c> param <c>timeoutMs</c>.
-///     After dispatching an engine API call on a background thread, the agent waits
-///     up to 15s for it to complete before reporting timeout.</item>
-///   <item><b>Poll timeouts (10s)</b> — window polling helpers wait
-///     until a condition is met or 10s elapses.</item>
+///   <item><b>Window wait (30s)</b> — Java agent's <c>waitForWindow</c>/<c>waitForWindowClose</c>
+///     timeout for dialog transitions during high-level actions.</item>
+///   <item><b>State poll (10s)</b> — Java agent's <c>waitForStateChange</c> polls
+///     until the roster state reflects the expected change.</item>
 ///   <item><b>Startup timeout (30s)</b> — <c>BsRosterApp.StartAsync</c> waits for
 ///     the Java process to print the agent port line.</item>
 ///   <item><b>Diagnostic timeout (5s)</b> — <c>BsUiDiagnostics</c> temporarily reduces
 ///     CallTimeout to 5s to capture state even when the agent is partially stuck.</item>
 /// </list>
-/// For a typical UI action, the effective max wait is roughly:
-/// CallTimeout (30s) + poll (10s) = 40s before the .NET side gives up.
-/// For engine API actions: CallTimeout (30s) for dispatch + CallTimeout (30s) for waitForEngine = 60s worst case.
+/// For a typical high-level action, the effective max wait is roughly:
+/// window wait (30s) + state poll (10s) = 40s on the Java side, well within the 90s RPC timeout.
 /// </para>
 /// </summary>
 public sealed class BsUiRosterEngine : IRosterEngine
@@ -139,6 +137,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     public void SetCostLimit(string costTypeId, decimal value)
     {
+        _pendingCostLimits[costTypeId] = value;
+        if (!_engineLocated)
+        {
+            // Roster not yet created; cost limit will be applied during createRosterAction.
+            return;
+        }
         var costName = _costNamesById.GetValueOrDefault(costTypeId) ?? costTypeId;
         RunAsync(() => CallActionAsync("setCostLimitAction", new JsonObject
         {

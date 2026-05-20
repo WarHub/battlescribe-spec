@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -561,7 +562,7 @@ public class EngineAccessor {
         try {
             Method m = sel.getClass().getMethod("getType");
             Object type = m.invoke(sel);
-            result.addProperty("type", type != null ? type.toString().toLowerCase() : null);
+            result.addProperty("type", type != null ? type.toString().toLowerCase(Locale.ROOT) : null);
         } catch (Exception e) {
             result.add("type", JsonNull.INSTANCE);
         }
@@ -1196,7 +1197,7 @@ public class EngineAccessor {
     }
 
     private ValidationRef resolveValidationRef(Map<String, List<String>> errorIdMap, String ownerType, String message, String ownerEntryId) {
-        String lowerMessage = message != null ? message.toLowerCase() : null;
+        String lowerMessage = message != null ? message.toLowerCase(Locale.ROOT) : null;
 
         if ("roster".equals(ownerType)) {
             ValidationRef rosterCostLimitRef = resolveRosterCostLimitRef(errorIdMap, lowerMessage);
@@ -1262,7 +1263,7 @@ public class EngineAccessor {
 
         for (String constraintId : constraintIds) {
             String costTypeName = getCostTypeName(constraintId);
-            if (costTypeName != null && containsIgnoreCase(lowerMessage, costTypeName.toLowerCase())) {
+            if (costTypeName != null && containsIgnoreCase(lowerMessage, costTypeName.toLowerCase(Locale.ROOT))) {
                 return new ValidationRef("costLimits", constraintId);
             }
         }
@@ -1287,7 +1288,7 @@ public class EngineAccessor {
         if (message == null || candidate == null || candidate.isEmpty()) {
             return false;
         }
-        return message.toLowerCase().contains(candidate.toLowerCase());
+        return message.toLowerCase(Locale.ROOT).contains(candidate.toLowerCase(Locale.ROOT));
     }
 
     private String getEntryName(String entryId) {
@@ -1318,7 +1319,7 @@ public class EngineAccessor {
             for (Object ct : toJavaList(costTypes)) {
                 String id = callGetter(ct, "getId");
                 String name = callGetter(ct, "getName");
-                if (name != null && lowerMessage.contains(name.toLowerCase())) {
+                if (name != null && lowerMessage.contains(name.toLowerCase(Locale.ROOT))) {
                     return id;
                 }
             }

@@ -1482,10 +1482,7 @@ public class RosterActions {
                 return;
             }
         }
-        // If exact match not found, select first item as fallback
-        if (combo.getItems().size() > 0) {
-            combo.getSelectionModel().select(0);
-        }
+        throw new RuntimeException("No ComboBox item matching '" + text + "' found in " + combo.getItems().size() + " items");
     }
 
     /**
@@ -1683,8 +1680,13 @@ public class RosterActions {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
             String result = engineAccessor.findEngine();
-            if (result.contains("\"found\":true") || result.contains("\"found\": true")) {
-                return;
+            try {
+                JsonObject json = new JsonParser().parse(result).getAsJsonObject();
+                if (json.has("found") && json.get("found").getAsBoolean()) {
+                    return;
+                }
+            } catch (Exception e) {
+                // Parse failure — engine not ready yet
             }
             sleep(POLL_INTERVAL_MS);
         }

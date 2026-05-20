@@ -229,16 +229,6 @@ Finds a single node by CSS selector.
   {"type": "Button", "id": "btnNewRoster", "text": "New", "visible": true, "disabled": false}
   ```
 
-#### `findAllNodes`
-
-Finds all nodes matching a CSS selector.
-
-- **Thread**: FX
-- **Params**:
-  - `selector` (string, required)
-  - `windowTitle` (string, optional)
-- **Returns**: Array of node JSON objects
-
 #### `findNodeByText`
 
 Finds a node by its text content (case-insensitive substring match).
@@ -249,16 +239,6 @@ Finds a node by its text content (case-insensitive substring match).
   - `nodeType` (string, optional) — Filter by class simple name (e.g., `"Button"`, `"Label"`)
   - `windowTitle` (string, optional) — If omitted, searches ALL windows
 - **Returns**: Node JSON object or `null`
-
-#### `getNodeText`
-
-Gets the text content of a node.
-
-- **Thread**: FX
-- **Params**:
-  - `selector` (string, required)
-  - `windowTitle` (string, optional)
-- **Returns**: String value
 
 #### `getUiState`
 
@@ -458,33 +438,9 @@ button in the Edit Roster dialog's force tree.
 - **Important**: The button is fired asynchronously because it typically triggers a modal
   confirmation dialog (`showAndWait`). The caller must handle the resulting dialog separately.
 
-#### `expandTreeItem`
-
-Expands a tree item (sets `TreeItem.setExpanded(true)`).
-
-- **Thread**: FX
-- **Params**:
-  - `selector` (string, required)
-  - `text` (string, required)
-  - `windowTitle` (string, optional)
-- **Returns**: Confirmation object
-
 ---
 
 ### UI Interaction — Spinner
-
-#### `getSpinnerValue`
-
-Reads the current value of a Spinner control.
-
-- **Thread**: FX
-- **Params**:
-  - `selector` (string, required)
-  - `windowTitle` (string, optional)
-- **Returns**:
-  ```json
-  {"value": 5}
-  ```
 
 #### `setSpinnerValue`
 
