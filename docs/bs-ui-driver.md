@@ -732,25 +732,6 @@ collecting constraint violations.
   ]
   ```
 
-#### `patchSupporterPass`
-
-Bytecode-patches `hasValidSupporterPass()` to always return `true`, unlocking supporter-only
-features (like custom names) in the desktop app.
-
-Uses `java.lang.instrument.Instrumentation.retransformClasses()` to rewrite the method's
-bytecode to `iconst_1, ireturn` (always return true).
-
-- **Thread**: Background
-- **Params**: none
-- **Returns**:
-  ```json
-  {"patched": true, "log": ["target:net.battlescribe.desktop.a.b", "retransformed", "verified"]}
-  ```
-  or:
-  ```json
-  {"patched": false, "log": ["method_not_found"]}
-  ```
-
 ---
 
 ### High-Level Action RPCs

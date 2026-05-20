@@ -161,8 +161,6 @@ public class SceneGraphCommands {
                 return clickControlByLabel(params);
             case "setSpinnerValueByLabel":
                 return setSpinnerValueByLabel(params);
-            case "patchSupporterPass":
-                return engineAccessor.patchSupporterPass();
             case "threadDump":
                 return threadDump();
             default:

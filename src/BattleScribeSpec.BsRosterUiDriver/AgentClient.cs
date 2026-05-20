@@ -155,18 +155,6 @@ public sealed class AgentClient : IDisposable
         await CallAsync("fireButton", parameters);
     }
 
-    /// <summary>Finds all nodes matching a CSS selector.</summary>
-    public async Task<JsonNode?> FindAllNodesAsync(string selector, string? windowTitle = null)
-    {
-        var parameters = new JsonObject { ["selector"] = selector };
-        if (windowTitle is not null)
-        {
-            parameters["windowTitle"] = windowTitle;
-        }
-
-        return await CallAsync("findAllNodes", parameters);
-    }
-
     /// <summary>Finds a node by its text content, optionally filtered by type.</summary>
     public async Task<JsonNode?> FindNodeByTextAsync(string text, string? nodeType = null, string? windowTitle = null)
     {
@@ -239,19 +227,6 @@ public sealed class AgentClient : IDisposable
         return false;
     }
 
-    /// <summary>Gets the text content of a node.</summary>
-    public async Task<string?> GetNodeTextAsync(string selector, string? windowTitle = null)
-    {
-        var parameters = new JsonObject { ["selector"] = selector };
-        if (windowTitle is not null)
-        {
-            parameters["windowTitle"] = windowTitle;
-        }
-
-        var result = await CallAsync("getNodeText", parameters);
-        return result?.GetValue<string>();
-    }
-
     public void Dispose()
     {
         _writer.Dispose();
@@ -260,24 +235,6 @@ public sealed class AgentClient : IDisposable
     }
 
     // --- Engine access commands ---
-
-    /// <summary>Lists all loaded net.battlescribe.* classes in the JVM.</summary>
-    public async Task<JsonNode?> ListBsClassesAsync()
-    {
-        return await CallAsync("listBsClasses");
-    }
-
-    /// <summary>Inspects a class by name, listing fields and methods.</summary>
-    public async Task<JsonNode?> InspectClassAsync(string className)
-    {
-        return await CallAsync("inspectClass", new JsonObject { ["className"] = className });
-    }
-
-    /// <summary>Attempts to find the BS engine instance in the JVM.</summary>
-    public async Task<JsonNode?> FindEngineAsync()
-    {
-        return await CallAsync("findEngine");
-    }
 
     /// <summary>Reads the current roster state from the engine.</summary>
     public async Task<JsonNode?> GetRosterStateAsync()
@@ -330,103 +287,6 @@ public sealed class AgentClient : IDisposable
         return await CallAsync("getRecordedActions");
     }
 
-    // --- ComboBox / TreeView commands ---
-
-    /// <summary>Gets items from a ComboBox.</summary>
-    public async Task<JsonNode?> GetComboBoxItemsAsync(string selector, string? windowTitle = null)
-    {
-        var p = new JsonObject { ["selector"] = selector };
-        if (windowTitle is not null)
-        {
-            p["windowTitle"] = windowTitle;
-        }
-        return await CallAsync("getComboBoxItems", p);
-    }
-
-    /// <summary>Selects an item in a ComboBox by text match or index.</summary>
-    public async Task<JsonNode?> SelectComboBoxItemAsync(
-        string selector,
-        string? text = null,
-        int? index = null,
-        string? windowTitle = null)
-    {
-        var p = new JsonObject { ["selector"] = selector };
-        if (text is not null)
-        {
-            p["text"] = text;
-        }
-        if (index is not null)
-        {
-            p["index"] = index.Value;
-        }
-        if (windowTitle is not null)
-        {
-            p["windowTitle"] = windowTitle;
-        }
-        return await CallAsync("selectComboBoxItem", p);
-    }
-
-    /// <summary>Gets items from a TreeView.</summary>
-    public async Task<JsonNode?> GetTreeItemsAsync(
-        string selector,
-        int maxDepth = 3,
-        string? windowTitle = null)
-    {
-        var p = new JsonObject { ["selector"] = selector, ["maxDepth"] = maxDepth };
-        if (windowTitle is not null)
-        {
-            p["windowTitle"] = windowTitle;
-        }
-        return await CallAsync("getTreeItems", p);
-    }
-
-    /// <summary>Selects an item in a TreeView by text match.</summary>
-    public async Task<JsonNode?> SelectTreeItemAsync(
-        string selector,
-        string text,
-        string? windowTitle = null)
-    {
-        var p = new JsonObject { ["selector"] = selector, ["text"] = text };
-        if (windowTitle is not null)
-        {
-            p["windowTitle"] = windowTitle;
-        }
-        return await CallAsync("selectTreeItem", p);
-    }
-
-    /// <summary>Expands a TreeItem by text match.</summary>
-    public async Task<JsonNode?> ExpandTreeItemAsync(
-        string selector,
-        string text,
-        string? windowTitle = null)
-    {
-        var p = new JsonObject { ["selector"] = selector, ["text"] = text };
-        if (windowTitle is not null)
-        {
-            p["windowTitle"] = windowTitle;
-        }
-        return await CallAsync("expandTreeItem", p);
-    }
-
-    /// <summary>Clicks (or double-clicks) a tree item by text. Double-click on catalogue tree adds entry.</summary>
-    public async Task<JsonNode?> ClickTreeItemAsync(
-        string selector,
-        string text,
-        bool doubleClick = false,
-        string? windowTitle = null)
-    {
-        var p = new JsonObject { ["selector"] = selector, ["text"] = text };
-        if (doubleClick)
-        {
-            p["doubleClick"] = "true";
-        }
-        if (windowTitle is not null)
-        {
-            p["windowTitle"] = windowTitle;
-        }
-        return await CallAsync("clickTreeItem", p);
-    }
-
     /// <summary>Presses a key on the focused or specified node.</summary>
     public async Task<JsonNode?> PressKeyAsync(
         string key,
@@ -465,39 +325,6 @@ public sealed class AgentClient : IDisposable
         return await CallAsync("pressKey", p);
     }
 
-    /// <summary>Gets the current value of a Spinner control.</summary>
-    public async Task<JsonNode?> GetSpinnerValueAsync(string selector, string? windowTitle = null)
-    {
-        var p = new JsonObject { ["selector"] = selector };
-        if (windowTitle is not null)
-        {
-            p["windowTitle"] = windowTitle;
-        }
-        return await CallAsync("getSpinnerValue", p);
-    }
-
-    /// <summary>Sets a Spinner value by steps (increment/decrement) or direct value.</summary>
-    public async Task<JsonNode?> SetSpinnerValueAsync(
-        string selector,
-        int? steps = null,
-        int? value = null,
-        string? windowTitle = null)
-    {
-        var p = new JsonObject { ["selector"] = selector };
-        if (steps is not null)
-        {
-            p["steps"] = steps.Value;
-        }
-        if (value is not null)
-        {
-            p["value"] = value.Value;
-        }
-        if (windowTitle is not null)
-        {
-            p["windowTitle"] = windowTitle;
-        }
-        return await CallAsync("setSpinnerValue", p);
-    }
 }
 
 /// <summary>Exception thrown when the agent returns a JSON-RPC error.</summary>
