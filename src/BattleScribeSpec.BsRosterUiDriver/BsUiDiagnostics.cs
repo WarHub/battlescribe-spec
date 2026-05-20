@@ -70,6 +70,18 @@ public sealed class BsUiDiagnostics
                     }
 
                     sb.AppendLine();
+                    sb.AppendLine("─── ALL WINDOWS SCENE DUMP (depth=4) ────────────────────");
+                    try
+                    {
+                        var allWindows = await client.CallAsync("dumpAllWindows", new JsonObject { ["maxDepth"] = 4 });
+                        sb.AppendLine(FormatJson(allWindows));
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine($"  [Failed to dump all windows: {ex.GetType().Name}: {ex.Message}]");
+                    }
+
+                    sb.AppendLine();
                     sb.AppendLine("─── THREAD DUMP ────────────────────────────────────────");
                     try
                     {

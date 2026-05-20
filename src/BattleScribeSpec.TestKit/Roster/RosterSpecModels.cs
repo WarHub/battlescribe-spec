@@ -99,6 +99,12 @@ public sealed class StepDef
     /// </summary>
     public string? CustomNotes { get; set; }
 
+    /// <summary>
+    /// Category entry ID for setCustomization. Targets the named category in the force.
+    /// NR does not support category customization (silently ignored).
+    /// </summary>
+    public string? CategoryEntryId { get; set; }
+
     public string? Path { get; set; }
 
     /// <summary>
@@ -373,6 +379,10 @@ public sealed class ExpectedCategoryDef
     public string? PublicationId { get; set; }
 
     public string? Page { get; set; }
+
+    public string? CustomName { get; set; }
+
+    public string? CustomNotes { get; set; }
 }
 
 

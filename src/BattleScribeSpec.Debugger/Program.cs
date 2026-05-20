@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BattleScribeSpec;
 using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.Debugger;
@@ -16,6 +17,7 @@ string? screenshotsDir = null;
 string? reportPath = null;
 var keepAlive = false;
 var probeMode = false;
+string? recordPath = null;
 var formatMode = false;
 var formatCheck = false;
 string? formatDir = null;
@@ -66,6 +68,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--keep-alive":
             keepAlive = true;
+            break;
+        case "--record" when i + 1 < args.Length:
+            recordPath = args[++i];
             break;
         case "--report" when i + 1 < args.Length:
             reportPath = args[++i];
@@ -279,7 +284,37 @@ using (engine)
     Console.Error.WriteLine($"Running {stepCount} steps...");
     Console.Error.WriteLine();
 
+    // Start action recording if requested (bs-ui engine only)
+    if (recordPath is not null && engine is BsUiRosterEngine recordingEngine)
+    {
+        await recordingEngine.StartRecordingAsync();
+        Console.Error.WriteLine("Recording UI actions...");
+    }
+
     var result = runner.Run(spec);
+
+    // Stop recording and save captured actions
+    if (recordPath is not null && engine is BsUiRosterEngine recordStopEngine)
+    {
+        try
+        {
+            var actions = await recordStopEngine.StopRecordingAsync();
+            if (actions is not null)
+            {
+                var jsonStr = actions.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(recordPath, jsonStr);
+                Console.Error.WriteLine($"Recorded actions saved to: {recordPath}");
+            }
+            else
+            {
+                Console.Error.WriteLine("Warning: no actions recorded.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: failed to save recorded actions: {ex.Message}");
+        }
+    }
 
     Console.Error.WriteLine();
     if (result.Failures.Count == 0)
@@ -292,6 +327,24 @@ using (engine)
         foreach (var failure in result.Failures)
         {
             Console.Error.WriteLine($"  {failure}");
+        }
+        // Show diagnostic dump paths if any were captured during the run
+        var diagDir = BsUiDiagnostics.DiagnosticsDirectory;
+        if (Directory.Exists(diagDir))
+        {
+            var diagFiles = Directory.GetFiles(diagDir, "*.txt")
+                .OrderByDescending(f => f)
+                .Take(3)
+                .ToArray();
+            if (diagFiles.Length > 0)
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("  Diagnostic dumps:");
+                foreach (var f in diagFiles)
+                {
+                    Console.Error.WriteLine($"    {f}");
+                }
+            }
         }
     }
 
@@ -633,6 +686,7 @@ static void PrintUsage()
           --export-roster <dir>  Export final roster as .ros XML (bs-ui engine only)
           --screenshots <dir>  Capture screenshot at each step (bs-ui engine only)
           --report <file>  Generate HTML timeline report (bs-ui engine only)
+          --record <file>  Record UI actions to JSON file (bs-ui engine only)
           --keep-alive     Keep BattleScribe app running between runs (bs-ui only)
           --format [<dir>]    Format all *.yaml files under <dir> (default: specs/roster/)
           --check             With --format: report issues without fixing (exit 1 if any)

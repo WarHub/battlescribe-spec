@@ -1,6 +1,5 @@
 package bsspec.uiagent;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
@@ -18,9 +17,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * Discovers and accesses the BattleScribe roster engine running in the same JVM.
@@ -31,30 +30,6 @@ import java.util.concurrent.CountDownLatch;
  */
 public class EngineAccessor {
 
-    private static final Gson GSON = new Gson();
-
-    private static class EngineOp {
-        final CountDownLatch latch = new CountDownLatch(1);
-        volatile String error;
-        volatile boolean completed;
-
-        void complete() {
-            completed = true;
-            latch.countDown();
-        }
-
-        void fail(String errorMessage) {
-            error = errorMessage;
-            completed = true;
-            latch.countDown();
-        }
-    }
-
-    @FunctionalInterface
-    private interface EngineOpAction {
-        void run() throws Exception;
-    }
-
     private final Instrumentation instrumentation;
 
     // Cached references
@@ -64,11 +39,19 @@ public class EngineAccessor {
     private Class<?> rosterClass;
     private Method getRosterMethod;
 
-    // Synchronization for async engine operations (single-op-at-a-time by design)
-    private volatile EngineOp currentOp;
-
     public EngineAccessor(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
+    }
+
+    /**
+     * Returns the cached RosterEditorWindowController instance, or null if not yet discovered.
+     */
+    public Object getControllerInstance() {
+        return controllerInstance;
+    }
+
+    public Object getEngineInstance() {
+        return engineInstance;
     }
 
     private static JsonObject parseParams(String paramsJson) {
@@ -83,86 +66,6 @@ public class EngineAccessor {
     private static String getString(JsonObject params, String key, String defaultValue) {
         JsonElement value = params.get(key);
         return value != null && !value.isJsonNull() ? value.getAsString() : defaultValue;
-    }
-
-    private static int getInt(JsonObject params, String key, int defaultValue) {
-        JsonElement value = params.get(key);
-        return value != null && !value.isJsonNull() ? value.getAsInt() : defaultValue;
-    }
-
-    private static double getDouble(JsonObject params, String key, double defaultValue) {
-        JsonElement value = params.get(key);
-        return value != null && !value.isJsonNull() ? value.getAsDouble() : defaultValue;
-    }
-
-    /**
-     * Lists all loaded classes in the net.battlescribe package.
-     * Used for discovery/exploration.
-     */
-    public String listBsClasses() {
-        JsonArray classes = new JsonArray();
-        for (Class<?> cls : instrumentation.getAllLoadedClasses()) {
-            String name = cls.getName();
-            if (name.startsWith("net.battlescribe.")) {
-                JsonObject item = new JsonObject();
-                item.addProperty("name", name);
-                item.addProperty("simple", cls.getSimpleName());
-                item.addProperty("loader", String.valueOf(cls.getClassLoader()));
-                classes.add(item);
-            }
-        }
-        return classes.toString();
-    }
-
-    /**
-     * Inspects a class by name, listing fields and methods.
-     */
-    public String inspectClass(String className) {
-        Class<?> cls = findClass(className);
-        if (cls == null) {
-            return errorJson("Class not found: " + className);
-        }
-
-        JsonObject result = new JsonObject();
-        result.addProperty("name", cls.getName());
-        result.addProperty("superclass", cls.getSuperclass() != null ? cls.getSuperclass().getName() : null);
-
-        JsonArray fields = new JsonArray();
-        List<Field> allFields = new ArrayList<>();
-        Class<?> c = cls;
-        while (c != null && !c.getName().equals("java.lang.Object")) {
-            for (Field f : c.getDeclaredFields()) {
-                allFields.add(f);
-            }
-            c = c.getSuperclass();
-        }
-        for (Field f : allFields) {
-            JsonObject field = new JsonObject();
-            field.addProperty("name", f.getName());
-            field.addProperty("type", f.getType().getName());
-            field.addProperty("modifiers", Modifier.toString(f.getModifiers()));
-            field.addProperty("declaringClass", f.getDeclaringClass().getSimpleName());
-            fields.add(field);
-        }
-        result.add("fields", fields);
-
-        JsonArray methodsJson = new JsonArray();
-        Method[] methods = cls.getDeclaredMethods();
-        for (Method m : methods) {
-            if (m.getDeclaringClass() == Object.class) continue;
-            JsonObject method = new JsonObject();
-            method.addProperty("name", m.getName());
-            method.addProperty("returnType", m.getReturnType().getName());
-            JsonArray params = new JsonArray();
-            for (Class<?> param : m.getParameterTypes()) {
-                params.add(param.getName());
-            }
-            method.add("params", params);
-            method.addProperty("modifiers", Modifier.toString(m.getModifiers()));
-            methodsJson.add(method);
-        }
-        result.add("methods", methodsJson);
-        return result.toString();
     }
 
     /**
@@ -387,16 +290,6 @@ public class EngineAccessor {
     }
 
     /**
-     * Sets the engine instance from an external source (e.g., found via controller).
-     */
-    public void setEngineInstance(Object engine) {
-        this.engineInstance = engine;
-        this.engineClass = engine.getClass();
-        cacheRosterAccess();
-        patchEngineThreadCount(engine);
-    }
-
-    /**
      * Set engine's thread count to 1 to prevent multi-threaded validation.
      * The Desktop app uses 8 threads which can cause issues when we call engine
      * methods from outside the normal FX event loop.
@@ -440,50 +333,6 @@ public class EngineAccessor {
             System.err.println("[agent] Could not patch thread count: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             e.printStackTrace(System.err);
         }
-    }
-
-    /**
-     * Reads all static fields of a class and returns their values.
-     */
-    public String readStaticFields(String className) {
-        Class<?> cls = findClass(className);
-        if (cls == null) {
-            return errorJson("Class not found: " + className);
-        }
-
-        JsonObject result = new JsonObject();
-        result.addProperty("className", cls.getName());
-        JsonArray fields = new JsonArray();
-
-        Class<?> c = cls;
-        while (c != null && !c.getName().equals("java.lang.Object")) {
-            for (Field f : c.getDeclaredFields()) {
-                if (!Modifier.isStatic(f.getModifiers())) continue;
-                f.setAccessible(true);
-                JsonObject field = new JsonObject();
-                field.addProperty("name", f.getName());
-                field.addProperty("type", f.getType().getName());
-                field.addProperty("declaringClass", c.getSimpleName());
-                try {
-                    Object val = f.get(null);
-                    if (val == null) {
-                        field.add("value", JsonNull.INSTANCE);
-                    } else {
-                        field.addProperty("valueType", val.getClass().getName());
-                        String str = val.toString();
-                        if (str.length() > 200) str = str.substring(0, 200) + "...";
-                        field.addProperty("value", str);
-                    }
-                } catch (Exception e) {
-                    field.addProperty("error", e.getMessage());
-                }
-                fields.add(field);
-            }
-            c = c.getSuperclass();
-        }
-
-        result.add("fields", fields);
-        return result.toString();
     }
 
     /**
@@ -713,7 +562,7 @@ public class EngineAccessor {
         try {
             Method m = sel.getClass().getMethod("getType");
             Object type = m.invoke(sel);
-            result.addProperty("type", type != null ? type.toString().toLowerCase() : null);
+            result.addProperty("type", type != null ? type.toString().toLowerCase(Locale.ROOT) : null);
         } catch (Exception e) {
             result.add("type", JsonNull.INSTANCE);
         }
@@ -775,6 +624,7 @@ public class EngineAccessor {
             } catch (Exception e) {
                 item.addProperty("primary", false);
             }
+            item.addProperty("customName", callGetter(category, "getCustomName"));
             item.addProperty("customNotes", callGetter(category, "getCustomNotes"));
             item.addProperty("publicationId", callGetter(category, "getPublicationId"));
             item.addProperty("page", callGetter(category, "getPage"));
@@ -867,114 +717,6 @@ public class EngineAccessor {
         if (engineInstance == null || engineClass == null || getRosterMethod == null) {
             throw new IllegalStateException("Engine not found. Call findEngine first.");
         }
-    }
-
-    private Object findForceById(String forceId) throws Exception {
-        Object roster = getCurrentRoster();
-        for (Object force : toJavaList(callListGetter(roster, "getForces"))) {
-            Object found = findForceByIdRecursive(force, forceId);
-            if (found != null) {
-                return found;
-            }
-        }
-        throw new IllegalArgumentException("Force '" + forceId + "' not found.");
-    }
-
-    private Object findForceContainingSelection(String selectionId) throws Exception {
-        Object roster = getCurrentRoster();
-        for (Object force : toJavaList(callListGetter(roster, "getForces"))) {
-            if (tryFindSelectionById(force, selectionId) != null) {
-                return force;
-            }
-        }
-        return null;
-    }
-
-    private Object findForceByIdRecursive(Object force, String forceId) {
-        if (matchesId(callGetter(force, "getId"), forceId)) {
-            return force;
-        }
-        for (Object child : toJavaList(callListGetter(force, "getForces"))) {
-            Object found = findForceByIdRecursive(child, forceId);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
-    }
-
-    private Object findSelectionById(Object force, String selectionId) {
-        Object found = tryFindSelectionById(force, selectionId);
-        if (found != null) {
-            return found;
-        }
-        throw new IllegalArgumentException(
-                "Selection '" + selectionId + "' not found under force '" + callGetter(force, "getId") + "'.");
-    }
-
-    private Object tryFindSelectionById(Object force, String selectionId) {
-        for (Object selection : toJavaList(callListGetter(force, "getSelections"))) {
-            Object found = findSelectionByIdRecursive(selection, selectionId);
-            if (found != null) {
-                return found;
-            }
-        }
-        for (Object childForce : toJavaList(callListGetter(force, "getForces"))) {
-            Object found = tryFindSelectionById(childForce, selectionId);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
-    }
-
-    private Object findSelectionByIdRecursive(Object selection, String selectionId) {
-        if (matchesId(callGetter(selection, "getId"), selectionId)) {
-            return selection;
-        }
-        for (Object child : toJavaList(callListGetter(selection, "getSelections"))) {
-            Object found = findSelectionByIdRecursive(child, selectionId);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
-    }
-
-    private Object findSelectionParent(Object force, String selectionId) {
-        return tryFindSelectionParent(force, selectionId);
-    }
-
-    private Object tryFindSelectionParent(Object force, String selectionId) {
-        for (Object selection : toJavaList(callListGetter(force, "getSelections"))) {
-            if (matchesId(callGetter(selection, "getId"), selectionId)) {
-                return force;
-            }
-            Object found = findSelectionParentRecursive(selection, selectionId);
-            if (found != null) {
-                return found;
-            }
-        }
-        for (Object childForce : toJavaList(callListGetter(force, "getForces"))) {
-            Object found = tryFindSelectionParent(childForce, selectionId);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
-    }
-
-    private Object findSelectionParentRecursive(Object selection, String selectionId) {
-        for (Object child : toJavaList(callListGetter(selection, "getSelections"))) {
-            if (matchesId(callGetter(child, "getId"), selectionId)) {
-                return selection;
-            }
-            Object found = findSelectionParentRecursive(child, selectionId);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
     }
 
     private Object findAvailableEntryForParent(Object parent, String entryId) throws Exception {
@@ -1455,7 +1197,7 @@ public class EngineAccessor {
     }
 
     private ValidationRef resolveValidationRef(Map<String, List<String>> errorIdMap, String ownerType, String message, String ownerEntryId) {
-        String lowerMessage = message != null ? message.toLowerCase() : null;
+        String lowerMessage = message != null ? message.toLowerCase(Locale.ROOT) : null;
 
         if ("roster".equals(ownerType)) {
             ValidationRef rosterCostLimitRef = resolveRosterCostLimitRef(errorIdMap, lowerMessage);
@@ -1521,7 +1263,7 @@ public class EngineAccessor {
 
         for (String constraintId : constraintIds) {
             String costTypeName = getCostTypeName(constraintId);
-            if (costTypeName != null && containsIgnoreCase(lowerMessage, costTypeName.toLowerCase())) {
+            if (costTypeName != null && containsIgnoreCase(lowerMessage, costTypeName.toLowerCase(Locale.ROOT))) {
                 return new ValidationRef("costLimits", constraintId);
             }
         }
@@ -1546,7 +1288,7 @@ public class EngineAccessor {
         if (message == null || candidate == null || candidate.isEmpty()) {
             return false;
         }
-        return message.toLowerCase().contains(candidate.toLowerCase());
+        return message.toLowerCase(Locale.ROOT).contains(candidate.toLowerCase(Locale.ROOT));
     }
 
     private String getEntryName(String entryId) {
@@ -1577,7 +1319,7 @@ public class EngineAccessor {
             for (Object ct : toJavaList(costTypes)) {
                 String id = callGetter(ct, "getId");
                 String name = callGetter(ct, "getName");
-                if (name != null && lowerMessage.contains(name.toLowerCase())) {
+                if (name != null && lowerMessage.contains(name.toLowerCase(Locale.ROOT))) {
                     return id;
                 }
             }
@@ -1656,19 +1398,6 @@ public class EngineAccessor {
             // fall back to toString
         }
         return error.toString();
-    }
-
-    private List<String> collectSelectionIdsByEntry(Object parent, String entryId) {
-        List<String> result = new ArrayList<String>();
-        for (Object child : toJavaList(callListGetter(parent, "getSelections"))) {
-            if (matchesId(callGetter(child, "getEntryId"), entryId)) {
-                String id = callGetter(child, "getId");
-                if (id != null) {
-                    result.add(id);
-                }
-            }
-        }
-        return result;
     }
 
     private Object findObjectById(Class<?> targetClass, String id, Object... roots) throws Exception {
@@ -1810,17 +1539,6 @@ public class EngineAccessor {
         return false;
     }
 
-    private List<String> extractIds(Object values) {
-        List<String> ids = new ArrayList<String>();
-        for (Object value : toJavaList(values)) {
-            String id = callGetter(value, "getId");
-            if (id != null) {
-                ids.add(id);
-            }
-        }
-        return ids;
-    }
-
     private List<String> extractStrings(Object values) {
         List<String> result = new ArrayList<String>();
         for (Object value : toJavaList(values)) {
@@ -1863,7 +1581,7 @@ public class EngineAccessor {
     private JsonArray toJsonArray(List<String> values) {
         JsonArray array = new JsonArray();
         for (String value : values) {
-            array.add(value);
+            array.add(new com.google.gson.JsonPrimitive(value));
         }
         return array;
     }
@@ -1889,27 +1607,6 @@ public class EngineAccessor {
             }
         }
         return msg;
-    }
-
-    private void startEngineOp(EngineOp op, String threadName, String errorLabel, EngineOpAction action) {
-        currentOp = op;
-        new Thread(() -> {
-            try {
-                action.run();
-                op.complete();
-            } catch (Exception ex) {
-                String errorMessage = errorLabel + ": " + buildExceptionMessage(ex);
-                System.err.println("[agent] " + errorMessage);
-                ex.printStackTrace(System.err);
-                op.fail(errorMessage);
-            }
-        }, threadName).start();
-    }
-
-    private void clearCurrentOp(EngineOp op) {
-        if (currentOp == op) {
-            currentOp = null;
-        }
     }
 
     private void cacheRosterAccess() {
@@ -2146,117 +1843,6 @@ public class EngineAccessor {
             }
         }
         return findControllerFromNode(scene.getRoot(), controllerClass);
-    }
-
-    /**
-     * Explicitly invokes the controller's catalogue tree rebuild method.
-     * Runs off-FX-thread: waits for engine pool to settle, then schedules all work on FX thread.
-     */
-    public String rebuildCatalogueTree(String params) {
-        try {
-            // Wait for engine thread pool to settle after bg thread operations
-            Thread.sleep(1000);
-
-            // Do everything on FX thread (scene graph access + p() invocation)
-            final CountDownLatch fxDone = new CountDownLatch(1);
-            final String[] result = {null};
-            javafx.application.Platform.runLater(() -> {
-                try {
-                    Class<?> controllerClass = findClass("net.battlescribe.desktop.rostereditor.RosterEditorWindowController");
-                    javafx.scene.Scene scene = findMainScene();
-                    if (scene == null || controllerClass == null) {
-                        result[0] = errorJson("Cannot find scene or controller class.");
-                        return;
-                    }
-                    Object controller = findControllerInstance(controllerClass, scene);
-                    if (controller == null) {
-                        result[0] = errorJson("Controller instance not found.");
-                        return;
-                    }
-                    Method rebuildMethod = null;
-                    for (Method m : controllerClass.getDeclaredMethods()) {
-                        if (m.getName().equals("p") && m.getParameterCount() == 0 && m.getReturnType() == void.class) {
-                            rebuildMethod = m;
-                            break;
-                        }
-                    }
-                    if (rebuildMethod == null) {
-                        result[0] = errorJson("Method p() not found on controller. Methods: " + listMethodNames(controllerClass));
-                        return;
-                    }
-                    rebuildMethod.setAccessible(true);
-                    rebuildMethod.invoke(controller);
-                    System.err.println("[agent] rebuildCatalogueTree: invoked controller.p()");
-                    result[0] = "{\"rebuilt\":true}";
-                } catch (Exception e) {
-                    result[0] = errorJson("rebuildCatalogueTree: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-                } finally {
-                    fxDone.countDown();
-                }
-            });
-
-            boolean completed = fxDone.await(20, java.util.concurrent.TimeUnit.SECONDS);
-            if (!completed) {
-                return errorJson("rebuildCatalogueTree: FX execution timed out (20s) — controller.p() likely deadlocked");
-            }
-            return result[0];
-        } catch (Exception e) {
-            return errorJson("rebuildCatalogueTree: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-        }
-    }
-
-    private String listMethodNames(Class<?> cls) {
-        StringBuilder sb = new StringBuilder();
-        for (Method m : cls.getDeclaredMethods()) {
-            if (m.getParameterCount() == 0 && m.getReturnType() == void.class) {
-                if (sb.length() > 0) sb.append(",");
-                sb.append(m.getName());
-            }
-        }
-        return sb.toString();
-    }
-
-    /**
-     * Waits for any pending background engine operation to complete.
-     * Must NOT run on the FX thread (would deadlock if the bg op needs FX).
-     * Accepts optional "timeoutMs" param (default 15000).
-     */
-    public String waitForEngine(String params) {
-        JsonObject paramsObject = parseParams(params);
-        JsonObject response = new JsonObject();
-        EngineOp op = currentOp;
-        if (op == null) {
-            response.addProperty("waited", false);
-            response.addProperty("reason", "no pending operation");
-            return GSON.toJson(response);
-        }
-        int timeoutMs = getInt(paramsObject, "timeoutMs", 15000);
-        try {
-            boolean finished = op.latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
-            response.addProperty("waited", true);
-            if (!finished) {
-                response.addProperty("timedOut", true);
-                return GSON.toJson(response);
-            }
-
-            clearCurrentOp(op);
-
-            // Wait for FX event queue to drain (process any Platform.runLater tasks
-            // queued by the bg thread's engine operation, like tree rebuilds)
-            CountDownLatch fxLatch = new CountDownLatch(1);
-            javafx.application.Platform.runLater(fxLatch::countDown);
-            fxLatch.await(5000, java.util.concurrent.TimeUnit.MILLISECONDS);
-
-            if (op.error != null) {
-                response.addProperty("error", op.error);
-            }
-            return GSON.toJson(response);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            response.addProperty("waited", false);
-            response.addProperty("reason", "interrupted");
-            return GSON.toJson(response);
-        }
     }
 
     /**

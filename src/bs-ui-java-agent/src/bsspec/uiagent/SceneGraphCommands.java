@@ -25,10 +25,10 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,13 +77,6 @@ public class SceneGraphCommands {
         return value != null && !value.isJsonNull() ? value.getAsBoolean() : defaultValue;
     }
 
-    private static JsonElement parseJsonValue(String json) {
-        if (json == null) {
-            return JsonNull.INSTANCE;
-        }
-        return new JsonParser().parse(json);
-    }
-
     private static void addDynamicProperty(JsonObject obj, String key, Object value) {
         if (value == null) {
             obj.add(key, JsonNull.INSTANCE);
@@ -115,24 +108,18 @@ public class SceneGraphCommands {
         switch (method) {
             case "ping":
                 return "\"pong\"";
+            case "dumpAllWindows":
+                return dumpAllWindows(params);
             case "dumpTree":
                 return dumpTree(params);
             case "getWindows":
                 return getWindows();
             case "findNode":
                 return findNode(params);
-            case "findAllNodes":
-                return findAllNodes(params);
-            case "getNodeInfo":
-                return getNodeInfo(params);
             case "clickNode":
                 return clickNode(params);
             case "fireButton":
                 return fireButton(params);
-            case "getChildren":
-                return getChildren(params);
-            case "getNodeText":
-                return getNodeText(params);
             case "findNodeByText":
                 return findNodeByText(params);
             case "setNodeText":
@@ -141,27 +128,17 @@ public class SceneGraphCommands {
                 return getComboBoxItems(params);
             case "selectComboBoxItem":
                 return selectComboBoxItem(params);
-            case "getTreeItems":
-                return getTreeItems(params);
             case "selectTreeItem":
                 return selectTreeItem(params);
-            case "clearTreeSelection":
-                return clearTreeSelection(params);
-            case "expandTreeItem":
-                return expandTreeItem(params);
             case "clickTreeItem":
                 return clickTreeItem(params);
+            case "clickTreeCellButton":
+                return clickTreeCellButton(params);
             case "pressKey":
                 return pressKey(params);
-            case "getSpinnerValue":
-                return getSpinnerValue(params);
             case "setSpinnerValue":
                 return setSpinnerValue(params);
             // Engine access commands
-            case "listBsClasses":
-                return engineAccessor.listBsClasses();
-            case "inspectClass":
-                return engineAccessor.inspectClass(getString(paramsObject, "className", null));
             case "findEngine":
                 return engineAccessor.findEngine();
             case "getRosterState":
@@ -182,22 +159,12 @@ public class SceneGraphCommands {
                 return engineAccessor.setRosterName(params);
             case "getValidationErrors":
                 return engineAccessor.getValidationErrors();
-            case "readStaticFields":
-                return engineAccessor.readStaticFields(getString(paramsObject, "className", null));
-            case "dumpNodeProperties":
-                return dumpNodeProperties(params);
-            case "findControlByLabel":
-                return findControlByLabel(params);
             case "clickControlByLabel":
                 return clickControlByLabel(params);
             case "setSpinnerValueByLabel":
                 return setSpinnerValueByLabel(params);
             case "patchSupporterPass":
                 return engineAccessor.patchSupporterPass();
-            case "rebuildCatalogueTree":
-                return engineAccessor.rebuildCatalogueTree(params);
-            case "waitForEngine":
-                return engineAccessor.waitForEngine(params);
             case "threadDump":
                 return threadDump();
             default:
@@ -216,7 +183,7 @@ public class SceneGraphCommands {
             thread.addProperty("state", t.getState().toString());
             JsonArray frames = new JsonArray();
             for (int i = 0; i < Math.min(stack.length, 15); i++) {
-                frames.add(stack[i].toString());
+                frames.add(new com.google.gson.JsonPrimitive(stack[i].toString()));
             }
             thread.add("stack", frames);
             threads.add(thread);
@@ -294,7 +261,7 @@ public class SceneGraphCommands {
         JsonObject paramsObject = parseParams(params);
         String actions = ActionRecorder.getInstance().stopRecording();
         JsonObject response = new JsonObject();
-        response.add("actions", parseJsonValue(actions));
+        response.add("actions", actions == null ? JsonNull.INSTANCE : new JsonParser().parse(actions));
         return response.toString();
     }
 
@@ -303,7 +270,7 @@ public class SceneGraphCommands {
         String actions = ActionRecorder.getInstance().getActionsJson();
         JsonObject response = new JsonObject();
         response.addProperty("recording", ActionRecorder.getInstance().isRecording());
-        response.add("actions", parseJsonValue(actions));
+        response.add("actions", actions == null ? JsonNull.INSTANCE : new JsonParser().parse(actions));
         return response.toString();
     }
 
@@ -349,6 +316,66 @@ public class SceneGraphCommands {
         return response.toString();
     }
 
+    /**
+     * Dumps ALL open windows' scene graphs. Useful for diagnostics when it's unclear
+     * which windows are open (e.g., confirm dialogs, modal popups).
+     * Runs on IO thread and marshals to FX thread — works even during showAndWait
+     * nested event loops (Platform.runLater tasks ARE processed during those).
+     */
+    private String dumpAllWindows(String params) {
+        JsonObject paramsObject = parseParams(params);
+        int maxDepth = getInt(paramsObject, "maxDepth", 4);
+
+        // If already on FX thread, run directly
+        if (Platform.isFxApplicationThread()) {
+            return dumpAllWindowsImpl(maxDepth);
+        }
+
+        // Marshal to FX thread
+        java.util.concurrent.CompletableFuture<String> future = new java.util.concurrent.CompletableFuture<>();
+        Platform.runLater(() -> {
+            try {
+                future.complete(dumpAllWindowsImpl(maxDepth));
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        });
+
+        try {
+            return future.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            JsonObject error = new JsonObject();
+            error.addProperty("error", "FX thread did not respond within 10s: " + e.getMessage());
+            return error.toString();
+        }
+    }
+
+    private String dumpAllWindowsImpl(int maxDepth) {
+        JsonArray windowDumps = new JsonArray();
+        for (Window w : Window.getWindows()) {
+            JsonObject windowObj = new JsonObject();
+            windowObj.addProperty("type", w.getClass().getSimpleName());
+            windowObj.addProperty("focused", w.isFocused());
+            if (w instanceof Stage) {
+                Stage s = (Stage) w;
+                windowObj.addProperty("title", s.getTitle());
+                windowObj.addProperty("showing", s.isShowing());
+                windowObj.addProperty("modality", s.getModality().toString());
+            }
+            windowObj.addProperty("width", w.getWidth());
+            windowObj.addProperty("height", w.getHeight());
+
+            if (w.getScene() != null && w.getScene().getRoot() != null) {
+                windowObj.add("tree", dumpNode(w.getScene().getRoot(), 0, maxDepth));
+            }
+            windowDumps.add(windowObj);
+        }
+        JsonObject response = new JsonObject();
+        response.addProperty("windowCount", windowDumps.size());
+        response.add("windows", windowDumps);
+        return response.toString();
+    }
+
     private String findNode(String params) {
         JsonObject paramsObject = parseParams(params);
         String selector = getString(paramsObject, "selector", null);
@@ -371,32 +398,34 @@ public class SceneGraphCommands {
         return nodeToJsonObject(node).toString();
     }
 
-    private String getNodeInfo(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String selector = getString(paramsObject, "selector", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        Node node = resolveNode(selector, windowTitle);
-        if (node == null) {
-            return "null";
-        }
-        return nodeToJsonObject(node).toString();
-    }
-
     private String clickNode(String params) {
         JsonObject paramsObject = parseParams(params);
         String selector = getString(paramsObject, "selector", null);
         String windowTitle = getString(paramsObject, "windowTitle", null);
         String text = getString(paramsObject, "text", null);
         boolean doubleClick = getBoolean(paramsObject, "doubleClick", false);
+        boolean async = "true".equals(getString(paramsObject, "async", null));
         int clickCount = doubleClick ? 2 : 1;
 
         Node node;
         if (text != null) {
-            Scene scene = findScene(windowTitle);
-            if (scene == null) {
-                throw new IllegalArgumentException("Window not found: " + windowTitle);
+            // When no windowTitle specified, search ALL windows (useful for dialogs)
+            if (windowTitle == null || windowTitle.isEmpty()) {
+                Node found = null;
+                for (Window w : Window.getWindows()) {
+                    if (w.getScene() != null) {
+                        found = findNodeByTextRecursive(w.getScene().getRoot(), text, null);
+                        if (found != null) break;
+                    }
+                }
+                node = found;
+            } else {
+                Scene scene = findScene(windowTitle);
+                if (scene == null) {
+                    throw new IllegalArgumentException("Window not found: " + windowTitle);
+                }
+                node = findNodeByTextRecursive(scene.getRoot(), text, null);
             }
-            node = findNodeByTextRecursive(scene.getRoot(), text, null);
         } else {
             node = resolveNode(selector, windowTitle);
         }
@@ -411,87 +440,47 @@ public class SceneGraphCommands {
         double x = bounds.getMinX() + bounds.getWidth() / 2;
         double y = bounds.getMinY() + bounds.getHeight() / 2;
 
-        node.fireEvent(new MouseEvent(
-                MouseEvent.MOUSE_PRESSED,
-                bounds.getWidth() / 2, bounds.getHeight() / 2,
-                x, y,
-                MouseButton.PRIMARY, clickCount,
-                false, false, false, false,
-                true, false, false,
-                true, false, false, null));
-        node.fireEvent(new MouseEvent(
-                MouseEvent.MOUSE_RELEASED,
-                bounds.getWidth() / 2, bounds.getHeight() / 2,
-                x, y,
-                MouseButton.PRIMARY, clickCount,
-                false, false, false, false,
-                true, false, false,
-                true, false, false, null));
-        node.fireEvent(new MouseEvent(
-                MouseEvent.MOUSE_CLICKED,
-                bounds.getWidth() / 2, bounds.getHeight() / 2,
-                x, y,
-                MouseButton.PRIMARY, clickCount,
-                false, false, false, false,
-                true, false, false,
-                true, false, false, null));
+        Runnable fireEvents = () -> {
+            node.fireEvent(new MouseEvent(
+                    MouseEvent.MOUSE_PRESSED,
+                    bounds.getWidth() / 2, bounds.getHeight() / 2,
+                    x, y,
+                    MouseButton.PRIMARY, clickCount,
+                    false, false, false, false,
+                    true, false, false,
+                    true, false, false, null));
+            node.fireEvent(new MouseEvent(
+                    MouseEvent.MOUSE_RELEASED,
+                    bounds.getWidth() / 2, bounds.getHeight() / 2,
+                    x, y,
+                    MouseButton.PRIMARY, clickCount,
+                    false, false, false, false,
+                    true, false, false,
+                    true, false, false, null));
+            node.fireEvent(new MouseEvent(
+                    MouseEvent.MOUSE_CLICKED,
+                    bounds.getWidth() / 2, bounds.getHeight() / 2,
+                    x, y,
+                    MouseButton.PRIMARY, clickCount,
+                    false, false, false, false,
+                    true, false, false,
+                    true, false, false, null));
+        };
 
         JsonObject response = new JsonObject();
         response.addProperty("clicked", true);
         response.addProperty("doubleClick", doubleClick);
         response.addProperty("x", x);
         response.addProperty("y", y);
+
+        if (async) {
+            Platform.runLater(fireEvents);
+            response.addProperty("async", true);
+        } else {
+            fireEvents.run();
+        }
+
         return response.toString();
-    }
-
-    private String getChildren(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String selector = getString(paramsObject, "selector", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        Node node = resolveNode(selector, windowTitle);
-        JsonArray children = new JsonArray();
-        if (node == null || !(node instanceof Parent)) {
-            return children.toString();
-        }
-
-        for (Node child : ((Parent) node).getChildrenUnmodifiable()) {
-            children.add(nodeToJsonObject(child));
-        }
-        return children.toString();
-    }
-
-    private String getNodeText(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String selector = getString(paramsObject, "selector", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        Node node = resolveNode(selector, windowTitle);
-        if (node == null) {
-            return "null";
-        }
-        String text = extractTextContent(node);
-        return text == null ? "null" : new com.google.gson.JsonPrimitive(text).toString();
-    }
-
-    private String findAllNodes(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String selector = getString(paramsObject, "selector", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-
-        if (selector == null) {
-            throw new IllegalArgumentException("Missing 'selector' param");
-        }
-
-        Scene scene = findScene(windowTitle);
-        JsonArray nodesJson = new JsonArray();
-        if (scene == null) {
-            return nodesJson.toString();
-        }
-
-        var nodes = scene.getRoot().lookupAll(selector);
-        for (Node node : nodes) {
-            nodesJson.add(nodeToJsonObject(node));
-        }
-        return nodesJson.toString();
     }
 
     private String fireButton(String params) {
@@ -540,6 +529,19 @@ public class SceneGraphCommands {
             throw new IllegalArgumentException("Missing 'text' param");
         }
 
+        // When no windowTitle specified, search ALL windows (useful for dialogs)
+        if (windowTitle == null || windowTitle.isEmpty()) {
+            for (Window w : Window.getWindows()) {
+                if (w.getScene() != null) {
+                    Node found = findNodeByTextRecursive(w.getScene().getRoot(), text, nodeType);
+                    if (found != null) {
+                        return nodeToJsonObject(found).toString();
+                    }
+                }
+            }
+            return "null";
+        }
+
         Scene scene = findScene(windowTitle);
         if (scene == null) {
             return "null";
@@ -554,7 +556,7 @@ public class SceneGraphCommands {
 
     private Node findNodeByTextRecursive(Node node, String text, String nodeType) {
         String nodeText = extractTextContent(node);
-        if (nodeText != null && nodeText.contains(text)) {
+        if (nodeText != null && nodeText.toLowerCase(Locale.ROOT).contains(text.toLowerCase(Locale.ROOT))) {
             if (nodeType == null || node.getClass().getSimpleName().equals(nodeType)) {
                 return node;
             }
@@ -658,45 +660,6 @@ public class SceneGraphCommands {
     }
 
     @SuppressWarnings("unchecked")
-    private String getTreeItems(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String selector = getString(paramsObject, "selector", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        int maxDepth = getInt(paramsObject, "maxDepth", 3);
-        Node node = resolveNode(selector, windowTitle);
-        if (node == null) {
-            throw new IllegalArgumentException("TreeView not found: " + selector);
-        }
-        if (!(node instanceof TreeView)) {
-            throw new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName());
-        }
-        TreeView<Object> tree = (TreeView<Object>) node;
-        TreeItem<Object> root = tree.getRoot();
-        JsonObject response = new JsonObject();
-        response.add("root", root != null ? serializeTreeItem(root, 0, maxDepth) : JsonNull.INSTANCE);
-        response.addProperty("showRoot", tree.isShowRoot());
-        return response.toString();
-    }
-
-    private JsonObject serializeTreeItem(TreeItem<Object> item, int depth, int maxDepth) {
-        JsonObject result = new JsonObject();
-        Object val = item.getValue();
-        result.addProperty("text", val != null ? val.toString() : null);
-        result.addProperty("expanded", item.isExpanded());
-        result.addProperty("leaf", item.isLeaf());
-        if (depth < maxDepth && !item.getChildren().isEmpty()) {
-            JsonArray children = new JsonArray();
-            for (TreeItem<Object> child : item.getChildren()) {
-                children.add(serializeTreeItem(child, depth + 1, maxDepth));
-            }
-            result.add("children", children);
-        } else if (!item.getChildren().isEmpty()) {
-            result.addProperty("childCount", item.getChildren().size());
-        }
-        return result;
-    }
-
-    @SuppressWarnings("unchecked")
     private String selectTreeItem(String params) {
         JsonObject paramsObject = parseParams(params);
         String selector = getString(paramsObject, "selector", null);
@@ -731,51 +694,6 @@ public class SceneGraphCommands {
         return response.toString();
     }
 
-    @SuppressWarnings("unchecked")
-    private String clearTreeSelection(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String treeId = getString(paramsObject, "treeId", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        Node node = resolveNode(treeId, windowTitle);
-        if (node == null) {
-            throw new IllegalArgumentException("TreeView not found: " + treeId);
-        }
-        if (!(node instanceof TreeView)) {
-            throw new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName());
-        }
-        TreeView<Object> tree = (TreeView<Object>) node;
-        tree.getSelectionModel().clearSelection();
-        return jsonBooleanResult("cleared", true);
-    }
-
-    @SuppressWarnings("unchecked")
-    private String expandTreeItem(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String selector = getString(paramsObject, "selector", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        String text = getString(paramsObject, "text", null);
-        Node node = resolveNode(selector, windowTitle);
-        if (node == null) {
-            throw new IllegalArgumentException("TreeView not found: " + selector);
-        }
-        if (!(node instanceof TreeView)) {
-            throw new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName());
-        }
-        TreeView<Object> tree = (TreeView<Object>) node;
-        TreeItem<Object> item = findTreeItemByText(tree.getRoot(), text);
-        if (item == null) {
-            JsonObject response = new JsonObject();
-            response.addProperty("expanded", false);
-            response.addProperty("error", "Item not found: " + text);
-            return response.toString();
-        }
-        item.setExpanded(true);
-        JsonObject response = new JsonObject();
-        response.addProperty("expanded", true);
-        response.addProperty("text", item.getValue() != null ? item.getValue().toString() : null);
-        return response.toString();
-    }
-
     private TreeItem<Object> findTreeItemByText(TreeItem<Object> item, String text) {
         if (item == null) return null;
         Object val = item.getValue();
@@ -801,7 +719,9 @@ public class SceneGraphCommands {
         String windowTitle = getString(paramsObject, "windowTitle", null);
         String text = getString(paramsObject, "text", null);
         boolean doubleClick = getBoolean(paramsObject, "doubleClick", false);
+        boolean rightClick = getBoolean(paramsObject, "rightClick", false);
         int clickCount = doubleClick ? 2 : 1;
+        MouseButton button = rightClick ? MouseButton.SECONDARY : MouseButton.PRIMARY;
 
         Node node = resolveNode(selector, windowTitle);
         if (node == null) {
@@ -852,19 +772,22 @@ public class SceneGraphCommands {
 
         cellNode.fireEvent(new MouseEvent(
                 MouseEvent.MOUSE_PRESSED, localX, localY, x, y,
-                MouseButton.PRIMARY, clickCount,
+                button, clickCount,
                 false, false, false, false,
-                true, false, false, true, false, false, null));
+                button == MouseButton.PRIMARY, false, button == MouseButton.SECONDARY,
+                true, false, false, null));
         cellNode.fireEvent(new MouseEvent(
                 MouseEvent.MOUSE_RELEASED, localX, localY, x, y,
-                MouseButton.PRIMARY, clickCount,
+                button, clickCount,
                 false, false, false, false,
-                true, false, false, true, false, false, null));
+                button == MouseButton.PRIMARY, false, button == MouseButton.SECONDARY,
+                true, false, false, null));
         cellNode.fireEvent(new MouseEvent(
                 MouseEvent.MOUSE_CLICKED, localX, localY, x, y,
-                MouseButton.PRIMARY, clickCount,
+                button, clickCount,
                 false, false, false, false,
-                true, false, false, true, false, false, null));
+                button == MouseButton.PRIMARY, false, button == MouseButton.SECONDARY,
+                true, false, false, null));
 
         JsonObject response = new JsonObject();
         response.addProperty("clicked", true);
@@ -872,6 +795,121 @@ public class SceneGraphCommands {
         response.addProperty("text", item.getValue() != null ? item.getValue().toString() : null);
         response.addProperty("cellFound", cellNode != tree);
         return response.toString();
+    }
+
+    /**
+     * Click a Button embedded inside a tree cell's graphic.
+     * BattleScribe's Edit Roster tree uses an embedded clear/remove button in Force cells.
+     * Finds the cell for the item, locates a Button within its graphic, and fires it.
+     *
+     * This method runs on the IO thread. It resolves the button on FX thread,
+     * then fires it asynchronously (Platform.runLater) because the action may
+     * trigger a modal dialog (showAndWait) that would block synchronous execution.
+     * Returns immediately after firing — caller must handle any resulting dialog.
+     */
+    private String clickTreeCellButton(String params) {
+        JsonObject paramsObject = parseParams(params);
+        String selector = getString(paramsObject, "selector", null);
+        String windowTitle = getString(paramsObject, "windowTitle", null);
+        String itemText = getString(paramsObject, "text", null);
+
+        // Resolve the button on the FX thread
+        java.util.concurrent.CompletableFuture<javafx.scene.control.Button> buttonFuture =
+            new java.util.concurrent.CompletableFuture<>();
+
+        Platform.runLater(() -> {
+            try {
+                Node node = resolveNode(selector, windowTitle);
+                if (node == null) {
+                    buttonFuture.completeExceptionally(
+                        new IllegalArgumentException("TreeView not found: " + selector));
+                    return;
+                }
+                if (!(node instanceof TreeView)) {
+                    buttonFuture.completeExceptionally(
+                        new IllegalArgumentException("Node is not a TreeView: " + node.getClass().getSimpleName()));
+                    return;
+                }
+                TreeView<Object> tree = (TreeView<Object>) node;
+                TreeItem<Object> item = findTreeItemByText(tree.getRoot(), itemText);
+                if (item == null) {
+                    buttonFuture.completeExceptionally(
+                        new IllegalArgumentException("Tree item not found: " + itemText));
+                    return;
+                }
+
+                int itemIndex = tree.getRow(item);
+                tree.getSelectionModel().select(item);
+                tree.scrollTo(itemIndex);
+
+                // Find the rendered cell for this item
+                javafx.scene.control.TreeCell<?> targetCell = null;
+                for (Node child : tree.lookupAll(".tree-cell")) {
+                    if (child instanceof javafx.scene.control.TreeCell) {
+                        javafx.scene.control.TreeCell<?> cell = (javafx.scene.control.TreeCell<?>) child;
+                        if (cell.getTreeItem() == item && !cell.isEmpty()) {
+                            targetCell = cell;
+                            break;
+                        }
+                    }
+                }
+
+                if (targetCell == null) {
+                    buttonFuture.completeExceptionally(
+                        new IllegalArgumentException("Cell not found for item: " + itemText));
+                    return;
+                }
+
+                // Find a Button inside the cell's graphic (recursive lookup)
+                javafx.scene.control.Button btn = findButtonRecursive(targetCell.getGraphic());
+                if (btn == null) {
+                    buttonFuture.completeExceptionally(
+                        new IllegalArgumentException("No button found in cell for item: " + itemText));
+                    return;
+                }
+
+                buttonFuture.complete(btn);
+            } catch (Exception e) {
+                buttonFuture.completeExceptionally(e);
+            }
+        });
+
+        // Wait for button resolution
+        javafx.scene.control.Button btn;
+        try {
+            btn = buttonFuture.get(30, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IllegalArgumentException) {
+                throw (IllegalArgumentException) cause;
+            }
+            throw new RuntimeException(cause);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to resolve button on FX thread", e);
+        }
+
+        // Fire the button asynchronously — it will trigger showAndWait for confirm dialog
+        // During showAndWait, Platform.runLater tasks ARE processed (nested event loop)
+        Platform.runLater(btn::fire);
+
+        JsonObject response = new JsonObject();
+        response.addProperty("fired", true);
+        response.addProperty("itemText", itemText);
+        return response.toString();
+    }
+
+    private javafx.scene.control.Button findButtonRecursive(Node node) {
+        if (node == null) return null;
+        if (node instanceof javafx.scene.control.Button) {
+            return (javafx.scene.control.Button) node;
+        }
+        if (node instanceof javafx.scene.Parent) {
+            for (Node child : ((javafx.scene.Parent) node).getChildrenUnmodifiable()) {
+                javafx.scene.control.Button found = findButtonRecursive(child);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     /**
@@ -926,29 +964,6 @@ public class SceneGraphCommands {
     }
 
     /**
-     * Get the current value of a Spinner control.
-     */
-    @SuppressWarnings("unchecked")
-    private String getSpinnerValue(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String selector = getString(paramsObject, "selector", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        Node node = resolveNode(selector, windowTitle);
-        if (node == null) {
-            throw new IllegalArgumentException("Node not found: " + selector);
-        }
-        if (!(node instanceof Spinner)) {
-            throw new IllegalArgumentException("Node is not a Spinner: " + node.getClass().getSimpleName());
-        }
-        Spinner<?> spinner = (Spinner<?>) node;
-        Object value = spinner.getValue();
-        JsonObject response = new JsonObject();
-        addDynamicProperty(response, "value", value);
-        response.addProperty("editable", spinner.isEditable());
-        return response.toString();
-    }
-
-    /**
      * Set the value of a Spinner control by incrementing/decrementing or setting directly.
      * steps: number of steps to increment (positive) or decrement (negative)
      * value: direct integer value to set (alternative to steps)
@@ -987,116 +1002,6 @@ public class SceneGraphCommands {
         Object newValue = spinner.getValue();
         JsonObject response = new JsonObject();
         addDynamicProperty(response, "value", newValue);
-        return response.toString();
-    }
-
-    private String dumpNodeProperties(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String selector = getString(paramsObject, "selector", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        Node node = resolveNode(selector, windowTitle);
-        if (node == null) {
-            Scene scene = findScene(windowTitle);
-            if (scene == null) return jsonError("no scene");
-            node = scene.getRoot();
-        }
-
-        JsonObject response = new JsonObject();
-        response.addProperty("nodeType", node.getClass().getName());
-        response.addProperty("id", node.getId());
-
-        JsonObject properties = new JsonObject();
-        for (Object key : node.getProperties().keySet()) {
-            Object val = node.getProperties().get(key);
-            if (val == null) {
-                properties.add(String.valueOf(key), JsonNull.INSTANCE);
-            } else {
-                JsonObject property = new JsonObject();
-                property.addProperty("type", val.getClass().getName());
-                property.addProperty("toString", val.toString());
-                properties.add(String.valueOf(key), property);
-            }
-        }
-        response.add("properties", properties);
-
-        Object ud = node.getUserData();
-        if (ud != null) {
-            JsonObject userData = new JsonObject();
-            userData.addProperty("type", ud.getClass().getName());
-            userData.addProperty("toString", ud.toString());
-            response.add("userData", userData);
-        }
-        return response.toString();
-    }
-
-    /**
-     * Find a control (Spinner, CheckBox, or Button) in the scene by looking for it adjacent
-     * to a Label whose text contains the specified text. Used for edit panel child entries.
-     * Params: text (label text to match), windowTitle (optional), controlType (optional: spinner, checkbox, button)
-     * Returns: JSON with found control info (type, index, value if applicable)
-     */
-    private String findControlByLabel(String params) {
-        JsonObject paramsObject = parseParams(params);
-        String text = getString(paramsObject, "text", null);
-        String windowTitle = getString(paramsObject, "windowTitle", null);
-        String controlType = getString(paramsObject, "controlType", null);
-
-        Scene scene = findScene(windowTitle);
-        if (scene == null) return jsonError("no scene");
-
-        for (Node labelNode : scene.getRoot().lookupAll(".label")) {
-            if (!(labelNode instanceof Label)) continue;
-            Label label = (Label) labelNode;
-            String labelText = label.getText();
-            if (labelText == null || !labelText.contains(text)) continue;
-
-            Parent parent = label.getParent();
-            if (parent == null) continue;
-
-            for (Node sibling : parent.getChildrenUnmodifiable()) {
-                if (sibling == label) continue;
-                if (sibling instanceof Spinner) {
-                    if (controlType != null && !controlType.equals("spinner")) continue;
-                    Spinner<?> spinner = (Spinner<?>) sibling;
-                    Object val = spinner.getValue();
-                    JsonObject response = new JsonObject();
-                    response.addProperty("found", true);
-                    response.addProperty("controlType", "spinner");
-                    response.addProperty("labelText", labelText);
-                    addDynamicProperty(response, "value", val);
-                    response.addProperty("parentClass", parent.getClass().getSimpleName());
-                    return response.toString();
-                }
-                if (sibling instanceof Button) {
-                    if (controlType != null && !controlType.equals("button")) continue;
-                    JsonObject response = new JsonObject();
-                    response.addProperty("found", true);
-                    response.addProperty("controlType", "button");
-                    response.addProperty("labelText", labelText);
-                    response.addProperty("parentClass", parent.getClass().getSimpleName());
-                    return response.toString();
-                }
-            }
-        }
-
-        for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
-            if (!(cbNode instanceof CheckBox)) continue;
-            CheckBox cb = (CheckBox) cbNode;
-            String cbText = cb.getText();
-            if (cbText != null && cbText.contains(text)) {
-                if (controlType != null && !controlType.equals("checkbox")) continue;
-                JsonObject response = new JsonObject();
-                response.addProperty("found", true);
-                response.addProperty("controlType", "checkbox");
-                response.addProperty("labelText", cbText);
-                response.addProperty("selected", cb.isSelected());
-                return response.toString();
-            }
-        }
-
-        JsonObject response = new JsonObject();
-        response.addProperty("found", false);
-        response.addProperty("searchedText", text);
         return response.toString();
     }
 
@@ -1279,7 +1184,7 @@ public class SceneGraphCommands {
         if (text != null) {
             String trimmed = text.trim();
             if (!trimmed.isEmpty() && id != null) {
-                String lowerId = id.toLowerCase();
+                String lowerId = id.toLowerCase(Locale.ROOT);
                 if ((lowerId.contains("roster") || lowerId.contains("name"))
                         && !trimmed.equalsIgnoreCase("Roster Editor")) {
                     return trimmed;
@@ -1494,7 +1399,7 @@ public class SceneGraphCommands {
         if (rawName == null) {
             return null;
         }
-        String normalized = rawName.trim().toLowerCase();
+        String normalized = rawName.trim().toLowerCase(Locale.ROOT);
         if (normalized.endsWith(":")) {
             normalized = normalized.substring(0, normalized.length() - 1).trim();
         }
@@ -1616,7 +1521,7 @@ public class SceneGraphCommands {
         if (!styleClasses.isEmpty()) {
             JsonArray styles = new JsonArray();
             for (String styleClass : styleClasses) {
-                styles.add(styleClass);
+                styles.add(new com.google.gson.JsonPrimitive(styleClass));
             }
             result.add("styleClasses", styles);
         }

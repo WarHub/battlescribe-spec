@@ -36,40 +36,33 @@ public class JsonRpcServer {
             "dumpTree",
             "getWindows",
             "findNode",
-            "findAllNodes",
-            "getNodeInfo",
             "clickNode",
             "fireButton",
-            "getChildren",
-            "getNodeText",
             "findNodeByText",
             "setNodeText",
             "getComboBoxItems",
             "selectComboBoxItem",
-            "getTreeItems",
             "selectTreeItem",
-            "clearTreeSelection",
-            "expandTreeItem",
             "clickTreeItem",
+            "clickTreeCellButton",
             "pressKey",
-            "getSpinnerValue",
             "setSpinnerValue",
             "captureScreenshot",
             "getUiState",
             "startRecording",
             "stopRecording",
-            "dumpNodeProperties",
-            "findControlByLabel",
             "clickControlByLabel",
             "setSpinnerValueByLabel"
     )));
 
     private final ServerSocket serverSocket;
     private final SceneGraphCommands commands;
+    private final RosterActions rosterActions;
 
     public JsonRpcServer(int port, EngineAccessor engineAccessor) throws IOException {
         this.serverSocket = new ServerSocket(port, 1, java.net.InetAddress.getLoopbackAddress());
         this.commands = new SceneGraphCommands(engineAccessor);
+        this.rosterActions = new RosterActions(engineAccessor);
     }
 
     public int getPort() {
@@ -135,6 +128,9 @@ public class JsonRpcServer {
             String result;
             if (FX_THREAD_METHODS.contains(method)) {
                 result = executeOnFxThread(() -> commands.dispatch(method, params));
+            } else if (method.endsWith("Action")) {
+                // High-level roster actions run on background thread
+                result = rosterActions.dispatch(method, params);
             } else {
                 result = commands.dispatch(method, params);
             }

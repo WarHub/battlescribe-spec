@@ -527,8 +527,14 @@ public static class NewRecruitActions
         }
     }
 
-    public static async Task SetCustomizationAsync(IPage page, string forceId, string? selectionId, string? customName, string? customNotes)
+    public static async Task SetCustomizationAsync(IPage page, string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
     {
+        if (categoryEntryId is not null)
+        {
+            // NR doesn't support category-level customization — silently ignore.
+            return;
+        }
+
         var error = await page.EvaluateAsync<string?>("""
             ({forceId, selectionId, customName, customNotes}) => {
                 try {
