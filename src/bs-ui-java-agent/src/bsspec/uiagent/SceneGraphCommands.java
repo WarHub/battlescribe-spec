@@ -155,8 +155,6 @@ public class SceneGraphCommands {
                 return stopRecording(params);
             case "getRecordedActions":
                 return getRecordedActions(params);
-            case "setRosterName":
-                return engineAccessor.setRosterName(params);
             case "getValidationErrors":
                 return engineAccessor.getValidationErrors();
             case "clickControlByLabel":

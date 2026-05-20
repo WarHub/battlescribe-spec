@@ -717,21 +717,6 @@ serializer (`net.battlescribe.a.c.e.a(Roster, OutputStream)`).
   {"xml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<roster ...>...</roster>"}
   ```
 
-#### `setRosterName` (deprecated, unused by `BsUiRosterEngine`)
-
-Sets the roster's name via `Roster.setName(String)`.
-
-This RPC still exists for low-level/manual use, but `BsUiRosterEngine` no longer calls it.
-Roster naming now happens as part of `createRosterAction` during roster creation.
-
-- **Thread**: Background
-- **Params**:
-  - `name` (string, required)
-- **Returns**:
-  ```json
-  {"set": true}
-  ```
-
 #### `getValidationErrors`
 
 Reads validation errors from the engine's roster state. Walks forces and selections

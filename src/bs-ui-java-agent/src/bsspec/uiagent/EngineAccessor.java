@@ -355,28 +355,6 @@ public class EngineAccessor {
         }
     }
 
-    public String setRosterName(String params) {
-        JsonObject paramsObject = parseParams(params);
-        if (engineInstance == null) {
-            return errorJson("Engine not found. Call findEngine first.");
-        }
-        try {
-            String name = getString(paramsObject, "name", null);
-            if (name == null || name.isEmpty()) {
-                return errorJson("Missing 'name' parameter.");
-            }
-            Object roster = getRosterMethod.invoke(engineInstance);
-            if (roster == null) {
-                return errorJson("No roster loaded.");
-            }
-            Method setNameMethod = roster.getClass().getMethod("setName", String.class);
-            setNameMethod.invoke(roster, name);
-            return jsonBooleanResult("set", true);
-        } catch (Exception e) {
-            return errorJson("setRosterName: " + e.getMessage());
-        }
-    }
-
     /**
      * Exports the current roster as BattleScribe XML (.ros format).
      * Uses the DataUtils serializer (net.battlescribe.a.c.e) method:
