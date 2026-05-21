@@ -22,6 +22,7 @@ string? recordPath = null;
 var formatMode = false;
 var formatCheck = false;
 string? formatDir = null;
+int? stopBefore = null;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -76,6 +77,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--report" when i + 1 < args.Length:
             reportPath = args[++i];
+            break;
+        case "--stop-before" when i + 1 < args.Length:
+            stopBefore = int.Parse(args[++i]);
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -314,6 +318,60 @@ using (engine)
         }
     };
 
+    // Stop-before: pause execution before a specific step and drop into REPL
+    if (stopBefore is not null)
+    {
+        runner.OnBeforeStep = (stepIndex, step) =>
+        {
+            if (stepIndex != stopBefore.Value)
+            {
+                return true;
+            }
+
+            Console.Error.WriteLine();
+            Console.Error.WriteLine($"═══ Stopped before step {stepIndex}: {DescribeStep(step)} ═══");
+
+            if (engine is NrRosterUiEngine nrUiStopEngine)
+            {
+                Console.Error.WriteLine("NR UI page available. Enter JS expressions (exit/quit to continue):");
+                Console.Error.Write("> ");
+                while (true)
+                {
+                    var line = Console.In.ReadLine();
+                    if (line is null or "exit" or "quit")
+                    {
+                        break;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        Console.Error.Write("> ");
+                        continue;
+                    }
+
+                    try
+                    {
+                        var evalResult = nrUiStopEngine.EvaluateAsync<JsonElement>(line).GetAwaiter().GetResult();
+                        Console.Out.WriteLine(evalResult.ToString());
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"Error: {ex.Message}");
+                    }
+
+                    Console.Error.Write("> ");
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine("Press Enter to continue execution, or Ctrl+C to abort...");
+                Console.In.ReadLine();
+            }
+
+            return true; // continue execution after REPL
+        };
+    }
+
     Console.Error.WriteLine($"Running {stepCount} steps...");
     Console.Error.WriteLine();
 
@@ -385,6 +443,13 @@ using (engine)
     {
         timeline.Write(reportPath, result.Failures.Count == 0, result.Failures);
         Console.Error.WriteLine($"Timeline report: {reportPath}");
+    }
+
+    if (!headless && engine is NrRosterUiEngine)
+    {
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("NR UI: Browser will remain open. Press Enter to close...");
+        Console.In.ReadLine();
     }
 
     return result.Failures.Count == 0 ? 0 : 1;

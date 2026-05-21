@@ -33,13 +33,8 @@ public static class NrUiActions
         var before = await GetAllForceUidsAsync(page);
 
         // In multi-catalogue setups, NR shows force entries without distinguishing which
-        // catalogue they belong to. Use JS directly when we need a specific catalogue and
-        // there are multiple books (to ensure the correct book is used for insertForce).
-        var hasMultipleBooks = catalogueId is not null && await HasMultipleBooksAsync(page);
-        if (hasMultipleBooks && forceEntryId is not null)
-        {
-            return await AddForceByJsAsync(page, forceEntryId, catalogueId);
-        }
+        // catalogue they belong to. The UI picks the correct book internally when clicked,
+        // so we just proceed with normal UI interaction (catalogueId is informational only).
 
         // Open the forces panel (picker of available force types).
         // Two entry points depending on roster state:
@@ -71,10 +66,11 @@ public static class NrUiActions
         }
         else if (forceEntryId is not null)
         {
-            // Force not visible in panel — close popup and use JS
+            // Hidden forces are not accessible via NR UI — throw
             await page.Keyboard.PressAsync("Escape");
-            await page.WaitForTimeoutAsync(300);
-            return await AddForceByJsAsync(page, forceEntryId, catalogueId);
+            throw new NotSupportedException(
+                $"NR UI: force '{forceName}' (entryId={forceEntryId}) is not visible in the forces panel (hidden force). " +
+                "Hidden forces cannot be added via UI interaction.");
         }
         else
         {
@@ -82,34 +78,6 @@ public static class NrUiActions
         }
 
         return await WaitForNewForceUidAsync(page, before);
-    }
-
-    private static async Task<string?> AddForceByJsAsync(IPage page, string forceEntryId, string? catalogueId)
-    {
-        var newUid = await page.EvaluateAsync<string?>("""
-            ({forceEntryId, catalogueId}) => {
-                const spec = window.__bsspec;
-                if (!spec) throw new Error('no spec state');
-                const army = spec.army;
-                const books = spec.books || [spec.book];
-                const catIds = spec.bookCatalogueIds || [];
-                const book = catalogueId
-                    ? (books[catIds.indexOf(catalogueId)] || books[0])
-                    : books[0];
-                if (!army || !book) throw new Error('no army or book');
-
-                const beforeUids = new Set(
-                    (army.getForces?.() || []).map(f => f.uid));
-                army.insertForce(book, forceEntryId);
-                const afterForces = army.getForces?.() || [];
-                for (const f of afterForces) {
-                    if (f.uid && !beforeUids.has(f.uid)) return f.uid;
-                }
-                return null;
-            }
-            """, new { forceEntryId, catalogueId });
-        await page.WaitForTimeoutAsync(500);
-        return newUid;
     }
 
     /// <summary>
@@ -148,18 +116,56 @@ public static class NrUiActions
         }
 
         // Try UI path: expand childForces accordion and click force type row
-        var uiSuccess = false;
         try
         {
+            // Close any open editing panel to ensure the bookForce is fully accessible
+            await DismissOverlaysAsync(page);
+            await CloseEditingPanelAsync(page);
+            await page.WaitForTimeoutAsync(500);
+
             var childForcesHeader = parentBookForce.Locator(".childForces h3.arrowTitle").First;
-            // Use short timeout — if the section isn't usable, fall back to JS quickly
-            await childForcesHeader.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 2_000 });
+            await childForcesHeader.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
 
             var isCollapsed = await childForcesHeader.EvaluateAsync<bool>(
                 "el => el.classList.contains('collapsed')");
             if (isCollapsed)
             {
                 await childForcesHeader.ClickAsync(new() { Timeout = 3_000 });
+                await page.WaitForTimeoutAsync(300);
+            }
+
+            // If multiple catalogues exist, NR shows a <select> picker before the unitList
+            var catSelect = parentBookForce.Locator(".childForces select");
+            if (await catSelect.CountAsync() > 0)
+            {
+                // Resolve catalogue name from ID
+                var catName = catalogueId != null
+                    ? await page.EvaluateAsync<string?>("""
+                        ([catId]) => {
+                            const pinia = document.querySelector('#__nuxt')
+                                ?.__vue_app__?.config?.globalProperties?.$pinia;
+                            const army = pinia?._s?.get('lists')?.currentList?.army
+                                ?? window.__bsspec?.army;
+                            if (!army) return null;
+                            const sys = army.system || army.gameSystem;
+                            const books = sys?.books?.array || [];
+                            const book = books.find(b => b.id === catId);
+                            return book?.name ?? null;
+                        }
+                        """, new[] { catalogueId })
+                    : null;
+
+                if (catName != null)
+                {
+                    await catSelect.SelectOptionAsync(new SelectOptionValue { Label = catName });
+                    await page.WaitForTimeoutAsync(300);
+                }
+                else
+                {
+                    // Select first non-disabled option
+                    await catSelect.SelectOptionAsync(new SelectOptionValue { Index = 1 });
+                    await page.WaitForTimeoutAsync(300);
+                }
             }
 
             var unitList = parentBookForce.Locator(".childForces .unitList");
@@ -167,62 +173,46 @@ public static class NrUiActions
 
             var forceRow = unitList.Locator(".unit-wrap").Filter(new() { HasText = forceName });
             await forceRow.Locator(".addButton").First.ClickAsync(new() { Timeout = 5_000 });
-            uiSuccess = true;
         }
-        catch (TimeoutException)
+        catch (TimeoutException ex)
         {
-            // UI path failed — fall through to JS fallback
-        }
-
-        if (!uiSuccess)
-        {
-            if (forceEntryId is not null)
-            {
-                // JS fallback — child forces section not visible/interactable in NR UI
-                await page.EvaluateAsync("""
-                    ([parentForceUid, childForceEntryId, catalogueId]) => {
-                        const spec = window.__bsspec;
-                        if (!spec) throw new Error('no spec state');
-                        const army = spec.army;
-                        const books = spec.books || [spec.book];
-                        const catIds = spec.bookCatalogueIds || [];
-                        const book = catalogueId
-                            ? (books[catIds.indexOf(catalogueId)] || books[0])
-                            : books[0];
-                        if (!army || !book) throw new Error('no army or book');
-                        const parentForce = (army.getForces?.() || []).find(f => f.uid === parentForceUid);
-                        if (!parentForce) throw new Error('parent force not found: ' + parentForceUid);
-                        parentForce.insertForce(book, childForceEntryId);
-                    }
-                    """, new object[] { parentForceId, forceEntryId, catalogueId ?? "" });
-                await page.WaitForTimeoutAsync(500);
-            }
-            else
-            {
-                throw new TimeoutException($"Child force '{forceName}' section not visible and no forceEntryId for JS fallback");
-            }
+            throw new NotSupportedException(
+                $"NR UI: child force '{forceName}' section is not visible/interactable. " +
+                $"Hidden or inaccessible child forces cannot be added via UI interaction. Detail: {ex.Message}");
         }
 
         return await WaitForNewForceUidAsync(page, before);
     }
 
     /// <summary>
-    /// Removes a force. TODO: probe force delete button in NR UI; uses JS fallback for now.
+    /// Removes a force via Force Options → "Delete Force" menu item.
+    /// The force options dots menu is in the middle panel (.forceSection),
+    /// not inside .bookForce. We identify it by force index.
     /// </summary>
     public static async Task RemoveForceAsync(IPage page, string forceUid)
     {
-        _ = forceUid;
-        // TODO: probe what the force delete button looks like — for now, use JS direct mutation
-        await page.EvaluateAsync("""
-            (forceUid) => {
+        await DismissOverlaysAsync(page);
+        await CloseEditingPanelAsync(page);
+
+        // Find force index
+        var forceIndex = await page.EvaluateAsync<int>("""
+            ([uid]) => {
                 const army = window.__bsspec?.army;
-                if (!army) throw new Error('no army');
-                const force = army.getForces?.()?.find(f => f.uid === forceUid);
-                if (!force) throw new Error('force not found: ' + forceUid);
-                force.delete?.();
+                if (!army) return -1;
+                const forces = army.getForces?.() || [];
+                return forces.findIndex(f => f.uid === uid);
             }
-            """, forceUid);
+            """, new[] { forceUid });
+
+        if (forceIndex < 0)
+        {
+            throw new InvalidOperationException($"NR UI: Force '{forceUid}' not found in army.getForces().");
+        }
+        var forceOptions = page.Locator(".forceOptions").Nth(forceIndex);
+        await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = 5_000 });
+        await page.GetByText("Delete Force", new() { Exact = true }).ClickAsync(new() { Timeout = 5_000 });
         await MaybeConfirmDeletionAsync(page);
+        await page.WaitForTimeoutAsync(300);
     }
 
     // ===== Selection operations =====
@@ -270,46 +260,10 @@ public static class NrUiActions
             return await WaitForNewSelectionUidAsync(page, before);
         }
 
-        // JS fallback for hidden entries not visible in the catalogue panel
-        var result = await page.EvaluateAsync<string?>("""
-            ({forceUid, entryId}) => {
-                try {
-                    const army = window.__bsspec?.army;
-                    if (!army) return 'ERROR:No current roster';
-
-                    const force = getForceByUid(army, forceUid);
-                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
-
-                    const before = new Set(
-                        getSelections(force).map(s => s.uid));
-
-                    const selector = findSelectorById(force, entryId);
-                    if (!selector) return `ERROR:Entry '${entryId}' not found in force selector tree`;
-
-                    if (typeof selector.addInstance !== 'function')
-                        return `ERROR:Selector for '${entryId}' has no addInstance`;
-
-                    selector.addInstance();
-
-                    const after = getSelections(force);
-                    for (const s of after) {
-                        if (s.uid && !before.has(s.uid)) {
-                            s.autocheck();
-                            return s.uid;
-                        }
-                    }
-
-                    return `ERROR:addInstance on '${entryId}' did not produce a new selection`;
-                } catch(e) {
-                    return 'ERROR:SelectEntry error: ' + e.message;
-                }
-            }
-            """, new { forceUid, entryId });
-        if (result?.StartsWith("ERROR:", StringComparison.Ordinal) == true)
-        {
-            throw new InvalidOperationException(result[6..]);
-        }
-        return result;
+        // Hidden entries are not accessible via NR UI — throw
+        throw new NotSupportedException(
+            $"NR UI: entry '{entryId}' is not visible in the catalogue panel (hidden entry). " +
+            "Hidden entries cannot be selected via UI interaction.");
     }
 
     /// <summary>
@@ -349,65 +303,10 @@ public static class NrUiActions
         }
         else
         {
-            // JS fallback for hidden entries not visible in the options panel.
-            // Uses the same selector-tree traversal as NewRecruitActions.SelectChildEntryByIdAsync.
-            var searchId = entryId ?? entryName;
-            await page.EvaluateAsync("""
-                ([parentSelectionUid, searchId]) => {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const army = pinia?._s?.get('lists')?.currentList?.army
-                        ?? window.__bsspec?.army;
-                    if (!army) throw new Error('no army');
-                    function findInNode(node) {
-                        for (const s of (node.getSelections?.() || [])) {
-                            if (s.uid === parentSelectionUid) return s;
-                            const found = findInNode(s);
-                            if (found) return found;
-                        }
-                        return null;
-                    }
-                    let sel = null;
-                    for (const f of (army.getForces?.() || [])) {
-                        sel = findInNode(f);
-                        if (sel) break;
-                    }
-                    if (!sel) throw new Error('parent not found: ' + parentSelectionUid);
-
-                    // Check if already exists as a child instance
-                    const children = sel.getSelections?.() || [];
-                    const existing = children.find(c =>
-                        c.getId?.() === searchId
-                        || c.source?.id === searchId
-                        || c.selector?.ids?.includes?.(searchId));
-                    if (existing) {
-                        if (existing.selector?.isInstanced) {
-                            existing.selector.addInstance?.();
-                        } else {
-                            existing.incrementAmount?.();
-                            existing.autocheck?.();
-                        }
-                        return;
-                    }
-
-                    // Not pre-created — search selector tree and addInstance
-                    function findSelectorDeep(selectors, id) {
-                        for (const s of selectors) {
-                            if (s.id === id || s.ids?.includes(id)) return s;
-                            for (const inst of (s.instances || [])) {
-                                const found = findSelectorDeep(inst.selectors || [], id);
-                                if (found) return found;
-                            }
-                        }
-                        return null;
-                    }
-                    const targetSelector = findSelectorDeep(sel.selectors || [], searchId);
-                    if (!targetSelector)
-                        throw new Error('child entry not found: ' + searchId);
-                    targetSelector.addInstance?.();
-                }
-                """, new object[] { parentSelectionUid, searchId });
-            await page.WaitForTimeoutAsync(300);
+            // Hidden entries are not accessible via NR UI — throw
+            throw new NotSupportedException(
+                $"NR UI: child entry '{entryName}' is not visible in the options panel (hidden entry). " +
+                "Hidden entries cannot be selected via UI interaction.");
         }
 
         // Query the child uid from the parent selection's children
@@ -455,31 +354,16 @@ public static class NrUiActions
     }
 
     /// <summary>
-    /// Falls back to JS-based count mutation for root selections that have no direct spinner in the UI.
+    /// Root selection count is not editable via NR UI (no number input for root selections).
+    /// Use selectEntry/deselectSelection to add/remove root instances instead.
     /// </summary>
-    public static async Task SetSelectionCountAsync(IPage page, string selectionUid, int count)
+    public static Task SetSelectionCountAsync(IPage page, string selectionUid, int count)
     {
-        await page.EvaluateAsync("""
-            ([selectionUid, count]) => {
-                const army = window.__bsspec?.army;
-                if (!army) throw new Error('no army');
-                function findInNode(node) {
-                    for (const s of (node.getSelections?.() || [])) {
-                        if (s.uid === selectionUid) return s;
-                        const found = findInNode(s);
-                        if (found) return found;
-                    }
-                    return null;
-                }
-                let sel = null;
-                for (const f of (army.getForces?.() || [])) {
-                    sel = findInNode(f);
-                    if (sel) break;
-                }
-                if (!sel) throw new Error('selection not found: ' + selectionUid);
-                sel.setNumSelections?.(Number(count));
-            }
-            """, new object[] { selectionUid, count });
+        _ = page;
+        _ = count;
+        throw new NotSupportedException(
+            $"NR UI: root selection '{selectionUid}' does not have a count input. " +
+            "Root selection count is managed via selectEntry (add) and deselectSelection (remove).");
     }
 
     /// <summary>
@@ -507,43 +391,10 @@ public static class NrUiActions
         }
         else
         {
-            // JS fallback for child/hidden selections without .unitRow in DOM.
-            // Mirrors the logic from NewRecruitActions.DeselectSelectionAsync.
-            await page.EvaluateAsync("""
-                (selectionUid) => {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const army = pinia?._s?.get('lists')?.currentList?.army
-                        ?? window.__bsspec?.army;
-                    if (!army) throw new Error('no army');
-                    function findInNode(node) {
-                        for (const s of (node.getSelections?.() || [])) {
-                            if (s.uid === selectionUid) return s;
-                            const found = findInNode(s);
-                            if (found) return found;
-                        }
-                        return null;
-                    }
-                    let sel = null;
-                    for (const f of (army.getForces?.() || [])) {
-                        sel = findInNode(f);
-                        if (sel) break;
-                    }
-                    if (!sel) throw new Error('selection not found: ' + selectionUid);
-                    if (typeof sel.decrementAmount === 'function') {
-                        sel.decrementAmount();
-                        if (typeof sel.getAmount === 'function' && sel.getAmount() === 0
-                            && typeof sel.delete === 'function') {
-                            sel.delete();
-                        }
-                    } else if (typeof sel.delete === 'function') {
-                        sel.delete();
-                    } else {
-                        throw new Error('cannot deselect: no decrementAmount or delete on ' + selectionUid);
-                    }
-                }
-                """, selectionUid);
-            await page.WaitForTimeoutAsync(300);
+            // Hidden/nested selections without a .unitRow are not accessible via NR UI — throw
+            throw new NotSupportedException(
+                $"NR UI: selection '{selectionUid}' has no .unitRow in DOM (hidden or nested). " +
+                "Hidden selections cannot be deselected via UI interaction.");
         }
     }
 
@@ -559,58 +410,74 @@ public static class NrUiActions
     }
 
     /// <summary>
-    /// Duplicates a force. TODO: probe force duplicate button location.
+    /// Duplicates a force via Force Options → "Duplicate" menu item.
+    /// Returns the uid of the newly created force.
     /// </summary>
     public static async Task<string?> DuplicateForceAsync(IPage page, string forceUid)
     {
-        // NR's force method is `dupe()` (async), not `duplicate()`
-        var newUid = await page.EvaluateAsync<string?>("""
-            async (forceUid) => {
+        var before = await GetAllForceUidsAsync(page);
+        await DismissOverlaysAsync(page);
+        await CloseEditingPanelAsync(page);
+
+        // Find force index to pick the correct .forceOptions element
+        var forceIndex = await page.EvaluateAsync<int>("""
+            ([uid]) => {
                 const army = window.__bsspec?.army;
-                if (!army) throw new Error('no army');
-                const beforeUids = new Set((army.getForces?.() || []).map(f => f.uid));
-                const force = (army.getForces?.() || []).find(f => f.uid === forceUid);
-                if (!force) throw new Error('force not found: ' + forceUid);
-                if (typeof force.dupe !== 'function')
-                    throw new Error('dupe() method not available on force');
-                await force.dupe();
-                for (const f of (army.getForces?.() || [])) {
-                    if (f.uid && !beforeUids.has(f.uid)) return f.uid;
-                }
-                return null;
+                if (!army) return -1;
+                const forces = army.getForces?.() || [];
+                return forces.findIndex(f => f.uid === uid);
             }
-            """, forceUid);
-        return newUid;
+            """, new[] { forceUid });
+
+        if (forceIndex < 0)
+        {
+            throw new InvalidOperationException($"NR UI: Force '{forceUid}' not found in army.getForces().");
+        }
+
+        var forceOptions = page.Locator(".forceOptions").Nth(forceIndex);
+        await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = 5_000 });
+        await page.GetByText("Duplicate Force", new() { Exact = true }).ClickAsync(new() { Timeout = 5_000 });
+        return await WaitForNewForceUidAsync(page, before);
     }
 
     // ===== Roster-level operations =====
 
     /// <summary>
-    /// Sets a cost limit via JS (NR UI doesn't expose a direct cost-limit input in the editor).
+    /// Sets a cost limit via the "List Configuration" dialog:
+    /// List Options → "List Configuration" → fill .maxCostInput for the target type → close.
     /// </summary>
     public static async Task SetCostLimitAsync(IPage page, string costTypeId, decimal value)
     {
-        await page.EvaluateAsync("""
-            ([costTypeId, value]) => {
-                const army = window.__bsspec?.army;
-                if (!army) throw new Error('No army');
-                const maxCosts = army.getMaxCosts?.() || [];
-                const cost = maxCosts.find(c => c.typeId === costTypeId || c.id === costTypeId);
-                if (!cost) throw new Error('Cost type not found: ' + costTypeId);
-                cost.value = Number(value);
-                army.setMaxCosts?.(maxCosts);
-            }
-            """, new object[] { costTypeId, (double)value });
+        await DismissOverlaysAsync(page);
+
+        // Open "List Options" dropdown
+        await page.Locator(".dotsMenuContainer").Filter(new() { HasText = "List Options" }).First.ClickAsync();
+
+        // Click "List Configuration" menu item (has img with alt="edit cost limits")
+        await page.Locator("img[alt='edit cost limits']").First.ClickAsync(new() { Timeout = 5_000 });
+
+        // Wait for the configuration dialog to appear with cost limit inputs
+        // Use attribute selector since typeId often contains special chars (dots, dashes)
+        var costInput = page.Locator($"input[id='{costTypeId}']");
+        await costInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+
+        // Set the value
+        var valueStr = value < 0 ? "" : ((int)value).ToString();
+        await costInput.FillAsync(valueStr);
+        await costInput.DispatchEventAsync("change");
+
+        // Close the dialog
+        await page.Keyboard.PressAsync("Escape");
+        await page.WaitForTimeoutAsync(300);
     }
 
     /// <summary>
-    /// Sets custom name/notes for a force or selection.
+    /// Sets custom name/notes for a force or selection via UI interaction.
     /// <para>
-    /// NR's roster UI does not expose dedicated custom name/notes editing fields for
-    /// individual selections or force custom names. The force notes can be opened via an
-    /// inline editname button, but for consistency and reliability, we use direct JS property
-    /// writes for all customization. The supporter paywall bypass (set in setup) ensures
-    /// that NR's internal serialization includes these fields.
+    /// Selection-level: opens the unit's editing panel → submenu → "Rename Unit" / "Add Note".
+    /// Force-level name: Force Options → "Rename Force".
+    /// Force-level notes: JS fallback (no dedicated UI in NR).
+    /// Supporter bypass (set during setup) unlocks notes editing.
     /// </para>
     /// </summary>
     public static async Task SetCustomizationAsync(
@@ -627,45 +494,147 @@ public static class NrUiActions
             return;
         }
 
-        // NR's UI has limited customization support:
-        // - Selection customName/note: no UI at all
-        // - Force customName: no UI (only catalogue/entry names shown)
-        // - Force note: only a contenteditable notes field (no name input, no save button)
-        // For reliability, use direct JS property writes for all cases.
-        await page.EvaluateAsync("""
-            ([forceId, selectionId, customName, customNotes]) => {
-                const pinia = document.querySelector('#__nuxt')
-                    ?.__vue_app__?.config?.globalProperties?.$pinia;
-                const lists = pinia?._s.get('lists');
-                const army = lists?.currentList?.army;
-                if (!army) return;
-                const forces = army.getForces?.() ?? [];
-                for (const f of forces) {
-                    if (f.uid === forceId || f.getId?.() === forceId) {
-                        if (selectionId) {
-                            // Find the selection (including nested) via recursive search
-                            function findSel(node) {
-                                for (const s of (node.getSelections?.() ?? [])) {
-                                    if (s.uid === selectionId || s.getId?.() === selectionId) return s;
-                                    const found = findSel(s);
-                                    if (found) return found;
-                                }
-                                return null;
-                            }
-                            const sel = findSel(f);
-                            if (sel) {
-                                if (customName !== null && customName !== undefined) sel.customName = customName;
-                                if (customNotes !== null && customNotes !== undefined) sel.note = customNotes;
-                            }
-                        } else {
-                            if (customName !== null && customName !== undefined) f.customName = customName;
-                            if (customNotes !== null && customNotes !== undefined) f.note = customNotes;
-                        }
-                        return;
-                    }
-                }
+        if (selectionId is not null)
+        {
+            await SetSelectionCustomizationAsync(page, selectionId, customName, customNotes);
+        }
+        else
+        {
+            await SetForceCustomizationAsync(page, forceId, customName, customNotes);
+        }
+    }
+
+    /// <summary>
+    /// Sets custom name/notes on a selection via the "Unit Options" submenu.
+    /// Opens panel → clicks "Unit Options" in .unitNameTitle → "Rename Unit" / "Add Note".
+    /// The submenu renders as a .subMenu overlay with menu items.
+    /// </summary>
+    private static async Task SetSelectionCustomizationAsync(
+        IPage page,
+        string selectionUid,
+        string? customName,
+        string? customNotes)
+    {
+        // Open the selection's options/editing panel
+        await OpenOptionsPanelAsync(page, selectionUid);
+
+        if (customName is not null)
+        {
+            // Open "Unit Options" submenu — the button is in .unitNameTitle .rightButton
+            await OpenUnitOptionsSubmenuAsync(page);
+
+            // Click "Rename Unit" in the dropdown
+            await page.GetByText("Rename Unit").First.ClickAsync(new() { Timeout = 3_000 });
+            await page.WaitForTimeoutAsync(300);
+
+            // An editable pre element appears in the name area
+            var nameInput = page.Locator(".unitNameTitle .editableDiv[contenteditable='true']").First;
+            if (await nameInput.CountAsync() == 0)
+            {
+                // Fallback: any contenteditable in the title area
+                nameInput = page.Locator(".unitNameTitle [contenteditable='true']").First;
             }
-            """, new object?[] { forceId, selectionId, customName, customNotes });
+            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
+            await nameInput.FillAsync(customName);
+            await nameInput.PressAsync("Enter");
+            await page.WaitForTimeoutAsync(300);
+        }
+
+        if (customNotes is not null)
+        {
+            // Open "Unit Options" submenu (may need to reopen after rename)
+            await OpenUnitOptionsSubmenuAsync(page);
+
+            // Click "Add Note" in the dropdown
+            await page.GetByText("Add Note").First.ClickAsync(new() { Timeout = 3_000 });
+            await page.WaitForTimeoutAsync(300);
+
+            // Fill the note field — a contenteditable pre with class "note" appears in .content
+            var noteField = page.Locator("pre.editableDiv.note[contenteditable='true'], pre[contenteditable='true'].note").First;
+            if (await noteField.CountAsync() == 0)
+            {
+                // Fallback: any contenteditable in the content area
+                noteField = page.Locator(".content [contenteditable='true']").First;
+            }
+            await noteField.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
+            await noteField.FillAsync(customNotes);
+            await page.WaitForTimeoutAsync(100);
+        }
+    }
+
+    /// <summary>
+    /// Opens the "Unit Options" submenu in the editing panel header.
+    /// The button is in .unitNameTitle .rightButton with img[alt='list menu'].
+    /// </summary>
+    private static async Task OpenUnitOptionsSubmenuAsync(IPage page)
+    {
+        // Dismiss any existing submenu/overlay first
+        var existingSubmenu = page.Locator(".subMenu");
+        if (await existingSubmenu.CountAsync() > 0)
+        {
+            await page.Keyboard.PressAsync("Escape");
+            await page.WaitForTimeoutAsync(200);
+        }
+
+        var unitOptionsBtn = page.Locator(".unitNameTitle .rightButton")
+            .Filter(new() { Has = page.Locator("img[alt='list menu']") });
+        await unitOptionsBtn.ClickAsync(new() { Timeout = 5_000 });
+        // Wait for submenu to appear
+        await page.Locator(".subMenu").WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
+    }
+
+    /// <summary>
+    /// Sets custom name/notes on a force.
+    /// Name: Force Options → "Rename Force" → inline editable field.
+    /// Notes: not supported in NR (no UI control) — silently ignored.
+    /// </summary>
+    private static async Task SetForceCustomizationAsync(
+        IPage page,
+        string forceId,
+        string? customName,
+        string? customNotes)
+    {
+        _ = customNotes; // NR doesn't support force-level notes (no UI control)
+
+        if (customName is not null)
+        {
+            // Ensure we're viewing the force list (close any open editing panel)
+            await DismissOverlaysAsync(page);
+            await CloseEditingPanelAsync(page);
+
+            // Find force index to pick the correct .forceOptions element
+            var forceIndex = await page.EvaluateAsync<int>("""
+                ([uid]) => {
+                    const army = window.__bsspec?.army;
+                    if (!army) return -1;
+                    const forces = army.getForces?.() || [];
+                    return forces.findIndex(f => f.uid === uid);
+                }
+                """, new[] { forceId });
+
+            var forceOptions = forceIndex >= 0
+                ? page.Locator(".forceOptions").Nth(forceIndex)
+                : page.Locator(".forceOptions").First;
+
+            // Click "Force Options" dots menu
+            await forceOptions.Locator(".dotsMenuContainer .dots").ClickAsync(new() { Timeout = 5_000 });
+
+            // Click "Rename Force"
+            await page.GetByText("Rename Force").First.ClickAsync(new() { Timeout = 3_000 });
+            await page.WaitForTimeoutAsync(300);
+
+            // Fill the inline rename field (contenteditable pre or input)
+            var nameInput = forceOptions.Locator("[contenteditable='true']").First;
+            if (await nameInput.CountAsync() == 0)
+            {
+                // Broader: any contenteditable that appeared in the force header area
+                nameInput = page.Locator(".forceSection [contenteditable='true'], .titreForce [contenteditable='true']").First;
+            }
+            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
+            await nameInput.FillAsync(customName);
+            await nameInput.PressAsync("Enter");
+            await page.WaitForTimeoutAsync(200);
+        }
     }
 
     // ===== Internal: element finders =====
@@ -971,19 +940,6 @@ public static class NrUiActions
         return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
     }
 
-    private static async Task<bool> HasMultipleBooksAsync(IPage page)
-    {
-        var count = await page.EvaluateAsync<int>("""
-            () => {
-                const spec = window.__bsspec;
-                if (!spec) return 0;
-                const books = spec.books || (spec.book ? [spec.book] : []);
-                return books.length;
-            }
-            """);
-        return count > 1;
-    }
-
     private static async Task<HashSet<string>> GetAllForceUidsAsync(IPage page)
     {
         var uids = await page.EvaluateAsync<string[]>("""
@@ -1109,6 +1065,20 @@ public static class NrUiActions
         catch
         {
             // No overlay — that's fine
+        }
+    }
+
+    /// <summary>
+    /// Closes any open unit editing panel by clicking the "Save unit" (X) button.
+    /// This returns the view to the force list, making left panel elements accessible.
+    /// </summary>
+    private static async Task CloseEditingPanelAsync(IPage page)
+    {
+        var saveBtn = page.Locator(".unitNameTitle img[alt='Save unit']");
+        if (await saveBtn.CountAsync() > 0)
+        {
+            await saveBtn.First.ClickAsync(new() { Timeout = 3_000 });
+            await page.WaitForTimeoutAsync(300);
         }
     }
 }

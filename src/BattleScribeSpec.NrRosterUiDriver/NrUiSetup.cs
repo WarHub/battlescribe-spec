@@ -7,15 +7,15 @@ namespace BattleScribeSpec.NrRosterUiDriver;
 /// <summary>
 /// Helpers for the setup phase of NrRosterUiEngine:
 ///   1. Loading game data files into NR via the loadSystemFromFs Pinia store API
-///      (NR's web version has no file-upload UI for custom game data).
+///      or by mocking showDirectoryPicker for full UI-driven loading.
 ///   2. Creating a new roster/list via the NR UI (JS fallback for now).
 /// </summary>
 public static class NrUiSetup
 {
     /// <summary>
     /// Load game data XML files into NR via the loadSystemFromFs Pinia store API.
-    /// NR's public web version at newrecruit.eu has no file-upload UI for custom data
-    /// (MySystems only has "Update All" for its own hosted systems), so we use JS.
+    /// This is the direct JS path used by default. For UI-driven loading, use
+    /// <see cref="InjectDirectoryPickerMockAsync"/> + NR's "Load from Folder" button.
     /// </summary>
     public static async Task LoadGameDataAsync(
         NewRecruitBrowser browser,
@@ -51,6 +51,81 @@ public static class NrUiSetup
         {
             throw new InvalidOperationException($"LoadGameData failed: {result[6..]}");
         }
+    }
+
+    /// <summary>
+    /// Injects a mock for <c>window.showDirectoryPicker</c> that returns a fake
+    /// <c>FileSystemDirectoryHandle</c> containing the provided XML file data.
+    /// <para>
+    /// When NR's "Load from Folder" button is clicked, it calls <c>showDirectoryPicker()</c>,
+    /// iterates the entries, reads file contents, and passes them to <c>loadSystemFromFs</c>.
+    /// This mock intercepts that call and returns our spec data without needing real
+    /// filesystem permissions (which Playwright cannot grant for the File System Access API).
+    /// </para>
+    /// <para>
+    /// The mock is one-shot: after the first call it restores the original (or removes the mock),
+    /// preventing interference with subsequent tests.
+    /// </para>
+    /// </summary>
+    public static async Task InjectDirectoryPickerMockAsync(
+        IPage page,
+        IReadOnlyList<(string FileName, string Content)> files)
+    {
+        var fileData = files.Select(f => new { name = f.FileName, content = f.Content }).ToArray();
+
+        await page.EvaluateAsync("""
+            (fileData) => {
+                const originalPicker = window.showDirectoryPicker;
+
+                window.showDirectoryPicker = async () => {
+                    // Restore original after first use (one-shot mock)
+                    if (originalPicker) {
+                        window.showDirectoryPicker = originalPicker;
+                    } else {
+                        delete window.showDirectoryPicker;
+                    }
+
+                    // Build fake File objects
+                    const fakeFiles = fileData.map(f => {
+                        const blob = new Blob([f.content], { type: 'application/xml' });
+                        return new File([blob], f.name, { type: 'application/xml' });
+                    });
+
+                    // Build fake FileSystemFileHandle objects
+                    const fileHandles = fakeFiles.map(file => ({
+                        kind: 'file',
+                        name: file.name,
+                        getFile: async () => file,
+                    }));
+
+                    // Return a fake FileSystemDirectoryHandle
+                    return {
+                        kind: 'directory',
+                        name: 'spec-data',
+                        values: async function* () {
+                            for (const handle of fileHandles) {
+                                yield handle;
+                            }
+                        },
+                        entries: async function* () {
+                            for (const handle of fileHandles) {
+                                yield [handle.name, handle];
+                            }
+                        },
+                        keys: async function* () {
+                            for (const handle of fileHandles) {
+                                yield handle.name;
+                            }
+                        },
+                        getFileHandle: async (name) => {
+                            const h = fileHandles.find(fh => fh.name === name);
+                            if (!h) throw new DOMException('File not found: ' + name, 'NotFoundError');
+                            return h;
+                        },
+                    };
+                };
+            }
+            """, fileData);
     }
 
     /// <summary>

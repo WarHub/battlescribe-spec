@@ -340,6 +340,15 @@ public sealed class NrRosterUiEngine : IRosterEngine
     }
 
     /// <summary>
+    /// Evaluates a JavaScript expression in the page context.
+    /// Used by the Debugger REPL for interactive DOM probing.
+    /// </summary>
+    public async Task<T> EvaluateAsync<T>(string expression)
+    {
+        return await Browser.Page.EvaluateAsync<T>(expression);
+    }
+
+    /// <summary>
     /// Captures full diagnostic report (screenshot + console + DOM + Pinia state).
     /// Used on failure for debugging.
     /// </summary>

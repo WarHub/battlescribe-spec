@@ -671,6 +671,7 @@ steps:
             - name: Required Unit
 
   # Step 4d: setCustomization — set custom name/notes on force
+  # NR doesn't support force-level notes (no UI control) — customNotes is ignored.
   - action: setCustomization
     forceId: ${{ steps.add-battalion.forceId }}
     customName: Alpha Strike Force
@@ -680,6 +681,10 @@ steps:
       forces:
         - customName: Alpha Strike Force
           customNotes: Main battle group
+      engines:
+        newrecruit:
+          forces:
+            - customName: Alpha Strike Force
 
   # Step 4e: setCustomization — set custom name and notes on force HQ category
   - action: setCustomization
@@ -817,10 +822,12 @@ steps:
           from: costLimits/ct-pts
 
   # Step 9b: addForce hidden detachment — exercises ExpectedForceDef.Hidden
+  # NR doesn't expose hidden forces in the UI — skipped for newrecruit.
   - action: addForce
     id: add-hidden-detachment
     forceEntryId: fe-hidden-detachment
     catalogueId: cat-1
+    skipEngines: [newrecruit]
 
   - expectedState:
       errorCount: 1
@@ -830,10 +837,16 @@ steps:
         - name: Hidden Detachment
           hidden: true
           selectionCount: 0
+      engines:
+        newrecruit:
+          forces:
+            - name: Battalion
+              selectionCount: 4
 
   # Step 9c: removeForce — exercises removeForce action, restores single-force state
   - action: removeForce
     forceId: ${{ steps.add-hidden-detachment.forceId }}
+    skipEngines: [newrecruit]
 
   - expectedState:
       errorCount: 1
@@ -1302,7 +1315,7 @@ steps:
               page: "10"
               # NR: availableEntryCount not returned by NR engine (omitted)
               customName: Alpha Strike Force
-              customNotes: Main battle group
+              # NR: force notes not supported (no UI control)
               childForceCount: 0
               profiles: []
               rules:

@@ -560,8 +560,8 @@ public static class NewRecruitActions
                         if (customName !== null && customName !== undefined) sel.customName = customName;
                         if (customNotes !== null && customNotes !== undefined) sel.note = customNotes;
                     } else {
+                        // NR doesn't support force-level notes (no UI control) — only set name.
                         if (customName !== null && customName !== undefined) force.customName = customName;
-                        if (customNotes !== null && customNotes !== undefined) force.note = customNotes;
                     }
                     return null;
                 } catch(e) {

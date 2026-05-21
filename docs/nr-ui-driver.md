@@ -1,0 +1,139 @@
+# NrRosterUiDriver — NewRecruit Browser UI Automation Adapter
+
+The `BattleScribeSpec.NrRosterUiDriver` project is a UI automation adapter that drives the
+**NewRecruit web roster editor** (Vue.js/Nuxt) as a conformance test engine. It implements
+`IRosterEngine` — the same interface used by the IKVM-based BS engine and the non-UI NR
+adapter — but instead of calling NR's JS API directly, it **interacts through the browser
+UI** using Playwright, mimicking real user actions (clicks, form inputs, menu selections).
+
+## Architecture Overview
+
+```
+┌────────────────────────────────────────────────────────┐
+│  NrRosterUiEngine (C#, IRosterEngine)                  │
+│  Thin dispatcher — maps IRosterEngine to UI actions    │
+├────────────────────────────────────────────────────────┤
+│  NrUiActions (C#, Playwright locators + interactions)  │
+│  High-level UI workflows: AddForce, SelectEntry, etc.  │
+├────────────────────────────────────────────────────────┤
+│  NrUiSetup (C#, data loading + roster creation)        │
+│  Loads game data via JS store API, creates roster      │
+├────────────────────────────────────────────────────────┤
+│  NewRecruitBrowser (shared, Playwright lifecycle)       │
+│  Browser/page management, HAR replay, navigation       │
+├────────────────────────────────────────────────────────┤
+│  NrUiDiagnostics (C#, failure capture)                 │
+│  Screenshot, console log, DOM snapshot, Pinia dump     │
+├────────────────────────────────────────────────────────┤
+│  NrUiProbe (C#, interactive debugging)                 │
+│  Ad-hoc DOM exploration with live Playwright session   │
+└────────────────────────────────────────────────────────┘
+```
+
+State reading: reuses `NewRecruitStateReader` (JS reads from Pinia stores — acceptable per
+design decision that only **mutations** must go through UI).
+
+## Source Files
+
+| File | Purpose |
+|------|---------|
+| `src/BattleScribeSpec.NrRosterUiDriver/NrRosterUiEngine.cs` | `IRosterEngine` implementation |
+| `src/BattleScribeSpec.NrRosterUiDriver/NrUiActions.cs` | All Playwright UI interactions |
+| `src/BattleScribeSpec.NrRosterUiDriver/NrUiSetup.cs` | Game data loading, roster creation |
+| `src/BattleScribeSpec.NrRosterUiDriver/NrUiDiagnostics.cs` | Failure diagnostics capture |
+| `src/BattleScribeSpec.NrRosterUiDriver/NrUiProbe.cs` | Interactive probe/debug mode |
+
+## Design Decisions
+
+1. **All mutations via UI** — every roster-modifying action (add force, select entry, set
+   cost limit, rename, etc.) is performed via Playwright UI interaction. No `EvaluateAsync`
+   calls that mutate NR engine state.
+
+2. **State reading via JS** — reading roster state (forces, selections, costs, errors) uses
+   Pinia store access. This is not a mutation and avoids fragile DOM scraping.
+
+3. **Supporter bypass** — NR locks some features (notes, custom names) behind a supporter
+   paywall. The adapter injects a fake supporter user via JS during setup to unlock these.
+
+4. **Setup uses JS** — Loading game data XML into NR uses the `loadSystemFromFs` Pinia API.
+   This is infrastructure setup, not a user action. A `showDirectoryPicker` mock is available
+   for full UI-driven loading if needed.
+
+5. **Engine name = "newrecruit"** — shares assertion overrides with the non-UI NR adapter
+   (same behavioral quirks, same expected state adjustments).
+
+## Action → UI Mapping
+
+| Action | UI Flow |
+|--------|---------|
+| AddForce | "List Options" → "Add Force" OR forces panel `+` button |
+| RemoveForce | Force Options `.dots` → "Delete Force" |
+| DuplicateForce | Force Options `.dots` → "Duplicate" |
+| SelectEntry | Click entry row (`.boutonSubUnit` or `.addButton`) in panel |
+| SelectChildEntry | Open parent options → click child toggle/button |
+| DeselectSelection | Click `img[title='Delete Unit']` on unit row |
+| DuplicateSelection | Click `img[title='Duplicate']` on unit row |
+| SetChildEntryCount | Open parent options → fill `input[type='number']` |
+| SetCostLimit | "List Options" → "List Configuration" → `.maxCostInput` |
+| SetCustomization (sel) | Open unit panel → submenu → "Rename Unit" / "Add Note" |
+| SetCustomization (force) | Force Options → "Rename Force" |
+| SetSelectionCount | JS fallback (`sel.setNumSelections`) — TODO: UI conversion |
+
+## Key DOM Selectors
+
+| Selector | Element |
+|----------|---------|
+| `.bookForce` | Force container |
+| `.dotsMenuContainer` | Dots menu trigger containers |
+| `.dots` | Clickable dots trigger within menu container |
+| `.unitRow` | Selection/unit row |
+| `.unitRow.editing` | Currently open selection panel |
+| `.inputOption` | Option item in selection panel |
+| `.boutonSubUnit` | Entry toggle button (checkbox/radio-like) |
+| `.addButton` | Add entry `+` button |
+| `input[type='number'].input.minmax` | Numeric option input |
+| `img[alt='edit cost limits']` | List Configuration menu item trigger |
+| `input[id='{costTypeId}']` | Cost limit input in config dialog |
+| `.editname` | Roster name/note edit button |
+| `img[title='Delete Unit']` | Delete selection icon |
+
+## Running
+
+```bash
+# Run specific spec with NR UI engine
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-ui protocol-kitchen-sink
+
+# Interactive probe mode
+dotnet run --project src/BattleScribeSpec.Debugger -- --probe --engine nr-ui protocol-kitchen-sink
+
+# Visible browser (non-headless)
+dotnet run --project src/BattleScribeSpec.Debugger -- --no-headless --engine nr-ui protocol-kitchen-sink
+```
+
+## Diagnostics
+
+On failure, `NrUiDiagnostics` captures:
+- **Screenshot** of current page state
+- **Console logs** collected during the test
+- **DOM snapshot** (page HTML)
+- **Pinia state dump** (serialized stores)
+
+Artifacts are saved to `artifacts/nr-ui-diagnostics/`.
+
+## Probe Mode
+
+The interactive probe (`NrUiProbe`) provides a REPL for live DOM exploration:
+- Loads game data and creates roster
+- Opens a browser window (non-headless)
+- Accepts JavaScript expressions to evaluate against the page
+- Useful for discovering selectors, testing interaction flows
+
+## Known Limitations
+
+- **SetSelectionCount**: Uses JS fallback for root selections. The UI control (likely
+  `UnitOptionsOptionNumberInput` in the editing panel) needs live probing to confirm.
+- **Force notes**: No dedicated UI in NR. Uses JS property write as fallback.
+- **Cost display rendering**: In probe/test setup, cost display may not render if
+  `getCostTypes()` returns undefined (probe-specific issue, not an NR limitation).
+- **Vue event handlers**: `element.click()` via JS does NOT trigger Vue event handlers.
+  Must use Playwright's real event dispatch (`ClickAsync`) for dropdown menus.
