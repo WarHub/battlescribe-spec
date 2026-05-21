@@ -48,7 +48,7 @@ jobs:
         run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
 
       - name: Test
-        run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "Engine!=FrozenNrRoster&Engine!=FrozenNrGameData&Engine!=LiveNrRoster&Engine!=LiveNrGameData"
+        run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "Engine!=FrozenNrRoster&Engine!=FrozenNrGameData&Engine!=LiveNrRoster&Engine!=LiveNrGameData&Engine!=FrozenNrUiRoster&Engine!=LiveNrUiRoster"
 
       - name: End-to-end spec runner test
         run: |

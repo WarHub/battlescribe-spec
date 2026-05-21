@@ -29,7 +29,14 @@ public sealed class FrozenNrUiRosterFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        Engine = await NrRosterUiEngine.CreateFrozenAsync(harFile, headless: headless, slowMo: slowMo);
+        try
+        {
+            Engine = await NrRosterUiEngine.CreateFrozenAsync(harFile, headless: headless, slowMo: slowMo);
+        }
+        catch (Microsoft.Playwright.PlaywrightException)
+        {
+            // Playwright browsers not installed — skip gracefully
+        }
     }
 
     public async ValueTask DisposeAsync()
