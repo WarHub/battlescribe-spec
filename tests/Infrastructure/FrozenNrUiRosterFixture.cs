@@ -1,5 +1,5 @@
-using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NrRosterUiDriver;
 
 namespace BattleScribeSpec.Tests;
 
