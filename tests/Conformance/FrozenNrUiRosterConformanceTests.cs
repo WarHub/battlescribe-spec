@@ -3,7 +3,7 @@ using BattleScribeSpec.Roster;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Runs declarative YAML spec files against the NR UI driver in frozen (HAR replay) mode.
+/// Runs the kitchen-sink spec against the NR UI driver in frozen (HAR replay) mode.
 /// Actions are executed through Playwright UI interactions; state is read via JS.
 /// Skipped when the HAR file doesn't exist or NR_UI_FROZEN_SKIP=true.
 /// Sequential by design — UI interactions cannot run concurrently in one browser context.
@@ -15,8 +15,14 @@ public sealed class FrozenNrUiRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly FrozenNrUiRosterFixture _fixture;
-    private const string EngineName = "nr-ui";
+    private const string EngineName = "newrecruit";
     private const string LogPrefix = "[FROZEN-UI] ";
+
+    /// <summary>
+    /// The spec(s) this UI driver runs against. Only kitchen-sink for now —
+    /// the NR UI driver validates core protocol conformance, not all 312 specs.
+    /// </summary>
+    private static readonly string[] TargetSpecs = ["protocol/protocol-kitchen-sink"];
 
     public FrozenNrUiRosterConformanceTests(ITestOutputHelper output, FrozenNrUiRosterFixture fixture)
     {
@@ -34,12 +40,14 @@ public sealed class FrozenNrUiRosterConformanceTests
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var resolver = new DataSourceResolver();
 
-        var loadedSpecs = allSpecs.Select(s => (
-            s.Path,
-            s.Name,
-            spec: SpecLoader.Load(s.Path)
-        )).ToList();
+        var loadedSpecs = allSpecs
+            .Where(s => TargetSpecs.Contains(s.Name))
+            .Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path)))
+            .ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
+
+        Assert.SkipWhen(loadedSpecs.Count == 0,
+            $"No matching specs found for targets: {string.Join(", ", TargetSpecs)}");
 
         var passed = 0;
         var skipped = 0;

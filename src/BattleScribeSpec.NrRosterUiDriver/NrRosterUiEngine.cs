@@ -24,6 +24,11 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private string? _listId;
     private bool _systemLoaded;
     private string? _loadedSystemId;
+    private bool _rosterCreated;
+
+    // Spec data retained from Setup for deferred roster creation.
+    private ProtocolGameSystem? _gameSystem;
+    private ProtocolCatalogue[]? _catalogues;
 
     // ID → Name lookups built from spec data during Setup.
     // Used by UI actions that must find entries by their visible label.
@@ -70,6 +75,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
+        _gameSystem = gameSystem;
+        _catalogues = catalogues;
         BuildEntryLookups(gameSystem, catalogues);
 
         var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
@@ -93,7 +100,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
             await Browser.WaitForPiniaAsync();
         }
 
-        // Load game data into NR via UI (only once per unique system in frozen mode)
+        // Load game data into NR (only once per unique system in frozen mode)
         if (!_systemLoaded || _loadedSystemId != gameSystem.Id)
         {
             await NrUiSetup.LoadGameDataAsync(Browser, allFiles, gameSystem.Id);
@@ -106,10 +113,28 @@ public sealed class NrRosterUiEngine : IRosterEngine
             }
         }
 
-        // Create a new roster via NR UI and navigate to the editor.
-        // Prefer the first non-library catalogue so NR uses it (not a library catalogue) as
-        // the roster's primary book, which determines the catalogueId for forces added via UI.
-        var preferredCatalogueId = catalogues.FirstOrDefault(c => c.Library != true)?.Id;
+        // Roster creation is deferred to the first AddForce call (like BS UI driver).
+        // This matches the user-facing NR flow: load data → pick force → roster created.
+        return [];
+    }
+
+    /// <summary>
+    /// Creates the roster if it hasn't been created yet. Called before the first mutation.
+    /// Currently uses JS (same as previous Setup flow). Will be replaced with UI-driven
+    /// roster creation once the NR "Add List" flow is probed.
+    /// </summary>
+    private async Task EnsureRosterCreatedAsync()
+    {
+        if (_rosterCreated)
+        {
+            return;
+        }
+
+        var gameSystem = _gameSystem
+            ?? throw new InvalidOperationException("Setup must be called before any mutation.");
+
+        // Prefer the first non-library catalogue so NR uses it as the roster's primary book.
+        var preferredCatalogueId = _catalogues?.FirstOrDefault(c => c.Library != true)?.Id;
         var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, gameSystem, preferredCatalogueId);
         _listId = listId;
 
@@ -120,7 +145,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
             await NrUiSetup.BypassSupporterPaywallAsync(Browser.Page);
         }
 
-        return [];
+        _rosterCreated = true;
     }
 
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
@@ -137,16 +162,12 @@ public sealed class NrRosterUiEngine : IRosterEngine
         await NrUiSetup.LoadGameDataAsync(Browser, files, systemId: null);
         _systemLoaded = true;
 
-        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, gameSystem: null);
-        _listId = listId;
-
-        if (listId is not null)
+        if (Browser.IsFrozen)
         {
-            await Browser.NavigateToEditorAsync(listId);
-            await NrUiSetup.WaitForEditorLoadedAsync(Browser.Page);
-            await NrUiSetup.BypassSupporterPaywallAsync(Browser.Page);
+            Browser.FrozenReady = true;
         }
 
+        // Roster creation is deferred to the first AddForce call.
         return [];
     }
 
@@ -157,6 +178,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> AddForceAsync(string forceEntryId, string catalogueId)
     {
+        await EnsureRosterCreatedAsync();
+
         var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
         var uid = await NrUiActions.AddForceByNameAsync(Browser.Page, name, forceEntryId, catalogueId);
 
@@ -304,13 +327,38 @@ public sealed class NrRosterUiEngine : IRosterEngine
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
         => NewRecruitStateReader.ReadValidationErrorsAsync(Browser.Page).GetAwaiter().GetResult();
 
+    // ===== Diagnostics =====
+
+    /// <summary>
+    /// Captures a PNG screenshot of the current browser page.
+    /// Used by the Debugger for step-by-step visual output.
+    /// </summary>
+    public async Task<byte[]?> CaptureScreenshotAsync()
+    {
+        var diag = new NrUiDiagnostics(Browser.Page);
+        return await diag.CaptureScreenshotAsync();
+    }
+
+    /// <summary>
+    /// Captures full diagnostic report (screenshot + console + DOM + Pinia state).
+    /// Used on failure for debugging.
+    /// </summary>
+    public async Task<DiagnosticReport> CaptureDiagnosticsAsync()
+    {
+        var diag = new NrUiDiagnostics(Browser.Page);
+        return await diag.CaptureFullReportAsync();
+    }
+
     // ===== Lifecycle =====
 
     public void Cleanup()
     {
         _listId = null;
+        _rosterCreated = false;
         _systemLoaded = false;
         _loadedSystemId = null;
+        _gameSystem = null;
+        _catalogues = null;
         _forceEntryNames.Clear();
         _entryNames.Clear();
         _childSelectionParent.Clear();

@@ -191,6 +191,12 @@ if (probeMode && engineName is "bs-ui")
     return await RunBsUiProbe(spec);
 }
 
+// ===== NR UI Probe mode =====
+if (probeMode && engineName is "nr-ui")
+{
+    return await RunNrUiProbe(spec, headless: false);
+}
+
 // ===== Create engine =====
 Console.Error.WriteLine($"Engine: {engineName}");
 IRosterEngine engine;
@@ -208,7 +214,13 @@ using (engine)
 {
     var dumpOptions = new DumpOptions(Json: json);
     // bs-ui engine uses "battlescribe" assertion overrides since it IS the BattleScribe engine
-    var assertionEngineName = engineName == "bs-ui" ? "battlescribe" : engineName;
+    // nr-ui engine uses "newrecruit" assertion overrides since it IS the NR engine
+    var assertionEngineName = engineName switch
+    {
+        "bs-ui" => "battlescribe",
+        "nr-ui" => "newrecruit",
+        _ => engineName
+    };
     var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngineName);
 
     var stepCount = spec.Steps.Count;
@@ -221,13 +233,32 @@ using (engine)
         var isLastStep = stepIndex == lastStepIndex;
         var shouldDump = isDumpAction || dumpAll || isLastStep;
 
-        // Capture screenshot for screenshots dir and/or timeline report (bs-ui engine only)
+        // Capture screenshot for screenshots dir and/or timeline report (bs-ui and nr-ui engines)
         byte[]? screenshotBytes = null;
         if ((screenshotsDir is not null || timeline is not null) && engine is BsUiRosterEngine screenshotEngine)
         {
             try
             {
                 screenshotBytes = screenshotEngine.CaptureScreenshotAsync().GetAwaiter().GetResult();
+                if (screenshotBytes is not null && screenshotsDir is not null)
+                {
+                    Directory.CreateDirectory(screenshotsDir);
+                    var actionName = SanitizeFileName(step.Action ?? "assert");
+                    var fileName = $"{stepIndex:D3}_{actionName}.png";
+                    var filePath = Path.Combine(screenshotsDir, fileName);
+                    File.WriteAllBytes(filePath, screenshotBytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[screenshots] Step {stepIndex} capture failed: {ex.Message}");
+            }
+        }
+        else if ((screenshotsDir is not null || timeline is not null) && engine is NrRosterUiEngine nrUiEngine)
+        {
+            try
+            {
+                screenshotBytes = nrUiEngine.CaptureScreenshotAsync().GetAwaiter().GetResult();
                 if (screenshotBytes is not null && screenshotsDir is not null)
                 {
                     Directory.CreateDirectory(screenshotsDir);
@@ -400,6 +431,31 @@ async Task<int> RunBsUiProbe(SpecFile spec)
     Console.Error.WriteLine("BS UI probe complete. BattleScribe is running.");
     Console.Error.WriteLine("Press Enter to shut down...");
     Console.In.ReadLine();
+
+    return 0;
+}
+
+async Task<int> RunNrUiProbe(SpecFile spec, bool headless)
+{
+    if (spec.Setup.DataSource is { Length: > 0 })
+    {
+        Console.Error.WriteLine("Error: --engine nr-ui probe does not support dataSource specs yet.");
+        return 1;
+    }
+
+    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+
+    Console.Error.WriteLine($"NR UI Probe — launching with {catalogues.Length + 1} data file(s)");
+
+    await using var probe = new NrUiProbe();
+    var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL") ?? "https://newrecruit.eu";
+    await probe.LaunchAsync(gameSystem, catalogues, url, Console.Error);
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("NR UI probe ready. Browser is open.");
+    Console.Error.WriteLine("Entering REPL — type JS expressions to evaluate, 'exit' to quit:");
+
+    await probe.RunReplAsync(Console.In, Console.Out);
 
     return 0;
 }

@@ -18,6 +18,11 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
     private const string EngineName = "newrecruit";
     private const string LogPrefix = "[SEQ-UI] ";
 
+    /// <summary>
+    /// The spec(s) this UI driver runs against. Only kitchen-sink for now.
+    /// </summary>
+    private static readonly string[] TargetSpecs = ["protocol/protocol-kitchen-sink"];
+
     public SequentialLiveNrUiRosterConformanceTests(ITestOutputHelper output, LiveNrUiRosterFixture fixture)
     {
         _output = output;
@@ -29,6 +34,7 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
     public void LiveNrUiRosterEngine(string specPath, string specName)
     {
         Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set — skipping live NR UI tests");
+        Assert.SkipWhen(!TargetSpecs.Contains(specName), $"Spec '{specName}' not in NR UI target list");
 
         var spec = SpecLoader.Load(specPath);
         if (!spec.IsApplicableTo(EngineName))

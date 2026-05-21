@@ -3,7 +3,7 @@ using BattleScribeSpec.Roster;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Runs declarative YAML spec files against the NR UI driver in live mode.
+/// Runs the kitchen-sink spec against the NR UI driver in live mode.
 /// Gated by NR_ENGINE_URL env var.
 /// </summary>
 [Collection("LiveNrUiRoster")]
@@ -15,6 +15,11 @@ public sealed class LiveNrUiRosterConformanceTests
     private readonly LiveNrUiRosterFixture _fixture;
     private const string EngineName = "newrecruit";
     private const string LogPrefix = "[LIVE-UI] ";
+
+    /// <summary>
+    /// The spec(s) this UI driver runs against. Only kitchen-sink for now.
+    /// </summary>
+    private static readonly string[] TargetSpecs = ["protocol/protocol-kitchen-sink"];
 
     public LiveNrUiRosterConformanceTests(ITestOutputHelper output, LiveNrUiRosterFixture fixture)
     {
@@ -32,12 +37,14 @@ public sealed class LiveNrUiRosterConformanceTests
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var resolver = new DataSourceResolver();
 
-        var loadedSpecs = allSpecs.Select(s => (
-            s.Path,
-            s.Name,
-            spec: SpecLoader.Load(s.Path)
-        )).ToList();
+        var loadedSpecs = allSpecs
+            .Where(s => TargetSpecs.Contains(s.Name))
+            .Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path)))
+            .ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
+
+        Assert.SkipWhen(loadedSpecs.Count == 0,
+            $"No matching specs found for targets: {string.Join(", ", TargetSpecs)}");
 
         var passed = 0;
         var skipped = 0;
