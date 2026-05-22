@@ -210,6 +210,7 @@ public static class NrUiSetup
                     window.__bsspec = {
                         army: cl.army,
                         book: cl.book,
+                        row: cl.row,
                     };
 
                     return cl.row?.list_key || 'ui-created';
@@ -248,6 +249,7 @@ public static class NrUiSetup
                 if (window.__bsspec && ls?.currentList?.army) {
                     window.__bsspec.army = ls.currentList.army;
                     window.__bsspec.book = ls.currentList.book;
+                    window.__bsspec.row = ls.currentList.row;
                 }
             }
             """);

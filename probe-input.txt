@@ -1,0 +1,2 @@
+(function() { try { var myGames = document.querySelector('.myGames, .gamesList, [class*="game"]'); var systems = document.querySelectorAll('.system, .systemRow, .gameRow, [class*="system"]'); var createBtn = document.querySelector('button, a, [class*="create"]'); var page = document.body.textContent.substring(0, 500); return JSON.stringify({ myGames: !!myGames, systemsCount: systems.length, url: window.location.href, pageText: page }); } catch(e) { return 'ERR:' + e.message; } })()
+exit

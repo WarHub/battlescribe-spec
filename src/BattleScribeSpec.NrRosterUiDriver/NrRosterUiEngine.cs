@@ -187,10 +187,30 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> AddForceAsync(string forceEntryId, string catalogueId)
     {
+        var isFirstAddForce = !_rosterCreated;
         await EnsureRosterCreatedAsync(catalogueId);
 
-        var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
-        var uid = await NrUiActions.AddForceByNameAsync(Browser.Page, name, forceEntryId, catalogueId);
+        string? uid;
+
+        if (isFirstAddForce)
+        {
+            // NR auto-creates a force during "Create List". Adopt it instead of adding another.
+            uid = await Browser.Page.EvaluateAsync<string?>("""
+                () => {
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const army = pinia?._s?.get('lists')?.currentList?.army
+                        ?? window.__bsspec?.army;
+                    const forces = army?.getForces?.() || [];
+                    return forces.length > 0 ? forces[0].uid : null;
+                }
+                """);
+        }
+        else
+        {
+            var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
+            uid = await NrUiActions.AddForceByNameAsync(Browser.Page, name, forceEntryId, catalogueId);
+        }
 
         // Capture any auto-added selections (e.g. from min=1 constraints).
         // NR adds selections asynchronously: the selection appears immediately (s.id=null)
