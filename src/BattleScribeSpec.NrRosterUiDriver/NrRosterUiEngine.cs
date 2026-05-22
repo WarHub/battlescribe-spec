@@ -125,7 +125,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// Currently uses JS (same as previous Setup flow). Will be replaced with UI-driven
     /// roster creation once the NR "Add List" flow is probed.
     /// </summary>
-    private async Task EnsureRosterCreatedAsync()
+    private async Task EnsureRosterCreatedAsync(string? catalogueId = null)
     {
         if (_rosterCreated)
         {
@@ -137,9 +137,17 @@ public sealed class NrRosterUiEngine : IRosterEngine
             throw new InvalidOperationException("Setup must be called before any mutation.");
         }
 
-        // Prefer the first non-library catalogue name so the UI selects it in the Faction dropdown.
-        var preferredCatalogueName = _catalogues?.FirstOrDefault(c => c.Library != true)?.Name;
-        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, preferredCatalogueName);
+        // Use the catalogue from the first AddForce call to select the right faction.
+        // Fall back to the first non-library catalogue if not specified.
+        string? catalogueName = null;
+        if (catalogueId != null)
+        {
+            catalogueName = _catalogues?.FirstOrDefault(c => c.Id == catalogueId)?.Name;
+        }
+
+        catalogueName ??= _catalogues?.FirstOrDefault(c => c.Library != true)?.Name;
+
+        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, catalogueName);
         _listId = listId;
 
         // Wait for editor to stabilize and bypass supporter paywall
@@ -179,7 +187,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> AddForceAsync(string forceEntryId, string catalogueId)
     {
-        await EnsureRosterCreatedAsync();
+        await EnsureRosterCreatedAsync(catalogueId);
 
         var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
         var uid = await NrUiActions.AddForceByNameAsync(Browser.Page, name, forceEntryId, catalogueId);
