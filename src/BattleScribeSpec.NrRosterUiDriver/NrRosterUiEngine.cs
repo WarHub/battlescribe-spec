@@ -132,20 +132,19 @@ public sealed class NrRosterUiEngine : IRosterEngine
             return;
         }
 
-        var gameSystem = _gameSystem
-            ?? throw new InvalidOperationException("Setup must be called before any mutation.");
+        if (_gameSystem is null)
+        {
+            throw new InvalidOperationException("Setup must be called before any mutation.");
+        }
 
-        // Prefer the first non-library catalogue so NR uses it as the roster's primary book.
-        var preferredCatalogueId = _catalogues?.FirstOrDefault(c => c.Library != true)?.Id;
-        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, gameSystem, preferredCatalogueId);
+        // Prefer the first non-library catalogue name so the UI selects it in the Faction dropdown.
+        var preferredCatalogueName = _catalogues?.FirstOrDefault(c => c.Library != true)?.Name;
+        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, preferredCatalogueName);
         _listId = listId;
 
-        if (listId is not null)
-        {
-            await Browser.NavigateToEditorAsync(listId);
-            await NrUiSetup.WaitForEditorLoadedAsync(Browser.Page);
-            await NrUiSetup.BypassSupporterPaywallAsync(Browser.Page);
-        }
+        // Wait for editor to stabilize and bypass supporter paywall
+        await NrUiSetup.WaitForEditorLoadedAsync(Browser.Page);
+        await NrUiSetup.BypassSupporterPaywallAsync(Browser.Page);
 
         _rosterCreated = true;
     }
