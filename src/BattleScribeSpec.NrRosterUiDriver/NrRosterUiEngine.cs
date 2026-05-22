@@ -40,6 +40,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private readonly Dictionary<string, (string ParentUid, string EntryName)> _childSelectionParent
         = new(StringComparer.Ordinal);
 
+    private NrUiDiagnostics? _diagnostics;
+
     private NrRosterUiEngine(NewRecruitBrowser browser)
     {
         Browser = browser;
@@ -289,7 +291,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         }
         else
         {
-            // Root selection — JS-based fallback (no single count spinner in NR UI)
+            // Root selection — throws (no single count control in NR UI for root-level)
             NrUiActions.SetSelectionCountAsync(Browser.Page, selectionId, count).GetAwaiter().GetResult();
         }
     }
@@ -335,8 +337,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// </summary>
     public async Task<byte[]?> CaptureScreenshotAsync()
     {
-        var diag = new NrUiDiagnostics(Browser.Page);
-        return await diag.CaptureScreenshotAsync();
+        _diagnostics ??= new NrUiDiagnostics(Browser.Page);
+        return await _diagnostics.CaptureScreenshotAsync();
     }
 
     /// <summary>
@@ -354,8 +356,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// </summary>
     public async Task<DiagnosticReport> CaptureDiagnosticsAsync()
     {
-        var diag = new NrUiDiagnostics(Browser.Page);
-        return await diag.CaptureFullReportAsync();
+        _diagnostics ??= new NrUiDiagnostics(Browser.Page);
+        return await _diagnostics.CaptureFullReportAsync();
     }
 
     // ===== Lifecycle =====

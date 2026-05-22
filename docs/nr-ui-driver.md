@@ -68,16 +68,16 @@ design decision that only **mutations** must go through UI).
 |--------|---------|
 | AddForce | "List Options" → "Add Force" OR forces panel `+` button |
 | RemoveForce | Force Options `.dots` → "Delete Force" |
-| DuplicateForce | Force Options `.dots` → "Duplicate" |
+| DuplicateForce | Force Options `.dots` → "Duplicate Force" |
 | SelectEntry | Click entry row (`.boutonSubUnit` or `.addButton`) in panel |
 | SelectChildEntry | Open parent options → click child toggle/button |
 | DeselectSelection | Click `img[title='Delete Unit']` on unit row |
-| DuplicateSelection | Click `img[title='Duplicate']` on unit row |
+| DuplicateSelection | Click `img[title='Duplicate Unit']` on unit row |
 | SetChildEntryCount | Open parent options → fill `input[type='number']` |
 | SetCostLimit | "List Options" → "List Configuration" → `.maxCostInput` |
 | SetCustomization (sel) | Open unit panel → submenu → "Rename Unit" / "Add Note" |
 | SetCustomization (force) | Force Options → "Rename Force" |
-| SetSelectionCount | JS fallback (`sel.setNumSelections`) — TODO: UI conversion |
+| SetSelectionCount | Child: fill `input[type='number']`; Root: throws (no UI control) |
 
 ## Key DOM Selectors
 
@@ -130,9 +130,11 @@ The interactive probe (`NrUiProbe`) provides a REPL for live DOM exploration:
 
 ## Known Limitations
 
-- **SetSelectionCount**: Uses JS fallback for root selections. The UI control (likely
-  `UnitOptionsOptionNumberInput` in the editing panel) needs live probing to confirm.
-- **Force notes**: No dedicated UI in NR. Uses JS property write as fallback.
+- **SetSelectionCount (root)**: Root-level selections have no count spinner in NR UI.
+  Throws `NotSupportedException`. Only child entry counts are adjustable via UI.
+- **Force notes**: No dedicated UI in NR. Silently ignored by the driver. Specs must
+  use `engines: newrecruit:` overrides to expect empty `customNotes` on forces.
+- **Hidden entries**: Cannot be selected/deselected via UI. Throws `NotSupportedException`.
 - **Cost display rendering**: In probe/test setup, cost display may not render if
   `getCostTypes()` returns undefined (probe-specific issue, not an NR limitation).
 - **Vue event handlers**: `element.click()` via JS does NOT trigger Vue event handlers.

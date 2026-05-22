@@ -74,7 +74,7 @@ public static class NrUiActions
         }
         else
         {
-            throw new TimeoutException($"Force '{forceName}' not found in the forces panel and no forceEntryId for JS fallback");
+            throw new TimeoutException($"Force '{forceName}' not found in the forces panel (no matching entry visible)");
         }
 
         return await WaitForNewForceUidAsync(page, before);
@@ -197,7 +197,10 @@ public static class NrUiActions
         // Find force index
         var forceIndex = await page.EvaluateAsync<int>("""
             ([uid]) => {
-                const army = window.__bsspec?.army;
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army
+                    ?? window.__bsspec?.army;
                 if (!army) return -1;
                 const forces = army.getForces?.() || [];
                 return forces.findIndex(f => f.uid === uid);
@@ -272,7 +275,7 @@ public static class NrUiActions
     /// Supports two NR UI styles:
     ///   • numeric (input[type=number]): child has max > 1 → increment value by 1
     ///   • binary (button.boutonSubUnit): child has max = 1 → click the "+" button
-    /// Falls back to JS-based selection for hidden entries not visible in the UI.
+    /// Throws NotSupportedException for hidden entries not visible in the UI.
     /// Returns the uid of the child selection.
     /// </summary>
     public static async Task<string?> SelectChildEntryByNameAsync(IPage page, string parentSelectionUid, string entryName, string? entryId = null)
@@ -422,7 +425,10 @@ public static class NrUiActions
         // Find force index to pick the correct .forceOptions element
         var forceIndex = await page.EvaluateAsync<int>("""
             ([uid]) => {
-                const army = window.__bsspec?.army;
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army
+                    ?? window.__bsspec?.army;
                 if (!army) return -1;
                 const forces = army.getForces?.() || [];
                 return forces.findIndex(f => f.uid === uid);
@@ -605,7 +611,10 @@ public static class NrUiActions
             // Find force index to pick the correct .forceOptions element
             var forceIndex = await page.EvaluateAsync<int>("""
                 ([uid]) => {
-                    const army = window.__bsspec?.army;
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const army = pinia?._s?.get('lists')?.currentList?.army
+                        ?? window.__bsspec?.army;
                     if (!army) return -1;
                     const forces = army.getForces?.() || [];
                     return forces.findIndex(f => f.uid === uid);
