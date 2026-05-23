@@ -8,6 +8,7 @@
     <Project Path="src/BattleScribeSpec.NewRecruit.HarTool/BattleScribeSpec.NewRecruit.HarTool.csproj" />
     <Project Path="src/BattleScribeSpec.Debugger/BattleScribeSpec.Debugger.csproj" />
     <Project Path="src/BattleScribeSpec.BsRosterUiDriver/BattleScribeSpec.BsRosterUiDriver.csproj" />
+    <Project Path="src/BattleScribeSpec.NrRosterUiDriver/BattleScribeSpec.NrRosterUiDriver.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BattleScribeSpec.Tests.csproj" />

@@ -48,7 +48,7 @@ jobs:
         run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
 
       - name: Test
-        run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "Engine!=FrozenNrRoster&Engine!=FrozenNrGameData&Engine!=LiveNrRoster&Engine!=LiveNrGameData"
+        run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "Engine!=FrozenNrRoster&Engine!=FrozenNrGameData&Engine!=LiveNrRoster&Engine!=LiveNrGameData&Engine!=FrozenNrUiRoster&Engine!=LiveNrUiRoster"
 
       - name: End-to-end spec runner test
         run: |
@@ -174,6 +174,54 @@ jobs:
           name: bs-ui-diagnostics
           path: artifacts/bs-ui-diagnostics/
 
+  nr-ui-frozen:
+    if: >-
+      github.event.pull_request.draft != true
+      && (
+        github.event_name == 'pull_request'
+        || github.event_name == 'workflow_dispatch'
+        || github.event_name == 'schedule'
+        || contains(github.event.head_commit.message, '[nr-ui-test]')
+      )
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.WARHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
+          owner: WarHub
+          repositories: newrecruit-har,battlescribe-archive
+
+      - name: Setup dependencies
+        run: pwsh ./setup.ps1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Build
+        run: dotnet build
+
+      - name: Run frozen NR UI conformance tests
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrUiRoster" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        env:
+          NR_HEADLESS: true
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nr-ui-diagnostics
+          path: artifacts/nr-ui-diagnostics/
+
   nr-conformance:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[nr-test]')
     runs-on: ubuntu-latest
@@ -242,9 +290,10 @@ jobs:
         || needs.script-tests.result == 'failure'
         || needs.nr-frozen.result == 'failure'
         || needs.bs-ui.result == 'failure'
+        || needs.nr-ui-frozen.result == 'failure'
         || needs.nr-conformance.result == 'failure'
       )
-    needs: [build-and-test, script-tests, nr-frozen, bs-ui, nr-conformance]
+    needs: [build-and-test, script-tests, nr-frozen, bs-ui, nr-ui-frozen, nr-conformance]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -288,6 +337,7 @@ jobs:
           if ('${{ needs.script-tests.result }}' -eq 'failure') { $failed += 'script-tests' }
           if ('${{ needs.nr-frozen.result }}' -eq 'failure') { $failed += 'nr-frozen' }
           if ('${{ needs.bs-ui.result }}' -eq 'failure') { $failed += 'bs-ui' }
+          if ('${{ needs.nr-ui-frozen.result }}' -eq 'failure') { $failed += 'nr-ui-frozen' }
           if ('${{ needs.nr-conformance.result }}' -eq 'failure') { $failed += 'nr-conformance' }
           $failedList = ($failed | ForEach-Object { "- $_" }) -join "`n"
           $body = @"

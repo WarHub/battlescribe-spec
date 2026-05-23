@@ -132,6 +132,17 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     }
 
     /// <summary>
+    /// Navigate to any NR route via Vue Router client-side navigation.
+    /// Preserves page JS state (unlike GotoAsync which reloads the page).
+    /// Also dismisses any dialogs that might appear after navigation.
+    /// </summary>
+    public async Task NavigateToRouteAsync(string route)
+    {
+        await VueRouterPushAsync(route);
+        await DismissDialogsAsync();
+    }
+
+    /// <summary>
     /// Navigate to the roster editor for a specific list.
     /// Uses Vue Router client-side navigation — avoids a full page reload
     /// (which is slower in live mode and breaks HAR replay in frozen mode).
@@ -193,6 +204,36 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         catch
         {
             // Consent dialog may not be present — that's fine
+        }
+
+        try
+        {
+            // CookieFirst consent root (fc-consent-root) may block UI interactions
+            var fcRoot = Page.Locator(".fc-consent-root");
+            try
+            {
+                await fcRoot.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 1_000 });
+            }
+            catch
+            {
+                return;
+            }
+
+            // Try "Do not consent" / reject buttons inside CookieFirst dialog
+            var rejectBtn = fcRoot.GetByRole(AriaRole.Button, new() { Name = "Do not consent" })
+                .Or(fcRoot.GetByRole(AriaRole.Button, new() { Name = "Reject" }))
+                .Or(fcRoot.GetByRole(AriaRole.Button, new() { Name = "Decline" }));
+            try
+            {
+                await rejectBtn.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 500 });
+                await rejectBtn.First.ClickAsync();
+                await fcRoot.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 3_000 });
+            }
+            catch { /* button may not be visible — that's fine */ }
+        }
+        catch
+        {
+            // CookieFirst dialog may not be present — that's fine
         }
     }
 

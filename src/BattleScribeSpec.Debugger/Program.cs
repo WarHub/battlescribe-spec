@@ -3,6 +3,7 @@ using BattleScribeSpec;
 using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.Debugger;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
 
 // ===== Parse arguments =====
@@ -21,6 +22,7 @@ string? recordPath = null;
 var formatMode = false;
 var formatCheck = false;
 string? formatDir = null;
+int? stopBefore = null;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -42,6 +44,7 @@ for (var i = 0; i < args.Length; i++)
             {
                 "bs" => "battlescribe",
                 "nr" => "newrecruit",
+                "nr-ui" => "nr-ui",
                 var name => name
             };
             break;
@@ -74,6 +77,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--report" when i + 1 < args.Length:
             reportPath = args[++i];
+            break;
+        case "--stop-before" when i + 1 < args.Length:
+            stopBefore = int.Parse(args[++i]);
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -189,6 +195,12 @@ if (probeMode && engineName is "bs-ui")
     return await RunBsUiProbe(spec);
 }
 
+// ===== NR UI Probe mode =====
+if (probeMode && engineName is "nr-ui")
+{
+    return await RunNrUiProbe(spec, headless: false);
+}
+
 // ===== Create engine =====
 Console.Error.WriteLine($"Engine: {engineName}");
 IRosterEngine engine;
@@ -206,7 +218,13 @@ using (engine)
 {
     var dumpOptions = new DumpOptions(Json: json);
     // bs-ui engine uses "battlescribe" assertion overrides since it IS the BattleScribe engine
-    var assertionEngineName = engineName == "bs-ui" ? "battlescribe" : engineName;
+    // nr-ui engine uses "newrecruit" assertion overrides since it IS the NR engine
+    var assertionEngineName = engineName switch
+    {
+        "bs-ui" => "battlescribe",
+        "nr-ui" => "newrecruit",
+        _ => engineName
+    };
     var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngineName);
 
     var stepCount = spec.Steps.Count;
@@ -219,13 +237,32 @@ using (engine)
         var isLastStep = stepIndex == lastStepIndex;
         var shouldDump = isDumpAction || dumpAll || isLastStep;
 
-        // Capture screenshot for screenshots dir and/or timeline report (bs-ui engine only)
+        // Capture screenshot for screenshots dir and/or timeline report (bs-ui and nr-ui engines)
         byte[]? screenshotBytes = null;
         if ((screenshotsDir is not null || timeline is not null) && engine is BsUiRosterEngine screenshotEngine)
         {
             try
             {
                 screenshotBytes = screenshotEngine.CaptureScreenshotAsync().GetAwaiter().GetResult();
+                if (screenshotBytes is not null && screenshotsDir is not null)
+                {
+                    Directory.CreateDirectory(screenshotsDir);
+                    var actionName = SanitizeFileName(step.Action ?? "assert");
+                    var fileName = $"{stepIndex:D3}_{actionName}.png";
+                    var filePath = Path.Combine(screenshotsDir, fileName);
+                    File.WriteAllBytes(filePath, screenshotBytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[screenshots] Step {stepIndex} capture failed: {ex.Message}");
+            }
+        }
+        else if ((screenshotsDir is not null || timeline is not null) && engine is NrRosterUiEngine nrUiEngine)
+        {
+            try
+            {
+                screenshotBytes = nrUiEngine.CaptureScreenshotAsync().GetAwaiter().GetResult();
                 if (screenshotBytes is not null && screenshotsDir is not null)
                 {
                     Directory.CreateDirectory(screenshotsDir);
@@ -280,6 +317,60 @@ using (engine)
             }
         }
     };
+
+    // Stop-before: pause execution before a specific step and drop into REPL
+    if (stopBefore is not null)
+    {
+        runner.OnBeforeStep = (stepIndex, step) =>
+        {
+            if (stepIndex != stopBefore.Value)
+            {
+                return true;
+            }
+
+            Console.Error.WriteLine();
+            Console.Error.WriteLine($"═══ Stopped before step {stepIndex}: {DescribeStep(step)} ═══");
+
+            if (engine is NrRosterUiEngine nrUiStopEngine)
+            {
+                Console.Error.WriteLine("NR UI page available. Enter JS expressions (exit/quit to continue):");
+                Console.Error.Write("> ");
+                while (true)
+                {
+                    var line = Console.In.ReadLine();
+                    if (line is null or "exit" or "quit")
+                    {
+                        break;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        Console.Error.Write("> ");
+                        continue;
+                    }
+
+                    try
+                    {
+                        var evalResult = nrUiStopEngine.EvaluateAsync<JsonElement>(line).GetAwaiter().GetResult();
+                        Console.Out.WriteLine(evalResult.ToString());
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"Error: {ex.Message}");
+                    }
+
+                    Console.Error.Write("> ");
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine("Press Enter to continue execution, or Ctrl+C to abort...");
+                Console.In.ReadLine();
+            }
+
+            return true; // continue execution after REPL
+        };
+    }
 
     Console.Error.WriteLine($"Running {stepCount} steps...");
     Console.Error.WriteLine();
@@ -354,6 +445,13 @@ using (engine)
         Console.Error.WriteLine($"Timeline report: {reportPath}");
     }
 
+    if (!headless && engine is NrRosterUiEngine)
+    {
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("NR UI: Browser will remain open. Press Enter to close...");
+        Console.In.ReadLine();
+    }
+
     return result.Failures.Count == 0 ? 0 : 1;
 }
 
@@ -398,6 +496,31 @@ async Task<int> RunBsUiProbe(SpecFile spec)
     Console.Error.WriteLine("BS UI probe complete. BattleScribe is running.");
     Console.Error.WriteLine("Press Enter to shut down...");
     Console.In.ReadLine();
+
+    return 0;
+}
+
+async Task<int> RunNrUiProbe(SpecFile spec, bool headless)
+{
+    if (spec.Setup.DataSource is { Length: > 0 })
+    {
+        Console.Error.WriteLine("Error: --engine nr-ui probe does not support dataSource specs yet.");
+        return 1;
+    }
+
+    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+
+    Console.Error.WriteLine($"NR UI Probe — launching with {catalogues.Length + 1} data file(s)");
+
+    await using var probe = new NrUiProbe();
+    var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL") ?? "https://newrecruit.eu";
+    await probe.LaunchAsync(gameSystem, catalogues, url, Console.Error);
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("NR UI probe ready. Browser is open.");
+    Console.Error.WriteLine("Entering REPL — type JS expressions to evaluate, 'exit' to quit:");
+
+    await probe.RunReplAsync(Console.In, Console.Out);
 
     return 0;
 }
@@ -594,8 +717,28 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
                 return new BsUiRosterEngine(bsUiOptions) { KeepAlive = keepAlive };
             }
 
+        case "nr-ui":
+            {
+                var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
+                NrRosterUiEngine uiEngine;
+                if (url is { Length: > 0 })
+                {
+                    Console.Error.WriteLine($"NR UI live mode: {url}");
+                    uiEngine = await NrRosterUiEngine.CreateAsync(url, headless);
+                }
+                else
+                {
+                    var harFile = HarRecorder.FindFrozenHarFile() ?? throw new InvalidOperationException(
+                            "NR UI engine requires NR_ENGINE_URL env var (live mode) or .testdata/newrecruit-har/newrecruit.har (frozen mode).");
+
+                    Console.Error.WriteLine($"NR UI frozen mode: {harFile}");
+                    uiEngine = await NrRosterUiEngine.CreateFrozenAsync(harFile, headless: headless);
+                }
+                return uiEngine;
+            }
+
         default:
-            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs', 'nr', or 'bs-ui'.");
+            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs', 'nr', 'bs-ui', or 'nr-ui'.");
     }
 }
 
@@ -677,7 +820,7 @@ static void PrintUsage()
                           or "-" for stdin
 
         Options:
-          --engine <name> Engine to use: bs (default), nr, bs-ui
+          --engine <name> Engine to use: bs (default), nr, bs-ui, nr-ui
           --dump          Dump state after every step (default: after last step only)
           --probe         Run bs-ui probe mode (bs-ui engine only)
           --json          Output state as JSON instead of pretty tree

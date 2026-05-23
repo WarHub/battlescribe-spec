@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run live NR UI driver roster tests with browser window visible (for debugging). -->
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <NR_ENGINE_URL>https://newrecruit.eu</NR_ENGINE_URL>
+      <NR_HEADLESS>false</NR_HEADLESS>
+    </EnvironmentVariables>
+    <TestCaseFilter>Engine=LiveNrUiRoster</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>
