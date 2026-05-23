@@ -92,6 +92,63 @@ public static class HarRecorder
         }
         catch (TimeoutException) { /* app may have changed structure; continue */ }
 
+        // Navigate through pages the UI driver uses to capture lazy-loaded chunks:
+        // MySystems page (loads MySystems component + CSS)
+        try
+        {
+            var mySysLink = page.Locator("a[href*='MySystems']").First;
+            if (await mySysLink.IsVisibleAsync())
+            {
+                await mySysLink.ClickAsync();
+                await WaitForNetworkSettledAsync(page, timeoutMs: 5_000);
+            }
+        }
+        catch { /* page structure may vary */ }
+
+        // Open "Add More Games" popup to capture its component chunk
+        try
+        {
+            var addMoreGames = page.GetByText("Add more games");
+            if (await addMoreGames.IsVisibleAsync())
+            {
+                await addMoreGames.ClickAsync();
+                await WaitForNetworkSettledAsync(page, timeoutMs: 5_000);
+                // Close the popup
+                var closeBtn = page.Locator(".xCross").First;
+                if (await closeBtn.IsVisibleAsync())
+                {
+                    await closeBtn.ClickAsync();
+                }
+            }
+        }
+        catch { /* may not appear in all versions */ }
+
+        // Navigate to Lists page and trigger Create List dialog
+        try
+        {
+            var listsLink = page.Locator("a[href*='Lists']").First;
+            if (await listsLink.IsVisibleAsync())
+            {
+                await listsLink.ClickAsync();
+                await WaitForNetworkSettledAsync(page, timeoutMs: 5_000);
+            }
+
+            // Click "New" to open Create List
+            var newLink = page.Locator("a[href='#']", new() { HasTextString = "New" });
+            if (await newLink.IsVisibleAsync())
+            {
+                await newLink.ClickAsync();
+                await WaitForNetworkSettledAsync(page, timeoutMs: 5_000);
+                // Close dialog
+                var closeBtn = page.Locator(".xCross").First;
+                if (await closeBtn.IsVisibleAsync())
+                {
+                    await closeBtn.ClickAsync();
+                }
+            }
+        }
+        catch { /* Lists page may require data; continue */ }
+
         // Close context to finalize the HAR file
         await context.CloseAsync();
 
