@@ -55,18 +55,24 @@ design decision that only **mutations** must go through UI).
 3. **Supporter bypass** — NR locks some features (notes, custom names) behind a supporter
    paywall. The adapter injects a fake supporter user via JS during setup to unlock these.
 
-4. **Setup uses JS** — Loading game data XML into NR uses the `loadSystemFromFs` Pinia API.
-   This is infrastructure setup, not a user action. A `showDirectoryPicker` mock is available
-   for full UI-driven loading if needed.
+4. **Setup via UI with directory picker mock** — Game data loading uses a
+   `showDirectoryPicker` mock that returns spec-generated XML files, then clicks
+   "Add more games" → "Add From Folder" in the UI. This keeps the data loading path
+   exercising NR's real import logic.
 
-5. **Engine name = "newrecruit"** — shares assertion overrides with the non-UI NR adapter
+5. **Deferred roster creation** — The roster is NOT created during `Setup`. Instead, it is
+   created on the first `AddForce` call via the Lists → New → Create List UI flow. NR
+   auto-creates the first force during "Create List", so the first `AddForce` adopts that
+   existing force (reads its uid via JS) rather than adding a duplicate.
+
+6. **Engine name = "newrecruit"** — shares assertion overrides with the non-UI NR adapter
    (same behavioral quirks, same expected state adjustments).
 
 ## Action → UI Mapping
 
 | Action | UI Flow |
 |--------|---------|
-| AddForce | "List Options" → "Add Force" OR forces panel `+` button |
+| AddForce | First call: Lists → "New" → select catalogue → "Create List" (adopts auto-created force). Subsequent: "List Options" → "Add Force" OR forces panel `+` button |
 | RemoveForce | Force Options `.dots` → "Delete Force" |
 | DuplicateForce | Force Options `.dots` → "Duplicate Force" |
 | SelectEntry | Click entry row (`.boutonSubUnit` or `.addButton`) in panel |
