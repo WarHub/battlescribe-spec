@@ -95,6 +95,7 @@ public record CategoryState(
     IReadOnlyList<RuleState>? Rules = null,
     string? PublicationId = null,
     string? Page = null,
+    string? CustomName = null,
     string? CustomNotes = null);
 
 public record PublicationState(

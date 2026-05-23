@@ -7,6 +7,7 @@ obj/
 TestResults/
 node_modules/
 .testdata/
+lib/
 .har-staging/
 
 # Playwright MCP artifacts

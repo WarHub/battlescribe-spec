@@ -22,6 +22,12 @@ public sealed class RosterRunner
     /// </summary>
     public Action<int, StepDef, RosterState, IReadOnlyList<ValidationErrorState>>? OnStepCompleted { get; set; }
 
+    /// <summary>
+    /// Called before each step executes. Return false to stop execution before this step.
+    /// Parameters: step index, step definition. If null, all steps execute.
+    /// </summary>
+    public Func<int, StepDef, bool>? OnBeforeStep { get; set; }
+
     public RosterRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null, string? engineName = null)
     {
         _engine = engine;
@@ -68,6 +74,11 @@ public sealed class RosterRunner
                 var step = spec.Steps[i];
                 try
                 {
+                    if (OnBeforeStep is { } beforeStep && !beforeStep(i, step))
+                    {
+                        break;
+                    }
+
                     if (step.Action == "dump")
                     {
                         // dump is a no-op in the runner itself; the callback does the work
@@ -962,6 +973,11 @@ public sealed class RosterRunner
             if (ec.Page is not null)
             {
                 AssertEqual(stepIndex, $"{catPrefix}.page", ec.Page, ac.Page ?? "");
+            }
+
+            if (ec.CustomName is not null)
+            {
+                AssertEqual(stepIndex, $"{catPrefix}.customName", ec.CustomName, ac.CustomName ?? "");
             }
 
             if (ec.CustomNotes is not null)

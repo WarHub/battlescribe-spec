@@ -901,7 +901,7 @@ public sealed class SpecLintTests
         "Costs", "Profiles", "Rules", "Categories",
         "Children", "ChildCount",
         "Page", "PublicationId", "PublicationName",
-        "CustomName", "CustomNotes", "Hidden",
+        "CustomName", "CustomNotes",
     ];
 
     [Fact]

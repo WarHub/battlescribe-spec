@@ -1,0 +1,43 @@
+id: customization-force
+category: customization
+description: Setting customName and customNotes on a force
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test Game System
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-unit
+          name: Unit A
+          type: unit
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit
+
+  - action: setCustomization
+    forceId: ${{ steps.add-patrol.forceId }}
+    customName: Alpha Strike
+    customNotes: Main battle group
+
+  - expectedState:
+      forces:
+        - customName: Alpha Strike
+          customNotes: Main battle group
+      engines:
+        newrecruit:
+          forces:
+            - customName: Alpha Strike
+              customNotes: ""

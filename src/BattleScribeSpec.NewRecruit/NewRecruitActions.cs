@@ -529,8 +529,14 @@ public static class NewRecruitActions
 
     public static async Task SetCustomizationAsync(IPage page, string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
     {
+        if (categoryEntryId is not null)
+        {
+            // NR doesn't support category-level customization — silently ignore.
+            return;
+        }
+
         var error = await page.EvaluateAsync<string?>("""
-            ({forceId, selectionId, categoryEntryId, customName, customNotes}) => {
+            ({forceId, selectionId, customName, customNotes}) => {
                 try {
                     const army = window.__bsspec?.army;
                     if (!army) return 'No current roster';
@@ -540,7 +546,6 @@ public static class NewRecruitActions
                     if (!force) return `Force '${forceId}' not found`;
 
                     if (selectionId) {
-                        // Target a selection (or category on selection)
                         function findSel(parent) {
                             for (const s of (parent.getSelections?.() || [])) {
                                 if (s.uid === selectionId) return s;
@@ -552,26 +557,18 @@ public static class NewRecruitActions
                         const sel = findSel(force);
                         if (!sel) return `Selection '${selectionId}' not found in force '${forceId}'`;
 
-                        if (categoryEntryId) {
-                            // NR doesn't support category-level customNotes — skip silently
-                            return null;
-                        }
                         if (customName !== null && customName !== undefined) sel.customName = customName;
                         if (customNotes !== null && customNotes !== undefined) sel.note = customNotes;
                     } else {
-                        if (categoryEntryId) {
-                            // NR doesn't support category-level customNotes — skip silently
-                            return null;
-                        }
+                        // NR doesn't support force-level notes (no UI control) — only set name.
                         if (customName !== null && customName !== undefined) force.customName = customName;
-                        if (customNotes !== null && customNotes !== undefined) force.note = customNotes;
                     }
                     return null;
                 } catch(e) {
                     return 'SetCustomization error: ' + e.message;
                 }
             }
-            """, new { forceId, selectionId, categoryEntryId, customName, customNotes });
+            """, new { forceId, selectionId, customName, customNotes });
         if (error != null)
         {
             throw new InvalidOperationException(error);
