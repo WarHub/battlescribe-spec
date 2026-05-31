@@ -2,8 +2,7 @@ id: cost-type-hidden
 category: cost
 description: >
   Hidden cost types appear in roster cost aggregation alongside visible ones;
-  the hidden flag affects display only. The hidden flag metadata on the cost
-  type definition is asserted via GameData specs (ct-initial-hidden).
+  the hidden flag affects display only and is exposed on each cost instance.
 
 setup:
   gameSystem:
@@ -50,3 +49,4 @@ steps:
           value: 100.0
         - typeId: cp
           value: 1
+          hidden: true

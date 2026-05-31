@@ -48,10 +48,10 @@ public static class NewRecruitStateReader
         var forces = snapshot.Forces.Select(MapForce).ToList();
 
         var costs = snapshot.Costs.Select(c =>
-            new CostState(c.Name, c.TypeId, c.Value)).ToList();
+            new CostState(c.Name, c.TypeId, c.Value, c.Hidden)).ToList();
 
         var costLimits = snapshot.CostLimits?.Select(c =>
-            new CostState(c.Name, c.TypeId, c.Value)).ToList();
+            new CostState(c.Name, c.TypeId, c.Value, c.Hidden)).ToList();
 
         return new RosterState(
             snapshot.Name,
@@ -105,7 +105,7 @@ public static class NewRecruitStateReader
             sel.Type,
             sel.Number,
             sel.Hidden,
-            [.. sel.Costs.Select(c => new CostState(c.Name, c.TypeId, c.Value))],
+            [.. sel.Costs.Select(c => new CostState(c.Name, c.TypeId, c.Value, c.Hidden))],
             [.. sel.Children.Select(MapSelection)],
             Profiles: [.. sel.Profiles.Select(p => new ProfileState(
                 p.Name,
@@ -201,6 +201,7 @@ public static class NewRecruitStateReader
         public string Name { get; init; } = "";
         public string TypeId { get; init; } = "";
         public decimal Value { get; init; }
+        public bool Hidden { get; init; }
     }
 
     internal record NrProfileSnapshot

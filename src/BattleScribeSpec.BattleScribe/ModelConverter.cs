@@ -30,7 +30,7 @@ public static class ModelConverter
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
         var costStates = costs.Select(c =>
-            new CostState(c.getName(), c.getTypeId(), (decimal)c.getValue())).ToList();
+            new CostState(c.getName(), c.getTypeId(), (decimal)c.getValue(), c.isHidden())).ToList();
 
         return new RosterState(
             roster.getName(),
@@ -51,7 +51,7 @@ public static class ModelConverter
             sel.getType(),
             sel.getNumber(),
             Hidden: false,
-            [.. costs.Select(c => new CostState(c.getName(), c.getTypeId(), (decimal)c.getValue()))],
+            [.. costs.Select(c => new CostState(c.getName(), c.getTypeId(), (decimal)c.getValue(), c.isHidden()))],
             [.. children.Select(CaptureSelection)]);
     }
 

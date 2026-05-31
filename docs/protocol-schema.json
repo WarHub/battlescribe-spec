@@ -348,7 +348,8 @@
       "properties": {
         "name": { "type": "string" },
         "typeId": { "type": "string" },
-        "value": { "type": "number" }
+        "value": { "type": "number" },
+        "hidden": { "type": "boolean", "default": false }
       }
     },
     "profileState": {

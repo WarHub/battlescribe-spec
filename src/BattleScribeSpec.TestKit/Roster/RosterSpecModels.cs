@@ -323,6 +323,8 @@ public sealed class ExpectedCostDef
     public string? TypeId { get; set; }
 
     public decimal? Value { get; set; }
+
+    public bool? Hidden { get; set; }
 }
 
 public sealed class ExpectedProfileDef

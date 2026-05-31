@@ -114,6 +114,14 @@ internal static class JsHelpers
                 const army = spec.army;
                 if (army === null || army === undefined) return JSON.stringify({...empty, validationErrors: [emptyErr('army is null')]});
 
+                const gs = spec.book?.catalogue?.gameSystem;
+                const costTypeHiddenMap = {};
+                if (gs?.costTypes) {
+                    for (const ct of gs.costTypes) {
+                        if (ct.id) costTypeHiddenMap[ct.id] = ct.hidden || false;
+                    }
+                }
+
                 try {
                     const result = {
                         name: army.getCustomName?.() || army.getName?.() || spec.row?.name || '',
@@ -206,7 +214,8 @@ internal static class JsHelpers
                         costs: costs.map(c => ({
                             name: c.name || '',
                             typeId: c.typeId || '',
-                            value: (c.value || 0) * count
+                            value: (c.value || 0) * count,
+                            hidden: costTypeHiddenMap[c.typeId] || false
                         })),
                         children: extractSelections(sel),
                         profiles: profiles.map(p => ({
@@ -293,7 +302,7 @@ internal static class JsHelpers
                             for (const c of (sel.getCosts?.() || [])) {
                                 const tid = c.typeId || '';
                                 if (!tid) continue;
-                                if (!result[tid]) result[tid] = { name: c.name || '', typeId: tid, value: 0 };
+                                if (!result[tid]) result[tid] = { name: c.name || '', typeId: tid, value: 0, hidden: costTypeHiddenMap[tid] || false };
                                 result[tid].value += (c.value || 0) * count;
                             }
                             sumNode(sel);
@@ -304,12 +313,13 @@ internal static class JsHelpers
                     if (vals.length > 0) return vals;
 
                     // Fallback for empty roster: zero-valued from game system
-                    const gs = window.__bsspec?.book?.catalogue?.gameSystem;
-                    if (gs?.costTypes) {
-                        return gs.costTypes.map(ct => ({
+                    const gs2 = window.__bsspec?.book?.catalogue?.gameSystem;
+                    if (gs2?.costTypes) {
+                        return gs2.costTypes.map(ct => ({
                             name: ct.name || '',
                             typeId: ct.id || '',
-                            value: 0
+                            value: 0,
+                            hidden: ct.hidden || false
                         }));
                     }
                     return [];
@@ -322,7 +332,7 @@ internal static class JsHelpers
                     for (const c of maxCosts) {
                         const value = c.value ?? c.defaultCostLimit ?? -1;
                         if (value < 0) continue;
-                        limits.push({ name: c.name || '', typeId: c.typeId || '', value: value });
+                        limits.push({ name: c.name || '', typeId: c.typeId || '', value: value, hidden: costTypeHiddenMap[c.typeId] || false });
                     }
                     return limits.length > 0 ? limits : null;
                 }
