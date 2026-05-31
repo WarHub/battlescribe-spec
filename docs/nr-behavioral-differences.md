@@ -6,6 +6,9 @@
 > See also: [NR Ordering Analysis](nr-ordering-analysis.md) for a deep-dive into
 > NR's native selection and force ordering algorithm.
 >
+> See also: [Cost-Field Repeat Algorithm](cost-field-repeat-algorithm.md) for the
+> BS vs NR cost evaluation model comparison.
+>
 > **Note:** References to BattleScribe Java engine internals (`c.java`, `engine.a.f`)
 > are from decompiled `lib/BattleScribeEngine.jar` and are not present as files in this repository.
 
@@ -238,6 +241,28 @@ based on any `min>=1` regardless of field type.
 a child selection). Root selection count is managed via
 `selectEntry`/`deselectSelection`. A lint rule (`SetSelectionCountTargetsChildOnly`)
 enforces this in specs.
+
+### Cost-Field Repeat Evaluation Model
+
+NR uses a **reactive fixed-point** algorithm for cost evaluation, fundamentally
+different from BattleScribe's single-pass approach. This produces different results
+for self-referencing and mutually-referencing cost-field repeat modifiers.
+
+| Behavior | BattleScribe | NewRecruit |
+|----------|-------------|------------|
+| Algorithm | Single-pass, insertion-order, live values | Reactive fixed-point iteration |
+| Self-reference | Asymmetric (order-dependent) | Symmetric (all converge to same value) |
+| Mutual reference | Escalates across mutations | Diverges to infinity in single op |
+| Non-self-reference | Correct | Correct (identical to BS) |
+
+For non-circular modifiers (the vast majority of real-world data), both engines
+agree. Differences only manifest with self- or mutually-referencing cost-field
+repeats. See [Cost-Field Repeat Algorithm](cost-field-repeat-algorithm.md) for
+the full technical breakdown.
+
+Affected specs use per-engine `expectedState` overrides or `newrecruit: skip`:
+- `modifier-repeat-cost-self-reference` — per-engine overrides (NR converges higher)
+- `modifier-repeat-cost-mutual-reference` — NR skipped (diverges)
 
 ---
 

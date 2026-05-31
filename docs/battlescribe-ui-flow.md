@@ -86,6 +86,8 @@ calls with `GetNumChanges` to compute delta.
 For self-referencing cost-field repeat modifiers, intermediate cost states are
 visible to subsequent repeat queries. This produces different results than the
 engine's atomic `setNumSelections` API (which does all changes + 1 refresh).
+See [Cost-Field Repeat Algorithm](cost-field-repeat-algorithm.md) for the full
+single-pass live-value evaluation model.
 
 ### Remove Selection (× button)
 
