@@ -1,0 +1,123 @@
+id: modifier-repeat-cost-field-child-entry
+category: modifier
+description: >
+  Repeat counting cost of a child entry type demonstrates insertion-order
+  semantics: a newly added entry has empty costs (0) until processed, so
+  entries processed earlier in the pass see 0 from the new entry. This is
+  not a "cross-type exemption" — it is the natural consequence of the
+  single-pass live-value algorithm with children-first DFS ordering.
+
+setup:
+  gameSystem:
+    id: test-gs
+    name: Test GS
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Cat
+      gameSystemId: test-gs
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 50
+          modifiers:
+            # For each 100 pts of se-model in force, increment Squad's pts by 10
+            - type: increment
+              field: pts
+              value: "10"
+              repeats:
+                - value: 100
+                  repeats: 1
+                  field: pts
+                  scope: force
+                  childId: se-model
+                  includeChildSelections: true
+          selectionEntries:
+            - id: se-model
+              name: Model
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 200
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # Squad added, no Model yet → 0 pts of se-model → 0 reps → Squad stays at 50
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 50
+      forces:
+        - selections:
+            - name: Squad
+              costs:
+                - typeId: pts
+                  value: 50
+
+  # Add child Model to Squad. Children are processed before parents in DFS.
+  # Model gets its cost set (200) BEFORE Squad's modifier evaluates.
+  # Squad's modifier: query = Model(200) → floor(200/100)=2 reps → 50+20=70
+  - action: selectChildEntry
+    id: select-model
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-model
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 270
+      forces:
+        - selections:
+            - name: Squad
+              costs:
+                - typeId: pts
+                  value: 70
+              children:
+                - name: Model
+                  number: 1
+                  costs:
+                    - typeId: pts
+                      value: 200
+
+  # Increase Model count via setSelectionCount. Model×2=400 pts.
+  # Squad's modifier: query = Model(400) → floor(400/100)=4 reps → 50+40=90
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-model.selectionId }}
+    count: 2
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 490
+      forces:
+        - selections:
+            - name: Squad
+              costs:
+                - typeId: pts
+                  value: 90
+              children:
+                - name: Model
+                  number: 2
+                  costs:
+                    - typeId: pts
+                      value: 400

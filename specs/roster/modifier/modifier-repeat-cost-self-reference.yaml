@@ -128,3 +128,81 @@ steps:
                   costs:
                     - typeId: pts
                       value: 160
+
+  # Three instances: demonstrates insertion-order asymmetry in BS's single-pass algorithm.
+  # Each entry's modifier queries LIVE costs of other entries at the moment it's processed.
+  # Earlier-inserted entries see fewer updated values → lower cost.
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit
+
+  # Ideal: loop detected, modifier not applied, base costs preserved.
+  - expectedState:
+      errorCount: 1
+      costs:
+        - typeId: pts
+          value: 300
+      forces:
+        - selections:
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 100
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 100
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 100
+      engines:
+        # BS single-pass live-value algorithm (insertion order):
+        #   Unit[0]: query = Unit[0](120,old) + Unit[1](120,old) + Unit[2](0,new) = 240
+        #            floor(240/50)=4 reps → 100+40=140
+        #   Unit[1]: query = Unit[0](140,updated) + Unit[1](120,old) + Unit[2](0,new) = 260
+        #            floor(260/50)=5 reps → 100+50=150
+        #   Unit[2]: query = Unit[0](140) + Unit[1](150,updated) + Unit[2](0,self) = 290
+        #            floor(290/50)=5 reps → 100+50=150
+        # Asymmetry: first-inserted entry gets lower cost because it's processed first
+        # and sees other entries at their OLD (lower) values.
+        battlescribe:
+          errorCount: 0
+          costs:
+            - typeId: pts
+              value: 440
+          forces:
+            - selections:
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 140
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 150
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 150
+        # NR: reactive fixed-point converges symmetrically.
+        # cost = 100 + 10×floor(3×cost/50). Solution: cost=230, floor(690/50)=13 → 100+130=230.
+        newrecruit:
+          errorCount: 0
+          costs:
+            - typeId: pts
+              value: 690
+          forces:
+            - selections:
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 230
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 230
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 230
