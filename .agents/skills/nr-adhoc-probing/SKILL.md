@@ -2,180 +2,99 @@
 name: nr-adhoc-probing
 description: >
   Run ad-hoc probes against the live NewRecruit engine. Use when debugging NR behavior,
-  verifying assumptions about NR internals, or testing how NR handles specific data
-  configurations. Covers the probe test pattern, environment setup, and JS evaluation
-  snippets for inspecting NR's Pinia stores and roster tree.
+  verifying assumptions about NR internals, inspecting Pinia store state at a specific
+  spec step, or discovering UI selectors. Covers the debugger probe workflow
+  (--probe, --stop-before), NrUiDiagnostics for CI failure inspection, and NR
+  Pinia/DOM JS patterns.
 ---
 
 # NR Ad-Hoc Probing
 
-Quickly verify NR behavior by writing a temporary xUnit test, running it against
-live NR, reading test output, then deleting the file.
+Inspect NR behavior interactively using the `bs-spec-debug` debugger's probe mode.
+The probe loads spec data into a live NR browser session and provides a JS REPL —
+no temporary test files needed.
 
-## Workflow
+## Quick start — probe mode
 
-1. **Create** a probe test file at `tests/Integration/NrProbe.cs`
-2. **Run** with env vars set:
-   ```powershell
-   $env:NR_ENGINE_URL = "https://newrecruit.eu"
-   $env:NR_HEADLESS = "true"
-   dotnet test tests/BattleScribeSpec.Tests.csproj `
-       --filter "FullyQualifiedName~NrProbe" `
-       --logger "console;verbosity=detailed"
-   ```
-3. **Read** the `Standard Output Messages` in test output
-4. **Delete** the probe file when done
+```powershell
+# Launch NR with spec data loaded, open a JS REPL
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-ui --probe my-spec-id
 
-### Gotchas
+# Set NR_ENGINE_URL if probing live NR (default is https://newrecruit.eu)
+$env:NR_ENGINE_URL = "https://newrecruit.eu"
+```
 
-- **Always** use `--logger "console;verbosity=detailed"` — without it,
-  `ITestOutputHelper.WriteLine` output is invisible.
-- **Never** use `-p:TestProfile=...` — profile filters exclude ad-hoc test classes.
-- **Env vars** must be set on separate lines in PowerShell — `$env:X = "..."` can't
-  chain with `&&`.
+The browser opens (visible), spec data is loaded, and the REPL accepts JS expressions:
 
-## Simple probe (using Engine API)
+```
+NR UI probe ready. Browser is open.
+Entering REPL — type JS expressions to evaluate, 'exit' to quit:
+> document.title
+"NewRecruit"
+> const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia
+undefined
+> pinia._s.get('lists')?.currentList?.army?.getForces?.()?.length
+0
+```
 
-For most probes — checking roster state, testing setup configurations, verifying
-action behavior — use `_fixture.Engine` directly. No raw JS needed.
+## Stop-before — inspect state mid-spec
 
-```csharp
-using BattleScribeSpec;
-using BattleScribeSpec.NewRecruit;
-using BattleScribeSpec.Protocol;
-using Xunit;
-using Xunit.Abstractions;
+```powershell
+# Run spec, pause before step N, drop into REPL with full roster state
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-ui --stop-before 5 my-spec-id
+```
 
-namespace BattleScribeSpec.Tests;
+Steps run in order; at step 5 the REPL opens before that step executes.
+Evaluate any JS against the live NR page — same REPL as `--probe`.
+Type `exit` or `quit` to continue execution.
 
-[Collection("NewRecruit")]
-[Trait("Category", "Integration")]
-public sealed class NrProbe
+## Other useful flags
+
+| Flag | Effect |
+|------|--------|
+| `--no-headless` | Keep browser visible after the spec run |
+| `--dump` | Print full roster state after every step |
+| `--engine nr-ui` | Required — selects the NR UI driver |
+
+## NrUiDiagnostics — reading CI failures
+
+When an NR UI action times out or fails, `NrUiDiagnostics` captures:
+- **Screenshot** (PNG) of the page at failure time
+- **Browser console log** collected since test start
+- **DOM snapshot** (body HTML, truncated to 5 KB)
+- **Pinia state dump** (forces, selections, maxCosts as JSON)
+
+Artifacts are saved to `artifacts/nr-ui-diagnostics/`. Check these first
+when investigating a failing CI run before running locally.
+
+The Pinia dump is particularly useful:
+
+```json
 {
-    private readonly ITestOutputHelper _output;
-    private readonly NewRecruitFixture _fixture;
-
-    public NrProbe(ITestOutputHelper output, NewRecruitFixture fixture)
+  "forces": [
     {
-        _output = output;
-        _fixture = fixture;
+      "uid": "f-1",
+      "name": "Battalion",
+      "selections": [
+        { "uid": "s-1", "name": "Commander", "amount": 1, "entryId": "se-commander" }
+      ]
     }
-
-    [SkippableFact]
-    public void Probe()
-    {
-        Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
-
-        var gs = new ProtocolGameSystem
-        {
-            Id = "probe-gs", Name = "Probe System",
-            ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Test Force" }]
-        };
-        var cat = new ProtocolCatalogue
-        {
-            Id = "probe-cat", Name = "Probe Cat", GameSystemId = "probe-gs",
-            SelectionEntries =
-            [
-                new ProtocolSelectionEntry { Id = "se-1", Name = "Test Unit", Type = "unit" }
-            ]
-        };
-
-        var errors = _fixture.Engine!.Setup(gs, [cat]);
-        _output.WriteLine($"Setup errors: {errors.Count}");
-
-        _fixture.Engine.AddForce(0);
-        var state = _fixture.Engine.GetRosterState();
-        _output.WriteLine($"Forces: {state.Forces.Count}");
-        foreach (var f in state.Forces)
-        {
-            _output.WriteLine($"  Force: {f.Name}, selections: {f.Selections.Count}");
-            foreach (var s in f.Selections)
-                _output.WriteLine($"    {s.Name} ({s.Type})");
-        }
-    }
+  ],
+  "maxCosts": [{ "typeId": "pts", "value": 1000 }]
 }
 ```
 
-## Raw JS probe (for NR internals)
+## Design decision — harness scope
 
-When you need to inspect NR's internal data structures, Pinia stores, or
-deobfuscated methods — bypass the Engine API and evaluate JS directly.
-For NR internal API reference, see the **newrecruit-adapter** skill.
+The probe harness is `NrUiProbe` (C# class in `BattleScribeSpec.NrRosterUiDriver`),
+accessed through the debugger's `--probe` and `--stop-before` flags. This avoids
+temporary xUnit test files and gives the same JS REPL with proper spec data loaded.
 
-```csharp
-[SkippableFact]
-public async Task ProbeJs()
-{
-    Skip.If(!_fixture.Available, "NR_ENGINE_URL not set");
-
-    var gs = new ProtocolGameSystem
-    {
-        Id = "probe-gs", Name = "Probe System",
-        ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Test Force" }]
-    };
-    var cat = new ProtocolCatalogue
-    {
-        Id = "probe-cat", Name = "Probe Cat", GameSystemId = "probe-gs"
-    };
-
-    var page = _fixture.Engine!.Browser.Page;
-    await _fixture.Engine.Browser.NavigateToAppAsync();
-    await _fixture.Engine.Browser.WaitForPiniaAsync();
-    var gstXml = CatXmlGenerator.GenerateGameSystemXml(gs);
-    var catXml = CatXmlGenerator.GenerateCatalogueXml(gs, cat);
-
-    var result = await page.EvaluateAsync<string?>("""
-        async ([gstXml, catXml, systemId]) => {
-            try {
-                const pinia = document.querySelector('#__nuxt')
-                    ?.__vue_app__?.config?.globalProperties?.$pinia;
-                const sysStore = pinia._s.get('systemsStore');
-                for (const key of Object.keys(sysStore.localLibrary || {}))
-                    delete sysStore.localLibrary[key];
-                await sysStore.loadSystemFromFs([
-                    { name: 'system.gst', path: '/spec/system.gst', data: gstXml },
-                    { name: 'cat.cat', path: '/spec/cat.cat', data: catXml },
-                ]);
-                const localSys = sysStore.localLibrary[systemId];
-                sysStore.selectSystem(localSys);
-                const sys = sysStore._selectedSystem;
-                const pb = sys.books?.array?.filter(b => b.playable)?.[0];
-                const bd = await sys.getBook(pb.id);
-                bd.catalogue.costIndex = {};
-                const gsData = bd.catalogue.gameSystem;
-                if (gsData?.costTypes)
-                    for (const ct of gsData.costTypes)
-                        bd.catalogue.costIndex[ct.id] = ct;
-
-                // === YOUR PROBE LOGIC HERE ===
-                let info = '';
-                const roster = bd.createRoster(bd.getCosts());
-                const forces = roster?.getForces?.() || [];
-                info += `Forces: ${forces.length}\n`;
-                for (const f of forces)
-                    info += `  ${f.getName?.()}\n`;
-                return info;
-            } catch(e) {
-                return 'Error: ' + e.message + '\n' + e.stack;
-            }
-        }
-        """, new object[] { gstXml, catXml, gs.Id });
-
-    _output.WriteLine("=== PROBE RESULT ===");
-    _output.WriteLine(result ?? "(null — success)");
-}
-```
-
-Add this method inside the same `NrProbe` class from the simple template above.
-
-## Tips
-
-- **Multiple probes in one file:** Add multiple `[SkippableFact]` methods —
-  they share the browser fixture (one browser for all tests in the collection).
-- **Log generated XML:** `_output.WriteLine(gstXml)` to verify CatXmlGenerator output.
-- **Fresh state per test:** The JS preamble cleans `localLibrary`, and `Engine.Setup`
-  resets the roster — no cross-test contamination.
+**Rule:** Use the debugger probe, not ad-hoc xUnit test files, for NR debugging.
 
 ## Reference files
 
-- [NR-INTERNALS.md](references/NR-INTERNALS.md) — Deobfuscated NR behaviors discovered via probing
+- [NR-INTERNALS.md](references/NR-INTERNALS.md) — Deobfuscated NR behaviors: Pinia access,
+  selection mechanics, cost types, setAmount quirks, publication resolution
+- [NR-UI-PROBE.md](references/NR-UI-PROBE.md) — NrUiProbe and NrUiDiagnostics API reference,
+  all debugger flags, common JS snippets
