@@ -4,8 +4,6 @@ description: Number set modifier replaces a numeric (cost) field value entirely
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     costTypes:
       - id: pts
         name: pts
@@ -14,8 +12,6 @@ setup:
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Unit A

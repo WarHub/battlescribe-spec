@@ -4,15 +4,11 @@ description: Publications defined on catalogue appear at force level, entries re
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-1
         name: Patrol
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       publications:
         - id: pub-1
           name: Core Rulebook

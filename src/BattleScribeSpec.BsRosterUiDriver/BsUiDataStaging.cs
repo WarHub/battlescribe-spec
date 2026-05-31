@@ -37,13 +37,15 @@ public static class BsUiDataStaging
         IReadOnlyList<ProtocolCatalogue> catalogues,
         IReadOnlyList<(string FileName, string Content)> files)
     {
+        var gstFileName = files.FirstOrDefault(x => x.FileName.EndsWith(".gst", StringComparison.Ordinal)).FileName
+            ?? "system.gst";
         var catalogueFiles = files.Where(x => x.FileName.EndsWith(".cat", StringComparison.Ordinal)).ToList();
         XNamespace ns = "http://www.battlescribe.net/schema/dataIndexSchema";
         var entries = new List<XElement>
         {
             new(
                 ns + "dataIndexEntry",
-                new XAttribute("filePath", "system.gst"),
+                new XAttribute("filePath", gstFileName),
                 new XAttribute("dataType", "gamesystem"),
                 new XAttribute("dataId", gameSystem.Id),
                 new XAttribute("dataName", gameSystem.Name),

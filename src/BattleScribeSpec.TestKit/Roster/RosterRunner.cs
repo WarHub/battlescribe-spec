@@ -54,7 +54,7 @@ public sealed class RosterRunner
             }
             else
             {
-                var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+                var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
                 _catalogueIds = [.. catalogues.Select(c => c.Id)];
                 var setupErrors = _engine.Setup(gameSystem, catalogues);
                 if (setupErrors.Count > 0)

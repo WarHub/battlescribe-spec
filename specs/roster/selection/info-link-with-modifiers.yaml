@@ -4,15 +4,11 @@ description: InfoLink with modifiers applies modifier to the resolved target inf
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-1
         name: Patrol
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       sharedRules:
         - id: shared-rule-1
           name: Duty Eternal

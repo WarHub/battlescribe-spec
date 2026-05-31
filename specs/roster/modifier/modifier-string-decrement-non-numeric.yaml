@@ -4,15 +4,11 @@ description: String decrement on non-numeric string is a no-op (cannot parse as 
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Alpha Squad

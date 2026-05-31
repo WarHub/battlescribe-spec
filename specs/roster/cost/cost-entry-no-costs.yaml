@@ -5,8 +5,6 @@ tags: [cost, default]
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     costTypes:
       - id: pts
         name: pts
@@ -15,8 +13,6 @@ setup:
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-costed
           name: Costed Unit

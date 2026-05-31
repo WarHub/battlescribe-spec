@@ -4,8 +4,6 @@ description: Modifier can set a Profile Characteristic value (STRING modifier on
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
@@ -17,8 +15,6 @@ setup:
             name: Wounds
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Marine

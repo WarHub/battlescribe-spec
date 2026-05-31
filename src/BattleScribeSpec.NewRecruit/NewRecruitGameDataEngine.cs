@@ -336,7 +336,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         // Load system files
                         const loader = sysStore || editorStore;
                         const files = [
-                            { name: 'system.gst', path: '/spec/system.gst', data: gstXml },
+                            { name: systemId + '.gst', path: '/spec/' + systemId + '.gst', data: gstXml },
                             ...catFiles.map(c => ({ name: c.name, path: '/spec/' + c.name, data: c.data })),
                         ];
 

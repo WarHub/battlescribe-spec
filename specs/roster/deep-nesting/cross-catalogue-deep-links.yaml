@@ -9,8 +9,6 @@ tags: [deep-nesting, entryLink, catalogue]
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     costTypes:
       - id: pts
         name: pts
@@ -20,7 +18,6 @@ setup:
   catalogues:
     - id: cat-base
       name: Base Armoury
-      gameSystemId: test-gs
       sharedSelectionEntries:
         - id: sse-base-weapon
           name: Standard Rifle
@@ -45,7 +42,6 @@ setup:
                   scope: parent
     - id: cat-faction
       name: Faction Catalogue
-      gameSystemId: test-gs
       catalogueLinks:
         - id: cl-base
           name: Base Armoury

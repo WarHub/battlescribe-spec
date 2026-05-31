@@ -4,8 +4,6 @@ description: An infoGroup with multiple profiles all appear in state
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
@@ -26,8 +24,6 @@ setup:
             name: Description
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Commander

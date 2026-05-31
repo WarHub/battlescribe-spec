@@ -21,15 +21,15 @@ public sealed class BsUiDataStagingTests : IDisposable
     public async Task StageDataFilesAsync_CreatesGameSystemSubfolderAndIndex()
     {
         var spec = SpecLoader.Load(FindSpec("cost/cost-hidden-limit-validation"));
-        var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+        var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
         var xmlFiles = BuildXmlFiles(gameSystem, catalogues);
 
         await BsUiDataStaging.StageDataFilesAsync(_outputDir, gameSystem, catalogues, xmlFiles);
 
         var stagedDir = Path.Combine(_outputDir, gameSystem.Id);
         Assert.True(Directory.Exists(stagedDir));
-        Assert.True(File.Exists(Path.Combine(stagedDir, "system.gst")));
-        Assert.True(File.Exists(Path.Combine(stagedDir, "catalogue0.cat")));
+        Assert.True(File.Exists(Path.Combine(stagedDir, $"{gameSystem.Id}.gst")));
+        Assert.True(File.Exists(Path.Combine(stagedDir, $"{catalogues[0].Id}.cat")));
         Assert.True(File.Exists(Path.Combine(stagedDir, "index.bsi")));
     }
 
@@ -37,14 +37,14 @@ public sealed class BsUiDataStagingTests : IDisposable
     public void BuildIndexXml_ListsGameSystemAndCatalogueFiles()
     {
         var spec = SpecLoader.Load(FindSpec("cost/cost-hidden-limit-validation"));
-        var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+        var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
         var xmlFiles = BuildXmlFiles(gameSystem, catalogues);
 
         var indexXml = BsUiDataStaging.BuildIndexXml(gameSystem, catalogues, xmlFiles);
 
         Assert.Contains("dataIndex", indexXml);
-        Assert.Contains("filePath=\"system.gst\"", indexXml);
-        Assert.Contains("filePath=\"catalogue0.cat\"", indexXml);
+        Assert.Contains($"filePath=\"{gameSystem.Id}.gst\"", indexXml);
+        Assert.Contains($"filePath=\"{catalogues[0].Id}.cat\"", indexXml);
         Assert.Contains($"dataId=\"{gameSystem.Id}\"", indexXml);
         Assert.Contains($"dataId=\"{catalogues[0].Id}\"", indexXml);
     }
@@ -55,7 +55,7 @@ public sealed class BsUiDataStagingTests : IDisposable
     {
         var files = new List<(string FileName, string Content)>
         {
-            ("system.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem))
+            ($"{gameSystem.Id}.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem))
         };
 
         foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues))

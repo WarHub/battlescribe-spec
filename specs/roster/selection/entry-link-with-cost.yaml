@@ -4,8 +4,6 @@ description: EntryLink with costs selects the target entry which uses its own ba
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     costTypes:
       - id: pts
         name: pts
@@ -14,8 +12,6 @@ setup:
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-base
           name: Plasma Rifle

@@ -4,22 +4,18 @@ description: Forces from different catalogues get entries from their respective 
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-patrol
         name: Patrol
   catalogues:
     - id: cat-a
       name: Faction A
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-a1
           name: Alpha Unit
           type: unit
     - id: cat-b
       name: Faction B
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-b1
           name: Beta Unit

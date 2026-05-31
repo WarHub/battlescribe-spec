@@ -4,8 +4,6 @@ description: Category set-primary modifier sets a category as primary on the sel
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     categoryEntries:
       - id: cat-hq
         name: HQ
@@ -23,8 +21,6 @@ setup:
             name: Elites
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Commander

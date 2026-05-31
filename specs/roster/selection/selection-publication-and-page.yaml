@@ -4,15 +4,11 @@ description: Selection entry with both publicationId and page preserves both fie
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       publications:
         - id: pub-1
           name: Core Rulebook

@@ -4,15 +4,11 @@ description: Modifier can set a Rule's description field (STRING modifier on rul
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Marine

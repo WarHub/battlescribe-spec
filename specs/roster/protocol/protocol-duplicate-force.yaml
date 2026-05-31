@@ -37,7 +37,6 @@ setup:
 
   catalogues:
     - id: cat-1
-      name: Test Catalogue
       gameSystemId: gs-df
       selectionEntries:
         - id: se-captain

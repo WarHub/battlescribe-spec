@@ -33,8 +33,9 @@ public sealed class ExportXmlTests : IDisposable
         var exitCode = await Program.RunAsync("--export-xml", _outputDir, specPath);
 
         Assert.Equal(0, exitCode);
-        Assert.True(File.Exists(Path.Combine(_outputDir, "system.gst")));
-        Assert.True(File.Exists(Path.Combine(_outputDir, "catalogue0.cat")));
+        var specDir = Path.Combine(_outputDir, "cost-hidden-limit-validation");
+        Assert.True(File.Exists(Path.Combine(specDir, "cost-hidden-limit-validation.gst")));
+        Assert.True(File.Exists(Path.Combine(specDir, "cost-hidden-limit-validation.cat")));
     }
 
     [Fact]
@@ -44,10 +45,10 @@ public sealed class ExportXmlTests : IDisposable
 
         await Program.RunAsync("--export-xml", _outputDir, specPath);
 
-        var gstXml = File.ReadAllText(Path.Combine(_outputDir, "system.gst"));
+        var gstXml = File.ReadAllText(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.gst"));
         Assert.Contains("<?xml", gstXml);
         Assert.Contains("gameSystem", gstXml);
-        Assert.Contains("test-gs", gstXml);
+        Assert.Contains("cost-hidden-limit-validation", gstXml);
         Assert.Contains("costType", gstXml);
     }
 
@@ -58,7 +59,7 @@ public sealed class ExportXmlTests : IDisposable
 
         await Program.RunAsync("--export-xml", _outputDir, specPath);
 
-        var catXml = File.ReadAllText(Path.Combine(_outputDir, "catalogue0.cat"));
+        var catXml = File.ReadAllText(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.cat"));
         Assert.Contains("<?xml", catXml);
         Assert.Contains("catalogue", catXml);
         Assert.Contains("cat-1", catXml);
@@ -72,11 +73,11 @@ public sealed class ExportXmlTests : IDisposable
 
         await Program.RunAsync("--export-xml", _outputDir, specPath);
 
-        var gstXml = File.ReadAllText(Path.Combine(_outputDir, "system.gst"));
+        var gstXml = File.ReadAllText(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.gst"));
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(gstXml));
         var gs = stream.DeserializeGamesystem()!;
-        Assert.Equal("test-gs", gs.Id);
-        Assert.Equal("Test GS", gs.Name);
+        Assert.Equal("cost-hidden-limit-validation", gs.Id);
+        Assert.Equal("cost-hidden-limit-validation", gs.Name);
         Assert.Equal(2, gs.CostTypes.Count);
     }
 
@@ -87,11 +88,11 @@ public sealed class ExportXmlTests : IDisposable
 
         await Program.RunAsync("--export-xml", _outputDir, specPath);
 
-        var catXml = File.ReadAllText(Path.Combine(_outputDir, "catalogue0.cat"));
+        var catXml = File.ReadAllText(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.cat"));
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(catXml));
         var cat = stream.DeserializeCatalogue()!;
         Assert.Equal("cat-1", cat.Id);
-        Assert.Equal("Cat", cat.Name);
+        Assert.Equal("cost-hidden-limit-validation", cat.Name);
         Assert.Single(cat.SelectionEntries);
     }
 
@@ -103,8 +104,9 @@ public sealed class ExportXmlTests : IDisposable
         var exitCode = await Program.RunAsync("--export-xml", _outputDir, specPath);
 
         Assert.Equal(0, exitCode);
-        var gstFiles = Directory.GetFiles(_outputDir, "*.gst");
-        var catFiles = Directory.GetFiles(_outputDir, "*.cat");
+        var specDir = Path.Combine(_outputDir, "protocol-kitchen-sink");
+        var gstFiles = Directory.GetFiles(specDir, "*.gst");
+        var catFiles = Directory.GetFiles(specDir, "*.cat");
         Assert.Single(gstFiles);
         Assert.True(catFiles.Length >= 1, "Expected at least one .cat file");
     }
@@ -118,7 +120,7 @@ public sealed class ExportXmlTests : IDisposable
         var exitCode = await Program.RunAsync("--export-xml", _outputDir, "--engine", "nonexistent", specPath);
 
         Assert.Equal(0, exitCode);
-        Assert.True(File.Exists(Path.Combine(_outputDir, "system.gst")));
+        Assert.True(File.Exists(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.gst")));
     }
 
     [Fact]
@@ -130,8 +132,9 @@ public sealed class ExportXmlTests : IDisposable
         var exitCode = await Program.RunAsync("--export-xml", nestedDir, specPath);
 
         Assert.Equal(0, exitCode);
-        Assert.True(Directory.Exists(nestedDir));
-        Assert.True(File.Exists(Path.Combine(nestedDir, "system.gst")));
+        var specDir = Path.Combine(nestedDir, "cost-hidden-limit-validation");
+        Assert.True(Directory.Exists(specDir));
+        Assert.True(File.Exists(Path.Combine(specDir, "cost-hidden-limit-validation.gst")));
     }
 
     [Fact]
@@ -142,7 +145,7 @@ public sealed class ExportXmlTests : IDisposable
         var exitCode = await Program.RunAsync("--probe", "--export-xml", _outputDir, specPath);
 
         Assert.Equal(0, exitCode);
-        Assert.True(File.Exists(Path.Combine(_outputDir, "system.gst")));
+        Assert.True(File.Exists(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.gst")));
     }
 
     private static string FindSpec(string specId)

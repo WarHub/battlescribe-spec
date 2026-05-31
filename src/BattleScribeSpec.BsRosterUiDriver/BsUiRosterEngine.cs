@@ -545,7 +545,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         var files = new List<(string FileName, string Content)>
         {
-            ("system.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem)),
+            ($"{gameSystem.Id}.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem)),
         };
 
         foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues))

@@ -8,22 +8,18 @@ tags: [forceEntry, catalogue]
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-patrol
         name: Patrol
   catalogues:
     - id: cat-a
       name: Faction A
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-alpha
           name: Alpha
           type: unit
     - id: cat-b
       name: Faction B
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-beta
           name: Beta

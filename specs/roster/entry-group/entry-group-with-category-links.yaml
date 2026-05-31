@@ -7,8 +7,6 @@ tags: [newrecruit-bug]
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     categoryEntries:
       - id: cat-infantry
         name: Infantry
@@ -27,8 +25,6 @@ setup:
 
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-squad
           name: Squad

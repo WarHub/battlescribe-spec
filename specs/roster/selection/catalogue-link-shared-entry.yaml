@@ -4,22 +4,18 @@ description: CatalogueLink allows entry links to target shared entries from link
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-1
         name: Patrol
   catalogues:
     - id: cat-base
       name: Base Catalogue
-      gameSystemId: test-gs
       sharedSelectionEntries:
         - id: shared-se-1
           name: Generic Weapon
           type: upgrade
     - id: cat-faction
       name: Faction Catalogue
-      gameSystemId: test-gs
       catalogueLinks:
         - id: cl-1
           name: Base Catalogue
