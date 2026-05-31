@@ -1,0 +1,1190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/WarHub/battlescribe-spec/docs/protocol-schema.json",
+  "title": "BattleScribe Spec Protocol",
+  "description": "Schema for the NDJSON wire protocol between spec runner and engine adapters. Each line is either a command (runner → adapter) or a response (adapter → runner), discriminated by the \"type\" property.",
+
+  "oneOf": [
+    { "$ref": "#/$defs/command" },
+    { "$ref": "#/$defs/response" }
+  ],
+
+  "$defs": {
+    "command": {
+      "description": "A message sent from the spec runner to the engine adapter.",
+      "oneOf": [
+        { "$ref": "#/$defs/setupCommand" },
+        { "$ref": "#/$defs/setupFromFilesCommand" },
+        { "$ref": "#/$defs/actionCommand" },
+        { "$ref": "#/$defs/getStateCommand" },
+        { "$ref": "#/$defs/getErrorsCommand" },
+        { "$ref": "#/$defs/teardownCommand" }
+      ]
+    },
+    "response": {
+      "description": "A message sent from the engine adapter to the spec runner.",
+      "oneOf": [
+        { "$ref": "#/$defs/setupResult" },
+        { "$ref": "#/$defs/actionResult" },
+        { "$ref": "#/$defs/stateResponse" },
+        { "$ref": "#/$defs/errorsResponse" },
+        { "$ref": "#/$defs/teardownResult" },
+        { "$ref": "#/$defs/protocolError" }
+      ]
+    },
+
+    "setupCommand": {
+      "type": "object",
+      "required": ["type", "gameSystem"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "setup" },
+        "version": { "type": "string" },
+        "specId": { "type": "string" },
+        "gameSystem": { "$ref": "#/$defs/gameSystem" },
+        "catalogues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/catalogue" }
+        }
+      }
+    },
+    "setupFromFilesCommand": {
+      "type": "object",
+      "required": ["type", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "setupFromFiles" },
+        "specId": { "type": "string" },
+        "files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dataFile" }
+        }
+      }
+    },
+    "actionCommand": {
+      "type": "object",
+      "required": ["type", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "action" },
+        "action": { "$ref": "#/$defs/actionName" },
+        "forceEntryId": { "type": "string" },
+        "entryId": { "type": "string" },
+        "catalogueId": { "type": "string" },
+        "forceId": { "type": "string" },
+        "selectionId": { "type": "string" },
+        "costTypeId": { "type": "string" },
+        "count": { "type": "integer" },
+        "value": { "type": "number" },
+        "customName": { "type": "string" },
+        "customNotes": { "type": "string" },
+        "categoryEntryId": { "type": "string" }
+      }
+    },
+    "getStateCommand": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "getState" }
+      }
+    },
+    "getErrorsCommand": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "getErrors" }
+      }
+    },
+    "teardownCommand": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "teardown" }
+      }
+    },
+
+    "setupResult": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "setupResult" },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "actionResult": {
+      "type": "object",
+      "required": ["type", "ok"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "actionResult" },
+        "ok": { "type": "boolean" },
+        "error": { "type": "string" },
+        "outputs": { "$ref": "#/$defs/actionOutputs" }
+      }
+    },
+    "stateResponse": {
+      "type": "object",
+      "required": ["type", "name", "gameSystemId", "forces", "costs", "validationErrors"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "state" },
+        "name": { "type": "string" },
+        "gameSystemId": { "type": "string" },
+        "gameSystemName": { "type": "string" },
+        "forces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/forceState" }
+        },
+        "costs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/costState" }
+        },
+        "costLimits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/costState" }
+        },
+        "validationErrors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/validationErrorState" }
+        }
+      }
+    },
+    "errorsResponse": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "errors" },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/validationErrorState" }
+        }
+      }
+    },
+    "teardownResult": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "teardownResult" }
+      }
+    },
+    "protocolError": {
+      "type": "object",
+      "required": ["type", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "error" },
+        "message": { "type": "string" }
+      }
+    },
+
+    "actionOutputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "forceId": { "type": "string" },
+        "selectionId": { "type": "string" },
+        "selections": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map of entryId → selectionId for auto-selected child selections."
+        }
+      }
+    },
+
+    "dataFile": {
+      "type": "object",
+      "required": ["fileName", "content"],
+      "additionalProperties": false,
+      "properties": {
+        "fileName": { "type": "string" },
+        "content": { "type": "string" }
+      }
+    },
+
+    "actionName": {
+      "type": "string",
+      "enum": [
+        "addForce",
+        "addChildForce",
+        "removeForce",
+        "selectEntry",
+        "selectChildEntry",
+        "deselectSelection",
+        "setSelectionCount",
+        "duplicateSelection",
+        "duplicateForce",
+        "setCostLimit",
+        "setCustomization"
+      ]
+    },
+    "constraintType": {
+      "type": "string",
+      "enum": ["min", "max"]
+    },
+    "conditionType": {
+      "type": "string",
+      "enum": [
+        "atLeast",
+        "atMost",
+        "equalTo",
+        "greaterThan",
+        "lessThan",
+        "notEqualTo",
+        "instanceOf",
+        "notInstanceOf"
+      ]
+    },
+    "modifierType": {
+      "type": "string",
+      "enum": ["set", "add", "increment", "decrement", "append", "remove", "set-primary", "unset-primary"]
+    },
+    "conditionGroupType": {
+      "type": "string",
+      "enum": ["and", "or"]
+    },
+    "selectionEntryType": {
+      "type": "string",
+      "enum": ["unit", "model", "upgrade"]
+    },
+    "entryLinkType": {
+      "type": "string",
+      "enum": ["selectionEntry", "selectionEntryGroup"]
+    },
+
+    "forceState": {
+      "type": "object",
+      "required": ["name", "selections"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "catalogueId": { "type": "string" },
+        "catalogueName": { "type": "string" },
+        "entryId": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "customName": { "type": "string" },
+        "customNotes": { "type": "string" },
+        "availableEntryCount": { "type": "integer" },
+        "selections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionState" }
+        },
+        "childForces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/forceState" }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profileState" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ruleState" }
+        },
+        "categories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/categoryState" }
+        },
+        "publications": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/publicationState" }
+        }
+      }
+    },
+    "selectionState": {
+      "type": "object",
+      "required": ["name", "number", "hidden", "costs", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "entryId": { "type": "string" },
+        "type": { "type": "string" },
+        "number": { "type": "integer" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "publicationName": { "type": "string" },
+        "entryGroupId": { "type": "string" },
+        "customName": { "type": "string" },
+        "customNotes": { "type": "string" },
+        "costs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/costState" }
+        },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionState" }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profileState" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ruleState" }
+        },
+        "categories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/categoryState" }
+        }
+      }
+    },
+    "costState": {
+      "type": "object",
+      "required": ["name", "typeId", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "typeId": { "type": "string" },
+        "value": { "type": "number" }
+      }
+    },
+    "profileState": {
+      "type": "object",
+      "required": ["name", "hidden", "characteristics"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "typeId": { "type": "string" },
+        "typeName": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "characteristics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/characteristicState" }
+        }
+      }
+    },
+    "characteristicState": {
+      "type": "object",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "typeId": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    },
+    "ruleState": {
+      "type": "object",
+      "required": ["name", "description", "hidden"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" }
+      }
+    },
+    "categoryState": {
+      "type": "object",
+      "required": ["name", "primary"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "entryId": { "type": "string" },
+        "primary": { "type": "boolean" },
+        "publicationId": { "type": "string" },
+        "page": { "type": "string" },
+        "customName": { "type": "string" },
+        "customNotes": { "type": "string" },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profileState" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ruleState" }
+        }
+      }
+    },
+    "publicationState": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "validationErrorState": {
+      "type": "object",
+      "required": ["message"],
+      "additionalProperties": false,
+      "properties": {
+        "message": { "type": "string" },
+        "ownerType": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "ownerEntryId": { "type": "string" },
+        "entryId": { "type": "string" },
+        "constraintId": { "type": "string" }
+      }
+    },
+
+    "gameSystem": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "costTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/costType" }
+        },
+        "forceEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/forceEntry" }
+        },
+        "categoryEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/categoryEntry" }
+        },
+        "profileTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profileType" }
+        },
+        "publications": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/publication" }
+        },
+        "selectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntry" }
+        },
+        "entryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entryLink" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        },
+        "sharedSelectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntry" }
+        },
+        "sharedSelectionEntryGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntryGroup" }
+        },
+        "sharedRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "sharedProfiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "sharedInfoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        }
+      }
+    },
+    "catalogue": {
+      "type": "object",
+      "required": ["id", "name", "gameSystemId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "gameSystemId": { "type": "string" },
+        "library": { "type": "boolean" },
+        "selectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntry" }
+        },
+        "entryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entryLink" }
+        },
+        "sharedSelectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntry" }
+        },
+        "sharedSelectionEntryGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntryGroup" }
+        },
+        "sharedRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "sharedProfiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "sharedInfoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        },
+        "catalogueLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/catalogueLink" }
+        },
+        "publications": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/publication" }
+        },
+        "costTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/costType" }
+        },
+        "profileTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profileType" }
+        },
+        "categoryEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/categoryEntry" }
+        },
+        "forceEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/forceEntry" }
+        }
+      }
+    },
+    "costType": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "defaultCostLimit": { "type": "number" },
+        "hidden": { "type": "boolean" },
+        "limit": { "type": "boolean" }
+      }
+    },
+    "profileType": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "characteristicTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/characteristicType" }
+        }
+      }
+    },
+    "characteristicType": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "forceEntry": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/constraint" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        },
+        "categoryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/categoryLink" }
+        },
+        "forceEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/forceEntry" }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "infoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        }
+      }
+    },
+    "categoryEntry": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/constraint" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "infoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        }
+      }
+    },
+    "selectionEntry": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "$ref": "#/$defs/selectionEntryType" },
+        "hidden": { "type": "boolean" },
+        "import": { "type": "boolean" },
+        "collective": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "costs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/costValue" }
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/constraint" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        },
+        "selectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntry" }
+        },
+        "selectionEntryGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntryGroup" }
+        },
+        "entryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entryLink" }
+        },
+        "categoryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/categoryLink" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "infoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        }
+      }
+    },
+    "selectionEntryGroup": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "collective": { "type": "boolean" },
+        "import": { "type": "boolean" },
+        "defaultSelectionEntryId": { "type": "string" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/constraint" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        },
+        "selectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntry" }
+        },
+        "selectionEntryGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntryGroup" }
+        },
+        "entryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entryLink" }
+        },
+        "categoryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/categoryLink" }
+        },
+        "costs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/costValue" }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "infoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        }
+      }
+    },
+    "entryLink": {
+      "type": "object",
+      "required": ["id", "targetId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "targetId": { "type": "string" },
+        "type": { "$ref": "#/$defs/entryLinkType" },
+        "hidden": { "type": "boolean" },
+        "collective": { "type": "boolean" },
+        "import": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "costs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/costValue" }
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/constraint" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        },
+        "categoryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/categoryLink" }
+        },
+        "selectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntry" }
+        },
+        "selectionEntryGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/selectionEntryGroup" }
+        },
+        "entryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entryLink" }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "infoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        }
+      }
+    },
+    "categoryLink": {
+      "type": "object",
+      "required": ["id", "targetId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "targetId": { "type": "string" },
+        "name": { "type": "string" },
+        "primary": { "type": "boolean" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/constraint" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "infoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        }
+      }
+    },
+    "costValue": {
+      "type": "object",
+      "required": ["name", "typeId", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "typeId": { "type": "string" },
+        "value": { "type": "number" }
+      }
+    },
+    "constraint": {
+      "type": "object",
+      "required": ["id", "type", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "$ref": "#/$defs/constraintType" },
+        "value": { "type": "number" },
+        "field": { "type": "string" },
+        "scope": { "type": "string" },
+        "shared": { "type": "boolean" },
+        "includeChildSelections": { "type": "boolean" },
+        "includeChildForces": { "type": "boolean" },
+        "percentValue": { "type": "boolean" }
+      }
+    },
+    "modifier": {
+      "type": "object",
+      "required": ["type", "field", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/modifierType" },
+        "field": { "type": "string" },
+        "value": { "type": "string" },
+        "conditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "conditionGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/conditionGroup" }
+        },
+        "repeats": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/repeat" }
+        }
+      }
+    },
+    "modifierGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "conditionGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/conditionGroup" }
+        },
+        "repeats": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/repeat" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "required": ["type", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/conditionType" },
+        "value": { "type": "number" },
+        "field": { "type": "string" },
+        "scope": { "type": "string" },
+        "childId": { "type": "string" },
+        "shared": { "type": "boolean" },
+        "includeChildSelections": { "type": "boolean" },
+        "includeChildForces": { "type": "boolean" },
+        "percentValue": { "type": "boolean" }
+      }
+    },
+    "conditionGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/conditionGroupType" },
+        "conditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "conditionGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/conditionGroup" }
+        }
+      }
+    },
+    "repeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number" },
+        "repeats": { "type": "integer" },
+        "field": { "type": "string" },
+        "scope": { "type": "string" },
+        "childId": { "type": "string" },
+        "roundUp": { "type": "boolean" },
+        "shared": { "type": "boolean" },
+        "includeChildSelections": { "type": "boolean" },
+        "includeChildForces": { "type": "boolean" },
+        "percentValue": { "type": "boolean" }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "required": ["id", "name", "typeId", "typeName"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "typeId": { "type": "string" },
+        "typeName": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "page": { "type": "string" },
+        "publicationId": { "type": "string" },
+        "characteristics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/characteristic" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        }
+      }
+    },
+    "characteristic": {
+      "type": "object",
+      "required": ["name", "typeId", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "typeId": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    },
+    "infoGroup": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "publicationId": { "type": "string" },
+        "page": { "type": "string" },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        },
+        "infoLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoLink" }
+        },
+        "infoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoGroup" }
+        }
+      }
+    },
+    "infoLink": {
+      "type": "object",
+      "required": ["id", "name", "targetId", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "targetId": { "type": "string" },
+        "type": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "publicationId": { "type": "string" },
+        "page": { "type": "string" },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "modifierGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierGroup" }
+        }
+      }
+    },
+    "catalogueLink": {
+      "type": "object",
+      "required": ["id", "name", "targetId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "targetId": { "type": "string" },
+        "type": { "type": "string" },
+        "importRootEntries": { "type": "boolean" }
+      }
+    },
+    "publication": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "shortName": { "type": "string" },
+        "publisher": { "type": "string" },
+        "publicationDate": { "type": "string" },
+        "publisherUrl": { "type": "string" }
+      }
+    }
+  }
+}
