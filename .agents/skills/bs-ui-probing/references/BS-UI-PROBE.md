@@ -154,12 +154,17 @@ The debugger resolves BS UI paths in this order:
    - `BS_UI_AGENT_JAR` — path to `bs-ui-java-agent.jar`
 
 2. **Conventional repo locations** (fallback):
-   - `lib/battlescribe/jre/bin/java` (Linux) or `lib/battlescribe/jre/bin/java.exe` (Windows)
-   - `lib/battlescribe/app/RosterEditor.jar`
-   - `artifacts/bs-ui-java-agent/bs-ui-java-agent.jar`
+   - `lib/battlescribe/jre-win/bin/java.exe` (Windows)
+   - `lib/battlescribe/jre-mac/bin/java` (macOS)
+   - `lib/battlescribe/jre/bin/java` (Linux)
+   - `lib/battlescribe/RosterEditor.jar`
+   - `src/bs-ui-java-agent/bs-ui-java-agent.jar`
 
-`setup.ps1` downloads BS and extracts it to `lib/battlescribe/`.
-The agent jar is built by `src/bs-ui-java-agent/` and output to `artifacts/`.
+`setup.ps1` downloads BattleScribe to `lib/battlescribe/`. The agent JAR is **not**
+included — build it separately:
+```powershell
+pwsh -File src/bs-ui-java-agent/build.ps1
+```
 
 ## Startup sequence details
 

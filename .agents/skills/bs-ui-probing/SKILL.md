@@ -27,12 +27,18 @@ $env:BS_UI_AGENT_JAR    = "C:\path\to\bs-ui-java-agent.jar"  # built agent jar
 Conventional locations (auto-resolved if env vars absent):
 
 ```
-lib/battlescribe/jre/bin/java(.exe)
-lib/battlescribe/app/RosterEditor.jar
-artifacts/bs-ui-java-agent/bs-ui-java-agent.jar
+lib/battlescribe/jre-win/bin/java.exe   (Windows)
+lib/battlescribe/jre-mac/bin/java       (macOS)
+lib/battlescribe/jre/bin/java           (Linux)
+lib/battlescribe/RosterEditor.jar
+src/bs-ui-java-agent/bs-ui-java-agent.jar
 ```
 
-These are populated by `setup.ps1` (downloads BS and the agent jar).
+`setup.ps1` downloads BattleScribe to `lib/battlescribe/`.
+The agent JAR must be built separately:
+```powershell
+pwsh -File src/bs-ui-java-agent/build.ps1
+```
 
 ## Quick start — probe mode
 
