@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -287,18 +288,11 @@ public sealed class ProtocolSchemaDriftTests
 
     private static IReadOnlyList<Type> GetProtocolJsonContextTypes()
     {
-        var attributes = typeof(ProtocolJsonContext)
-            .GetCustomAttributes(typeof(System.Text.Json.Serialization.JsonSerializableAttribute), false)
-            .Cast<System.Text.Json.Serialization.JsonSerializableAttribute>()
-            .ToList();
-
-        return attributes.Select(a => a.TypeInfoPropertyName)
-            .Where(name => name is not null)
-            .Select(name => typeof(ProtocolJsonContext).GetProperty(name!)?.PropertyType)
+        return CustomAttributeData
+            .GetCustomAttributes(typeof(ProtocolJsonContext))
+            .Where(a => a.AttributeType == typeof(System.Text.Json.Serialization.JsonSerializableAttribute))
+            .Select(a => a.ConstructorArguments[0].Value as Type)
             .Where(t => t is not null)
-            .Select(t => t!.IsGenericType && t.GetGenericTypeDefinition() == typeof(JsonTypeInfo<>)
-                ? t.GetGenericArguments()[0]
-                : t)
             .ToList()!;
     }
 
