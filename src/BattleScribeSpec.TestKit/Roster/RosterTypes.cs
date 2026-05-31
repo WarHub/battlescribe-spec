@@ -64,7 +64,8 @@ public record SelectionState(
 public record CostState(
     string Name,
     string TypeId,
-    decimal Value);
+    decimal Value,
+    bool Hidden = false);
 
 public record ProfileState(
     string Name,

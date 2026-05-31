@@ -335,9 +335,16 @@ public sealed class RosterRunner
                 {
                     _errors.Add($"Step {stepIndex}: cost type '{matchKey}' not found in roster");
                 }
-                else if (ec.Value is { } v)
+                else
                 {
-                    AssertEqual(stepIndex, $"cost[{matchKey}].value", v, actual.Value);
+                    if (ec.Value is { } v)
+                    {
+                        AssertEqual(stepIndex, $"cost[{matchKey}].value", v, actual.Value);
+                    }
+                    if (ec.Hidden is { } h)
+                    {
+                        AssertEqual(stepIndex, $"cost[{matchKey}].hidden", h, actual.Hidden);
+                    }
                 }
             }
 
@@ -380,9 +387,16 @@ public sealed class RosterRunner
                 {
                     _errors.Add($"Step {stepIndex}: costLimit type '{matchKey}' not found in roster");
                 }
-                else if (ecl.Value is { } v)
+                else
                 {
-                    AssertEqual(stepIndex, $"costLimit[{matchKey}].value", v, actual.Value);
+                    if (ecl.Value is { } v)
+                    {
+                        AssertEqual(stepIndex, $"costLimit[{matchKey}].value", v, actual.Value);
+                    }
+                    if (ecl.Hidden is { } h)
+                    {
+                        AssertEqual(stepIndex, $"costLimit[{matchKey}].hidden", h, actual.Hidden);
+                    }
                 }
             }
 
@@ -770,9 +784,16 @@ public sealed class RosterRunner
                     {
                         _errors.Add($"Step {stepIndex}: {selPrefix} cost type '{matchKey}' not found");
                     }
-                    else if (ec.Value is { } v)
+                    else
                     {
-                        AssertEqual(stepIndex, $"{selPrefix}.cost[{matchKey}]", v, ac.Value);
+                        if (ec.Value is { } v)
+                        {
+                            AssertEqual(stepIndex, $"{selPrefix}.cost[{matchKey}]", v, ac.Value);
+                        }
+                        if (ec.Hidden is { } h)
+                        {
+                            AssertEqual(stepIndex, $"{selPrefix}.cost[{matchKey}].hidden", h, ac.Hidden);
+                        }
                     }
                 }
 

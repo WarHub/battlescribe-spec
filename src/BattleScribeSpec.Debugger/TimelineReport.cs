@@ -580,7 +580,8 @@ public sealed class TimelineReport
         var parts = new List<string>(costs.Count);
         foreach (var cost in costs)
         {
-            parts.Add($"{cost.Name}: {cost.Value.ToString(CultureInfo.InvariantCulture)}");
+            var hidden = cost.Hidden ? " [hidden]" : "";
+            parts.Add($"{cost.Name}: {cost.Value.ToString(CultureInfo.InvariantCulture)}{hidden}");
         }
 
         return string.Join(", ", parts);

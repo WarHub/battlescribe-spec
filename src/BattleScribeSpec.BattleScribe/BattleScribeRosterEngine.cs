@@ -259,12 +259,12 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
 
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCosts());
         var costStates = costs.Select(c =>
-            new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue())).ToList();
+            new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue(), c.isHidden())).ToList();
 
         var rawCostLimits = JavaListToList<net.battlescribe.model.data.Cost>(roster.getCostLimits());
         var costLimitStates = rawCostLimits.Count > 0
             ? rawCostLimits.Select(c =>
-                new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue())).ToList()
+                new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue(), c.isHidden())).ToList()
             : null;
 
         return new RosterState(
@@ -657,7 +657,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             sel.getType(),
             sel.getNumber(),
             hidden,
-            [.. costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue()))],
+            [.. costs.Select(c => new CostState(c.getName() ?? "", c.getTypeId() ?? "", (decimal)c.getValue(), c.isHidden()))],
             [.. children.Select(c => CaptureSelection(c, force))],
             Profiles: [.. profiles.Select(CaptureProfile)],
             Rules: [.. rules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
