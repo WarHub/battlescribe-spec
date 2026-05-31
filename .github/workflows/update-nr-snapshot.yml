@@ -28,7 +28,7 @@ jobs:
           client-id: ${{ vars.WARHUB_BOT_APP_ID }}
           private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
           owner: WarHub
-          repositories: newrecruit-har,battlescribe-spec
+          repositories: newrecruit-har,battlescribe-archive,battlescribe-spec
 
       - name: Setup dependencies
         run: pwsh ./setup.ps1
