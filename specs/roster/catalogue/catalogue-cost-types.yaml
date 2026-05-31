@@ -47,8 +47,10 @@ steps:
                   typeId: cat-pts
                   value: 50
       engines:
-        # BS tracks all game system cost types on each selection, including zero-value ones.
-        # NR omits zero-value costs from selection state.
+        # Accepted conformant divergence: BS tracks all game system cost types on each
+        # selection (including zero-value ones); NR omits zero-value costs from selection state.
+        # Both behaviors are valid — the engines:override mechanism is the correct way to
+        # express this difference in specs.
         battlescribe:
           forces:
             - selections:

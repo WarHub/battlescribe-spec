@@ -537,7 +537,7 @@ steps:
                       value: 10
             - name: Required Unit
       engines:
-        # BS returns all game system cost types, including zero-value ones (power=0 for Trooper).
+        # Accepted conformant divergence: BS includes all cost types (including zero-value);
         # NR omits zero-value costs from selection state.
         battlescribe:
           forces:
@@ -733,7 +733,7 @@ steps:
                       value: 20
             - name: Required Unit
       engines:
-        # BS returns all game system cost types, including zero-value ones (power=0 for Trooper at count=2).
+        # Accepted conformant divergence: BS includes all cost types (including zero-value);
         # NR omits zero-value costs from selection state.
         battlescribe:
           forces:
