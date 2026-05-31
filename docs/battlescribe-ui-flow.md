@@ -163,6 +163,56 @@ setRoster(roster, gameSystem, maps..., z=true):   // f.java:28
   if (z) x()               // auto-select default root entries (entries with min>=1)
   a(true, true)             // FULL cost refresh (ALL selections, not just changed)
   v()                       // validate
+
+## Display Ordering — SortedTreeView
+
+The engine data model (`roster.getForces()`, `force.getSelections()`, `selection.getSelections()`)
+returns items in **insertion order** — the order they were added to the roster. The engine
+itself applies NO sorting.
+
+All display ordering is applied by the JavaFX UI layer via `SortedTreeView`, a custom
+TreeView that sorts children of each node using a pluggable `Comparator<TreeItem<Object>>`.
+
+### RosterNameNodeComparator (default sort)
+
+Set at startup via `treeRoster.setNodeComparator(new RosterNameNodeComparator(rosterManager))`.
+Source: `RosterEditor.jar` — decompiled from `net/battlescribe/desktop/rostereditor/a/a/b.class`.
+
+Sort rules (in priority order):
+1. **Sentinel nodes** (e.g. "loading" placeholder) → sort first
+2. **Category vs Force**: Categories sort before Forces when siblings
+3. **Category vs Category**: sorted by index in `force.getCategories()` (definition order)
+   - "Uncategorised" (`a.r(entryId)` = true) always sorts first
+4. **INamed vs INamed** (Forces, Selections): `name.compareToIgnoreCase(otherName)`
+
+This means:
+- **Forces** — sorted alphabetically by `getName()` (case-insensitive)
+- **Selections** — sorted alphabetically by `getName()` (case-insensitive)
+- **Child forces** — sorted alphabetically by `getName()` (case-insensitive)
+- **Categories** — sorted by their definition order in the force entry, NOT alphabetically
+
+### RosterCostNodeComparator (alternate sort)
+
+Available via toolbar menu. Sorts selections by a chosen cost type value (descending).
+Uses `engine.b.a.g` comparator. Non-selection nodes return -1 (sort first).
+
+### customName does NOT affect sort
+
+The tree UI sorts by `INamed.getName()` (entry name, after modifier application).
+A separate comparator (`engine.b.a.h`) that uses `customName + name` exists in the engine
+JAR but is used only for HTML/text export (`RenderRoster.getRenderSelections()`), NOT
+for the interactive tree.
+
+### Comparison with NewRecruit
+
+NR has no data/UI layer separation for ordering. Its API (`force.getSelections()`)
+directly returns items in display order:
+- **Selections**: natural/numeric-aware sort, grouped by primary category
+- **Forces**: definition order (order of `addChildForce` calls)
+- **Child selections**: natural sort within parent
+
+The NR adapter reads this order as-is (no additional sorting applied).
+Known differences are tagged `design-difference` in ordering specs.
   d()                       // clear cache
   w()                       // clear changed flags
   b(false)                  // set loading = false

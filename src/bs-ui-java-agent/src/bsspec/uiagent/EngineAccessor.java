@@ -438,9 +438,23 @@ public class EngineAccessor {
         JsonArray forces = new JsonArray();
         if (list == null) return forces;
         int size = (int) list.getClass().getMethod("size").invoke(list);
+        // Engine data layer returns forces in insertion order. The desktop UI's
+        // SortedTreeView + RosterNameNodeComparator sorts by getName() case-insensitive.
+        List<Object> items = new ArrayList<Object>(size);
         for (int i = 0; i < size; i++) {
-            Object force = list.getClass().getMethod("get", int.class).invoke(list, i);
-            forces.add(serializeForce(force));
+            items.add(list.getClass().getMethod("get", int.class).invoke(list, i));
+        }
+        items.sort((a, b) -> {
+            try {
+                String nameA = String.valueOf(callGetter(a, "getName"));
+                String nameB = String.valueOf(callGetter(b, "getName"));
+                return nameA.compareToIgnoreCase(nameB);
+            } catch (Exception e) {
+                return 0;
+            }
+        });
+        for (Object item : items) {
+            forces.add(serializeForce(item));
         }
         return forces;
     }
@@ -506,6 +520,8 @@ public class EngineAccessor {
         for (int i = 0; i < size; i++) {
             items.add(list.getClass().getMethod("get", int.class).invoke(list, i));
         }
+        // Engine data layer returns selections in insertion order. The desktop UI's
+        // SortedTreeView + RosterNameNodeComparator sorts by getName() case-insensitive.
         items.sort((a, b) -> {
             try {
                 String nameA = String.valueOf(callGetter(a, "getName"));
