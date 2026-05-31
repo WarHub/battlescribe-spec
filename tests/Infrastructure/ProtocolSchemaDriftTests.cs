@@ -43,65 +43,34 @@ public sealed class ProtocolSchemaDriftTests
     }
 
     /// <summary>
-    /// Maps each C# protocol type to its corresponding JSON Schema $defs key.
-    /// This mapping itself acts as a drift guard: adding a new type to
-    /// ProtocolJsonContext requires adding it here too.
+    /// Derives the JSON Schema $defs key from a C# type name using naming conventions:
+    /// 1. Strip "Protocol" prefix if present
+    /// 2. camelCase the result
+    /// Exceptions are listed in <see cref="SchemaDefKeyOverrides"/>.
     /// </summary>
-    private static readonly Dictionary<Type, string> TypeToSchemaDef = new()
+    private static string GetSchemaDefKey(Type type)
     {
-        // Commands
-        [typeof(SetupCommand)] = "setupCommand",
-        [typeof(SetupFromFilesCommand)] = "setupFromFilesCommand",
-        [typeof(ActionCommand)] = "actionCommand",
-        [typeof(GetStateCommand)] = "getStateCommand",
-        [typeof(GetErrorsCommand)] = "getErrorsCommand",
-        [typeof(TeardownCommand)] = "teardownCommand",
-        // Responses
-        [typeof(SetupResult)] = "setupResult",
-        [typeof(ActionResult)] = "actionResult",
-        [typeof(StateResponse)] = "stateResponse",
-        [typeof(ErrorsResponse)] = "errorsResponse",
-        [typeof(TeardownResult)] = "teardownResult",
-        [typeof(ProtocolError)] = "protocolError",
-        // Shared protocol setup types
-        [typeof(ProtocolGameSystem)] = "gameSystem",
-        [typeof(ProtocolCatalogue)] = "catalogue",
-        [typeof(ProtocolCostType)] = "costType",
-        [typeof(ProtocolProfileType)] = "profileType",
-        [typeof(ProtocolCharacteristicType)] = "characteristicType",
-        [typeof(ProtocolForceEntry)] = "forceEntry",
-        [typeof(ProtocolCategoryEntry)] = "categoryEntry",
-        [typeof(ProtocolSelectionEntry)] = "selectionEntry",
-        [typeof(ProtocolSelectionEntryGroup)] = "selectionEntryGroup",
-        [typeof(ProtocolEntryLink)] = "entryLink",
-        [typeof(ProtocolCategoryLink)] = "categoryLink",
-        [typeof(ProtocolCostValue)] = "costValue",
-        [typeof(ProtocolConstraint)] = "constraint",
-        [typeof(ProtocolModifier)] = "modifier",
-        [typeof(ProtocolModifierGroup)] = "modifierGroup",
-        [typeof(ProtocolCondition)] = "condition",
-        [typeof(ProtocolConditionGroup)] = "conditionGroup",
-        [typeof(ProtocolRepeat)] = "repeat",
-        [typeof(ProtocolRule)] = "rule",
-        [typeof(ProtocolProfile)] = "profile",
-        [typeof(ProtocolCharacteristic)] = "characteristic",
-        [typeof(ProtocolInfoGroup)] = "infoGroup",
-        [typeof(ProtocolInfoLink)] = "infoLink",
-        [typeof(ProtocolCatalogueLink)] = "catalogueLink",
-        [typeof(ProtocolPublication)] = "publication",
-        [typeof(ProtocolDataFile)] = "dataFile",
-        // State types
-        [typeof(ActionOutputs)] = "actionOutputs",
+        if (SchemaDefKeyOverrides.TryGetValue(type, out var overrideKey))
+        {
+            return overrideKey;
+        }
+
+        var name = type.Name;
+        if (name.StartsWith("Protocol", StringComparison.Ordinal))
+        {
+            name = name["Protocol".Length..];
+        }
+
+        return char.ToLowerInvariant(name[0]) + name[1..];
+    }
+
+    /// <summary>
+    /// Types whose schema $defs key cannot be derived from the generic naming rule.
+    /// </summary>
+    private static readonly Dictionary<Type, string> SchemaDefKeyOverrides = new()
+    {
+        [typeof(ProtocolError)] = "protocolError", // "Protocol" is part of the concept name, not a prefix
         [typeof(RosterState)] = "stateResponse", // RosterState fields are inlined into stateResponse
-        [typeof(ForceState)] = "forceState",
-        [typeof(SelectionState)] = "selectionState",
-        [typeof(CostState)] = "costState",
-        [typeof(ProfileState)] = "profileState",
-        [typeof(CharacteristicState)] = "characteristicState",
-        [typeof(RuleState)] = "ruleState",
-        [typeof(CategoryState)] = "categoryState",
-        [typeof(PublicationState)] = "publicationState",
-        [typeof(ValidationErrorState)] = "validationErrorState",
     };
 
     /// <summary>
@@ -142,14 +111,19 @@ public sealed class ProtocolSchemaDriftTests
     public static TheoryData<Type, string> AllMappedTypes()
     {
         var data = new TheoryData<Type, string>();
-        foreach (var (type, schemaKey) in TypeToSchemaDef)
+        foreach (var type in GetProtocolJsonContextTypes())
         {
+            if (type.IsAbstract || type == typeof(ProtocolCommand) || type == typeof(ProtocolResponse))
+            {
+                continue;
+            }
+
             if (SkipBidirectionalCheck.Contains(type))
             {
                 continue;
             }
 
-            data.Add(type, schemaKey);
+            data.Add(type, GetSchemaDefKey(type));
         }
         Assert.NotEmpty(data);
         return data;
@@ -200,27 +174,29 @@ public sealed class ProtocolSchemaDriftTests
     }
 
     [Fact]
-    public void AllProtocolJsonContextTypesAreMapped()
+    public void AllProtocolJsonContextTypesHaveSchemaDefinitions()
     {
-        // Get all types registered in ProtocolJsonContext (excluding base/abstract types and primitives)
-        var registeredTypes = GetProtocolJsonContextTypes();
+        // Every concrete type registered in ProtocolJsonContext must have a $defs entry
+        // with a key matching the derived schema name.
+        var registeredTypes = GetProtocolJsonContextTypes()
+            .Where(t => !t.IsAbstract && t != typeof(ProtocolCommand) && t != typeof(ProtocolResponse))
+            .ToList();
         Assert.NotEmpty(registeredTypes);
-        var mappedTypes = TypeToSchemaDef.Keys.ToHashSet();
-        Assert.NotEmpty(mappedTypes);
 
-        var unmapped = registeredTypes
-            .Where(t => !mappedTypes.Contains(t))
-            .Where(t => !t.IsAbstract) // Skip ProtocolCommand, ProtocolResponse base classes
-            .Where(t => t != typeof(ProtocolCommand) && t != typeof(ProtocolResponse))
+        var root = SchemaDoc.Value.RootElement;
+        var defs = root.GetProperty("$defs");
+
+        var missing = registeredTypes
+            .Select(t => (Type: t, Key: GetSchemaDefKey(t)))
+            .Where(pair => !defs.TryGetProperty(pair.Key, out _))
             .ToList();
 
-        if (unmapped.Count > 0)
+        if (missing.Count > 0)
         {
             Assert.Fail(
-                $"Types registered in ProtocolJsonContext but not mapped in ProtocolSchemaDriftTests:\n" +
-                $"  {string.Join(", ", unmapped.Select(t => t.Name))}\n" +
-                $"  Action: Add these types to TypeToSchemaDef dictionary and create corresponding " +
-                $"$defs entries in docs/protocol-schema.json");
+                $"Types registered in ProtocolJsonContext have no matching $defs entry in schema:\n" +
+                $"  {string.Join(", ", missing.Select(m => $"{m.Type.Name} → \"{m.Key}\""))}\n" +
+                $"  Action: Add $defs entries or update SchemaDefKeyOverrides if the naming convention doesn't apply.");
         }
     }
 
