@@ -151,6 +151,7 @@ public sealed class ProtocolSchemaDriftTests
 
             data.Add(type, schemaKey);
         }
+        Assert.NotEmpty(data);
         return data;
     }
 
@@ -203,7 +204,9 @@ public sealed class ProtocolSchemaDriftTests
     {
         // Get all types registered in ProtocolJsonContext (excluding base/abstract types and primitives)
         var registeredTypes = GetProtocolJsonContextTypes();
+        Assert.NotEmpty(registeredTypes);
         var mappedTypes = TypeToSchemaDef.Keys.ToHashSet();
+        Assert.NotEmpty(mappedTypes);
 
         var unmapped = registeredTypes
             .Where(t => !mappedTypes.Contains(t))
@@ -225,7 +228,9 @@ public sealed class ProtocolSchemaDriftTests
     public void AllCommandDiscriminatorsAreInSchema()
     {
         var commandDef = GetSchemaDefOneOfConsts("command");
+        Assert.NotEmpty(commandDef);
         var csharpDiscriminators = GetPolymorphicDiscriminators<ProtocolCommand>();
+        Assert.NotEmpty(csharpDiscriminators);
 
         var missingInSchema = csharpDiscriminators
             .Where(d => !commandDef.Contains(d))
@@ -244,7 +249,9 @@ public sealed class ProtocolSchemaDriftTests
     public void AllResponseDiscriminatorsAreInSchema()
     {
         var responseDef = GetSchemaDefOneOfConsts("response");
+        Assert.NotEmpty(responseDef);
         var csharpDiscriminators = GetPolymorphicDiscriminators<ProtocolResponse>();
+        Assert.NotEmpty(csharpDiscriminators);
 
         var missingInSchema = csharpDiscriminators
             .Where(d => !responseDef.Contains(d))
