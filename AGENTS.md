@@ -21,7 +21,8 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id
 
 **Always run `pre-push` before pushing.** It covers lint, BattleScribe conformance, and NR frozen
 (offline HAR replay) in one fast command. Other profiles: `lint`, `bs`, `nr-frozen`,
-`nr-editor-frozen`, `nr-editor-live`, `nr-live`, `nr-live-visible`.
+`nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`, `nr-editor-ui-live`,
+`bs-ui-gamedata`, `nr-live`, `nr-live-visible`.
 
 ## NR frozen tests and HAR
 
@@ -74,6 +75,12 @@ pwsh -File tools/format-specs.ps1                                               
 | `src/BattleScribeSpec.TestKit/GameData/GameDataSpecModels.cs` | GameData YAML spec model classes |
 | `src/BattleScribeSpec.TestKit/GameData/GameDataRunner.cs` | GameData assertion engine |
 | `src/BattleScribeSpec.NewRecruit/NewRecruitGameDataEngine.cs` | NR Editor GameData adapter (live + frozen) |
+| `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiEngine.cs` | NR Editor GameData UI driver (Playwright UI) |
+| `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiActions.cs` | NR GameData UI mutations + state reads |
+| `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiSetup.cs` | NR GameData UI file loading + static routing |
+| `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiEngine.cs` | BS Data Editor UI driver (Java agent RPC) |
+| `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiDiagnostics.cs` | BS GameData UI diagnostics |
+| `src/bs-ui-java-agent/src/bsspec/uiagent/DataEditorActions.java` | BS Data Editor Java agent stubs (need probing) |
 | `src/BattleScribeSpec.Debugger/Program.cs` | bs-spec-debug console app |
 | `src/BattleScribeSpec.TestKit/Protocol/AdapterHandler.cs` | Action dispatch |
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |

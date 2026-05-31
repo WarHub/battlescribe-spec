@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BattleScribeSpec.NrGameDataUiDriver</RootNamespace>
+    <Description>NewRecruit Editor UI-driven GameData engine: executes spec actions through Playwright UI interactions rather than direct store manipulation.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BattleScribeSpec.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
+  </ItemGroup>
+
+</Project>
