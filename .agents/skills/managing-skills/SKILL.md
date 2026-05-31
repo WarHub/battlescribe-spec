@@ -165,6 +165,7 @@ are for deep dives, not prerequisites.
 | `battlescribe-engine` | IKVM Java interop engine | JAVA-MODEL-FACTORY.md |
 | `newrecruit-adapter` | Playwright browser adapter | STATE-EXTRACTION.md |
 | `nr-adhoc-probing` | NR UI probe and JS REPL debugging | NR-INTERNALS.md, NR-UI-PROBE.md |
+| `bs-ui-probing` | BS UI driver probe and diagnostics | BS-UI-PROBE.md |
 | `managing-skills` | This skill — creating/updating skills | SKILL-TEMPLATE.md |
 | `managing-backlog` | Issue triage, labels, hierarchy, grooming | ISSUE-HIERARCHY.md, LABEL-TAXONOMY.md |
 
