@@ -10,6 +10,10 @@ on:
     - cron: '0 8 * * 1'
       timezone: Europe/Warsaw
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-test:
     if: github.event.pull_request.draft != true
@@ -47,6 +51,9 @@ jobs:
       - name: Verify formatting
         run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
 
+      - name: Run script tests
+        run: node --test scripts/har-diff.test.mjs
+
       - name: Test
         run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "Engine!=FrozenNrRoster&Engine!=FrozenNrGameData&Engine!=LiveNrRoster&Engine!=LiveNrGameData&Engine!=FrozenNrUiRoster&Engine!=LiveNrUiRoster"
 
@@ -61,65 +68,8 @@ jobs:
             --output github-actions \
             --workers 2
 
-  script-tests:
+  nr-and-ui:
     if: github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Run har-diff tests
-        run: node --test scripts/har-diff.test.mjs
-
-  nr-frozen:
-    if: github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.WARHUB_BOT_APP_ID }}
-          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
-          owner: WarHub
-          repositories: newrecruit-har,battlescribe-archive
-
-      - name: Setup dependencies
-        run: pwsh ./setup.ps1
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - name: Build
-        run: dotnet build
-
-      - name: Run frozen NR roster conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrRoster&Mode!=Sequential" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
-        env:
-          NR_HEADLESS: true
-          NR_PARALLEL: 4
-
-      - name: Run frozen NR Editor GameData tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrGameData" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
-        env:
-          NR_HEADLESS: true
-
-  bs-ui:
-    if: >-
-      github.event.pull_request.draft != true
-      && (
-        github.event_name == 'pull_request'
-        || github.event_name == 'workflow_dispatch'
-        || github.event_name == 'schedule'
-        || contains(github.event.head_commit.message, '[bs-ui-test]')
-      )
     runs-on: ubuntu-latest
 
     steps:
@@ -143,7 +93,7 @@ jobs:
           repositories: newrecruit-har,battlescribe-archive
 
       - name: Setup dependencies
-        run: pwsh ./setup.ps1 -SkipPlaywright
+        run: pwsh ./setup.ps1
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
@@ -160,6 +110,22 @@ jobs:
       - name: Build
         run: dotnet build
 
+      - name: Run frozen NR roster conformance tests
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrRoster&Mode!=Sequential" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        env:
+          NR_HEADLESS: true
+          NR_PARALLEL: 4
+
+      - name: Run frozen NR Editor GameData tests
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrGameData" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        env:
+          NR_HEADLESS: true
+
+      - name: Run frozen NR UI conformance tests
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrUiRoster" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        env:
+          NR_HEADLESS: true
+
       - name: Run kitchen-sink via BS UI driver
         run: |
           xvfb-run -a dotnet run --project src/BattleScribeSpec.Debugger -- \
@@ -171,56 +137,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: bs-ui-diagnostics
-          path: artifacts/bs-ui-diagnostics/
-
-  nr-ui-frozen:
-    if: >-
-      github.event.pull_request.draft != true
-      && (
-        github.event_name == 'pull_request'
-        || github.event_name == 'workflow_dispatch'
-        || github.event_name == 'schedule'
-        || contains(github.event.head_commit.message, '[nr-ui-test]')
-      )
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.WARHUB_BOT_APP_ID }}
-          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
-          owner: WarHub
-          repositories: newrecruit-har,battlescribe-archive
-
-      - name: Setup dependencies
-        run: pwsh ./setup.ps1
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - name: Build
-        run: dotnet build
-
-      - name: Run frozen NR UI conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrUiRoster" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
-        env:
-          NR_HEADLESS: true
-
-      - name: Upload diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: nr-ui-diagnostics
-          path: artifacts/nr-ui-diagnostics/
+          name: nr-and-ui-diagnostics
+          path: |
+            artifacts/bs-ui-diagnostics/
+            artifacts/nr-ui-diagnostics/
 
   nr-conformance:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[nr-test]')
@@ -281,37 +201,56 @@ jobs:
           name: nr-conformance-report
           path: artifacts/nr-conformance-report.json
 
-  notify-failure:
-    if: >-
-      always()
-      && github.event_name == 'schedule'
-      && (
-        needs.build-and-test.result == 'failure'
-        || needs.script-tests.result == 'failure'
-        || needs.nr-frozen.result == 'failure'
-        || needs.bs-ui.result == 'failure'
-        || needs.nr-ui-frozen.result == 'failure'
-        || needs.nr-conformance.result == 'failure'
-      )
-    needs: [build-and-test, script-tests, nr-frozen, bs-ui, nr-ui-frozen, nr-conformance]
+  ci-gate:
+    if: always()
+    needs: [build-and-test, nr-and-ui, nr-conformance]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
 
     steps:
+      - name: Check job results
+        id: gate
+        shell: pwsh
+        run: |
+          $results = @{
+            'build-and-test' = '${{ needs.build-and-test.result }}'
+            'nr-and-ui' = '${{ needs.nr-and-ui.result }}'
+            'nr-conformance' = '${{ needs.nr-conformance.result }}'
+          }
+          $failed = $results.GetEnumerator() | Where-Object { $_.Value -notin @('success', 'skipped') }
+          if ($failed) {
+            Write-Host "##[error]The following jobs did not succeed:"
+            $failed | ForEach-Object { Write-Host "  - $($_.Key): $($_.Value)" }
+            "failed=true" >> $env:GITHUB_OUTPUT
+            exit 1
+          }
+          Write-Host "All required jobs passed or were skipped."
+          $results.GetEnumerator() | ForEach-Object { Write-Host "  $($_.Key): $($_.Value)" }
+          "failed=false" >> $env:GITHUB_OUTPUT
+
       - name: Check for existing open issue
+        if: >-
+          always()
+          && github.event_name == 'schedule'
+          && steps.gate.outputs.failed == 'true'
         id: existing
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         shell: pwsh
         run: |
-          gh label create scheduled-ci-failure --color D93F0B --description "Auto-created by scheduled CI on failure" --force
-          $count = (gh issue list --label scheduled-ci-failure --state open --json number | ConvertFrom-Json).Count
+          gh label create scheduled-ci-failure --color D93F0B --description "Auto-created by scheduled CI on failure" --force --repo $env:GH_REPO
+          $count = (gh issue list --label scheduled-ci-failure --state open --json number --repo $env:GH_REPO | ConvertFrom-Json).Count
           "count=$count" >> $env:GITHUB_OUTPUT
 
       - name: Find last non-bot committer
-        if: steps.existing.outputs.count == '0'
+        if: >-
+          always()
+          && github.event_name == 'schedule'
+          && steps.gate.outputs.failed == 'true'
+          && steps.existing.outputs.count == '0'
         id: assignee
         env:
           GH_TOKEN: ${{ github.token }}
@@ -326,18 +265,20 @@ jobs:
           Write-Host "Found assignee: $username"
 
       - name: Create issue
-        if: steps.existing.outputs.count == '0'
+        if: >-
+          always()
+          && github.event_name == 'schedule'
+          && steps.gate.outputs.failed == 'true'
+          && steps.existing.outputs.count == '0'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: pwsh
         run: |
           $failed = @()
           if ('${{ needs.build-and-test.result }}' -eq 'failure') { $failed += 'build-and-test' }
-          if ('${{ needs.script-tests.result }}' -eq 'failure') { $failed += 'script-tests' }
-          if ('${{ needs.nr-frozen.result }}' -eq 'failure') { $failed += 'nr-frozen' }
-          if ('${{ needs.bs-ui.result }}' -eq 'failure') { $failed += 'bs-ui' }
-          if ('${{ needs.nr-ui-frozen.result }}' -eq 'failure') { $failed += 'nr-ui-frozen' }
+          if ('${{ needs.nr-and-ui.result }}' -eq 'failure') { $failed += 'nr-and-ui' }
           if ('${{ needs.nr-conformance.result }}' -eq 'failure') { $failed += 'nr-conformance' }
           $failedList = ($failed | ForEach-Object { "- $_" }) -join "`n"
           $body = @"
@@ -357,6 +298,6 @@ jobs:
           $body = ($body -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
           $title = "Scheduled CI failure — $(Get-Date -Format 'yyyy-MM-dd')"
           $assignee = '${{ steps.assignee.outputs.username }}'
-          $ghArgs = @('issue', 'create', '--title', $title, '--body', $body, '--label', 'scheduled-ci-failure')
+          $ghArgs = @('issue', 'create', '--title', $title, '--body', $body, '--label', 'scheduled-ci-failure', '--repo', $env:GH_REPO)
           if ($assignee) { $ghArgs += '--assignee'; $ghArgs += $assignee }
           & gh @ghArgs
