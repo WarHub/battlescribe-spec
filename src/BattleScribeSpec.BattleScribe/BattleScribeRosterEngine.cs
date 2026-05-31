@@ -247,11 +247,13 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var forces = Engine.GetForces();
         var errors = Engine.GetValidationErrors();
 
-        // Sort forces alphabetically by name to match BS render layer behavior.
-        // BS's own RenderRoster sorts forces via Collections.sort(new f()) which uses
-        // case-insensitive alphabetical order. This matches BattleScribe's rendered order
-        // and usually matches NR for simple names, but NR may differ in documented cases
-        // such as numeric-aware comparisons, category grouping, or explicit sort indices.
+        // The engine's data layer (roster.getForces()) returns forces in insertion order.
+        // The desktop UI's SortedTreeView applies RosterNameNodeComparator which sorts all
+        // INamed items (forces, selections) by getName() case-insensitive alphabetically.
+        // We replicate that UI-layer sort here so adapter output matches what users see.
+        // Source: RosterEditor.jar — RosterNameNodeComparator (decompiled from a.a.b.class).
+        // Note: NR has no data/UI layer split — its API already returns display order
+        // (natural sort, category-grouped), so NR adapter applies no additional sorting.
         forces = [.. forces.OrderBy(f => f.getName(), StringComparer.OrdinalIgnoreCase)];
         var forceStates = forces.Select((f, i) => CaptureForce(f, i)).ToList();
 
@@ -587,7 +589,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var hidden = resolvedForceEntry?.isHidden()
             ?? Engine.FindForceEntryById(f.getEntryId())?.isHidden()
             ?? false;
-        // Sort selections and child forces alphabetically to match BattleScribe render-layer ordering.
+        // Engine data layer returns selections/forces in insertion order. The desktop UI's
+        // SortedTreeView + RosterNameNodeComparator sorts by getName() case-insensitive.
+        // Note: the engine JAR also has comparator 'h' (customName+name) used in HTML export,
+        // but the interactive tree UI uses getName() only — customName doesn't affect sort order.
         selections = [.. selections.OrderBy(s => s.getName(), StringComparer.OrdinalIgnoreCase)];
         childForces = [.. childForces.OrderBy(cf => cf.getName(), StringComparer.OrdinalIgnoreCase)];
         var customName = f.getCustomName();
@@ -632,7 +637,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     {
         var costs = JavaListToList<net.battlescribe.model.data.Cost>(sel.getCosts());
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections());
-        // Sort children alphabetically to match BattleScribe render-layer ordering.
+        // Engine data layer: insertion order. UI tree: RosterNameNodeComparator → getName() sort.
         children = [.. children.OrderBy(c => c.getName(), StringComparer.OrdinalIgnoreCase)];
         var profiles = JavaListToList<net.battlescribe.model.data.Profile>(sel.getProfiles());
         var rules = JavaListToList<net.battlescribe.model.data.Rule>(sel.getRules());

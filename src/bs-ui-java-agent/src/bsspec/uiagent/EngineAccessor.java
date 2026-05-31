@@ -438,9 +438,21 @@ public class EngineAccessor {
         JsonArray forces = new JsonArray();
         if (list == null) return forces;
         int size = (int) list.getClass().getMethod("size").invoke(list);
+        // Engine data layer returns forces in insertion order. The desktop UI's
+        // SortedTreeView + RosterNameNodeComparator sorts by getName() case-insensitive.
+        // Pre-resolve names eagerly to avoid non-transitive comparator from reflection errors.
+        List<Object> items = new ArrayList<Object>(size);
+        String[] names = new String[size];
         for (int i = 0; i < size; i++) {
-            Object force = list.getClass().getMethod("get", int.class).invoke(list, i);
-            forces.add(serializeForce(force));
+            Object item = list.getClass().getMethod("get", int.class).invoke(list, i);
+            items.add(item);
+            names[i] = String.valueOf(callGetter(item, "getName"));
+        }
+        Integer[] indices = new Integer[size];
+        for (int i = 0; i < size; i++) indices[i] = i;
+        java.util.Arrays.sort(indices, (a, b) -> names[a].compareToIgnoreCase(names[b]));
+        for (int idx : indices) {
+            forces.add(serializeForce(items.get(idx)));
         }
         return forces;
     }
@@ -502,21 +514,21 @@ public class EngineAccessor {
         JsonArray selections = new JsonArray();
         if (list == null) return selections;
         int size = (int) list.getClass().getMethod("size").invoke(list);
+        // Engine data layer returns selections in insertion order. The desktop UI's
+        // SortedTreeView + RosterNameNodeComparator sorts by getName() case-insensitive.
+        // Pre-resolve names eagerly to avoid non-transitive comparator from reflection errors.
         List<Object> items = new ArrayList<Object>(size);
+        String[] names = new String[size];
         for (int i = 0; i < size; i++) {
-            items.add(list.getClass().getMethod("get", int.class).invoke(list, i));
+            Object item = list.getClass().getMethod("get", int.class).invoke(list, i);
+            items.add(item);
+            names[i] = String.valueOf(callGetter(item, "getName"));
         }
-        items.sort((a, b) -> {
-            try {
-                String nameA = String.valueOf(callGetter(a, "getName"));
-                String nameB = String.valueOf(callGetter(b, "getName"));
-                return nameA.compareToIgnoreCase(nameB);
-            } catch (Exception e) {
-                return 0;
-            }
-        });
-        for (Object item : items) {
-            selections.add(serializeSelection(item, pubNameMap, force));
+        Integer[] indices = new Integer[size];
+        for (int i = 0; i < size; i++) indices[i] = i;
+        java.util.Arrays.sort(indices, (a, b) -> names[a].compareToIgnoreCase(names[b]));
+        for (int idx : indices) {
+            selections.add(serializeSelection(items.get(idx), pubNameMap, force));
         }
         return selections;
     }
