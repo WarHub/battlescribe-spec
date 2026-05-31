@@ -4,15 +4,11 @@ description: childId filter can reference a SelectionEntryGroup ID to count sele
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-watcher
           name: Watcher

@@ -41,7 +41,7 @@ public static class CatXmlGenerator
         for (var i = 0; i < catalogues.Length; i++)
         {
             var xml = SerializeNode(MapCatalogue(gamesystem, catalogues[i]));
-            result.Add(($"catalogue{i}.cat", xml));
+            result.Add(($"{catalogues[i].Id}.cat", xml));
         }
         return result;
     }

@@ -171,21 +171,27 @@ if (exportXmlDir is not null)
         return 1;
     }
 
-    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
-    Directory.CreateDirectory(exportXmlDir);
+    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
+    var specExportDir = Path.Combine(exportXmlDir, spec.Id);
+    Directory.CreateDirectory(specExportDir);
 
-    var gstFile = Path.Combine(exportXmlDir, "system.gst");
+    var gstFile = Path.Combine(specExportDir, $"{SanitizeFileName(gameSystem.Name)}.gst");
     File.WriteAllText(gstFile, CatXmlGenerator.GenerateGameSystemXml(gameSystem));
     Console.Error.WriteLine($"Wrote {gstFile}");
 
-    foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues))
+    for (var catIdx = 0; catIdx < catalogues.Length; catIdx++)
     {
-        var catFile = Path.Combine(exportXmlDir, fileName);
-        File.WriteAllText(catFile, xml);
+        var catName = SanitizeFileName(catalogues[catIdx].Name);
+        // Deduplicate filename if needed (e.g. two catalogues with same sanitized name)
+        var catFileName = catIdx == 0 || Enumerable.Range(0, catIdx).All(j => SanitizeFileName(catalogues[j].Name) != catName)
+            ? catName
+            : $"{catName}-{catIdx + 1}";
+        var catFile = Path.Combine(specExportDir, $"{catFileName}.cat");
+        File.WriteAllText(catFile, CatXmlGenerator.GenerateCatalogueXml(gameSystem, catalogues[catIdx]));
         Console.Error.WriteLine($"Wrote {catFile}");
     }
 
-    Console.Error.WriteLine($"Exported {1 + catalogues.Length} file(s) to {exportXmlDir}");
+    Console.Error.WriteLine($"Exported {1 + catalogues.Length} file(s) to {specExportDir}");
     return 0;
 }
 
@@ -467,12 +473,12 @@ async Task<int> RunBsUiProbe(SpecFile spec)
 
     var options = ResolveBsUiOptions();
 
-    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
 
     // Generate XML files
     var xmlFiles = new List<(string FileName, string Content)>
     {
-        ("system.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem))
+        ($"{gameSystem.Id}.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem))
     };
     foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues))
     {
@@ -508,7 +514,7 @@ async Task<int> RunNrUiProbe(SpecFile spec, bool headless)
         return 1;
     }
 
-    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
 
     Console.Error.WriteLine($"NR UI Probe — launching with {catalogues.Length + 1} data file(s)");
 

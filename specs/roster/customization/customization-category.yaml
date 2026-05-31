@@ -6,8 +6,6 @@ engines:
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-patrol
         name: Patrol
@@ -20,8 +18,6 @@ setup:
         name: HQ
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-unit
           name: Unit A

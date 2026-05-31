@@ -6,8 +6,6 @@ description: >
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-patrol
         name: Patrol
@@ -16,8 +14,6 @@ setup:
             targetId: ce-troops
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       categoryEntries:
         - id: ce-troops
           name: Troops

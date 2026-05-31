@@ -141,7 +141,7 @@
 
     "gameSystem": {
       "type": "object",
-      "required": ["id", "name"],
+      "required": [],
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
@@ -206,7 +206,7 @@
     },
     "catalogue": {
       "type": "object",
-      "required": ["id", "name", "gameSystemId"],
+      "required": ["id"],
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },

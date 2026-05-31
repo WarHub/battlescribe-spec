@@ -5,15 +5,11 @@ description: Catalogue defines own forceEntries that can be used to add forces
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-gs
         name: GS Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       forceEntries:
         - id: fe-cat
           name: Catalogue Detachment

@@ -4,15 +4,11 @@ description: Selection type is preserved as defined in the entry (upgrade)
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-patrol
         name: Patrol
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-upgrade-a
           name: Upgrade A

@@ -394,7 +394,7 @@ public sealed class BattleScribeEngine : IDisposable
             }
 
             if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
-                && !e.Message.Contains("forces"))
+                && !e.Message.Contains(" forces from "))
             {
                 errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId };
             }
@@ -418,7 +418,7 @@ public sealed class BattleScribeEngine : IDisposable
             }
 
             if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
-                && !e.Message.Contains("forces"))
+                && !e.Message.Contains(" forces from "))
             {
                 // Resolve entry link → target, or use entryId directly for shared entries
                 var selectionEntryId = _linkTargetMap.TryGetValue(e.EntryId, out var targetId)

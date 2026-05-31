@@ -11,8 +11,6 @@ tags:
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     categoryEntries:
       - id: cat-troops
         name: Troops
@@ -25,8 +23,6 @@ setup:
             name: Troops
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-unit-a
           name: Unit A

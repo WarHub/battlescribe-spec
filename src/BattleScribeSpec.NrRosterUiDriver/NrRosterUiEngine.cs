@@ -91,7 +91,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         var catFiles = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, sortedCatalogues);
         var allFiles = new List<(string FileName, string Content)>
         {
-            ("system.gst", gstXml),
+            ($"{gameSystem.Id}.gst", gstXml),
         };
         allFiles.AddRange(catFiles.Select(f => (f.FileName, f.Xml)));
 

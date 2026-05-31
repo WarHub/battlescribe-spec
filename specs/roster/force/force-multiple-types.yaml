@@ -4,8 +4,6 @@ description: Multiple forces of different types can be created and selected into
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-patrol
         name: Patrol
@@ -13,8 +11,6 @@ setup:
         name: Battalion
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-unit
           name: Unit A

@@ -4,8 +4,6 @@ description: Roster tracks multiple cost types independently
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     costTypes:
       - id: pts
         name: Points
@@ -18,8 +16,6 @@ setup:
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: HQ Choice

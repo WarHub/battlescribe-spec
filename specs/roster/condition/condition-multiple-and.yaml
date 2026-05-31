@@ -4,15 +4,11 @@ description: Multiple conditions use AND logic (all must be true for modifier to
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-patrol
         name: Patrol
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-trigger-a
           name: Trigger A
