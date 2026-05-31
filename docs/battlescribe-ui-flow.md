@@ -163,6 +163,10 @@ setRoster(roster, gameSystem, maps..., z=true):   // f.java:28
   if (z) x()               // auto-select default root entries (entries with min>=1)
   a(true, true)             // FULL cost refresh (ALL selections, not just changed)
   v()                       // validate
+  d()                       // clear cache
+  w()                       // clear changed flags
+  b(false)                  // set loading = false
+```
 
 ## Display Ordering — SortedTreeView
 
@@ -213,10 +217,6 @@ directly returns items in display order:
 
 The NR adapter reads this order as-is (no additional sorting applied).
 Known differences are tagged `design-difference` in ordering specs.
-  d()                       // clear cache
-  w()                       // clear changed flags
-  b(false)                  // set loading = false
-```
 
 Our adapter flow differs because we don't use `setRoster`:
 - We call `selectRootForce` (which creates force + calls `t()`)
