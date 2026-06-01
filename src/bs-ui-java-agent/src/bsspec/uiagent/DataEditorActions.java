@@ -1,50 +1,52 @@
 package bsspec.uiagent;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import javafx.application.Platform;
+import javafx.scene.Node;
+import javafx.scene.control.ButtonBase;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeView;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
+import javafx.stage.Window;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
- * High-level data editor action orchestration for the BattleScribe data editor window.
- * Each method implements a complete {@code IGameDataEngine} action as a single RPC call,
- * analogous to {@link RosterActions} for the roster editor.
+ * Data editor action orchestration for the BattleScribe Data Editor window.
+ * Parallel to {@link RosterActions} for the roster editor.
  *
- * <p><b>Status: Stub / Pending UI probing.</b><br>
- * The BattleScribe data editor UI structure has not yet been probed.
- * All action methods currently throw {@code UnsupportedOperationException} with probing
- * instructions. Once the data editor UI is probed and tree/property selectors are known,
- * replace the stubs with real implementations following the same patterns as
- * {@link RosterActions}.
+ * <p>All mutations run on the JavaFX application thread via {@link #runOnFx} /
+ * {@link #runOnFxGet}. State reads walk the Java model via reflection.
  *
- * <h2>How to implement after probing</h2>
- * <ol>
- *   <li>Launch BattleScribe with the agent via {@code bs-spec-debug --engine battlescribe-ui --probe}</li>
- *   <li>Use {@code dumpTree} and {@code getWindows} to explore the data editor scene graph</li>
- *   <li>Map window title, tree item structure, context menus, and property panels</li>
- *   <li>Implement each method by following the RosterActions pattern:
- *       use {@link EngineAccessor} for FX thread dispatch, window waits, and state polling</li>
- * </ol>
- *
- * <h2>Known BS Data Editor UI characteristics (to confirm during probing)</h2>
- * <ul>
- *   <li>Accessed via the "Data Editor" button in the Roster Editor main window, OR by a
- *       separate "BattleScribe Data Editor" launch mode if it exists</li>
- *   <li>Tree view showing game system / catalogue hierarchy</li>
- *   <li>Right-click context menus for add/remove/move entry operations</li>
- *   <li>Property panel / dialog for editing entry fields</li>
- * </ul>
- *
- * @see RosterActions for the established action implementation pattern
- * @see EngineAccessor for FX-thread dispatch, waitForWindow, and state polling helpers
+ * <p>The controller is found by locating the Stage whose title starts with
+ * {@code "Data Editor"}, then looking up {@code #btnSaveDataFile} and walking
+ * the handler's object tree to reach {@code DataEditorWindowController}.
  */
 public class DataEditorActions {
 
-    private static final int POLL_INTERVAL_MS = 200;
-    private static final int STATE_POLL_TIMEOUT_MS = 10_000;
-    private static final int WINDOW_TIMEOUT_MS = 15_000;
-    private static final int FX_TIMEOUT_MS = 30_000;
+    private static final int POLL_MS = 200;
+    private static final int POLL_TIMEOUT_MS = 10_000;
+    private static final int LOAD_TIMEOUT_MS = 120_000;
+    private static final int FX_TIMEOUT_MS = 60_000;
 
     @SuppressWarnings("unused")
     private final EngineAccessor engineAccessor;
+    /** Cached controller — cleared on each new setup call. */
+    private Object cachedController = null;
 
     public DataEditorActions(EngineAccessor engineAccessor) {
         this.engineAccessor = engineAccessor;
@@ -52,24 +54,12 @@ public class DataEditorActions {
 
     // ─── Dispatch ────────────────────────────────────────────────────────────
 
-    /**
-     * Dispatches a data editor JSON-RPC method to the appropriate action handler.
-     * Methods are routed by exact name.
-     *
-     * <p>Called from {@link JsonRpcServer} for methods matching the "editor" prefix
-     * naming convention.
-     *
-     * @param method RPC method name (e.g., "editorAddEntryAction")
-     * @param params JSON params string
-     * @return JSON result string
-     * @throws UnsupportedOperationException when the method has not yet been implemented
-     * @throws IllegalArgumentException for unknown method names
-     */
     public String dispatch(String method, String params) {
         JsonObject p = params != null && !params.isEmpty() && !params.equals("{}")
                 ? new JsonParser().parse(params).getAsJsonObject()
                 : new JsonObject();
 
+        if ("editorLoadFilesAction".equals(method))   return loadFiles(p);
         if ("editorAddEntryAction".equals(method))    return addEntry(p);
         if ("editorRemoveEntryAction".equals(method)) return removeEntry(p);
         if ("editorMoveEntryAction".equals(method))   return moveEntry(p);
@@ -79,158 +69,564 @@ public class DataEditorActions {
         throw new IllegalArgumentException("Unknown data editor action: " + method);
     }
 
-    // ─── Action stubs ────────────────────────────────────────────────────────
+    // ─── Actions ─────────────────────────────────────────────────────────────
 
-    /**
-     * Adds a new entry of {@code entryType} under the parent identified by {@code parentId}.
-     *
-     * <p><b>Params (JSON)</b>:
-     * <ul>
-     *   <li>{@code parentId} — ID of the parent catalogue, game system, or entry</li>
-     *   <li>{@code entryType} — BattleScribe entry type string (e.g., "selectionEntry")</li>
-     *   <li>{@code name} — optional name to set on the new entry</li>
-     * </ul>
-     *
-     * <p><b>Returns</b>: {@code {"entryId": "<id>"}} with the ID of the created entry.
-     *
-     * <p><b>Implementation notes</b>:
-     * <ol>
-     *   <li>Locate the parent tree node by {@code parentId} (same :id: token search as RosterActions)</li>
-     *   <li>Right-click to open context menu</li>
-     *   <li>Select "Add" → entry type sub-menu → specific type</li>
-     *   <li>If a "New Entry" dialog appears, fill in the name and confirm</li>
-     *   <li>Read the newly created entry's ID from the model (via engineAccessor or scene)</li>
-     *   <li>Return {@code {"entryId": "..."}} JSON</li>
-     * </ol>
-     *
-     * @throws UnsupportedOperationException until implemented after UI probing
-     */
+    private String loadFiles(JsonObject params) {
+        cachedController = null; // reset cache on new load
+        String gstPath = requireString(params, "gstPath");
+        JsonArray catPathsArr = params.has("catPaths") ? params.get("catPaths").getAsJsonArray() : new JsonArray();
+
+        Object ctrl = findController();
+        Object dataSource = runOnFxGet(() -> ctrl.getClass().getMethod("getDataSource").invoke(ctrl));
+
+        Object flatEntry;
+        if (catPathsArr.size() > 0) {
+            String catPath = catPathsArr.get(0).getAsString();
+            Method f = getMethod(dataSource.getClass(), "f", String.class, boolean.class);
+            flatEntry = invoke(f, dataSource, catPath, false);
+        } else {
+            Method c = getMethod(dataSource.getClass(), "c", String.class, boolean.class);
+            flatEntry = invoke(c, dataSource, gstPath, false);
+        }
+        if (flatEntry == null) throw new RuntimeException("Data source returned null for the given path");
+
+        Method loadMethod = findLoadMethod(ctrl.getClass());
+        Object finalFlat = flatEntry;
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            try { loadMethod.invoke(ctrl, finalFlat); future.complete(null); }
+            catch (Exception e) { future.completeExceptionally(e); }
+        });
+        try {
+            future.get(LOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            throw new RuntimeException("File loading timed out after " + LOAD_TIMEOUT_MS + "ms");
+        } catch (Exception e) {
+            throw new RuntimeException("File loading failed", e);
+        }
+        return "{}";
+    }
+
     private String addEntry(JsonObject params) {
-        throw new UnsupportedOperationException(
-            "editorAddEntryAction not yet implemented. " +
-            "Run `bs-spec-debug --engine battlescribe-ui --probe` to inspect the BS data editor UI, " +
-            "then implement using the RosterActions pattern. " +
-            "Params: parentId=" + params.get("parentId") + " entryType=" + params.get("entryType"));
+        String parentId = requireString(params, "parentId");
+        String entryType = requireString(params, "entryType");
+        String name = optString(params, "name");
+
+        Object ctrl = findController();
+        TreeItem<Object> parentItem = runOnFxGet(() -> findTreeItemById(ctrl, parentId));
+        if (parentItem == null) throw new RuntimeException("Tree item not found: " + parentId);
+
+        Set<String> before = runOnFxGet(() -> childIds(parentItem));
+        String addMethod = actAddMethodName(entryType);
+        runOnFx(() -> selectItem(ctrl, parentItem));
+        sleep(200);
+        runOnFx(() -> ctrl.getClass().getMethod(addMethod).invoke(ctrl));
+
+        String newId = waitForNewChild(parentItem, before);
+        if (name != null) setFieldOnEntry(ctrl, newId, "name", name);
+
+        JsonObject result = new JsonObject();
+        result.addProperty("entryId", newId);
+        return result.toString();
     }
 
-    /**
-     * Removes the entry identified by {@code entryId} from the data tree.
-     *
-     * <p><b>Params</b>: {@code {"entryId": "<id>"}}.
-     *
-     * <p><b>Implementation notes</b>:
-     * <ol>
-     *   <li>Locate tree node by {@code entryId}</li>
-     *   <li>Right-click → "Delete" (or press Delete key while node is selected)</li>
-     *   <li>Confirm deletion dialog if shown</li>
-     *   <li>Wait for node to disappear from tree</li>
-     * </ol>
-     *
-     * @throws UnsupportedOperationException until implemented after UI probing
-     */
     private String removeEntry(JsonObject params) {
-        throw new UnsupportedOperationException(
-            "editorRemoveEntryAction not yet implemented. " +
-            "Run `bs-spec-debug --engine battlescribe-ui --probe` to inspect the BS data editor UI. " +
-            "Params: entryId=" + params.get("entryId"));
+        String entryId = requireString(params, "entryId");
+        Object ctrl = findController();
+        TreeItem<Object> item = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
+        if (item == null) throw new RuntimeException("Tree item not found: " + entryId);
+        TreeItem<Object> parent = item.getParent();
+
+        runOnFx(() -> selectItem(ctrl, item));
+        sleep(200);
+        runOnFx(() -> ctrl.getClass().getMethod("actRemove").invoke(ctrl));
+        waitForRemoved(parent, entryId);
+        return "{}";
     }
 
-    /**
-     * Moves the entry identified by {@code entryId} under the new parent {@code newParentId}.
-     *
-     * <p><b>Params</b>: {@code {"entryId": "...", "newParentId": "...", "index": null}}.
-     *
-     * <p><b>Implementation notes</b>:
-     * <ol>
-     *   <li>Locate source node by {@code entryId}</li>
-     *   <li>Try context menu "Move to..." option first (if available)</li>
-     *   <li>Fallback: Cut (Ctrl+X), navigate to target, Paste (Ctrl+V)</li>
-     *   <li>Verify the node appears under the new parent</li>
-     * </ol>
-     *
-     * @throws UnsupportedOperationException until implemented after UI probing
-     */
     private String moveEntry(JsonObject params) {
-        throw new UnsupportedOperationException(
-            "editorMoveEntryAction not yet implemented. " +
-            "Run `bs-spec-debug --engine battlescribe-ui --probe` to inspect the BS data editor UI. " +
-            "Params: entryId=" + params.get("entryId") + " newParentId=" + params.get("newParentId"));
+        String entryId = requireString(params, "entryId");
+        String newParentId = requireString(params, "newParentId");
+        Object ctrl = findController();
+
+        TreeItem<Object> src = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
+        if (src == null) throw new RuntimeException("Tree item not found: " + entryId);
+        runOnFx(() -> selectItem(ctrl, src));
+        sleep(200);
+        runOnFx(() -> ctrl.getClass().getMethod("actCut").invoke(ctrl));
+        sleep(500);
+
+        TreeItem<Object> newParent = runOnFxGet(() -> findTreeItemById(ctrl, newParentId));
+        if (newParent == null) throw new RuntimeException("New parent tree item not found: " + newParentId);
+        Set<String> before = runOnFxGet(() -> childIds(newParent));
+
+        runOnFx(() -> selectItem(ctrl, newParent));
+        sleep(200);
+        runOnFx(() -> ctrl.getClass().getMethod("actPaste").invoke(ctrl));
+        waitForNewChild(newParent, before);
+        return "{}";
     }
 
-    /**
-     * Sets a field {@code field} to {@code value} on the entry identified by {@code entryId}.
-     *
-     * <p><b>Params</b>: {@code {"entryId": "...", "field": "name", "value": "My Entry"}}.
-     *
-     * <p><b>Implementation notes</b>:
-     * <ol>
-     *   <li>Locate tree node by {@code entryId} and click it to select</li>
-     *   <li>The property panel (right side) should update to show the entry's properties</li>
-     *   <li>Find the form field by label text matching {@code field} (or use reflection for known fields)</li>
-     *   <li>Clear and type the new value</li>
-     *   <li>Confirm/apply (Tab out, or hit Enter)</li>
-     *   <li>Verify the value is reflected in the model</li>
-     * </ol>
-     *
-     * @throws UnsupportedOperationException until implemented after UI probing
-     */
     private String setField(JsonObject params) {
-        throw new UnsupportedOperationException(
-            "editorSetFieldAction not yet implemented. " +
-            "Run `bs-spec-debug --engine battlescribe-ui --probe` to inspect the BS data editor UI. " +
-            "Params: entryId=" + params.get("entryId") + " field=" + params.get("field"));
+        String entryId = requireString(params, "entryId");
+        String field = requireString(params, "field");
+        String value = params.has("value") && !params.get("value").isJsonNull()
+                ? params.get("value").getAsString() : null;
+        setFieldOnEntry(findController(), entryId, field, value);
+        return "{}";
     }
 
-    /**
-     * Adds a link entry of {@code linkType} pointing to {@code targetId} under {@code parentId}.
-     *
-     * <p><b>Params</b>: {@code {"parentId": "...", "linkType": "entryLink", "targetId": "..."}}.
-     *
-     * <p><b>Returns</b>: {@code {"entryId": "<linkId>"}}.
-     *
-     * <p><b>Implementation notes</b>:
-     * <ol>
-     *   <li>Locate parent tree node by {@code parentId}</li>
-     *   <li>Right-click → "Add Link" → select link type</li>
-     *   <li>In the link selection dialog, find and select the entry with ID {@code targetId}</li>
-     *   <li>Confirm; read the created link's ID</li>
-     * </ol>
-     *
-     * @throws UnsupportedOperationException until implemented after UI probing
-     */
     private String addLink(JsonObject params) {
-        throw new UnsupportedOperationException(
-            "editorAddLinkAction not yet implemented. " +
-            "Run `bs-spec-debug --engine battlescribe-ui --probe` to inspect the BS data editor UI. " +
-            "Params: parentId=" + params.get("parentId") + " linkType=" + params.get("linkType"));
+        String parentId = requireString(params, "parentId");
+        String linkType = requireString(params, "linkType");
+        String targetId = requireString(params, "targetId");
+
+        Object ctrl = findController();
+        TreeItem<Object> parentItem = runOnFxGet(() -> findTreeItemById(ctrl, parentId));
+        if (parentItem == null) throw new RuntimeException("Parent tree item not found: " + parentId);
+
+        Set<String> before = runOnFxGet(() -> childIds(parentItem));
+        String addMethod = actAddMethodName(linkType); // entryLink/infoLink/categoryLink map correctly
+        runOnFx(() -> selectItem(ctrl, parentItem));
+        sleep(200);
+        runOnFx(() -> ctrl.getClass().getMethod(addMethod).invoke(ctrl));
+
+        String linkId = waitForNewChild(parentItem, before);
+        setFieldOnEntry(ctrl, linkId, "targetId", targetId);
+
+        JsonObject result = new JsonObject();
+        result.addProperty("entryId", linkId);
+        return result.toString();
     }
 
-    /**
-     * Returns the complete data state of the currently loaded game system and catalogues
-     * as a JSON object matching the {@code GameDataState} C# record structure.
-     *
-     * <p><b>Returns</b>:
-     * <pre>
-     * {
-     *   "gameSystem": { "id": "...", "name": "...", ... },
-     *   "catalogues": [{ "id": "...", "name": "...", "entries": [...] }]
-     * }
-     * </pre>
-     *
-     * <p><b>Implementation notes</b>:
-     * <ol>
-     *   <li>Access the loaded game system and catalogues via engineAccessor or Java reflection</li>
-     *   <li>Walk the entry tree recursively, serializing each node to JSON</li>
-     *   <li>Match the structure expected by {@code GameDataRunner.DeserializeState()}</li>
-     * </ol>
-     *
-     * @throws UnsupportedOperationException until implemented after UI probing
-     */
     private String getDataState(JsonObject params) {
-        throw new UnsupportedOperationException(
-            "editorGetDataState not yet implemented. " +
-            "This requires reading from the BS data editor's Java model via engineAccessor. " +
-            "Run `bs-spec-debug --engine battlescribe-ui --probe` and use `getModelState` or " +
-            "reflection to discover the data editor's loaded catalogue model.");
+        Object ctrl = findController();
+        Object dm = runOnFxGet(() -> ctrl.getClass().getMethod("getDataManager").invoke(ctrl));
+        if (dm == null) return buildEmptyState();
+
+        Object root = tryInvoke(dm, "c");
+        if (root == null) return buildEmptyState();
+
+        JsonObject state = new JsonObject();
+        String rootClass = root.getClass().getName();
+        boolean isCatalogue = rootClass.contains("Catalogue")
+                && !rootClass.contains("CatalogueLink")
+                && !rootClass.contains("CatalogueManager");
+
+        if (isCatalogue) {
+            Object gs = tryInvoke(dm, "aa");
+            if (gs != null) state.add("gameSystem", buildGameSystemJson(gs));
+            JsonArray cats = new JsonArray();
+            cats.add(buildCatalogueJson(root));
+            state.add("catalogues", cats);
+        } else {
+            state.add("gameSystem", buildGameSystemJson(root));
+            state.add("catalogues", new JsonArray());
+        }
+        return state.toString();
+    }
+
+    // ─── Controller discovery ─────────────────────────────────────────────────
+
+    private Object findController() {
+        if (cachedController != null) return cachedController;
+        Stage stage = runOnFxGet(() -> {
+            for (Window w : Window.getWindows()) {
+                if (w instanceof Stage) {
+                    Stage s = (Stage) w;
+                    if (s.getTitle() != null && s.getTitle().startsWith("Data Editor"))
+                        return s;
+                }
+            }
+            return null;
+        });
+        if (stage == null) throw new RuntimeException("Data Editor window not found");
+
+        javafx.scene.Scene scene = stage.getScene();
+        Node btn = scene.getRoot().lookup("#btnSaveDataFile");
+        if (btn == null) throw new RuntimeException("#btnSaveDataFile not found in Data Editor scene");
+
+        javafx.event.EventHandler<?> handler = ((ButtonBase) btn).getOnAction();
+        Object ctrl = findByClassName(handler, "DataEditorWindowController", 4);
+        if (ctrl == null) throw new RuntimeException("DataEditorWindowController not found via handler tree");
+
+        cachedController = ctrl;
+        return ctrl;
+    }
+
+    private Object findByClassName(Object obj, String nameFragment, int depth) {
+        if (obj == null || depth <= 0) return null;
+        if (obj.getClass().getName().contains(nameFragment)) return obj;
+        Class<?> cls = obj.getClass();
+        while (cls != null && cls != Object.class) {
+            for (Field f : cls.getDeclaredFields()) {
+                if (f.getType().isPrimitive() || java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                try {
+                    f.setAccessible(true);
+                    Object val = f.get(obj);
+                    if (val == null) continue;
+                    String vn = val.getClass().getName();
+                    if (vn.contains(nameFragment)) return val;
+                    if (vn.startsWith("javafx.fxml") || vn.startsWith("net.battlescribe")) {
+                        Object found = findByClassName(val, nameFragment, depth - 1);
+                        if (found != null) return found;
+                    }
+                } catch (Exception ignored) {}
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
+    // ─── Tree helpers ─────────────────────────────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    private TreeItem<Object> findTreeItemById(Object ctrl, String id) throws Exception {
+        TreeView<Object> tree = (TreeView<Object>) ctrl.getClass().getMethod("getTreeData").invoke(ctrl);
+        return tree == null ? null : findItemRecursive(tree.getRoot(), id);
+    }
+
+    private TreeItem<Object> findItemRecursive(TreeItem<Object> item, String id) {
+        if (item == null) return null;
+        if (id.equals(getId(item.getValue()))) return item;
+        for (TreeItem<Object> child : item.getChildren()) {
+            TreeItem<Object> found = findItemRecursive(child, id);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private Set<String> childIds(TreeItem<Object> parent) {
+        Set<String> ids = new HashSet<>();
+        if (parent == null) return ids;
+        for (TreeItem<Object> c : parent.getChildren()) {
+            String id = getId(c.getValue());
+            if (id != null) ids.add(id);
+        }
+        return ids;
+    }
+
+    private String waitForNewChild(TreeItem<Object> parent, Set<String> before) {
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            Set<String> current = runOnFxGet(() -> childIds(parent));
+            for (String id : current) {
+                if (!before.contains(id)) return id;
+            }
+            sleep(POLL_MS);
+        }
+        throw new RuntimeException("No new child appeared within " + POLL_TIMEOUT_MS + "ms");
+    }
+
+    private void waitForRemoved(TreeItem<Object> parent, String entryId) {
+        if (parent == null) return;
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            if (!runOnFxGet(() -> childIds(parent)).contains(entryId)) return;
+            sleep(POLL_MS);
+        }
+        throw new RuntimeException("Entry " + entryId + " not removed within " + POLL_TIMEOUT_MS + "ms");
+    }
+
+    @SuppressWarnings("unchecked")
+    private void selectItem(Object ctrl, TreeItem<Object> item) throws Exception {
+        TreeView<Object> tree = (TreeView<Object>) ctrl.getClass().getMethod("getTreeData").invoke(ctrl);
+        tree.getSelectionModel().select(item);
+    }
+
+    // ─── Field editing ────────────────────────────────────────────────────────
+
+    private void setFieldOnEntry(Object ctrl, String entryId, String field, String value) {
+        TreeItem<Object> item = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
+        if (item == null) throw new RuntimeException("Tree item not found for setField: " + entryId);
+        runOnFx(() -> selectItem(ctrl, item));
+
+        String cssId = fieldToCssId(field);
+        VBox pnl = runOnFxGet(() -> (VBox) ctrl.getClass().getMethod("getPnlEditor").invoke(ctrl));
+        waitForFieldNode(pnl, cssId);
+
+        runOnFx(() -> {
+            Node node = pnl.lookup("#" + cssId);
+            if (node instanceof TextField) {
+                TextField tf = (TextField) node;
+                tf.setText(value != null ? value : "");
+                tf.fireEvent(new javafx.event.ActionEvent());
+            } else {
+                throw new RuntimeException("Field #" + cssId + " not found or not a TextField");
+            }
+        });
+        sleep(200);
+    }
+
+    private void waitForFieldNode(VBox pnl, String cssId) {
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            if (Boolean.TRUE.equals(runOnFxGet(() -> pnl.lookup("#" + cssId) != null))) return;
+            sleep(POLL_MS);
+        }
+        throw new RuntimeException("Edit panel field #" + cssId + " did not appear within " + POLL_TIMEOUT_MS + "ms");
+    }
+
+    private static String fieldToCssId(String field) {
+        if ("name".equals(field))       return "txtName";
+        if ("id".equals(field))         return "txtUniqueId";
+        if ("targetId".equals(field))   return "txtTargetId";
+        if ("hidden".equals(field))     return "chkHidden";
+        if ("collective".equals(field)) return "chkCollective";
+        if ("type".equals(field))       return "cboType";
+        return "txt" + Character.toUpperCase(field.charAt(0)) + field.substring(1);
+    }
+
+    // ─── Entry type → actAdd method name ─────────────────────────────────────
+
+    private static String actAddMethodName(String entryType) {
+        if ("selectionEntry".equals(entryType))            return "actAddSelectionEntry";
+        if ("selectionEntryGroup".equals(entryType))       return "actAddSelectionEntryGroup";
+        if ("entryLink".equals(entryType))                 return "actAddEntryLink";
+        if ("infoLink".equals(entryType))                  return "actAddInfoLink";
+        if ("categoryLink".equals(entryType))              return "actAddCategoryLink";
+        if ("forceEntry".equals(entryType))                return "actAddForceEntry";
+        if ("categoryEntry".equals(entryType))             return "actAddCategoryEntry";
+        if ("rule".equals(entryType))                      return "actAddRule";
+        if ("profile".equals(entryType))                   return "actAddProfile";
+        if ("infoGroup".equals(entryType))                 return "actAddInfoGroup";
+        if ("constraint".equals(entryType))                return "actAddConstraint";
+        if ("modifier".equals(entryType))                  return "actAddModifier";
+        if ("modifierGroup".equals(entryType))             return "actAddModifierGroup";
+        if ("condition".equals(entryType))                 return "actAddCondition";
+        if ("conditionGroup".equals(entryType))            return "actAddConditionGroup";
+        if ("repeat".equals(entryType))                    return "actAddRepeat";
+        if ("sharedSelectionEntry".equals(entryType))      return "actAddSharedSelectionEntry";
+        if ("sharedSelectionEntryGroup".equals(entryType)) return "actAddSharedSelectionEntryGroup";
+        if ("sharedProfile".equals(entryType))             return "actAddSharedProfile";
+        if ("sharedRule".equals(entryType))                return "actAddSharedRule";
+        if ("sharedInfoGroup".equals(entryType))           return "actAddSharedInfoGroup";
+        if ("costType".equals(entryType))                  return "actAddCostType";
+        if ("profileType".equals(entryType))               return "actAddProfileType";
+        if ("publication".equals(entryType))               return "actAddPublication";
+        if ("catalogueLink".equals(entryType))             return "actAddCatalogueLink";
+        throw new RuntimeException("Unknown entry type: " + entryType);
+    }
+
+    // ─── State serialization ──────────────────────────────────────────────────
+
+    private JsonObject buildGameSystemJson(Object gs) {
+        JsonObject o = new JsonObject();
+        putStr(o, "id", gs, "getId");
+        putStr(o, "name", gs, "getName");
+        o.add("forceEntries",                buildList(gs, "getForceEntries",               "forceEntry"));
+        o.add("categoryEntries",             buildList(gs, "getCategoryEntries",            "categoryEntry"));
+        o.add("costTypes",                   buildList(gs, "getCostTypes",                  "costType"));
+        o.add("profileTypes",                buildList(gs, "getProfileTypes",               "profileType"));
+        o.add("publications",                buildList(gs, "getPublications",               "publication"));
+        o.add("selectionEntries",            buildList(gs, "getSelectionEntries",           "selectionEntry"));
+        o.add("entryLinks",                  buildList(gs, "getEntryLinks",                 "entryLink"));
+        o.add("rules",                       buildList(gs, "getRules",                      "rule"));
+        o.add("sharedSelectionEntries",      buildList(gs, "getSharedSelectionEntries",     "selectionEntry"));
+        o.add("sharedSelectionEntryGroups",  buildList(gs, "getSharedSelectionEntryGroups","selectionEntryGroup"));
+        o.add("sharedRules",                 buildList(gs, "getSharedRules",               "rule"));
+        o.add("sharedProfiles",              buildList(gs, "getSharedProfiles",            "profile"));
+        return o;
+    }
+
+    private JsonObject buildCatalogueJson(Object cat) {
+        JsonObject o = new JsonObject();
+        putStr(o, "id", cat, "getId");
+        putStr(o, "name", cat, "getName");
+        putStr(o, "gameSystemId", cat, "getGameSystemId");
+        o.add("selectionEntries",           buildList(cat, "getSelectionEntries",           "selectionEntry"));
+        o.add("entryLinks",                 buildList(cat, "getEntryLinks",                 "entryLink"));
+        o.add("rules",                      buildList(cat, "getRules",                      "rule"));
+        o.add("forceEntries",               buildList(cat, "getForceEntries",               "forceEntry"));
+        o.add("categoryEntries",            buildList(cat, "getCategoryEntries",            "categoryEntry"));
+        o.add("publications",               buildList(cat, "getPublications",               "publication"));
+        o.add("costTypes",                  buildList(cat, "getCostTypes",                  "costType"));
+        o.add("profileTypes",               buildList(cat, "getProfileTypes",               "profileType"));
+        o.add("sharedSelectionEntries",     buildList(cat, "getSharedSelectionEntries",     "selectionEntry"));
+        o.add("sharedSelectionEntryGroups", buildList(cat, "getSharedSelectionEntryGroups","selectionEntryGroup"));
+        o.add("sharedRules",                buildList(cat, "getSharedRules",               "rule"));
+        o.add("sharedProfiles",             buildList(cat, "getSharedProfiles",            "profile"));
+        return o;
+    }
+
+    private JsonArray buildList(Object obj, String getter, String childType) {
+        JsonArray arr = new JsonArray();
+        List<Object> list = getList(obj, getter);
+        if (list == null) return arr;
+        for (Object item : list) arr.add(buildEntryJson(item, childType));
+        return arr;
+    }
+
+    private JsonObject buildEntryJson(Object entry, String entryType) {
+        JsonObject o = new JsonObject();
+        putStr(o, "id", entry, "getId");
+        putStr(o, "name", entry, "getName");
+        o.addProperty("entryType", entryType);
+        o.addProperty("hidden", tryBool(entry, "getHidden", "isHidden"));
+
+        JsonObject fields = new JsonObject();
+        putFieldIfPresent(fields, entry, "getType", "type");
+        putFieldIfPresent(fields, entry, "getTargetId", "targetId");
+        putFieldIfPresent(fields, entry, "getPublicationId", "publicationId");
+        putFieldIfPresent(fields, entry, "getPage", "page");
+        if (!fields.entrySet().isEmpty()) o.add("fields", fields);
+
+        JsonArray children = new JsonArray();
+        addChildren(children, entry, "getSelectionEntries",       "selectionEntry");
+        addChildren(children, entry, "getSelectionEntryGroups",   "selectionEntryGroup");
+        addChildren(children, entry, "getEntryLinks",             "entryLink");
+        addChildren(children, entry, "getRules",                  "rule");
+        addChildren(children, entry, "getProfiles",               "profile");
+        addChildren(children, entry, "getInfoGroups",             "infoGroup");
+        addChildren(children, entry, "getInfoLinks",              "infoLink");
+        addChildren(children, entry, "getCategoryLinks",          "categoryLink");
+        addChildren(children, entry, "getConstraints",            "constraint");
+        addChildren(children, entry, "getModifiers",              "modifier");
+        addChildren(children, entry, "getModifierGroups",         "modifierGroup");
+        addChildren(children, entry, "getForceEntries",           "forceEntry");
+        addChildren(children, entry, "getCategoryEntries",        "categoryEntry");
+        if (children.size() > 0) o.add("children", children);
+        return o;
+    }
+
+    private void addChildren(JsonArray arr, Object entry, String getter, String childType) {
+        List<Object> list = getList(entry, getter);
+        if (list == null) return;
+        for (Object child : list) arr.add(buildEntryJson(child, childType));
+    }
+
+    private static String buildEmptyState() {
+        JsonObject s = new JsonObject();
+        s.add("catalogues", new JsonArray());
+        return s.toString();
+    }
+
+    // ─── Reflection helpers ───────────────────────────────────────────────────
+
+    private String getId(Object obj) { return tryStr(obj, "getId"); }
+
+    private void putStr(JsonObject o, String key, Object src, String method) {
+        String v = tryStr(src, method);
+        if (v != null) o.addProperty(key, v);
+    }
+
+    private void putFieldIfPresent(JsonObject fields, Object entry, String getter, String key) {
+        String v = tryStr(entry, getter);
+        if (v != null && !v.isEmpty()) fields.addProperty(key, v);
+    }
+
+    private String tryStr(Object obj, String method) {
+        if (obj == null) return null;
+        try { Object r = obj.getClass().getMethod(method).invoke(obj); return r != null ? r.toString() : null; }
+        catch (Exception e) { return null; }
+    }
+
+    private boolean tryBool(Object obj, String... methods) {
+        for (String m : methods) {
+            try { Object r = obj.getClass().getMethod(m).invoke(obj); if (Boolean.TRUE.equals(r)) return true; }
+            catch (Exception ignored) {}
+        }
+        return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> getList(Object obj, String method) {
+        if (obj == null) return null;
+        try {
+            Object raw = obj.getClass().getMethod(method).invoke(obj);
+            if (raw == null) return null;
+            // Handles java.util.List subclasses
+            return new ArrayList<>((java.util.Collection<Object>) raw);
+        } catch (Exception e) { return null; }
+    }
+
+    private Object tryInvoke(Object obj, String method) {
+        try { return obj.getClass().getMethod(method).invoke(obj); }
+        catch (Exception e) { return null; }
+    }
+
+    private Method getMethod(Class<?> cls, String name, Class<?>... types) {
+        try { return cls.getMethod(name, types); }
+        catch (NoSuchMethodException e) { throw new RuntimeException("Method not found: " + name, e); }
+    }
+
+    private Object invoke(Method m, Object obj, Object... args) {
+        try { return m.invoke(obj, args); }
+        catch (Exception e) { throw new RuntimeException("Invocation failed: " + m.getName(), e); }
+    }
+
+    private Method findLoadMethod(Class<?> cls) {
+        while (cls != null && cls != Object.class) {
+            for (Method m : cls.getDeclaredMethods()) {
+                if ("a".equals(m.getName()) && m.getParameterCount() == 1
+                        && m.getParameterTypes()[0].getName().contains("BaseRootEntry")) {
+                    m.setAccessible(true);
+                    return m;
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        throw new RuntimeException("Could not find private a(BaseRootEntry) load method");
+    }
+
+    // ─── FX thread dispatch ───────────────────────────────────────────────────
+
+    @FunctionalInterface
+    private interface FxAction { void run() throws Exception; }
+
+    private void runOnFx(FxAction action) {
+        if (Platform.isFxApplicationThread()) {
+            try { action.run(); } catch (RuntimeException e) { throw e; } catch (Exception e) { throw new RuntimeException(e); }
+            return;
+        }
+        CompletableFuture<Void> f = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            try { action.run(); f.complete(null); } catch (Exception e) { f.completeExceptionally(e); }
+        });
+        await(f);
+    }
+
+    private <T> T runOnFxGet(Callable<T> action) {
+        if (Platform.isFxApplicationThread()) {
+            try { return action.call(); } catch (RuntimeException e) { throw e; } catch (Exception e) { throw new RuntimeException(e); }
+        }
+        CompletableFuture<T> f = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            try { f.complete(action.call()); } catch (Exception e) { f.completeExceptionally(e); }
+        });
+        return await(f);
+    }
+
+    private <T> T await(CompletableFuture<T> f) {
+        try {
+            return f.get(FX_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            throw new RuntimeException("FX thread timed out after " + FX_TIMEOUT_MS + "ms");
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable c = e.getCause();
+            if (c instanceof RuntimeException) throw (RuntimeException) c;
+            throw new RuntimeException(c);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted", e);
+        }
+    }
+
+    // ─── Misc ─────────────────────────────────────────────────────────────────
+
+    private static String requireString(JsonObject p, String key) {
+        JsonElement e = p.get(key);
+        if (e == null || e.isJsonNull()) throw new IllegalArgumentException("Missing param: " + key);
+        return e.getAsString();
+    }
+
+    private static String optString(JsonObject p, String key) {
+        JsonElement e = p.get(key);
+        return (e == null || e.isJsonNull()) ? null : e.getAsString();
+    }
+
+    private static void sleep(int ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
     }
 }
+

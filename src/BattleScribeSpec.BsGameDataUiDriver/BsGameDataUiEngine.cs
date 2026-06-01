@@ -191,19 +191,26 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             _client = await _app.ConnectAsync();
             _ = await _client.PingAsync();
 
-            // BattleScribe opens with the Roster Editor window.
-            if (!await _client.WaitForWindowAsync("Roster Editor", timeoutMs: WindowWaitMs))
+            // BattleScribe Data Editor opens with its main window.
+            if (!await _client.WaitForWindowAsync("Data Editor", timeoutMs: WindowWaitMs))
             {
-                throw new TimeoutException("Roster Editor window did not appear within 30 seconds.");
+                throw new TimeoutException("Data Editor window did not appear within 30 seconds.");
             }
 
             // Dismiss startup dialogs (download data? → No)
             await HandleStartupDialogsAsync();
 
-            // TODO: Open the Data Editor window once selector is known.
-            // Currently the data editor is not opened here because the BattleScribe
-            // data editor window title and navigation is unknown (needs probing).
-            // After probing, add: await OpenDataEditorWindowAsync();
+            // Load the staged game data files into the editor.
+            var gsDir = Path.Combine(_app.DataDirectoryPath, gameSystem.Id);
+            var gstPath = Path.Combine(gsDir, "system.gst");
+            var catPaths = files.Where(f => f.FileName.EndsWith(".cat", StringComparison.Ordinal))
+                .Select(f => Path.Combine(gsDir, f.FileName)).ToArray();
+            var loadParams = new JsonObject
+            {
+                ["gstPath"] = gstPath,
+                ["catPaths"] = new JsonArray([.. catPaths.Select(p => JsonValue.Create(p))])
+            };
+            await CallActionAsync("editorLoadFilesAction", loadParams);
 
             return [];
         }
@@ -434,14 +441,14 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             return null;
         }
 
-        var rosterEditorJar = Path.Combine(libDir, "RosterEditor.jar");
-        if (!File.Exists(rosterEditorJar))
+        var dataEditorJar = Path.Combine(libDir, "DataEditor.jar");
+        if (!File.Exists(dataEditorJar))
         {
             // Some distributions use a different main JAR name
-            rosterEditorJar = Directory.GetFiles(libDir, "*.jar").FirstOrDefault() ?? rosterEditorJar;
+            dataEditorJar = Directory.GetFiles(libDir, "*.jar").FirstOrDefault() ?? dataEditorJar;
         }
 
-        if (!File.Exists(rosterEditorJar))
+        if (!File.Exists(dataEditorJar))
         {
             return null;
         }
@@ -455,7 +462,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         return new BsUiOptions
         {
             JavaPath = javaPath,
-            RosterEditorJarPath = rosterEditorJar,
+            RosterEditorJarPath = dataEditorJar,
             AgentJarPath = agentJar,
         };
     }
