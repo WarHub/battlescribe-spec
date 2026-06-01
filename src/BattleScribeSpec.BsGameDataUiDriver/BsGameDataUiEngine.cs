@@ -361,12 +361,15 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         ProtocolCatalogue[] catalogues)
     {
         var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-        var catXmls = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
         var files = new List<(string FileName, string Content)>
         {
             ("system.gst", gstXml)
         };
-        files.AddRange(catXmls.Select(c => (c.FileName, c.Xml)));
+        if (catalogues.Length > 0)
+        {
+            var catXmls = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+            files.AddRange(catXmls.Select(c => (c.FileName, c.Xml)));
+        }
         return files;
     }
 
@@ -408,31 +411,36 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         }
 
         var libDir = Path.Combine(repoRoot, "lib", "battlescribe");
-        string? javaPath = null;
 
-        // Use platform-specific JRE directories (same as BsRosterUiDriver/Program.cs)
-        if (OperatingSystem.IsWindows())
+        // Check env var first (same as Debugger/Program.cs ResolveBsUiOptions)
+        var javaPath = Environment.GetEnvironmentVariable("BS_UI_JAVA_PATH");
+
+        if (javaPath is null)
         {
-            var winJava = Path.Combine(libDir, "jre-win", "bin", "java.exe");
-            if (File.Exists(winJava))
+            // Use platform-specific JRE directories (same as BsRosterUiDriver/Program.cs)
+            if (OperatingSystem.IsWindows())
             {
-                javaPath = winJava;
+                var winJava = Path.Combine(libDir, "jre-win", "bin", "java.exe");
+                if (File.Exists(winJava))
+                {
+                    javaPath = winJava;
+                }
             }
-        }
-        else if (OperatingSystem.IsMacOS())
-        {
-            var macJava = Path.Combine(libDir, "jre-mac", "bin", "java");
-            if (File.Exists(macJava))
+            else if (OperatingSystem.IsMacOS())
             {
-                javaPath = macJava;
+                var macJava = Path.Combine(libDir, "jre-mac", "bin", "java");
+                if (File.Exists(macJava))
+                {
+                    javaPath = macJava;
+                }
             }
-        }
-        else
-        {
-            var linuxJava = Path.Combine(libDir, "jre", "bin", "java");
-            if (File.Exists(linuxJava))
+            else
             {
-                javaPath = linuxJava;
+                var linuxJava = Path.Combine(libDir, "jre", "bin", "java");
+                if (File.Exists(linuxJava))
+                {
+                    javaPath = linuxJava;
+                }
             }
         }
 
