@@ -116,13 +116,15 @@ public class DataEditorActions {
         TreeItem<Object> parentItem = runOnFxGet(() -> findTreeItemById(ctrl, parentId));
         if (parentItem == null) throw new RuntimeException("Tree item not found: " + parentId);
 
-        Set<String> before = runOnFxGet(() -> childIds(parentItem));
+        // Snapshot the full tree — the tree may have container nodes with no IDs,
+        // and may be rebuilt after the add operation, making parentItem stale.
+        Set<String> before = runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot()));
         String addMethod = actAddMethodName(entryType);
         runOnFx(() -> selectItem(ctrl, parentItem));
-        sleep(200);
-        runOnFx(() -> ctrl.getClass().getMethod(addMethod).invoke(ctrl));
+        sleep(500);
+        runOnFx(() -> invokeCtrl(ctrl, addMethod));
 
-        String newId = waitForNewChild(parentItem, before);
+        String newId = waitForNewIdInTree(ctrl, before);
         if (name != null) setFieldOnEntry(ctrl, newId, "name", name);
 
         JsonObject result = new JsonObject();
@@ -135,13 +137,17 @@ public class DataEditorActions {
         Object ctrl = findController();
         TreeItem<Object> item = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
         if (item == null) throw new RuntimeException("Tree item not found: " + entryId);
-        TreeItem<Object> parent = item.getParent();
 
         runOnFx(() -> selectItem(ctrl, item));
         sleep(200);
-        runOnFx(() -> ctrl.getClass().getMethod("actRemove").invoke(ctrl));
-        waitForRemoved(parent, entryId);
-        return "{}";
+        runOnFx(() -> invokeCtrl(ctrl, "actRemove"));
+
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            if (!runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot())).contains(entryId)) return "{}";
+            sleep(POLL_MS);
+        }
+        throw new RuntimeException("Entry " + entryId + " not removed within " + POLL_TIMEOUT_MS + "ms");
     }
 
     private String moveEntry(JsonObject params) {
@@ -153,18 +159,22 @@ public class DataEditorActions {
         if (src == null) throw new RuntimeException("Tree item not found: " + entryId);
         runOnFx(() -> selectItem(ctrl, src));
         sleep(200);
-        runOnFx(() -> ctrl.getClass().getMethod("actCut").invoke(ctrl));
+        runOnFx(() -> invokeCtrl(ctrl, "actCut"));
         sleep(500);
 
+        // Re-find new parent (tree may have been rebuilt after cut)
         TreeItem<Object> newParent = runOnFxGet(() -> findTreeItemById(ctrl, newParentId));
         if (newParent == null) throw new RuntimeException("New parent tree item not found: " + newParentId);
-        Set<String> before = runOnFxGet(() -> childIds(newParent));
-
         runOnFx(() -> selectItem(ctrl, newParent));
         sleep(200);
-        runOnFx(() -> ctrl.getClass().getMethod("actPaste").invoke(ctrl));
-        waitForNewChild(newParent, before);
-        return "{}";
+        runOnFx(() -> invokeCtrl(ctrl, "actPaste"));
+
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            if (runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot())).contains(entryId)) return "{}";
+            sleep(POLL_MS);
+        }
+        throw new RuntimeException("Entry " + entryId + " did not reappear after move within " + POLL_TIMEOUT_MS + "ms");
     }
 
     private String setField(JsonObject params) {
@@ -185,13 +195,13 @@ public class DataEditorActions {
         TreeItem<Object> parentItem = runOnFxGet(() -> findTreeItemById(ctrl, parentId));
         if (parentItem == null) throw new RuntimeException("Parent tree item not found: " + parentId);
 
-        Set<String> before = runOnFxGet(() -> childIds(parentItem));
-        String addMethod = actAddMethodName(linkType); // entryLink/infoLink/categoryLink map correctly
+        Set<String> before = runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot()));
+        String addMethod = actAddMethodName(linkType);
         runOnFx(() -> selectItem(ctrl, parentItem));
-        sleep(200);
-        runOnFx(() -> ctrl.getClass().getMethod(addMethod).invoke(ctrl));
+        sleep(500);
+        runOnFx(() -> invokeCtrl(ctrl, addMethod));
 
-        String linkId = waitForNewChild(parentItem, before);
+        String linkId = waitForNewIdInTree(ctrl, before);
         setFieldOnEntry(ctrl, linkId, "targetId", targetId);
 
         JsonObject result = new JsonObject();
@@ -281,8 +291,13 @@ public class DataEditorActions {
     // ─── Tree helpers ─────────────────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")
+    private TreeView<Object> getTreeView(Object ctrl) throws Exception {
+        return (TreeView<Object>) ctrl.getClass().getMethod("getTreeData").invoke(ctrl);
+    }
+
+    @SuppressWarnings("unchecked")
     private TreeItem<Object> findTreeItemById(Object ctrl, String id) throws Exception {
-        TreeView<Object> tree = (TreeView<Object>) ctrl.getClass().getMethod("getTreeData").invoke(ctrl);
+        TreeView<Object> tree = getTreeView(ctrl);
         return tree == null ? null : findItemRecursive(tree.getRoot(), id);
     }
 
@@ -296,42 +311,45 @@ public class DataEditorActions {
         return null;
     }
 
-    private Set<String> childIds(TreeItem<Object> parent) {
+    /** Collect all IDs in the subtree rooted at {@code root} (recursive, depth-first). */
+    private Set<String> subtreeIds(TreeItem<Object> root) {
         Set<String> ids = new HashSet<>();
-        if (parent == null) return ids;
-        for (TreeItem<Object> c : parent.getChildren()) {
-            String id = getId(c.getValue());
-            if (id != null) ids.add(id);
-        }
+        collectIds(root, ids);
         return ids;
     }
 
-    private String waitForNewChild(TreeItem<Object> parent, Set<String> before) {
+    private void collectIds(TreeItem<Object> item, Set<String> ids) {
+        if (item == null) return;
+        String id = getId(item.getValue());
+        if (id != null) ids.add(id);
+        for (TreeItem<Object> child : item.getChildren()) {
+            collectIds(child, ids);
+        }
+    }
+
+    /**
+     * Poll the full tree until a new ID (not in {@code before}) appears.
+     * Uses tree-root scanning so stale {@code parentItem} references don't matter.
+     */
+    private String waitForNewIdInTree(Object ctrl, Set<String> before) {
         long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
-            Set<String> current = runOnFxGet(() -> childIds(parent));
+            Set<String> current = runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot()));
             for (String id : current) {
                 if (!before.contains(id)) return id;
             }
             sleep(POLL_MS);
         }
-        throw new RuntimeException("No new child appeared within " + POLL_TIMEOUT_MS + "ms");
-    }
-
-    private void waitForRemoved(TreeItem<Object> parent, String entryId) {
-        if (parent == null) return;
-        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
-        while (System.currentTimeMillis() < deadline) {
-            if (!runOnFxGet(() -> childIds(parent)).contains(entryId)) return;
-            sleep(POLL_MS);
-        }
-        throw new RuntimeException("Entry " + entryId + " not removed within " + POLL_TIMEOUT_MS + "ms");
+        throw new RuntimeException("No new entry appeared in tree within " + POLL_TIMEOUT_MS + "ms");
     }
 
     @SuppressWarnings("unchecked")
     private void selectItem(Object ctrl, TreeItem<Object> item) throws Exception {
-        TreeView<Object> tree = (TreeView<Object>) ctrl.getClass().getMethod("getTreeData").invoke(ctrl);
-        tree.getSelectionModel().select(item);
+        getTreeView(ctrl).getSelectionModel().select(item);
+    }
+
+    private void invokeCtrl(Object ctrl, String method) throws Exception {
+        ctrl.getClass().getMethod(method).invoke(ctrl);
     }
 
     // ─── Field editing ────────────────────────────────────────────────────────
@@ -340,31 +358,88 @@ public class DataEditorActions {
         TreeItem<Object> item = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
         if (item == null) throw new RuntimeException("Tree item not found for setField: " + entryId);
         runOnFx(() -> selectItem(ctrl, item));
+        sleep(200);
 
         String cssId = fieldToCssId(field);
         VBox pnl = runOnFxGet(() -> (VBox) ctrl.getClass().getMethod("getPnlEditor").invoke(ctrl));
-        waitForFieldNode(pnl, cssId);
 
-        runOnFx(() -> {
-            Node node = pnl.lookup("#" + cssId);
-            if (node instanceof TextField) {
-                TextField tf = (TextField) node;
-                tf.setText(value != null ? value : "");
-                tf.fireEvent(new javafx.event.ActionEvent());
-            } else {
-                throw new RuntimeException("Field #" + cssId + " not found or not a TextField");
-            }
-        });
+        // Try to find the field in the edit panel (2s grace period).
+        // Fields that are not displayed in the panel fall back to reflective model mutation.
+        Node node = waitForFieldNodeOptional(pnl, cssId, 2000);
+        if (node != null) {
+            runOnFx(() -> setNodeValue(node, cssId, value));
+        } else {
+            setFieldReflectively(item.getValue(), field, value);
+        }
         sleep(200);
     }
 
-    private void waitForFieldNode(VBox pnl, String cssId) {
-        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+    /** Try to find a node by CSS ID within {@code pnl}; return {@code null} on timeout. */
+    private Node waitForFieldNodeOptional(VBox pnl, String cssId, int timeoutMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
-            if (Boolean.TRUE.equals(runOnFxGet(() -> pnl.lookup("#" + cssId) != null))) return;
+            Node node = runOnFxGet(() -> pnl.lookup("#" + cssId));
+            if (node != null) return node;
             sleep(POLL_MS);
         }
-        throw new RuntimeException("Edit panel field #" + cssId + " did not appear within " + POLL_TIMEOUT_MS + "ms");
+        return null;
+    }
+
+    private void setNodeValue(Node node, String cssId, String value) throws Exception {
+        if (node instanceof TextField) {
+            TextField tf = (TextField) node;
+            tf.setText(value != null ? value : "");
+            tf.fireEvent(new javafx.event.ActionEvent());
+        } else if (node instanceof javafx.scene.control.CheckBox) {
+            javafx.scene.control.CheckBox cb = (javafx.scene.control.CheckBox) node;
+            cb.setSelected(Boolean.parseBoolean(value));
+        } else if (node instanceof javafx.scene.control.ComboBox) {
+            @SuppressWarnings("unchecked")
+            javafx.scene.control.ComboBox<Object> cb = (javafx.scene.control.ComboBox<Object>) node;
+            String finalValue = value;
+            for (Object cbItem : cb.getItems()) {
+                if (cbItem != null && cbItem.toString().equalsIgnoreCase(finalValue)) {
+                    cb.setValue(cbItem);
+                    return;
+                }
+            }
+            cb.setValue(value); // fall back to setting the raw string
+        } else {
+            throw new RuntimeException("Field #" + cssId + " has unsupported type: " + node.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Set a field directly on the model object via reflection.
+     * Used when the field has no corresponding edit panel control.
+     */
+    private void setFieldReflectively(Object modelObj, String field, String value) {
+        if (modelObj == null) throw new RuntimeException("Model object is null for reflective setField");
+        String setterName = "set" + Character.toUpperCase(field.charAt(0)) + field.substring(1);
+        Class<?> cls = modelObj.getClass();
+        while (cls != null && cls != Object.class) {
+            for (Method m : cls.getDeclaredMethods()) {
+                if (m.getName().equals(setterName) && m.getParameterCount() == 1) {
+                    m.setAccessible(true);
+                    try {
+                        m.invoke(modelObj, coerceValue(m.getParameterTypes()[0], value));
+                        return;
+                    } catch (Exception e) {
+                        throw new RuntimeException("Reflective setField failed for " + field, e);
+                    }
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        throw new RuntimeException("No setter found for field: " + field + " on " + modelObj.getClass().getName());
+    }
+
+    private static Object coerceValue(Class<?> type, String value) {
+        if (value == null) return null;
+        if (type == String.class) return value;
+        if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(value);
+        if (type == int.class || type == Integer.class) return Integer.parseInt(value);
+        return value;
     }
 
     private static String fieldToCssId(String field) {
@@ -373,6 +448,7 @@ public class DataEditorActions {
         if ("targetId".equals(field))   return "txtTargetId";
         if ("hidden".equals(field))     return "chkHidden";
         if ("collective".equals(field)) return "chkCollective";
+        if ("imported".equals(field))   return "chkImported";
         if ("type".equals(field))       return "cboType";
         return "txt" + Character.toUpperCase(field.charAt(0)) + field.substring(1);
     }
