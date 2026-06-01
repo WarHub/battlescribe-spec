@@ -58,7 +58,8 @@ Both modes use the same `NrGameDataUiEngine` — the difference is in `CreateFro
 | `nr-editor-ui-frozen` | `dotnet test -p:TestProfile=nr-editor-ui-frozen` |
 | `nr-editor-ui-live` | `dotnet test -p:TestProfile=nr-editor-ui-live` |
 
-Frozen tests are excluded from `pre-push` (they require a browser).
+Frozen tests are included in `pre-push` and run via a static Playwright route interception
+(no live network needed). They use the pinned NR Editor commit from `testdata.json`.
 
 ## Probe mode — discover selectors
 

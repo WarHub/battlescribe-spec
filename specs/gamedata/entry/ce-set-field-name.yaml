@@ -1,9 +1,10 @@
-id: ce-set-field-name
+﻿id: ce-set-field-name
 category: entry
 description: >
   Set the name field of a category entry and verify it is updated.
 engines:
   nr-editor: skip
+  nr-editor-ui: skip
 
 setup:
   gameSystem:

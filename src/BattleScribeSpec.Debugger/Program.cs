@@ -1,8 +1,11 @@
 using System.Text.Json;
 using BattleScribeSpec;
+using BattleScribeSpec.BsGameDataUiDriver;
 using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.Debugger;
+using BattleScribeSpec.GameData;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NrGameDataUiDriver;
 using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
 
@@ -147,6 +150,17 @@ if (specInput is null)
         PrintUsage();
         return 1;
     }
+}
+
+// ===== GameData UI Probe modes (load gamedata spec, not roster spec) =====
+if (probeMode && engineName is "battlescribe-ui")
+{
+    return await RunBsGameDataUiProbe(specInput);
+}
+
+if (probeMode && engineName is "nr-editor-ui")
+{
+    return await RunNrGameDataUiProbe(specInput, headless: false);
 }
 
 // ===== Load spec =====
@@ -525,6 +539,79 @@ async Task<int> RunNrUiProbe(SpecFile spec, bool headless)
     return 0;
 }
 
+async Task<int> RunBsGameDataUiProbe(string specInput)
+{
+    GameDataSpecFile gameDataSpec;
+    try
+    {
+        gameDataSpec = LoadGameDataSpec(specInput);
+        Console.Error.WriteLine($"Loaded GameData spec: {gameDataSpec.Category}/{gameDataSpec.Id} — {gameDataSpec.Description}");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error loading GameData spec: {ex.Message}");
+        return 1;
+    }
+
+    var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(gameDataSpec.Setup);
+
+    var options = ResolveBsUiOptions();
+    Console.Error.WriteLine($"BS GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
+
+    await using var probe = new BsGameDataUiProbe(options);
+    await probe.LaunchAsync(gameSystem, catalogues, Console.Error);
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("BS GameData UI probe complete. BattleScribe is running.");
+    Console.Error.WriteLine("Press Enter to shut down...");
+    Console.In.ReadLine();
+
+    return 0;
+}
+
+async Task<int> RunNrGameDataUiProbe(string specInput, bool headless)
+{
+    GameDataSpecFile gameDataSpec;
+    try
+    {
+        gameDataSpec = LoadGameDataSpec(specInput);
+        Console.Error.WriteLine($"Loaded GameData spec: {gameDataSpec.Category}/{gameDataSpec.Id} — {gameDataSpec.Description}");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error loading GameData spec: {ex.Message}");
+        return 1;
+    }
+
+    var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(gameDataSpec.Setup);
+
+    Console.Error.WriteLine($"NR Editor GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
+
+    await using var probe = new NrGameDataUiProbe();
+
+    var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir();
+    if (staticDir is not null)
+    {
+        Console.Error.WriteLine($"  Using frozen NR Editor static files: {staticDir}");
+        await probe.LaunchFrozenAsync(staticDir, gameSystem, catalogues, Console.Error);
+    }
+    else
+    {
+        var baseUrl = Environment.GetEnvironmentVariable("NR_EDITOR_URL")
+            ?? "https://giloushaker.github.io/nr-editor";
+        Console.Error.WriteLine($"  Using live NR Editor: {baseUrl}");
+        await probe.LaunchAsync(gameSystem, catalogues, baseUrl, Console.Error);
+    }
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("NR Editor GameData UI probe ready. Browser is open.");
+    Console.Error.WriteLine("Entering REPL — type JS expressions to evaluate, 'exit' to quit:");
+
+    await probe.RunReplAsync(Console.In, Console.Out);
+
+    return 0;
+}
+
 BsUiOptions ResolveBsUiOptions()
 {
     // Resolve paths from environment variables or conventional locations
@@ -683,6 +770,43 @@ SpecFile LoadSpec(string input)
     throw new FileNotFoundException($"Spec not found: '{input}'. Provide a file path, category/id, or id.");
 }
 
+GameDataSpecFile LoadGameDataSpec(string input)
+{
+    if (input == "-")
+    {
+        var yaml = Console.In.ReadToEnd();
+        return SpecLoader.LoadGameDataFromYaml(yaml, defaultId: "stdin");
+    }
+
+    if (File.Exists(input))
+    {
+        return SpecLoader.LoadGameData(input);
+    }
+
+    // Try as spec ID in specs/gamedata/
+    var specsDir = SpecLoader.FindGameDataSpecsDirectory();
+    if (specsDir is not null)
+    {
+        var candidate = Path.Combine(specsDir, input + ".yaml");
+        if (File.Exists(candidate))
+        {
+            return SpecLoader.LoadGameData(candidate);
+        }
+
+        foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
+        {
+            var name = Path.GetFileNameWithoutExtension(file);
+            var relative = Path.GetRelativePath(specsDir, file).Replace('\\', '/');
+            if (name == input || relative == input || relative == input + ".yaml")
+            {
+                return SpecLoader.LoadGameData(file);
+            }
+        }
+    }
+
+    throw new FileNotFoundException($"GameData spec not found: '{input}'. Provide a file path, category/id, or id.");
+}
+
 async Task<IRosterEngine> CreateEngine(string name, bool headless)
 {
     switch (name)
@@ -820,9 +944,9 @@ static void PrintUsage()
                           or "-" for stdin
 
         Options:
-          --engine <name> Engine to use: bs (default), nr, bs-ui, nr-ui
+          --engine <name> Engine to use: bs (default), nr, bs-ui, nr-ui, battlescribe-ui, nr-editor-ui
           --dump          Dump state after every step (default: after last step only)
-          --probe         Run bs-ui probe mode (bs-ui engine only)
+          --probe         Run probe mode (bs-ui, nr-ui, battlescribe-ui, nr-editor-ui engines)
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
@@ -843,6 +967,8 @@ static void PrintUsage()
           bs-spec-debug --export-xml ./output/ cost/cost-hidden-limit-validation
           bs-spec-debug --engine bs-ui --probe selection/selection-page
           bs-spec-debug --engine bs-ui selection/selection-page
+          bs-spec-debug --engine battlescribe-ui --probe gamedata/basic/entry-add
+          bs-spec-debug --engine nr-editor-ui --probe gamedata/basic/entry-add
           cat spec.yaml | bs-spec-debug -
           bs-spec-debug --format
           bs-spec-debug --format --check specs/roster/

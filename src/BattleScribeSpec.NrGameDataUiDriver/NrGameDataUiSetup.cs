@@ -1,3 +1,4 @@
+using System.Text;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using Microsoft.Playwright;
@@ -7,13 +8,16 @@ namespace BattleScribeSpec.NrGameDataUiDriver;
 /// <summary>
 /// Helpers for the setup phase of NrGameDataUiEngine:
 ///   1. Serving the NR Editor static files locally (frozen mode).
-///   2. Loading game system + catalogue XML files via the NR Editor's "Add From Folder" UI.
+///   2. Loading game system + catalogue XML files via the NR Editor's file-upload UI.
 ///   3. Navigating to the catalogue editor view.
 ///   4. Cleanup between tests.
 ///
-/// File loading uses the same <c>showDirectoryPicker</c> mock as NrUiSetup for the
-/// roster builder: a fake FileSystemDirectoryHandle returns our XML data when NR's
-/// "Add From Folder" button is clicked, going through NR's full loading pipeline.
+/// File loading uses Playwright's <c>SetInputFilesAsync</c> on the hidden
+/// <c>&lt;input type="file"&gt;</c> that is already on the NR Editor system page.
+/// When files are set, NR's <c>onChange</c> handler fires, parses the XML via
+/// <c>BSXmlToJson</c>, calls <c>uploaded()</c>, populates the Pinia stores, and
+/// navigates to <c>/?id=&lt;systemId&gt;</c> — going through NR's full loading
+/// pipeline without any mocking.
 /// </summary>
 public static class NrGameDataUiSetup
 {
@@ -109,8 +113,15 @@ public static class NrGameDataUiSetup
     }
 
     /// <summary>
-    /// Loads game system + catalogue XML into the NR Editor via its "Add From Folder" UI flow,
+    /// Loads game system + catalogue XML into the NR Editor via its file-upload UI,
     /// then navigates to the catalogue editor view.
+    ///
+    /// The approach mirrors the NR Roster UI Driver's directory-picker mock:
+    /// rather than calling internal JS functions directly, we feed data through
+    /// the UI path that real users take. Here that means calling Playwright's
+    /// <c>SetInputFilesAsync</c> on the hidden <c>&lt;input type="file"&gt;</c> element.
+    /// NR's Vue <c>onChange</c> handler fires, parses the XML via <c>BSXmlToJson</c>,
+    /// stores the data in Pinia, and navigates to <c>/?id=&lt;systemId&gt;</c>.
     /// </summary>
     /// <returns>
     /// Empty list on success. Non-empty on setup errors (engine can skip the spec).
@@ -125,68 +136,51 @@ public static class NrGameDataUiSetup
         // Generate BattleScribe XML from protocol types
         var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
         var allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
-        var files = new List<(string FileName, string Xml)> { ("system.gst", gstXml) };
-        files.AddRange(allCatXml);
 
-        // Use Pinia store's loadSystemFromFs to load the data (same pipeline as user clicking "Add From Folder")
-        // This is the least fragile approach: NR's internal loading pipeline handles parsing.
-        var loadResult = await page.EvaluateAsync<string?>("""
-            async ([files]) => {
-                try {
-                    const nuxt = document.querySelector('#__nuxt')?.__vue_app__;
-                    const app = document.querySelector('#app')?.__vue_app__;
-                    const vueApp = nuxt || app;
-                    if (!vueApp) return 'Vue app not found';
-                    const pinia = vueApp.config?.globalProperties?.$pinia;
-                    if (!pinia) return 'Pinia not found';
-
-                    const sysStore = pinia._s.get('systemsStore') || pinia._s.get('systems') || pinia._s.get('system');
-                    const editorStore = pinia._s.get('editor') || pinia._s.get('editorStore')
-                        || pinia._s.get('catalogue') || pinia._s.get('catalogues');
-
-                    // Trigger showDirectoryPicker (our mock will return the files)
-                    if (sysStore?.loadSystemFromFs) {
-                        // Call loadSystemFromFs directly (it internally calls showDirectoryPicker for the UI flow)
-                        await sysStore.loadSystemFromFs(files.map(f => ({ name: f.FileName, data: f.Content })));
-                    } else {
-                        // Trigger via clicking the "Add From Folder" button in the UI
-                        // The mock intercepts showDirectoryPicker
-                        return 'no-load-method';
-                    }
-
-                    // Store reference to pinia/stores for later use
-                    window.__bsspec_editor_ui = {
-                        pinia,
-                        sysStore,
-                        editorStore,
-                        storeIds: [...pinia._s.keys()],
-                    };
-
-                    return null;
-                } catch (e) {
-                    return 'Load error: ' + e.message;
-                }
-            }
-            """, new object[] { files.Select(f => new { f.FileName, f.Xml }).ToArray() });
-
-        if (loadResult == "no-load-method")
+        // Build file payloads: GST first, then all CATs
+        var payloads = new List<FilePayload>
         {
-            // Fall back to UI-based loading: navigate to home and click "Add From Folder"
-            var uiLoadResult = await LoadViaUiAsync(page, gameSystem.Id);
-            if (uiLoadResult is not null)
-            {
-                errors.Add(uiLoadResult);
-                return errors;
-            }
+            new() { Name = "system.gst", MimeType = "application/xml", Buffer = Encoding.UTF8.GetBytes(gstXml) }
+        };
+        foreach (var (fileName, xml) in allCatXml)
+        {
+            payloads.Add(new() { Name = fileName, MimeType = "application/xml", Buffer = Encoding.UTF8.GetBytes(xml) });
         }
-        else if (loadResult is not null)
+
+        // Set files on the hidden input — triggers onChange → uploaded() pipeline.
+        // Playwright's SetInputFilesAsync on a Locator sets files regardless of visibility.
+        await page.Locator("input[type=file]").SetInputFilesAsync(payloads);
+
+        // Wait for the catalogues Pinia store to be populated.
+        // uploaded() calls updateCatalogue() for each file, which populates catalogues.dict.
+        try
         {
-            errors.Add(loadResult);
+            await page.WaitForFunctionAsync(
+                """
+                () => {
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const cs = pinia?._s?.get('catalogues');
+                    return cs?.dict && Object.keys(cs.dict).length > 0;
+                }
+                """,
+                null,
+                new PageWaitForFunctionOptions { Timeout = 15_000 });
+        }
+        catch (TimeoutException ex)
+        {
+            errors.Add($"NR Editor did not populate catalogues store after file upload: {ex.Message}");
             return errors;
         }
 
-        // Navigate to the catalogue editing view via UI
-        var navResult = await NavigateToCatalogueAsync(page, gameSystem.Id);
+        // Navigate to the target catalogue (last in the list is the spec's target)
+        if (catalogues.Length == 0)
+        {
+            errors.Add("No catalogues provided — cannot navigate to catalogue editor.");
+            return errors;
+        }
+
+        var navResult = await NavigateToCatalogueAsync(page, catalogues[^1]);
         if (navResult is not null)
         {
             errors.Add(navResult);
@@ -196,117 +190,64 @@ public static class NrGameDataUiSetup
     }
 
     /// <summary>
-    /// UI-based fallback loading: navigate to home page → "Add More Games" → "Add From Folder".
-    /// The showDirectoryPicker mock must already be injected before calling this.
+    /// Navigates to the catalogue editor view for a given catalogue.
+    ///
+    /// After <c>uploaded()</c> runs, the NR Editor is on the system list page showing
+    /// catalogue entries as <c>.item.unselectable</c> elements. Double-clicking an item
+    /// navigates to the catalogue editor at <c>/catalogue?systemId=X&amp;id=Y</c>.
+    /// This method finds the item by the catalogue's name and double-clicks it, then
+    /// waits for the URL to confirm navigation to the catalogue editor route.
     /// </summary>
-    private static async Task<string?> LoadViaUiAsync(IPage page, string systemId)
+    private static async Task<string?> NavigateToCatalogueAsync(
+        IPage page,
+        ProtocolCatalogue targetCatalogue)
     {
         try
         {
-            // Navigate to the systems list (home page)
-            var homeLink = page.Locator("a[href*='MySystems'], a[href='/'], a[href*='home']").First;
-            if (await homeLink.IsVisibleAsync())
-            {
-                await homeLink.ClickAsync();
-                await page.WaitForTimeoutAsync(500);
-            }
+            // After file upload, the system list page shows .item.unselectable elements —
+            // one per catalogue file. Wait for them to appear.
+            await page.WaitForSelectorAsync(".item.unselectable:not(.add)",
+                new PageWaitForSelectorOptions { Timeout = 10_000 });
 
-            // Click "Add More Games" or "Add System" button
-            var addBtn = page.GetByText("Add more games")
-                .Or(page.GetByText("Add System"))
-                .Or(page.GetByText("Add From Folder"));
-            await addBtn.First.ClickAsync(new() { Timeout = 5_000 });
-            await page.WaitForTimeoutAsync(500);
+            // Find the item matching the catalogue name and double-click it.
+            // Double-click (not single click) navigates to the catalogue editor.
+            var item = page.Locator(".item.unselectable:not(.add)",
+                new PageLocatorOptions { HasText = targetCatalogue.Name });
+            await item.First.DblClickAsync();
 
-            // If we opened a popup, click "Add From Folder" within it
-            var addFromFolder = page.GetByText("Add From Folder");
-            if (await addFromFolder.IsVisibleAsync())
-            {
-                await addFromFolder.ClickAsync();
-            }
+            // Wait for URL to change to the catalogue editor route.
+            await page.WaitForURLAsync("**/catalogue**",
+                new PageWaitForURLOptions { Timeout = 15_000 });
 
-            // Wait for the system to appear in the local library
+            // Wait for the editor store to have the catalogue fully loaded in
+            // loadedCatalogues. The URL change fires before Vue finishes
+            // populating editor.gameSystems[systemId].loadedCatalogues[catId].
             await page.WaitForFunctionAsync(
                 """
-                (systemId) => {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const sysStore = pinia?._s?.get('systemsStore');
-                    if (systemId) return !!sysStore?.localLibrary?.[systemId];
-                    return Object.keys(sysStore?.localLibrary || {}).length > 0;
-                }
-                """,
-                systemId,
-                new() { Timeout = 10_000 });
-
-            // Close any popup
-            var closeBtn = page.Locator(".xCross, button[aria-label='Close'], [class*='close']").First;
-            if (await closeBtn.IsVisibleAsync())
-            {
-                await closeBtn.ClickAsync();
-                await page.WaitForTimeoutAsync(300);
-            }
-
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return $"UI load error: {ex.Message}";
-        }
-    }
-
-    /// <summary>
-    /// Navigate to the catalogue editing view for the loaded system.
-    /// The NR Editor shows a list of available catalogues; we click to open one for editing.
-    /// </summary>
-#pragma warning disable IDE0060
-    private static async Task<string?> NavigateToCatalogueAsync(IPage page, string systemId)
-#pragma warning restore IDE0060
-    {
-        try
-        {
-            // Look for a catalogue link or card in the systems list, then open the editor.
-            // The NR Editor URL for editing is typically /nr-editor/[catalogue] or similar.
-            // Try clicking on the system/catalogue card.
-            var catalogueCard = page
-                .Locator("[data-id], [class*='system'], [class*='catalogue'], [class*='book']")
-                .Filter(new LocatorFilterOptions { HasNotText = "Add" })
-                .First;
-
-            if (await catalogueCard.IsVisibleAsync())
-            {
-                await catalogueCard.ClickAsync();
-                await page.WaitForTimeoutAsync(1_000);
-            }
-
-            // Wait for the editor store to have a loaded catalogue
-            await page.WaitForFunctionAsync("""
                 () => {
                     const pinia = document.querySelector('#__nuxt')
                         ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    if (!pinia) return false;
-                    const editorStore = pinia._s.get('editor') || pinia._s.get('editorStore')
-                        || pinia._s.get('catalogue') || pinia._s.get('catalogues');
-                    return !!(editorStore?.catalogue || editorStore?.currentCatalogue
-                        || editorStore?.rootCatalogue || editorStore?.rootEntry);
+                    const params = new URLSearchParams(window.location.search);
+                    const systemId = params.get('systemId');
+                    const catId = params.get('id');
+                    const editor = pinia?._s?.get('editor');
+                    return !!editor?.gameSystems?.[systemId]?.loadedCatalogues?.[catId];
                 }
                 """,
                 null,
-                new() { Timeout = 10_000 });
+                new PageWaitForFunctionOptions { Timeout = 15_000 });
 
-            // Store reference in window for state reads
+            // Persist Pinia store references for action methods to use later.
             await page.EvaluateAsync("""
                 () => {
                     const pinia = document.querySelector('#__nuxt')
                         ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const editorStore = pinia?._s?.get('editor') || pinia?._s?.get('editorStore')
-                        || pinia?._s?.get('catalogue') || pinia?._s?.get('catalogues');
-                    const sysStore = pinia?._s?.get('systemsStore') || pinia?._s?.get('systems');
-                    if (!window.__bsspec_editor_ui) window.__bsspec_editor_ui = {};
-                    window.__bsspec_editor_ui.editorStore = editorStore;
-                    window.__bsspec_editor_ui.sysStore = sysStore;
-                    window.__bsspec_editor_ui.pinia = pinia;
-                    window.__bsspec_editor_ui.storeIds = pinia ? [...pinia._s.keys()] : [];
+                    window.__bsspec_editor_ui = {
+                        pinia,
+                        storeIds: pinia ? [...pinia._s.keys()] : [],
+                        cataloguesStore: pinia?._s?.get('catalogues'),
+                        editorStore: pinia?._s?.get('editor'),
+                    };
                 }
                 """);
 
@@ -319,72 +260,26 @@ public static class NrGameDataUiSetup
     }
 
     /// <summary>
-    /// Injects a mock for <c>window.showDirectoryPicker</c> that returns a fake
-    /// <c>FileSystemDirectoryHandle</c> containing the provided XML file data.
-    /// The mock is one-shot: it restores the original after the first call.
-    /// </summary>
-    public static async Task InjectDirectoryPickerMockAsync(
-        IPage page,
-        IReadOnlyList<(string FileName, string Xml)> files)
-    {
-        var fileData = files.Select(f => new { name = f.FileName, content = f.Xml }).ToArray();
-
-        await page.EvaluateAsync("""
-            (fileData) => {
-                const originalPicker = window.showDirectoryPicker;
-
-                window.showDirectoryPicker = async () => {
-                    if (originalPicker) {
-                        window.showDirectoryPicker = originalPicker;
-                    } else {
-                        delete window.showDirectoryPicker;
-                    }
-
-                    const fakeFiles = fileData.map(f => {
-                        const blob = new Blob([f.content], { type: 'application/xml' });
-                        return new File([blob], f.name, { type: 'application/xml' });
-                    });
-
-                    const fileHandles = fakeFiles.map(file => ({
-                        kind: 'file',
-                        name: file.name,
-                        getFile: async () => file,
-                    }));
-
-                    return {
-                        kind: 'directory',
-                        name: 'spec-data',
-                        values: async function* () { for (const h of fileHandles) yield h; },
-                        entries: async function* () { for (const h of fileHandles) yield [h.name, h]; },
-                        keys: async function* () { for (const h of fileHandles) yield h.name; },
-                        getFileHandle: async (name) => {
-                            const h = fileHandles.find(fh => fh.name === name);
-                            if (!h) throw new DOMException('File not found: ' + name, 'NotFoundError');
-                            return h;
-                        },
-                    };
-                };
-            }
-            """, fileData);
-    }
-
-    /// <summary>
     /// Clears the NR Editor's loaded state for this spec.
     /// Called by <see cref="NrGameDataUiEngine.Cleanup"/> between test runs.
+    /// Resets the Pinia stores and navigates back to the home page.
     /// </summary>
-    public static async Task CleanupCatalogueAsync(IPage page)
+    public static async Task CleanupCatalogueAsync(IPage page, string editorBaseUrl)
     {
+        // Reset Pinia store state
         await page.EvaluateAsync("""
             () => {
-                const ctx = window.__bsspec_editor_ui;
-                if (ctx?.editorStore?.reset) {
-                    try { ctx.editorStore.reset(); } catch { /* best-effort */ }
-                }
-                if (ctx?.sysStore?.clear) {
-                    try { ctx.sysStore.clear(); } catch { /* best-effort */ }
-                }
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                // Reset catalogues and editor stores to clear loaded data
+                try { pinia?._s?.get('catalogues')?.$reset(); } catch { /* best-effort */ }
+                try { pinia?._s?.get('editor')?.$reset(); } catch { /* best-effort */ }
                 window.__bsspec_editor_ui = null;
             }
             """);
+
+        // Navigate back to home page for the next test
+        await page.GotoAsync(editorBaseUrl);
+        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 }

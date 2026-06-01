@@ -25,6 +25,10 @@
 .PARAMETER SkipPlaywright
     Skip Playwright browser installation.
 
+.PARAMETER SkipJavaAgent
+    Skip Liberica JDK download and bs-ui-java-agent.jar build.
+    Set automatically when running in CI (CI=true env var).
+
 .EXAMPLE
     ./setup.ps1
 
@@ -33,10 +37,14 @@
 
 .EXAMPLE
     ./setup.ps1 -SkipPlaywright
+
+.EXAMPLE
+    ./setup.ps1 -SkipJavaAgent
 #>
 param(
     [switch]$Force,
-    [switch]$SkipPlaywright
+    [switch]$SkipPlaywright,
+    [switch]$SkipJavaAgent
 )
 
 $ErrorActionPreference = 'Stop'
@@ -171,6 +179,79 @@ if (Test-Path $configPath) {
             }
         }
     }
+}
+
+# --- Liberica JDK + bs-ui-java-agent build ---
+# Skipped in CI (env var CI=true) because CI provisions Java via actions/setup-java.
+# Also skipped if -SkipJavaAgent switch is passed.
+
+if ($SkipJavaAgent -or $env:CI -eq 'true') {
+    Write-Host ""
+    Write-Host "Skipping Liberica JDK / Java agent build (CI or -SkipJavaAgent)" -ForegroundColor Yellow
+} else {
+    $libericaVersion = '11.0.31+11'
+    $libericaDir = Join-Path $repoRoot 'lib/liberica-jdk'
+    $libericaTagFile = Join-Path $libericaDir '.tag'
+
+    Write-Host ""
+    Write-Host "Setting up Liberica JDK $libericaVersion (for bs-ui-java-agent)..." -ForegroundColor Cyan
+
+    if (-not $Force -and (Test-Path $libericaTagFile) -and ((Get-Content $libericaTagFile -Raw).Trim() -eq $libericaVersion)) {
+        Write-Host "  [OK] Already downloaded ($libericaVersion)" -ForegroundColor Green
+    } else {
+        if (Test-Path $libericaDir) { Remove-Item $libericaDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $libericaDir -Force | Out-Null
+
+        $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) { 'aarch64' } else { 'amd64' }
+        if ($IsLinux) {
+            $assetName = "bellsoft-jdk${libericaVersion}-linux-${arch}-full.tar.gz"
+        } elseif ($IsMacOS) {
+            $assetName = "bellsoft-jdk${libericaVersion}-macos-${arch}-full.zip"
+        } else {
+            $assetName = "bellsoft-jdk${libericaVersion}-windows-${arch}-full.zip"
+        }
+
+        $downloadUrl = "https://download.bell-sw.com/java/${libericaVersion}/${assetName}"
+        $archivePath = Join-Path $libericaDir $assetName
+
+        Write-Host "  Downloading $assetName..." -ForegroundColor Yellow
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
+        $ProgressPreference = 'Continue'
+
+        Write-Host "  Extracting..." -ForegroundColor Yellow
+        if ($assetName.EndsWith('.tar.gz')) {
+            # tar --strip-components=1 puts JDK contents directly into $libericaDir
+            tar -xzf $archivePath -C $libericaDir --strip-components=1
+            if ($LASTEXITCODE -ne 0) { throw "Failed to extract Liberica JDK" }
+        } else {
+            Expand-Archive -Path $archivePath -DestinationPath $libericaDir -Force
+        }
+        Remove-Item $archivePath -Force
+
+        $libericaVersion | Out-File -FilePath $libericaTagFile -NoNewline -Encoding utf8
+        Write-Host "  [OK] Liberica JDK ready at $libericaDir" -ForegroundColor Green
+    }
+
+    # Locate the JDK home — either directly in $libericaDir (tar --strip-components) or one level down (zip)
+    $jdkHome = if (Test-Path (Join-Path $libericaDir 'bin')) {
+        $libericaDir
+    } else {
+        (Get-ChildItem $libericaDir -Directory -ErrorAction SilentlyContinue |
+            Where-Object { Test-Path (Join-Path $_.FullName 'bin') } |
+            Select-Object -First 1)?.FullName
+    }
+
+    if (-not $jdkHome) {
+        throw "Could not locate JDK home inside $libericaDir — extraction may have failed"
+    }
+
+    Write-Host ""
+    Write-Host "Building bs-ui-java-agent..." -ForegroundColor Cyan
+    $buildScript = Join-Path $repoRoot 'src/bs-ui-java-agent/build.ps1'
+    pwsh -File $buildScript -JavaHome $jdkHome
+    if ($LASTEXITCODE -ne 0) { throw "bs-ui-java-agent build failed" }
+    Write-Host "[OK] bs-ui-java-agent.jar built" -ForegroundColor Green
 }
 
 # --- Playwright browsers ---

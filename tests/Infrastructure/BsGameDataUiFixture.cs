@@ -17,7 +17,7 @@ namespace BattleScribeSpec.Tests;
 /// <list type="bullet">
 ///   <item><c>BS_UI_SKIP=true</c> environment variable is set</item>
 ///   <item>BattleScribe binary artifacts not found (run <c>setup.ps1</c>)</item>
-///   <item>Java agent JAR not found (run <c>./gradlew jar</c> in <c>src/bs-ui-java-agent/</c>)</item>
+///   <item>Java agent JAR not found (run <c>pwsh -File src/bs-ui-java-agent/build.ps1</c>)</item>
 /// </list>
 /// </para>
 ///

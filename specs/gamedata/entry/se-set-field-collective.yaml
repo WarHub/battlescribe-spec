@@ -3,6 +3,8 @@ category: entry
 description: >
   Set the collective field of a selection entry to true and verify
   the state reflects it in the fields dictionary.
+engines:
+  nr-editor-ui: skip # collective checkbox is disabled in the NR Editor UI for model-type entries
 
 setup:
   gameSystem:

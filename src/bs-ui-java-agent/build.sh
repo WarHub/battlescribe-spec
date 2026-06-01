@@ -17,8 +17,43 @@ if [[ ! -f "$GSON_JAR" ]]; then
     exit 1
 fi
 
-JAVAC="${1:-javac}"
-JAR_CMD="${2:-jar}"
+JAVAC=""
+JAR_CMD=""
+
+if [ -n "${1:-}" ]; then
+    # Explicit positional args
+    JAVAC="$1/bin/javac"
+    JAR_CMD="${2:-$1/bin/jar}"
+elif [ -n "${JAVA_HOME:-}" ]; then
+    # Respect JAVA_HOME environment variable (set by CI via actions/setup-java)
+    JAVAC="$JAVA_HOME/bin/javac"
+    JAR_CMD="$JAVA_HOME/bin/jar"
+else
+    # Auto-discover in-repo Liberica JDK (installed by setup.ps1 for local dev)
+    SEARCH_DIR="$SCRIPT_DIR"
+    while [ "$SEARCH_DIR" != "/" ] && [ -n "$SEARCH_DIR" ]; do
+        CANDIDATE="$SEARCH_DIR/lib/liberica-jdk"
+        if [ -d "$CANDIDATE/bin" ]; then
+            JAVAC="$CANDIDATE/bin/javac"
+            JAR_CMD="$CANDIDATE/bin/jar"
+            break
+        elif [ -d "$CANDIDATE" ]; then
+            for subdir in "$CANDIDATE"/*/; do
+                if [ -f "$subdir/bin/javac" ]; then
+                    JAVAC="$subdir/bin/javac"
+                    JAR_CMD="$subdir/bin/jar"
+                    break
+                fi
+            done
+            [ -n "$JAVAC" ] && break
+        fi
+        SEARCH_DIR="$(dirname "$SEARCH_DIR")"
+    done
+    if [ -z "$JAVAC" ]; then
+        JAVAC="javac"
+        JAR_CMD="jar"
+    fi
+fi
 
 echo "[bs-ui-java-agent] Compiling..."
 rm -rf "$OUT_DIR"

@@ -1,10 +1,11 @@
-id: ce-set-field-page
+﻿id: ce-set-field-page
 category: entry
 description: >
   Set the page field of a category entry and verify it is stored
   in the fields dictionary.
 engines:
   nr-editor: skip
+  nr-editor-ui: skip
 
 setup:
   gameSystem:

@@ -1,10 +1,11 @@
-id: ce-create-in-gamesystem
+﻿id: ce-create-in-gamesystem
 category: entry
 description: >
   Add a category entry to a game system and verify it appears in the
   categoryEntries container.
 engines:
   nr-editor: skip
+  nr-editor-ui: skip
 
 setup:
   gameSystem:

@@ -70,15 +70,13 @@ public class DataEditorActions {
                 ? new JsonParser().parse(params).getAsJsonObject()
                 : new JsonObject();
 
-        return switch (method) {
-            case "editorAddEntryAction"    -> addEntry(p);
-            case "editorRemoveEntryAction" -> removeEntry(p);
-            case "editorMoveEntryAction"   -> moveEntry(p);
-            case "editorSetFieldAction"    -> setField(p);
-            case "editorAddLinkAction"     -> addLink(p);
-            case "editorGetDataState"      -> getDataState(p);
-            default -> throw new IllegalArgumentException("Unknown data editor action: " + method);
-        };
+        if ("editorAddEntryAction".equals(method))    return addEntry(p);
+        if ("editorRemoveEntryAction".equals(method)) return removeEntry(p);
+        if ("editorMoveEntryAction".equals(method))   return moveEntry(p);
+        if ("editorSetFieldAction".equals(method))    return setField(p);
+        if ("editorAddLinkAction".equals(method))     return addLink(p);
+        if ("editorGetDataState".equals(method))      return getDataState(p);
+        throw new IllegalArgumentException("Unknown data editor action: " + method);
     }
 
     // ─── Action stubs ────────────────────────────────────────────────────────

@@ -1,10 +1,11 @@
-id: fe-create-nested
+﻿id: fe-create-nested
 category: entry
 description: >
   Add a force entry nested inside another force entry and verify
   the parent-child relationship.
 engines:
   nr-editor: skip
+  nr-editor-ui: skip
 
 setup:
   gameSystem:

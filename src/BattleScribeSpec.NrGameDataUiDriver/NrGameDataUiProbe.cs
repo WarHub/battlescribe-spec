@@ -93,6 +93,7 @@ public sealed class NrGameDataUiProbe : IAsyncDisposable
     {
         output.WriteLine("\nNR Editor GameData UI Probe REPL — enter JS expressions (exit/quit to stop):");
         output.Write("> ");
+        output.Flush();
 
         while (true)
         {
@@ -103,6 +104,7 @@ public sealed class NrGameDataUiProbe : IAsyncDisposable
             if (string.IsNullOrWhiteSpace(line))
             {
                 output.Write("> ");
+                output.Flush();
                 continue;
             }
 
@@ -117,6 +119,7 @@ public sealed class NrGameDataUiProbe : IAsyncDisposable
             }
 
             output.Write("> ");
+            output.Flush();
         }
     }
 

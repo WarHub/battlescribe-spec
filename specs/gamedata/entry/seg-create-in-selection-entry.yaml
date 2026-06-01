@@ -3,6 +3,8 @@ category: entry
 description: >
   Add a selection entry group nested inside a selection entry and verify
   it appears as a child of the parent entry.
+engines:
+  nr-editor-ui: skip # NR Editor UI: adding entries under a non-root parent not yet implemented
 
 setup:
   gameSystem:

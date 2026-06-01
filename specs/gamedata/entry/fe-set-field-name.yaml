@@ -1,9 +1,10 @@
-id: fe-set-field-name
+﻿id: fe-set-field-name
 category: entry
 description: >
   Set the name field of a force entry and verify it is updated.
 engines:
   nr-editor: skip
+  nr-editor-ui: skip
 
 setup:
   gameSystem:

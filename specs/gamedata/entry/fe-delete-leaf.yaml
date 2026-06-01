@@ -1,10 +1,11 @@
-id: fe-delete-leaf
+﻿id: fe-delete-leaf
 category: entry
 description: >
   Delete a force entry that has no children and verify it is removed
   from the game system.
 engines:
   nr-editor: skip
+  nr-editor-ui: skip
 
 setup:
   gameSystem:

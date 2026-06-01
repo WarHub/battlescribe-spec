@@ -43,6 +43,9 @@ public sealed class BsGameDataUiConformanceTests : GameDataConformanceTestBase
     {
         if (!_fixture.Available)
         {
+            Assert.Skip(
+                "BS UI artifacts not found (run setup.ps1) or BS_UI_SKIP=true " +
+                "— skipping BS GameData UI tests");
             return null;
         }
 

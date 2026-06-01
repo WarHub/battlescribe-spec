@@ -401,14 +401,35 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         }
 
         var libDir = Path.Combine(repoRoot, "lib", "battlescribe");
-        var javaPath = Path.Combine(libDir, "jre", "bin", "java");
-        var javaWin = javaPath + ".exe";
-        if (File.Exists(javaWin))
+        string? javaPath = null;
+
+        // Use platform-specific JRE directories (same as BsRosterUiDriver/Program.cs)
+        if (OperatingSystem.IsWindows())
         {
-            javaPath = javaWin;
+            var winJava = Path.Combine(libDir, "jre-win", "bin", "java.exe");
+            if (File.Exists(winJava))
+            {
+                javaPath = winJava;
+            }
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            var macJava = Path.Combine(libDir, "jre-mac", "bin", "java");
+            if (File.Exists(macJava))
+            {
+                javaPath = macJava;
+            }
+        }
+        else
+        {
+            var linuxJava = Path.Combine(libDir, "jre", "bin", "java");
+            if (File.Exists(linuxJava))
+            {
+                javaPath = linuxJava;
+            }
         }
 
-        if (!File.Exists(javaPath) && !File.Exists(javaPath + ".exe"))
+        if (javaPath is null)
         {
             return null;
         }
@@ -441,16 +462,9 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
 
     private static string? FindAgentJar(string repoRoot)
     {
-        // Built agent JAR from Gradle
-        var agentDir = Path.Combine(repoRoot, "src", "bs-ui-java-agent", "build", "libs");
-        if (!Directory.Exists(agentDir))
-        {
-            return null;
-        }
-
-        return Directory.GetFiles(agentDir, "bs-ui-java-agent*.jar")
-            .OrderByDescending(f => f)
-            .FirstOrDefault();
+        // Standard output path from src/bs-ui-java-agent/build.ps1
+        var candidate = Path.Combine(repoRoot, "src", "bs-ui-java-agent", "bs-ui-java-agent.jar");
+        return File.Exists(candidate) ? candidate : null;
     }
 
     private static string? FindRepoRoot()

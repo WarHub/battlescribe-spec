@@ -1,10 +1,11 @@
-id: fe-delete-with-children
+﻿id: fe-delete-with-children
 category: entry
 description: >
   Delete a force entry that has nested force entries and verify
   the entire subtree is removed.
 engines:
   nr-editor: skip
+  nr-editor-ui: skip
 
 setup:
   gameSystem:

@@ -32,41 +32,28 @@ public static class NrGameDataUiActions
 
     /// <summary>
     /// Adds a new entry of the given type under the specified parent.
-    /// Locates the parent node in the NR Editor tree, opens its context menu, and
-    /// selects the matching "Add [type]" action.
-    /// Returns the ID assigned by NR to the newly created entry.
+    ///
+    /// When <paramref name="parentId"/> matches the currently open catalogue ID (read from
+    /// the page URL), drives the catalogue editor's collapsible section headers:
+    /// right-clicks the section <c>&lt;h3&gt;</c>, picks the icon-based context menu item,
+    /// waits for the properties form, reads the auto-generated ID, and sets the name.
+    ///
+    /// Nested-parent support (parentId is a child entry) is not yet implemented.
     /// </summary>
     public static async Task<GameDataActionOutputs> AddEntryAsync(
         IPage page, string parentId, string entryType, string? name)
     {
-        // Step 1: Locate the parent node in the tree by its data-id attribute
-        var parentNode = await FindTreeNodeByIdAsync(page, parentId);
+        var catalogueId = await GetCurrentCatalogueIdAsync(page);
 
-        // Step 2: Right-click to open context menu
-        await parentNode.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-        await page.WaitForTimeoutAsync(300);
-
-        // Step 3: Select the add action matching entryType
-        var menuLabel = GetAddMenuLabel(entryType);
-        var menuItem = page.GetByRole(AriaRole.Menuitem, new() { Name = menuLabel })
-            .Or(page.GetByText(menuLabel).Filter(new LocatorFilterOptions { Has = page.Locator("[role='menuitem'], [class*='menu-item'], [class*='menuItem']") }))
-            .Or(page.GetByText(menuLabel, new PageGetByTextOptions { Exact = false }));
-        await menuItem.First.ClickAsync(new() { Timeout = 5_000 });
-        await page.WaitForTimeoutAsync(500);
-
-        // Step 4: If a name was provided, fill in the name field in the dialog/inline editor
-        if (name is not null)
+        if (parentId == catalogueId)
         {
-            await SetNewEntryNameAsync(page, name);
+            return await AddEntryToRootSectionAsync(page, entryType, name);
         }
 
-        // Step 5: Read back the ID of the newly created entry via JS
-        var newId = await ReadLastCreatedEntryIdAsync(page, parentId, entryType);
-
-        // Step 6: Confirm/close any open dialog
-        await DismissActiveDialogAsync(page);
-
-        return new GameDataActionOutputs { EntryId = newId };
+        throw new NotSupportedException(
+            $"NR Editor UI: adding entries under non-root parent '{parentId}' is not yet implemented. " +
+            $"Currently open catalogue: '{catalogueId}'. " +
+            "Use --probe to discover nested tree selectors and extend AddEntryAsync.");
     }
 
     /// <summary>
@@ -81,10 +68,11 @@ public static class NrGameDataUiActions
         await node.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
         await page.WaitForTimeoutAsync(300);
 
-        // Click Delete / Remove in the context menu
-        var deleteItem = page.GetByRole(AriaRole.Menuitem, new() { Name = "Delete" })
-            .Or(page.GetByRole(AriaRole.Menuitem, new() { Name = "Remove" }))
-            .Or(page.GetByText("Delete").Filter(new LocatorFilterOptions { Has = page.Locator("[role='menuitem']") }));
+        // Click "Remove" in the context menu.
+        // NR Editor context menu items are <div> elements inside .context-menu (not role=menuitem).
+        // The Remove option text is "Remove" followed by a <span class="gray right">Del</span>.
+        var deleteItem = page.Locator(".context-menu > div")
+            .Filter(new LocatorFilterOptions { HasText = "Remove" });
         await deleteItem.First.ClickAsync(new() { Timeout = 5_000 });
         await page.WaitForTimeoutAsync(300);
 
@@ -128,57 +116,74 @@ public static class NrGameDataUiActions
         }
         else
         {
-            // Close context menu and fall back to store-level move via JS
+            // Context menu move is not available; throw to signal this UI action is unsupported.
+            // MoveEntry via UI requires a working context menu — this is a placeholder until
+            // the NR Editor's move UI is properly discovered via probe mode.
             await page.Keyboard.PressAsync("Escape");
-            await page.WaitForTimeoutAsync(200);
-
-            var result = await page.EvaluateAsync<string?>("""
-                ([entryId, newParentId, index]) => {
-                    try {
-                        const ctx = window.__bsspec_editor_ui;
-                        if (!ctx?.editorStore) return 'No editor store';
-                        if (ctx.editorStore.move_node) {
-                            ctx.editorStore.move_node(entryId, newParentId, index);
-                            return null;
-                        }
-                        return 'Move not supported via editorStore';
-                    } catch (e) {
-                        return 'MoveEntry error: ' + e.message;
-                    }
-                }
-                """, new object[] { entryId, newParentId, index ?? -1 });
-
-            if (result is not null)
-            {
-                throw new InvalidOperationException($"NR Editor UI: {result}");
-            }
+            throw new NotSupportedException(
+                $"NR Editor UI: MoveEntry is not yet supported via context menu. " +
+                $"Probe the editor with --engine nr-editor-ui --probe to discover the move action.");
         }
     }
 
     /// <summary>
     /// Sets a field value on an entry in the NR Editor properties panel.
-    /// Clicks the entry in the tree to select it, then edits the named field.
+    ///
+    /// NR Editor renders two kinds of field controls in the right panel:
+    /// <list type="bullet">
+    ///   <item><b>Boolean fields</b> — <c>&lt;input type="checkbox" id="{field}"&gt;</c> with
+    ///     an associated <c>&lt;label for="{field}"&gt;</c> inside <c>.booleans</c>. Located via
+    ///     Playwright's <c>GetByLabel</c> which resolves the <c>for</c> attribute.</item>
+    ///   <item><b>Text/select fields</b> — <c>&lt;tr&gt;&lt;td&gt;{Label}:&lt;/td&gt;&lt;td&gt;&lt;input/select&gt;&lt;/td&gt;&lt;/tr&gt;</c>
+    ///     inside <c>table.editorTable</c> inside fieldsets. The label <c>&lt;td&gt;</c> is NOT a
+    ///     <c>&lt;label&gt;</c> element — located by filtering the tr by its first-cell text.</item>
+    /// </list>
     /// </summary>
     public static async Task SetFieldAsync(IPage page, string entryId, string field, string? value)
     {
-        // Click the entry to select it and open its properties
+        // Click the entry to select it and open its properties panel
         var node = await FindTreeNodeByIdAsync(page, entryId);
         await node.ClickAsync();
-        await page.WaitForTimeoutAsync(500);
 
-        // Locate the field control in the properties panel
-        // NR Editor typically renders a label + input pair for each field
+        // Wait for properties to appear — "Unique ID" row is the reliable signal
+        await page.Locator(".rightPanel tr")
+            .Filter(new LocatorFilterOptions { HasText = "Unique ID" })
+            .WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 10_000,
+            });
+
         var fieldLabel = GetFieldLabel(field);
+        var rightPanel = page.Locator(".rightPanel");
 
-        // Try label-associated input first
-        var fieldInput = page.GetByLabel(fieldLabel, new PageGetByLabelOptions { Exact = false });
+        // Several fields use NR Editor's custom autocomplete widget (not a standard input/select).
+        // Handle these before the generic input strategies.
+        if (field is "publicationId" or "defaultSelectionEntryId" or "targetId")
+        {
+            if (value is not null)
+            {
+                var lookupJs = field == "publicationId" ? PublicationNameLookupJs : EntryNameLookupJs;
+                var displayName = await page.EvaluateAsync<string?>(lookupJs, value);
+                await SetAutocompleteFieldAsync(page, rightPanel, fieldLabel, value, displayName);
+            }
+            return;
+        }
+
+        // Strategy 1: GetByLabel — works for checkbox fields that have a proper <label for>
+        // association (all boolean fields in the .booleans div use this pattern).
+        // Scope to .rightPanel to avoid matching unrelated labels elsewhere.
+        var fieldInput = rightPanel.GetByLabel(fieldLabel, new LocatorGetByLabelOptions { Exact = false });
 
         if (!await fieldInput.IsVisibleAsync())
         {
-            // Fall back to input/checkbox near a text that matches the field name
-            fieldInput = page
-                .Locator($"label:has-text('{fieldLabel}') + input, label:has-text('{fieldLabel}') + select")
-                .Or(page.Locator($"[data-field='{field}'] input, [data-field='{field}'] select"));
+            // Strategy 2: Table row approach for text/select fields.
+            // NR Editor renders: <tr><td>Label:</td><td><input or select></td></tr>
+            // The td label is NOT a <label> element so GetByLabel does not find these inputs.
+            fieldInput = rightPanel.Locator("table.editorTable tr")
+                .Filter(new LocatorFilterOptions { HasText = fieldLabel })
+                .Locator("td:last-child input, td:last-child select")
+                .First;
         }
 
         if (value is null)
@@ -186,9 +191,10 @@ public static class NrGameDataUiActions
             // Clear the field
             if (await IsCheckboxAsync(fieldInput))
             {
-                // Uncheck if currently checked
                 if (await fieldInput.IsCheckedAsync())
-                { await fieldInput.UncheckAsync(); }
+                {
+                    await fieldInput.UncheckAsync();
+                }
             }
             else
             {
@@ -197,69 +203,172 @@ public static class NrGameDataUiActions
         }
         else if (value is "true" or "false")
         {
-            // Boolean field (checkbox)
-            if (value == "true")
-            { await fieldInput.CheckAsync(); }
+            // Only treat as boolean if the control is actually a checkbox.
+            // Strings "true"/"false" could also be valid text input values.
+            if (await IsCheckboxAsync(fieldInput))
+            {
+                if (value == "true")
+                {
+                    await fieldInput.CheckAsync();
+                }
+                else
+                {
+                    await fieldInput.UncheckAsync();
+                }
+            }
             else
-            { await fieldInput.UncheckAsync(); }
+            {
+                await fieldInput.FillAsync(value);
+            }
         }
         else
         {
-            // Try as select option first
+            // Try as select option first, fall back to text input fill
             try
             {
                 await fieldInput.SelectOptionAsync(value, new() { Timeout = 500 });
             }
             catch
             {
-                // Fall back to text input
                 await fieldInput.FillAsync(value);
             }
         }
 
-        // Commit the change (Tab or Enter to trigger model update)
+        // Commit the change (Tab triggers model update in NR Editor for text fields;
+        // checkboxes commit immediately on click so Tab is a no-op for them)
         await fieldInput.PressAsync("Tab");
         await page.WaitForTimeoutAsync(300);
     }
 
     /// <summary>
+    /// Drives an NR Editor autocomplete widget in the right panel to select the item
+    /// identified by <paramref name="id"/>.
+    ///
+    /// The same widget pattern is used for Publication, Target:, and Default Selection rows:
+    /// <code>
+    /// &lt;div class="autocomplete container"&gt;
+    ///   &lt;div class="autocomplete-input"&gt;...&lt;/div&gt;
+    ///   &lt;div class="suggestions hidden"&gt;
+    ///     &lt;div&gt;&lt;span class="inline"&gt;Display Name&lt;/span&gt;&lt;/div&gt;
+    ///   &lt;/div&gt;
+    /// &lt;/div&gt;
+    /// </code>
+    /// Clicking <c>.autocomplete-input</c> removes <c>hidden</c> from <c>.suggestions</c> after a Vue tick.
+    /// The suggestion is filtered by <paramref name="displayName"/> (or falls back to <paramref name="id"/>).
+    /// </summary>
+    private static async Task SetAutocompleteFieldAsync(
+        IPage page, ILocator rightPanel, string rowLabel, string id, string? displayName)
+    {
+        var fieldRow = rightPanel.Locator("table.editorTable tr")
+            .Filter(new LocatorFilterOptions { HasText = rowLabel });
+
+        // Click the autocomplete input — Vue removes 'hidden' from .suggestions after a tick
+        await fieldRow.Locator(".autocomplete-input").ClickAsync();
+        await page.WaitForTimeoutAsync(300);
+
+        // Wait for suggestions to become visible
+        var suggestions = fieldRow.Locator(".suggestions:not(.hidden) > div");
+        await suggestions.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 5_000,
+        });
+
+        // Click the suggestion whose text contains the display name (or fall back to ID)
+        var matchingSuggestion = suggestions
+            .Filter(new LocatorFilterOptions { HasText = displayName ?? id });
+        await matchingSuggestion.First.ClickAsync(new() { Timeout = 3_000 });
+        await page.WaitForTimeoutAsync(300);
+    }
+
+    /// <summary>
+    /// JS expression to look up a publication name by ID from the Pinia editorStore.
+    /// Argument: publication ID string; returns name string or null.
+    /// </summary>
+    private const string PublicationNameLookupJs = """
+        (pubId) => {
+            const pinia = document.querySelector('#__nuxt')
+                ?.__vue_app__?.config?.globalProperties?.$pinia;
+            if (!pinia) return null;
+            const params = new URLSearchParams(window.location.search);
+            const systemId = params.get('systemId');
+            const gsSys = pinia._s.get('editor')?.gameSystems?.[systemId];
+            const pubs = gsSys?.loadedCatalogues?.[systemId]?.publications ?? [];
+            return pubs.find(p => p.id === pubId)?.name ?? null;
+        }
+        """;
+
+    /// <summary>
+    /// JS expression to look up an entry name by ID via deep search across all loaded catalogues.
+    /// Argument: entry ID string; returns name string or null.
+    /// Searches known collection property names only (no circular reference traversal).
+    /// </summary>
+    private const string EntryNameLookupJs = """
+        (entryId) => {
+            const pinia = document.querySelector('#__nuxt')
+                ?.__vue_app__?.config?.globalProperties?.$pinia;
+            if (!pinia) return null;
+            const editor = pinia._s.get('editor');
+            const params = new URLSearchParams(window.location.search);
+            const systemId = params.get('systemId');
+            const gsSys = editor?.gameSystems?.[systemId];
+            if (!gsSys) return null;
+            const COLLECTIONS = [
+                'selectionEntries', 'sharedSelectionEntries', 'sharedSelectionEntryGroups',
+                'entryLinks', 'infoLinks', 'categoryLinks', 'rules', 'sharedRules',
+                'profiles', 'sharedProfiles',
+            ];
+            function search(entries, id, depth) {
+                if (!entries || depth > 10) return null;
+                for (const entry of entries) {
+                    if (!entry || typeof entry !== 'object') continue;
+                    if (entry.id === id) return entry.name;
+                    for (const col of COLLECTIONS) {
+                        const children = entry[col];
+                        if (children?.length) {
+                            const r = search(children, id, depth + 1);
+                            if (r !== null) return r;
+                        }
+                    }
+                }
+                return null;
+            }
+            for (const cat of Object.values(gsSys.loadedCatalogues ?? {})) {
+                for (const col of COLLECTIONS) {
+                    const entries = cat[col];
+                    if (entries?.length) {
+                        const r = search(entries, entryId, 0);
+                        if (r !== null) return r;
+                    }
+                }
+            }
+            return null;
+        }
+        """;
+
+
+    /// <summary>
     /// Adds a link (entryLink, infoLink, categoryLink) to the given parent.
-    /// Opens the link creation dialog in the NR Editor and selects the target entry.
+    ///
+    /// When <paramref name="parentId"/> matches the currently open catalogue ID, drives the
+    /// catalogue root's section header context menu to add the link, then sets the target field.
+    ///
+    /// Nested-parent support (parentId is a child entry) is not yet implemented.
     /// </summary>
     public static async Task<GameDataActionOutputs> AddLinkAsync(
         IPage page, string parentId, string linkType, string targetId)
     {
-        var parentNode = await FindTreeNodeByIdAsync(page, parentId);
-        await parentNode.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-        await page.WaitForTimeoutAsync(300);
+        var catalogueId = await GetCurrentCatalogueIdAsync(page);
 
-        var menuLabel = GetAddMenuLabel(linkType);
-        var menuItem = page.GetByRole(AriaRole.Menuitem, new() { Name = menuLabel })
-            .Or(page.GetByText(menuLabel, new PageGetByTextOptions { Exact = false }));
-        await menuItem.First.ClickAsync(new() { Timeout = 5_000 });
-        await page.WaitForTimeoutAsync(500);
-
-        // In the link dialog, select the target by its ID
-        var targetInput = page.GetByPlaceholder("Search", new PageGetByPlaceholderOptions { Exact = false })
-            .Or(page.Locator("[class*='search'] input, [class*='link-target'] input"));
-        if (await targetInput.IsVisibleAsync())
+        if (parentId == catalogueId)
         {
-            await targetInput.First.FillAsync(targetId);
-            await page.WaitForTimeoutAsync(500);
-            // Click the matching result
-            var resultItem = page.Locator($"[data-id='{targetId}'], [class*='result-item'], [class*='option']").First;
-            if (await resultItem.IsVisibleAsync())
-            {
-                await resultItem.ClickAsync();
-                await page.WaitForTimeoutAsync(300);
-            }
+            return await AddLinkToRootSectionAsync(page, linkType, targetId);
         }
 
-        // Confirm the dialog
-        await DismissActiveDialogAsync(page);
-
-        var newId = await ReadLastCreatedEntryIdAsync(page, parentId, linkType);
-        return new GameDataActionOutputs { EntryId = newId };
+        throw new NotSupportedException(
+            $"NR Editor UI: adding links under non-root parent '{parentId}' is not yet implemented. " +
+            $"Currently open catalogue: '{catalogueId}'. " +
+            "Use --probe to discover nested tree selectors and extend AddLinkAsync.");
     }
 
     // ===== State reads =====
@@ -273,31 +382,37 @@ public static class NrGameDataUiActions
         var json = await page.EvaluateAsync<string>("""
             () => {
                 try {
-                    const ctx = window.__bsspec_editor_ui;
-                    const pinia = ctx?.pinia || document.querySelector('#__nuxt')
+                    const pinia = document.querySelector('#__nuxt')
                         ?.__vue_app__?.config?.globalProperties?.$pinia;
                     if (!pinia) return JSON.stringify({ error: 'Pinia not found' });
 
-                    const editorStore = ctx?.editorStore
-                        || pinia._s.get('editor') || pinia._s.get('editorStore')
-                        || pinia._s.get('catalogue') || pinia._s.get('catalogues');
+                    // Resolve the currently open catalogue and system IDs from the page URL:
+                    // .../catalogue?systemId=gs-1&id=cat-1
+                    const params = new URLSearchParams(window.location.search);
+                    const catId = params.get('id');
+                    const systemId = params.get('systemId');
+                    if (!catId) {
+                        return JSON.stringify({ error: 'No catalogue ID in URL — not on catalogue page? URL: ' + window.location.href });
+                    }
 
+                    // The actual catalogue data lives in editor.gameSystems[systemId].loadedCatalogues[catId].
+                    // The 'catalogues' Pinia store is a dependency tracker (not the data store).
+                    const editorStore = pinia._s.get('editor');
                     if (!editorStore) {
-                        return JSON.stringify({ error: 'Editor store not found. Available: [' + [...pinia._s.keys()].join(', ') + ']' });
+                        return JSON.stringify({ error: 'editor store not found. Available: [' + [...pinia._s.keys()].join(', ') + ']' });
                     }
 
-                    // Retrieve the catalogue from the editor store.
-                    // The NR Editor may expose it as: catalogue, currentCatalogue, rootCatalogue, rootEntry, data
-                    const catalogue = editorStore.catalogue || editorStore.currentCatalogue
-                        || editorStore.rootCatalogue || editorStore.rootEntry;
+                    const gsSys = editorStore.gameSystems?.[systemId];
+                    if (!gsSys) {
+                        return JSON.stringify({ error: `Game system '${systemId}' not found in editor.gameSystems` });
+                    }
 
+                    const catalogue = gsSys.loadedCatalogues?.[catId];
                     if (!catalogue) {
-                        return JSON.stringify({ error: 'No catalogue in editor store. Store keys: ' + Object.keys(editorStore).join(', ') });
+                        return JSON.stringify({ error: `Catalogue '${catId}' not in loadedCatalogues for system '${systemId}'` });
                     }
 
-                    const sysStore = ctx?.sysStore
-                        || pinia._s.get('systemsStore') || pinia._s.get('systems');
-                    const gameSystemData = sysStore?.currentSystem || sysStore?.system || null;
+                    const gameSystemData = gsSys.loadedCatalogues?.[systemId] ?? null;
 
                     // Helper to serialize an entry node
                     const serializeEntry = (entry, entryType) => {
@@ -320,7 +435,9 @@ public static class NrGameDataUiActions
                             if (skipKeys.has(key)) continue;
                             if (typeof val === 'function') continue;
                             if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
-                                result.fields[key] = String(val);
+                                // NR stores the import flag as 'import' but the spec protocol uses 'imported'
+                                const fieldKey = key === 'import' ? 'imported' : key;
+                                result.fields[fieldKey] = String(val);
                             }
                         }
 
@@ -404,44 +521,126 @@ public static class NrGameDataUiActions
     // ===== Internal helpers =====
 
     /// <summary>
-    /// Finds a tree node by its data-id attribute or by traversing visible tree items.
-    /// This is the primary entry point for locating entries in the NR Editor tree.
+    /// Finds the <c>h3.normalTitle</c> DOM element for an entry in the NR Editor catalogue tree.
+    ///
+    /// The NR Editor does NOT render <c>data-id</c> attributes on tree nodes — entries can only
+    /// be located by their display name. This method:
+    /// <list type="number">
+    ///   <item>Queries the Pinia store to get the entry's display name and which top-level
+    ///     collection it belongs to (e.g. <c>selectionEntries</c>).</item>
+    ///   <item>Expands every <c>depth-0</c> section whose CSS class matches that collection,
+    ///     so entries become visible.</item>
+    ///   <item>Returns a Playwright locator for the <c>h3.normalTitle</c> element inside
+    ///     a <c>depth-1</c> container whose text matches the entry name.</item>
+    /// </list>
+    ///
+    /// After this method returns, callers can click the locator to select the entry and
+    /// open its properties panel.
     /// </summary>
     private static async Task<ILocator> FindTreeNodeByIdAsync(IPage page, string entryId)
     {
-        // Try data-id attribute first (most reliable if NR renders it)
-        var byDataId = page.Locator($"[data-id='{entryId}']");
-        if (await byDataId.IsVisibleAsync())
-        {
-            return byDataId.First;
-        }
-
-        // Fall back: find in the tree structure (NR Editor renders entries with ids in the DOM or as data attributes)
-        var byTreeItem = page.Locator($"[class*='tree-node'][id='{entryId}'], [class*='entry'][id='{entryId}']");
-        if (await byTreeItem.IsVisibleAsync())
-        {
-            return byTreeItem.First;
-        }
-
-        // Scroll the tree to find hidden items
-        await page.EvaluateAsync("""
+        // Step 1: Look up the entry's name and collection key in the Pinia editorStore.
+        // NR Editor stores catalogue data as:
+        //   pinia._s.get('editor').gameSystems[systemId].loadedCatalogues[catalogueId]
+        var entryJson = await page.EvaluateAsync<string?>("""
             (entryId) => {
-                const el = document.querySelector(`[data-id='${entryId}']`);
-                if (el) el.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+                try {
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const ed = pinia?._s?.get('editor');
+                    const sId = new URLSearchParams(window.location.search).get('systemId');
+                    const cId = new URLSearchParams(window.location.search).get('id');
+                    const cat = ed?.gameSystems?.[sId]?.loadedCatalogues?.[cId];
+                    if (!cat) return null;
+                    const cols = [
+                        'selectionEntries','categoryEntries','selectionEntryGroups',
+                        'forceEntries','entryLinks','infoLinks','categoryLinks',
+                        'rules','profileTypes','costTypes','publications',
+                        'sharedSelectionEntries','sharedSelectionEntryGroups',
+                        'sharedProfiles','sharedRules','sharedInfoGroups'
+                    ];
+                    for (const col of cols) {
+                        const arr = cat[col];
+                        if (Array.isArray(arr)) {
+                            const e = arr.find(function(e) { return e.id === entryId; });
+                            if (e) return JSON.stringify({ name: e.name, col: col });
+                        }
+                    }
+                    return null;
+                } catch (ex) {
+                    return null;
+                }
             }
-            """, entryId);
-        await page.WaitForTimeoutAsync(200);
+            """, entryId)
+            ?? throw new InvalidOperationException(
+                $"NR Editor UI: entry '{entryId}' not found in any catalogue collection via Pinia. " +
+                "Ensure setup ran correctly, NavigateToCatalogueAsync completed, and the entry exists.");
 
-        // Retry after scroll
-        if (await byDataId.IsVisibleAsync())
+        var info = System.Text.Json.JsonSerializer.Deserialize<EntryLocationInfo>(entryJson,
+            _jsonOptions) ?? throw new InvalidOperationException(
+                $"NR Editor UI: failed to deserialize entry info for '{entryId}'.");
+        var entryName = info.Name ?? entryId;
+        var collectionCssClass = info.Col!;
+
+        // Step 2: Expand all depth-0 section containers for this collection type so entries
+        // become visible. Sections start collapsed and must be expanded before their children
+        // render as h3.normalTitle elements in the DOM.
+        //
+        // Vue.js may not have finished rendering when we get here. Wait for the first
+        // section element to appear before counting, otherwise CountAsync returns 0.
+        var sections = page.Locator($".{collectionCssClass}.depth-0");
+        try
         {
-            return byDataId.First;
+            await sections.First.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Attached,
+                Timeout = 10_000,
+            });
+        }
+        catch (TimeoutException)
+        {
+            // Section may not exist (empty catalogue); let the final WaitForAsync report the failure.
         }
 
-        throw new InvalidOperationException(
-            $"NR Editor UI: tree node for entry '{entryId}' not found in the visible tree. " +
-            "Run --probe to inspect the editor's DOM structure and update FindTreeNodeByIdAsync selectors.");
+        var sectionCount = await sections.CountAsync();
+        for (var i = 0; i < sectionCount; i++)
+        {
+            var section = sections.Nth(i);
+            var isCollapsed = await section.EvaluateAsync<bool>(
+                "el => el.classList.contains('collapsed')");
+            if (isCollapsed)
+            {
+                // Use JS click to bypass Playwright actionability checks (viewport, headless, etc.).
+                // This is equivalent to document.querySelector('.arrow-wrap').click() which
+                // was confirmed to expand collapsible sections in probe sessions.
+                await section.EvaluateAsync("el => el.querySelector('.arrow-wrap')?.click()");
+                await page.WaitForTimeoutAsync(400);
+            }
+        }
+
+        // Step 3: Return a locator for the entry title element. Entries at depth-1 are
+        // rendered as collapsible-box divs containing an <h3> element.
+        // Leaf entries:   <h3 class="title normalTitle">
+        // Parent entries: <h3 class="title arrowTitle collapsed">  (can also be "opened")
+        // Both variants are matched with :is(.normalTitle, .arrowTitle).
+        var nodeLocator = page.Locator($".{collectionCssClass}.depth-1 h3:is(.normalTitle, .arrowTitle)")
+            .Filter(new LocatorFilterOptions { HasText = entryName });
+
+        await nodeLocator.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10_000,
+        });
+
+        return nodeLocator.First;
     }
+
+    private sealed record EntryLocationInfo(string? Name, string? Col);
+
+    private static readonly System.Text.Json.JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
 
     /// <summary>
     /// Returns the context menu label for adding an entry of the given type.
@@ -477,11 +676,13 @@ public static class NrGameDataUiActions
         "hidden" => "Hidden",
         "type" => "Type",
         "import" => "Import",
+        "imported" => "Import",
         "collective" => "Collective",
         "defaultAmount" => "Default Amount",
         "page" => "Page",
         "publicationId" => "Publication",
         "defaultSelectionEntryId" => "Default Selection",
+        "targetId" => "Target:",
         _ => char.ToUpperInvariant(field[0]) + field[1..], // Capitalize first letter
     };
 
@@ -527,11 +728,11 @@ public static class NrGameDataUiActions
                 try {
                     const pinia = document.querySelector('#__nuxt')
                         ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const editorStore = pinia?._s?.get('editor') || pinia?._s?.get('editorStore')
-                        || pinia?._s?.get('catalogue') || pinia?._s?.get('catalogues');
-                    const catalogue = editorStore?.catalogue || editorStore?.currentCatalogue
-                        || editorStore?.rootCatalogue;
-                    if (!catalogue) return null;
+                    const ed = pinia?._s?.get('editor');
+                    const sId = new URLSearchParams(window.location.search).get('systemId');
+                    const cId = new URLSearchParams(window.location.search).get('id');
+                    const cat = ed?.gameSystems?.[sId]?.loadedCatalogues?.[cId];
+                    if (!cat) return null;
 
                     const findById = (obj, id) => {
                         if (!obj || typeof obj !== 'object') return null;
@@ -547,7 +748,7 @@ public static class NrGameDataUiActions
                         return null;
                     };
 
-                    const parent = parentId === catalogue.id ? catalogue : findById(catalogue, parentId);
+                    const parent = parentId === cat.id ? cat : findById(cat, parentId);
                     if (!parent) return null;
 
                     const items = parent[containerKey];
@@ -575,6 +776,131 @@ public static class NrGameDataUiActions
             await page.WaitForTimeoutAsync(200);
         }
     }
+
+    /// <summary>
+    /// Returns the ID of the currently open catalogue by reading the <c>id</c> query
+    /// parameter from the page URL (e.g. <c>.../catalogue?systemId=gs-1&amp;id=cat-1</c>).
+    /// </summary>
+    private static async Task<string> GetCurrentCatalogueIdAsync(IPage page)
+        => await page.EvaluateAsync<string>(
+            "() => new URLSearchParams(window.location.search).get('id') ?? ''") ?? "";
+
+    /// <summary>
+    /// Adds a new entry to a top-level section in the catalogue editor by driving the
+    /// collapsible section header's context menu.
+    ///
+    /// NR Editor layout (catalogue editor page):
+    /// <list type="bullet">
+    ///   <item>Each data array renders as <c>&lt;div class="collapsible-box {sectionClass} depth-0"&gt;</c>.</item>
+    ///   <item>The <c>&lt;h3&gt;</c> inside that div opens a context menu on right-click.</item>
+    ///   <item>Context menu items are <c>&lt;li class="context-menu"&gt;&lt;div&gt;&lt;img src="...{entryType}.png"&gt;&lt;/div&gt;&lt;/li&gt;</c>.</item>
+    ///   <item>After clicking add, NR creates "New {Type}" and opens a properties form in the right panel.</item>
+    ///   <item>The form is a table where each row is <c>&lt;tr&gt;&lt;td&gt;{Label}&lt;/td&gt;&lt;td&gt;&lt;input&gt;&lt;/td&gt;&lt;/tr&gt;</c>.</item>
+    /// </list>
+    /// </summary>
+    private static async Task<GameDataActionOutputs> AddEntryToRootSectionAsync(
+        IPage page, string entryType, string? name)
+    {
+        var sectionClass = GetSectionCssClass(entryType);
+
+        // Right-click the section header to open the context menu
+        await page.Locator($".{sectionClass} h3").ClickAsync(
+            new LocatorClickOptions { Button = MouseButton.Right });
+        await page.WaitForTimeoutAsync(300);
+
+        // Click the add menu item — identified by the entry type icon image
+        await page.Locator($".context-menu div:has(img[src*=\"{entryType}\"])").ClickAsync(
+            new LocatorClickOptions { Timeout = 5_000 });
+
+        // Wait for the properties form to open — the "Unique ID" row is the reliable signal
+        var idRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = "Unique ID" });
+        await idRow.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10_000,
+        });
+
+        // Read the auto-generated entry ID from the Unique ID cell's input
+        var entryId = await idRow.Locator("td:last-child input[type='text']").InputValueAsync();
+
+        // Set the name if provided — find the Name row and replace its input value
+        if (name is not null)
+        {
+            var nameRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = "Name" });
+            var nameInput = nameRow.Locator("td:last-child input[type='text']").First;
+            await nameInput.ClickAsync(new LocatorClickOptions { ClickCount = 3 });
+            await nameInput.FillAsync(name);
+            await nameInput.PressAsync("Tab");
+            await page.WaitForTimeoutAsync(200);
+        }
+
+        return new GameDataActionOutputs { EntryId = entryId };
+    }
+
+    /// <summary>
+    /// Adds a new link to a top-level section in the catalogue editor.
+    ///
+    /// The entryLinks section has CSS class <c>entryLinks</c> (combined with selectionEntries).
+    /// Right-clicking its header opens a context menu; the link type is identified by its
+    /// icon image src. After creating the link, sets the <c>targetId</c> field in the
+    /// properties panel.
+    /// </summary>
+    private static async Task<GameDataActionOutputs> AddLinkToRootSectionAsync(
+        IPage page, string linkType, string targetId)
+    {
+        var sectionClass = GetSectionCssClass(linkType);
+
+        // Right-click the section header to open the context menu
+        await page.Locator($".{sectionClass} h3").ClickAsync(
+            new LocatorClickOptions { Button = MouseButton.Right });
+        await page.WaitForTimeoutAsync(300);
+
+        // From probe: context menu for section header shows two items:
+        //   • "Entry" (with selectionEntry.png icon)
+        //   • "Link " (with link.png icon — NOT "entryLink.png")
+        // Filter by text "Link" rather than icon src to be robust against icon name changes.
+        var linkMenuItem = page.Locator(".context-menu > div")
+            .Filter(new LocatorFilterOptions { HasText = "Link" });
+        await linkMenuItem.First.ClickAsync(new() { Timeout = 5_000 });
+
+        // Wait for the properties form to open — "Unique ID" row is the reliable signal
+        var idRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = "Unique ID" });
+        await idRow.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10_000,
+        });
+
+        // Read the auto-generated entry ID
+        var entryId = await idRow.Locator("td:last-child input[type='text']").InputValueAsync();
+
+        // Set the target entry via the properties panel Target: autocomplete widget
+        var rightPanel = page.Locator(".rightPanel");
+        var targetFieldLabel = GetFieldLabel("targetId");
+        var targetName = await page.EvaluateAsync<string?>(EntryNameLookupJs, targetId);
+        await SetAutocompleteFieldAsync(page, rightPanel, targetFieldLabel, targetId, targetName);
+
+        return new GameDataActionOutputs { EntryId = entryId };
+    }
+
+
+    /// <summary>
+    /// Maps an entry type to the CSS class of its collapsible section on the NR Editor
+    /// catalogue editor page. NR renders each data array as:
+    /// <c>&lt;div class="collapsible-box {sectionClass} depth-0"&gt;</c>
+    /// </summary>
+    private static string GetSectionCssClass(string entryType) => entryType switch
+    {
+        "categoryEntry" => "categoryEntries",
+        "selectionEntry" => "selectionEntries",
+        "selectionEntryGroup" => "sharedSelectionEntryGroups",
+        "forceEntry" => "forceEntries",
+        "rule" => "rules",
+        "publication" => "publications",
+        "costType" => "costTypes",
+        "profileType" => "profileTypes",
+        _ => entryType + "s",
+    };
 
     private static async Task<bool> IsCheckboxAsync(ILocator input)
     {

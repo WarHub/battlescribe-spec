@@ -60,7 +60,7 @@ lib/battlescribe/lib/*.jar           # dependency JARs
 
 # Agent JAR (must be built):
 pwsh -File src/bs-ui-java-agent/build.ps1
-# Output: src/bs-ui-java-agent/build/libs/bs-ui-java-agent-*.jar
+# Output: src/bs-ui-java-agent/bs-ui-java-agent.jar
 ```
 
 `BsGameDataUiEngine.FindOptions()` auto-discovers these paths.

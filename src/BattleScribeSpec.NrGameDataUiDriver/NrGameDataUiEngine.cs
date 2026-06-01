@@ -236,7 +236,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
         try
         {
-            await NrGameDataUiSetup.CleanupCatalogueAsync(_page);
+            await NrGameDataUiSetup.CleanupCatalogueAsync(_page, BaseUrl);
         }
         catch
         {
