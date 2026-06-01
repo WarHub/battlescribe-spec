@@ -577,7 +577,7 @@ public static class NrGameDataUiActions
                 "Ensure setup ran correctly, NavigateToCatalogueAsync completed, and the entry exists.");
 
         var info = System.Text.Json.JsonSerializer.Deserialize<EntryLocationInfo>(entryJson,
-            _jsonOptions) ?? throw new InvalidOperationException(
+            JsonOptions) ?? throw new InvalidOperationException(
                 $"NR Editor UI: failed to deserialize entry info for '{entryId}'.");
         var entryName = info.Name ?? entryId;
         var collectionCssClass = info.Col!;
@@ -637,7 +637,7 @@ public static class NrGameDataUiActions
 
     private sealed record EntryLocationInfo(string? Name, string? Col);
 
-    private static readonly System.Text.Json.JsonSerializerOptions _jsonOptions = new()
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
