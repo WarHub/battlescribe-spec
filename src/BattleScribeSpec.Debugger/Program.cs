@@ -163,6 +163,12 @@ if (probeMode && engineName is "nr-editor-ui")
     return await RunNrGameDataUiProbe(specInput, headless: false);
 }
 
+// ===== GameData spec run modes (non-probe): run a gamedata spec with assertions =====
+if (engineName is "battlescribe-ui" or "nr-editor-ui")
+{
+    return await RunGameDataSpec(specInput, engineName, headless, dumpAll, json);
+}
+
 // ===== Load spec =====
 SpecFile spec;
 try
@@ -612,6 +618,95 @@ async Task<int> RunNrGameDataUiProbe(string specInput, bool headless)
     return 0;
 }
 
+// Runs a GameData spec end-to-end against a GameData UI engine, with assertions and
+// optional per-step state dumps. This is the assertion-based counterpart to the gamedata
+// --probe modes (which only open the editor for interactive inspection).
+async Task<int> RunGameDataSpec(string? specInput, string engine, bool headless, bool dumpAll, bool jsonDump)
+{
+    if (specInput is null)
+    {
+        Console.Error.WriteLine($"Error: a gamedata spec path/id is required for engine '{engine}'.");
+        return 1;
+    }
+
+    GameDataSpecFile spec;
+    try
+    {
+        spec = LoadGameDataSpec(specInput);
+        Console.Error.WriteLine($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error loading GameData spec: {ex.Message}");
+        return 1;
+    }
+
+    if (!spec.IsApplicableTo(engine))
+    {
+        Console.Error.WriteLine($"Spec '{spec.Id}' is not applicable to engine '{engine}' (skipped).");
+        return 0;
+    }
+
+    Console.Error.WriteLine($"Engine: {engine}");
+    IGameDataEngine gameDataEngine;
+    try
+    {
+        if (engine == "nr-editor-ui")
+        {
+            var staticDir = NrGameDataUiEngine.FindFrozenStaticDir()
+                ?? throw new InvalidOperationException(
+                    "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
+            Console.Error.WriteLine($"NR Editor GameData UI (frozen): {staticDir}");
+            gameDataEngine = await NrGameDataUiEngine.CreateFrozenAsync(staticDir, headless);
+        }
+        else // battlescribe-ui
+        {
+            var options = BsGameDataUiEngine.FindOptions()
+                ?? throw new InvalidOperationException(
+                    "BS UI artifacts not found — set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
+            Console.Error.WriteLine($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
+            gameDataEngine = new BsGameDataUiEngine(options);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error creating engine: {ex.Message}");
+        return 1;
+    }
+
+    using (gameDataEngine)
+    {
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+        var runner = new GameDataRunner(gameDataEngine, engine)
+        {
+            OnStepCompleted = (index, step, state) =>
+            {
+                Console.Error.WriteLine($"  step {index}: {step.Action ?? "assert"}");
+                if (dumpAll || jsonDump)
+                {
+                    Console.Out.WriteLine(System.Text.Json.JsonSerializer.Serialize(state, jsonOptions));
+                }
+            },
+        };
+
+        var result = runner.Run(spec);
+
+        if (result.Passed)
+        {
+            Console.Error.WriteLine($"PASS — {spec.Id} on {engine} ({spec.Steps.Count} step(s))");
+            return 0;
+        }
+
+        Console.Error.WriteLine($"FAIL — {spec.Id} on {engine}: {result.Failures.Count} error(s):");
+        foreach (var (failure, i) in result.Failures.Select((f, i) => (f, i)))
+        {
+            Console.Error.WriteLine($"  [{i + 1}] {failure}");
+        }
+
+        return 1;
+    }
+}
+
 BsUiOptions ResolveBsUiOptions()
 {
     // Resolve paths from environment variables or conventional locations
@@ -945,6 +1040,7 @@ static void PrintUsage()
 
         Options:
           --engine <name> Engine to use: bs (default), nr, bs-ui, nr-ui, battlescribe-ui, nr-editor-ui
+                          (battlescribe-ui / nr-editor-ui run GameData specs with assertions)
           --dump          Dump state after every step (default: after last step only)
           --probe         Run probe mode (bs-ui, nr-ui, battlescribe-ui, nr-editor-ui engines)
           --json          Output state as JSON instead of pretty tree
@@ -969,6 +1065,8 @@ static void PrintUsage()
           bs-spec-debug --engine bs-ui selection/selection-page
           bs-spec-debug --engine battlescribe-ui --probe gamedata/basic/entry-add
           bs-spec-debug --engine nr-editor-ui --probe gamedata/basic/entry-add
+          bs-spec-debug --engine nr-editor-ui gamedata/entry/add-entry-nested
+          bs-spec-debug --engine battlescribe-ui --dump gamedata/entry/move-entry
           cat spec.yaml | bs-spec-debug -
           bs-spec-debug --format
           bs-spec-debug --format --check specs/roster/
