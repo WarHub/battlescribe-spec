@@ -3,9 +3,6 @@ category: entry
 description: >
   Create a three-level deep nesting of selection entries and verify
   the entire tree structure is correctly represented.
-engines:
-  nr-editor-ui: skip # NR Editor UI: adding entries under a non-root parent not yet implemented
-
 setup:
   gameSystem:
     id: gs-1

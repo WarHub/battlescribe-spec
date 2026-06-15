@@ -25,7 +25,7 @@ NrGameDataUiEngine (IGameDataEngine)
 ├── Mutations: NrGameDataUiActions.*
 │   ├── AddEntry    → right-click tree node → context menu → "Add" → type
 │   ├── RemoveEntry → right-click tree node → "Delete" → confirm
-│   ├── MoveEntry   → keyboard Cut/Paste or context menu "Move to..."
+│   ├── MoveEntry   → Pinia store re-parent (no id-preserving UI move; see notes below)
 │   ├── SetField    → click entry → edit property panel input
 │   └── AddLink     → right-click → "Add Link" → select target
 ├── State: NrGameDataUiActions.ReadStateAsync()
@@ -130,6 +130,32 @@ await treeNode.ClickAsync(new() { Button = MouseButton.Right });
 await page.GetByRole(AriaRole.Menuitem, new() { Name = "Add" }).ClickAsync();
 await page.GetByRole(AriaRole.Menuitem, new() { Name = "Selection Entry" }).ClickAsync();
 ```
+
+### Nested operations & UI realities (verified via `--probe` REPL)
+
+The NR Editor's actual entry-node context menu does **not** use `role=menuitem`; items are
+`.context-menu > div` elements. Hard-won specifics:
+
+- **Add child entry** — right-click the parent's tree node and click the text-labelled item:
+  `Entry` for a `selectionEntry`, `Group` for a `selectionEntryGroup` (see `GetAddChildMenuLabel`).
+  The icons are inline **base64 data URIs**, so match by **exact text** (anchored regex
+  `^\s*Group\s*$` — an unanchored "Group" also matches "Modifier Group" / "Info Group").
+  Root-section adds are different (icon-`src` filename match in `AddEntryToRootSectionAsync`).
+- **Finding nested nodes** — `FindTreeNodeByIdAsync` resolves the entry **recursively** in the
+  Pinia store (children of children), then expands **all** `h3.arrowTitle.collapsed` nodes in a
+  loop (depth-0 section expansion alone leaves deeper parents collapsed and their children
+  unrendered), then matches `.{collectionClass} h3:is(.normalTitle,.arrowTitle)` by name.
+- **Move** — there is **no** id-preserving UI gesture to move an entry under a specific other
+  entry: the "Move To" submenu only targets top-level containers (shared catalogue / shared
+  system / root), and Cut+Paste pastes a **clone with a new id**. `MoveEntryAsync` therefore
+  re-parents the entry node directly in the Pinia `editorStore` (preserving the id), mirroring
+  the BattleScribe driver. State reads go through the same store, so it is observed as a UI move.
+- **collective on model-type entries** — the `Collective` checkbox is **disabled** in the NR
+  Editor for `type: model` entries (verified: `disabled=true`), so `se-set-field-collective` is
+  intentionally `skip`ped for `nr-editor-ui` — a genuine product limitation, not a driver gap.
+
+The probe REPL is drivable non-interactively for DOM discovery — pipe JS expressions to stdin:
+`echo '<js>' | dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-editor-ui --probe <spec>`.
 
 ### Property panel field editing
 

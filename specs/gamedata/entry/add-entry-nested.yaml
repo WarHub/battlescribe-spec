@@ -3,9 +3,6 @@ category: entry
 description: >
   Add child entries nested inside a parent entry and verify
   the tree structure is correct.
-engines:
-  nr-editor-ui: skip # NR Editor UI: adding entries under a non-root parent not yet implemented
-
 setup:
   gameSystem:
     id: gs-1

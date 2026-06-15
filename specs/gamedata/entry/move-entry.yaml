@@ -2,9 +2,6 @@ id: move-entry
 category: entry
 description: >
   Move an entry from one parent to another within the same catalogue.
-engines:
-  nr-editor-ui: skip # NR Editor UI: moveEntry for nested entries not yet implemented
-
 setup:
   gameSystem:
     id: gs-1

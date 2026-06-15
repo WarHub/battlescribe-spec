@@ -3,9 +3,6 @@ category: entry
 description: >
   Add a selection entry group nested inside another selection entry group
   and verify the parent-child relationship is correct.
-engines:
-  nr-editor-ui: skip # NR Editor UI: adding entries under a non-root parent not yet implemented
-
 setup:
   gameSystem:
     id: gs-1

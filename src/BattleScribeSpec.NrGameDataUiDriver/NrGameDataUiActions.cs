@@ -38,7 +38,8 @@ public static class NrGameDataUiActions
     /// right-clicks the section <c>&lt;h3&gt;</c>, picks the icon-based context menu item,
     /// waits for the properties form, reads the auto-generated ID, and sets the name.
     ///
-    /// Nested-parent support (parentId is a child entry) is not yet implemented.
+    /// When <paramref name="parentId"/> is a child entry, right-clicks that entry's tree node
+    /// and picks the text-labelled "add child" item from its context menu.
     /// </summary>
     public static async Task<GameDataActionOutputs> AddEntryAsync(
         IPage page, string parentId, string entryType, string? name)
@@ -50,11 +51,70 @@ public static class NrGameDataUiActions
             return await AddEntryToRootSectionAsync(page, entryType, name);
         }
 
-        throw new NotSupportedException(
-            $"NR Editor UI: adding entries under non-root parent '{parentId}' is not yet implemented. " +
-            $"Currently open catalogue: '{catalogueId}'. " +
-            "Use --probe to discover nested tree selectors and extend AddEntryAsync.");
+        return await AddEntryToParentNodeAsync(page, parentId, entryType, name);
     }
+
+    /// <summary>
+    /// Adds a child entry under a non-root parent entry by driving the parent tree node's
+    /// context menu.
+    ///
+    /// The entry-node context menu lists "add child" items as text-labelled <c>&lt;div&gt;</c>
+    /// elements ("Entry" for a selection entry, "Group" for a selection entry group). Their
+    /// icons are inline base64 data URIs, so the item is matched by exact text — anchored to
+    /// avoid "Group" matching "Modifier Group" / "Info Group".
+    /// </summary>
+    private static async Task<GameDataActionOutputs> AddEntryToParentNodeAsync(
+        IPage page, string parentId, string entryType, string? name)
+    {
+        var parentNode = await FindTreeNodeByIdAsync(page, parentId);
+        await parentNode.ScrollIntoViewIfNeededAsync();
+        await parentNode.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
+        await page.WaitForTimeoutAsync(300);
+
+        var label = GetAddChildMenuLabel(entryType);
+        await page.Locator(".context-menu > div")
+            .Filter(new LocatorFilterOptions
+            {
+                HasTextRegex = new System.Text.RegularExpressions.Regex($"^\\s*{label}\\s*$"),
+            })
+            .First.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
+
+        // Wait for the properties form to open — the "Unique ID" row is the reliable signal.
+        var idRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = "Unique ID" });
+        await idRow.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10_000,
+        });
+
+        var entryId = await idRow.Locator("td:last-child input[type='text']").InputValueAsync();
+
+        if (name is not null)
+        {
+            var nameRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = "Name" });
+            var nameInput = nameRow.Locator("td:last-child input[type='text']").First;
+            await nameInput.ClickAsync(new LocatorClickOptions { ClickCount = 3 });
+            await nameInput.FillAsync(name);
+            await nameInput.PressAsync("Tab");
+            await page.WaitForTimeoutAsync(200);
+        }
+
+        return new GameDataActionOutputs { EntryId = entryId };
+    }
+
+    /// <summary>
+    /// Returns the context-menu text label for adding a child entry of the given type from an
+    /// entry node's context menu (distinct from the root-section icon items).
+    /// </summary>
+    private static string GetAddChildMenuLabel(string entryType) => entryType switch
+    {
+        "selectionEntry" => "Entry",
+        "selectionEntryGroup" => "Group",
+        "profile" => "Profile",
+        "rule" => "Rule",
+        "infoGroup" => "Info Group",
+        _ => GetAddMenuLabel(entryType),
+    };
 
     /// <summary>
     /// Removes the entry with the given ID from the NR Editor tree.
@@ -88,42 +148,88 @@ public static class NrGameDataUiActions
     }
 
     /// <summary>
-    /// Moves an entry to a new parent in the NR Editor tree.
-    /// Uses context menu "Move to" or JS store manipulation as fallback
-    /// (drag-and-drop is unreliable in Playwright for tree views).
+    /// Moves an entry under a new parent, preserving the entry id.
+    ///
+    /// The NR Editor UI has no id-preserving gesture for moving an entry under a specific
+    /// other entry: the context menu's "Move To" submenu only targets top-level containers
+    /// (shared catalogue / shared system / root), and Cut+Paste pastes a <em>clone</em> with a
+    /// freshly generated id. A spec move must keep the entry id, so we re-parent the entry
+    /// node directly in the Pinia <c>editorStore</c> — detach it from its current parent's
+    /// child array and append it to the new parent's array of the same kind. State reads go
+    /// through the same store, so this is observed identically to a UI move. (This mirrors the
+    /// BattleScribe Data Editor driver, whose cut/paste likewise clones.)
     /// </summary>
     public static async Task MoveEntryAsync(IPage page, string entryId, string newParentId, int? index)
     {
-        // Try context menu "Move" action first
-        var node = await FindTreeNodeByIdAsync(page, entryId);
-        await node.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-        await page.WaitForTimeoutAsync(300);
+        var result = await page.EvaluateAsync<string>("""
+            ([entryId, newParentId]) => {
+                try {
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const ed = pinia?._s?.get('editor');
+                    const sId = new URLSearchParams(window.location.search).get('systemId');
+                    const cId = new URLSearchParams(window.location.search).get('id');
+                    const cat = ed?.gameSystems?.[sId]?.loadedCatalogues?.[cId];
+                    if (!cat) return 'no-catalogue';
 
-        var moveItem = page.GetByRole(AriaRole.Menuitem, new() { Name = "Move" })
-            .Or(page.GetByText("Move to"));
-        if (await moveItem.First.IsVisibleAsync())
-        {
-            await moveItem.First.ClickAsync();
-            await page.WaitForTimeoutAsync(300);
-            // In the move dialog, pick the new parent
-            var targetNode = page.GetByText(newParentId, new PageGetByTextOptions { Exact = false });
-            if (await targetNode.First.IsVisibleAsync())
-            {
-                await targetNode.First.ClickAsync();
-                await page.WaitForTimeoutAsync(300);
+                    const childKeys = [
+                        'selectionEntries','selectionEntryGroups','entryLinks','infoLinks',
+                        'categoryLinks','forceEntries','categoryEntries','rules','profiles',
+                        'infoGroups','sharedSelectionEntries','sharedSelectionEntryGroups'
+                    ];
+
+                    // Detach: find the entry in any (nested) child array and splice it out.
+                    let moved = null, movedKey = null;
+                    const detach = (obj) => {
+                        if (moved || !obj || typeof obj !== 'object') return;
+                        for (const k of childKeys) {
+                            const arr = obj[k];
+                            if (!Array.isArray(arr)) continue;
+                            const idx = arr.findIndex(e => e && e.id === entryId);
+                            if (idx >= 0) { moved = arr.splice(idx, 1)[0]; movedKey = k; return; }
+                            for (const e of arr) { detach(e); if (moved) return; }
+                        }
+                    };
+                    detach(cat);
+                    if (!moved) return 'entry-not-found';
+
+                    // Locate the new parent (the catalogue root, or any nested entry).
+                    const find = (obj, id) => {
+                        if (!obj || typeof obj !== 'object') return null;
+                        if (obj.id === id) return obj;
+                        for (const k of childKeys) {
+                            const arr = obj[k];
+                            if (Array.isArray(arr)) {
+                                for (const e of arr) { const r = find(e, id); if (r) return r; }
+                            }
+                        }
+                        return null;
+                    };
+                    const np = (newParentId === cat.id) ? cat : find(cat, newParentId);
+                    if (!np) return 'new-parent-not-found';
+
+                    // Attach under the same collection kind (drop the 'shared' prefix when
+                    // nesting a shared root entry under a concrete parent).
+                    let destKey = movedKey;
+                    if (np !== cat && destKey.startsWith('shared')) {
+                        destKey = destKey.charAt(6).toLowerCase() + destKey.slice(7);
+                    }
+                    if (!Array.isArray(np[destKey])) np[destKey] = [];
+                    np[destKey].push(moved);
+                    return 'ok';
+                } catch (e) {
+                    return 'error: ' + (e && e.message ? e.message : e);
+                }
             }
-            await DismissActiveDialogAsync(page);
-        }
-        else
+            """, new object[] { entryId, newParentId });
+
+        if (result != "ok")
         {
-            // Context menu move is not available; throw to signal this UI action is unsupported.
-            // MoveEntry via UI requires a working context menu — this is a placeholder until
-            // the NR Editor's move UI is properly discovered via probe mode.
-            await page.Keyboard.PressAsync("Escape");
-            throw new NotSupportedException(
-                $"NR Editor UI: MoveEntry is not yet supported via context menu. " +
-                $"Probe the editor with --engine nr-editor-ui --probe to discover the move action.");
+            throw new InvalidOperationException(
+                $"NR Editor UI: moveEntry('{entryId}' -> '{newParentId}') failed: {result}");
         }
+
+        await page.WaitForTimeoutAsync(200);
     }
 
     /// <summary>
@@ -559,14 +665,23 @@ public static class NrGameDataUiActions
                         'sharedSelectionEntries','sharedSelectionEntryGroups',
                         'sharedProfiles','sharedRules','sharedInfoGroups'
                     ];
-                    for (const col of cols) {
-                        const arr = cat[col];
-                        if (Array.isArray(arr)) {
-                            const e = arr.find(function(e) { return e.id === entryId; });
-                            if (e) return JSON.stringify({ name: e.name, col: col });
+                    // Recursive search so nested entries (children of children) resolve too.
+                    // Returns the entry name and the key of the collection that directly holds it.
+                    let result = null;
+                    const search = (obj) => {
+                        if (result || !obj || typeof obj !== 'object') return;
+                        for (const col of cols) {
+                            const arr = obj[col];
+                            if (!Array.isArray(arr)) continue;
+                            for (const e of arr) {
+                                if (e && e.id === entryId) { result = { name: e.name, col: col }; return; }
+                                search(e);
+                                if (result) return;
+                            }
                         }
-                    }
-                    return null;
+                    };
+                    search(cat);
+                    return result ? JSON.stringify(result) : null;
                 } catch (ex) {
                     return null;
                 }
@@ -618,12 +733,38 @@ public static class NrGameDataUiActions
             }
         }
 
-        // Step 3: Return a locator for the entry title element. Entries at depth-1 are
-        // rendered as collapsible-box divs containing an <h3> element.
+        // Step 2b: Expand collapsed parent entry nodes too, so nested entries (children of
+        // children) render in the DOM. Parent nodes are <h3 class="... arrowTitle collapsed">;
+        // clicking their .arrow-wrap toggles them open. Loop until none remain collapsed (the
+        // tree reveals one level per pass) with a bounded pass count as a safety net.
+        for (var pass = 0; pass < 8; pass++)
+        {
+            var collapsedCount = await page.Locator("h3.arrowTitle.collapsed").CountAsync();
+            if (collapsedCount == 0)
+            {
+                break;
+            }
+
+            for (var i = 0; i < collapsedCount; i++)
+            {
+                var collapsed = page.Locator("h3.arrowTitle.collapsed").First;
+                if (await collapsed.CountAsync() == 0)
+                {
+                    break;
+                }
+
+                await collapsed.EvaluateAsync("el => (el.querySelector('.arrow-wrap') || el).click()");
+                await page.WaitForTimeoutAsync(120);
+            }
+        }
+
+        // Step 3: Return a locator for the entry title element. Entries render as
+        // collapsible-box divs containing an <h3> element, at any tree depth.
         // Leaf entries:   <h3 class="title normalTitle">
         // Parent entries: <h3 class="title arrowTitle collapsed">  (can also be "opened")
-        // Both variants are matched with :is(.normalTitle, .arrowTitle).
-        var nodeLocator = page.Locator($".{collectionCssClass}.depth-1 h3:is(.normalTitle, .arrowTitle)")
+        // Both variants are matched with :is(.normalTitle, .arrowTitle); the section-header
+        // h3 (e.g. "Root Selection Entries") is excluded by the entry-name text filter.
+        var nodeLocator = page.Locator($".{collectionCssClass} h3:is(.normalTitle, .arrowTitle)")
             .Filter(new LocatorFilterOptions { HasText = entryName });
 
         await nodeLocator.First.WaitForAsync(new LocatorWaitForOptions
