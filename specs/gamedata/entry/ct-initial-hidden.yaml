@@ -5,7 +5,7 @@ description: >
   the hidden flag in their GameData state. The hidden flag affects display
   only — hidden cost types still participate in cost aggregation.
 engines:
-  nr-editor: skip
+  nr-editor: skip # NewRecruit's data model does not expose game-system cost type hidden flags
 
 setup:
   gameSystem:

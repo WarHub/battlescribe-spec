@@ -39,6 +39,21 @@ The frozen NR Editor GameData tests serve the **gh-pages static deployment** of 
 interception. No network access needed. The static files are downloaded by `setup.ps1`
 (git clone of the gh-pages branch, pinned by commit SHA in `testdata.json`).
 
+## BS GameData UI tests (local)
+
+The `bs-ui-gamedata` profile drives the **BattleScribe desktop Data Editor UI** through the
+Java agent. Mutations go through the real UI; state is read via the Java model. To run locally,
+point `BS_UI_JAVA_PATH` at the Liberica **full** JDK (which ships the JavaFX runtime) that
+`setup.ps1` downloads — the bundled `lib/battlescribe/jre` is Linux-only and lacks Windows/macOS
+JavaFX:
+
+```bash
+BS_UI_JAVA_PATH=lib/liberica-jdk/jdk-11.0.31-full/bin/java.exe  # or .../bin/java on *nix
+dotnet test -p:TestProfile=bs-ui-gamedata
+```
+
+Set `BS_UI_SKIP=true` to skip all BS UI tests (they also self-skip when BS artifacts are absent).
+
 ## Debugging specs
 
 Use `bs-spec-debug` to run a spec step-by-step and inspect full roster state:
@@ -65,7 +80,7 @@ pwsh -File tools/format-specs.ps1                                               
 | Path | What |
 |------|------|
 | `specs/roster/{category}/{id}.yaml` | Roster spec files (312 total, 17 categories) |
-| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (10 total, 1 category) |
+| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (49 total, 1 category) |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
 | `src/BattleScribeSpec.TestKit/Roster/RosterTypes.cs` | Roster state records |
 | `src/BattleScribeSpec.TestKit/Roster/RosterSpecModels.cs` | Roster YAML spec model classes |

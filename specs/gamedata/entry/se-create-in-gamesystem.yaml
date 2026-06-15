@@ -4,8 +4,8 @@ description: >
   Add a selection entry to a game system's root selectionEntries container
   and verify it appears in the game system state.
 engines:
-  nr-editor: skip
-  nr-editor-ui: skip
+  nr-editor: skip # NewRecruit's data model does not support authoring entries directly in a game system
+  nr-editor-ui: skip # NewRecruit's data model does not support authoring entries directly in a game system
 
 setup:
   gameSystem:

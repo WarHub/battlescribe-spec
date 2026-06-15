@@ -4,8 +4,8 @@ description: >
   Add a force entry to a game system and verify it appears in the
   forceEntries container.
 engines:
-  nr-editor: skip
-  nr-editor-ui: skip
+  nr-editor: skip # NewRecruit's data model does not support authoring force entries
+  nr-editor-ui: skip # NewRecruit's data model does not support authoring force entries
 
 setup:
   gameSystem:

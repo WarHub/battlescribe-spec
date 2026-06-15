@@ -4,8 +4,8 @@ description: >
   Delete a force entry that has nested force entries and verify
   the entire subtree is removed.
 engines:
-  nr-editor: skip
-  nr-editor-ui: skip
+  nr-editor: skip # NewRecruit's data model does not support authoring force entries
+  nr-editor-ui: skip # NewRecruit's data model does not support authoring force entries
 
 setup:
   gameSystem:

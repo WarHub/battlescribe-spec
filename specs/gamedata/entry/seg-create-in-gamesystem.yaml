@@ -4,8 +4,8 @@ description: >
   Add a selection entry group to a game system and verify it appears
   in the sharedSelectionEntryGroups container.
 engines:
-  nr-editor: skip
-  nr-editor-ui: skip
+  nr-editor: skip # NewRecruit's data model does not support authoring entries directly in a game system
+  nr-editor-ui: skip # NewRecruit's data model does not support authoring entries directly in a game system
 
 setup:
   gameSystem:

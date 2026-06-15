@@ -4,8 +4,8 @@ description: >
   Add a force entry nested inside another force entry and verify
   the parent-child relationship.
 engines:
-  nr-editor: skip
-  nr-editor-ui: skip
+  nr-editor: skip # NewRecruit's data model does not support authoring force entries
+  nr-editor-ui: skip # NewRecruit's data model does not support authoring force entries
 
 setup:
   gameSystem:

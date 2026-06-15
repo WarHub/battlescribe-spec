@@ -2,6 +2,6 @@
 <!-- Run all tests except those requiring live NR or sequential mode. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Mode!=Sequential</TestCaseFilter>
+    <TestCaseFilter>Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Engine!=LiveNrGameDataUi&amp;Mode!=Sequential</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

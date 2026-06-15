@@ -4,8 +4,8 @@ description: >
   Add a category entry to a game system and verify it appears in the
   categoryEntries container.
 engines:
-  nr-editor: skip
-  nr-editor-ui: skip
+  nr-editor: skip # NewRecruit's data model does not support authoring category entries
+  nr-editor-ui: skip # NewRecruit's data model does not support authoring category entries
 
 setup:
   gameSystem:
