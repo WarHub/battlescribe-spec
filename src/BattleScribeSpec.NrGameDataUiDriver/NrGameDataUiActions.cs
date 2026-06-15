@@ -383,7 +383,17 @@ public static class NrGameDataUiActions
         // Click the suggestion whose text contains the display name (or fall back to ID)
         var matchingSuggestion = suggestions
             .Filter(new LocatorFilterOptions { HasText = displayName ?? id });
-        await matchingSuggestion.First.ClickAsync(new() { Timeout = 3_000 });
+        try
+        {
+            await matchingSuggestion.First.ClickAsync(new() { Timeout = 3_000 });
+        }
+        catch (TimeoutException)
+        {
+            var available = await suggestions.AllTextContentsAsync();
+            throw new InvalidOperationException(
+                $"NR Editor UI: no '{rowLabel}' suggestion matched '{displayName ?? id}' " +
+                $"(displayName={(displayName ?? "<null>")}, id={id}). Available: [{string.Join(", ", available)}]");
+        }
         await page.WaitForTimeoutAsync(300);
     }
 
@@ -420,7 +430,9 @@ public static class NrGameDataUiActions
             const gsSys = editor?.gameSystems?.[systemId];
             if (!gsSys) return null;
             const COLLECTIONS = [
-                'selectionEntries', 'sharedSelectionEntries', 'sharedSelectionEntryGroups',
+                'selectionEntries', 'selectionEntryGroups',
+                'sharedSelectionEntries', 'sharedSelectionEntryGroups',
+                'forceEntries', 'categoryEntries',
                 'entryLinks', 'infoLinks', 'categoryLinks', 'rules', 'sharedRules',
                 'profiles', 'sharedProfiles',
             ];
@@ -944,8 +956,10 @@ public static class NrGameDataUiActions
     {
         var sectionClass = GetSectionCssClass(entryType);
 
-        // Right-click the section header to open the context menu
-        await page.Locator($".{sectionClass} h3").ClickAsync(
+        // Right-click the section header to open the context menu. The header is the depth-0
+        // section box's *direct* child <h3>; once entries exist they add deeper descendant
+        // <h3>s, so scope to the direct child to avoid a strict-mode multi-match.
+        await page.Locator($".{sectionClass}.depth-0 > h3").ClickAsync(
             new LocatorClickOptions { Button = MouseButton.Right });
         await page.WaitForTimeoutAsync(300);
 
@@ -991,8 +1005,9 @@ public static class NrGameDataUiActions
     {
         var sectionClass = GetSectionCssClass(linkType);
 
-        // Right-click the section header to open the context menu
-        await page.Locator($".{sectionClass} h3").ClickAsync(
+        // Right-click the section header (depth-0 box's direct child <h3> — see
+        // AddEntryToRootSectionAsync) to open the context menu.
+        await page.Locator($".{sectionClass}.depth-0 > h3").ClickAsync(
             new LocatorClickOptions { Button = MouseButton.Right });
         await page.WaitForTimeoutAsync(300);
 

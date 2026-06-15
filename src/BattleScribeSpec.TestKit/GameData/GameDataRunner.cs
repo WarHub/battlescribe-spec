@@ -152,7 +152,7 @@ public sealed class GameDataRunner
                 _engine.SetField(
                     entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setField requires entryId"),
                     step.Field ?? throw new InvalidOperationException($"Step {stepIndex}: setField requires field"),
-                    step.Value);
+                    _exprResolver.Resolve(step.Value));
                 break;
 
             case "addLink":

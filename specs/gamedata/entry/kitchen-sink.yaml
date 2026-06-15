@@ -1,0 +1,115 @@
+id: kitchen-sink
+category: entry
+description: >
+  Kitchen-sink GameData spec: chains add (root and nested), setField across
+  control types, addLink, move, and remove operations in a single catalogue
+  and verifies the cumulative state — exercising the full driver surface the
+  way the roster protocol-kitchen-sink does. Uses only operations supported
+  across all engines (no per-engine skips).
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntries:
+        - id: sse-bolter
+          name: Bolter Template
+          type: upgrade
+
+steps:
+  # ── Build a unit with nested children ──────────────────────────────────────
+  - action: addEntry
+    id: add-squad
+    parentId: cat-1
+    entryType: selectionEntry
+    name: Tactical Squad
+
+  - action: addEntry
+    id: add-sgt
+    parentId: ${{ steps.add-squad.entryId }}
+    entryType: selectionEntry
+    name: Sergeant
+
+  - action: addEntry
+    id: add-wargear
+    parentId: ${{ steps.add-squad.entryId }}
+    entryType: selectionEntryGroup
+    name: Wargear
+
+  - action: addEntry
+    id: add-bolter
+    parentId: ${{ steps.add-wargear.entryId }}
+    entryType: selectionEntry
+    name: Bolter
+
+  - action: addEntry
+    id: add-plasma
+    parentId: ${{ steps.add-wargear.entryId }}
+    entryType: selectionEntry
+    name: Plasma Gun
+
+  # ── A second root unit (move target) ───────────────────────────────────────
+  - action: addEntry
+    id: add-devs
+    parentId: cat-1
+    entryType: selectionEntry
+    name: Devastator Squad
+
+  # ── Field edits across control types ───────────────────────────────────────
+  - action: setField
+    entryId: ${{ steps.add-wargear.entryId }}
+    field: defaultSelectionEntryId
+    value: ${{ steps.add-bolter.entryId }}
+
+  - action: setField
+    entryId: ${{ steps.add-sgt.entryId }}
+    field: hidden
+    value: "true"
+
+  # ── A catalogue-level rule and an entry link ───────────────────────────────
+  - action: addEntry
+    id: add-rule
+    parentId: cat-1
+    entryType: rule
+    name: Combat Doctrine
+
+  - action: addLink
+    id: add-link
+    parentId: cat-1
+    linkType: entryLink
+    targetId: sse-bolter
+
+  # ── Move Plasma Gun from Wargear (nested) to Devastator Squad (root) ────────
+  - action: moveEntry
+    entryId: ${{ steps.add-plasma.entryId }}
+    newParentId: ${{ steps.add-devs.entryId }}
+
+  # ── Remove the Sergeant ────────────────────────────────────────────────────
+  - action: removeEntry
+    entryId: ${{ steps.add-sgt.entryId }}
+
+  # ── Final cumulative state ─────────────────────────────────────────────────
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - name: Tactical Squad
+              children:
+                - name: Wargear
+                  entryType: selectionEntryGroup
+                  children:
+                    - name: Bolter
+            - name: Devastator Squad
+              children:
+                - name: Plasma Gun
+          rules:
+            - name: Combat Doctrine
+              entryType: rule
+          entryLinks:
+            - entryType: entryLink
+              fields:
+                targetId: sse-bolter
