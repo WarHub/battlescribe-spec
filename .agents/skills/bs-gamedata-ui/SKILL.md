@@ -40,13 +40,41 @@ DataEditorActions.java — Java agent side
 
 **Engine name**: `battlescribe-ui` (use in spec `engines` field overrides).
 
-## Current status: Stubs
+## Current status: Implemented (49/49 gamedata specs pass)
 
-All `DataEditorActions.java` methods throw `UnsupportedOperationException`.
-They must be implemented after probing the BattleScribe data editor UI.
+`DataEditorActions.java` is fully implemented: load / addEntry / removeEntry / moveEntry /
+setField / addLink / getDataState. The controller is found via the Stage titled
+`"Data Editor …"` → `#btnSaveDataFile` handler → `DataEditorWindowController`.
 
-**Why stubs?** The BattleScribe data editor is a separate UI context from the roster editor.
-Its window title, tree structure, context menu layout, and property panel are not yet mapped.
+### Edit-panel field mapping & gotchas
+
+`setField` selects the entry (which populates `#pnlEditor`), looks up the control by CSS id,
+sets its value, then **fires an `ActionEvent`**. The panel writes the model in each control's
+`setOnAction` handler, so `setSelected()` / `setValue()` alone do **not** persist — you must
+fire the action. Confirmed control ids (from decompiled `*EditPanelController`):
+
+| Field | CSS id | Control | Notes |
+|-------|--------|---------|-------|
+| `name` | `#txtName` | TextField | |
+| `id` | `#txtUniqueId` | TextField | |
+| `targetId` | `#txtTargetId` | TextField | |
+| `hidden` | `#chkHidden` | CheckBox | fire ActionEvent to commit |
+| `collective` | `#chkCollective` | CheckBox | |
+| `imported` | `#chkImport` | CheckBox | **id is `chkImport`, not `chkImported`** |
+| `type` | `#cboType` | ComboBox | match item by text |
+| `defaultSelectionEntryId` | `#cboDefaultSelection` | ComboBox\<INamed\> | **match item by `getId()`**, not text |
+
+Other gotchas baked into the implementation:
+- **getDataState must serialize** `collective`, `imported`, `defaultSelectionEntryId` into the
+  `fields` dict (they were missing originally → asserted as `''`). Booleans emit `"true"`/`"false"`.
+- **addEntry of a group at a root parent** (game system / catalogue) must call
+  `actAddSharedSelectionEntryGroup` — `actAddSelectionEntryGroup` only handles a
+  `BaseSelectionEntry` parent and is a **silent no-op at the root**. A plain selection entry is
+  already handled at the root by `actAddSelectionEntry`. See `isRootEntry(...)`.
+- **moveEntry re-parents the model object directly** (preserves id). The Data Editor's only move
+  gesture is cut + paste, and paste inserts `entry.copy(false, false)` — a clone with a **new id** —
+  so it cannot express an id-preserving move. State is read from the same model graph, so a model
+  re-parent is observed identically to a UI move.
 
 ## Environment setup
 
@@ -54,16 +82,35 @@ Same as `BsUiRosterEngine` — the data editor reuses the same binary artifacts:
 
 ```powershell
 # Binary artifacts (downloaded by setup.ps1):
-lib/battlescribe/jre/bin/java        # JavaFX-capable JRE
-lib/battlescribe/RosterEditor.jar    # BattleScribe main JAR
+lib/battlescribe/DataEditor.jar      # BattleScribe Data Editor JAR (platform-independent)
 lib/battlescribe/lib/*.jar           # dependency JARs
+lib/liberica-jdk/jdk-11.0.31-full/   # BellSoft Liberica 11 full JDK (JavaFX) — used to build/run
 
-# Agent JAR (must be built):
-pwsh -File src/bs-ui-java-agent/build.ps1
+# Agent JAR (built by setup.ps1, or manually):
+pwsh -File src/bs-ui-java-agent/build.ps1 -JavaHome lib/liberica-jdk/jdk-11.0.31-full
 # Output: src/bs-ui-java-agent/bs-ui-java-agent.jar
 ```
 
 `BsGameDataUiEngine.FindOptions()` auto-discovers these paths.
+
+### Running the specs locally
+
+The bundled `lib/battlescribe/jre` is the **Linux** runtime (no Windows JavaFX). On any platform,
+point `BS_UI_JAVA_PATH` at the Liberica full JDK (the JavaFX runtime, same build CI uses):
+
+```powershell
+$env:BS_UI_JAVA_PATH = "$PWD/lib/liberica-jdk/jdk-11.0.31-full/bin/java.exe"  # or .../bin/java on *nix
+Remove-Item Env:\BS_UI_SKIP -ErrorAction SilentlyContinue   # ensure not skipped
+dotnet build tests/BattleScribeSpec.Tests.csproj
+dotnet test  tests/BattleScribeSpec.Tests.csproj --no-build --filter "FullyQualifiedName~BsGameDataUiEngine"
+```
+
+Notes:
+- Each spec relaunches the app (~5 s) → full suite ≈ 4–5 min, matching CI.
+- `BS_UI_KEEP_ALIVE=true` is **broken for gamedata** (stale data across specs → "Tree item not
+  found"); leave it unset. CI does not use it.
+- The Debugger CLI runs *roster* specs and offers gamedata **`--probe`** (interactive launch) only —
+  it has no gamedata spec-runner with assertions; use `dotnet test` for pass/fail.
 
 ## Test profiles
 

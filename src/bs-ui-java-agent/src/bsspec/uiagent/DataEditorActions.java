@@ -119,7 +119,8 @@ public class DataEditorActions {
         // Snapshot the full tree — the tree may have container nodes with no IDs,
         // and may be rebuilt after the add operation, making parentItem stale.
         Set<String> before = runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot()));
-        String addMethod = actAddMethodName(entryType);
+        boolean parentIsRoot = runOnFxGet(() -> isRootEntry(parentItem.getValue()));
+        String addMethod = actAddMethodName(entryType, parentIsRoot);
         runOnFx(() -> selectItem(ctrl, parentItem));
         sleep(500);
         runOnFx(() -> invokeCtrl(ctrl, addMethod));
@@ -155,26 +156,100 @@ public class DataEditorActions {
         String newParentId = requireString(params, "newParentId");
         Object ctrl = findController();
 
-        TreeItem<Object> src = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
-        if (src == null) throw new RuntimeException("Tree item not found: " + entryId);
-        runOnFx(() -> selectItem(ctrl, src));
-        sleep(200);
-        runOnFx(() -> invokeCtrl(ctrl, "actCut"));
-        sleep(500);
+        // The Data Editor has no id-preserving move affordance: its only move gesture is
+        // cut + paste, and paste inserts entry.copy(false, false) — a clone with a freshly
+        // generated id (see DataEditorWindowController#a(Object, SelectionEntry)). A spec
+        // move must preserve the entry id, so we re-parent the model object itself: detach
+        // it from its current parent's child list and append it to the new parent's list.
+        // State is read from this same model graph (getDataState walks getDataManager().c()),
+        // so the result is observed identically to a UI move — only the tree view, which is
+        // not used for assertions, is left unrefreshed.
+        Object dm = runOnFxGet(() -> ctrl.getClass().getMethod("getDataManager").invoke(ctrl));
+        if (dm == null) throw new RuntimeException("Data manager unavailable for move");
 
-        // Re-find new parent (tree may have been rebuilt after cut)
-        TreeItem<Object> newParent = runOnFxGet(() -> findTreeItemById(ctrl, newParentId));
-        if (newParent == null) throw new RuntimeException("New parent tree item not found: " + newParentId);
-        runOnFx(() -> selectItem(ctrl, newParent));
-        sleep(200);
-        runOnFx(() -> invokeCtrl(ctrl, "actPaste"));
+        runOnFx(() -> {
+            Object root = dm.getClass().getMethod("c").invoke(dm);
+            if (root == null) throw new RuntimeException("Model root unavailable for move");
 
-        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
-        while (System.currentTimeMillis() < deadline) {
-            if (runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot())).contains(entryId)) return "{}";
-            sleep(POLL_MS);
+            Object newParent = findInModel(root, newParentId);
+            if (newParent == null) throw new RuntimeException("New parent not found in model: " + newParentId);
+
+            Object entry = detachFromModel(root, entryId);
+            if (entry == null) throw new RuntimeException("Entry not found in model: " + entryId);
+
+            if (!attachToModel(newParent, entry)) {
+                throw new RuntimeException("New parent cannot hold entry: " + newParentId);
+            }
+        });
+        return "{}";
+    }
+
+    /** Child-collection getters traversed when locating/moving model entries. */
+    private static final String[] CHILD_GETTERS = {
+        "getSelectionEntries", "getSelectionEntryGroups", "getEntryLinks", "getRules",
+        "getProfiles", "getInfoGroups", "getInfoLinks", "getCategoryLinks",
+        "getConstraints", "getModifiers", "getModifierGroups",
+        "getForceEntries", "getCategoryEntries",
+        "getSharedSelectionEntries", "getSharedSelectionEntryGroups",
+        "getSharedRules", "getSharedProfiles", "getSharedInfoGroups",
+    };
+
+    /** Return the live (mutable) backing list for a child getter, or {@code null}. */
+    @SuppressWarnings("unchecked")
+    private List<Object> liveList(Object obj, String getter) {
+        if (obj == null) return null;
+        try {
+            Object raw = obj.getClass().getMethod(getter).invoke(obj);
+            if (raw instanceof List) return (List<Object>) raw;
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /** Find the model object with the given id anywhere under {@code node} (inclusive). */
+    private Object findInModel(Object node, String id) {
+        if (node == null) return null;
+        if (id.equals(getId(node))) return node;
+        for (String g : CHILD_GETTERS) {
+            List<Object> list = liveList(node, g);
+            if (list == null) continue;
+            for (Object child : new ArrayList<>(list)) {
+                Object found = findInModel(child, id);
+                if (found != null) return found;
+            }
         }
-        throw new RuntimeException("Entry " + entryId + " did not reappear after move within " + POLL_TIMEOUT_MS + "ms");
+        return null;
+    }
+
+    /** Remove and return the model object with the given id from its parent's child list. */
+    private Object detachFromModel(Object node, String id) {
+        if (node == null) return null;
+        for (String g : CHILD_GETTERS) {
+            List<Object> list = liveList(node, g);
+            if (list == null) continue;
+            for (int i = 0; i < list.size(); i++) {
+                if (id.equals(getId(list.get(i)))) return list.remove(i);
+            }
+            for (Object child : new ArrayList<>(list)) {
+                Object found = detachFromModel(child, id);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    /** Append {@code entry} to the appropriate child list of {@code parent}. */
+    private boolean attachToModel(Object parent, Object entry) {
+        String n = entry.getClass().getSimpleName();
+        String getter;
+        if (n.contains("SelectionEntryGroup"))   getter = "getSelectionEntryGroups";
+        else if (n.contains("SelectionEntry"))    getter = "getSelectionEntries";
+        else if (n.contains("EntryLink"))         getter = "getEntryLinks";
+        else if (n.contains("ForceEntry"))        getter = "getForceEntries";
+        else if (n.contains("CategoryEntry"))     getter = "getCategoryEntries";
+        else                                      getter = "getSelectionEntries";
+        List<Object> list = liveList(parent, getter);
+        if (list == null) return false;
+        return list.add(entry);
     }
 
     private String setField(JsonObject params) {
@@ -352,6 +427,16 @@ public class DataEditorActions {
         ctrl.getClass().getMethod(method).invoke(ctrl);
     }
 
+    /** True if {@code value} is a game system or catalogue (a {@code BaseRootEntry} subclass). */
+    private boolean isRootEntry(Object value) {
+        Class<?> c = value == null ? null : value.getClass();
+        while (c != null && c != Object.class) {
+            if ("BaseRootEntry".equals(c.getSimpleName())) return true;
+            c = c.getSuperclass();
+        }
+        return false;
+    }
+
     // ─── Field editing ────────────────────────────────────────────────────────
 
     private void setFieldOnEntry(Object ctrl, String entryId, String field, String value) {
@@ -393,17 +478,25 @@ public class DataEditorActions {
         } else if (node instanceof javafx.scene.control.CheckBox) {
             javafx.scene.control.CheckBox cb = (javafx.scene.control.CheckBox) node;
             cb.setSelected(Boolean.parseBoolean(value));
+            // The edit panel writes the model in the checkbox's onAction handler;
+            // setSelected() alone does not fire it, so dispatch an ActionEvent.
+            cb.fireEvent(new javafx.event.ActionEvent());
         } else if (node instanceof javafx.scene.control.ComboBox) {
             @SuppressWarnings("unchecked")
             javafx.scene.control.ComboBox<Object> cb = (javafx.scene.control.ComboBox<Object>) node;
-            String finalValue = value;
+            Object match = null;
             for (Object cbItem : cb.getItems()) {
-                if (cbItem != null && cbItem.toString().equalsIgnoreCase(finalValue)) {
-                    cb.setValue(cbItem);
-                    return;
+                if (cbItem == null) continue;
+                // Items may be domain objects (match by id, e.g. cboDefaultSelection holds
+                // INamed entries) or plain values/enums (match by display text, e.g. cboType).
+                if (value.equals(tryStr(cbItem, "getId")) || cbItem.toString().equalsIgnoreCase(value)) {
+                    match = cbItem;
+                    break;
                 }
             }
-            cb.setValue(value); // fall back to setting the raw string
+            cb.setValue(match != null ? match : value);
+            // Writeback is also via the combo's onAction handler — fire it after setValue.
+            cb.fireEvent(new javafx.event.ActionEvent());
         } else {
             throw new RuntimeException("Field #" + cssId + " has unsupported type: " + node.getClass().getSimpleName());
         }
@@ -448,12 +541,27 @@ public class DataEditorActions {
         if ("targetId".equals(field))   return "txtTargetId";
         if ("hidden".equals(field))     return "chkHidden";
         if ("collective".equals(field)) return "chkCollective";
-        if ("imported".equals(field))   return "chkImported";
+        if ("imported".equals(field))   return "chkImport";
         if ("type".equals(field))       return "cboType";
+        if ("defaultSelectionEntryId".equals(field)) return "cboDefaultSelection";
         return "txt" + Character.toUpperCase(field.charAt(0)) + field.substring(1);
     }
 
     // ─── Entry type → actAdd method name ─────────────────────────────────────
+
+    /**
+     * Resolve the controller add-method, accounting for the selected parent. When a root
+     * entry (game system / catalogue) is selected, a "group" must be added via the
+     * {@code actAddShared*} methods — {@code actAddSelectionEntryGroup} only handles a
+     * {@code BaseSelectionEntry} parent and is a silent no-op at the root. (A plain
+     * selection entry is already handled at the root by {@code actAddSelectionEntry}.)
+     */
+    private static String actAddMethodName(String entryType, boolean parentIsRoot) {
+        if (parentIsRoot && "selectionEntryGroup".equals(entryType)) {
+            return "actAddSharedSelectionEntryGroup";
+        }
+        return actAddMethodName(entryType);
+    }
 
     private static String actAddMethodName(String entryType) {
         if ("selectionEntry".equals(entryType))            return "actAddSelectionEntry";
@@ -545,6 +653,9 @@ public class DataEditorActions {
         putFieldIfPresent(fields, entry, "getTargetId", "targetId");
         putFieldIfPresent(fields, entry, "getPublicationId", "publicationId");
         putFieldIfPresent(fields, entry, "getPage", "page");
+        putFieldIfPresent(fields, entry, "getDefaultSelectionEntryId", "defaultSelectionEntryId");
+        putBoolField(fields, entry, "collective", "isCollective", "getCollective");
+        putBoolField(fields, entry, "imported", "isImported", "getImported");
         if (!fields.entrySet().isEmpty()) o.add("fields", fields);
 
         JsonArray children = new JsonArray();
@@ -589,6 +700,19 @@ public class DataEditorActions {
     private void putFieldIfPresent(JsonObject fields, Object entry, String getter, String key) {
         String v = tryStr(entry, getter);
         if (v != null && !v.isEmpty()) fields.addProperty(key, v);
+    }
+
+    /** Emit a boolean field as a "true"/"false" string, using the first getter that exists. */
+    private void putBoolField(JsonObject fields, Object entry, String key, String... getters) {
+        for (String g : getters) {
+            try {
+                Object r = entry.getClass().getMethod(g).invoke(entry);
+                if (r instanceof Boolean) {
+                    fields.addProperty(key, r.toString());
+                    return;
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     private String tryStr(Object obj, String method) {
