@@ -20,7 +20,7 @@ namespace BattleScribeSpec.NrGameDataUiDriver;
 /// If the editor updates its DOM structure, run the probe workflow to re-discover
 /// selectors:
 /// <code>
-///   dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-editor-ui --probe spec-id
+///   dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe spec-id
 /// </code>
 /// See .agents/skills/nr-gamedata-ui/ for the full probe workflow documentation.
 /// </summary>

@@ -27,7 +27,7 @@ public sealed class FrozenNrGameDataUiConformanceTests : GameDataConformanceTest
         _fixture = fixture;
     }
 
-    protected override string EngineName => "nr-editor-ui";
+    protected override string EngineName => "newrecruit-ui";
     protected override string LogPrefix => "[FROZEN-NR-EDITOR-UI] ";
 
     protected override IGameDataEngine? GetEngine()

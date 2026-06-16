@@ -12,7 +12,7 @@ namespace BattleScribeSpec.NrGameDataUiDriver;
 /// before they are codified in <see cref="NrGameDataUiActions"/>.
 ///
 /// Usage via Debugger:
-///   dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-editor-ui --probe spec-id
+///   dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe spec-id
 /// </summary>
 public sealed class NrGameDataUiProbe : IAsyncDisposable
 {

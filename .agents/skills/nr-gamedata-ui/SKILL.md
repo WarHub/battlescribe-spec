@@ -4,7 +4,7 @@ description: >
   Debug NR Editor GameData UI driver actions and test failures. Use when investigating
   NrGameDataUiDriver test failures, reading Pinia editorStore state, discovering
   NR Editor DOM/CSS selectors for new actions, or understanding the frozen static-file
-  test setup. Covers the probe workflow (--engine nr-editor-ui --probe), NrGameDataUiDiagnostics
+  test setup. Covers the probe workflow (--engine gamedata/newrecruit-ui --probe), NrGameDataUiDiagnostics
   artifacts, frozen vs. live mode, and how to extend NrGameDataUiActions.
 ---
 
@@ -34,7 +34,7 @@ NrGameDataUiEngine (IGameDataEngine)
     └── screenshot + console log + DOM snapshot + editorStore JSON
 ```
 
-**Engine name**: `nr-editor-ui` (use in spec `engines` field overrides).
+**Engine name**: `newrecruit-ui` (use in spec `engines` field overrides).
 
 ## Frozen vs. live mode
 
@@ -64,11 +64,11 @@ Frozen tests are included in `pre-push` and run via a static Playwright route in
 
 ```powershell
 # Launch NR Editor with spec data, open a JS REPL
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-editor-ui --probe my-gamedata-spec
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe my-gamedata-spec
 
 # With no-headless for visual inspection
 $env:NR_HEADLESS = "false"
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-editor-ui --probe my-gamedata-spec
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe my-gamedata-spec
 ```
 
 In the probe REPL, use JS to inspect the Pinia stores:
@@ -146,10 +146,10 @@ The NR Editor's actual entry-node context menu does **not** use `role=menuitem`;
   unrendered), then matches `.{collectionClass} h3:is(.normalTitle,.arrowTitle)` by name.
 - **collective on model-type entries** — the `Collective` checkbox is **disabled** in the NR
   Editor for `type: model` entries (verified: `disabled=true`), so `se-set-field-collective` is
-  intentionally `skip`ped for `nr-editor-ui` — a genuine product limitation, not a driver gap.
+  intentionally `skip`ped for `newrecruit-ui` — a genuine product limitation, not a driver gap.
 
 The probe REPL is drivable non-interactively for DOM discovery — pipe JS expressions to stdin:
-`echo '<js>' | dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-editor-ui --probe <spec>`.
+`echo '<js>' | dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe <spec>`.
 
 ### Property panel field editing
 

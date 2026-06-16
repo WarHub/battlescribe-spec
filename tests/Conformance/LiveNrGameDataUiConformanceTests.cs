@@ -24,7 +24,7 @@ public sealed class LiveNrGameDataUiConformanceTests : GameDataConformanceTestBa
         _fixture = fixture;
     }
 
-    protected override string EngineName => "nr-editor-ui";
+    protected override string EngineName => "newrecruit-ui";
     protected override string LogPrefix => "[LIVE-NR-EDITOR-UI] ";
 
     protected override IGameDataEngine? GetEngine()

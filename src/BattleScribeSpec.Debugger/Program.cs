@@ -12,6 +12,7 @@ using BattleScribeSpec.Roster;
 // ===== Parse arguments =====
 string? specInput = null;
 var engineName = "battlescribe";
+string? engineType = null; // "roster" or "gamedata"; inferred from spec path if unset
 var dumpAll = false;
 var json = false;
 var headless = true;
@@ -43,13 +44,19 @@ for (var i = 0; i < args.Length; i++)
             formatCheck = true;
             break;
         case "--engine" when i + 1 < args.Length:
-            engineName = args[++i].ToLowerInvariant() switch
             {
-                "bs" => "battlescribe",
-                "nr" => "newrecruit",
-                "nr-ui" => "nr-ui",
-                var name => name
-            };
+                var engineArg = args[++i].ToLowerInvariant();
+                if (engineArg.Contains('/'))
+                {
+                    var parts = engineArg.Split('/', 2);
+                    engineType = parts[0];
+                    engineName = parts[1];
+                }
+                else
+                {
+                    engineName = engineArg;
+                }
+            }
             break;
         case "--dump":
             dumpAll = true;
@@ -152,20 +159,42 @@ if (specInput is null)
     }
 }
 
-// ===== GameData UI Probe modes (load gamedata spec, not roster spec) =====
-if (probeMode && engineName is "battlescribe-ui")
+// ===== Resolve engine type (roster vs gamedata) =====
+// If --engine used the <type>/<name> form, engineType is already set. Otherwise infer
+// it from the resolved spec path: contains "gamedata" → gamedata, "roster" → roster,
+// defaulting to roster when unknowable.
+engineType ??= InferEngineType(specInput);
+
+// Validate engine name.
+var validEngineNames = new[] { "battlescribe", "battlescribe-ui", "newrecruit", "newrecruit-ui" };
+if (!validEngineNames.Contains(engineName))
 {
-    return await RunBsGameDataUiProbe(specInput);
+    Console.Error.WriteLine(
+        $"Unknown engine name: '{engineName}'. Valid names: {string.Join(", ", validEngineNames)}.");
+    PrintUsage();
+    return 1;
 }
 
-if (probeMode && engineName is "nr-editor-ui")
+// ===== GameData engines (type=gamedata): load gamedata spec, not roster spec =====
+if (engineType == "gamedata")
 {
-    return await RunNrGameDataUiProbe(specInput, headless: false);
-}
+    if (probeMode && engineName == "battlescribe-ui")
+    {
+        return await RunBsGameDataUiProbe(specInput);
+    }
 
-// ===== GameData spec run modes (non-probe): run a gamedata spec with assertions =====
-if (engineName is "battlescribe-ui" or "nr-editor-ui")
-{
+    if (probeMode && engineName == "newrecruit-ui")
+    {
+        return await RunNrGameDataUiProbe(specInput, headless: false);
+    }
+
+    if (probeMode)
+    {
+        Console.Error.WriteLine($"--probe is only supported for gamedata UI engines (battlescribe-ui, newrecruit-ui).");
+        return 1;
+    }
+
+    // Non-probe: run a gamedata spec with assertions against the chosen gamedata engine.
     return await RunGameDataSpec(specInput, engineName, headless, dumpAll, json);
 }
 
@@ -209,14 +238,14 @@ if (exportXmlDir is not null)
     return 0;
 }
 
-// ===== BS UI Probe mode =====
-if (probeMode && engineName is "bs-ui")
+// ===== BS UI Probe mode (roster) =====
+if (probeMode && engineName is "battlescribe-ui")
 {
     return await RunBsUiProbe(spec);
 }
 
-// ===== NR UI Probe mode =====
-if (probeMode && engineName is "nr-ui")
+// ===== NR UI Probe mode (roster) =====
+if (probeMode && engineName is "newrecruit-ui")
 {
     return await RunNrUiProbe(spec, headless: false);
 }
@@ -237,12 +266,12 @@ catch (Exception ex)
 using (engine)
 {
     var dumpOptions = new DumpOptions(Json: json);
-    // bs-ui engine uses "battlescribe" assertion overrides since it IS the BattleScribe engine
-    // nr-ui engine uses "newrecruit" assertion overrides since it IS the NR engine
+    // The roster UI engines reuse their non-UI counterpart's assertion overrides since the
+    // UI engine drives the same underlying product (battlescribe-ui IS BattleScribe, etc.).
     var assertionEngineName = engineName switch
     {
-        "bs-ui" => "battlescribe",
-        "nr-ui" => "newrecruit",
+        "battlescribe-ui" => "battlescribe",
+        "newrecruit-ui" => "newrecruit",
         _ => engineName
     };
     var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngineName);
@@ -651,21 +680,48 @@ async Task<int> RunGameDataSpec(string? specInput, string engine, bool headless,
     IGameDataEngine gameDataEngine;
     try
     {
-        if (engine == "nr-editor-ui")
+        switch (engine)
         {
-            var staticDir = NrGameDataUiEngine.FindFrozenStaticDir()
-                ?? throw new InvalidOperationException(
-                    "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
-            Console.Error.WriteLine($"NR Editor GameData UI (frozen): {staticDir}");
-            gameDataEngine = await NrGameDataUiEngine.CreateFrozenAsync(staticDir, headless);
-        }
-        else // battlescribe-ui
-        {
-            var options = BsGameDataUiEngine.FindOptions()
-                ?? throw new InvalidOperationException(
-                    "BS UI artifacts not found — set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
-            Console.Error.WriteLine($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
-            gameDataEngine = new BsGameDataUiEngine(options);
+            case "newrecruit-ui":
+                {
+                    var staticDir = NrGameDataUiEngine.FindFrozenStaticDir()
+                        ?? throw new InvalidOperationException(
+                            "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
+                    Console.Error.WriteLine($"NR Editor GameData UI (frozen): {staticDir}");
+                    gameDataEngine = await NrGameDataUiEngine.CreateFrozenAsync(staticDir, headless);
+                    break;
+                }
+
+            case "battlescribe-ui":
+                {
+                    var options = BsGameDataUiEngine.FindOptions()
+                        ?? throw new InvalidOperationException(
+                            "BS UI artifacts not found — set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
+                    Console.Error.WriteLine($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
+                    gameDataEngine = new BsGameDataUiEngine(options);
+                    break;
+                }
+
+            case "newrecruit":
+                {
+                    var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir()
+                        ?? throw new InvalidOperationException(
+                            "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
+                    Console.Error.WriteLine($"NewRecruit GameData (frozen): {staticDir}");
+                    gameDataEngine = await NewRecruitGameDataEngine.CreateFrozenAsync(staticDir, headless);
+                    break;
+                }
+
+            case "battlescribe":
+                {
+                    Console.Error.WriteLine("BattleScribe GameData (in-process)");
+                    gameDataEngine = new BattleScribeGameDataEngine();
+                    break;
+                }
+
+            default:
+                throw new ArgumentException(
+                    $"Unknown gamedata engine: '{engine}'. Use 'battlescribe', 'newrecruit', 'battlescribe-ui', or 'newrecruit-ui'.");
         }
     }
     catch (Exception ex)
@@ -799,6 +855,53 @@ BsUiOptions ResolveBsUiOptions()
     };
 }
 
+// Infer the engine type ("gamedata" or "roster") from the resolved spec path.
+// Rules: a path/id containing "gamedata" → gamedata, "roster" → roster; default roster.
+string InferEngineType(string? input)
+{
+    if (input is null or "-")
+    {
+        return "roster";
+    }
+
+    // Resolve to an absolute path when the input is (or can be located as) a real file,
+    // so inference works even for bare spec IDs.
+    var resolved = input;
+    if (!File.Exists(input))
+    {
+        var gameDataDir = SpecLoader.FindGameDataSpecsDirectory();
+        if (gameDataDir is not null)
+        {
+            foreach (var file in Directory.EnumerateFiles(gameDataDir, "*.yaml", SearchOption.AllDirectories))
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                var relative = Path.GetRelativePath(gameDataDir, file).Replace('\\', '/');
+                if (name == input || relative == input || relative == input + ".yaml")
+                {
+                    return "gamedata";
+                }
+            }
+        }
+    }
+    else
+    {
+        resolved = Path.GetFullPath(input);
+    }
+
+    var normalized = resolved.Replace('\\', '/').ToLowerInvariant();
+    if (normalized.Contains("gamedata"))
+    {
+        return "gamedata";
+    }
+
+    if (normalized.Contains("roster"))
+    {
+        return "roster";
+    }
+
+    return "roster";
+}
+
 static string? FindRepoRoot()
 {
     var dir = Directory.GetCurrentDirectory();
@@ -906,10 +1009,10 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
 {
     switch (name)
     {
-        case "bs" or "battlescribe":
+        case "battlescribe":
             return new BattleScribeRosterEngine();
 
-        case "nr" or "newrecruit":
+        case "newrecruit":
             {
                 var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
                 NewRecruitRosterEngine nrEngine;
@@ -929,14 +1032,14 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
                 return nrEngine;
             }
 
-        case "bs-ui":
+        case "battlescribe-ui":
             {
                 var bsUiOptions = ResolveBsUiOptions();
                 Console.Error.WriteLine($"BS UI mode: {bsUiOptions.RosterEditorJarPath}");
                 return new BsUiRosterEngine(bsUiOptions) { KeepAlive = keepAlive };
             }
 
-        case "nr-ui":
+        case "newrecruit-ui":
             {
                 var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
                 NrRosterUiEngine uiEngine;
@@ -957,7 +1060,8 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
             }
 
         default:
-            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs', 'nr', 'bs-ui', or 'nr-ui'.");
+            throw new ArgumentException(
+                $"Unknown roster engine: '{name}'. Use 'battlescribe', 'newrecruit', 'battlescribe-ui', or 'newrecruit-ui'.");
     }
 }
 
@@ -1039,18 +1143,24 @@ static void PrintUsage()
                           or "-" for stdin
 
         Options:
-          --engine <name> Engine to use: bs (default), nr, bs-ui, nr-ui, battlescribe-ui, nr-editor-ui
-                          (battlescribe-ui / nr-editor-ui run GameData specs with assertions)
+          --engine <type>/<name>
+                          Engine to use. <type> ∈ {roster, gamedata} (optional — inferred
+                          from the spec path when omitted: specs/gamedata/... → gamedata,
+                          specs/roster/... → roster, default roster).
+                          <name> ∈ {battlescribe, battlescribe-ui, newrecruit, newrecruit-ui}.
+                          Default: roster/battlescribe.
           --dump          Dump state after every step (default: after last step only)
-          --probe         Run probe mode (bs-ui, nr-ui, battlescribe-ui, nr-editor-ui engines)
+          --probe         Run probe mode (the -ui engines of either type:
+                          roster/battlescribe-ui, roster/newrecruit-ui,
+                          gamedata/battlescribe-ui, gamedata/newrecruit-ui)
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
-          --export-roster <dir>  Export final roster as .ros XML (bs-ui engine only)
-          --screenshots <dir>  Capture screenshot at each step (bs-ui engine only)
-          --report <file>  Generate HTML timeline report (bs-ui engine only)
-          --record <file>  Record UI actions to JSON file (bs-ui engine only)
-          --keep-alive     Keep BattleScribe app running between runs (bs-ui only)
+          --export-roster <dir>  Export final roster as .ros XML (roster/battlescribe-ui only)
+          --screenshots <dir>  Capture screenshot at each step (roster -ui engines only)
+          --report <file>  Generate HTML timeline report (roster/battlescribe-ui only)
+          --record <file>  Record UI actions to JSON file (roster/battlescribe-ui only)
+          --keep-alive     Keep BattleScribe app running between runs (roster/battlescribe-ui only)
           --format [<dir>]    Format all *.yaml files under <dir> (default: specs/roster/)
           --check             With --format: report issues without fixing (exit 1 if any)
           -h, --help      Show this help
@@ -1059,14 +1169,16 @@ static void PrintUsage()
           bs-spec-debug specs/selection/selection-page.yaml
           bs-spec-debug selection/selection-page
           bs-spec-debug selection-page
-          bs-spec-debug --engine nr --dump specs/protocol/protocol-kitchen-sink.yaml
+          bs-spec-debug --engine roster/newrecruit --dump specs/protocol/protocol-kitchen-sink.yaml
           bs-spec-debug --export-xml ./output/ cost/cost-hidden-limit-validation
-          bs-spec-debug --engine bs-ui --probe selection/selection-page
-          bs-spec-debug --engine bs-ui selection/selection-page
-          bs-spec-debug --engine battlescribe-ui --probe gamedata/basic/entry-add
-          bs-spec-debug --engine nr-editor-ui --probe gamedata/basic/entry-add
-          bs-spec-debug --engine nr-editor-ui gamedata/entry/add-entry-nested
-          bs-spec-debug --engine battlescribe-ui --dump gamedata/entry/move-entry
+          bs-spec-debug --engine roster/battlescribe-ui --probe selection/selection-page
+          bs-spec-debug --engine roster/battlescribe-ui selection/selection-page
+          bs-spec-debug --engine gamedata/battlescribe-ui --probe gamedata/basic/entry-add
+          bs-spec-debug --engine gamedata/newrecruit-ui --probe gamedata/basic/entry-add
+          bs-spec-debug --engine gamedata/newrecruit-ui specs/gamedata/entry/add-entry-basic.yaml
+          bs-spec-debug --engine gamedata/newrecruit specs/gamedata/entry/se-create-in-gamesystem.yaml
+          bs-spec-debug --engine gamedata/battlescribe --dump specs/gamedata/entry/move-entry.yaml
+          bs-spec-debug --engine newrecruit-ui specs/gamedata/entry/add-entry-basic.yaml  # type inferred
           cat spec.yaml | bs-spec-debug -
           bs-spec-debug --format
           bs-spec-debug --format --check specs/roster/
