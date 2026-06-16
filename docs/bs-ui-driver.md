@@ -893,14 +893,12 @@ Used by the debugger tool for manual investigation of BattleScribe behavior.
 ## Building the Java Agent
 
 ```powershell
-# From src/bs-ui-java-agent/
-pwsh -File build.ps1
-# or on Linux/Mac:
-bash build.sh
+pwsh -File src/bs-ui-java-agent/build.ps1   # all platforms (PowerShell 7+)
 ```
 
-Compiles the Java sources and packages them into `bs-ui-java-agent.jar` with the
-`MANIFEST.MF` specifying `Premain-Class: bsspec.uiagent.BsUiAgent`.
+Normally you don't run this by hand — `setup.ps1` invokes it. It compiles the Java sources and
+packages them into `bs-ui-java-agent.jar` with the `MANIFEST.MF` specifying
+`Premain-Class: bsspec.uiagent.BsUiAgent`.
 
 Dependencies: Gson (bundled or on classpath), JavaFX (from the BS JRE).
 
