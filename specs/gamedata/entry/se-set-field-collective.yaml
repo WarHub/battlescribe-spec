@@ -1,10 +1,10 @@
 id: se-set-field-collective
 category: entry
 description: >
-  Set the collective field of a selection entry to true and verify
-  the state reflects it in the fields dictionary.
-engines:
-  nr-editor-ui: skip # collective checkbox is disabled in the NR Editor UI for model-type entries
+  Set the collective field of a nested selection entry to true and verify
+  the state reflects it in the fields dictionary. The entry is nested under a
+  parent because the NR Editor UI only enables the collective checkbox for
+  non-root entries.
 
 setup:
   gameSystem:
@@ -15,9 +15,13 @@ setup:
       name: Test Catalogue
       gameSystemId: gs-1
       selectionEntries:
-        - id: se-1
-          name: Squad Member
-          type: model
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-1
+              name: Squad Member
+              type: model
 
 steps:
   - action: setField
@@ -29,6 +33,8 @@ steps:
       catalogues:
         - id: cat-1
           selectionEntries:
-            - id: se-1
-              fields:
-                collective: "true"
+            - id: se-squad
+              children:
+                - id: se-1
+                  fields:
+                    collective: "true"
