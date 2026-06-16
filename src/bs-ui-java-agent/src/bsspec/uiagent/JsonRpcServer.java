@@ -130,11 +130,11 @@ public class JsonRpcServer {
             String result;
             if (FX_THREAD_METHODS.contains(method)) {
                 result = executeOnFxThread(() -> commands.dispatch(method, params));
-            } else if (method.startsWith("editor")) {
-                // High-level data editor actions run on background thread
+            } else if (method.startsWith("gamedata")) {
+                // High-level gamedata (Data Editor) actions run on background thread
                 result = dataEditorActions.dispatch(method, params);
             } else if (method.endsWith("Action")) {
-                // High-level roster actions run on background thread
+                // High-level roster (Roster Editor) actions run on background thread
                 result = rosterActions.dispatch(method, params);
             } else {
                 result = commands.dispatch(method, params);

@@ -76,7 +76,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         => RunAsync(() => SetupAsync(gameSystem, catalogues));
 
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
-        => RunAsync(() => CallActionAsync<GameDataActionOutputs>("editorAddEntryAction", new JsonObject
+        => RunAsync(() => CallActionAsync<GameDataActionOutputs>("gamedataAddEntryAction", new JsonObject
         {
             ["parentId"] = parentId,
             ["entryType"] = entryType,
@@ -84,13 +84,13 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         }));
 
     public void RemoveEntry(string entryId)
-        => RunAsync(() => CallActionAsync("editorRemoveEntryAction", new JsonObject
+        => RunAsync(() => CallActionAsync("gamedataRemoveEntryAction", new JsonObject
         {
             ["entryId"] = entryId,
         }));
 
     public void SetField(string entryId, string field, string? value)
-        => RunAsync(() => CallActionAsync("editorSetFieldAction", new JsonObject
+        => RunAsync(() => CallActionAsync("gamedataSetFieldAction", new JsonObject
         {
             ["entryId"] = entryId,
             ["field"] = field,
@@ -98,7 +98,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         }));
 
     public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
-        => RunAsync(() => CallActionAsync<GameDataActionOutputs>("editorAddLinkAction", new JsonObject
+        => RunAsync(() => CallActionAsync<GameDataActionOutputs>("gamedataAddLinkAction", new JsonObject
         {
             ["parentId"] = parentId,
             ["linkType"] = linkType,
@@ -202,7 +202,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                 ["gstPath"] = gstPath,
                 ["catPaths"] = new JsonArray([.. catPaths.Select(p => JsonValue.Create(p))])
             };
-            await CallActionAsync("editorLoadFilesAction", loadParams);
+            await CallActionAsync("gamedataLoadFilesAction", loadParams);
 
             return [];
         }
@@ -240,7 +240,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         ThrowIfDisposed();
         EnsureSetup();
 
-        var result = await ConnectedClient.CallAsync("editorGetDataState");
+        var result = await ConnectedClient.CallAsync("gamedataGetDataState");
         if (result is null)
         {
             return new GameDataState();

@@ -59,13 +59,13 @@ public class DataEditorActions {
                 ? new JsonParser().parse(params).getAsJsonObject()
                 : new JsonObject();
 
-        if ("editorLoadFilesAction".equals(method))   return loadFiles(p);
-        if ("editorAddEntryAction".equals(method))    return addEntry(p);
-        if ("editorRemoveEntryAction".equals(method)) return removeEntry(p);
-        if ("editorSetFieldAction".equals(method))    return setField(p);
-        if ("editorAddLinkAction".equals(method))     return addLink(p);
-        if ("editorGetDataState".equals(method))      return getDataState(p);
-        throw new IllegalArgumentException("Unknown data editor action: " + method);
+        if ("gamedataLoadFilesAction".equals(method))   return loadFiles(p);
+        if ("gamedataAddEntryAction".equals(method))    return addEntry(p);
+        if ("gamedataRemoveEntryAction".equals(method)) return removeEntry(p);
+        if ("gamedataSetFieldAction".equals(method))    return setField(p);
+        if ("gamedataAddLinkAction".equals(method))     return addLink(p);
+        if ("gamedataGetDataState".equals(method))      return getDataState(p);
+        throw new IllegalArgumentException("Unknown gamedata action: " + method);
     }
 
     // ─── Actions ─────────────────────────────────────────────────────────────

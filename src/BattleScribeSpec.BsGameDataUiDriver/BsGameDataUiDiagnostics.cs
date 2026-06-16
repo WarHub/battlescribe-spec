@@ -85,7 +85,7 @@ public static class BsGameDataUiDiagnostics
                     sb.AppendLine("─── DATA STATE ──────────────────────────────────────────");
                     try
                     {
-                        var dataState = await client.CallAsync("editorGetDataState");
+                        var dataState = await client.CallAsync("gamedataGetDataState");
                         sb.AppendLine(FormatJson(dataState));
                     }
                     catch (Exception ex)

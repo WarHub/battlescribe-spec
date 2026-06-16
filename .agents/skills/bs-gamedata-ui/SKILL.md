@@ -21,19 +21,19 @@ BsGameDataUiEngine (IGameDataEngine) — C# side
 │   ├── Generate XML via CatXmlGenerator
 │   ├── Write .gst/.cat files to isolated BS home directory
 │   └── Launch BattleScribe + connect Java agent
-├── Mutations: AgentClient.CallAsync("editorXxxAction", params)
-│   ├── editorAddEntryAction    → DataEditorActions.addEntry()
-│   ├── editorRemoveEntryAction → DataEditorActions.removeEntry()
-│   ├── editorSetFieldAction    → DataEditorActions.setField()
-│   └── editorAddLinkAction     → DataEditorActions.addLink()
-├── State: AgentClient.CallAsync("editorGetDataState")
+├── Mutations: AgentClient.CallAsync("gamedataXxxAction", params)
+│   ├── gamedataAddEntryAction    → DataEditorActions.addEntry()
+│   ├── gamedataRemoveEntryAction → DataEditorActions.removeEntry()
+│   ├── gamedataSetFieldAction    → DataEditorActions.setField()
+│   └── gamedataAddLinkAction     → DataEditorActions.addLink()
+├── State: AgentClient.CallAsync("gamedataGetDataState")
 │   └── DataEditorActions.getDataState() → Java model traversal → JSON
 └── Diagnostics: BsGameDataUiDiagnostics.CaptureAsync()
     └── scene dump + thread dump + data state + screenshot
 
 DataEditorActions.java — Java agent side
-├── Dispatched from JsonRpcServer when method.startsWith("editor")
-├── editorLoadFilesAction → load the staged .gst/.cat into the editor controller
+├── Dispatched from JsonRpcServer when method.startsWith("gamedata")
+├── gamedataLoadFilesAction → load the staged .gst/.cat into the editor controller
 ├── Each mutation: locate tree node → interact with JavaFX scene → verify state
 └── Status: fully implemented (load / addEntry / removeEntry / setField / addLink / getDataState)
 ```
@@ -115,16 +115,17 @@ Re-probe only when a new field/control id or menu label is unknown.
 
 ## JSON-RPC routing
 
-In `JsonRpcServer.java`, methods starting with `"editor"` route to `DataEditorActions.dispatch()`:
+In `JsonRpcServer.java`, methods starting with `"gamedata"` route to `DataEditorActions.dispatch()`
+(the gamedata/roster split mirrors the engine identifiers; roster actions keep the `*Action` suffix):
 
 ```java
-} else if (method.startsWith("editor")) {
+} else if (method.startsWith("gamedata")) {
     result = dataEditorActions.dispatch(method, params);
 } else if (method.endsWith("Action")) {
     result = rosterActions.dispatch(method, params);
 ```
 
-Adding new data editor methods: add a `case "editorXxxAction":` in `DataEditorActions.dispatch()`.
+Adding new gamedata methods: add a `gamedataXxxAction` entry in `DataEditorActions.dispatch()`.
 
 ## Diagnostics on failure
 
@@ -132,7 +133,7 @@ When a test fails, `BsGameDataUiDiagnostics.CaptureAsync()` writes to
 `artifacts/bs-gamedata-ui-diagnostics/{timestamp}-{specId}.txt`:
 - Open windows list
 - Full scene graph dump (depth 4 for all windows)
-- Data state JSON (`editorGetDataState`)
+- Data state JSON (`gamedataGetDataState`)
 - Thread dump (detects deadlocks)
 - Stack trace
 
@@ -150,7 +151,7 @@ its Java counterpart.
    locate the tree item via the cached `DataEditorWindowController`, mutate on the FX thread
    (`Platform.runLater` / `runOnFxGet`), then poll until the model reflects the change.
 3. Call it from `BsGameDataUiEngine.cs` via `CallActionAsync(...)`. The controller is cached and
-   reused across calls (cleared on each `editorLoadFilesAction`).
+   reused across calls (cleared on each `gamedataLoadFilesAction`).
 
 ### Edit-panel fields
 

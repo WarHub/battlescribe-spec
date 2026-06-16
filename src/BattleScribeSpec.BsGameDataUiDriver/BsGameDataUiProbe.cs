@@ -27,7 +27,7 @@ namespace BattleScribeSpec.BsGameDataUiDriver;
 ///   <item><c>dumpTree {"maxDepth": 5, "windowTitle": "Data Editor"}</c> — inspect scene graph</item>
 ///   <item><c>findNodeByText {"text": "...", "windowTitle": "..."}</c> — find node by label</item>
 ///   <item><c>captureScreenshot</c> — capture PNG screenshot</item>
-///   <item><c>editorGetDataState</c> — read the loaded data model as JSON</item>
+///   <item><c>gamedataGetDataState</c> — read the loaded data model as JSON</item>
 /// </list>
 /// </para>
 /// </summary>
