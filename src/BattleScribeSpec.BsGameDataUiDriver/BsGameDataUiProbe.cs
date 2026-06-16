@@ -9,9 +9,9 @@ namespace BattleScribeSpec.BsGameDataUiDriver;
 /// with the agent, connect, and leave the app open for inspection.
 ///
 /// <para>
-/// <b>Usage</b> (from bs-spec-debug):
+/// <b>Usage</b> (from bs-spec):
 /// <code>
-/// bs-spec-debug --engine gamedata/battlescribe-ui --probe [spec-id]
+/// bs-spec probe --engine battlescribe --ui [spec-id]
 /// </code>
 /// This stages the spec's game system / catalogue files, launches the Data Editor
 /// (<c>DataEditor.jar</c> — the same artifact <see cref="BsGameDataUiEngine"/> drives), connects

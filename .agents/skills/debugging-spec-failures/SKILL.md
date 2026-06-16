@@ -194,14 +194,14 @@ See [ERROR-ASSERTIONS.md](references/ERROR-ASSERTIONS.md) for error matching det
 
 ## Debugging workflow
 
-1. **Quick dump:** Run the spec with `bs-spec-debug` to see full roster state:
+1. **Quick dump:** Run the spec with `bs-spec` to see full roster state:
    ```bash
-   dotnet run --project src/BattleScribeSpec.Debugger -- {category/id}
-   dotnet run --project src/BattleScribeSpec.Debugger -- --dump {category/id}   # after every step
-   dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit {id}       # against NR
-   dotnet run --project src/BattleScribeSpec.Debugger -- --json {id}            # JSON output
+   dotnet run --project src/BattleScribeSpec.Cli -- run {category/id}
+   dotnet run --project src/BattleScribeSpec.Cli -- run --all-steps {category/id}   # after every step
+   dotnet run --project src/BattleScribeSpec.Cli -- run --engine newrecruit {id}    # against NR
+   dotnet run --project src/BattleScribeSpec.Cli -- run --json {id}                 # JSON output
    ```
-   Default dumps after the last step. Use `--dump` to see state progression.
+   Default dumps after the last step. Use `--all-steps` to see state progression.
    Use `action: dump` in spec YAML for explicit dump points.
 2. **Isolate:** Run single spec with `--filter "DisplayName~{id}"`
 3. **Read:** Parse the `Step N: path: expected X but got Y` messages

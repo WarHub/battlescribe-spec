@@ -55,19 +55,21 @@ so neither local runs nor CI need to set anything. Tests self-skip when BS artif
 
 ## Debugging specs
 
-Use `bs-spec-debug` to run a spec step-by-step and inspect full roster state:
+Use `bs-spec` to run a spec step-by-step and inspect full roster state:
 
 ```bash
-dotnet run --project src/BattleScribeSpec.Debugger -- selection-publication        # by spec ID
-dotnet run --project src/BattleScribeSpec.Debugger -- --dump protocol/kitchen-sink # dump after every step
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit --json spec.yaml # NR engine, JSON output
-dotnet run --project src/BattleScribeSpec.Debugger -- --export-xml ./out/ cost/cost-hidden-limit-validation
+dotnet run --project src/BattleScribeSpec.Cli -- run selection-publication             # by spec ID
+dotnet run --project src/BattleScribeSpec.Cli -- run --all-steps protocol/kitchen-sink # dump after every step
+dotnet run --project src/BattleScribeSpec.Cli -- run --engine newrecruit --json spec.yaml # NR engine, JSON output
+dotnet run --project src/BattleScribeSpec.Cli -- export-xml cost/cost-hidden-limit-validation ./out/
 ```
 
-Options: `--dump` (all steps), `--json`, `--engine <type>/<name>` (type ∈ {roster, gamedata},
-inferred from the spec path if omitted; name ∈ {battlescribe, battlescribe-ui, newrecruit,
-newrecruit-ui}), `--no-headless`,
-`--export-xml <dir>` (generate .gst/.cat XML files from spec setup and exit).
+Verbs: `run` (execute + assert), `probe` (open a UI engine for inspection), `export-xml`,
+`format`. Engine selection is orthogonal: `--engine {battlescribe,newrecruit}`, `--ui` to
+drive the real app, and the domain (roster/gamedata) is inferred from the spec path
+(override with `--gamedata`/`--roster`). `run` options include `--all-steps`,
+`--output {tree,json}` (or `--json`), `--headed`, `--screenshots <dir>`, `--timeline <file>`,
+`--record <file>`, `--save-roster <dir>`, `--keep-alive`, and `--break <n>`.
 Specs can include `action: dump` steps for explicit dump points.
 
 ## After editing specs
@@ -97,7 +99,7 @@ pwsh -File tools/format-specs.ps1                                               
 | `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiEngine.cs` | BS Data Editor UI driver (Java agent RPC) |
 | `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiDiagnostics.cs` | BS GameData UI diagnostics |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/DataEditorActions.java` | BS Data Editor Java agent stubs (need probing) |
-| `src/BattleScribeSpec.Debugger/Program.cs` | bs-spec-debug console app |
+| `src/BattleScribeSpec.Cli/Program.cs` | bs-spec console app (run/probe/export-xml/format) |
 | `src/BattleScribeSpec.TestKit/Protocol/AdapterHandler.cs` | Action dispatch |
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |

@@ -2,9 +2,18 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <RootNamespace>BattleScribeSpec.Debugger</RootNamespace>
-    <AssemblyName>bs-spec-debug</AssemblyName>
+    <RootNamespace>BattleScribeSpec.Cli</RootNamespace>
+    <AssemblyName>bs-spec</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BattleScribeSpec.Cli.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\BattleScribeSpec.BattleScribe\BattleScribeSpec.BattleScribe.csproj" />

@@ -164,10 +164,7 @@ are for deep dives, not prerequisites.
 | `changing-protocol-types` | Protocol type file sync | COMMON-MISTAKES.md, FILE-MAP.md |
 | `battlescribe-engine` | IKVM Java interop engine | JAVA-MODEL-FACTORY.md |
 | `newrecruit-adapter` | Playwright browser adapter | STATE-EXTRACTION.md |
-| `nr-adhoc-probing` | NR UI probe and JS REPL debugging | NR-INTERNALS.md, NR-UI-PROBE.md |
-| `bs-ui-probing` | BS Roster UI driver probe and diagnostics | BS-UI-PROBE.md |
-| `nr-gamedata-ui` | NR Editor GameData UI driver (Playwright) | — |
-| `bs-gamedata-ui` | BS Data Editor GameData UI driver (Java agent) | — |
+| `bsspec-cli` | bs-spec CLI: run/probe/debug specs across all engines | BS-ROSTER-UI.md, NR-ROSTER-UI.md, NR-INTERNALS.md, BS-GAMEDATA-UI.md, NR-GAMEDATA-UI.md |
 | `managing-skills` | This skill — creating/updating skills | SKILL-TEMPLATE.md |
 | `managing-backlog` | Issue triage, labels, hierarchy, grooming | ISSUE-HIERARCHY.md, LABEL-TAXONOMY.md |
 

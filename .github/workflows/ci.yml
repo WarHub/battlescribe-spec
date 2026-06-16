@@ -133,8 +133,8 @@ jobs:
 
       - name: Run kitchen-sink via BS UI driver
         run: |
-          xvfb-run -a dotnet run --project src/BattleScribeSpec.Debugger -- \
-            --engine roster/battlescribe-ui protocol-kitchen-sink
+          xvfb-run -a dotnet run --project src/BattleScribeSpec.Cli -- \
+            run --engine battlescribe --ui protocol-kitchen-sink
 
       - name: Run specs via BS GameData UI driver
         run: |

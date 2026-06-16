@@ -11,8 +11,8 @@ namespace BattleScribeSpec.NrGameDataUiDriver;
 /// Used to discover and validate CSS selectors for the NR Editor's tree UI
 /// before they are codified in <see cref="NrGameDataUiActions"/>.
 ///
-/// Usage via Debugger:
-///   dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe spec-id
+/// Usage via the CLI:
+///   dotnet run --project src/BattleScribeSpec.Cli -- probe --engine newrecruit --ui spec-id
 /// </summary>
 public sealed class NrGameDataUiProbe : IAsyncDisposable
 {

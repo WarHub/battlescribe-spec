@@ -295,7 +295,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         {
             throw new NotSupportedException(
                 $"[bs-gamedata-ui] {method} is not yet implemented in the Java agent. " +
-                $"Run `bs-spec-debug --engine gamedata/battlescribe-ui --probe` to probe the data editor UI, " +
+                $"Run `bs-spec probe --engine battlescribe --ui` to probe the data editor UI, " +
                 $"then implement DataEditorActions.{method}(). Agent error: {ex.Message}", ex);
         }
         finally
@@ -323,7 +323,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         {
             throw new NotSupportedException(
                 $"[bs-gamedata-ui] {method} is not yet implemented in the Java agent. " +
-                $"Run `bs-spec-debug --engine gamedata/battlescribe-ui --probe` to probe the data editor UI, " +
+                $"Run `bs-spec probe --engine battlescribe --ui` to probe the data editor UI, " +
                 $"then implement DataEditorActions.{method}(). Agent error: {ex.Message}", ex);
         }
         finally

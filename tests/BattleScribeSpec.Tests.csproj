@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
+    <!-- BattleScribeSpec.Cli.Tests is a separate project nested in this directory; don't sweep up its files. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);BattleScribeSpec.Cli.Tests/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,7 +24,6 @@
     <ProjectReference Include="..\src\BattleScribeSpec.NrRosterUiDriver\BattleScribeSpec.NrRosterUiDriver.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.NrGameDataUiDriver\BattleScribeSpec.NrGameDataUiDriver.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.BsGameDataUiDriver\BattleScribeSpec.BsGameDataUiDriver.csproj" />
-    <ProjectReference Include="..\src\BattleScribeSpec.Debugger\BattleScribeSpec.Debugger.csproj" />
   </ItemGroup>
 
   <ItemGroup>

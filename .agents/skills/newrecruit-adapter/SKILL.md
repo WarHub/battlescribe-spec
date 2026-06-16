@@ -210,7 +210,7 @@ an instance. Without it, nested min-constraint children aren't populated.
 **Caveat:** `autocheck()` ignores `defaultSelectionEntryId` — it picks entries
 alphabetically. Specs must use single-option groups for deterministic auto-selection.
 
-See [NR-INTERNALS.md](../nr-adhoc-probing/references/NR-INTERNALS.md) for the full
+See [NR-INTERNALS.md](../bsspec-cli/references/NR-INTERNALS.md) for the full
 deobfuscated behavior reference.
 
 ## HAR recording and replay
