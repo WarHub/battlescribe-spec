@@ -2,9 +2,9 @@
 name: bs-gamedata-ui
 description: >
   Work with the BS GameData UI driver (BattleScribe desktop Data Editor via Java agent RPC).
-  Use when debugging BsGameDataUiDriver test failures, implementing DataEditorActions.java stubs,
-  probing the BattleScribe data editor scene graph, understanding the JSON-RPC dispatch for
-  data editor methods, or extending the driver to support new entry types.
+  Use when debugging BsGameDataUiDriver test failures, extending DataEditorActions.java with new
+  data editor methods, probing the BattleScribe data editor scene graph, understanding the
+  JSON-RPC dispatch for data editor methods, or supporting new entry types and fields.
 ---
 
 # BS GameData UI Driver
@@ -33,11 +33,14 @@ BsGameDataUiEngine (IGameDataEngine) — C# side
 
 DataEditorActions.java — Java agent side
 ├── Dispatched from JsonRpcServer when method.startsWith("editor")
-├── Each method: locate tree node → interact with JavaFX scene → verify state
-└── Status: ALL STUBS (not yet implemented, need UI probing)
+├── editorLoadFilesAction → load the staged .gst/.cat into the editor controller
+├── Each mutation: locate tree node → interact with JavaFX scene → verify state
+└── Status: fully implemented (load / addEntry / removeEntry / setField / addLink / getDataState)
 ```
 
-**Engine name**: `battlescribe-ui` (use in spec `engines` field overrides).
+**Engine name in specs**: `battlescribe-ui` (use in a spec's `engines:` field overrides).
+**Debugger `--engine` flag**: `gamedata/battlescribe-ui` (the `gamedata/` type prefix selects the
+GameData engine; it is inferred from a `specs/gamedata/...` path when omitted).
 
 ## Current status: Implemented (49/49 gamedata specs pass)
 
@@ -71,127 +74,43 @@ Other gotchas baked into the implementation:
   `BaseSelectionEntry` parent and is a **silent no-op at the root**. A plain selection entry is
   already handled at the root by `actAddSelectionEntry`. See `isRootEntry(...)`.
 
-## Environment setup
-
-Same as `BsUiRosterEngine` — the data editor reuses the same binary artifacts:
+## Running
 
 ```powershell
-# Binary artifacts (downloaded by setup.ps1):
-lib/battlescribe/DataEditor.jar      # BattleScribe Data Editor JAR (platform-independent)
-lib/battlescribe/lib/*.jar           # dependency JARs
-lib/liberica-jdk/jdk-11.0.31-full/   # BellSoft Liberica 11 full JDK (JavaFX) — used to build/run
-
-# Agent JAR (built by setup.ps1, or manually):
-pwsh -File src/bs-ui-java-agent/build.ps1 -JavaHome lib/liberica-jdk/jdk-11.0.31-full
-# Output: src/bs-ui-java-agent/bs-ui-java-agent.jar
+pwsh -File setup.ps1                        # once — downloads BattleScribe + Liberica JDK, builds the agent
+dotnet test -p:TestProfile=bs-ui-gamedata
 ```
 
-`BsGameDataUiEngine.FindOptions()` auto-discovers these paths.
-
-### Running the specs locally
-
-The bundled `lib/battlescribe/jre` is the **Linux** runtime (no Windows JavaFX). On any platform,
-point `BS_UI_JAVA_PATH` at the Liberica full JDK (the JavaFX runtime, same build CI uses):
-
-```powershell
-$env:BS_UI_JAVA_PATH = "$PWD/lib/liberica-jdk/jdk-11.0.31-full/bin/java.exe"  # or .../bin/java on *nix
-Remove-Item Env:\BS_UI_SKIP -ErrorAction SilentlyContinue   # ensure not skipped
-dotnet build tests/BattleScribeSpec.Tests.csproj
-dotnet test  tests/BattleScribeSpec.Tests.csproj --no-build --filter "FullyQualifiedName~BsGameDataUiEngine"
-```
+That's the whole setup — the Java runtime and jars are auto-discovered (`BsUiPaths.ResolveJavaPath`,
+`BsGameDataUiEngine.FindOptions`). Set `BS_UI_JAVA_PATH` only to override the JDK (CI does).
 
 Notes:
 - Each spec relaunches the app (~5 s) → full suite ≈ 4–5 min, matching CI.
 - `BS_UI_KEEP_ALIVE=true` is **broken for gamedata** (stale data across specs → "Tree item not
-  found"); leave it unset. CI does not use it.
-- The Debugger CLI runs *roster* specs and offers gamedata **`--probe`** (interactive launch) only —
-  it has no gamedata spec-runner with assertions; use `dotnet test` for pass/fail.
+  found"); leave it unset.
+- Single spec end-to-end with assertions:
+  `dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/battlescribe-ui specs/gamedata/entry/se-create-in-gamesystem.yaml`
+  (add `--dump` for per-step state).
 
-## Test profiles
-
-| Profile | Command |
-|---------|---------|
-| `bs-ui-gamedata` | `dotnet test -p:TestProfile=bs-ui-gamedata` |
-
-Set `BS_UI_SKIP=true` to skip all BS UI tests.
-
-## Probe workflow — implement DataEditorActions.java
-
-Before implementing stubs, you must probe the BattleScribe data editor to discover:
-- The window title of the data editor window
-- The tree item structure (how entries appear as `:id:` tokens)
-- Context menu items for add/remove/link operations
-- Property panel structure for field editing
-
-### Step 1: Launch probe
+## Probe workflow — visual inspection
 
 ```powershell
-# Launch BS with a simple game system, enter the agent REPL
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine battlescribe-ui --probe gamedata/basic/entry-add
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/battlescribe-ui --probe specs/gamedata/entry/se-create-in-gamesystem.yaml
 ```
 
-### Step 2: Explore the data editor
+This stages the spec's game system / catalogues, launches BattleScribe with the Java agent, loads
+the data editor, and **leaves the app open for manual inspection** — press Enter in the terminal to
+shut it down. Unlike the NR gamedata probe, the BS probe has **no JSON-RPC REPL**; use it to watch
+the editor by hand, or attach to the agent port from your own tooling.
 
-In the agent REPL (JSON-RPC calls):
+How the driver locates things (already discovered — you don't need to re-probe to use it):
+- **Window**: the Data Editor opens directly as a Stage titled `"Data Editor …"`; setup waits for it.
+- **Controller**: found via that Stage → `#btnSaveDataFile`'s `setOnAction` handler →
+  `DataEditorWindowController`.
+- **Entries**: located by tree item via the controller's tree, not by a `:id:` token.
 
-```json
-// List all open windows
-{"method": "getWindows", "params": {}}
-
-// Navigate to data editor window (title TBD — look for "Data Editor" or similar)
-// Then dump its scene graph
-{"method": "dumpTree", "params": {"maxDepth": 4, "windowTitle": "Data Editor"}}
-
-// Try clicking the "Data Editor" menu item to open it
-{"method": "findNodeByText", "params": {"text": "Data Editor"}}
-{"method": "clickNode", "params": {"selector": "#menuDataEditor"}}
-
-// After opening, dump tree again
-{"method": "dumpTree", "params": {"maxDepth": 5}}
-
-// Find the entry tree view
-{"method": "findNode", "params": {"selector": "TreeView, .tree-view, #entryTree"}}
-```
-
-### Step 3: Map the UI structure
-
-Document in `DataEditorActions.java`:
-1. Window title for the data editor (e.g., `"BattleScribe Data Editor"`)
-2. How to navigate from Roster Editor → Data Editor (menu item? toolbar button?)
-3. Tree item format (`:id:` substring? full name? separate label field?)
-4. Context menu items (e.g., "Add Selection Entry", "Add Force Entry")
-5. Property panel fields (CSS selectors for name, type, hidden inputs)
-
-### Step 4: Implement stubs
-
-Each stub follows the `RosterActions.java` pattern:
-1. Locate tree item by `entryId` (substring search `:id:`)
-2. Right-click to open context menu
-3. Click the appropriate menu item
-4. Fill dialog if shown (name, type)
-5. Poll until the entry appears in the tree
-6. Read the new entry's ID via engineAccessor or scene text
-7. Return JSON `{"entryId": "..."}` for addEntry/addLink
-
-```java
-// Pattern from RosterActions.java (adapt for data editor):
-private String addEntry(JsonObject params) {
-    String parentId = params.get("parentId").getAsString();
-    String entryType = params.get("entryType").getAsString();
-
-    // Run on background thread (complex UI sequence)
-    String contextMenuItemText = entryTypeToMenuLabel(entryType);
-    // 1. Select parent tree item
-    selectTreeItemById(parentId);
-    // 2. Right-click → context menu
-    JsonObject cmResult = rightClickCurrentTreeItem();
-    // 3. Click "Add" → entryType
-    clickContextMenuCascade("Add", contextMenuItemText);
-    // 4. Wait for new entry
-    String newId = waitForNewChildEntry(parentId);
-    return "{\"entryId\":\"" + newId + "\"}";
-}
-```
+To **add** a new action you generally edit `DataEditorActions.java` directly (see *How to extend*).
+Re-probe only when a new field/control id or menu label is unknown.
 
 ## JSON-RPC routing
 
@@ -216,37 +135,33 @@ When a test fails, `BsGameDataUiDiagnostics.CaptureAsync()` writes to
 - Thread dump (detects deadlocks)
 - Stack trace
 
-`NotSupportedException` failures (stubs not implemented) are expected until implementation.
+A `NotSupportedException` from `CallActionAsync` means the Java agent reported a method as
+unimplemented (`UnsupportedOperationException` / "not yet implemented"). All current actions are
+implemented, so this should only appear if you add a new `editorXxxAction` case in C# before wiring
+its Java counterpart.
 
 ## How to extend
 
-### Opening the data editor window
-
-After probing, the engine's `SetupAsync()` must call a method to open the data editor window.
-In `BsGameDataUiEngine.cs`, replace the TODO comment:
-
-```csharp
-// TODO: Open the Data Editor window once selector is known.
-await OpenDataEditorWindowAsync();
-```
-
-Implement `OpenDataEditorWindowAsync()` to navigate to the data editor using the discovered
-menu item or toolbar button.
-
 ### Adding a new action to DataEditorActions.java
 
-1. Add a new case to `dispatch()`: `case "editorNewAction":`
-2. Implement the method following the probe-discovered UI structure
-3. No C# changes needed — `BsGameDataUiEngine.cs` calls via generic `CallActionAsync()`
+1. Add a new `editorXxxAction` line to `DataEditorActions.dispatch()`.
+2. Implement the method, following the existing actions (`addEntry` / `setField`):
+   locate the tree item via the cached `DataEditorWindowController`, mutate on the FX thread
+   (`Platform.runLater` / `runOnFxGet`), then poll until the model reflects the change.
+3. Call it from `BsGameDataUiEngine.cs` via `CallActionAsync(...)`. The controller is cached and
+   reused across calls (cleared on each `editorLoadFilesAction`).
+
+### Edit-panel fields
+
+Field writes go through `setField`, which sets the control then **fires an `ActionEvent`** so the
+panel's `setOnAction` handler commits the value to the model — see the control-id table above for
+the confirmed CSS ids and per-field quirks.
 
 ### State extraction in Java
 
-`getDataState()` must traverse the Java data model. The model is accessed via:
-- `engineAccessor` (which can access the data editor engine via reflection)
-- Or direct model access if the data editor has a different engine class than the roster editor
-
-Check `EngineAccessor.java` to see how the roster engine is located, then find the parallel
-method for the data editor model.
+`getDataState()` traverses the loaded data model via the cached controller and serializes each
+entry's fields. When adding a field, remember to serialize it in `getDataState()` too, or the
+assertion will see `''` (this already bit `collective` / `imported` / `defaultSelectionEntryId`).
 
 ## Reference files
 
@@ -255,7 +170,7 @@ method for the data editor model.
 | `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiEngine.cs` | Main engine class |
 | `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiDiagnostics.cs` | Failure diagnostics |
 | `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiProbe.cs` | Probe session launcher |
-| `src/bs-ui-java-agent/src/bsspec/uiagent/DataEditorActions.java` | Java agent stubs |
+| `src/bs-ui-java-agent/src/bsspec/uiagent/DataEditorActions.java` | Java agent actions (load/add/remove/setField/addLink/getState) |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/JsonRpcServer.java` | RPC routing (editor→DataEditorActions) |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/RosterActions.java` | Reference for action patterns |
 | `src/BattleScribeSpec.BsRosterUiDriver/AgentClient.cs` | Shared C# RPC client |

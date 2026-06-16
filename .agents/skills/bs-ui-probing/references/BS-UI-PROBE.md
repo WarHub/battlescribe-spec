@@ -146,25 +146,14 @@ the tree view, costs from visible labels. Independent of the engine API.
 
 ## Environment resolution
 
-The debugger resolves BS UI paths in this order:
+`setup.ps1` provisions everything and the debugger auto-discovers it:
 
-1. **Env vars** (explicit override):
-   - `BS_UI_JAVA_PATH` — path to `java(.exe)` binary
-   - `BS_UI_APP_DIR` — directory containing `RosterEditor.jar`
-   - `BS_UI_AGENT_JAR` — path to `bs-ui-java-agent.jar`
+- Java: repo-local Liberica JDK at `lib/liberica-jdk/bin/java[.exe]` (`BsUiPaths.ResolveJavaPath`)
+- App: `lib/battlescribe/RosterEditor.jar`
+- Agent: `src/bs-ui-java-agent/bs-ui-java-agent.jar` (built by `setup.ps1`)
 
-2. **Conventional repo locations** (fallback):
-   - `lib/battlescribe/jre-win/bin/java.exe` (Windows)
-   - `lib/battlescribe/jre-mac/bin/java` (macOS)
-   - `lib/battlescribe/jre/bin/java` (Linux)
-   - `lib/battlescribe/RosterEditor.jar`
-   - `src/bs-ui-java-agent/bs-ui-java-agent.jar`
-
-`setup.ps1` downloads BattleScribe to `lib/battlescribe/`. The agent JAR is **not**
-included — build it separately:
-```powershell
-pwsh -File src/bs-ui-java-agent/build.ps1
-```
+Override env vars (set only for non-default artifacts): `BS_UI_JAVA_PATH` (takes precedence over the
+Liberica JDK), `BS_UI_APP_DIR` (directory containing `RosterEditor.jar`), `BS_UI_AGENT_JAR`.
 
 ## Startup sequence details
 

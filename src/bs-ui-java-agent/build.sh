@@ -29,7 +29,8 @@ elif [ -n "${JAVA_HOME:-}" ]; then
     JAVAC="$JAVA_HOME/bin/javac"
     JAR_CMD="$JAVA_HOME/bin/jar"
 else
-    # Auto-discover in-repo Liberica JDK (installed by setup.ps1 for local dev)
+    # Auto-discover in-repo Liberica JDK (installed by setup.ps1 for local dev).
+    # setup.ps1 normalizes the layout so bin/ is directly under lib/liberica-jdk on every OS.
     SEARCH_DIR="$SCRIPT_DIR"
     while [ "$SEARCH_DIR" != "/" ] && [ -n "$SEARCH_DIR" ]; do
         CANDIDATE="$SEARCH_DIR/lib/liberica-jdk"
@@ -37,15 +38,6 @@ else
             JAVAC="$CANDIDATE/bin/javac"
             JAR_CMD="$CANDIDATE/bin/jar"
             break
-        elif [ -d "$CANDIDATE" ]; then
-            for subdir in "$CANDIDATE"/*/; do
-                if [ -f "$subdir/bin/javac" ]; then
-                    JAVAC="$subdir/bin/javac"
-                    JAR_CMD="$subdir/bin/jar"
-                    break
-                fi
-            done
-            [ -n "$JAVAC" ] && break
         fi
         SEARCH_DIR="$(dirname "$SEARCH_DIR")"
     done

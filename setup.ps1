@@ -51,6 +51,21 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = $PSScriptRoot
 
+# Locate a JDK home under $root, tolerating the three extraction layouts we produce:
+#   - bin directly under $root            (Linux: tar --strip-components=1)
+#   - <subdir>/bin                        (Windows: zip)
+#   - <subdir>/Contents/Home/bin          (macOS: zip, .jdk app bundle)
+function Resolve-JdkHome {
+    param([string]$root)
+    if (Test-Path (Join-Path $root 'bin')) { return $root }
+    foreach ($dir in (Get-ChildItem $root -Directory -ErrorAction SilentlyContinue)) {
+        if (Test-Path (Join-Path $dir.FullName 'bin')) { return $dir.FullName }
+        $macHome = Join-Path $dir.FullName 'Contents/Home'
+        if (Test-Path (Join-Path $macHome 'bin')) { return $macHome }
+    }
+    return $null
+}
+
 Write-Host "Setting up battlescribe-spec dependencies..." -ForegroundColor Cyan
 Write-Host "  Repo root: $repoRoot"
 Write-Host ""
@@ -196,11 +211,17 @@ if ($SkipJavaAgent -or $env:CI -eq 'true') {
     Write-Host ""
     Write-Host "Setting up Liberica JDK $libericaVersion (for bs-ui-java-agent)..." -ForegroundColor Cyan
 
-    if (-not $Force -and (Test-Path $libericaTagFile) -and ((Get-Content $libericaTagFile -Raw).Trim() -eq $libericaVersion)) {
+    # Re-extract if forced, version-mismatched, OR a legacy non-normalized layout is present
+    # (correct version on .tag but no top-level bin/ — e.g. an install from before normalization).
+    $libericaReady = (Test-Path $libericaTagFile) -and
+        ((Get-Content $libericaTagFile -Raw).Trim() -eq $libericaVersion) -and
+        (Test-Path (Join-Path $libericaDir 'bin'))
+    if (-not $Force -and $libericaReady) {
         Write-Host "  [OK] Already downloaded ($libericaVersion)" -ForegroundColor Green
     } else {
         if (Test-Path $libericaDir) { Remove-Item $libericaDir -Recurse -Force }
-        New-Item -ItemType Directory -Path $libericaDir -Force | Out-Null
+        $staging = Join-Path $libericaDir '.staging'
+        New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
         $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) { 'aarch64' } else { 'amd64' }
         if ($IsLinux) {
@@ -219,37 +240,39 @@ if ($SkipJavaAgent -or $env:CI -eq 'true') {
         Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
         $ProgressPreference = 'Continue'
 
+        # Extract into staging, then normalize so the JDK home is ALWAYS $libericaDir itself
+        # (i.e. $libericaDir/bin/java exists on every OS). The archive's internal layout differs
+        # per OS — Linux/Windows wrap the JDK in a jdk-*-full/ dir, macOS in a
+        # jdk-*-full.jdk/Contents/Home/ app bundle — but downstream consumers see one path.
         Write-Host "  Extracting..." -ForegroundColor Yellow
         if ($assetName.EndsWith('.tar.gz')) {
-            # tar --strip-components=1 puts JDK contents directly into $libericaDir
-            tar -xzf $archivePath -C $libericaDir --strip-components=1
+            tar -xzf $archivePath -C $staging
             if ($LASTEXITCODE -ne 0) { throw "Failed to extract Liberica JDK" }
         } else {
-            Expand-Archive -Path $archivePath -DestinationPath $libericaDir -Force
+            Expand-Archive -Path $archivePath -DestinationPath $staging -Force
         }
         Remove-Item $archivePath -Force
+
+        $extractedHome = Resolve-JdkHome $staging
+        if (-not $extractedHome) {
+            throw "Could not locate JDK home inside the extracted archive — extraction may have failed"
+        }
+        Get-ChildItem -LiteralPath $extractedHome -Force | Move-Item -Destination $libericaDir -Force
+        Remove-Item $staging -Recurse -Force
 
         $libericaVersion | Out-File -FilePath $libericaTagFile -NoNewline -Encoding utf8
         Write-Host "  [OK] Liberica JDK ready at $libericaDir" -ForegroundColor Green
     }
 
-    # Locate the JDK home — either directly in $libericaDir (tar --strip-components) or one level down (zip)
-    $jdkHome = if (Test-Path (Join-Path $libericaDir 'bin')) {
-        $libericaDir
-    } else {
-        (Get-ChildItem $libericaDir -Directory -ErrorAction SilentlyContinue |
-            Where-Object { Test-Path (Join-Path $_.FullName 'bin') } |
-            Select-Object -First 1)?.FullName
-    }
-
-    if (-not $jdkHome) {
-        throw "Could not locate JDK home inside $libericaDir — extraction may have failed"
+    # Layout is normalized above: the JDK home is $libericaDir, with bin/ directly under it.
+    if (-not (Test-Path (Join-Path $libericaDir 'bin'))) {
+        throw "Liberica JDK at $libericaDir is missing bin/ — delete it and re-run with -Force"
     }
 
     Write-Host ""
     Write-Host "Building bs-ui-java-agent..." -ForegroundColor Cyan
     $buildScript = Join-Path $repoRoot 'src/bs-ui-java-agent/build.ps1'
-    pwsh -File $buildScript -JavaHome $jdkHome
+    pwsh -File $buildScript -JavaHome $libericaDir
     if ($LASTEXITCODE -ne 0) { throw "bs-ui-java-agent build failed" }
     Write-Host "[OK] bs-ui-java-agent.jar built" -ForegroundColor Green
 }

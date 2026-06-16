@@ -5,42 +5,29 @@ using BattleScribeSpec.Protocol;
 namespace BattleScribeSpec.BsGameDataUiDriver;
 
 /// <summary>
-/// Orchestrates a BS GameData UI probe session: export XML, launch BS with agent,
-/// connect, and provide an interactive probe workflow.
+/// Orchestrates a BS GameData UI probe session: stage XML, launch the BattleScribe Data Editor
+/// with the agent, connect, and leave the app open for inspection.
 ///
 /// <para>
 /// <b>Usage</b> (from bs-spec-debug):
 /// <code>
-/// bs-spec-debug --engine battlescribe-ui --probe [spec-id]
+/// bs-spec-debug --engine gamedata/battlescribe-ui --probe [spec-id]
 /// </code>
-/// This launches BS with the agent, stages game system files (if a spec is provided),
-/// connects to the agent, and enters an interactive JSON-RPC REPL where you can
-/// explore the data editor scene graph.
+/// This stages the spec's game system / catalogue files, launches the Data Editor
+/// (<c>DataEditor.jar</c> — the same artifact <see cref="BsGameDataUiEngine"/> drives), connects
+/// to the agent, and waits for the "Data Editor" window. There is <b>no interactive REPL</b>: the
+/// app is left running for manual inspection until the caller presses Enter. To drive it
+/// programmatically, attach a JSON-RPC client to the agent port.
 /// </para>
 ///
 /// <para>
-/// <b>Probe workflow for DataEditorActions.java implementation</b>:
-/// <list type="number">
-///   <item>Run with a spec that loads a simple game system (e.g., <c>gamedata/basic/entry-add</c>)</item>
-///   <item>Use <c>getWindows</c> to see open window titles</item>
-///   <item>Navigate to the BattleScribe data editor window (title TBD after probing)</item>
-///   <item>Use <c>dumpTree</c> with the data editor window title to inspect the scene graph</item>
-///   <item>Identify the tree view, context menu structure, and property panel</item>
-///   <item>Document selectors and window titles in <c>DataEditorActions.java</c></item>
-///   <item>Implement each stub method using the <see cref="BsUiProbe"/> pattern from
-///     <c>RosterActions.java</c></item>
-/// </list>
-/// </para>
-///
-/// <para>
-/// <b>Key probe RPC commands</b>:
+/// <b>Useful agent RPC commands</b> (for an attached client):
 /// <list type="bullet">
 ///   <item><c>getWindows</c> — list all open JavaFX windows</item>
-///   <item><c>dumpTree {"maxDepth": 5, "windowTitle": "..."}</c> — inspect scene graph</item>
-///   <item><c>clickNode {"selector": "...", "windowTitle": "..."}</c> — click a node</item>
+///   <item><c>dumpTree {"maxDepth": 5, "windowTitle": "Data Editor"}</c> — inspect scene graph</item>
 ///   <item><c>findNodeByText {"text": "...", "windowTitle": "..."}</c> — find node by label</item>
 ///   <item><c>captureScreenshot</c> — capture PNG screenshot</item>
-///   <item><c>editorAddEntryAction {...}</c> — test a data editor action stub</item>
+///   <item><c>editorGetDataState</c> — read the loaded data model as JSON</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -99,19 +86,18 @@ public sealed class BsGameDataUiProbe : IAsyncDisposable
         var pong = await _client.PingAsync();
         log.WriteLine($"  Agent connected: {pong}");
 
-        log.WriteLine("Waiting for Roster Editor window...");
-        var hasWindow = await _client.WaitForWindowAsync("Roster Editor", timeoutMs: 30_000);
+        log.WriteLine("Waiting for Data Editor window...");
+        var hasWindow = await _client.WaitForWindowAsync("Data Editor", timeoutMs: 30_000);
         if (!hasWindow)
         {
-            throw new TimeoutException("Roster Editor window did not appear within 30s.");
+            throw new TimeoutException("Data Editor window did not appear within 30s.");
         }
 
         log.WriteLine("  Window ready.");
         await HandleStartupDialogsAsync(log);
         log.WriteLine();
-        log.WriteLine("BS is running. Use the agent REPL to probe the data editor.");
-        log.WriteLine("Tip: Try 'getWindows' first, then 'dumpTree' to see the scene graph.");
-        log.WriteLine("Tip: To open the data editor: explore the menu structure with dumpTree.");
+        log.WriteLine("BattleScribe Data Editor is running. Inspect it by hand, or attach your own");
+        log.WriteLine($"JSON-RPC client to the agent on port {_app.AgentPort} (e.g. getWindows, dumpTree).");
     }
 
     private async Task HandleStartupDialogsAsync(TextWriter log)

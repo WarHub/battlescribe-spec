@@ -28,11 +28,11 @@ namespace BattleScribeSpec.BsGameDataUiDriver;
 /// other engines.
 /// </para>
 /// <para>
-/// <b>Current status</b>: The Java-side <c>DataEditorActions</c> stubs are not yet
-/// implemented (they require probing the BS data editor UI to discover selectors and
-/// window titles). All mutation methods (<see cref="AddEntry"/>, <see cref="RemoveEntry"/>,
-/// etc.) will throw <see cref="NotSupportedException"/> until the stubs are filled in.
-/// Use <see cref="BsGameDataUiProbe"/> to probe the data editor UI.
+/// <b>Current status</b>: fully implemented. The Java-side <c>DataEditorActions</c> supports
+/// load / addEntry / removeEntry / setField / addLink / getDataState; the conformance suite
+/// passes against this engine. A <see cref="NotSupportedException"/> is only raised if a new
+/// C#-side <c>editorXxxAction</c> is invoked before its Java counterpart exists. Use
+/// <see cref="BsGameDataUiProbe"/> to inspect the data editor UI when adding actions.
 /// </para>
 /// <para>
 /// <b>Timeout architecture</b> — same as <see cref="BsUiRosterEngine"/>:
@@ -295,7 +295,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         {
             throw new NotSupportedException(
                 $"[bs-gamedata-ui] {method} is not yet implemented in the Java agent. " +
-                $"Run `bs-spec-debug --engine battlescribe-ui --probe` to probe the data editor UI, " +
+                $"Run `bs-spec-debug --engine gamedata/battlescribe-ui --probe` to probe the data editor UI, " +
                 $"then implement DataEditorActions.{method}(). Agent error: {ex.Message}", ex);
         }
         finally
@@ -323,7 +323,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         {
             throw new NotSupportedException(
                 $"[bs-gamedata-ui] {method} is not yet implemented in the Java agent. " +
-                $"Run `bs-spec-debug --engine battlescribe-ui --probe` to probe the data editor UI, " +
+                $"Run `bs-spec-debug --engine gamedata/battlescribe-ui --probe` to probe the data editor UI, " +
                 $"then implement DataEditorActions.{method}(). Agent error: {ex.Message}", ex);
         }
         finally
@@ -404,38 +404,8 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
 
         var libDir = Path.Combine(repoRoot, "lib", "battlescribe");
 
-        // Check env var first (same as Debugger/Program.cs ResolveBsUiOptions)
-        var javaPath = Environment.GetEnvironmentVariable("BS_UI_JAVA_PATH");
-
-        if (javaPath is null)
-        {
-            // Use platform-specific JRE directories (same as BsRosterUiDriver/Program.cs)
-            if (OperatingSystem.IsWindows())
-            {
-                var winJava = Path.Combine(libDir, "jre-win", "bin", "java.exe");
-                if (File.Exists(winJava))
-                {
-                    javaPath = winJava;
-                }
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                var macJava = Path.Combine(libDir, "jre-mac", "bin", "java");
-                if (File.Exists(macJava))
-                {
-                    javaPath = macJava;
-                }
-            }
-            else
-            {
-                var linuxJava = Path.Combine(libDir, "jre", "bin", "java");
-                if (File.Exists(linuxJava))
-                {
-                    javaPath = linuxJava;
-                }
-            }
-        }
-
+        // BS_UI_JAVA_PATH → repo-local Liberica JDK → bundled platform JRE. See BsUiPaths.
+        var javaPath = BsUiPaths.ResolveJavaPath(repoRoot);
         if (javaPath is null)
         {
             return null;

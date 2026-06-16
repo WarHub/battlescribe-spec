@@ -16,29 +16,12 @@ dumps the initial scene graph and window list to stdout, then waits for you to i
 
 ## Environment setup
 
-Three env vars must be set before the BS UI engine can run:
+Run `setup.ps1` once — it downloads BattleScribe + the Liberica JDK and builds the agent jar.
+Everything is then auto-discovered (Liberica JDK at `lib/liberica-jdk`, `lib/battlescribe/RosterEditor.jar`,
+`src/bs-ui-java-agent/bs-ui-java-agent.jar`); no env vars needed.
 
-```powershell
-$env:BS_UI_JAVA_PATH    = "C:\path\to\bs-jre\bin\java.exe"   # JavaFX-capable JRE
-$env:BS_UI_APP_DIR      = "C:\path\to\battlescribe\app"       # dir with RosterEditor.jar
-$env:BS_UI_AGENT_JAR    = "C:\path\to\bs-ui-java-agent.jar"  # built agent jar
-```
-
-Conventional locations (auto-resolved if env vars absent):
-
-```
-lib/battlescribe/jre-win/bin/java.exe   (Windows)
-lib/battlescribe/jre-mac/bin/java       (macOS)
-lib/battlescribe/jre/bin/java           (Linux)
-lib/battlescribe/RosterEditor.jar
-src/bs-ui-java-agent/bs-ui-java-agent.jar
-```
-
-`setup.ps1` downloads BattleScribe to `lib/battlescribe/`.
-The agent JAR must be built separately:
-```powershell
-pwsh -File src/bs-ui-java-agent/build.ps1
-```
+Overrides (set only if you want non-default artifacts): `BS_UI_JAVA_PATH`, `BS_UI_APP_DIR`,
+`BS_UI_AGENT_JAR`.
 
 ## Quick start — probe mode
 

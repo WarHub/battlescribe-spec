@@ -45,10 +45,9 @@ NrGameDataUiEngine (IGameDataEngine)
 
 Both modes use the same `NrGameDataUiEngine` — the difference is in `CreateFrozenAsync` vs `CreateAsync`.
 
-**Setup requirements**:
-- Run `setup.ps1` to download `.testdata/nr-editor/` (the NR Editor gh-pages snapshot).
-- Run `pwsh -File src/BattleScribeSpec.NrGameDataUiDriver/install-playwright.ps1` to install Playwright browsers.
-- Same NR Editor snapshot as `NewRecruitGameDataEngine` (no separate download).
+**Setup**: run `setup.ps1` — it downloads `.testdata/nr-editor/` (the NR Editor gh-pages snapshot,
+pinned to the commit in `testdata.json`, shared with `NewRecruitGameDataEngine`) and installs the
+Playwright browsers.
 
 ## Test profiles
 
@@ -63,11 +62,10 @@ Frozen tests are included in `pre-push` and run via a static Playwright route in
 ## Probe mode — discover selectors
 
 ```powershell
-# Launch NR Editor with spec data, open a JS REPL
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe my-gamedata-spec
-
-# With no-headless for visual inspection
-$env:NR_HEADLESS = "false"
+# Launch NR Editor with spec data, open a JS REPL.
+# The probe always runs headed (browser visible) — NR_HEADLESS does not apply here.
+# It prefers the frozen static files (.testdata/nr-editor/) and falls back to
+# NR_EDITOR_URL (default https://giloushaker.github.io/nr-editor) when they're absent.
 dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe my-gamedata-spec
 ```
 
@@ -106,59 +104,57 @@ available in all subsequent `EvaluateAsync` calls.
 
 ## Action implementation patterns
 
-### Tree navigation
+These are the **actual** selectors the driver uses (verified via `--probe`). The NR Editor is a
+Vue/Nuxt SPA with no test hooks, so several intuitive selectors do **not** work — the notes below
+call out each trap. The authoritative source is `NrGameDataUiActions.cs`; read it before changing
+an action.
+
+### Tree navigation — no `data-id`, resolve via the Pinia store
+
+The NR Editor does **not** render `data-id` (or `role=treeitem`) attributes on tree nodes, so you
+cannot locate an entry by ID in the DOM. `FindTreeNodeByIdAsync` instead:
+
+1. Resolves the entry **recursively** in the Pinia store (children of children) to get its name
+   and `collectionClass`.
+2. Expands **all** `h3.arrowTitle.collapsed` nodes in a loop — expanding only the depth-0 section
+   leaves deeper parents collapsed and their children unrendered.
+3. Matches `.{collectionClass} h3:is(.normalTitle, .arrowTitle)` by visible name.
+
+### Context menu operations — `.context-menu > div`, not `role=menuitem`
+
+The entry-node context menu items are plain `.context-menu > div` elements (no ARIA roles):
 
 ```csharp
-// Find tree node by entry ID (data-id attribute or text search)
-private static async Task<ILocator?> FindTreeNodeByIdAsync(IPage page, string entryId)
-{
-    var byDataId = page.Locator($"[data-id='{entryId}']");
-    if (await byDataId.IsVisibleAsync())
-        return byDataId;
-    // Fall back to :id: substring token in tree text
-    var byTreeItem = page.Locator($"[role='treeitem']").Filter(new() { HasText = $":{entryId}:" });
-    return await byTreeItem.IsVisibleAsync() ? byTreeItem : null;
-}
-```
-
-### Context menu operations
-
-```csharp
-// Right-click tree node → context menu → pick item
 await treeNode.ClickAsync(new() { Button = MouseButton.Right });
-await page.GetByRole(AriaRole.Menuitem, new() { Name = "Add" }).ClickAsync();
-await page.GetByRole(AriaRole.Menuitem, new() { Name = "Selection Entry" }).ClickAsync();
+// Match the menu item by its exact visible text (icons are inline base64 data URIs).
+await page.Locator(".context-menu > div").Filter(new() { HasTextRegex = new Regex(@"^\s*Entry\s*$") })
+    .ClickAsync();
 ```
-
-### Nested operations & UI realities (verified via `--probe` REPL)
-
-The NR Editor's actual entry-node context menu does **not** use `role=menuitem`; items are
-`.context-menu > div` elements. Hard-won specifics:
 
 - **Add child entry** — right-click the parent's tree node and click the text-labelled item:
   `Entry` for a `selectionEntry`, `Group` for a `selectionEntryGroup` (see `GetAddChildMenuLabel`).
-  The icons are inline **base64 data URIs**, so match by **exact text** (anchored regex
-  `^\s*Group\s*$` — an unanchored "Group" also matches "Modifier Group" / "Info Group").
-  Root-section adds are different (icon-`src` filename match in `AddEntryToRootSectionAsync`).
-- **Finding nested nodes** — `FindTreeNodeByIdAsync` resolves the entry **recursively** in the
-  Pinia store (children of children), then expands **all** `h3.arrowTitle.collapsed` nodes in a
-  loop (depth-0 section expansion alone leaves deeper parents collapsed and their children
-  unrendered), then matches `.{collectionClass} h3:is(.normalTitle,.arrowTitle)` by name.
-- **collective on model-type entries** — the `Collective` checkbox is **disabled** in the NR
-  Editor for `type: model` entries (verified: `disabled=true`), so `se-set-field-collective` is
-  intentionally `skip`ped for `newrecruit-ui` — a genuine product limitation, not a driver gap.
+  Match by **anchored** text (`^\s*Group\s*$`) — an unanchored "Group" also matches
+  "Modifier Group" / "Info Group".
+- **Add at a root section** — different code path (`AddEntryToRootSectionAsync`): the menu item is
+  matched by its icon `src` filename, not text.
+- **collective is a root-entry limitation, not a skip** — the `Collective` checkbox is **disabled**
+  for **root** entries in the NR Editor, so `se-set-field-collective` nests the entry under a parent
+  (`Squad` of type `unit`) so the checkbox is enabled. The spec runs on `newrecruit-ui` and is
+  **not** skipped (it was un-skipped in commit `da9da15`). Do not "fix" it by adding a skip.
 
 The probe REPL is drivable non-interactively for DOM discovery — pipe JS expressions to stdin:
 `echo '<js>' | dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe <spec>`.
 
-### Property panel field editing
+### Reading an entry's ID and name
+
+A newly-added entry's ID and name live in the editor table on the right, **not** in a
+`name`/`id`-attributed input. Read them from the last cell of the matching row:
 
 ```csharp
-// Click entry to select → edit name in right panel
-await treeNode.ClickAsync();
-var nameInput = page.Locator("input[placeholder*='Name'], input[name='name']").First;
-await nameInput.FillAsync(newName);
-await nameInput.DispatchEventAsync("change");
+var entryId = await idRow.Locator("td:last-child input[type='text']").InputValueAsync();
+var nameInput = nameRow.Locator("td:last-child input[type='text']").First;
+await nameInput.FillAsync(name);
+await nameInput.PressAsync("Tab");   // commit — the panel writes the model on blur/Enter, not on input
 ```
 
 ## Diagnostics on failure
@@ -193,17 +189,17 @@ In `NrGameDataUiActions.cs`, update `AddEntry` to handle the new `entryType` str
 - Map the string to the NR Editor context menu label (may differ from the BattleScribe type name)
 - Add a case in the context menu navigation logic
 
-## Key selector notes
+## Key selectors (verified against the pinned snapshot)
 
-> **These selectors are best-effort estimates and must be validated by probing.**
-> Run `--probe` on actual NR Editor pages to verify.
+These reflect the NR Editor commit pinned in `testdata.json`. If you bump that commit, re-verify
+with `--probe` — the SPA has no stable test hooks, so selectors can drift between snapshots.
 
-| Element | Selector pattern |
-|---------|-----------------|
-| Tree nodes | `[data-id='{id}']` or `[role='treeitem']` filtered by text |
-| Context menu items | `[role='menuitem']` with name matching |
-| Property name input | `input[name='name']` or `input[placeholder*='Name']` |
-| Delete confirm button | `button:has-text('Delete')`, `button:has-text('Confirm')` |
+| Element | Selector | Trap to avoid |
+|---------|----------|---------------|
+| Tree node by ID | resolve in Pinia store → match `.{collectionClass} h3:is(.normalTitle,.arrowTitle)` by name | no `data-id` / `role=treeitem` in the DOM |
+| Context menu items | `.context-menu > div` filtered by **anchored** text | not `role=menuitem`; unanchored text over-matches |
+| Entry id / name fields | `td:last-child input[type='text']` in the editor table row | no `name`/`id` attribute on the input |
+| Delete / Save confirm | `GetByRole(Button, Name="Confirm"\|"Delete"\|"Yes")` (`"OK"\|"Save"\|"Close"` for saves) | button label varies by dialog |
 
 ## Reference files
 

@@ -42,17 +42,15 @@ interception. No network access needed. The static files are downloaded by `setu
 ## BS GameData UI tests (local)
 
 The `bs-ui-gamedata` profile drives the **BattleScribe desktop Data Editor UI** through the
-Java agent. Mutations go through the real UI; state is read via the Java model. To run locally,
-point `BS_UI_JAVA_PATH` at the Liberica **full** JDK (which ships the JavaFX runtime) that
-`setup.ps1` downloads — the bundled `lib/battlescribe/jre` is Linux-only and lacks Windows/macOS
-JavaFX:
+Java agent. Mutations go through the real UI; state is read via the Java model. After `setup.ps1`
+(which downloads the BattleScribe app + Liberica full JDK and builds the agent), just run:
 
 ```bash
-BS_UI_JAVA_PATH=lib/liberica-jdk/jdk-11.0.31-full/bin/java.exe  # or .../bin/java on *nix
 dotnet test -p:TestProfile=bs-ui-gamedata
 ```
 
-Set `BS_UI_SKIP=true` to skip all BS UI tests (they also self-skip when BS artifacts are absent).
+The JavaFX-capable JDK is auto-discovered from `lib/liberica-jdk`; set `BS_UI_JAVA_PATH` only to
+override it (CI does). Tests self-skip when BS artifacts are absent.
 
 ## Debugging specs
 

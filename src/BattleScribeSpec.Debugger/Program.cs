@@ -608,7 +608,13 @@ async Task<int> RunBsGameDataUiProbe(string specInput)
 
     var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(gameDataSpec.Setup);
 
-    var options = ResolveBsUiOptions();
+    // Resolve the *Data Editor* jar (DataEditor.jar) — the same artifacts the gamedata engine
+    // uses. ResolveBsUiOptions() returns RosterEditor.jar, which opens the Roster Editor instead.
+    var options = BsGameDataUiEngine.FindOptions()
+        ?? throw new InvalidOperationException(
+            "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the " +
+            "agent jar), or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
+    Console.Error.WriteLine($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
     Console.Error.WriteLine($"BS GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
 
     await using var probe = new BsGameDataUiProbe(options);
@@ -714,7 +720,8 @@ async Task<int> RunGameDataSpec(string? specInput, string engine, bool headless,
                 {
                     var options = BsGameDataUiEngine.FindOptions()
                         ?? throw new InvalidOperationException(
-                            "BS UI artifacts not found — set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
+                            "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the " +
+            "agent jar), or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
                     Console.Error.WriteLine($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
                     gameDataEngine = new BsGameDataUiEngine(options);
                     break;
@@ -784,42 +791,16 @@ async Task<int> RunGameDataSpec(string? specInput, string engine, bool headless,
 BsUiOptions ResolveBsUiOptions()
 {
     // Resolve paths from environment variables or conventional locations
-    var javaPath = Environment.GetEnvironmentVariable("BS_UI_JAVA_PATH");
     var appDir = Environment.GetEnvironmentVariable("BS_UI_APP_DIR");
     var agentJar = Environment.GetEnvironmentVariable("BS_UI_AGENT_JAR");
 
     // Fallback: look for conventional locations relative to repo root
     var repoRoot = FindRepoRoot();
 
-    if (javaPath is null && repoRoot is not null)
-    {
-        // Try platform-specific JRE paths under lib/battlescribe
-        var jreDir = Path.Combine(repoRoot, "lib", "battlescribe");
-        if (OperatingSystem.IsWindows())
-        {
-            var winJava = Path.Combine(jreDir, "jre-win", "bin", "java.exe");
-            if (File.Exists(winJava))
-            {
-                javaPath = winJava;
-            }
-        }
-        else if (OperatingSystem.IsMacOS())
-        {
-            var macJava = Path.Combine(jreDir, "jre-mac", "bin", "java");
-            if (File.Exists(macJava))
-            {
-                javaPath = macJava;
-            }
-        }
-        else
-        {
-            var linuxJava = Path.Combine(jreDir, "jre", "bin", "java");
-            if (File.Exists(linuxJava))
-            {
-                javaPath = linuxJava;
-            }
-        }
-    }
+    // BS_UI_JAVA_PATH → repo-local Liberica JDK → bundled platform JRE. See BsUiPaths.
+    var javaPath = repoRoot is not null
+        ? BsUiPaths.ResolveJavaPath(repoRoot)
+        : Environment.GetEnvironmentVariable("BS_UI_JAVA_PATH");
 
     if (appDir is null && repoRoot is not null)
     {
@@ -842,7 +823,8 @@ BsUiOptions ResolveBsUiOptions()
     if (javaPath is null)
     {
         throw new InvalidOperationException(
-            "Java path not found. Set BS_UI_JAVA_PATH env var or place JRE at lib/battlescribe/jre-{platform}/");
+            "Java runtime not found. Run setup.ps1 to install the repo-local Liberica JDK " +
+            "(lib/liberica-jdk), or set BS_UI_JAVA_PATH to a JavaFX-capable java.");
     }
 
     var rosterEditorJar = appDir is not null
