@@ -1,12 +1,8 @@
-﻿id: seg-create-in-gamesystem
+id: seg-create-in-gamesystem
 category: entry
 description: >
   Add a selection entry group to a game system and verify it appears
   in the sharedSelectionEntryGroups container.
-engines:
-  nr-editor: skip # NewRecruit's data model does not support authoring entries directly in a game system
-  nr-editor-ui: skip # NewRecruit's data model does not support authoring entries directly in a game system
-
 setup:
   gameSystem:
     id: gs-1

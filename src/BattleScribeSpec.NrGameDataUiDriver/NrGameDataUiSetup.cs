@@ -133,9 +133,14 @@ public static class NrGameDataUiSetup
     {
         var errors = new List<string>();
 
-        // Generate BattleScribe XML from protocol types
+        // Generate BattleScribe XML from protocol types. GenerateAllCatalogueXml requires at
+        // least one catalogue, so skip it for game-system-only specs.
         var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-        var allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+        IReadOnlyList<(string FileName, string Xml)> allCatXml = [];
+        if (catalogues.Length > 0)
+        {
+            allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+        }
 
         // Build file payloads: GST first, then all CATs
         var payloads = new List<FilePayload>
@@ -173,14 +178,22 @@ public static class NrGameDataUiSetup
             return errors;
         }
 
-        // Navigate to the target catalogue (last in the list is the spec's target)
+        // Game-system-only spec: open the game system itself for editing. NR Editor edits a
+        // game system through the same catalogue-editor route, keyed by the system id
+        // (loadedCatalogues[systemId]); ReadStateAsync already surfaces it as state.gameSystem.
         if (catalogues.Length == 0)
         {
-            errors.Add("No catalogues provided — cannot navigate to catalogue editor.");
+            var gsNav = await NavigateToEditableAsync(page, gameSystem.Name);
+            if (gsNav is not null)
+            {
+                errors.Add(gsNav);
+            }
+
             return errors;
         }
 
-        var navResult = await NavigateToCatalogueAsync(page, catalogues[^1]);
+        // Navigate to the target catalogue (last in the list is the spec's target)
+        var navResult = await NavigateToEditableAsync(page, catalogues[^1].Name);
         if (navResult is not null)
         {
             errors.Add(navResult);
@@ -190,29 +203,30 @@ public static class NrGameDataUiSetup
     }
 
     /// <summary>
-    /// Navigates to the catalogue editor view for a given catalogue.
+    /// Navigates to the editor view for a loaded item (a catalogue, or the game system itself).
     ///
-    /// After <c>uploaded()</c> runs, the NR Editor is on the system list page showing
-    /// catalogue entries as <c>.item.unselectable</c> elements. Double-clicking an item
-    /// navigates to the catalogue editor at <c>/catalogue?systemId=X&amp;id=Y</c>.
-    /// This method finds the item by the catalogue's name and double-clicks it, then
-    /// waits for the URL to confirm navigation to the catalogue editor route.
+    /// After <c>uploaded()</c> runs, the NR Editor is on the system list page showing the
+    /// uploaded files (game system and catalogues) as <c>.item.unselectable</c> elements.
+    /// Double-clicking an item navigates to the editor at <c>/catalogue?systemId=X&amp;id=Y</c>
+    /// — the game system is edited through the same route, keyed by the system id. This method
+    /// finds the item by name and double-clicks it, then waits for the editor route and the
+    /// item to appear in <c>loadedCatalogues</c>.
     /// </summary>
-    private static async Task<string?> NavigateToCatalogueAsync(
+    private static async Task<string?> NavigateToEditableAsync(
         IPage page,
-        ProtocolCatalogue targetCatalogue)
+        string itemName)
     {
         try
         {
             // After file upload, the system list page shows .item.unselectable elements —
-            // one per catalogue file. Wait for them to appear.
+            // one per uploaded file. Wait for them to appear.
             await page.WaitForSelectorAsync(".item.unselectable:not(.add)",
                 new PageWaitForSelectorOptions { Timeout = 10_000 });
 
-            // Find the item matching the catalogue name and double-click it.
-            // Double-click (not single click) navigates to the catalogue editor.
+            // Find the item matching the name and double-click it.
+            // Double-click (not single click) navigates to the editor.
             var item = page.Locator(".item.unselectable:not(.add)",
-                new PageLocatorOptions { HasText = targetCatalogue.Name });
+                new PageLocatorOptions { HasText = itemName });
             await item.First.DblClickAsync();
 
             // Wait for URL to change to the catalogue editor route.
@@ -255,7 +269,7 @@ public static class NrGameDataUiSetup
         }
         catch (Exception ex)
         {
-            return $"Navigation to catalogue failed: {ex.Message}";
+            return $"Navigation to editor failed: {ex.Message}";
         }
     }
 

@@ -1,12 +1,8 @@
-﻿id: fe-create-nested
+id: fe-create-nested
 category: entry
 description: >
   Add a force entry nested inside another force entry and verify
   the parent-child relationship.
-engines:
-  nr-editor: skip # NewRecruit's data model does not support authoring force entries
-  nr-editor-ui: skip # NewRecruit's data model does not support authoring force entries
-
 setup:
   gameSystem:
     id: gs-1

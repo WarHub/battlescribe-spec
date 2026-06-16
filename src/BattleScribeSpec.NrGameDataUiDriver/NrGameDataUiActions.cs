@@ -108,6 +108,8 @@ public static class NrGameDataUiActions
     {
         "selectionEntry" => "Entry",
         "selectionEntryGroup" => "Group",
+        "forceEntry" => "Force",
+        "categoryEntry" => "Category",
         "profile" => "Profile",
         "rule" => "Rule",
         "infoGroup" => "Info Group",

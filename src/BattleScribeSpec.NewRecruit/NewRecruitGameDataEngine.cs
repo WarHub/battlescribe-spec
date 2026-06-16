@@ -303,7 +303,11 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         {
             // Generate BattleScribe XML from protocol types
             var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-            var allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+            IReadOnlyList<(string FileName, string Xml)> allCatXml = [];
+            if (catalogues.Length > 0)
+            {
+                allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+            }
             var catFiles = allCatXml.Select(c => new { name = c.FileName, data = c.Xml }).ToArray();
 
             // Load data into the NR Editor.
@@ -356,73 +360,94 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
 
                         // Build catalogue from XML parsing (always, not just as fallback)
                         const parser = new DOMParser();
-                        const catXml = catFiles[0]?.data;
+
+                        // Recursive entry parser shared by catalogue and game system roots
+                        const parseEntry = (el) => {
+                            const entry = {
+                                id: el.getAttribute('id') || '',
+                                name: el.getAttribute('name') || '',
+                                hidden: el.getAttribute('hidden') === 'true',
+                                type: el.getAttribute('type') || '',
+                            };
+                            // Recursively parse child containers
+                            const childContainers = ['selectionEntries', 'selectionEntryGroups',
+                                'rules', 'profiles', 'infoGroups', 'infoLinks', 'entryLinks',
+                                'categoryLinks', 'constraints', 'modifiers', 'modifierGroups',
+                                'conditions', 'conditionGroups'];
+                            for (const ck of childContainers) {
+                                const container = el.querySelector(':scope > ' + ck);
+                                if (container && container.children.length > 0) {
+                                    entry[ck] = [...container.children].map(parseEntry);
+                                }
+                            }
+                            return entry;
+                        };
+                        const parseEntries = (parentEl, tag) => {
+                            const container = parentEl.querySelector(':scope > ' + tag);
+                            if (!container) return [];
+                            return [...container.children].map(parseEntry);
+                        };
+
+                        // Build an editable root (catalogue or game system) from a root element
+                        const buildRoot = (rootEl, rootId, rootName, rootGameSystemId) => {
+                            const root = {
+                                id: rootEl.getAttribute('id') || rootId,
+                                name: rootEl.getAttribute('name') || rootName,
+                                gameSystemId: rootEl.getAttribute('gameSystemId') || rootGameSystemId,
+                                selectionEntries: [],
+                                selectionEntryGroups: [],
+                                entryLinks: [],
+                                rules: [],
+                                sharedSelectionEntries: [],
+                                sharedSelectionEntryGroups: [],
+                                sharedRules: [],
+                                sharedProfiles: [],
+                                forceEntries: [],
+                                categoryEntries: [],
+                                publications: [],
+                                costTypes: [],
+                                profileTypes: [],
+                            };
+
+                            root.selectionEntries = parseEntries(rootEl, 'selectionEntries');
+                            root.sharedSelectionEntries = parseEntries(rootEl, 'sharedSelectionEntries');
+                            root.sharedSelectionEntryGroups = parseEntries(rootEl, 'sharedSelectionEntryGroups');
+                            root.selectionEntryGroups = parseEntries(rootEl, 'selectionEntryGroups');
+                            root.rules = parseEntries(rootEl, 'rules');
+                            root.sharedRules = parseEntries(rootEl, 'sharedRules');
+                            root.sharedProfiles = parseEntries(rootEl, 'sharedProfiles');
+                            root.entryLinks = parseEntries(rootEl, 'entryLinks');
+                            root.forceEntries = parseEntries(rootEl, 'forceEntries');
+                            root.categoryEntries = parseEntries(rootEl, 'categoryEntries');
+                            root.publications = parseEntries(rootEl, 'publications');
+                            root.costTypes = parseEntries(rootEl, 'costTypes');
+                            root.profileTypes = parseEntries(rootEl, 'profileTypes');
+                            return root;
+                        };
+
                         let catalogue = null;
+                        let gameSystem = null;
+                        const catXml = catFiles[0]?.data;
                         if (catXml) {
                             const doc = parser.parseFromString(catXml, 'text/xml');
                             const catEl = doc.querySelector('catalogue');
                             if (catEl) {
-                                catalogue = {
-                                    id: catEl.getAttribute('id') || systemId,
-                                    name: catEl.getAttribute('name') || systemName,
-                                    gameSystemId: catEl.getAttribute('gameSystemId') || systemId,
-                                    selectionEntries: [],
-                                    selectionEntryGroups: [],
-                                    entryLinks: [],
-                                    rules: [],
-                                    sharedSelectionEntries: [],
-                                    sharedSelectionEntryGroups: [],
-                                    sharedRules: [],
-                                    sharedProfiles: [],
-                                    forceEntries: [],
-                                    categoryEntries: [],
-                                    publications: [],
-                                    costTypes: [],
-                                    profileTypes: [],
-                                };
-
-                                // Parse existing entries from XML (recursive)
-                                const parseEntry = (el) => {
-                                    const entry = {
-                                        id: el.getAttribute('id') || '',
-                                        name: el.getAttribute('name') || '',
-                                        hidden: el.getAttribute('hidden') === 'true',
-                                        type: el.getAttribute('type') || '',
-                                    };
-                                    // Recursively parse child containers
-                                    const childContainers = ['selectionEntries', 'selectionEntryGroups',
-                                        'rules', 'profiles', 'infoGroups', 'infoLinks', 'entryLinks',
-                                        'categoryLinks', 'constraints', 'modifiers', 'modifierGroups',
-                                        'conditions', 'conditionGroups'];
-                                    for (const ck of childContainers) {
-                                        const container = el.querySelector(':scope > ' + ck);
-                                        if (container && container.children.length > 0) {
-                                            entry[ck] = [...container.children].map(parseEntry);
-                                        }
-                                    }
-                                    return entry;
-                                };
-                                const parseEntries = (parentEl, tag) => {
-                                    const container = parentEl.querySelector(':scope > ' + tag);
-                                    if (!container) return [];
-                                    return [...container.children].map(parseEntry);
-                                };
-
-                                catalogue.selectionEntries = parseEntries(catEl, 'selectionEntries');
-                                catalogue.sharedSelectionEntries = parseEntries(catEl, 'sharedSelectionEntries');
-                                catalogue.sharedSelectionEntryGroups = parseEntries(catEl, 'sharedSelectionEntryGroups');
-                                catalogue.selectionEntryGroups = parseEntries(catEl, 'selectionEntryGroups');
-                                catalogue.rules = parseEntries(catEl, 'rules');
-                                catalogue.sharedRules = parseEntries(catEl, 'sharedRules');
-                                catalogue.sharedProfiles = parseEntries(catEl, 'sharedProfiles');
-                                catalogue.entryLinks = parseEntries(catEl, 'entryLinks');
-                                catalogue.forceEntries = parseEntries(catEl, 'forceEntries');
-                                catalogue.categoryEntries = parseEntries(catEl, 'categoryEntries');
+                                catalogue = buildRoot(catEl, systemId, systemName, systemId);
                             }
-                        }
-
-                        if (!catalogue) {
-                            return 'Setup error: could not parse catalogue from XML';
+                            if (!catalogue) {
+                                return 'Setup error: could not parse catalogue from XML';
+                            }
+                        } else {
+                            // No catalogues: author entries directly in the game system.
+                            const gstDoc = parser.parseFromString(gstXml, 'text/xml');
+                            const gstEl = gstDoc.querySelector('gameSystem');
+                            if (gstEl) {
+                                gameSystem = buildRoot(gstEl, systemId, systemName,
+                                    gstEl.getAttribute('id') || systemId);
+                            }
+                            if (!gameSystem) {
+                                return 'Setup error: could not parse game system from XML';
+                            }
                         }
 
                         // Store references for later actions
@@ -435,7 +460,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                             specId,
                             directMode: true,
                             catalogue,
-                            gameSystem: null,
+                            gameSystem,
                         };
 
                         return null; // success
@@ -474,8 +499,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'ERROR:No editor context — was Setup called?';
 
-                    const catalogue = ctx.catalogue;
-                    if (!catalogue) return 'ERROR:No catalogue available';
+                    const root = ctx.catalogue || ctx.gameSystem;
+                    if (!root) return 'ERROR:No catalogue available';
 
                     // Map entryType to container key
                     // At catalogue root, some types go to "shared" containers
@@ -534,14 +559,14 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         return null;
                     };
 
-                    let parent = findById(catalogue, parentId);
+                    let parent = findById(root, parentId);
                     if (!parent && parentId === ctx.systemId) {
-                        parent = catalogue; // treat catalogue as root
+                        parent = root; // treat root (catalogue or game system) as root
                     }
                     if (!parent) return 'ERROR:Parent not found: ' + parentId;
 
-                    // If parent is the catalogue root, use shared containers for certain types
-                    if (parent === catalogue && sharedKeyMap[entryType]) {
+                    // If parent is the root, use shared containers for certain types
+                    if (parent === root && sharedKeyMap[entryType]) {
                         childKey = sharedKeyMap[entryType];
                     }
 
@@ -579,8 +604,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                 try {
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'No editor context';
-                    const catalogue = ctx.catalogue;
-                    if (!catalogue) return 'No catalogue';
+                    const root = ctx.catalogue || ctx.gameSystem;
+                    if (!root) return 'No catalogue';
 
                     // Find and splice from parent
                     const removeFromParent = (parent, id) => {
@@ -597,7 +622,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         }
                         return false;
                     };
-                    if (!removeFromParent(catalogue, entryId)) {
+                    if (!removeFromParent(root, entryId)) {
                         return 'Could not remove entry: ' + entryId;
                     }
                     return null;
@@ -628,8 +653,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                 try {
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'No editor context';
-                    const catalogue = ctx.catalogue;
-                    if (!catalogue) return 'No catalogue';
+                    const root = ctx.catalogue || ctx.gameSystem;
+                    if (!root) return 'No catalogue';
 
                     // Find entry
                     const findById = (obj, id) => {
@@ -649,7 +674,10 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         return null;
                     };
 
-                    const entry = findById(catalogue, entryId);
+                    let entry = findById(root, entryId);
+                    if (!entry && entryId === ctx.systemId) {
+                        entry = root;
+                    }
                     if (!entry) return 'Entry not found: ' + entryId;
 
                     // Handle boolean fields
@@ -687,8 +715,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                 try {
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'ERROR:No editor context';
-                    const catalogue = ctx.catalogue;
-                    if (!catalogue) return 'ERROR:No catalogue';
+                    const root = ctx.catalogue || ctx.gameSystem;
+                    if (!root) return 'ERROR:No catalogue';
 
                     const containerKeyMap = {
                         'entryLink': 'entryLinks',
@@ -721,9 +749,9 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         }
                         return null;
                     };
-                    let parent = findById(catalogue, parentId);
+                    let parent = findById(root, parentId);
                     if (!parent && parentId === ctx.systemId) {
-                        parent = catalogue;
+                        parent = root;
                     }
                     if (!parent) return 'ERROR:Parent not found: ' + parentId;
 

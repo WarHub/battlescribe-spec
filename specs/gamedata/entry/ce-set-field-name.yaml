@@ -1,11 +1,7 @@
-﻿id: ce-set-field-name
+id: ce-set-field-name
 category: entry
 description: >
   Set the name field of a category entry and verify it is updated.
-engines:
-  nr-editor: skip # NewRecruit's data model does not support authoring category entries
-  nr-editor-ui: skip # NewRecruit's data model does not support authoring category entries
-
 setup:
   gameSystem:
     id: gs-1

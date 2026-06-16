@@ -1,11 +1,7 @@
-﻿id: ce-set-field-hidden
+id: ce-set-field-hidden
 category: entry
 description: >
   Set the hidden field of a category entry and verify the state reflects it.
-engines:
-  nr-editor: skip # NewRecruit's data model does not support authoring category entries
-  nr-editor-ui: skip # NewRecruit's data model does not support authoring category entries
-
 setup:
   gameSystem:
     id: gs-1

@@ -1,12 +1,8 @@
-﻿id: fe-set-field-publication
+id: fe-set-field-publication
 category: entry
 description: >
   Set the publicationId field of a force entry and verify it is stored
   in the fields dictionary.
-engines:
-  nr-editor: skip # NewRecruit's data model does not support authoring force entries
-  nr-editor-ui: skip # NewRecruit's data model does not support authoring force entries
-
 setup:
   gameSystem:
     id: gs-1

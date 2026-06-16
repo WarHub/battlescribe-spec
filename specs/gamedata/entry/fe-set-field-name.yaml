@@ -1,11 +1,7 @@
-﻿id: fe-set-field-name
+id: fe-set-field-name
 category: entry
 description: >
   Set the name field of a force entry and verify it is updated.
-engines:
-  nr-editor: skip # NewRecruit's data model does not support authoring force entries
-  nr-editor-ui: skip # NewRecruit's data model does not support authoring force entries
-
 setup:
   gameSystem:
     id: gs-1

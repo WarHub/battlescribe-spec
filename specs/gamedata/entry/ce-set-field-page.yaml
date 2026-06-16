@@ -1,12 +1,8 @@
-﻿id: ce-set-field-page
+id: ce-set-field-page
 category: entry
 description: >
   Set the page field of a category entry and verify it is stored
   in the fields dictionary.
-engines:
-  nr-editor: skip # NewRecruit's data model does not support authoring category entries
-  nr-editor-ui: skip # NewRecruit's data model does not support authoring category entries
-
 setup:
   gameSystem:
     id: gs-1
