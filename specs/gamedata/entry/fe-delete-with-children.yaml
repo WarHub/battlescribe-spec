@@ -3,6 +3,7 @@ category: entry
 description: >
   Delete a force entry that has nested force entries and verify
   the entire subtree is removed.
+
 setup:
   gameSystem:
     id: gs-1

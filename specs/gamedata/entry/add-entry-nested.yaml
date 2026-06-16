@@ -3,6 +3,7 @@ category: entry
 description: >
   Add child entries nested inside a parent entry and verify
   the tree structure is correct.
+
 setup:
   gameSystem:
     id: gs-1

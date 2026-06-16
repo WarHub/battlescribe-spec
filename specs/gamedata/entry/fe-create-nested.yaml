@@ -3,6 +3,7 @@ category: entry
 description: >
   Add a force entry nested inside another force entry and verify
   the parent-child relationship.
+
 setup:
   gameSystem:
     id: gs-1

@@ -3,6 +3,7 @@ category: entry
 description: >
   Delete a force entry that has no children and verify it is removed
   from the game system.
+
 setup:
   gameSystem:
     id: gs-1

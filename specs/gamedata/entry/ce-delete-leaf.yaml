@@ -2,6 +2,7 @@ id: ce-delete-leaf
 category: entry
 description: >
   Delete a category entry from a game system and verify it is removed.
+
 setup:
   gameSystem:
     id: gs-1

@@ -3,6 +3,7 @@ category: entry
 description: >
   Add a selection entry nested inside a selection entry group and verify
   it appears as a child of the group.
+
 setup:
   gameSystem:
     id: gs-1

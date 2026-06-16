@@ -2,6 +2,7 @@ id: ce-set-field-name
 category: entry
 description: >
   Set the name field of a category entry and verify it is updated.
+
 setup:
   gameSystem:
     id: gs-1

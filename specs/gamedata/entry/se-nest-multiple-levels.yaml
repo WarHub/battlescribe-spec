@@ -3,6 +3,7 @@ category: entry
 description: >
   Create a three-level deep nesting of selection entries and verify
   the entire tree structure is correctly represented.
+
 setup:
   gameSystem:
     id: gs-1
