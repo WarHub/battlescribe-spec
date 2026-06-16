@@ -20,9 +20,10 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id
 ```
 
 **Always run `pre-push` before pushing.** It covers lint, BattleScribe conformance, and NR frozen
-(offline HAR replay) in one fast command. Other profiles: `lint`, `bs`, `nr-frozen`,
-`nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`, `nr-editor-ui-live`,
-`bs-ui-gamedata`, `nr-live`, `nr-live-visible`.
+(offline HAR replay) in one fast command. Other profiles: `core` (offline suite, no NR engines),
+`lint`, `bs`, `nr-frozen`, `nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`,
+`nr-editor-ui-live`, `bs-ui-gamedata`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`,
+`nr-live-visible`. CI runs entirely through these profiles (`.github/workflows/ci.yml`).
 
 ## NR frozen tests and HAR
 

@@ -55,7 +55,7 @@ jobs:
         run: node --test scripts/har-diff.test.mjs
 
       - name: Test
-        run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" --filter "Engine!=FrozenNrRoster&Engine!=FrozenNrGameData&Engine!=LiveNrRoster&Engine!=LiveNrGameData&Engine!=FrozenNrUiRoster&Engine!=LiveNrUiRoster&Engine!=FrozenNrGameDataUi&Engine!=LiveNrGameDataUi"
+        run: dotnet test --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false" -p:TestProfile=core
 
       - name: End-to-end spec runner test
         run: |
@@ -111,13 +111,13 @@ jobs:
         run: dotnet build
 
       - name: Run frozen NR roster conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrRoster&Mode!=Sequential" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
           NR_PARALLEL: 4
 
       - name: Run frozen NR Editor GameData tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrGameData" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
 
@@ -127,7 +127,7 @@ jobs:
           NR_HEADLESS: true
 
       - name: Run frozen NR UI conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrUiRoster" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
 
@@ -182,15 +182,13 @@ jobs:
         run: dotnet build
 
       - name: Run NR smoke tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=LiveNrRoster&Category=Smoke" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live-smoke --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
-          NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true
 
       - name: Run NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=LiveNrRoster&Category=Conformance" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live-conformance --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
-          NR_ENGINE_URL: https://newrecruit.eu
           NR_HEADLESS: true
           NR_PARALLEL: 2
 
