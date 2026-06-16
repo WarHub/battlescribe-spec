@@ -50,7 +50,7 @@ public sealed class GameDataStepDef
     public string? Id { get; set; }
 
     /// <summary>
-    /// The action to perform (addEntry, removeEntry, moveEntry, setField, addLink, dump).
+    /// The action to perform (addEntry, removeEntry, setField, addLink, dump).
     /// </summary>
     public string? Action { get; set; }
 
@@ -73,20 +73,10 @@ public sealed class GameDataStepDef
     public string? Name { get; set; }
 
     /// <summary>
-    /// Target entry ID for removeEntry, moveEntry, setField.
+    /// Target entry ID for removeEntry, setField.
     /// May contain a ${{ steps.xxx.entryId }} expression.
     /// </summary>
     public string? EntryId { get; set; }
-
-    /// <summary>
-    /// New parent ID for moveEntry.
-    /// </summary>
-    public string? NewParentId { get; set; }
-
-    /// <summary>
-    /// Position index for moveEntry.
-    /// </summary>
-    public int? Index { get; set; }
 
     /// <summary>
     /// Field name for setField.

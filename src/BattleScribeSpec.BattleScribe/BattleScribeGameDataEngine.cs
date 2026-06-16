@@ -84,40 +84,6 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         _entriesById.Remove(entryId);
     }
 
-    public void MoveEntry(string entryId, string newParentId, int? index = null)
-    {
-        // Find entry, remove from current parent, add to new parent
-        var entry = FindById(entryId)
-            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
-
-        var newParent = FindById(newParentId)
-            ?? throw new InvalidOperationException($"New parent not found: {newParentId}");
-
-        // Determine entry type to know which container it belongs to
-        var entryType = GetEntryType(entry);
-
-        // Remove from old location
-        if (!RemoveFromParent(_catalogue, entryId) &&
-            !RemoveFromParent(_gameSystem, entryId))
-        {
-            throw new InvalidOperationException($"Could not remove entry for move: {entryId}");
-        }
-
-        // Add to new parent
-        var container = GetContainerList(newParent, entryType)
-            ?? throw new InvalidOperationException(
-                $"No suitable container for {entryType} in parent {newParentId}");
-
-        if (index is { } idx && idx >= 0 && idx <= container.size())
-        {
-            container.add(idx, entry);
-        }
-        else
-        {
-            container.add(entry);
-        }
-    }
-
     public void SetField(string entryId, string field, string? value)
     {
         var entry = FindById(entryId)
@@ -1065,26 +1031,5 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
         var result = method.Invoke(entry, null);
         return result is true;
-    }
-
-    private static string GetEntryType(object entry)
-    {
-        return entry switch
-        {
-            SelectionEntry => "selectionEntry",
-            SelectionEntryGroup => "selectionEntryGroup",
-            EntryLink => "entryLink",
-            Rule => "rule",
-            Profile => "profile",
-            InfoGroup => "infoGroup",
-            InfoLink => "infoLink",
-            CategoryLink => "categoryLink",
-            ForceEntry => "forceEntry",
-            CategoryEntry => "categoryEntry",
-            Constraint => "constraint",
-            Modifier => "modifier",
-            ModifierGroup => "modifierGroup",
-            _ => "unknown",
-        };
     }
 }

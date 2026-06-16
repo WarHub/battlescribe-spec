@@ -60,14 +60,6 @@ public interface IGameDataEngine : IDisposable
     /// </summary>
     void RemoveEntry(string entryId);
 
-    /// <summary>
-    /// Move an entry to a new parent in the data tree.
-    /// </summary>
-    /// <param name="entryId">ID of the entry to move.</param>
-    /// <param name="newParentId">ID of the new parent to move into.</param>
-    /// <param name="index">Optional position index within the new parent.</param>
-    void MoveEntry(string entryId, string newParentId, int? index = null);
-
     // ===== Property mutations =====
 
     /// <summary>

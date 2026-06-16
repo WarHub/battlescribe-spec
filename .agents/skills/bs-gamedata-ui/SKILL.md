@@ -24,7 +24,6 @@ BsGameDataUiEngine (IGameDataEngine) — C# side
 ├── Mutations: AgentClient.CallAsync("editorXxxAction", params)
 │   ├── editorAddEntryAction    → DataEditorActions.addEntry()
 │   ├── editorRemoveEntryAction → DataEditorActions.removeEntry()
-│   ├── editorMoveEntryAction   → DataEditorActions.moveEntry()
 │   ├── editorSetFieldAction    → DataEditorActions.setField()
 │   └── editorAddLinkAction     → DataEditorActions.addLink()
 ├── State: AgentClient.CallAsync("editorGetDataState")
@@ -42,7 +41,7 @@ DataEditorActions.java — Java agent side
 
 ## Current status: Implemented (49/49 gamedata specs pass)
 
-`DataEditorActions.java` is fully implemented: load / addEntry / removeEntry / moveEntry /
+`DataEditorActions.java` is fully implemented: load / addEntry / removeEntry /
 setField / addLink / getDataState. The controller is found via the Stage titled
 `"Data Editor …"` → `#btnSaveDataFile` handler → `DataEditorWindowController`.
 
@@ -71,10 +70,6 @@ Other gotchas baked into the implementation:
   `actAddSharedSelectionEntryGroup` — `actAddSelectionEntryGroup` only handles a
   `BaseSelectionEntry` parent and is a **silent no-op at the root**. A plain selection entry is
   already handled at the root by `actAddSelectionEntry`. See `isRootEntry(...)`.
-- **moveEntry re-parents the model object directly** (preserves id). The Data Editor's only move
-  gesture is cut + paste, and paste inserts `entry.copy(false, false)` — a clone with a **new id** —
-  so it cannot express an id-preserving move. State is read from the same model graph, so a model
-  re-parent is observed identically to a UI move.
 
 ## Environment setup
 
@@ -125,7 +120,7 @@ Set `BS_UI_SKIP=true` to skip all BS UI tests.
 Before implementing stubs, you must probe the BattleScribe data editor to discover:
 - The window title of the data editor window
 - The tree item structure (how entries appear as `:id:` tokens)
-- Context menu items for add/remove/move/link operations
+- Context menu items for add/remove/link operations
 - Property panel structure for field editing
 
 ### Step 1: Launch probe

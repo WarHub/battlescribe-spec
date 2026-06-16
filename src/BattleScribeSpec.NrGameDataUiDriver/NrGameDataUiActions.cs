@@ -1,8 +1,6 @@
 using BattleScribeSpec.GameData;
 using Microsoft.Playwright;
 
-#pragma warning disable IDE0060 // Remove unused parameter — index reserved for future ordering support
-
 namespace BattleScribeSpec.NrGameDataUiDriver;
 
 /// <summary>
@@ -145,91 +143,6 @@ public static class NrGameDataUiActions
             await confirmBtn.First.ClickAsync();
             await page.WaitForTimeoutAsync(300);
         }
-    }
-
-    /// <summary>
-    /// Moves an entry under a new parent, preserving the entry id.
-    ///
-    /// The NR Editor UI has no id-preserving gesture for moving an entry under a specific
-    /// other entry: the context menu's "Move To" submenu only targets top-level containers
-    /// (shared catalogue / shared system / root), and Cut+Paste pastes a <em>clone</em> with a
-    /// freshly generated id. A spec move must keep the entry id, so we re-parent the entry
-    /// node directly in the Pinia <c>editorStore</c> — detach it from its current parent's
-    /// child array and append it to the new parent's array of the same kind. State reads go
-    /// through the same store, so this is observed identically to a UI move. (This mirrors the
-    /// BattleScribe Data Editor driver, whose cut/paste likewise clones.)
-    /// </summary>
-    public static async Task MoveEntryAsync(IPage page, string entryId, string newParentId, int? index)
-    {
-        var result = await page.EvaluateAsync<string>("""
-            ([entryId, newParentId]) => {
-                try {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const ed = pinia?._s?.get('editor');
-                    const sId = new URLSearchParams(window.location.search).get('systemId');
-                    const cId = new URLSearchParams(window.location.search).get('id');
-                    const cat = ed?.gameSystems?.[sId]?.loadedCatalogues?.[cId];
-                    if (!cat) return 'no-catalogue';
-
-                    const childKeys = [
-                        'selectionEntries','selectionEntryGroups','entryLinks','infoLinks',
-                        'categoryLinks','forceEntries','categoryEntries','rules','profiles',
-                        'infoGroups','sharedSelectionEntries','sharedSelectionEntryGroups'
-                    ];
-
-                    // Detach: find the entry in any (nested) child array and splice it out.
-                    let moved = null, movedKey = null;
-                    const detach = (obj) => {
-                        if (moved || !obj || typeof obj !== 'object') return;
-                        for (const k of childKeys) {
-                            const arr = obj[k];
-                            if (!Array.isArray(arr)) continue;
-                            const idx = arr.findIndex(e => e && e.id === entryId);
-                            if (idx >= 0) { moved = arr.splice(idx, 1)[0]; movedKey = k; return; }
-                            for (const e of arr) { detach(e); if (moved) return; }
-                        }
-                    };
-                    detach(cat);
-                    if (!moved) return 'entry-not-found';
-
-                    // Locate the new parent (the catalogue root, or any nested entry).
-                    const find = (obj, id) => {
-                        if (!obj || typeof obj !== 'object') return null;
-                        if (obj.id === id) return obj;
-                        for (const k of childKeys) {
-                            const arr = obj[k];
-                            if (Array.isArray(arr)) {
-                                for (const e of arr) { const r = find(e, id); if (r) return r; }
-                            }
-                        }
-                        return null;
-                    };
-                    const np = (newParentId === cat.id) ? cat : find(cat, newParentId);
-                    if (!np) return 'new-parent-not-found';
-
-                    // Attach under the same collection kind (drop the 'shared' prefix when
-                    // nesting a shared root entry under a concrete parent).
-                    let destKey = movedKey;
-                    if (np !== cat && destKey.startsWith('shared')) {
-                        destKey = destKey.charAt(6).toLowerCase() + destKey.slice(7);
-                    }
-                    if (!Array.isArray(np[destKey])) np[destKey] = [];
-                    np[destKey].push(moved);
-                    return 'ok';
-                } catch (e) {
-                    return 'error: ' + (e && e.message ? e.message : e);
-                }
-            }
-            """, new object[] { entryId, newParentId });
-
-        if (result != "ok")
-        {
-            throw new InvalidOperationException(
-                $"NR Editor UI: moveEntry('{entryId}' -> '{newParentId}') failed: {result}");
-        }
-
-        await page.WaitForTimeoutAsync(200);
     }
 
     /// <summary>

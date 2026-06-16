@@ -62,7 +62,6 @@ public class DataEditorActions {
         if ("editorLoadFilesAction".equals(method))   return loadFiles(p);
         if ("editorAddEntryAction".equals(method))    return addEntry(p);
         if ("editorRemoveEntryAction".equals(method)) return removeEntry(p);
-        if ("editorMoveEntryAction".equals(method))   return moveEntry(p);
         if ("editorSetFieldAction".equals(method))    return setField(p);
         if ("editorAddLinkAction".equals(method))     return addLink(p);
         if ("editorGetDataState".equals(method))      return getDataState(p);
@@ -149,107 +148,6 @@ public class DataEditorActions {
             sleep(POLL_MS);
         }
         throw new RuntimeException("Entry " + entryId + " not removed within " + POLL_TIMEOUT_MS + "ms");
-    }
-
-    private String moveEntry(JsonObject params) {
-        String entryId = requireString(params, "entryId");
-        String newParentId = requireString(params, "newParentId");
-        Object ctrl = findController();
-
-        // The Data Editor has no id-preserving move affordance: its only move gesture is
-        // cut + paste, and paste inserts entry.copy(false, false) — a clone with a freshly
-        // generated id (see DataEditorWindowController#a(Object, SelectionEntry)). A spec
-        // move must preserve the entry id, so we re-parent the model object itself: detach
-        // it from its current parent's child list and append it to the new parent's list.
-        // State is read from this same model graph (getDataState walks getDataManager().c()),
-        // so the result is observed identically to a UI move — only the tree view, which is
-        // not used for assertions, is left unrefreshed.
-        Object dm = runOnFxGet(() -> ctrl.getClass().getMethod("getDataManager").invoke(ctrl));
-        if (dm == null) throw new RuntimeException("Data manager unavailable for move");
-
-        runOnFx(() -> {
-            Object root = dm.getClass().getMethod("c").invoke(dm);
-            if (root == null) throw new RuntimeException("Model root unavailable for move");
-
-            Object newParent = findInModel(root, newParentId);
-            if (newParent == null) throw new RuntimeException("New parent not found in model: " + newParentId);
-
-            Object entry = detachFromModel(root, entryId);
-            if (entry == null) throw new RuntimeException("Entry not found in model: " + entryId);
-
-            if (!attachToModel(newParent, entry)) {
-                throw new RuntimeException("New parent cannot hold entry: " + newParentId);
-            }
-        });
-        return "{}";
-    }
-
-    /** Child-collection getters traversed when locating/moving model entries. */
-    private static final String[] CHILD_GETTERS = {
-        "getSelectionEntries", "getSelectionEntryGroups", "getEntryLinks", "getRules",
-        "getProfiles", "getInfoGroups", "getInfoLinks", "getCategoryLinks",
-        "getConstraints", "getModifiers", "getModifierGroups",
-        "getForceEntries", "getCategoryEntries",
-        "getSharedSelectionEntries", "getSharedSelectionEntryGroups",
-        "getSharedRules", "getSharedProfiles", "getSharedInfoGroups",
-    };
-
-    /** Return the live (mutable) backing list for a child getter, or {@code null}. */
-    @SuppressWarnings("unchecked")
-    private List<Object> liveList(Object obj, String getter) {
-        if (obj == null) return null;
-        try {
-            Object raw = obj.getClass().getMethod(getter).invoke(obj);
-            if (raw instanceof List) return (List<Object>) raw;
-        } catch (Exception ignored) {}
-        return null;
-    }
-
-    /** Find the model object with the given id anywhere under {@code node} (inclusive). */
-    private Object findInModel(Object node, String id) {
-        if (node == null) return null;
-        if (id.equals(getId(node))) return node;
-        for (String g : CHILD_GETTERS) {
-            List<Object> list = liveList(node, g);
-            if (list == null) continue;
-            for (Object child : new ArrayList<>(list)) {
-                Object found = findInModel(child, id);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-
-    /** Remove and return the model object with the given id from its parent's child list. */
-    private Object detachFromModel(Object node, String id) {
-        if (node == null) return null;
-        for (String g : CHILD_GETTERS) {
-            List<Object> list = liveList(node, g);
-            if (list == null) continue;
-            for (int i = 0; i < list.size(); i++) {
-                if (id.equals(getId(list.get(i)))) return list.remove(i);
-            }
-            for (Object child : new ArrayList<>(list)) {
-                Object found = detachFromModel(child, id);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-
-    /** Append {@code entry} to the appropriate child list of {@code parent}. */
-    private boolean attachToModel(Object parent, Object entry) {
-        String n = entry.getClass().getSimpleName();
-        String getter;
-        if (n.contains("SelectionEntryGroup"))   getter = "getSelectionEntryGroups";
-        else if (n.contains("SelectionEntry"))    getter = "getSelectionEntries";
-        else if (n.contains("EntryLink"))         getter = "getEntryLinks";
-        else if (n.contains("ForceEntry"))        getter = "getForceEntries";
-        else if (n.contains("CategoryEntry"))     getter = "getCategoryEntries";
-        else                                      getter = "getSelectionEntries";
-        List<Object> list = liveList(parent, getter);
-        if (list == null) return false;
-        return list.add(entry);
     }
 
     private String setField(JsonObject params) {

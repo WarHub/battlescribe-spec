@@ -89,14 +89,6 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             ["entryId"] = entryId,
         }));
 
-    public void MoveEntry(string entryId, string newParentId, int? index = null)
-        => RunAsync(() => CallActionAsync("editorMoveEntryAction", new JsonObject
-        {
-            ["entryId"] = entryId,
-            ["newParentId"] = newParentId,
-            ["index"] = index.HasValue ? (JsonNode?)JsonValue.Create(index.Value) : null,
-        }));
-
     public void SetField(string entryId, string field, string? value)
         => RunAsync(() => CallActionAsync("editorSetFieldAction", new JsonObject
         {

@@ -204,9 +204,6 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     public void RemoveEntry(string entryId)
         => NrGameDataUiActions.RemoveEntryAsync(_page!, entryId).GetAwaiter().GetResult();
 
-    public void MoveEntry(string entryId, string newParentId, int? index = null)
-        => NrGameDataUiActions.MoveEntryAsync(_page!, entryId, newParentId, index).GetAwaiter().GetResult();
-
     public void SetField(string entryId, string field, string? value)
         => NrGameDataUiActions.SetFieldAsync(_page!, entryId, field, value).GetAwaiter().GetResult();
 

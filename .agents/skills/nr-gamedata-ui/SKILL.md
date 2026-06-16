@@ -25,7 +25,6 @@ NrGameDataUiEngine (IGameDataEngine)
 ├── Mutations: NrGameDataUiActions.*
 │   ├── AddEntry    → right-click tree node → context menu → "Add" → type
 │   ├── RemoveEntry → right-click tree node → "Delete" → confirm
-│   ├── MoveEntry   → Pinia store re-parent (no id-preserving UI move; see notes below)
 │   ├── SetField    → click entry → edit property panel input
 │   └── AddLink     → right-click → "Add Link" → select target
 ├── State: NrGameDataUiActions.ReadStateAsync()
@@ -145,11 +144,6 @@ The NR Editor's actual entry-node context menu does **not** use `role=menuitem`;
   Pinia store (children of children), then expands **all** `h3.arrowTitle.collapsed` nodes in a
   loop (depth-0 section expansion alone leaves deeper parents collapsed and their children
   unrendered), then matches `.{collectionClass} h3:is(.normalTitle,.arrowTitle)` by name.
-- **Move** — there is **no** id-preserving UI gesture to move an entry under a specific other
-  entry: the "Move To" submenu only targets top-level containers (shared catalogue / shared
-  system / root), and Cut+Paste pastes a **clone with a new id**. `MoveEntryAsync` therefore
-  re-parents the entry node directly in the Pinia `editorStore` (preserving the id), mirroring
-  the BattleScribe driver. State reads go through the same store, so it is observed as a UI move.
 - **collective on model-type entries** — the `Collective` checkbox is **disabled** in the NR
   Editor for `type: model` entries (verified: `disabled=true`), so `se-set-field-collective` is
   intentionally `skip`ped for `nr-editor-ui` — a genuine product limitation, not a driver gap.
