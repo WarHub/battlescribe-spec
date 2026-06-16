@@ -115,13 +115,13 @@ Re-probe only when a new field/control id or menu label is unknown.
 
 ## JSON-RPC routing
 
-In `JsonRpcServer.java`, methods starting with `"gamedata"` route to `DataEditorActions.dispatch()`
-(the gamedata/roster split mirrors the engine identifiers; roster actions keep the `*Action` suffix):
+In `JsonRpcServer.java`, RPC methods route by prefix, mirroring the engine identifiers —
+`gamedata*` → `DataEditorActions`, `roster*` → `RosterActions`:
 
 ```java
 } else if (method.startsWith("gamedata")) {
     result = dataEditorActions.dispatch(method, params);
-} else if (method.endsWith("Action")) {
+} else if (method.startsWith("roster")) {
     result = rosterActions.dispatch(method, params);
 ```
 

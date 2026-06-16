@@ -74,14 +74,14 @@ public sealed class BsUiRosterEngine : IRosterEngine
         => RunAsync(() => SetupAsync(gameSystem, catalogues));
 
     public ActionOutputs AddForce(string forceEntryId, string catalogueId)
-        => RunAsync(() => CallActionAsync<ActionOutputs>("addForceAction", new JsonObject
+        => RunAsync(() => CallActionAsync<ActionOutputs>("rosterAddForceAction", new JsonObject
         {
             ["forceEntryId"] = forceEntryId,
             ["catalogueId"] = catalogueId,
         }, isFirstForce: true, forceEntryId: forceEntryId, gameSystemName: _gameSystem?.Name));
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
-        => RunAsync(() => CallActionAsync<ActionOutputs>("addChildForceAction", new JsonObject
+        => RunAsync(() => CallActionAsync<ActionOutputs>("rosterAddChildForceAction", new JsonObject
         {
             ["parentForceId"] = parentForceId,
             ["forceEntryId"] = forceEntryId,
@@ -89,17 +89,17 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }));
 
     public void RemoveForce(string forceId)
-        => RunAsync(() => CallActionAsync("removeForceAction", new JsonObject { ["forceId"] = forceId }));
+        => RunAsync(() => CallActionAsync("rosterRemoveForceAction", new JsonObject { ["forceId"] = forceId }));
 
     public ActionOutputs SelectEntry(string forceId, string entryId)
-        => RunAsync(() => CallActionAsync<ActionOutputs>("selectEntryAction", new JsonObject
+        => RunAsync(() => CallActionAsync<ActionOutputs>("rosterSelectEntryAction", new JsonObject
         {
             ["forceId"] = forceId,
             ["entryId"] = entryId,
         }));
 
     public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
-        => RunAsync(() => CallActionAsync<ActionOutputs>("selectChildEntryAction", new JsonObject
+        => RunAsync(() => CallActionAsync<ActionOutputs>("rosterSelectChildEntryAction", new JsonObject
         {
             ["forceId"] = forceId,
             ["parentSelectionId"] = parentSelectionId,
@@ -108,14 +108,14 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }));
 
     public void DeselectSelection(string forceId, string selectionId)
-        => RunAsync(() => CallActionAsync("deselectSelectionAction", new JsonObject
+        => RunAsync(() => CallActionAsync("rosterDeselectSelectionAction", new JsonObject
         {
             ["forceId"] = forceId,
             ["selectionId"] = selectionId,
         }));
 
     public void SetSelectionCount(string forceId, string selectionId, int count)
-        => RunAsync(() => CallActionAsync("setSelectionCountAction", new JsonObject
+        => RunAsync(() => CallActionAsync("rosterSetSelectionCountAction", new JsonObject
         {
             ["forceId"] = forceId,
             ["selectionId"] = selectionId,
@@ -123,14 +123,14 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }));
 
     public ActionOutputs DuplicateSelection(string forceId, string selectionId)
-        => RunAsync(() => CallActionAsync<ActionOutputs>("duplicateSelectionAction", new JsonObject
+        => RunAsync(() => CallActionAsync<ActionOutputs>("rosterDuplicateSelectionAction", new JsonObject
         {
             ["forceId"] = forceId,
             ["selectionId"] = selectionId,
         }));
 
     public ActionOutputs DuplicateForce(string forceId)
-        => RunAsync(() => CallActionAsync<ActionOutputs>("duplicateForceAction", new JsonObject
+        => RunAsync(() => CallActionAsync<ActionOutputs>("rosterDuplicateForceAction", new JsonObject
         {
             ["forceId"] = forceId,
         }));
@@ -144,7 +144,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             return;
         }
         var costName = _costNamesById.GetValueOrDefault(costTypeId) ?? costTypeId;
-        RunAsync(() => CallActionAsync("setCostLimitAction", new JsonObject
+        RunAsync(() => CallActionAsync("rosterSetCostLimitAction", new JsonObject
         {
             ["costTypeId"] = costTypeId,
             ["costName"] = costName,
@@ -153,7 +153,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
     }
 
     public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
-        => RunAsync(() => CallActionAsync("setCustomizationAction", new JsonObject
+        => RunAsync(() => CallActionAsync("rosterSetCustomizationAction", new JsonObject
         {
             ["forceId"] = forceId,
             ["selectionId"] = selectionId,
@@ -950,12 +950,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
         EnsureSetup();
 
         // Special case: first force uses createRosterAction instead of addForceAction
-        if (isFirstForce && method == "addForceAction")
+        if (isFirstForce && method == "rosterAddForceAction")
         {
             var state = await ReadRosterStateOrEmptyAsync();
             if (state.Forces.Count == 0)
             {
-                method = "createRosterAction";
+                method = "rosterCreateRosterAction";
                 parameters = new JsonObject
                 {
                     ["forceEntryId"] = forceEntryId,

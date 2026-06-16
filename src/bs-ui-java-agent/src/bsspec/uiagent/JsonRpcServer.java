@@ -133,7 +133,7 @@ public class JsonRpcServer {
             } else if (method.startsWith("gamedata")) {
                 // High-level gamedata (Data Editor) actions run on background thread
                 result = dataEditorActions.dispatch(method, params);
-            } else if (method.endsWith("Action")) {
+            } else if (method.startsWith("roster")) {
                 // High-level roster (Roster Editor) actions run on background thread
                 result = rosterActions.dispatch(method, params);
             } else {

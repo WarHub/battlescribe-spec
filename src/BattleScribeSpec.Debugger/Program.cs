@@ -904,15 +904,21 @@ string InferEngineType(string? input)
 
 static string? FindRepoRoot()
 {
-    var dir = Directory.GetCurrentDirectory();
-    while (dir is not null)
+    // Anchor on the solution file rather than .git: in a git worktree, .git is a file
+    // (gitdir pointer), so Directory.Exists(".git") would miss it. Walk up from both the
+    // current directory and the assembly location so it works regardless of cwd.
+    foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
     {
-        if (Directory.Exists(Path.Combine(dir, ".git")))
+        var dir = start;
+        while (dir is not null)
         {
-            return dir;
-        }
+            if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
+            {
+                return dir;
+            }
 
-        dir = Path.GetDirectoryName(dir);
+            dir = Path.GetDirectoryName(dir);
+        }
     }
 
     return null;
