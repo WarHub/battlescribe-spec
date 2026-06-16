@@ -159,6 +159,44 @@ if (specInput is null)
     }
 }
 
+// ===== Export XML mode (standalone — exits before any engine resolution/validation) =====
+if (exportXmlDir is not null)
+{
+    SpecFile xmlSpec;
+    try
+    {
+        xmlSpec = LoadSpec(specInput);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error loading spec: {ex.Message}");
+        return 1;
+    }
+
+    if (xmlSpec.Setup.DataSource is { Length: > 0 })
+    {
+        Console.Error.WriteLine("Error: --export-xml is not supported for dataSource specs.");
+        return 1;
+    }
+
+    var (xmlGameSystem, xmlCatalogues) = SpecLoader.GetSetupData(xmlSpec.Setup);
+    Directory.CreateDirectory(exportXmlDir);
+
+    var gstOut = Path.Combine(exportXmlDir, "system.gst");
+    File.WriteAllText(gstOut, CatXmlGenerator.GenerateGameSystemXml(xmlGameSystem));
+    Console.Error.WriteLine($"Wrote {gstOut}");
+
+    foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(xmlGameSystem, xmlCatalogues))
+    {
+        var catOut = Path.Combine(exportXmlDir, fileName);
+        File.WriteAllText(catOut, xml);
+        Console.Error.WriteLine($"Wrote {catOut}");
+    }
+
+    Console.Error.WriteLine($"Exported {1 + xmlCatalogues.Length} file(s) to {exportXmlDir}");
+    return 0;
+}
+
 // ===== Resolve engine type (roster vs gamedata) =====
 // If --engine used the <type>/<name> form, engineType is already set. Otherwise infer
 // it from the resolved spec path: contains "gamedata" → gamedata, "roster" → roster,
@@ -211,32 +249,6 @@ catch (Exception ex)
     return 1;
 }
 
-// ===== Export XML mode =====
-if (exportXmlDir is not null)
-{
-    if (spec.Setup.DataSource is { Length: > 0 })
-    {
-        Console.Error.WriteLine("Error: --export-xml is not supported for dataSource specs.");
-        return 1;
-    }
-
-    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
-    Directory.CreateDirectory(exportXmlDir);
-
-    var gstFile = Path.Combine(exportXmlDir, "system.gst");
-    File.WriteAllText(gstFile, CatXmlGenerator.GenerateGameSystemXml(gameSystem));
-    Console.Error.WriteLine($"Wrote {gstFile}");
-
-    foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues))
-    {
-        var catFile = Path.Combine(exportXmlDir, fileName);
-        File.WriteAllText(catFile, xml);
-        Console.Error.WriteLine($"Wrote {catFile}");
-    }
-
-    Console.Error.WriteLine($"Exported {1 + catalogues.Length} file(s) to {exportXmlDir}");
-    return 0;
-}
 
 // ===== BS UI Probe mode (roster) =====
 if (probeMode && engineName is "battlescribe-ui")

@@ -134,7 +134,7 @@ jobs:
       - name: Run kitchen-sink via BS UI driver
         run: |
           xvfb-run -a dotnet run --project src/BattleScribeSpec.Debugger -- \
-            --engine bs-ui protocol-kitchen-sink
+            --engine roster/battlescribe-ui protocol-kitchen-sink
         env:
           BS_UI_JAVA_PATH: ${{ env.JAVA_HOME }}/bin/java
 

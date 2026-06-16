@@ -203,4 +203,4 @@ spec runs. On subsequent `Setup()` calls:
 2. If ping fails, kills old process and cold-starts
 
 Useful for iterative debugging where JVM startup time (~5-10s) is significant.
-The debugger uses KeepAlive internally when running with `--engine bs-ui`.
+The debugger uses KeepAlive internally when running with `--engine roster/battlescribe-ui`.

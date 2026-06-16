@@ -43,7 +43,7 @@ pwsh -File src/bs-ui-java-agent/build.ps1
 ## Quick start — probe mode
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --probe my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --probe my-spec-id
 ```
 
 Probe sequence:
@@ -59,7 +59,7 @@ Use this to see the initial UI state with your spec's game data loaded.
 ## Stop-before — inspect state mid-spec
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --stop-before 5 my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --stop-before 5 my-spec-id
 ```
 
 Runs the spec to step 4, then pauses before step 5:
@@ -136,20 +136,20 @@ scene graph. Key fields on each node:
 
 ```powershell
 # Probe the spec, check scene dump output for unexpected modal stages
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --stop-before 3 my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --stop-before 3 my-spec-id
 # Look for: "modality": "APPLICATION_MODAL" in the dumpAllWindows output
 ```
 
 ### Capture screenshots at every step
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --screenshots artifacts/steps my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --screenshots artifacts/steps my-spec-id
 ```
 
 ### Record UI interactions for new action discovery
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --record artifacts/recorded-actions.json my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --record artifacts/recorded-actions.json my-spec-id
 ```
 
 ## Design decision — no interactive REPL

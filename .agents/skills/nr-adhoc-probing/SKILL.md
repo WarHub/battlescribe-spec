@@ -18,7 +18,7 @@ no temporary test files needed.
 
 ```powershell
 # Launch NR with spec data loaded, open a JS REPL
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-ui --probe my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit-ui --probe my-spec-id
 
 # Set NR_ENGINE_URL if probing live NR (default is https://newrecruit.eu)
 $env:NR_ENGINE_URL = "https://newrecruit.eu"
@@ -41,7 +41,7 @@ undefined
 
 ```powershell
 # Run spec, pause before step N, drop into REPL with full roster state
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-ui --stop-before 5 my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit-ui --stop-before 5 my-spec-id
 ```
 
 Steps run in order; at step 5 the REPL opens before that step executes.
@@ -54,7 +54,7 @@ Type `exit` or `quit` to continue execution.
 |------|--------|
 | `--no-headless` | Keep browser visible after the spec run |
 | `--dump` | Print full roster state after every step |
-| `--engine nr-ui` | Required — selects the NR UI driver |
+| `--engine roster/newrecruit-ui` | Required — selects the NR UI driver |
 
 ## NrUiDiagnostics — reading CI failures
 

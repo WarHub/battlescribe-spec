@@ -198,7 +198,7 @@ See [ERROR-ASSERTIONS.md](references/ERROR-ASSERTIONS.md) for error matching det
    ```bash
    dotnet run --project src/BattleScribeSpec.Debugger -- {category/id}
    dotnet run --project src/BattleScribeSpec.Debugger -- --dump {category/id}   # after every step
-   dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr {id}       # against NR
+   dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit {id}       # against NR
    dotnet run --project src/BattleScribeSpec.Debugger -- --json {id}            # JSON output
    ```
    Default dumps after the last step. Use `--dump` to see state progression.

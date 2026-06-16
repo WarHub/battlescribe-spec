@@ -61,11 +61,13 @@ Use `bs-spec-debug` to run a spec step-by-step and inspect full roster state:
 ```bash
 dotnet run --project src/BattleScribeSpec.Debugger -- selection-publication        # by spec ID
 dotnet run --project src/BattleScribeSpec.Debugger -- --dump protocol/kitchen-sink # dump after every step
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr --json spec.yaml # NR engine, JSON output
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit --json spec.yaml # NR engine, JSON output
 dotnet run --project src/BattleScribeSpec.Debugger -- --export-xml ./out/ cost/cost-hidden-limit-validation
 ```
 
-Options: `--dump` (all steps), `--json`, `--engine bs|nr`, `--no-headless`,
+Options: `--dump` (all steps), `--json`, `--engine <type>/<name>` (type ∈ {roster, gamedata},
+inferred from the spec path if omitted; name ∈ {battlescribe, battlescribe-ui, newrecruit,
+newrecruit-ui}), `--no-headless`,
 `--export-xml <dir>` (generate .gst/.cat XML files from spec setup and exit).
 Specs can include `action: dump` steps for explicit dump points.
 
