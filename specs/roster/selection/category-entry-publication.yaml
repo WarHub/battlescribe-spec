@@ -8,8 +8,6 @@ description: >
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     categoryEntries:
       - id: cat-troops
         name: Troops
@@ -24,8 +22,6 @@ setup:
             name: Troops
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       publications:
         - id: pub-1
           name: Core Rulebook

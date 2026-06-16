@@ -239,8 +239,10 @@ public static class SpecLoader
     /// <summary>
     /// Extract setup data as Protocol types directly from the deserialized YAML.
     /// Requires plural 'catalogues' with at least one catalogue.
+    /// When <paramref name="specId"/> is provided, empty game system name/id and catalogue
+    /// name/gameSystemId fields are filled with spec-derived defaults.
     /// </summary>
-    public static (ProtocolGameSystem GameSystem, ProtocolCatalogue[] Catalogues) GetSetupData(SetupDef setup)
+    public static (ProtocolGameSystem GameSystem, ProtocolCatalogue[] Catalogues) GetSetupData(SetupDef setup, string? specId = null)
     {
         var gameSystem = setup.GameSystem
             ?? throw new InvalidOperationException("Setup requires 'gameSystem'.");
@@ -250,7 +252,42 @@ public static class SpecLoader
             throw new InvalidOperationException("Setup requires 'catalogues' with at least one catalogue.");
         }
 
+        if (specId is not null)
+        {
+            ApplySetupDefaults(gameSystem, catalogues, specId);
+        }
+
         return (gameSystem, catalogues.ToArray());
+    }
+
+    /// <summary>
+    /// Fills in empty name/id fields in game system and catalogues with spec-derived defaults.
+    /// Only mutates fields that are empty — explicit YAML values are preserved.
+    /// </summary>
+    private static void ApplySetupDefaults(ProtocolGameSystem gameSystem, IList<ProtocolCatalogue> catalogues, string specId)
+    {
+        if (string.IsNullOrEmpty(gameSystem.Id))
+        {
+            gameSystem.Id = specId;
+        }
+        if (string.IsNullOrEmpty(gameSystem.Name))
+        {
+            gameSystem.Name = specId;
+        }
+
+        var multiCat = catalogues.Count > 1;
+        for (var i = 0; i < catalogues.Count; i++)
+        {
+            var cat = catalogues[i];
+            if (string.IsNullOrEmpty(cat.GameSystemId))
+            {
+                cat.GameSystemId = gameSystem.Id;
+            }
+            if (string.IsNullOrEmpty(cat.Name))
+            {
+                cat.Name = multiCat ? $"{specId}-{i + 1}" : specId;
+            }
+        }
     }
 
     private static void ValidateIdUniqueness(SpecFile spec)

@@ -4,8 +4,6 @@ description: Selection entry with category link assigns the selection to a categ
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     categoryEntries:
       - id: cat-entry-hq
         name: HQ
@@ -18,8 +16,6 @@ setup:
             name: HQ
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Commander

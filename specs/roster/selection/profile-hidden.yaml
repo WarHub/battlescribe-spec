@@ -4,8 +4,6 @@ description: A profile with hidden true is filtered from selection state (not ex
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
@@ -17,8 +15,6 @@ setup:
             name: WS
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-stealth
           name: Stealth Unit

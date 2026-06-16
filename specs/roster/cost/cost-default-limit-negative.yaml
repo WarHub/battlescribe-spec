@@ -5,8 +5,6 @@ tags: [cost, defaultCostLimit]
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     costTypes:
       - id: ct-neg1
         name: neg1
@@ -21,8 +19,6 @@ setup:
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Expensive Unit

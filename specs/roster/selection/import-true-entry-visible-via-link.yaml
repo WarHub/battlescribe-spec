@@ -4,22 +4,18 @@ description: Entry with explicit import=true is selectable when its catalogue is
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     forceEntries:
       - id: fe-1
         name: Patrol
   catalogues:
     - id: cat-base
       name: Base Catalogue
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-base-1
           name: Shared Unit
           type: unit
     - id: cat-faction
       name: Faction Catalogue
-      gameSystemId: test-gs
       catalogueLinks:
         - id: cl-1
           name: Base Catalogue

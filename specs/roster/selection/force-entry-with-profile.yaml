@@ -5,8 +5,6 @@ description: ForceEntry carrying a profile (info content on force entry)
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     profileTypes:
       - id: pt-stats
         name: Force Stats
@@ -27,8 +25,6 @@ setup:
                 value: "3"
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Marine

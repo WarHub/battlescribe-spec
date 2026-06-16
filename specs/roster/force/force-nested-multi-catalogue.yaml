@@ -7,8 +7,6 @@ tags: [childForce, catalogue]
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-army
         name: Army
@@ -18,14 +16,12 @@ setup:
   catalogues:
     - id: cat-a
       name: Faction A
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-a1
           name: Alpha Unit
           type: unit
     - id: cat-b
       name: Faction B
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-b1
           name: Beta Unit

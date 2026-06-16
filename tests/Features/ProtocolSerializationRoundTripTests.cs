@@ -89,7 +89,7 @@ public class ProtocolSerializationRoundTripTests
     {
         var specPath = FindSpec("protocol/protocol-kitchen-sink");
         var spec = SpecLoader.Load(specPath);
-        var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup);
+        var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
 
         var command = new SetupCommand
         {

@@ -5,15 +5,11 @@ description: Selections with numeric names use natural sort ordering
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-unit-20
           name: Unit 20

@@ -4,8 +4,6 @@ description: Profile on a selection preserves its publicationId
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     forceEntries:
       - id: fe-1
         name: Detachment
@@ -17,8 +15,6 @@ setup:
             name: M
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       publications:
         - id: pub-1
           name: Core Rulebook

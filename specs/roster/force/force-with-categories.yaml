@@ -4,8 +4,6 @@ description: Force can be added when the game system defines category entries
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     categoryEntries:
       - id: cat-hq
         name: HQ
@@ -18,8 +16,6 @@ setup:
         name: Patrol
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
 
 steps:
   - action: addForce

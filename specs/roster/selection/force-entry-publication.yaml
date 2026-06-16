@@ -6,8 +6,6 @@ description: >
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test GS
     publications:
       - id: pub-1
         name: Core Rulebook
@@ -18,8 +16,6 @@ setup:
         page: "42"
   catalogues:
     - id: cat-1
-      name: Cat
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-1
           name: Marine

@@ -4,8 +4,6 @@ description: Entry without modifiers keeps its original values
 
 setup:
   gameSystem:
-    id: test-gs
-    name: Test Game System
     costTypes:
       - id: pts
         name: Points
@@ -14,8 +12,6 @@ setup:
         name: Patrol
   catalogues:
     - id: cat-1
-      name: Test Catalogue
-      gameSystemId: test-gs
       selectionEntries:
         - id: se-unit-a
           name: Unchanged Unit
