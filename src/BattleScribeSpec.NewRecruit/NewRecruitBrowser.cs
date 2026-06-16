@@ -33,7 +33,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// Create and initialize a browser session pointed at the NR web app.
     /// </summary>
     public static async Task<NewRecruitBrowser> CreateAsync(
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         float? slowMo = null)
     {
@@ -48,7 +48,7 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// </summary>
     public static async Task<NewRecruitBrowser> CreateFrozenAsync(
         string harFilePath,
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         float? slowMo = null)
     {

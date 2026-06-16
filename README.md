@@ -171,7 +171,7 @@ filters automatically. You can also run suites manually with `--filter`:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `NR_ENGINE_URL` | Base URL for live New Recruit tests | `https://newrecruit.eu` |
+| `NR_ENGINE_URL` | Base URL for live New Recruit tests | `https://www.newrecruit.eu` |
 | `NR_HEADLESS` | Set to `false` to show the browser window | `false` |
 | `NR_VISUAL` | Set to `true` to navigate to the roster editor UI after setup | `true` |
 | `NR_SLOW_MO` | Playwright SlowMo in ms — pauses between browser actions | `500` |
@@ -182,7 +182,7 @@ filters automatically. You can also run suites manually with `--filter`:
 Example — run live NR conformance tests with visible browser and roster editor UI:
 
 ```powershell
-$env:NR_ENGINE_URL = "https://newrecruit.eu"
+$env:NR_ENGINE_URL = "https://www.newrecruit.eu"
 $env:NR_HEADLESS = "false"
 $env:NR_VISUAL = "true"
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests"
@@ -210,7 +210,7 @@ The project includes a [New Recruit](https://newrecruit.eu) adapter that tests N
 via Playwright browser automation. Two testing modes are available:
 
 - **Live** (`nr-conformance` CI job) — Tests against the live NR website. Triggered manually
-  or with `[nr-test]` in commit message. Set `NR_ENGINE_URL=https://newrecruit.eu` to run locally.
+  or with `[nr-test]` in commit message. Set `NR_ENGINE_URL=https://www.newrecruit.eu` to run locally.
 - **Frozen** (`nr-frozen` CI job) — Tests against a pre-recorded HAR snapshot, fully offline.
   Runs automatically on every push. Run `./setup.ps1` to download the snapshot. Snapshots stored in
   [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har).

@@ -3,7 +3,7 @@
 <RunSettings>
   <RunConfiguration>
     <EnvironmentVariables>
-      <NR_ENGINE_URL>https://newrecruit.eu</NR_ENGINE_URL>
+      <NR_ENGINE_URL>https://www.newrecruit.eu</NR_ENGINE_URL>
       <NR_HEADLESS>false</NR_HEADLESS>
     </EnvironmentVariables>
     <TestCaseFilter>Engine=LiveNrUiRoster</TestCaseFilter>

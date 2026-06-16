@@ -25,7 +25,7 @@ public sealed class NrUiProbe : IAsyncDisposable
     public async Task LaunchAsync(
         ProtocolGameSystem gameSystem,
         IReadOnlyList<ProtocolCatalogue> catalogues,
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         TextWriter? log = null)
     {
         log ??= TextWriter.Null;
@@ -47,7 +47,7 @@ public sealed class NrUiProbe : IAsyncDisposable
         string harFilePath,
         ProtocolGameSystem gameSystem,
         IReadOnlyList<ProtocolCatalogue> catalogues,
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         TextWriter? log = null)
     {
         log ??= TextWriter.Null;

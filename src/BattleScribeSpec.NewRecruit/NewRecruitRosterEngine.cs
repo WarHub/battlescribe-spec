@@ -48,7 +48,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// Create and initialize a NewRecruitRosterEngine with a browser session.
     /// </summary>
     public static async Task<NewRecruitRosterEngine> CreateAsync(
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         float? slowMo = null)
     {
@@ -62,7 +62,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// </summary>
     public static async Task<NewRecruitRosterEngine> CreateFrozenAsync(
         string harFilePath,
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         float? slowMo = null)
     {

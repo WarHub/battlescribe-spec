@@ -49,7 +49,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     /// <summary>Create a live (internet-connected) engine instance.</summary>
     public static async Task<NrRosterUiEngine> CreateAsync(
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         float? slowMo = null)
     {
@@ -60,7 +60,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// <summary>Create an engine that replays all network traffic from a HAR file.</summary>
     public static async Task<NrRosterUiEngine> CreateFrozenAsync(
         string harFilePath,
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         float? slowMo = null)
     {

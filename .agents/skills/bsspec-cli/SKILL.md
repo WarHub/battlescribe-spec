@@ -134,7 +134,7 @@ Run `setup.ps1` once: it downloads BattleScribe + the Liberica JDK, builds the J
 and downloads the NR Editor frozen static files and Playwright browsers. Everything is then
 auto-discovered — no env vars needed. Optional overrides: `BS_UI_JAVA_PATH`, `BS_UI_APP_DIR`,
 `BS_UI_AGENT_JAR` (BS UI artifacts); `NR_ENGINE_URL` (live NR roster, default
-`https://newrecruit.eu`); `NR_EDITOR_URL` (live NR Editor).
+`https://www.newrecruit.eu`); `NR_EDITOR_URL` (live NR Editor).
 
 ## Reference files
 

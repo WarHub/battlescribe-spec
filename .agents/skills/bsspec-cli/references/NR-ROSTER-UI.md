@@ -9,8 +9,8 @@ and flags, and [NR-INTERNALS.md](NR-INTERNALS.md) for the deobfuscated engine be
 
 ```bash
 dotnet run --project src/BattleScribeSpec.Cli -- probe --engine newrecruit --ui my-spec-id
-# Target a specific instance (default https://newrecruit.eu):
-NR_ENGINE_URL=https://newrecruit.eu dotnet run --project src/BattleScribeSpec.Cli -- probe --engine newrecruit --ui my-spec-id
+# Target a specific instance (default https://www.newrecruit.eu):
+NR_ENGINE_URL=https://www.newrecruit.eu dotnet run --project src/BattleScribeSpec.Cli -- probe --engine newrecruit --ui my-spec-id
 ```
 
 The browser opens (visible), the spec's data is loaded via the "Add From Folder" flow, and a

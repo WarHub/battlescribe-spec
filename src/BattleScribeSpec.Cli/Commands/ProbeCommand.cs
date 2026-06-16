@@ -130,7 +130,7 @@ internal static class ProbeCommand
         Ui.Info($"NR UI Probe — launching with {catalogues.Length + 1} data file(s)");
 
         await using var probe = new NrUiProbe();
-        var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL") ?? "https://newrecruit.eu";
+        var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL") ?? "https://www.newrecruit.eu";
         await probe.LaunchAsync(gameSystem, catalogues, url, Console.Error);
 
         Ui.Blank();

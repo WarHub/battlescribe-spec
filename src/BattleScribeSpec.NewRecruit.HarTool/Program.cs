@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using BattleScribeSpec.NewRecruit;
 
-var baseUrl = "https://newrecruit.eu";
+var baseUrl = "https://www.newrecruit.eu";
 var outputDir = ".testdata/newrecruit-har";
 var headless = true;
 
@@ -66,7 +66,7 @@ static void PrintUsage()
         Usage: dotnet run -- [options]
 
         Options:
-          --url <url>       Base URL to record (default: https://newrecruit.eu)
+          --url <url>       Base URL to record (default: https://www.newrecruit.eu)
           -o, --output <dir>  Output directory (default: .testdata/newrecruit-har)
           --headed          Run browser in headed mode (visible)
           -h, --help        Show this help

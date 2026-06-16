@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Run live NR UI driver roster conformance tests against https://newrecruit.eu -->
+<!-- Run live NR UI driver roster conformance tests against https://www.newrecruit.eu -->
 <RunSettings>
   <RunConfiguration>
     <EnvironmentVariables>
-      <NR_ENGINE_URL>https://newrecruit.eu</NR_ENGINE_URL>
+      <NR_ENGINE_URL>https://www.newrecruit.eu</NR_ENGINE_URL>
     </EnvironmentVariables>
     <TestCaseFilter>Engine=LiveNrUiRoster</TestCaseFilter>
   </RunConfiguration>

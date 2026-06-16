@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Run live New Recruit roster conformance + integration tests against https://newrecruit.eu -->
+<!-- Run live New Recruit roster conformance + integration tests against https://www.newrecruit.eu -->
 <RunSettings>
   <RunConfiguration>
     <EnvironmentVariables>
-      <NR_ENGINE_URL>https://newrecruit.eu</NR_ENGINE_URL>
+      <NR_ENGINE_URL>https://www.newrecruit.eu</NR_ENGINE_URL>
     </EnvironmentVariables>
     <TestCaseFilter>Engine=LiveNrRoster</TestCaseFilter>
   </RunConfiguration>

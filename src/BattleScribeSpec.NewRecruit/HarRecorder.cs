@@ -29,7 +29,7 @@ public static class HarRecorder
     public static async Task RecordAsync(
         string harFilePath,
         string? metadataFilePath = null,
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true)
     {
         var harDir = Path.GetDirectoryName(harFilePath);
