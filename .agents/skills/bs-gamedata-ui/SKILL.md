@@ -82,7 +82,8 @@ dotnet test -p:TestProfile=bs-ui-gamedata
 ```
 
 That's the whole setup — the Java runtime and jars are auto-discovered (`BsUiPaths.ResolveJavaPath`,
-`BsGameDataUiEngine.FindOptions`). Set `BS_UI_JAVA_PATH` only to override the JDK (CI does).
+`BsGameDataUiEngine.FindOptions`). Resolution order is `BS_UI_JAVA_PATH` → `lib/liberica-jdk` →
+`JAVA_HOME`; CI relies on the `JAVA_HOME` from `actions/setup-java` (`jdk+fx`), so it sets nothing.
 
 Notes:
 - Each spec relaunches the app (~5 s) → full suite ≈ 4–5 min, matching CI.

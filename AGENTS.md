@@ -49,8 +49,8 @@ Java agent. Mutations go through the real UI; state is read via the Java model. 
 dotnet test -p:TestProfile=bs-ui-gamedata
 ```
 
-The JavaFX-capable JDK is auto-discovered from `lib/liberica-jdk`; set `BS_UI_JAVA_PATH` only to
-override it (CI does). Tests self-skip when BS artifacts are absent.
+The JavaFX-capable JDK is auto-discovered (`BS_UI_JAVA_PATH` → `lib/liberica-jdk` → `JAVA_HOME`),
+so neither local runs nor CI need to set anything. Tests self-skip when BS artifacts are absent.
 
 ## Debugging specs
 

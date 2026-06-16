@@ -122,7 +122,7 @@ jobs:
           NR_HEADLESS: true
 
       - name: Run frozen NR Editor GameData UI tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrGameDataUi" --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
 
@@ -135,17 +135,13 @@ jobs:
         run: |
           xvfb-run -a dotnet run --project src/BattleScribeSpec.Debugger -- \
             --engine roster/battlescribe-ui protocol-kitchen-sink
-        env:
-          BS_UI_JAVA_PATH: ${{ env.JAVA_HOME }}/bin/java
 
       - name: Run specs via BS GameData UI driver
         run: |
           xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj \
-            --filter "Engine=BsGameDataUi" --no-build \
+            -p:TestProfile=bs-ui-gamedata --no-build \
             --logger "console;verbosity=minimal" \
             --logger "GitHubActions;summary-include-passed=false"
-        env:
-          BS_UI_JAVA_PATH: ${{ env.JAVA_HOME }}/bin/java
 
       - name: Upload diagnostics
         if: failure()
