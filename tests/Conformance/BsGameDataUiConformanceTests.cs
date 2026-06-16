@@ -17,8 +17,8 @@ namespace BattleScribeSpec.Tests;
 /// </para>
 ///
 /// <para>
-/// <b>Status</b>: All mutation actions currently result in <c>NotSupportedException</c>
-/// because <c>DataEditorActions.java</c> stubs are not yet implemented.
+/// <b>Status</b>: implemented — <c>DataEditorActions.java</c> handles
+/// load / addEntry / removeEntry / setField / addLink / getDataState.
 /// See <c>src/bs-ui-java-agent/src/bsspec/uiagent/DataEditorActions.java</c> and the
 /// <c>bsspec-cli</c> skill (references/BS-GAMEDATA-UI.md) for the probing workflow.
 /// </para>
