@@ -212,13 +212,16 @@ that subclasses override. It passes this to `SpecRunner` automatically.
 
 ### Structural Tests
 
-Two structural tests enforce quality:
+`SpecLintTests` enforces quality (see `CheckAllErrorAssertionsHaveFrom`):
 
-- **`AllErrorAssertionsHaveFrom`** — Ensures all base-level error assertions
-  include the `from:` field for precise matching. Engine overrides are exempt
-  since some engines don't expose constraint metadata for all error types.
-- **`EngineOverridesUseKnownEngineNames`** — Validates that engine override keys
-  are one of the known engine names (`battlescribe`, `newrecruit`, `phalanx`).
+- All base-level error assertions must include the `from:` field for precise
+  matching. Engine overrides are exempt since some engines don't expose
+  constraint metadata for all error types.
+
+Engine **names** are open-ended strings (as the Solution section notes) and are
+**not** validated against a fixed list. The only engine-related lint is on the
+spec-level `engines:` *expectation value*, which must be `pass`, `fail`, or `skip`
+(`CheckEngineExpectations`).
 
 ## Examples in the Spec Suite
 
