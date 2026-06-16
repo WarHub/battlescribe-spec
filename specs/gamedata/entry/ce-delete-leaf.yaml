@@ -2,8 +2,6 @@ id: ce-delete-leaf
 category: entry
 description: >
   Delete a category entry from a game system and verify it is removed.
-engines:
-  nr-editor: skip
 
 setup:
   gameSystem:

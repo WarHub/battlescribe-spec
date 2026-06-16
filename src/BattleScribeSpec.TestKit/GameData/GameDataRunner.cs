@@ -141,18 +141,11 @@ public sealed class GameDataRunner
                     entryId ?? throw new InvalidOperationException($"Step {stepIndex}: removeEntry requires entryId"));
                 break;
 
-            case "moveEntry":
-                _engine.MoveEntry(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: moveEntry requires entryId"),
-                    _exprResolver.Resolve(step.NewParentId) ?? throw new InvalidOperationException($"Step {stepIndex}: moveEntry requires newParentId"),
-                    step.Index);
-                break;
-
             case "setField":
                 _engine.SetField(
                     entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setField requires entryId"),
                     step.Field ?? throw new InvalidOperationException($"Step {stepIndex}: setField requires field"),
-                    step.Value);
+                    _exprResolver.Resolve(step.Value));
                 break;
 
             case "addLink":

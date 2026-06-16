@@ -20,6 +20,8 @@
     <ProjectReference Include="..\src\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.BsRosterUiDriver\BattleScribeSpec.BsRosterUiDriver.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.NrRosterUiDriver\BattleScribeSpec.NrRosterUiDriver.csproj" />
+    <ProjectReference Include="..\src\BattleScribeSpec.NrGameDataUiDriver\BattleScribeSpec.NrGameDataUiDriver.csproj" />
+    <ProjectReference Include="..\src\BattleScribeSpec.BsGameDataUiDriver\BattleScribeSpec.BsGameDataUiDriver.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.Debugger\BattleScribeSpec.Debugger.csproj" />
   </ItemGroup>
 

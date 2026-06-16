@@ -16,34 +16,17 @@ dumps the initial scene graph and window list to stdout, then waits for you to i
 
 ## Environment setup
 
-Three env vars must be set before the BS UI engine can run:
+Run `setup.ps1` once — it downloads BattleScribe + the Liberica JDK and builds the agent jar.
+Everything is then auto-discovered (Liberica JDK at `lib/liberica-jdk`, `lib/battlescribe/RosterEditor.jar`,
+`src/bs-ui-java-agent/bs-ui-java-agent.jar`); no env vars needed.
 
-```powershell
-$env:BS_UI_JAVA_PATH    = "C:\path\to\bs-jre\bin\java.exe"   # JavaFX-capable JRE
-$env:BS_UI_APP_DIR      = "C:\path\to\battlescribe\app"       # dir with RosterEditor.jar
-$env:BS_UI_AGENT_JAR    = "C:\path\to\bs-ui-java-agent.jar"  # built agent jar
-```
-
-Conventional locations (auto-resolved if env vars absent):
-
-```
-lib/battlescribe/jre-win/bin/java.exe   (Windows)
-lib/battlescribe/jre-mac/bin/java       (macOS)
-lib/battlescribe/jre/bin/java           (Linux)
-lib/battlescribe/RosterEditor.jar
-src/bs-ui-java-agent/bs-ui-java-agent.jar
-```
-
-`setup.ps1` downloads BattleScribe to `lib/battlescribe/`.
-The agent JAR must be built separately:
-```powershell
-pwsh -File src/bs-ui-java-agent/build.ps1
-```
+Overrides (set only if you want non-default artifacts): `BS_UI_JAVA_PATH`, `BS_UI_APP_DIR`,
+`BS_UI_AGENT_JAR`.
 
 ## Quick start — probe mode
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --probe my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --probe my-spec-id
 ```
 
 Probe sequence:
@@ -59,7 +42,7 @@ Use this to see the initial UI state with your spec's game data loaded.
 ## Stop-before — inspect state mid-spec
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --stop-before 5 my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --stop-before 5 my-spec-id
 ```
 
 Runs the spec to step 4, then pauses before step 5:
@@ -136,20 +119,20 @@ scene graph. Key fields on each node:
 
 ```powershell
 # Probe the spec, check scene dump output for unexpected modal stages
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --stop-before 3 my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --stop-before 3 my-spec-id
 # Look for: "modality": "APPLICATION_MODAL" in the dumpAllWindows output
 ```
 
 ### Capture screenshots at every step
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --screenshots artifacts/steps my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --screenshots artifacts/steps my-spec-id
 ```
 
 ### Record UI interactions for new action discovery
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine bs-ui --record artifacts/recorded-actions.json my-spec-id
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/battlescribe-ui --record artifacts/recorded-actions.json my-spec-id
 ```
 
 ## Design decision — no interactive REPL

@@ -3,8 +3,6 @@ category: entry
 description: >
   Add a force entry to a game system and verify it appears in the
   forceEntries container.
-engines:
-  nr-editor: skip
 
 setup:
   gameSystem:

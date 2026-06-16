@@ -2,7 +2,7 @@
 .SYNOPSIS
     Auto-formats spec YAML files to match SpecLintTests conventions.
 .DESCRIPTION
-    Fixes auto-fixable formatting issues in specs/roster/ YAML files.
+    Fixes auto-fixable formatting issues in all spec YAML files under specs/ (roster + gamedata).
     Delegates to the bs-spec-debug --format command (SpecFormatter in BattleScribeSpec.TestKit).
 
     Formatting rules applied:
@@ -27,10 +27,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $debuggerProject = Join-Path $repoRoot 'src' 'BattleScribeSpec.Debugger' 'BattleScribeSpec.Debugger.csproj'
-$specsDir = Join-Path $repoRoot 'specs' 'roster'
+$specsDir = Join-Path $repoRoot 'specs'
 
 if (-not (Test-Path $specsDir)) {
-    Write-Error "specs/roster/ directory not found at $specsDir"
+    Write-Error "specs/ directory not found at $specsDir"
     exit 1
 }
 

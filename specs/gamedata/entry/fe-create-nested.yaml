@@ -3,8 +3,6 @@ category: entry
 description: >
   Add a force entry nested inside another force entry and verify
   the parent-child relationship.
-engines:
-  nr-editor: skip
 
 setup:
   gameSystem:

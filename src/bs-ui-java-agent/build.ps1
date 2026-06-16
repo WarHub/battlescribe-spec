@@ -19,6 +19,24 @@ if (!(Test-Path $GsonJar)) {
 }
 
 if ($JavaHome) {
+    # Explicit parameter — use as-is
+} elseif ($env:JAVA_HOME) {
+    # Respect JAVA_HOME environment variable (set by CI via actions/setup-java)
+    $JavaHome = $env:JAVA_HOME
+} else {
+    # Auto-discover in-repo Liberica JDK (installed by setup.ps1 for local dev)
+    $searchDir = $ScriptDir
+    while ($searchDir) {
+        # setup.ps1 normalizes the in-repo JDK so bin/ is directly under lib/liberica-jdk on every OS.
+        $candidate = Join-Path $searchDir 'lib' 'liberica-jdk'
+        if (Test-Path (Join-Path $candidate 'bin')) { $JavaHome = $candidate; break }
+        $parent = Split-Path $searchDir -Parent
+        if ($parent -eq $searchDir) { break }  # filesystem root
+        $searchDir = $parent
+    }
+}
+
+if ($JavaHome) {
     if ($IsLinux -or $IsMacOS) {
         $javac = Join-Path $JavaHome 'bin/javac'
         $jar = Join-Path $JavaHome 'bin/jar'

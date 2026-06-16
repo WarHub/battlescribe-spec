@@ -19,7 +19,7 @@ simply didn't run assertions for that engine at all.
 ## Solution
 
 The `expectedState` block now supports an `engines` map. Each key is an engine
-name (e.g. `"battlescribe"`, `"newrecruit"`, `"nr-editor"`), and each value is a
+name (e.g. `"battlescribe"`, `"newrecruit"`, `"battlescribe-ui"`), and each value is a
 partial `expectedState` whose non-null fields **replace** the corresponding base
 fields for that engine. Fields not specified in the override fall through to the
 base assertion. Engine names are open-ended strings; unlisted engines default to
@@ -92,7 +92,7 @@ Any field in `expectedState` can be overridden per engine — not just `errors`:
         errors:
           - on: selection se-unit
             from: se-unit/con-max
-      nr-editor:
+      newrecruit-ui:
         errors: []
 ```
 
@@ -212,13 +212,16 @@ that subclasses override. It passes this to `SpecRunner` automatically.
 
 ### Structural Tests
 
-Two structural tests enforce quality:
+`SpecLintTests` enforces quality (see `CheckAllErrorAssertionsHaveFrom`):
 
-- **`AllErrorAssertionsHaveFrom`** — Ensures all base-level error assertions
-  include the `from:` field for precise matching. Engine overrides are exempt
-  since some engines don't expose constraint metadata for all error types.
-- **`EngineOverridesUseKnownEngineNames`** — Validates that engine override keys
-  are one of the known engine names (`battlescribe`, `newrecruit`, `phalanx`).
+- All base-level error assertions must include the `from:` field for precise
+  matching. Engine overrides are exempt since some engines don't expose
+  constraint metadata for all error types.
+
+Engine **names** are open-ended strings (as the Solution section notes) and are
+**not** validated against a fixed list. The only engine-related lint is on the
+spec-level `engines:` *expectation value*, which must be `pass`, `fail`, or `skip`
+(`CheckEngineExpectations`).
 
 ## Examples in the Spec Suite
 

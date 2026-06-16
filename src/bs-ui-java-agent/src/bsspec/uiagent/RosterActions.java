@@ -63,29 +63,29 @@ public class RosterActions {
      */
     public String dispatch(String method, String params) {
         switch (method) {
-            case "duplicateSelectionAction":
+            case "rosterDuplicateSelectionAction":
                 return duplicateSelectionAction(params);
-            case "duplicateForceAction":
+            case "rosterDuplicateForceAction":
                 return duplicateForceAction(params);
-            case "selectEntryAction":
+            case "rosterSelectEntryAction":
                 return selectEntryAction(params);
-            case "createRosterAction":
+            case "rosterCreateRosterAction":
                 return createRosterAction(params);
-            case "addForceAction":
+            case "rosterAddForceAction":
                 return addForceAction(params);
-            case "addChildForceAction":
+            case "rosterAddChildForceAction":
                 return addChildForceAction(params);
-            case "removeForceAction":
+            case "rosterRemoveForceAction":
                 return removeForceAction(params);
-            case "selectChildEntryAction":
+            case "rosterSelectChildEntryAction":
                 return selectChildEntryAction(params);
-            case "deselectSelectionAction":
+            case "rosterDeselectSelectionAction":
                 return deselectSelectionAction(params);
-            case "setSelectionCountAction":
+            case "rosterSetSelectionCountAction":
                 return setSelectionCountAction(params);
-            case "setCostLimitAction":
+            case "rosterSetCostLimitAction":
                 return setCostLimitAction(params);
-            case "setCustomizationAction":
+            case "rosterSetCustomizationAction":
                 return setCustomizationAction(params);
             default:
                 throw new IllegalArgumentException("Unknown action: " + method);
@@ -262,7 +262,7 @@ public class RosterActions {
         // The first force is the only force
         JsonArray forces = after.has("forces") ? after.getAsJsonArray("forces") : new JsonArray();
         if (forces.size() == 0) {
-            throw new RuntimeException("createRosterAction: no forces found after roster creation");
+            throw new RuntimeException("rosterCreateRosterAction: no forces found after roster creation");
         }
         JsonObject createdForce = forces.get(0).getAsJsonObject();
         return buildForceOutputs(createdForce).toString();

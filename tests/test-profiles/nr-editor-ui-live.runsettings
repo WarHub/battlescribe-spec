@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run live NR Editor GameData UI conformance tests. Requires NR_EDITOR_URL to be set. -->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>Engine=LiveNrGameDataUi</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

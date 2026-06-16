@@ -3,8 +3,6 @@ category: entry
 description: >
   Delete a force entry that has nested force entries and verify
   the entire subtree is removed.
-engines:
-  nr-editor: skip
 
 setup:
   gameSystem:

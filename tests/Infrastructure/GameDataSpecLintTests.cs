@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using BattleScribeSpec.GameData;
 
 namespace BattleScribeSpec.Tests;
@@ -63,10 +62,8 @@ public sealed class GameDataSpecLintTests
     [MemberData(nameof(AllSpecs))]
     public void AllLintChecks(string specPath, string specName)
     {
-        var lines = File.ReadAllLines(specPath);
-
         var violations = new List<string>();
-        violations.AddRange(CheckBlankLineBetweenSteps(lines));
+        violations.AddRange(CheckFormatting(File.ReadAllText(specPath)));
 
         // Look up the cached spec (loaded once per test session)
         var entry = SpecsByPath.Value[specPath];
@@ -109,32 +106,20 @@ public sealed class GameDataSpecLintTests
             $"Duplicate GameData spec IDs found:\n  {string.Join("\n  ", duplicates)}");
     }
 
-    // ── Formatting: blank lines between steps ────────────────────────
+    // ── Formatting ───────────────────────────────────────────────────
+    // Same rule set as roster specs (SpecLintTests): a file must equal its
+    // SpecFormatter output. Covers blank line before setup:, blank lines between
+    // steps, trailing whitespace, expectedState ordering, and final newline.
 
-    private static IEnumerable<string> CheckBlankLineBetweenSteps(string[] lines)
+    private static IEnumerable<string> CheckFormatting(string text)
     {
-        var inSteps = false;
-        for (var i = 0; i < lines.Length; i++)
+        // Normalize CRLF → LF before comparing: on Windows with autocrlf=true,
+        // checked-out files have CRLF but the formatter (and repository) uses LF.
+        var normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        var formatted = SpecFormatter.FormatText(normalized);
+        if (formatted != normalized)
         {
-            var stripped = lines[i].Trim();
-            if (stripped == "steps:")
-            {
-                inSteps = true;
-                continue;
-            }
-            if (!inSteps)
-            {
-                continue;
-            }
-
-            if (Regex.IsMatch(lines[i], @"^  - (action|expectedState):") && i > 0)
-            {
-                var prev = lines[i - 1].Trim();
-                if (prev != "" && prev != "steps:" && !prev.StartsWith('#'))
-                {
-                    yield return $"line {i + 1}: missing blank line before '{stripped[..Math.Min(40, stripped.Length)]}'";
-                }
-            }
+            yield return "file is not correctly formatted — run 'pwsh tools/format-specs.ps1' to fix";
         }
     }
 
@@ -178,7 +163,7 @@ public sealed class GameDataSpecLintTests
 
     private static readonly HashSet<string> KnownActions =
     [
-        "addEntry", "removeEntry", "moveEntry",
+        "addEntry", "removeEntry",
         "setField", "addLink",
         "dump"
     ];
@@ -255,18 +240,6 @@ public sealed class GameDataSpecLintTests
                     if (step.EntryId is null)
                     {
                         yield return $"step {i + 1}: removeEntry requires 'entryId'";
-                    }
-
-                    break;
-                case "moveEntry":
-                    if (step.EntryId is null)
-                    {
-                        yield return $"step {i + 1}: moveEntry requires 'entryId'";
-                    }
-
-                    if (step.NewParentId is null)
-                    {
-                        yield return $"step {i + 1}: moveEntry requires 'newParentId'";
                     }
 
                     break;

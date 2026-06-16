@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run frozen NR Editor GameData UI conformance tests (static file serving, offline). -->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>Engine=FrozenNrGameDataUi</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

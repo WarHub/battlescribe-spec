@@ -3,8 +3,6 @@ category: entry
 description: >
   Add a selection entry to a game system's root selectionEntries container
   and verify it appears in the game system state.
-engines:
-  nr-editor: skip
 
 setup:
   gameSystem:

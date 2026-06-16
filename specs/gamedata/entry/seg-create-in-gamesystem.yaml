@@ -3,8 +3,6 @@ category: entry
 description: >
   Add a selection entry group to a game system and verify it appears
   in the sharedSelectionEntryGroups container.
-engines:
-  nr-editor: skip
 
 setup:
   gameSystem:

@@ -2,8 +2,6 @@ id: ce-set-field-hidden
 category: entry
 description: >
   Set the hidden field of a category entry and verify the state reflects it.
-engines:
-  nr-editor: skip
 
 setup:
   gameSystem:

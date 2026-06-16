@@ -226,6 +226,17 @@ public static class SpecLoader
     }
 
     /// <summary>
+    /// Extract setup data as Protocol types from a GameData spec setup.
+    /// </summary>
+    public static (ProtocolGameSystem GameSystem, ProtocolCatalogue[] Catalogues) GetGameDataSetupData(GameData.GameDataSetupDef setup)
+    {
+        var gameSystem = setup.GameSystem
+            ?? throw new InvalidOperationException("GameData setup requires 'gameSystem'.");
+        var catalogues = setup.Catalogues ?? [];
+        return (gameSystem, catalogues.ToArray());
+    }
+
+    /// <summary>
     /// Extract setup data as Protocol types directly from the deserialized YAML.
     /// Requires plural 'catalogues' with at least one catalogue.
     /// When <paramref name="specId"/> is provided, empty game system name/id and catalogue

@@ -107,13 +107,13 @@ design decision that only **mutations** must go through UI).
 
 ```bash
 # Run specific spec with NR UI engine
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-ui protocol-kitchen-sink
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit-ui protocol-kitchen-sink
 
 # Interactive probe mode
-dotnet run --project src/BattleScribeSpec.Debugger -- --probe --engine nr-ui protocol-kitchen-sink
+dotnet run --project src/BattleScribeSpec.Debugger -- --probe --engine roster/newrecruit-ui protocol-kitchen-sink
 
 # Visible browser (non-headless)
-dotnet run --project src/BattleScribeSpec.Debugger -- --no-headless --engine nr-ui protocol-kitchen-sink
+dotnet run --project src/BattleScribeSpec.Debugger -- --no-headless --engine roster/newrecruit-ui protocol-kitchen-sink
 ```
 
 ## Diagnostics

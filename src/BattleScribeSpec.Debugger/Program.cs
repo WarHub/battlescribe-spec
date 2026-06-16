@@ -1,14 +1,18 @@
 using System.Text.Json;
 using BattleScribeSpec;
+using BattleScribeSpec.BsGameDataUiDriver;
 using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.Debugger;
+using BattleScribeSpec.GameData;
 using BattleScribeSpec.NewRecruit;
+using BattleScribeSpec.NrGameDataUiDriver;
 using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
 
 // ===== Parse arguments =====
 string? specInput = null;
 var engineName = "battlescribe";
+string? engineType = null; // "roster" or "gamedata"; inferred from spec path if unset
 var dumpAll = false;
 var json = false;
 var headless = true;
@@ -40,13 +44,19 @@ for (var i = 0; i < args.Length; i++)
             formatCheck = true;
             break;
         case "--engine" when i + 1 < args.Length:
-            engineName = args[++i].ToLowerInvariant() switch
             {
-                "bs" => "battlescribe",
-                "nr" => "newrecruit",
-                "nr-ui" => "nr-ui",
-                var name => name
-            };
+                var engineArg = args[++i].ToLowerInvariant();
+                if (engineArg.Contains('/'))
+                {
+                    var parts = engineArg.Split('/', 2);
+                    engineType = parts[0];
+                    engineName = parts[1];
+                }
+                else
+                {
+                    engineName = engineArg;
+                }
+            }
             break;
         case "--dump":
             dumpAll = true;
@@ -149,6 +159,89 @@ if (specInput is null)
     }
 }
 
+// ===== Export XML mode (standalone — exits before any engine resolution/validation) =====
+if (exportXmlDir is not null)
+{
+    SpecFile xmlSpec;
+    try
+    {
+        xmlSpec = LoadSpec(specInput);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error loading spec: {ex.Message}");
+        return 1;
+    }
+
+    if (xmlSpec.Setup.DataSource is { Length: > 0 })
+    {
+        Console.Error.WriteLine("Error: --export-xml is not supported for dataSource specs.");
+        return 1;
+    }
+
+    var (xmlGameSystem, xmlCatalogues) = SpecLoader.GetSetupData(xmlSpec.Setup, xmlSpec.Id);
+    var specExportDir = Path.Combine(exportXmlDir, xmlSpec.Id);
+    Directory.CreateDirectory(specExportDir);
+
+    var gstOut = Path.Combine(specExportDir, $"{SanitizeFileName(xmlGameSystem.Name)}.gst");
+    File.WriteAllText(gstOut, CatXmlGenerator.GenerateGameSystemXml(xmlGameSystem));
+    Console.Error.WriteLine($"Wrote {gstOut}");
+
+    for (var catIdx = 0; catIdx < xmlCatalogues.Length; catIdx++)
+    {
+        var catName = SanitizeFileName(xmlCatalogues[catIdx].Name);
+        // Deduplicate filename if needed (e.g. two catalogues with same sanitized name)
+        var catFileName = catIdx == 0 || Enumerable.Range(0, catIdx).All(j => SanitizeFileName(xmlCatalogues[j].Name) != catName)
+            ? catName
+            : $"{catName}-{catIdx + 1}";
+        var catOut = Path.Combine(specExportDir, $"{catFileName}.cat");
+        File.WriteAllText(catOut, CatXmlGenerator.GenerateCatalogueXml(xmlGameSystem, xmlCatalogues[catIdx]));
+        Console.Error.WriteLine($"Wrote {catOut}");
+    }
+
+    Console.Error.WriteLine($"Exported {1 + xmlCatalogues.Length} file(s) to {specExportDir}");
+    return 0;
+}
+
+// ===== Resolve engine type (roster vs gamedata) =====
+// If --engine used the <type>/<name> form, engineType is already set. Otherwise infer
+// it from the resolved spec path: contains "gamedata" → gamedata, "roster" → roster,
+// defaulting to roster when unknowable.
+engineType ??= InferEngineType(specInput);
+
+// Validate engine name.
+var validEngineNames = new[] { "battlescribe", "battlescribe-ui", "newrecruit", "newrecruit-ui" };
+if (!validEngineNames.Contains(engineName))
+{
+    Console.Error.WriteLine(
+        $"Unknown engine name: '{engineName}'. Valid names: {string.Join(", ", validEngineNames)}.");
+    PrintUsage();
+    return 1;
+}
+
+// ===== GameData engines (type=gamedata): load gamedata spec, not roster spec =====
+if (engineType == "gamedata")
+{
+    if (probeMode && engineName == "battlescribe-ui")
+    {
+        return await RunBsGameDataUiProbe(specInput);
+    }
+
+    if (probeMode && engineName == "newrecruit-ui")
+    {
+        return await RunNrGameDataUiProbe(specInput, headless: false);
+    }
+
+    if (probeMode)
+    {
+        Console.Error.WriteLine($"--probe is only supported for gamedata UI engines (battlescribe-ui, newrecruit-ui).");
+        return 1;
+    }
+
+    // Non-probe: run a gamedata spec with assertions against the chosen gamedata engine.
+    return await RunGameDataSpec(specInput, engineName, headless, dumpAll, json);
+}
+
 // ===== Load spec =====
 SpecFile spec;
 try
@@ -162,47 +255,15 @@ catch (Exception ex)
     return 1;
 }
 
-// ===== Export XML mode =====
-if (exportXmlDir is not null)
-{
-    if (spec.Setup.DataSource is { Length: > 0 })
-    {
-        Console.Error.WriteLine("Error: --export-xml is not supported for dataSource specs.");
-        return 1;
-    }
 
-    var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
-    var specExportDir = Path.Combine(exportXmlDir, spec.Id);
-    Directory.CreateDirectory(specExportDir);
-
-    var gstFile = Path.Combine(specExportDir, $"{SanitizeFileName(gameSystem.Name)}.gst");
-    File.WriteAllText(gstFile, CatXmlGenerator.GenerateGameSystemXml(gameSystem));
-    Console.Error.WriteLine($"Wrote {gstFile}");
-
-    for (var catIdx = 0; catIdx < catalogues.Length; catIdx++)
-    {
-        var catName = SanitizeFileName(catalogues[catIdx].Name);
-        // Deduplicate filename if needed (e.g. two catalogues with same sanitized name)
-        var catFileName = catIdx == 0 || Enumerable.Range(0, catIdx).All(j => SanitizeFileName(catalogues[j].Name) != catName)
-            ? catName
-            : $"{catName}-{catIdx + 1}";
-        var catFile = Path.Combine(specExportDir, $"{catFileName}.cat");
-        File.WriteAllText(catFile, CatXmlGenerator.GenerateCatalogueXml(gameSystem, catalogues[catIdx]));
-        Console.Error.WriteLine($"Wrote {catFile}");
-    }
-
-    Console.Error.WriteLine($"Exported {1 + catalogues.Length} file(s) to {specExportDir}");
-    return 0;
-}
-
-// ===== BS UI Probe mode =====
-if (probeMode && engineName is "bs-ui")
+// ===== BS UI Probe mode (roster) =====
+if (probeMode && engineName is "battlescribe-ui")
 {
     return await RunBsUiProbe(spec);
 }
 
-// ===== NR UI Probe mode =====
-if (probeMode && engineName is "nr-ui")
+// ===== NR UI Probe mode (roster) =====
+if (probeMode && engineName is "newrecruit-ui")
 {
     return await RunNrUiProbe(spec, headless: false);
 }
@@ -223,12 +284,12 @@ catch (Exception ex)
 using (engine)
 {
     var dumpOptions = new DumpOptions(Json: json);
-    // bs-ui engine uses "battlescribe" assertion overrides since it IS the BattleScribe engine
-    // nr-ui engine uses "newrecruit" assertion overrides since it IS the NR engine
+    // The roster UI engines reuse their non-UI counterpart's assertion overrides since the
+    // UI engine drives the same underlying product (battlescribe-ui IS BattleScribe, etc.).
     var assertionEngineName = engineName switch
     {
-        "bs-ui" => "battlescribe",
-        "nr-ui" => "newrecruit",
+        "battlescribe-ui" => "battlescribe",
+        "newrecruit-ui" => "newrecruit",
         _ => engineName
     };
     var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngineName);
@@ -531,45 +592,215 @@ async Task<int> RunNrUiProbe(SpecFile spec, bool headless)
     return 0;
 }
 
+async Task<int> RunBsGameDataUiProbe(string specInput)
+{
+    GameDataSpecFile gameDataSpec;
+    try
+    {
+        gameDataSpec = LoadGameDataSpec(specInput);
+        Console.Error.WriteLine($"Loaded GameData spec: {gameDataSpec.Category}/{gameDataSpec.Id} — {gameDataSpec.Description}");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error loading GameData spec: {ex.Message}");
+        return 1;
+    }
+
+    var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(gameDataSpec.Setup);
+
+    // Resolve the *Data Editor* jar (DataEditor.jar) — the same artifacts the gamedata engine
+    // uses. ResolveBsUiOptions() returns RosterEditor.jar, which opens the Roster Editor instead.
+    var options = BsGameDataUiEngine.FindOptions()
+        ?? throw new InvalidOperationException(
+            "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the " +
+            "agent jar), or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
+    Console.Error.WriteLine($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
+    Console.Error.WriteLine($"BS GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
+
+    await using var probe = new BsGameDataUiProbe(options);
+    await probe.LaunchAsync(gameSystem, catalogues, Console.Error);
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("BS GameData UI probe complete. BattleScribe is running.");
+    Console.Error.WriteLine("Press Enter to shut down...");
+    Console.In.ReadLine();
+
+    return 0;
+}
+
+async Task<int> RunNrGameDataUiProbe(string specInput, bool headless)
+{
+    GameDataSpecFile gameDataSpec;
+    try
+    {
+        gameDataSpec = LoadGameDataSpec(specInput);
+        Console.Error.WriteLine($"Loaded GameData spec: {gameDataSpec.Category}/{gameDataSpec.Id} — {gameDataSpec.Description}");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error loading GameData spec: {ex.Message}");
+        return 1;
+    }
+
+    var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(gameDataSpec.Setup);
+
+    Console.Error.WriteLine($"NR Editor GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
+
+    await using var probe = new NrGameDataUiProbe();
+
+    var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir();
+    if (staticDir is not null)
+    {
+        Console.Error.WriteLine($"  Using frozen NR Editor static files: {staticDir}");
+        await probe.LaunchFrozenAsync(staticDir, gameSystem, catalogues, Console.Error);
+    }
+    else
+    {
+        var baseUrl = Environment.GetEnvironmentVariable("NR_EDITOR_URL")
+            ?? "https://giloushaker.github.io/nr-editor";
+        Console.Error.WriteLine($"  Using live NR Editor: {baseUrl}");
+        await probe.LaunchAsync(gameSystem, catalogues, baseUrl, Console.Error);
+    }
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("NR Editor GameData UI probe ready. Browser is open.");
+    Console.Error.WriteLine("Entering REPL — type JS expressions to evaluate, 'exit' to quit:");
+
+    await probe.RunReplAsync(Console.In, Console.Out);
+
+    return 0;
+}
+
+// Runs a GameData spec end-to-end against a GameData UI engine, with assertions and
+// optional per-step state dumps. This is the assertion-based counterpart to the gamedata
+// --probe modes (which only open the editor for interactive inspection).
+async Task<int> RunGameDataSpec(string? specInput, string engine, bool headless, bool dumpAll, bool jsonDump)
+{
+    if (specInput is null)
+    {
+        Console.Error.WriteLine($"Error: a gamedata spec path/id is required for engine '{engine}'.");
+        return 1;
+    }
+
+    GameDataSpecFile spec;
+    try
+    {
+        spec = LoadGameDataSpec(specInput);
+        Console.Error.WriteLine($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error loading GameData spec: {ex.Message}");
+        return 1;
+    }
+
+    if (!spec.IsApplicableTo(engine))
+    {
+        Console.Error.WriteLine($"Spec '{spec.Id}' is not applicable to engine '{engine}' (skipped).");
+        return 0;
+    }
+
+    Console.Error.WriteLine($"Engine: {engine}");
+    IGameDataEngine gameDataEngine;
+    try
+    {
+        switch (engine)
+        {
+            case "newrecruit-ui":
+                {
+                    var staticDir = NrGameDataUiEngine.FindFrozenStaticDir()
+                        ?? throw new InvalidOperationException(
+                            "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
+                    Console.Error.WriteLine($"NR Editor GameData UI (frozen): {staticDir}");
+                    gameDataEngine = await NrGameDataUiEngine.CreateFrozenAsync(staticDir, headless);
+                    break;
+                }
+
+            case "battlescribe-ui":
+                {
+                    var options = BsGameDataUiEngine.FindOptions()
+                        ?? throw new InvalidOperationException(
+                            "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the " +
+            "agent jar), or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
+                    Console.Error.WriteLine($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
+                    gameDataEngine = new BsGameDataUiEngine(options);
+                    break;
+                }
+
+            case "newrecruit":
+                {
+                    var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir()
+                        ?? throw new InvalidOperationException(
+                            "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
+                    Console.Error.WriteLine($"NewRecruit GameData (frozen): {staticDir}");
+                    gameDataEngine = await NewRecruitGameDataEngine.CreateFrozenAsync(staticDir, headless);
+                    break;
+                }
+
+            case "battlescribe":
+                {
+                    Console.Error.WriteLine("BattleScribe GameData (in-process)");
+                    gameDataEngine = new BattleScribeGameDataEngine();
+                    break;
+                }
+
+            default:
+                throw new ArgumentException(
+                    $"Unknown gamedata engine: '{engine}'. Use 'battlescribe', 'newrecruit', 'battlescribe-ui', or 'newrecruit-ui'.");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error creating engine: {ex.Message}");
+        return 1;
+    }
+
+    using (gameDataEngine)
+    {
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+        var runner = new GameDataRunner(gameDataEngine, engine)
+        {
+            OnStepCompleted = (index, step, state) =>
+            {
+                Console.Error.WriteLine($"  step {index}: {step.Action ?? "assert"}");
+                if (dumpAll || jsonDump)
+                {
+                    Console.Out.WriteLine(System.Text.Json.JsonSerializer.Serialize(state, jsonOptions));
+                }
+            },
+        };
+
+        var result = runner.Run(spec);
+
+        if (result.Passed)
+        {
+            Console.Error.WriteLine($"PASS — {spec.Id} on {engine} ({spec.Steps.Count} step(s))");
+            return 0;
+        }
+
+        Console.Error.WriteLine($"FAIL — {spec.Id} on {engine}: {result.Failures.Count} error(s):");
+        foreach (var (failure, i) in result.Failures.Select((f, i) => (f, i)))
+        {
+            Console.Error.WriteLine($"  [{i + 1}] {failure}");
+        }
+
+        return 1;
+    }
+}
+
 BsUiOptions ResolveBsUiOptions()
 {
     // Resolve paths from environment variables or conventional locations
-    var javaPath = Environment.GetEnvironmentVariable("BS_UI_JAVA_PATH");
     var appDir = Environment.GetEnvironmentVariable("BS_UI_APP_DIR");
     var agentJar = Environment.GetEnvironmentVariable("BS_UI_AGENT_JAR");
 
     // Fallback: look for conventional locations relative to repo root
     var repoRoot = FindRepoRoot();
 
-    if (javaPath is null && repoRoot is not null)
-    {
-        // Try platform-specific JRE paths under lib/battlescribe
-        var jreDir = Path.Combine(repoRoot, "lib", "battlescribe");
-        if (OperatingSystem.IsWindows())
-        {
-            var winJava = Path.Combine(jreDir, "jre-win", "bin", "java.exe");
-            if (File.Exists(winJava))
-            {
-                javaPath = winJava;
-            }
-        }
-        else if (OperatingSystem.IsMacOS())
-        {
-            var macJava = Path.Combine(jreDir, "jre-mac", "bin", "java");
-            if (File.Exists(macJava))
-            {
-                javaPath = macJava;
-            }
-        }
-        else
-        {
-            var linuxJava = Path.Combine(jreDir, "jre", "bin", "java");
-            if (File.Exists(linuxJava))
-            {
-                javaPath = linuxJava;
-            }
-        }
-    }
+    // BS_UI_JAVA_PATH → repo-local Liberica JDK → bundled platform JRE. See BsUiPaths.
+    var javaPath = repoRoot is not null
+        ? BsUiPaths.ResolveJavaPath(repoRoot)
+        : Environment.GetEnvironmentVariable("BS_UI_JAVA_PATH");
 
     if (appDir is null && repoRoot is not null)
     {
@@ -592,7 +823,8 @@ BsUiOptions ResolveBsUiOptions()
     if (javaPath is null)
     {
         throw new InvalidOperationException(
-            "Java path not found. Set BS_UI_JAVA_PATH env var or place JRE at lib/battlescribe/jre-{platform}/");
+            "Java runtime not found. Run setup.ps1 to install the repo-local Liberica JDK " +
+            "(lib/liberica-jdk), or set BS_UI_JAVA_PATH to a JavaFX-capable java.");
     }
 
     var rosterEditorJar = appDir is not null
@@ -623,17 +855,70 @@ BsUiOptions ResolveBsUiOptions()
     };
 }
 
+// Infer the engine type ("gamedata" or "roster") from the resolved spec path.
+// Rules: a path/id containing "gamedata" → gamedata, "roster" → roster; default roster.
+string InferEngineType(string? input)
+{
+    if (input is null or "-")
+    {
+        return "roster";
+    }
+
+    // Resolve to an absolute path when the input is (or can be located as) a real file,
+    // so inference works even for bare spec IDs.
+    var resolved = input;
+    if (!File.Exists(input))
+    {
+        var gameDataDir = SpecLoader.FindGameDataSpecsDirectory();
+        if (gameDataDir is not null)
+        {
+            foreach (var file in Directory.EnumerateFiles(gameDataDir, "*.yaml", SearchOption.AllDirectories))
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                var relative = Path.GetRelativePath(gameDataDir, file).Replace('\\', '/');
+                if (name == input || relative == input || relative == input + ".yaml")
+                {
+                    return "gamedata";
+                }
+            }
+        }
+    }
+    else
+    {
+        resolved = Path.GetFullPath(input);
+    }
+
+    var normalized = resolved.Replace('\\', '/').ToLowerInvariant();
+    if (normalized.Contains("gamedata"))
+    {
+        return "gamedata";
+    }
+
+    if (normalized.Contains("roster"))
+    {
+        return "roster";
+    }
+
+    return "roster";
+}
+
 static string? FindRepoRoot()
 {
-    var dir = Directory.GetCurrentDirectory();
-    while (dir is not null)
+    // Anchor on the solution file rather than .git: in a git worktree, .git is a file
+    // (gitdir pointer), so Directory.Exists(".git") would miss it. Walk up from both the
+    // current directory and the assembly location so it works regardless of cwd.
+    foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
     {
-        if (Directory.Exists(Path.Combine(dir, ".git")))
+        var dir = start;
+        while (dir is not null)
         {
-            return dir;
-        }
+            if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
+            {
+                return dir;
+            }
 
-        dir = Path.GetDirectoryName(dir);
+            dir = Path.GetDirectoryName(dir);
+        }
     }
 
     return null;
@@ -689,14 +974,51 @@ SpecFile LoadSpec(string input)
     throw new FileNotFoundException($"Spec not found: '{input}'. Provide a file path, category/id, or id.");
 }
 
+GameDataSpecFile LoadGameDataSpec(string input)
+{
+    if (input == "-")
+    {
+        var yaml = Console.In.ReadToEnd();
+        return SpecLoader.LoadGameDataFromYaml(yaml, defaultId: "stdin");
+    }
+
+    if (File.Exists(input))
+    {
+        return SpecLoader.LoadGameData(input);
+    }
+
+    // Try as spec ID in specs/gamedata/
+    var specsDir = SpecLoader.FindGameDataSpecsDirectory();
+    if (specsDir is not null)
+    {
+        var candidate = Path.Combine(specsDir, input + ".yaml");
+        if (File.Exists(candidate))
+        {
+            return SpecLoader.LoadGameData(candidate);
+        }
+
+        foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
+        {
+            var name = Path.GetFileNameWithoutExtension(file);
+            var relative = Path.GetRelativePath(specsDir, file).Replace('\\', '/');
+            if (name == input || relative == input || relative == input + ".yaml")
+            {
+                return SpecLoader.LoadGameData(file);
+            }
+        }
+    }
+
+    throw new FileNotFoundException($"GameData spec not found: '{input}'. Provide a file path, category/id, or id.");
+}
+
 async Task<IRosterEngine> CreateEngine(string name, bool headless)
 {
     switch (name)
     {
-        case "bs" or "battlescribe":
+        case "battlescribe":
             return new BattleScribeRosterEngine();
 
-        case "nr" or "newrecruit":
+        case "newrecruit":
             {
                 var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
                 NewRecruitRosterEngine nrEngine;
@@ -716,14 +1038,14 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
                 return nrEngine;
             }
 
-        case "bs-ui":
+        case "battlescribe-ui":
             {
                 var bsUiOptions = ResolveBsUiOptions();
                 Console.Error.WriteLine($"BS UI mode: {bsUiOptions.RosterEditorJarPath}");
                 return new BsUiRosterEngine(bsUiOptions) { KeepAlive = keepAlive };
             }
 
-        case "nr-ui":
+        case "newrecruit-ui":
             {
                 var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
                 NrRosterUiEngine uiEngine;
@@ -744,7 +1066,8 @@ async Task<IRosterEngine> CreateEngine(string name, bool headless)
             }
 
         default:
-            throw new ArgumentException($"Unknown engine: '{name}'. Use 'bs', 'nr', 'bs-ui', or 'nr-ui'.");
+            throw new ArgumentException(
+                $"Unknown roster engine: '{name}'. Use 'battlescribe', 'newrecruit', 'battlescribe-ui', or 'newrecruit-ui'.");
     }
 }
 
@@ -826,17 +1149,24 @@ static void PrintUsage()
                           or "-" for stdin
 
         Options:
-          --engine <name> Engine to use: bs (default), nr, bs-ui, nr-ui
+          --engine <type>/<name>
+                          Engine to use. <type> ∈ {roster, gamedata} (optional — inferred
+                          from the spec path when omitted: specs/gamedata/... → gamedata,
+                          specs/roster/... → roster, default roster).
+                          <name> ∈ {battlescribe, battlescribe-ui, newrecruit, newrecruit-ui}.
+                          Default: roster/battlescribe.
           --dump          Dump state after every step (default: after last step only)
-          --probe         Run bs-ui probe mode (bs-ui engine only)
+          --probe         Run probe mode (the -ui engines of either type:
+                          roster/battlescribe-ui, roster/newrecruit-ui,
+                          gamedata/battlescribe-ui, gamedata/newrecruit-ui)
           --json          Output state as JSON instead of pretty tree
           --no-headless   Show browser window (NR engine only)
           --export-xml <dir>  Generate BattleScribe XML files from spec setup and exit
-          --export-roster <dir>  Export final roster as .ros XML (bs-ui engine only)
-          --screenshots <dir>  Capture screenshot at each step (bs-ui engine only)
-          --report <file>  Generate HTML timeline report (bs-ui engine only)
-          --record <file>  Record UI actions to JSON file (bs-ui engine only)
-          --keep-alive     Keep BattleScribe app running between runs (bs-ui only)
+          --export-roster <dir>  Export final roster as .ros XML (roster/battlescribe-ui only)
+          --screenshots <dir>  Capture screenshot at each step (roster -ui engines only)
+          --report <file>  Generate HTML timeline report (roster/battlescribe-ui only)
+          --record <file>  Record UI actions to JSON file (roster/battlescribe-ui only)
+          --keep-alive     Keep BattleScribe app running between runs (roster/battlescribe-ui only)
           --format [<dir>]    Format all *.yaml files under <dir> (default: specs/roster/)
           --check             With --format: report issues without fixing (exit 1 if any)
           -h, --help      Show this help
@@ -845,10 +1175,16 @@ static void PrintUsage()
           bs-spec-debug specs/selection/selection-page.yaml
           bs-spec-debug selection/selection-page
           bs-spec-debug selection-page
-          bs-spec-debug --engine nr --dump specs/protocol/protocol-kitchen-sink.yaml
+          bs-spec-debug --engine roster/newrecruit --dump specs/protocol/protocol-kitchen-sink.yaml
           bs-spec-debug --export-xml ./output/ cost/cost-hidden-limit-validation
-          bs-spec-debug --engine bs-ui --probe selection/selection-page
-          bs-spec-debug --engine bs-ui selection/selection-page
+          bs-spec-debug --engine roster/battlescribe-ui --probe selection/selection-page
+          bs-spec-debug --engine roster/battlescribe-ui selection/selection-page
+          bs-spec-debug --engine gamedata/battlescribe-ui --probe gamedata/basic/entry-add
+          bs-spec-debug --engine gamedata/newrecruit-ui --probe gamedata/basic/entry-add
+          bs-spec-debug --engine gamedata/newrecruit-ui specs/gamedata/entry/add-entry-basic.yaml
+          bs-spec-debug --engine gamedata/newrecruit specs/gamedata/entry/se-create-in-gamesystem.yaml
+          bs-spec-debug --engine gamedata/battlescribe --dump specs/gamedata/entry/move-entry.yaml
+          bs-spec-debug --engine newrecruit-ui specs/gamedata/entry/add-entry-basic.yaml  # type inferred
           cat spec.yaml | bs-spec-debug -
           bs-spec-debug --format
           bs-spec-debug --format --check specs/roster/

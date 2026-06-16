@@ -4,8 +4,6 @@ description: >
   Cost types defined with hidden=true in the game system correctly report
   the hidden flag in their GameData state. The hidden flag affects display
   only — hidden cost types still participate in cost aggregation.
-engines:
-  nr-editor: skip
 
 setup:
   gameSystem:
@@ -17,10 +15,6 @@ setup:
       - id: ct-cp
         name: CP
         hidden: true
-  catalogues:
-    - id: cat-1
-      name: Test Catalogue
-      gameSystemId: gs-1
 
 steps:
   - expectedState:
@@ -29,7 +23,6 @@ steps:
         costTypes:
           - id: ct-pts
             name: Points
-            hidden: false
           - id: ct-cp
             name: CP
             hidden: true

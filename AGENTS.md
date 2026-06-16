@@ -20,8 +20,10 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id
 ```
 
 **Always run `pre-push` before pushing.** It covers lint, BattleScribe conformance, and NR frozen
-(offline HAR replay) in one fast command. Other profiles: `lint`, `bs`, `nr-frozen`,
-`nr-editor-frozen`, `nr-editor-live`, `nr-live`, `nr-live-visible`.
+(offline HAR replay) in one fast command. Other profiles: `core` (offline suite, no NR engines),
+`lint`, `bs`, `nr-frozen`, `nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`,
+`nr-editor-ui-live`, `bs-ui-gamedata`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`,
+`nr-live-visible`. CI runs entirely through these profiles (`.github/workflows/ci.yml`).
 
 ## NR frozen tests and HAR
 
@@ -38,6 +40,19 @@ The frozen NR Editor GameData tests serve the **gh-pages static deployment** of 
 interception. No network access needed. The static files are downloaded by `setup.ps1`
 (git clone of the gh-pages branch, pinned by commit SHA in `testdata.json`).
 
+## BS GameData UI tests (local)
+
+The `bs-ui-gamedata` profile drives the **BattleScribe desktop Data Editor UI** through the
+Java agent. Mutations go through the real UI; state is read via the Java model. After `setup.ps1`
+(which downloads the BattleScribe app + Liberica full JDK and builds the agent), just run:
+
+```bash
+dotnet test -p:TestProfile=bs-ui-gamedata
+```
+
+The JavaFX-capable JDK is auto-discovered (`BS_UI_JAVA_PATH` → `lib/liberica-jdk` → `JAVA_HOME`),
+so neither local runs nor CI need to set anything. Tests self-skip when BS artifacts are absent.
+
 ## Debugging specs
 
 Use `bs-spec-debug` to run a spec step-by-step and inspect full roster state:
@@ -45,11 +60,13 @@ Use `bs-spec-debug` to run a spec step-by-step and inspect full roster state:
 ```bash
 dotnet run --project src/BattleScribeSpec.Debugger -- selection-publication        # by spec ID
 dotnet run --project src/BattleScribeSpec.Debugger -- --dump protocol/kitchen-sink # dump after every step
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr --json spec.yaml # NR engine, JSON output
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit --json spec.yaml # NR engine, JSON output
 dotnet run --project src/BattleScribeSpec.Debugger -- --export-xml ./out/ cost/cost-hidden-limit-validation
 ```
 
-Options: `--dump` (all steps), `--json`, `--engine bs|nr`, `--no-headless`,
+Options: `--dump` (all steps), `--json`, `--engine <type>/<name>` (type ∈ {roster, gamedata},
+inferred from the spec path if omitted; name ∈ {battlescribe, battlescribe-ui, newrecruit,
+newrecruit-ui}), `--no-headless`,
 `--export-xml <dir>` (generate .gst/.cat XML files from spec setup and exit).
 Specs can include `action: dump` steps for explicit dump points.
 
@@ -64,7 +81,7 @@ pwsh -File tools/format-specs.ps1                                               
 | Path | What |
 |------|------|
 | `specs/roster/{category}/{id}.yaml` | Roster spec files (312 total, 17 categories) |
-| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (10 total, 1 category) |
+| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (49 total, 1 category) |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
 | `src/BattleScribeSpec.TestKit/Roster/RosterTypes.cs` | Roster state records |
 | `src/BattleScribeSpec.TestKit/Roster/RosterSpecModels.cs` | Roster YAML spec model classes |
@@ -74,6 +91,12 @@ pwsh -File tools/format-specs.ps1                                               
 | `src/BattleScribeSpec.TestKit/GameData/GameDataSpecModels.cs` | GameData YAML spec model classes |
 | `src/BattleScribeSpec.TestKit/GameData/GameDataRunner.cs` | GameData assertion engine |
 | `src/BattleScribeSpec.NewRecruit/NewRecruitGameDataEngine.cs` | NR Editor GameData adapter (live + frozen) |
+| `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiEngine.cs` | NR Editor GameData UI driver (Playwright UI) |
+| `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiActions.cs` | NR GameData UI mutations + state reads |
+| `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiSetup.cs` | NR GameData UI file loading + static routing |
+| `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiEngine.cs` | BS Data Editor UI driver (Java agent RPC) |
+| `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiDiagnostics.cs` | BS GameData UI diagnostics |
+| `src/bs-ui-java-agent/src/bsspec/uiagent/DataEditorActions.java` | BS Data Editor Java agent stubs (need probing) |
 | `src/BattleScribeSpec.Debugger/Program.cs` | bs-spec-debug console app |
 | `src/BattleScribeSpec.TestKit/Protocol/AdapterHandler.cs` | Action dispatch |
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |

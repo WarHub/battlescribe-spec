@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run BS GameData UI conformance tests (requires BS app and Java agent). -->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>Engine=BsGameDataUi</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

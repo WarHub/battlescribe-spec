@@ -23,10 +23,10 @@ is possible but not the recommended workflow.
 
 ## Debugger flags for NR probing
 
-All flags used with `--engine nr-ui`.
+All flags used with `--engine roster/newrecruit-ui`.
 
 ```powershell
-dotnet run --project src/BattleScribeSpec.Debugger -- --engine nr-ui [flags] <spec-id>
+dotnet run --project src/BattleScribeSpec.Debugger -- --engine roster/newrecruit-ui [flags] <spec-id>
 ```
 
 | Flag | Description |
