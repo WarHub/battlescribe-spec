@@ -1,0 +1,46 @@
+id: publication-create-and-fields
+category: publication
+description: >
+  Add a publication to a catalogue and set its metadata fields (shortName, publisher,
+  publicationDate). Verifies publication creation and its field surface.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-pub
+    parentId: cat-1
+    entryType: publication
+    name: Codex
+
+  - action: setField
+    entryId: ${{ steps.add-pub.entryId }}
+    field: shortName
+    value: Cdx
+
+  - action: setField
+    entryId: ${{ steps.add-pub.entryId }}
+    field: publisher
+    value: Games Workshop
+
+  - action: setField
+    entryId: ${{ steps.add-pub.entryId }}
+    field: publicationDate
+    value: "2023"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          publications:
+            - name: Codex
+              fields:
+                shortName: Cdx
+                publisher: Games Workshop
+                publicationDate: "2023"

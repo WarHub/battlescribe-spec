@@ -1035,6 +1035,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         AddChildren(children, entry, "getRepeats", "repeat");
         AddChildren(children, entry, "getForceEntries", "forceEntry");
         AddChildren(children, entry, "getCategoryEntries", "categoryEntry");
+        AddChildren(children, entry, "getCharacteristicTypes", "characteristicType");
 
         // Collect type-specific fields. Only non-empty values are emitted, so a given
         // entry surfaces just the fields meaningful to its type.

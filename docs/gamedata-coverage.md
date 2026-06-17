@@ -47,8 +47,8 @@ create ✅ · name ✅ · hidden ✅ · collective ✅ · import ✅ · defaultS
 ### EntryLink
 create ✅ · targetId ✅ · type ⬜ · collective ⬜ · import ⬜ · hidden ⬜
 
-### ForceEntry
-create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ⬜ · categoryLinks ⬜ · constraints ⬜
+### ForceEntry  (`force/force-create-and-nest`)
+create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ✅ · categoryLinks ⬜ · constraints ⬜
 
 ### CategoryEntry
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · constraints ⬜ · modifiers ⬜
@@ -56,41 +56,41 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment
 ### CategoryLink
 create 🟦 · name ⬜ · hidden ⬜ · targetId 🟦 (addLink) · primary ⬜
 
-### Cost / CostType
+### Cost / CostType  (`cost/…`, `type-def/…`)
 Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ⬜
-CostType: create 🟦 · name ⬜ · defaultCostLimit ⬜ · hidden ⬜
+CostType: create ✅ · name ✅ · defaultCostLimit ✅ · hidden ⬜
 
 ### Profile / Characteristic
 Profile: create ✅ · name ✅ · typeId ✅ · typeName ⬜ · hidden ⬜ · page ⬜ · publicationId ⬜
 Characteristic: value-by-name ✅ (`profile/profile-create-with-characteristics`)
 
-### ProfileType / CharacteristicType
-ProfileType: create 🟦 · name ⬜ · characteristicTypes ⬜
-CharacteristicType: create 🟦 · name ⬜
+### ProfileType / CharacteristicType  (`type-def/…`)
+ProfileType: create ✅ · name ✅ · characteristicTypes ⬜
+CharacteristicType: create 🟦 (in-proc; BS-UI via panel sub-controller — deferred) · name 🟦
 
-### Rule
-create ✅ · name ✅ · hidden ⬜ · page ⬜ · publicationId ⬜ · description ⬜ · modifiers ⬜
+### Rule  (`rule/rule-create-and-fields`)
+create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · description ✅ · modifiers ⬜
 
-### Constraint
+### Constraint  (`constraint/constraint-create-and-fields`)
 create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · childId ⬜ · shared ⬜ · percentValue ⬜ · includeChildSelections ⬜ · includeChildForces ⬜
 
-### Modifier / ModifierGroup
-Modifier: create 🟦 · type ⬜ · field ⬜ · value ⬜ · conditions ⬜ · repeats ⬜
+### Modifier / ModifierGroup  (`modifier/modifier-create-with-condition`)
+Modifier: create ✅ · type ✅ · field ✅ · value ✅ · conditions ✅ · repeats ✅
 ModifierGroup: create 🟦 · modifiers ⬜ · conditions ⬜
 
-### Condition / ConditionGroup
-Condition: create 🟦 · type (8 variants) ⬜ · value ⬜ · field ⬜ · scope ⬜ · childId ⬜ · shared ⬜ · percentValue ⬜
-ConditionGroup: create 🟦 · type (and/or) ⬜
+### Condition / ConditionGroup  (`condition/condition-types-and-group`)
+Condition: create ✅ · type (instanceOf/greaterThan/atLeast ✅; other 5 ⬜) · value ✅ · field ✅ · scope ✅ · childId ✅ · shared ⬜ · percentValue ⬜
+ConditionGroup: create ✅ · type (and/or) ✅
 
-### Repeat
-create 🟦 · repeats ⬜ · roundUp ⬜ · value ⬜ · field ⬜ · scope ⬜ · childId ⬜
+### Repeat  (`repeat/repeat-create-and-fields`)
+create ✅ · repeats ✅ · roundUp ✅ · value ⬜ · field ✅ · scope ✅ · childId ⬜
 
 ### InfoLink / InfoGroup
 InfoLink: create 🟦 · targetId ⬜ · type (profile/rule/infoGroup) ⬜ · name ⬜ · hidden ⬜
 InfoGroup: create 🟦 · name ⬜ · hidden ⬜ · profiles ⬜ · rules ⬜ · infoLinks ⬜
 
-### Publication
-create 🟦 · name ⬜ · shortName ⬜ · publisher ⬜ · publicationDate ⬜ · publisherUrl ⬜
+### Publication  (`publication/publication-create-and-fields`)
+create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ⬜
 
 ### GameSystem / Catalogue (root)
 name ✅ · revision ⬜ · battleScribeVersion ⬜ · authorName/Contact/Url ⬜ · readme ⬜ · (catalogue) gameSystemId ✅ · library ⬜

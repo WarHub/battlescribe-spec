@@ -552,9 +552,16 @@ public class DataEditorActions {
         // Fields that are not displayed in the panel fall back to reflective model mutation.
         Node node = waitForFieldNodeOptional(pnl, cssId, 2000);
         if (node != null) {
-            runOnFx(() -> setNodeValue(node, cssId, value));
+            try {
+                runOnFx(() -> setNodeValue(node, cssId, value));
+            } catch (RuntimeException ex) {
+                // The edit-panel control couldn't be driven (e.g. an unsupported control
+                // type such as a TextArea) — mutate the underlying model directly. The
+                // editor shares this model, and getDataState reads it back.
+                runOnFx(() -> setFieldReflectively(item.getValue(), field, value));
+            }
         } else {
-            setFieldReflectively(item.getValue(), field, value);
+            runOnFx(() -> setFieldReflectively(item.getValue(), field, value));
         }
         sleep(200);
     }
@@ -690,6 +697,7 @@ public class DataEditorActions {
         if ("sharedInfoGroup".equals(entryType))           return "actAddSharedInfoGroup";
         if ("costType".equals(entryType))                  return "actAddCostType";
         if ("profileType".equals(entryType))               return "actAddProfileType";
+        if ("characteristicType".equals(entryType))        return "actAddCharacteristicType";
         if ("publication".equals(entryType))               return "actAddPublication";
         if ("catalogueLink".equals(entryType))             return "actAddCatalogueLink";
         throw new RuntimeException("Unknown entry type: " + entryType);
@@ -807,6 +815,7 @@ public class DataEditorActions {
         addChildren(children, entry, "getRepeats",                "repeat");
         addChildren(children, entry, "getForceEntries",           "forceEntry");
         addChildren(children, entry, "getCategoryEntries",        "categoryEntry");
+        addChildren(children, entry, "getCharacteristicTypes",    "characteristicType");
         if (children.size() > 0) o.add("children", children);
         return o;
     }
