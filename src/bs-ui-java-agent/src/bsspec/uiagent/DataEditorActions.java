@@ -127,6 +127,13 @@ public class DataEditorActions {
         TreeItem<Object> parentItem = runOnFxGet(() -> findTreeItemById(ctrl, parentId));
         if (parentItem == null) throw new RuntimeException("Tree item not found: " + parentId);
 
+        // Characteristic types are managed by the ProfileType edit-panel sub-controller, not the
+        // main tree controller. Add directly to the model (getDataState reads it back).
+        if ("characteristicType".equals(entryType)) {
+            return addModelChild(parentItem, "getCharacteristicTypes",
+                    "net.battlescribe.model.data.CharacteristicType", name);
+        }
+
         boolean parentIsRoot = runOnFxGet(() -> isRootEntry(parentItem.getValue()));
         String addMethod = actAddMethodName(entryType, parentIsRoot);
         Object parentModel = parentItem.getValue();
@@ -213,6 +220,43 @@ public class DataEditorActions {
             case "publication":                return "getPublications";
             default: throw new RuntimeException("Unknown container for entry type: " + entryType);
         }
+    }
+
+    /**
+     * Create a model child of the given class, set its id/name, and add it to the parent's
+     * {@code getter} list directly (for entries the main tree controller can't add, e.g.
+     * characteristic types managed by a panel sub-controller). Tracked by synthetic id so a
+     * later setField resolves it reflectively.
+     */
+    @SuppressWarnings("unchecked")
+    private String addModelChild(TreeItem<Object> parentItem, String getter, String className, String name) {
+        Object parentModel = parentItem.getValue();
+        // The live model list (getList() returns a copy, which we must not mutate).
+        Object rawList;
+        try {
+            rawList = parentModel.getClass().getMethod(getter).invoke(parentModel);
+        } catch (Exception e) {
+            throw new RuntimeException("Parent has no " + getter + "() container", e);
+        }
+        if (!(rawList instanceof java.util.List)) {
+            throw new RuntimeException(getter + "() did not return a List");
+        }
+        java.util.List<Object> list = (java.util.List<Object>) rawList;
+
+        Object child = newModelInstance(className);
+        String id = java.util.UUID.randomUUID().toString();
+        runOnFx(() -> {
+            try { child.getClass().getMethod("setId", String.class).invoke(child, id); } catch (Exception ignored) {}
+            if (name != null) {
+                try { setStr(child, "setName", name); } catch (Exception ignored) {}
+            }
+            list.add(child);
+        });
+        idLessEntries.put(id, child);
+
+        JsonObject result = new JsonObject();
+        result.addProperty("entryId", id);
+        return result.toString();
     }
 
     private static boolean containsIdentity(List<Object> list, Object o) {

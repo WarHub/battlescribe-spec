@@ -1,12 +1,13 @@
 id: type-defs-create-and-fields
 category: type-def
 description: >
-  Create the game-system data-type definitions: a cost type (with default cost limit)
-  and a profile type. Verifies creation and fields for the root type-definition entities.
+  Create the game-system data-type definitions: a cost type (with default cost limit),
+  and a profile type with a nested characteristic type. Verifies creation and fields for
+  the root type-definition entities.
 
-  Note: nested characteristic-type creation is exercised in-process but not here on
-  battlescribe-ui — it is managed by the ProfileType edit-panel sub-controller rather
-  than the main tree controller, which the UI agent does not yet drive.
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
 
 setup:
   gameSystem:
@@ -36,6 +37,12 @@ steps:
     entryType: profileType
     name: Weapon
 
+  - action: addEntry
+    id: add-char-type
+    parentId: ${{ steps.add-profile-type.entryId }}
+    entryType: characteristicType
+    name: Range
+
   - expectedState:
       gameSystem:
         id: gs-1
@@ -46,3 +53,6 @@ steps:
               defaultCostLimit: "2000"
         profileTypes:
           - name: Weapon
+            children:
+              - name: Range
+                entryType: characteristicType

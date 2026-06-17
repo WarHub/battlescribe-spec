@@ -1,8 +1,13 @@
 id: category-entry-with-constraint
 category: category
 description: >
-  Add a category entry to the game system and nest a max constraint inside it.
-  Verifies category-entry creation and that constraints can be created on it.
+  Add a category entry to the game system and nest a max constraint and a modifier
+  inside it. Verifies category-entry creation and that constraints and modifiers can
+  be created on it.
+
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
 
 setup:
   gameSystem:
@@ -31,6 +36,16 @@ steps:
     field: value
     value: "2"
 
+  - action: addEntry
+    id: add-mod
+    parentId: ${{ steps.add-cat.entryId }}
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.add-mod.entryId }}
+    field: field
+    value: hidden
+
   - expectedState:
       gameSystem:
         id: gs-1
@@ -42,3 +57,6 @@ steps:
                 fields:
                   type: max
                   value: "2"
+              - entryType: modifier
+                fields:
+                  field: hidden

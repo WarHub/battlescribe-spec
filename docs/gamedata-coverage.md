@@ -54,7 +54,7 @@ create ✅ · targetId ✅ · type ✅ · collective ✅ · import ✅ · hidden
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ✅ · categoryLinks ✅ · constraints ✅
 
 ### CategoryEntry  (`category/category-entry-with-constraint`)
-create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · constraints ✅ · modifiers ⬜
+create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ✅ · constraints ✅ · modifiers ✅
 
 ### CategoryLink  (`links/links-create-and-fields` — attaches to force entries)
 create ✅ · name ✅ · hidden ✅ · targetId ✅ · primary ✅
@@ -68,8 +68,8 @@ Profile: create ✅ · name ✅ · typeId ✅ · typeName ✅ · hidden ✅ · p
 Characteristic: value-by-name ✅ (`profile/profile-create-with-characteristics`)
 
 ### ProfileType / CharacteristicType  (`type-def/…`)
-ProfileType: create ✅ · name ✅ · characteristicTypes ⬜
-CharacteristicType: create 🟦 (in-proc; BS-UI via panel sub-controller — deferred) · name 🟦
+ProfileType: create ✅ · name ✅ · characteristicTypes ✅
+CharacteristicType: create ✅ · name ✅
 
 ### Rule  (`rule/rule-create-and-fields`, `rule/rule-with-modifier`)
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · description ✅ · modifiers ✅
