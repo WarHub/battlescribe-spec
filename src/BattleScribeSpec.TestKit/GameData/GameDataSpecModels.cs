@@ -158,6 +158,9 @@ public sealed class ExpectedCatalogueDataDef
     /// </summary>
     public string? Name { get; set; }
 
+    /// <summary>Expected root metadata fields (revision, library, authorName, etc.).</summary>
+    public Dictionary<string, string?>? Fields { get; set; }
+
     /// <summary>
     /// Expected entries in a specific container. Key is the container name
     /// (selectionEntries, sharedSelectionEntries, rules, etc.).
@@ -192,6 +195,9 @@ public sealed class ExpectedGameSystemDataDef
 {
     public string? Id { get; set; }
     public string? Name { get; set; }
+
+    /// <summary>Expected root metadata fields (revision, authorName, etc.).</summary>
+    public Dictionary<string, string?>? Fields { get; set; }
     public List<ExpectedDataEntryDef>? ForceEntries { get; set; }
     public List<ExpectedDataEntryDef>? CategoryEntries { get; set; }
     public List<ExpectedDataEntryDef>? CostTypes { get; set; }

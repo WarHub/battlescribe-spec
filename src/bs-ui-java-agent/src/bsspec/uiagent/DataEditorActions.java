@@ -741,6 +741,7 @@ public class DataEditorActions {
         JsonObject o = new JsonObject();
         putStr(o, "id", gs, "getId");
         putStr(o, "name", gs, "getName");
+        o.add("fields", buildRootFields(gs, false));
         o.add("forceEntries",                buildList(gs, "getForceEntries",               "forceEntry"));
         o.add("categoryEntries",             buildList(gs, "getCategoryEntries",            "categoryEntry"));
         o.add("costTypes",                   buildList(gs, "getCostTypes",                  "costType"));
@@ -761,6 +762,7 @@ public class DataEditorActions {
         putStr(o, "id", cat, "getId");
         putStr(o, "name", cat, "getName");
         putStr(o, "gameSystemId", cat, "getGameSystemId");
+        o.add("fields", buildRootFields(cat, true));
         o.add("selectionEntries",           buildList(cat, "getSelectionEntries",           "selectionEntry"));
         o.add("entryLinks",                 buildList(cat, "getEntryLinks",                 "entryLink"));
         o.add("rules",                      buildList(cat, "getRules",                      "rule"));
@@ -774,6 +776,22 @@ public class DataEditorActions {
         o.add("sharedRules",                buildList(cat, "getSharedRules",               "rule"));
         o.add("sharedProfiles",             buildList(cat, "getSharedProfiles",            "profile"));
         return o;
+    }
+
+    /** Root-level metadata fields (author info, revision, version, library) of a game system / catalogue. */
+    private JsonObject buildRootFields(Object root, boolean isCatalogue) {
+        JsonObject fields = new JsonObject();
+        putFieldIfPresent(fields, root, "getAuthorName", "authorName");
+        putFieldIfPresent(fields, root, "getAuthorContact", "authorContact");
+        putFieldIfPresent(fields, root, "getAuthorUrl", "authorUrl");
+        putFieldIfPresent(fields, root, "getReadme", "readme");
+        putNumField(fields, root, "getRevision", "revision");
+        putFieldIfPresent(fields, root, "getBattleScribeVersion", "battleScribeVersion");
+        if (isCatalogue) {
+            putBoolField(fields, root, "library", "isLibrary", "getLibrary");
+            putNumField(fields, root, "getGameSystemRevision", "gameSystemRevision");
+        }
+        return fields;
     }
 
     private JsonArray buildList(Object obj, String getter, String childType) {

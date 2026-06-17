@@ -958,6 +958,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             Id = cat.getId() ?? "",
             Name = cat.getName() ?? "",
             GameSystemId = cat.getGameSystemId() ?? "",
+            Fields = ReadRootFields(cat, isCatalogue: true),
             SelectionEntries = ReadEntryList(cat.getSelectionEntries(), "selectionEntry"),
             EntryLinks = ReadEntryList(cat.getEntryLinks(), "entryLink"),
             Rules = ReadEntryList(cat.getRules(), "rule"),
@@ -979,6 +980,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         {
             Id = gs.getId() ?? "",
             Name = gs.getName() ?? "",
+            Fields = ReadRootFields(gs, isCatalogue: false),
             SelectionEntries = ReadEntryList(gs.getSelectionEntries(), "selectionEntry"),
             EntryLinks = ReadEntryList(gs.getEntryLinks(), "entryLink"),
             Rules = ReadEntryList(gs.getRules(), "rule"),
@@ -992,6 +994,28 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             CostTypes = ReadEntryList(gs.getCostTypes(), "costType"),
             ProfileTypes = ReadEntryList(gs.getProfileTypes(), "profileType"),
         };
+    }
+
+    /// <summary>
+    /// Read root-level metadata fields (author info, revision, version, library) from a
+    /// game system or catalogue into a generic field dictionary.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string?>? ReadRootFields(object root, bool isCatalogue)
+    {
+        var fields = new Dictionary<string, string?>();
+        TryAddField(fields, root, "getAuthorName", "authorName");
+        TryAddField(fields, root, "getAuthorContact", "authorContact");
+        TryAddField(fields, root, "getAuthorUrl", "authorUrl");
+        TryAddField(fields, root, "getReadme", "readme");
+        TryAddNumField(fields, root, "getRevision", "revision");
+        TryAddField(fields, root, "getBattleScribeVersion", "battleScribeVersion");
+        if (isCatalogue)
+        {
+            TryAddBoolField(fields, root, "library");
+            TryAddNumField(fields, root, "getGameSystemRevision", "gameSystemRevision");
+        }
+
+        return fields.Count > 0 ? fields : null;
     }
 
     private static IReadOnlyList<DataEntryState> ReadEntryList(JavaList? list, string entryType)

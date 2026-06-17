@@ -98,8 +98,11 @@ sharedSelectionEntry ✅ · sharedSelectionEntryGroup ✅ · sharedRule ✅ · s
 ### Publication  (`publication/publication-create-and-fields`)
 create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ✅
 
-### GameSystem / Catalogue (root)
-name ✅ · revision ⬜ · battleScribeVersion ⬜ · authorName/Contact/Url ⬜ · readme ⬜ · (catalogue) gameSystemId ✅ · library ⬜
+### GameSystem / Catalogue (root)  (`root/root-fields-gamesystem`, `root/root-fields-catalogue`)
+name ✅ · revision ✅ · battleScribeVersion ⬜ · authorName ✅ · authorContact ✅ · authorUrl ✅ · readme ✅ · (catalogue) gameSystemId ✅ · library ✅
+
+> Root metadata is asserted via a generic `fields:` map on `gameSystem:` / catalogue entries
+> (added to the state records + runner in this work).
 
 ## BS Data Editor UI surface notes (from probing)
 - **Category links attach to force entries only** — `actAddCategoryLink` is a no-op unless a

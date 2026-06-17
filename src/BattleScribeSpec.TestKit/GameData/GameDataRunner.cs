@@ -240,6 +240,8 @@ public sealed class GameDataRunner
             AssertEqual(stepIndex, $"{prefix}.name", expected.Name, actual.Name);
         }
 
+        AssertRootFields(stepIndex, prefix, expected.Fields, actual.Fields);
+
         if (expected.ForceEntries is not null)
         {
             AssertEntryList(stepIndex, $"{prefix}.forceEntries", expected.ForceEntries, actual.ForceEntries);
@@ -283,6 +285,8 @@ public sealed class GameDataRunner
         {
             AssertEqual(stepIndex, $"{prefix}.name", expected.Name, actual.Name);
         }
+
+        AssertRootFields(stepIndex, prefix, expected.Fields, actual.Fields);
 
         if (expected.EntryCount is { } ec)
         {
@@ -436,6 +440,22 @@ public sealed class GameDataRunner
                 actual.Fields?.TryGetValue(key, out actualValue);
                 AssertEqual(stepIndex, $"{prefix}.fields[{key}]", expectedValue ?? "", actualValue ?? "");
             }
+        }
+    }
+
+    private void AssertRootFields(int stepIndex, string prefix,
+        Dictionary<string, string?>? expected, IReadOnlyDictionary<string, string?>? actual)
+    {
+        if (expected is not { Count: > 0 })
+        {
+            return;
+        }
+
+        foreach (var (key, expectedValue) in expected)
+        {
+            string? actualValue = null;
+            actual?.TryGetValue(key, out actualValue);
+            AssertEqual(stepIndex, $"{prefix}.fields[{key}]", expectedValue ?? "", actualValue ?? "");
         }
     }
 
