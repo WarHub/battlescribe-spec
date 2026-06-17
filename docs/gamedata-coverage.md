@@ -50,8 +50,8 @@ create ✅ · targetId ✅ · type ✅ · collective ✅ · import ✅ · hidden
 ### ForceEntry  (`force/force-create-and-nest`)
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ✅ · categoryLinks ⬜ · constraints ⬜
 
-### CategoryEntry
-create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · constraints ⬜ · modifiers ⬜
+### CategoryEntry  (`category/category-entry-with-constraint`)
+create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · constraints ✅ · modifiers ⬜
 
 ### CategoryLink  (`links/links-create-and-fields` — attaches to force entries)
 create ✅ · name ⬜ · hidden ⬜ · targetId ✅ · primary ✅
@@ -68,8 +68,8 @@ Characteristic: value-by-name ✅ (`profile/profile-create-with-characteristics`
 ProfileType: create ✅ · name ✅ · characteristicTypes ⬜
 CharacteristicType: create 🟦 (in-proc; BS-UI via panel sub-controller — deferred) · name 🟦
 
-### Rule  (`rule/rule-create-and-fields`)
-create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · description ✅ · modifiers ⬜
+### Rule  (`rule/rule-create-and-fields`, `rule/rule-with-modifier`)
+create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · description ✅ · modifiers ✅
 
 ### Constraint  (`constraint/constraint-create-and-fields`, `constraint/constraint-advanced-fields`)
 create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · childId ➖ (n/a) · shared ✅ · percentValue ✅ · includeChildSelections ✅ · includeChildForces ✅
@@ -93,7 +93,7 @@ InfoGroup: create ✅ · name ✅ · hidden ⬜ · profiles ✅ · rules ✅ · 
 sharedSelectionEntry ✅ · sharedSelectionEntryGroup ✅ · sharedRule ✅ · sharedProfile ✅ · sharedInfoGroup ⬜
 
 ### Publication  (`publication/publication-create-and-fields`)
-create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ⬜
+create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ✅
 
 ### GameSystem / Catalogue (root)
 name ✅ · revision ⬜ · battleScribeVersion ⬜ · authorName/Contact/Url ⬜ · readme ⬜ · (catalogue) gameSystemId ✅ · library ⬜

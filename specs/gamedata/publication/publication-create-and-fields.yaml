@@ -35,6 +35,11 @@ steps:
     field: publicationDate
     value: "2023"
 
+  - action: setField
+    entryId: ${{ steps.add-pub.entryId }}
+    field: publisherUrl
+    value: https://example.com
+
   - expectedState:
       catalogues:
         - id: cat-1
@@ -44,3 +49,4 @@ steps:
                 shortName: Cdx
                 publisher: Games Workshop
                 publicationDate: "2023"
+                publisherUrl: https://example.com
