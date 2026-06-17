@@ -45,6 +45,11 @@ steps:
     field: hidden
     value: "true"
 
+  - action: setField
+    entryId: ${{ steps.add-profile.entryId }}
+    field: typeName
+    value: Infantry
+
   - expectedState:
       catalogues:
         - id: cat-1
@@ -57,3 +62,4 @@ steps:
                   fields:
                     page: "27"
                     publicationId: pub-1
+                    typeName: Infantry

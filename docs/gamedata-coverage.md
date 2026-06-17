@@ -57,14 +57,14 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · constraints ✅ · modifiers ⬜
 
 ### CategoryLink  (`links/links-create-and-fields` — attaches to force entries)
-create ✅ · name ⬜ · hidden ⬜ · targetId ✅ · primary ✅
+create ✅ · name ✅ · hidden ✅ · targetId ✅ · primary ✅
 
 ### Cost / CostType  (`cost/…`, `type-def/…`)
 Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ⬜
 CostType: create ✅ · name ✅ · defaultCostLimit ✅ · hidden ✅
 
 ### Profile / Characteristic  (`profile/…`)
-Profile: create ✅ · name ✅ · typeId ✅ · typeName ⬜ · hidden ✅ · page ✅ · publicationId ✅
+Profile: create ✅ · name ✅ · typeId ✅ · typeName ✅ · hidden ✅ · page ✅ · publicationId ✅
 Characteristic: value-by-name ✅ (`profile/profile-create-with-characteristics`)
 
 ### ProfileType / CharacteristicType  (`type-def/…`)
@@ -78,7 +78,7 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · descrip
 create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · childId ➖ (n/a) · shared ✅ · percentValue ✅ · includeChildSelections ✅ · includeChildForces ✅
 
 ### Modifier / ModifierGroup  (`modifier/…`, `modifier-group/…`)
-Modifier: create ✅ · type (set/increment/decrement/append all ✅) · field ✅ · value ✅ · conditions ✅ · repeats ✅
+Modifier: create ✅ · type (all 8: set/increment/decrement/append/add/remove/set-primary/unset-primary ✅) · field ✅ · value ✅ · conditions ✅ · repeats ✅
 ModifierGroup: create ✅ · modifiers ✅ · conditions ✅
 
 ### Condition / ConditionGroup  (`condition/condition-types-and-group`, `condition/condition-all-types`)
@@ -89,7 +89,7 @@ ConditionGroup: create ✅ · type (and/or) ✅
 create ✅ · repeats ✅ · roundUp ✅ · value ✅ · field ✅ · scope ✅ · childId ✅
 
 ### InfoLink / InfoGroup  (`links/…`, `info-group/info-group-create-and-nest`)
-InfoLink: create ✅ · targetId ✅ · type (profile/rule/infoGroup) ⬜ · name ⬜ · hidden ⬜
+InfoLink: create ✅ · targetId ✅ · type (profile/rule/infoGroup) ✅ · name ⬜ · hidden ⬜
 InfoGroup: create ✅ · name ✅ · hidden ✅ · profiles ✅ · rules ✅ · infoLinks ⬜
 
 ### Shared root containers  (`shared/shared-root-entries`)

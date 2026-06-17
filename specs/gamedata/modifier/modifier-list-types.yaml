@@ -1,0 +1,83 @@
+id: modifier-list-types
+category: modifier
+description: >
+  Create modifiers of the list/category modifier types (add, remove, set-primary,
+  unset-primary) and verify each type is persisted. Completes the modifier-type enum
+  alongside the string modifier types.
+
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: m-add
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.m-add.entryId }}
+    field: type
+    value: add
+
+  - action: addEntry
+    id: m-rem
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.m-rem.entryId }}
+    field: type
+    value: remove
+
+  - action: addEntry
+    id: m-setp
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.m-setp.entryId }}
+    field: type
+    value: set-primary
+
+  - action: addEntry
+    id: m-unsetp
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.m-unsetp.entryId }}
+    field: type
+    value: unset-primary
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  fields:
+                    type: add
+                - entryType: modifier
+                  fields:
+                    type: remove
+                - entryType: modifier
+                  fields:
+                    type: set-primary
+                - entryType: modifier
+                  fields:
+                    type: unset-primary

@@ -63,6 +63,16 @@ steps:
     field: primary
     value: "true"
 
+  - action: setField
+    entryId: ${{ steps.add-cat-link.entryId }}
+    field: name
+    value: Troops Link
+
+  - action: setField
+    entryId: ${{ steps.add-cat-link.entryId }}
+    field: hidden
+    value: "true"
+
   - expectedState:
       catalogues:
         - id: cat-1
@@ -80,7 +90,9 @@ steps:
           forceEntries:
             - id: fe-1
               children:
-                - entryType: categoryLink
+                - name: Troops Link
+                  entryType: categoryLink
+                  hidden: true
                   fields:
                     targetId: ce-troops
                     primary: "true"

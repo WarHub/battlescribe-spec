@@ -574,6 +574,18 @@ public class DataEditorActions {
             }
             throw new RuntimeException("Tree item not found for setField: " + entryId);
         }
+
+        // The `type` combo on modifiers and links re-renders the panel / opens a picker that
+        // can block the FX thread (modifier list types, link retarget). Set those on the model
+        // directly. Selection-entry/group `type` (unit/model/upgrade) is a plain combo — keep
+        // driving it through the UI.
+        Object itemModel = item.getValue();
+        if ("type".equals(field) && itemModel != null && typeViaModel(itemModel)) {
+            runOnFx(() -> setFieldReflectively(itemModel, field, value));
+            sleep(100);
+            return;
+        }
+
         runOnFx(() -> selectItem(ctrl, item));
         sleep(200);
 
@@ -596,6 +608,13 @@ public class DataEditorActions {
             runOnFx(() -> setFieldReflectively(item.getValue(), field, value));
         }
         sleep(200);
+    }
+
+    /** Whether the {@code type} field of this model should be set on the model (blocking combo). */
+    private static boolean typeViaModel(Object model) {
+        String cn = model.getClass().getSimpleName();
+        return cn.equals("Modifier") || cn.equals("EntryLink")
+                || cn.equals("InfoLink") || cn.equals("CategoryLink");
     }
 
     /** Try to find a node by CSS ID within {@code pnl}; return {@code null} on timeout. */
