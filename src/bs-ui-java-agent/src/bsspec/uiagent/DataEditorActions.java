@@ -656,12 +656,12 @@ public class DataEditorActions {
             throw new RuntimeException("Tree item not found for setField: " + entryId);
         }
 
-        // The `type` combo on modifiers and links re-renders the panel / opens a picker that
-        // can block the FX thread (modifier list types, link retarget). Set those on the model
-        // directly. Selection-entry/group `type` (unit/model/upgrade) is a plain combo — keep
-        // driving it through the UI.
+        // Some fields are awkward/unsafe to drive through the edit panel: a modifier/link `type`
+        // combo re-renders the panel (or opens a blocking picker), and a link `targetId` is a
+        // target picker that re-resolves and clears a value it can't find. Set those on the model
+        // directly. Selection-entry/group `type` (unit/model/upgrade) is a plain combo — keep UI.
         Object itemModel = item.getValue();
-        if ("type".equals(field) && itemModel != null && typeViaModel(itemModel)) {
+        if (itemModel != null && setViaModel(itemModel, field)) {
             runOnFx(() -> setFieldReflectively(itemModel, field, value));
             sleep(100);
             return;
@@ -691,11 +691,18 @@ public class DataEditorActions {
         sleep(200);
     }
 
-    /** Whether the {@code type} field of this model should be set on the model (blocking combo). */
-    private static boolean typeViaModel(Object model) {
+    /** Whether this field should be set on the model directly rather than via the edit panel. */
+    private static boolean setViaModel(Object model, String field) {
         String cn = model.getClass().getSimpleName();
-        return cn.equals("Modifier") || cn.equals("EntryLink")
-                || cn.equals("InfoLink") || cn.equals("CategoryLink");
+        boolean isLink = cn.equals("EntryLink") || cn.equals("InfoLink")
+                || cn.equals("CategoryLink") || cn.equals("CatalogueLink");
+        if ("type".equals(field)) {
+            return cn.equals("Modifier") || isLink;
+        }
+        if ("targetId".equals(field)) {
+            return isLink;
+        }
+        return false;
     }
 
     /** Try to find a node by CSS ID within {@code pnl}; return {@code null} on timeout. */

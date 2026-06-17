@@ -18,6 +18,9 @@ setup:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: gs-1
+      sharedProfiles:
+        - id: sp-ability
+          name: Shared Ability
       selectionEntries:
         - id: se-1
           name: Tactical Squad
@@ -42,6 +45,26 @@ steps:
     entryType: rule
     name: Ability Rule
 
+  - action: addEntry
+    id: add-infolink
+    parentId: ${{ steps.add-ig.entryId }}
+    entryType: infoLink
+
+  - action: setField
+    entryId: ${{ steps.add-infolink.entryId }}
+    field: targetId
+    value: sp-ability
+
+  - action: setField
+    entryId: ${{ steps.add-infolink.entryId }}
+    field: name
+    value: Linked Ability
+
+  - action: setField
+    entryId: ${{ steps.add-infolink.entryId }}
+    field: hidden
+    value: "true"
+
   - action: setField
     entryId: ${{ steps.add-ig.entryId }}
     field: hidden
@@ -61,3 +84,8 @@ steps:
                       entryType: profile
                     - name: Ability Rule
                       entryType: rule
+                    - name: Linked Ability
+                      entryType: infoLink
+                      hidden: true
+                      fields:
+                        targetId: sp-ability
