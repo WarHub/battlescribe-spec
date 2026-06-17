@@ -1,10 +1,10 @@
 id: error-broken-entry-link
 category: validation
 description: >
-  An entry link whose target does not exist produces a validation error in the data
-  editor. Verifies that the editor's error list is extracted and matched. The error is
-  asserted on battlescribe-ui (the Data Editor); the in-process reference engine does
-  not surface data-model validation, so it checks structure only.
+  An entry link whose target does not exist produces a validation error. Verifies that
+  the engine's error list is extracted and matched. Both the in-process reference engine
+  and the Data Editor (battlescribe-ui) construct the real BattleScribe data manager and
+  report the same error, so the assertion runs on both anchors.
 
 engines:
   newrecruit: skip
@@ -26,12 +26,10 @@ setup:
 
 steps:
   - expectedState:
+      errors:
+        - message: EntryLink must have a target that exists
       catalogues:
         - id: cat-1
           entryLinks:
             - id: el-broken
               entryType: entryLink
-      engines:
-        battlescribe-ui:
-          errors:
-            - message: EntryLink must have a target that exists

@@ -1,0 +1,85 @@
+id: selection-entry-containers
+category: entry
+description: >
+  Add the remaining child-container kinds directly onto a selection entry: a rule, an
+  info group, an info link (to a shared rule), and a modifier. Verifies that a selection
+  entry hosts rules / infoGroups / infoLinks / modifiers (category links attach to force
+  entries only, so they are not addable here).
+
+# NewRecruit orders a selection entry's children differently, so the unnamed modifier
+# (matched positionally) lands on the wrong sibling there. NR is not a gate; skip it.
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedRules:
+        - id: sr-keyword
+          name: Keyword Rule
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-rule
+    parentId: se-1
+    entryType: rule
+    name: Unit Rule
+
+  - action: addEntry
+    id: add-ig
+    parentId: se-1
+    entryType: infoGroup
+    name: Unit Abilities
+
+  - action: addEntry
+    id: add-il
+    parentId: se-1
+    entryType: infoLink
+
+  - action: setField
+    entryId: ${{ steps.add-il.entryId }}
+    field: targetId
+    value: sr-keyword
+
+  - action: setField
+    entryId: ${{ steps.add-il.entryId }}
+    field: name
+    value: Linked Keyword
+
+  - action: addEntry
+    id: add-mod
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.add-mod.entryId }}
+    field: field
+    value: hidden
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - name: Unit Rule
+                  entryType: rule
+                - name: Unit Abilities
+                  entryType: infoGroup
+                - name: Linked Keyword
+                  entryType: infoLink
+                  fields:
+                    targetId: sr-keyword
+                - entryType: modifier
+                  fields:
+                    field: hidden

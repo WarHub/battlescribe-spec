@@ -127,17 +127,21 @@ public class DataEditorActions {
         TreeItem<Object> parentItem = runOnFxGet(() -> findTreeItemById(ctrl, parentId));
         if (parentItem == null) throw new RuntimeException("Tree item not found: " + parentId);
 
-        // Characteristic types are managed by the ProfileType edit-panel sub-controller, not the
-        // main tree controller. Add directly to the model (getDataState reads it back).
+        // Characteristic types are added by the ProfileType edit-panel sub-controller, not the
+        // main tree controller. Drive that real sub-controller's add handler.
         if ("characteristicType".equals(entryType)) {
-            return addModelChild(parentItem, "getCharacteristicTypes",
-                    "net.battlescribe.model.data.CharacteristicType", name);
+            return addCharacteristicType(ctrl, parentItem, name);
         }
 
         boolean parentIsRoot = runOnFxGet(() -> isRootEntry(parentItem.getValue()));
         String addMethod = actAddMethodName(entryType, parentIsRoot);
         Object parentModel = parentItem.getValue();
         String getter = addContainerGetter(entryType, parentIsRoot);
+
+        // Fail fast with a clear message for entry types the editor only adds under a
+        // precondition. Without this the actAdd* call is a silent no-op and we'd otherwise
+        // wait out the full diff-poll timeout before throwing a generic "no new entry" error.
+        validateAddPreconditions(ctrl, parentModel, entryType);
 
         // Detect the new entry by diffing the parent's model child-list rather than scanning
         // the tree for a new id. This works uniformly for id-bearing entries, id-less entries
@@ -184,6 +188,42 @@ public class DataEditorActions {
         return result.toString();
     }
 
+    /**
+     * Validate that the editor will actually add an entry of {@code entryType} under
+     * {@code parentModel}, throwing a clear error when a known precondition is unmet.
+     * These mirror the Data Editor's own guards (verified in the decompiled controller):
+     * {@code actAddCategoryLink} is a no-op unless a ForceEntry is selected, and
+     * {@code actAddProfile}/{@code actAddSharedProfile} need at least one profile type.
+     */
+    private void validateAddPreconditions(Object ctrl, Object parentModel, String entryType) {
+        if ("categoryLink".equals(entryType)) {
+            String cn = runOnFxGet(() -> parentModel.getClass().getSimpleName());
+            if (!"ForceEntry".equals(cn)) {
+                throw new IllegalStateException(
+                        "categoryLink can only be added to a ForceEntry; parent is a " + cn);
+            }
+        }
+        if ("profile".equals(entryType) || "sharedProfile".equals(entryType)) {
+            if (!runOnFxGet(() -> profileTypeExists(ctrl))) {
+                throw new IllegalStateException(
+                        "profile requires at least one profileType in the game system or catalogue");
+            }
+        }
+    }
+
+    /** True if a ProfileType exists on the loaded catalogue root or its game system. */
+    private boolean profileTypeExists(Object ctrl) {
+        Object dm = tryInvoke(ctrl, "getDataManager");
+        if (dm == null) return true; // can't determine — don't block
+        return hasProfileType(tryInvoke(dm, "c")) || hasProfileType(tryInvoke(dm, "aa"));
+    }
+
+    private boolean hasProfileType(Object root) {
+        if (root == null) return false;
+        List<Object> pts = getList(root, "getProfileTypes");
+        return pts != null && !pts.isEmpty();
+    }
+
     /** Parent model container getter for a newly added entry of the given type. */
     private static String addContainerGetter(String entryType, boolean parentIsRoot) {
         if (parentIsRoot) {
@@ -223,40 +263,87 @@ public class DataEditorActions {
     }
 
     /**
-     * Create a model child of the given class, set its id/name, and add it to the parent's
-     * {@code getter} list directly (for entries the main tree controller can't add, e.g.
-     * characteristic types managed by a panel sub-controller). Tracked by synthetic id so a
-     * later setField resolves it reflectively.
+     * Add a CharacteristicType by driving the real ProfileType edit-panel sub-controller.
+     * Selecting the ProfileType node builds its {@code ProfileTypeEditPanelController}; we
+     * reach that live instance from the main controller's panel-controller list and invoke
+     * its {@code actAddCharacteristicType()} handler (the same path the panel's ADD button
+     * triggers). The new type is detected by diffing the ProfileType's child-list.
      */
-    @SuppressWarnings("unchecked")
-    private String addModelChild(TreeItem<Object> parentItem, String getter, String className, String name) {
-        Object parentModel = parentItem.getValue();
-        // The live model list (getList() returns a copy, which we must not mutate).
-        Object rawList;
-        try {
-            rawList = parentModel.getClass().getMethod(getter).invoke(parentModel);
-        } catch (Exception e) {
-            throw new RuntimeException("Parent has no " + getter + "() container", e);
-        }
-        if (!(rawList instanceof java.util.List)) {
-            throw new RuntimeException(getter + "() did not return a List");
-        }
-        java.util.List<Object> list = (java.util.List<Object>) rawList;
+    private String addCharacteristicType(Object ctrl, TreeItem<Object> parentItem, String name) {
+        Object profileType = parentItem.getValue();
 
-        Object child = newModelInstance(className);
-        String id = java.util.UUID.randomUUID().toString();
-        runOnFx(() -> {
-            try { child.getClass().getMethod("setId", String.class).invoke(child, id); } catch (Exception ignored) {}
-            if (name != null) {
-                try { setStr(child, "setName", name); } catch (Exception ignored) {}
+        List<Object> before = new ArrayList<>();
+        List<Object> beforeList = runOnFxGet(() -> getList(profileType, "getCharacteristicTypes"));
+        if (beforeList != null) before.addAll(beforeList);
+
+        // Select the ProfileType node so its edit panel (and sub-controller) is built.
+        runOnFx(() -> selectItem(ctrl, parentItem));
+        sleep(500);
+
+        Object panel = runOnFxGet(() -> findPanelController(ctrl, "ProfileTypeEditPanelController"));
+        if (panel == null) {
+            throw new RuntimeException(
+                    "ProfileTypeEditPanelController not active after selecting the profile type");
+        }
+        runOnFx(() -> panel.getClass().getMethod("actAddCharacteristicType").invoke(panel));
+
+        Object newObj = null;
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            List<Object> after = runOnFxGet(() -> getList(profileType, "getCharacteristicTypes"));
+            if (after != null && after.size() > before.size()) {
+                for (Object o : after) {
+                    if (!containsIdentity(before, o)) { newObj = o; break; }
+                }
+                if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
+                if (newObj != null) break;
             }
-            list.add(child);
-        });
-        idLessEntries.put(id, child);
+            sleep(POLL_MS);
+        }
+        if (newObj == null) {
+            throw new RuntimeException("No new characteristicType appeared on the profile type");
+        }
 
+        final Object created = newObj;
+        if (name != null) {
+            runOnFx(() -> { try { setStr(created, "setName", name); } catch (Exception ignored) {} });
+        }
+
+        String id = getId(newObj);
+        if (id == null || id.isEmpty()) {
+            id = java.util.UUID.randomUUID().toString();
+            idLessEntries.put(id, newObj);
+        }
         JsonObject result = new JsonObject();
         result.addProperty("entryId", id);
         return result.toString();
+    }
+
+    /**
+     * Find a live edit-panel sub-controller whose class name contains {@code nameFragment}.
+     * The main {@code DataEditorWindowController} keeps the active panel controllers in a
+     * private {@code List<BaseEditPanelController>} field (rebuilt whenever the tree
+     * selection changes); we scan its List-typed fields for the matching instance.
+     */
+    private Object findPanelController(Object ctrl, String nameFragment) {
+        Class<?> cls = ctrl.getClass();
+        while (cls != null && cls != Object.class) {
+            for (Field f : cls.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                if (!List.class.isAssignableFrom(f.getType())) continue;
+                try {
+                    f.setAccessible(true);
+                    Object val = f.get(ctrl);
+                    if (val instanceof List) {
+                        for (Object o : (List<?>) val) {
+                            if (o != null && o.getClass().getName().contains(nameFragment)) return o;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
     }
 
     private static boolean containsIdentity(List<Object> list, Object o) {

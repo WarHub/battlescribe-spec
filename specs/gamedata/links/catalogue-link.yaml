@@ -1,8 +1,11 @@
 id: catalogue-link
 category: links
 description: >
-  Add a catalogue link to a catalogue and set its targetId and importRootEntries.
-  Verifies catalogue-link creation and its fields (cross-catalogue reference).
+  Add a catalogue link from one catalogue to a second (library) catalogue in the same game
+  system, and set its targetId / importRootEntries. With the target catalogue present and
+  indexed by the editor, the link resolves cleanly (no validation error) and the targetId is
+  retained. Then re-point the link at a non-existent catalogue and verify the Data Editor
+  flags the dangling target.
 
 engines:
   newrecruit: skip
@@ -12,10 +15,21 @@ setup:
   gameSystem:
     id: gs-1
     name: Test System
+    forceEntries:
+      - id: fe-1
+        name: Detachment
   catalogues:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+    - id: cat-library
+      name: Shared Library
+      gameSystemId: gs-1
+      library: true
 
 steps:
   - action: addEntry
@@ -34,10 +48,9 @@ steps:
     field: importRootEntries
     value: "true"
 
-  # The Data Editor validates a catalogue link's target against loaded catalogues and
-  # clears a dangling targetId, so battlescribe-ui asserts only importRootEntries here
-  # (targetId is verified in-process). Cross-catalogue linking is otherwise out of scope.
+  # Valid target: the link resolves, targetId is retained, and there are no errors.
   - expectedState:
+      errors: []
       catalogues:
         - id: cat-1
           catalogueLinks:
@@ -45,11 +58,19 @@ steps:
               fields:
                 targetId: cat-library
                 importRootEntries: "true"
-      engines:
-        battlescribe-ui:
-          catalogues:
-            - id: cat-1
-              catalogueLinks:
-                - entryType: catalogueLink
-                  fields:
-                    importRootEntries: "true"
+
+  # Re-point at a catalogue that does not exist: the Data Editor flags the dangling target.
+  - action: setField
+    entryId: ${{ steps.add-cl.entryId }}
+    field: targetId
+    value: does-not-exist
+
+  - expectedState:
+      errors:
+        - message: CatalogueLink must have a target that exists
+      catalogues:
+        - id: cat-1
+          catalogueLinks:
+            - entryType: catalogueLink
+              fields:
+                targetId: does-not-exist

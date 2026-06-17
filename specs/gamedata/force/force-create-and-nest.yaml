@@ -5,6 +5,11 @@ description: >
   a category entry. Verifies force-entry creation, nesting, and category-entry creation
   at the game-system root.
 
+# The NewRecruit Data Editor UI does not expose these fields the same way and times out
+# there. NR is not a gate; skip the NR editor UI.
+engines:
+  newrecruit-ui: skip
+
 setup:
   gameSystem:
     id: gs-1

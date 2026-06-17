@@ -19,6 +19,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 {
     private GameSystem? _gameSystem;
     private Catalogue? _catalogue;
+    private readonly List<Catalogue> _catalogues = [];
     private string _specId = "";
 
     // Lookup maps for finding entries by ID
@@ -32,16 +33,22 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         try
         {
             _entriesById.Clear();
+            _catalogues.Clear();
 
             // Build game system from protocol types (reuse BattleScribeEngine patterns)
             _gameSystem = BuildGameSystem(gameSystem);
 
-            // Build catalogues (we support one primary catalogue for now)
-            if (catalogues.Length > 0)
+            // Build every catalogue (a catalogueLink target lives in a second, library
+            // catalogue, so all catalogues must be present and indexed). The first is the
+            // primary edited catalogue for root-level operations.
+            foreach (var catSpec in catalogues)
             {
-                _catalogue = BuildCatalogue(catalogues[0]);
-                IndexAllEntries(_catalogue);
+                var built = BuildCatalogue(catSpec);
+                _catalogues.Add(built);
+                IndexAllEntries(built);
             }
+
+            _catalogue = _catalogues.FirstOrDefault();
 
             // Also index game system entries
             if (_gameSystem != null)
@@ -62,6 +69,11 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var parent = FindById(parentId)
             ?? throw new InvalidOperationException($"Parent not found: {parentId}");
 
+        // Fail with a clear error (rather than silently producing an entry the Data Editor
+        // would reject) for entry types the editor only adds under a precondition. Keeps the
+        // in-process reference engine consistent with the battlescribe-ui anchor.
+        ValidateAddPreconditions(parent, entryType);
+
         var id = Guid.NewGuid().ToString();
         var entryName = name ?? $"New {entryType}";
 
@@ -72,11 +84,47 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         return new GameDataActionOutputs { EntryId = id };
     }
 
+    /// <summary>
+    /// Throw a clear error when an AddEntry would violate a Data Editor precondition:
+    /// a category link only attaches to a force entry, and a profile needs a profile type
+    /// to assign. Mirrors the guards in the BattleScribe Data Editor controller so both
+    /// anchors agree on what is and isn't a valid add.
+    /// </summary>
+    private void ValidateAddPreconditions(object parent, string entryType)
+    {
+        if (entryType == "categoryLink" && parent is not ForceEntry)
+        {
+            throw new InvalidOperationException(
+                $"categoryLink can only be added to a ForceEntry; parent is a {parent.GetType().Name}");
+        }
+
+        if ((entryType == "profile" || entryType == "sharedProfile") && !ProfileTypeExists())
+        {
+            throw new InvalidOperationException(
+                "profile requires at least one profileType in the game system or catalogue");
+        }
+    }
+
+    private bool ProfileTypeExists() =>
+        HasProfileType(_gameSystem) || HasProfileType(_catalogue);
+
+    private static bool HasProfileType(object? root)
+    {
+        if (root is null)
+        {
+            return false;
+        }
+
+        var list = GetList(root, "getProfileTypes");
+        return list is not null && list.size() > 0;
+    }
+
     public void RemoveEntry(string entryId)
     {
-        // Walk all container lists to find and remove the entry
-        if (!RemoveFromParent(_catalogue, entryId) &&
-            !RemoveFromParent(_gameSystem, entryId))
+        // Walk all container lists across every catalogue and the game system.
+        var removed = _catalogues.Any(cat => RemoveFromParent(cat, entryId))
+            || RemoveFromParent(_gameSystem, entryId);
+        if (!removed)
         {
             throw new InvalidOperationException($"Could not remove entry: {entryId}");
         }
@@ -167,11 +215,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
     public GameDataState GetState()
     {
-        var catalogues = new List<CatalogueDataState>();
-        if (_catalogue != null)
-        {
-            catalogues.Add(ReadCatalogueState(_catalogue));
-        }
+        var catalogues = _catalogues.Select(ReadCatalogueState).ToList();
 
         GameSystemDataState? gsState = null;
         if (_gameSystem != null)
@@ -188,9 +232,13 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
     public IReadOnlyList<Roster.ValidationErrorState> GetValidationErrors()
     {
-        // Validation lives in the BattleScribe data manager (net.battlescribe.engine.a.e),
-        // the same one the Data Editor uses. Construct it reflectively, load the data, and
-        // read its error list. Defensive: any failure (obfuscation drift) yields no errors.
+        // Validation lives in the BattleScribe data manager — the same class the Data Editor
+        // builds. Construct it reflectively over the live model, load, and read its error list
+        // via a(true) (full validation, matching the editor). Two concrete managers exist:
+        //   - engine.a.d : catalogue editing — a(GameSystem, Catalogue, Map, Collection)
+        //   - engine.a.e : game-system-only  — b(GameSystem, Collection, boolean)
+        // Both share the ctor (platform=DESKTOP, logger, perf tracker). Defensive: any failure
+        // (obfuscation drift) yields no errors.
         try
         {
             if (_gameSystem is null)
@@ -198,30 +246,57 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
                 return [];
             }
 
-            var dmType = java.lang.Class.forName("net.battlescribe.engine.a.e");
-            var ctor = dmType.getConstructors().FirstOrDefault(c => c.getParameterCount() == 3);
-            if (ctor is null)
+            // Shared constructor dependencies. The platform enum is a nested type
+            // (enum e inside class net.battlescribe.engine.constants.a), so its binary
+            // name uses '$'; field "d" is the DESKTOP constant the Data Editor uses.
+            var platform = java.lang.Class.forName("net.battlescribe.engine.constants.a$e").getField("d").get(null);
+            // The Data Editor's logger lives in DataUtils (not in the engine IKVM assembly),
+            // so supply our own no-op implementation of the engine logger interface.
+            var logger = new SilentEngineLogger();
+            var perf = java.lang.Class.forName("net.battlescribe.engine.b.e").getDeclaredConstructor().newInstance();
+
+            java.lang.Class dmType;
+            object dm;
+
+            if (_catalogues.Count > 0)
             {
-                return [];
+                // Catalogue editing: index the primary catalogue plus all others (link targets).
+                dmType = java.lang.Class.forName("net.battlescribe.engine.a.d");
+                dm = NewDataManager(dmType, platform, logger, perf);
+
+                var primary = _catalogues[0];
+                var imported = new java.util.HashMap();
+                var allCats = new java.util.ArrayList();
+                foreach (var cat in _catalogues)
+                {
+                    allCats.add(cat);
+                    if (!ReferenceEquals(cat, primary))
+                    {
+                        imported.put(cat.getId(), cat);
+                    }
+                }
+
+                // a(GameSystem, Catalogue, Map<String,Catalogue>, Collection<Catalogue>)
+                var init = dmType.getMethod("a",
+                    java.lang.Class.forName("net.battlescribe.model.data.GameSystem"),
+                    java.lang.Class.forName("net.battlescribe.model.data.Catalogue"),
+                    java.lang.Class.forName("java.util.Map"),
+                    java.lang.Class.forName("java.util.Collection"));
+                init.invoke(dm, [_gameSystem, primary, imported, allCats]);
             }
-
-            var enumD = java.lang.Class.forName("net.battlescribe.engine.constants.a.e").getField("d").get(null);
-            var depB = java.lang.Class.forName("net.battlescribe.a.c.f").getDeclaredConstructor().newInstance();
-            var depE = java.lang.Class.forName("net.battlescribe.engine.b.e").getDeclaredConstructor().newInstance();
-            var dm = ctor.newInstance([enumD, depB, depE]);
-
-            var cats = new java.util.ArrayList();
-            if (_catalogue is not null)
+            else
             {
-                cats.add(_catalogue);
-            }
+                // Game-system-only editing.
+                dmType = java.lang.Class.forName("net.battlescribe.engine.a.e");
+                dm = NewDataManager(dmType, platform, logger, perf);
 
-            // load: b(GameSystem, Collection<Catalogue>, boolean)
-            var loadMethod = dmType.getMethod("b",
-                java.lang.Class.forName("net.battlescribe.model.data.GameSystem"),
-                java.lang.Class.forName("java.util.Collection"),
-                java.lang.Boolean.TYPE);
-            loadMethod.invoke(dm, [_gameSystem, cats, java.lang.Boolean.FALSE]);
+                // b(GameSystem, Collection<Catalogue>, boolean)
+                var init = dmType.getMethod("b",
+                    java.lang.Class.forName("net.battlescribe.model.data.GameSystem"),
+                    java.lang.Class.forName("java.util.Collection"),
+                    java.lang.Boolean.TYPE);
+                init.invoke(dm, [_gameSystem, new java.util.ArrayList(), java.lang.Boolean.FALSE]);
+            }
 
             // a(boolean) → List of error objects; each is INamed (getName() = message).
             var errMethod = dmType.getMethod("a", java.lang.Boolean.TYPE);
@@ -250,9 +325,30 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         }
     }
 
+    /// <summary>
+    /// No-op implementation of the BattleScribe engine logger interface
+    /// (<c>net.battlescribe.engine.b.c</c>). The data manager logs verbosely during load /
+    /// validation; we discard it. Implemented in C# (IKVM lets a managed type satisfy a Java
+    /// interface) because the engine ships no usable logger in its own assembly.
+    /// </summary>
+    private sealed class SilentEngineLogger : net.battlescribe.engine.b.c
+    {
+        public void a(string str) { }
+
+        public void b(string str) { }
+    }
+
+    private static object NewDataManager(java.lang.Class dmType, object platform, object logger, object perf)
+    {
+        var ctor = dmType.getConstructors().FirstOrDefault(c => c.getParameterCount() == 3)
+            ?? throw new InvalidOperationException($"No 3-arg constructor on {dmType.getName()}");
+        return ctor.newInstance([platform, logger, perf]);
+    }
+
     public void Dispose()
     {
         _entriesById.Clear();
+        _catalogues.Clear();
         _gameSystem = null;
         _catalogue = null;
     }
@@ -883,9 +979,12 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
     private object? FindById(string id)
     {
-        if (_catalogue != null && _catalogue.getId() == id)
+        foreach (var cat in _catalogues)
         {
-            return _catalogue;
+            if (cat.getId() == id)
+            {
+                return cat;
+            }
         }
 
         if (_gameSystem != null && _gameSystem.getId() == id)

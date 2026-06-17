@@ -42,16 +42,16 @@ create ✅ · name ✅ · hidden ✅ · type ✅ · collective ✅ · import ✅
 
 > `comment` is a `BaseData` field common to every entity (serialized by both engines);
 > `comment/comment-fields` covers it on a selection entry and a rule.
-costs ✅ (`cost/cost-set-values`) · constraints ✅ (`constraint/constraint-create-and-fields`) · modifiers ⬜ · profiles ✅ (`profile/…`) · rules ⬜ · categoryLinks ⬜ · infoGroups ⬜ · infoLinks ⬜
+costs ✅ (`cost/cost-set-values`) · constraints ✅ (`constraint/constraint-create-and-fields`) · modifiers ✅ (`entry/selection-entry-containers`) · profiles ✅ (`profile/…`) · rules ✅ (`entry/selection-entry-containers`) · categoryLinks ➖ (force-entry only) · infoGroups ✅ (`entry/selection-entry-containers`) · infoLinks ✅ (`entry/selection-entry-containers`)
 
 ### SelectionEntryGroup
-create ✅ · name ✅ · hidden ✅ · collective ✅ · import ✅ · defaultSelectionEntryId ✅ · page ✅ · publicationId ✅ · comment ⬜
+create ✅ · name ✅ · hidden ✅ · collective ✅ · import ✅ · defaultSelectionEntryId ✅ · page ✅ · publicationId ✅ · comment ✅ (`comment/comment-fields`)
 
 ### EntryLink  (`links/links-create-and-fields`, `links/link-fields`)
 create ✅ · targetId ✅ · type ✅ · collective ✅ · import ✅ · hidden ✅
 
 ### ForceEntry  (`force/force-create-and-nest`, `links/…`)
-create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ✅ · categoryLinks ✅ · constraints ✅
+create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ✅ (`comment/comment-fields`) · nested forceEntries ✅ · categoryLinks ✅ · constraints ✅
 
 ### CategoryEntry  (`category/category-entry-with-constraint`)
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ✅ · constraints ✅ · modifiers ✅
@@ -60,7 +60,7 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment
 create ✅ · name ✅ · hidden ✅ · targetId ✅ · primary ✅
 
 ### Cost / CostType  (`cost/…`, `type-def/…`)
-Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ⬜
+Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ➖ (not editable per-cost; hide via `costType.hidden`)
 CostType: create ✅ · name ✅ · defaultCostLimit ✅ · hidden ✅
 
 ### Profile / Characteristic  (`profile/…`)
@@ -96,7 +96,12 @@ InfoGroup: create ✅ · name ✅ · hidden ✅ · profiles ✅ · rules ✅ · 
 sharedSelectionEntry ✅ · sharedSelectionEntryGroup ✅ · sharedRule ✅ · sharedProfile ✅ · sharedInfoGroup ✅
 
 ### CatalogueLink  (`links/catalogue-link`)
-create ✅ · targetId ✅ (in-proc; UI clears dangling cross-catalogue targets) · importRootEntries ✅
+create ✅ · targetId ✅ · importRootEntries ✅
+
+> The spec stages a second `library` catalogue in the same game system as the link target.
+> The Data Editor indexes all same-system catalogues on load, so the link resolves on both
+> anchors (targetId is retained, no error). Re-pointing the link at a non-existent catalogue
+> is flagged ("CatalogueLink must have a target that exists") — verified on `battlescribe-ui`.
 
 ### Publication  (`publication/publication-create-and-fields`)
 create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ✅
@@ -113,31 +118,38 @@ Specs can assert the editor's validation error list via an `errors:` key on `exp
 - `validation/no-errors-clean-state` — a valid system/catalogue reports no errors.
 - `validation/error-broken-entry-link` — a dangling entry-link target is flagged
   ("EntryLink must have a target that exists").
+- `links/catalogue-link` — a valid cross-catalogue link reports no errors, while a dangling
+  catalogue-link target is flagged ("CatalogueLink must have a target that exists").
 
-The **battlescribe-ui** engine reads the Data Editor's real error list (via the data
-manager's error method). The in-process reference engine does not surface data-model
-validation (the BattleScribe validator is obfuscated/not reliably constructible), so it
-checks structure only; error assertions use a `battlescribe-ui` engine override.
+Both BS anchors surface validation. The **battlescribe-ui** engine reads the Data Editor's
+live error list. The **in-process reference engine** now constructs the same BattleScribe
+data manager directly (`engine.a.d` for a catalogue, `engine.a.e` for a game system; both
+built with the DESKTOP platform constant, a no-op logger, and a perf tracker) and calls its
+`a(true)` validation method — so `errors:` assertions run on **both** anchors (no per-engine
+override needed). Construction is defensive: if the obfuscated classes ever drift, validation
+degrades to an empty list rather than throwing.
 
 ## BS Data Editor UI surface notes (from probing)
 - **Category links attach to force entries only** — `actAddCategoryLink` is a no-op unless a
-  ForceEntry is selected (verified in the decompiled controller). Spec covers it on a force entry.
+  ForceEntry is selected (verified in the decompiled controller). Adding a category link to any
+  other parent now **throws a clear error** on both anchors (rather than silently no-op'ing /
+  timing out). Spec covers it on a force entry.
 - **Profiles require a profile type** — `actAddProfile`/`actAddSharedProfile` only create a profile
-  when at least one profile type exists; specs that add profiles define a `profileType` in setup.
+  when at least one profile type exists; adding a profile with no profile type now **throws** on
+  both anchors. Specs that add profiles define a `profileType` in setup.
 - **Id-less entries** (modifier/condition/repeat/groups) and **panel-only entries** are detected by
   diffing the parent's model child-list (the agent no longer relies on new tree ids), so creation
   works uniformly regardless of tree representation.
-- **characteristicType** creation is a ProfileType edit-panel sub-controller op — not yet driven by
-  the agent; covered in-process only.
+- **characteristicType** creation is driven through the real ProfileType edit-panel sub-controller:
+  the agent selects the profile type, reaches the live `ProfileTypeEditPanelController` from the
+  window controller's panel list, and invokes its `actAddCharacteristicType()` handler (the same
+  path the panel's ADD button triggers) — covered on both anchors.
 
-## Remaining toward literal 100%
-The full data-model entity/field surface is ✅ on both BS anchors. Only two cells are
-intentionally not full-✅, both for documented editor reasons (not harness gaps):
-- **`Cost.hidden`** — ➖ not editable per-cost in the Data Editor; cost hiding is via
-  `costType.hidden` (covered).
-- **`catalogueLink.targetId`** — in-process only; the Data Editor clears a dangling
-  cross-catalogue target (asserted via a per-engine override; `importRootEntries` is covered
-  on both anchors).
+## Literal 100%
+The full data-model entity/field surface is ✅ on both BS anchors. The single non-✅ cell is
+**`Cost.hidden`**, marked ➖ (not applicable): a cost is not hidden per-instance in the Data
+Editor — cost visibility is controlled by `costType.hidden` (covered). Every other entity and
+field is created and asserted on both the in-process reference engine and the Data Editor UI.
 
 ## Tracked debt
 - **W3 (BS Data Editor UI agent): done.** `setCost`/`setCharacteristic` dispatch + the expanded

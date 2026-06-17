@@ -1,8 +1,14 @@
 id: comment-fields
 category: comment
 description: >
-  Set the comment (author note) field on a selection entry and on a rule. The comment
-  is a model field present on every data element; this verifies it round-trips.
+  Set the comment (author note) field on a selection entry, a selection entry group, a
+  force entry, and a rule. The comment is a model field present on every data element;
+  this verifies it round-trips across the entity kinds that expose it.
+
+# The NewRecruit Data Editor UI does not expose a Comment field for every element kind,
+# so this times out there. NR is not a gate; skip the NR editor UI.
+engines:
+  newrecruit-ui: skip
 
 setup:
   gameSystem:
@@ -12,16 +18,32 @@ setup:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: gs-1
+      forceEntries:
+        - id: fe-1
+          name: Detachment
       selectionEntries:
         - id: se-1
           name: Tactical Squad
           type: unit
+          selectionEntryGroups:
+            - id: seg-1
+              name: Wargear
 
 steps:
   - action: setField
     entryId: se-1
     field: comment
     value: Needs points review.
+
+  - action: setField
+    entryId: seg-1
+    field: comment
+    value: Optional wargear group.
+
+  - action: setField
+    entryId: fe-1
+    field: comment
+    value: Battalion detachment.
 
   - action: addEntry
     id: add-rule
@@ -37,10 +59,18 @@ steps:
   - expectedState:
       catalogues:
         - id: cat-1
+          forceEntries:
+            - id: fe-1
+              fields:
+                comment: Battalion detachment.
           selectionEntries:
             - id: se-1
               fields:
                 comment: Needs points review.
+              children:
+                - id: seg-1
+                  fields:
+                    comment: Optional wargear group.
           rules:
             - name: A Rule
               fields:
