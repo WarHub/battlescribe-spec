@@ -1,0 +1,67 @@
+id: constraint-advanced-fields
+category: constraint
+description: >
+  Set the advanced query fields on a constraint: shared, percentValue,
+  includeChildSelections and includeChildForces. Verifies the constraint
+  query-field surface beyond type/value/field/scope.
+
+engines:
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-con
+    parentId: se-1
+    entryType: constraint
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: scope
+    value: force
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: shared
+    value: "true"
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: percentValue
+    value: "true"
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: includeChildSelections
+    value: "true"
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: includeChildForces
+    value: "true"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: constraint
+                  fields:
+                    scope: force
+                    shared: "true"
+                    percentValue: "true"
+                    includeChildSelections: "true"
+                    includeChildForces: "true"

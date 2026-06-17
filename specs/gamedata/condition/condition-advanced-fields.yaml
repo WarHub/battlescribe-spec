@@ -1,0 +1,83 @@
+id: condition-advanced-fields
+category: condition
+description: >
+  Set the advanced query fields on a condition: childId, shared, percentValue and
+  includeChildSelections. Verifies the condition query-field surface beyond
+  type/value/field/scope.
+
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      categoryEntries:
+        - id: ce-troops
+          name: Troops
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-mod
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.add-mod.entryId }}
+    field: field
+    value: hidden
+
+  - action: addEntry
+    id: add-con
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: scope
+    value: roster
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: childId
+    value: ce-troops
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: shared
+    value: "true"
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: percentValue
+    value: "true"
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: includeChildSelections
+    value: "true"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  children:
+                    - entryType: condition
+                      fields:
+                        scope: roster
+                        childId: ce-troops
+                        shared: "true"
+                        percentValue: "true"
+                        includeChildSelections: "true"

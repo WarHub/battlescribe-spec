@@ -1,0 +1,55 @@
+id: link-fields
+category: links
+description: >
+  Set the flag fields of an entry link: collective, import and hidden. Verifies the
+  entry-link field surface beyond targetId/type. (Link type is covered in
+  links-create-and-fields.)
+
+engines:
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntries:
+        - id: sse-1
+          name: Bolter
+          type: upgrade
+
+steps:
+  - action: addLink
+    id: add-link
+    parentId: cat-1
+    linkType: entryLink
+    targetId: sse-1
+
+  - action: setField
+    entryId: ${{ steps.add-link.entryId }}
+    field: collective
+    value: "true"
+
+  - action: setField
+    entryId: ${{ steps.add-link.entryId }}
+    field: imported
+    value: "true"
+
+  - action: setField
+    entryId: ${{ steps.add-link.entryId }}
+    field: hidden
+    value: "true"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - entryType: entryLink
+              hidden: true
+              fields:
+                targetId: sse-1
+                collective: "true"
+                imported: "true"

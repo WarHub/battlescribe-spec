@@ -44,8 +44,8 @@ costs ✅ (`cost/cost-set-values`) · constraints ✅ (`constraint/constraint-cr
 ### SelectionEntryGroup
 create ✅ · name ✅ · hidden ✅ · collective ✅ · import ✅ · defaultSelectionEntryId ✅ · page ✅ · publicationId ✅ · comment ⬜
 
-### EntryLink  (`links/links-create-and-fields`)
-create ✅ · targetId ✅ · type ✅ · collective ⬜ · import ⬜ · hidden ⬜
+### EntryLink  (`links/links-create-and-fields`, `links/link-fields`)
+create ✅ · targetId ✅ · type ✅ · collective ✅ · import ✅ · hidden ✅
 
 ### ForceEntry  (`force/force-create-and-nest`)
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ✅ · categoryLinks ⬜ · constraints ⬜
@@ -60,8 +60,8 @@ create ✅ · name ⬜ · hidden ⬜ · targetId ✅ · primary ✅
 Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ⬜
 CostType: create ✅ · name ✅ · defaultCostLimit ✅ · hidden ⬜
 
-### Profile / Characteristic
-Profile: create ✅ · name ✅ · typeId ✅ · typeName ⬜ · hidden ⬜ · page ⬜ · publicationId ⬜
+### Profile / Characteristic  (`profile/…`)
+Profile: create ✅ · name ✅ · typeId ✅ · typeName ⬜ · hidden ✅ · page ✅ · publicationId ✅
 Characteristic: value-by-name ✅ (`profile/profile-create-with-characteristics`)
 
 ### ProfileType / CharacteristicType  (`type-def/…`)
@@ -71,15 +71,15 @@ CharacteristicType: create 🟦 (in-proc; BS-UI via panel sub-controller — def
 ### Rule  (`rule/rule-create-and-fields`)
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · description ✅ · modifiers ⬜
 
-### Constraint  (`constraint/constraint-create-and-fields`)
-create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · childId ⬜ · shared ⬜ · percentValue ⬜ · includeChildSelections ⬜ · includeChildForces ⬜
+### Constraint  (`constraint/constraint-create-and-fields`, `constraint/constraint-advanced-fields`)
+create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · childId ➖ (n/a) · shared ✅ · percentValue ✅ · includeChildSelections ✅ · includeChildForces ✅
 
 ### Modifier / ModifierGroup  (`modifier/…`, `modifier-group/…`)
 Modifier: create ✅ · type ✅ · field ✅ · value ✅ · conditions ✅ · repeats ✅
 ModifierGroup: create ✅ · modifiers ✅ · conditions ✅
 
 ### Condition / ConditionGroup  (`condition/condition-types-and-group`, `condition/condition-all-types`)
-Condition: create ✅ · type (all 8 ✅) · value ✅ · field ✅ · scope ✅ · childId ✅ · shared ⬜ · percentValue ⬜
+Condition: create ✅ · type (all 8 ✅) · value ✅ · field ✅ · scope ✅ · childId ✅ · shared ✅ · percentValue ✅ · includeChildSelections ✅
 ConditionGroup: create ✅ · type (and/or) ✅
 
 ### Repeat  (`repeat/repeat-create-and-fields`)
