@@ -78,7 +78,7 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · descrip
 create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · childId ➖ (n/a) · shared ✅ · percentValue ✅ · includeChildSelections ✅ · includeChildForces ✅
 
 ### Modifier / ModifierGroup  (`modifier/…`, `modifier-group/…`)
-Modifier: create ✅ · type ✅ · field ✅ · value ✅ · conditions ✅ · repeats ✅
+Modifier: create ✅ · type (set/increment/decrement/append all ✅) · field ✅ · value ✅ · conditions ✅ · repeats ✅
 ModifierGroup: create ✅ · modifiers ✅ · conditions ✅
 
 ### Condition / ConditionGroup  (`condition/condition-types-and-group`, `condition/condition-all-types`)
@@ -86,7 +86,7 @@ Condition: create ✅ · type (all 8 ✅) · value ✅ · field ✅ · scope ✅
 ConditionGroup: create ✅ · type (and/or) ✅
 
 ### Repeat  (`repeat/repeat-create-and-fields`)
-create ✅ · repeats ✅ · roundUp ✅ · value ⬜ · field ✅ · scope ✅ · childId ⬜
+create ✅ · repeats ✅ · roundUp ✅ · value ✅ · field ✅ · scope ✅ · childId ✅
 
 ### InfoLink / InfoGroup  (`links/…`, `info-group/info-group-create-and-nest`)
 InfoLink: create ✅ · targetId ✅ · type (profile/rule/infoGroup) ⬜ · name ⬜ · hidden ⬜
@@ -99,7 +99,7 @@ sharedSelectionEntry ✅ · sharedSelectionEntryGroup ✅ · sharedRule ✅ · s
 create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ✅
 
 ### GameSystem / Catalogue (root)  (`root/root-fields-gamesystem`, `root/root-fields-catalogue`)
-name ✅ · revision ✅ · battleScribeVersion ⬜ · authorName ✅ · authorContact ✅ · authorUrl ✅ · readme ✅ · (catalogue) gameSystemId ✅ · library ✅
+name ✅ · revision ✅ · battleScribeVersion ✅ · authorName ✅ · authorContact ✅ · authorUrl ✅ · readme ✅ · (catalogue) gameSystemId ✅ · library ✅
 
 > Root metadata is asserted via a generic `fields:` map on `gameSystem:` / catalogue entries
 > (added to the state records + runner in this work).

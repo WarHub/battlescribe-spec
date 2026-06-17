@@ -34,6 +34,11 @@ steps:
     field: revision
     value: "7"
 
+  - action: setField
+    entryId: gs-1
+    field: battleScribeVersion
+    value: "2.03"
+
   - expectedState:
       gameSystem:
         id: gs-1
@@ -42,3 +47,4 @@ steps:
           authorUrl: https://jane.example.com
           readme: System design notes.
           revision: "7"
+          battleScribeVersion: "2.03"

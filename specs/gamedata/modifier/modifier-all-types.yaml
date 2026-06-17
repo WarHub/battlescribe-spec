@@ -1,0 +1,83 @@
+id: modifier-all-types
+category: modifier
+description: >
+  On one selection entry, create a modifier of each string modifier type
+  (set, increment, decrement, append) and verify the type field of each is
+  persisted. Exercises the modifier-type enum.
+
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: m-set
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.m-set.entryId }}
+    field: type
+    value: set
+
+  - action: addEntry
+    id: m-inc
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.m-inc.entryId }}
+    field: type
+    value: increment
+
+  - action: addEntry
+    id: m-dec
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.m-dec.entryId }}
+    field: type
+    value: decrement
+
+  - action: addEntry
+    id: m-app
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.m-app.entryId }}
+    field: type
+    value: append
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  fields:
+                    type: set
+                - entryType: modifier
+                  fields:
+                    type: increment
+                - entryType: modifier
+                  fields:
+                    type: decrement
+                - entryType: modifier
+                  fields:
+                    type: append

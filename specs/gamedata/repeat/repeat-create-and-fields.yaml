@@ -57,6 +57,16 @@ steps:
     field: scope
     value: parent
 
+  - action: setField
+    entryId: ${{ steps.add-repeat.entryId }}
+    field: value
+    value: "3"
+
+  - action: setField
+    entryId: ${{ steps.add-repeat.entryId }}
+    field: childId
+    value: se-1
+
   - expectedState:
       catalogues:
         - id: cat-1
@@ -71,3 +81,5 @@ steps:
                         roundUp: "true"
                         field: selections
                         scope: parent
+                        value: "3"
+                        childId: se-1
