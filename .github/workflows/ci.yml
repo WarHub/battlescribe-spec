@@ -192,22 +192,21 @@ jobs:
           NR_HEADLESS: true
           NR_PARALLEL: 2
 
-      - name: Generate conformance report
+      - name: Generate BattleScribe conformance report
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Runner/debug/bs-spec-runner.dll \
             --adapter "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
-            --specs specs \
-            --engine newrecruit \
-            --assertion-engine battlescribe \
+            --specs specs/roster \
+            --engine battlescribe \
             --expected-failures battlescribe \
             --output github-actions \
-            --report artifacts/nr-conformance-report.json
+            --report artifacts/battlescribe-conformance-report.json
 
-      - name: Upload conformance report
+      - name: Upload BattleScribe conformance report
         uses: actions/upload-artifact@v7
         with:
-          name: nr-conformance-report
-          path: artifacts/nr-conformance-report.json
+          name: battlescribe-conformance-report
+          path: artifacts/battlescribe-conformance-report.json
 
   ci-gate:
     if: always()

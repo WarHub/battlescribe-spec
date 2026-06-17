@@ -50,7 +50,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
     public static async Task<NewRecruitEnginePool> CreateFrozenAsync(
         string harFilePath,
         int concurrency = 5,
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         bool visual = false,
         float? slowMo = null)
@@ -113,7 +113,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
     /// </summary>
     public static async Task<NewRecruitEnginePool> CreateLiveAsync(
         int concurrency = 10,
-        string baseUrl = "https://newrecruit.eu",
+        string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         bool visual = false,
         float? slowMo = null)

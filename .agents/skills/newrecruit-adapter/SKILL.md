@@ -43,7 +43,7 @@ IRosterEngine state (shared with BattleScribe)
 
 ```csharp
 var engine = await NewRecruitRosterEngine.CreateAsync(
-    baseUrl: "https://newrecruit.eu", headless: true);
+    baseUrl: "https://www.newrecruit.eu", headless: true);
 ```
 
 Requires `NR_ENGINE_URL` environment variable in test infrastructure.
@@ -219,7 +219,7 @@ deobfuscated behavior reference.
 
 ```bash
 dotnet run --project src/BattleScribeSpec.NewRecruit.HarTool/ -- \
-    --url https://newrecruit.eu -o .testdata/newrecruit-har
+    --url https://www.newrecruit.eu -o .testdata/newrecruit-har
 ```
 
 **Output:** `newrecruit.har` + `metadata.json` (timestamp, NR client version)
