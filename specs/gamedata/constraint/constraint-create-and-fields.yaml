@@ -5,9 +5,7 @@ description: >
   (type, value, field, scope, percentValue), verifying each is persisted. Exercises
   constraint creation plus the full constraint field surface in one spec.
 
-# battlescribe-ui skip is W3 debt: pending Java agent buildEntryJson field expansion.
 engines:
-  battlescribe-ui: skip
   newrecruit-ui: skip
 
 setup:

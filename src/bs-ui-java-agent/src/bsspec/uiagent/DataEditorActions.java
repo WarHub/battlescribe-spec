@@ -47,6 +47,14 @@ public class DataEditorActions {
     private final EngineAccessor engineAccessor;
     /** Cached controller — cleared on each new setup call. */
     private Object cachedController = null;
+    /**
+     * Identity map for id-less model entries (modifier, modifierGroup, condition,
+     * conditionGroup, repeat). BattleScribe gives these no id attribute, so the
+     * tree-id diffing used for normal entries cannot detect or reference them.
+     * We assign a synthetic UUID on add and resolve it back to the model object
+     * (and its tree item, by identity) for later setField/remove. Cleared on load.
+     */
+    private final java.util.Map<String, Object> idLessEntries = new java.util.HashMap<>();
 
     public DataEditorActions(EngineAccessor engineAccessor) {
         this.engineAccessor = engineAccessor;
@@ -63,6 +71,8 @@ public class DataEditorActions {
         if ("gamedataAddEntryAction".equals(method))    return addEntry(p);
         if ("gamedataRemoveEntryAction".equals(method)) return removeEntry(p);
         if ("gamedataSetFieldAction".equals(method))    return setField(p);
+        if ("gamedataSetCostAction".equals(method))     return setCost(p);
+        if ("gamedataSetCharacteristicAction".equals(method)) return setCharacteristic(p);
         if ("gamedataAddLinkAction".equals(method))     return addLink(p);
         if ("gamedataGetDataState".equals(method))      return getDataState(p);
         throw new IllegalArgumentException("Unknown gamedata action: " + method);
@@ -72,6 +82,7 @@ public class DataEditorActions {
 
     private String loadFiles(JsonObject params) {
         cachedController = null; // reset cache on new load
+        idLessEntries.clear();
         String gstPath = requireString(params, "gstPath");
         JsonArray catPathsArr = params.has("catPaths") ? params.get("catPaths").getAsJsonArray() : new JsonArray();
 
@@ -115,11 +126,18 @@ public class DataEditorActions {
         TreeItem<Object> parentItem = runOnFxGet(() -> findTreeItemById(ctrl, parentId));
         if (parentItem == null) throw new RuntimeException("Tree item not found: " + parentId);
 
+        boolean parentIsRoot = runOnFxGet(() -> isRootEntry(parentItem.getValue()));
+        String addMethod = actAddMethodName(entryType, parentIsRoot);
+
+        // Id-less entries (modifier/condition/repeat/groups) can't be detected via a new
+        // tree id — diff the parent's model child-list instead and track by identity.
+        if (isIdLessType(entryType)) {
+            return addIdLessEntry(ctrl, parentItem, entryType, addMethod, name);
+        }
+
         // Snapshot the full tree — the tree may have container nodes with no IDs,
         // and may be rebuilt after the add operation, making parentItem stale.
         Set<String> before = runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot()));
-        boolean parentIsRoot = runOnFxGet(() -> isRootEntry(parentItem.getValue()));
-        String addMethod = actAddMethodName(entryType, parentIsRoot);
         runOnFx(() -> selectItem(ctrl, parentItem));
         sleep(500);
         runOnFx(() -> invokeCtrl(ctrl, addMethod));
@@ -130,6 +148,77 @@ public class DataEditorActions {
         JsonObject result = new JsonObject();
         result.addProperty("entryId", newId);
         return result.toString();
+    }
+
+    private static final Set<String> ID_LESS_TYPES = new HashSet<>(java.util.Arrays.asList(
+            "modifier", "modifierGroup", "condition", "conditionGroup", "repeat"));
+
+    private static boolean isIdLessType(String entryType) {
+        return ID_LESS_TYPES.contains(entryType);
+    }
+
+    private static String idLessChildGetter(String entryType) {
+        switch (entryType) {
+            case "modifier":       return "getModifiers";
+            case "modifierGroup":  return "getModifierGroups";
+            case "condition":      return "getConditions";
+            case "conditionGroup": return "getConditionGroups";
+            case "repeat":         return "getRepeats";
+            default: throw new RuntimeException("Not an id-less type: " + entryType);
+        }
+    }
+
+    /**
+     * Add an id-less entry by selecting the parent tree node, invoking the controller's
+     * add method, then detecting the new element appended to the parent's model child-list.
+     * The new object is tracked by a synthetic UUID for later setField/remove.
+     */
+    private String addIdLessEntry(Object ctrl, TreeItem<Object> parentItem,
+                                  String entryType, String addMethod, String name) {
+        Object parentModel = parentItem.getValue();
+        String getter = idLessChildGetter(entryType);
+
+        List<Object> before = new ArrayList<>();
+        List<Object> beforeList = getList(parentModel, getter);
+        if (beforeList != null) before.addAll(beforeList);
+
+        runOnFx(() -> selectItem(ctrl, parentItem));
+        sleep(500);
+        runOnFx(() -> invokeCtrl(ctrl, addMethod));
+
+        Object newObj = null;
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            List<Object> after = getList(parentModel, getter);
+            if (after != null && after.size() > before.size()) {
+                for (Object o : after) {
+                    if (!containsIdentity(before, o)) { newObj = o; break; }
+                }
+                if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
+                if (newObj != null) break;
+            }
+            sleep(POLL_MS);
+        }
+        if (newObj == null) {
+            throw new RuntimeException("No new " + entryType + " appeared on parent " + getter + "()");
+        }
+
+        String id = java.util.UUID.randomUUID().toString();
+        idLessEntries.put(id, newObj);
+        if (name != null) {
+            try { setStr(newObj, "setName", name); } catch (Exception ignored) {}
+        }
+
+        JsonObject result = new JsonObject();
+        result.addProperty("entryId", id);
+        return result.toString();
+    }
+
+    private static boolean containsIdentity(List<Object> list, Object o) {
+        for (Object x : list) {
+            if (x == o) return true;
+        }
+        return false;
     }
 
     private String removeEntry(JsonObject params) {
@@ -157,6 +246,95 @@ public class DataEditorActions {
                 ? params.get("value").getAsString() : null;
         setFieldOnEntry(findController(), entryId, field, value);
         return "{}";
+    }
+
+    private String setCost(JsonObject params) {
+        String entryId = requireString(params, "entryId");
+        String costTypeId = requireString(params, "field"); // "field" carries the cost type id
+        String value = params.has("value") && !params.get("value").isJsonNull()
+                ? params.get("value").getAsString() : null;
+        double amount = parseDouble(value);
+
+        Object ctrl = findController();
+        TreeItem<Object> item = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
+        if (item == null) throw new RuntimeException("Tree item not found for setCost: " + entryId);
+        Object model = item.getValue();
+
+        runOnFx(() -> {
+            List<Object> costs = getList(model, "getCosts");
+            if (costs == null) throw new RuntimeException("Entry " + entryId + " has no costs container");
+            for (Object c : costs) {
+                if (costTypeId.equals(tryStr(c, "getTypeId"))) {
+                    setDouble(c, "setValue", amount);
+                    return;
+                }
+            }
+            Object cost = newModelInstance("net.battlescribe.model.data.Cost");
+            setStr(cost, "setTypeId", costTypeId);
+            setStr(cost, "setName", costTypeId);
+            setDouble(cost, "setValue", amount);
+            costs.add(cost);
+        });
+        sleep(100);
+        return "{}";
+    }
+
+    private String setCharacteristic(JsonObject params) {
+        String entryId = requireString(params, "entryId");
+        String nameOrTypeId = requireString(params, "field"); // "field" carries the characteristic name or type id
+        String value = params.has("value") && !params.get("value").isJsonNull()
+                ? params.get("value").getAsString() : "";
+
+        Object ctrl = findController();
+        TreeItem<Object> item = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
+        if (item == null) throw new RuntimeException("Tree item not found for setCharacteristic: " + entryId);
+        Object model = item.getValue();
+
+        runOnFx(() -> {
+            List<Object> chars = getList(model, "getCharacteristics");
+            if (chars == null) throw new RuntimeException("Entry " + entryId + " has no characteristics container (not a profile?)");
+            for (Object ch : chars) {
+                if (nameOrTypeId.equals(tryStr(ch, "getName")) || nameOrTypeId.equals(tryStr(ch, "getTypeId"))) {
+                    setStr(ch, "setValue", value);
+                    return;
+                }
+            }
+            Object ch = newModelInstance("net.battlescribe.model.data.Characteristic");
+            setStr(ch, "setName", nameOrTypeId);
+            setStr(ch, "setValue", value);
+            chars.add(ch);
+        });
+        sleep(100);
+        return "{}";
+    }
+
+    private static double parseDouble(String value) {
+        if (value == null || value.isEmpty()) return 0.0;
+        try { return Double.parseDouble(value); } catch (NumberFormatException e) { return 0.0; }
+    }
+
+    private static Object newModelInstance(String className) {
+        try {
+            return Class.forName(className).getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException("Could not instantiate " + className, e);
+        }
+    }
+
+    private static void setDouble(Object obj, String setter, double value) {
+        try {
+            obj.getClass().getMethod(setter, double.class).invoke(obj, value);
+        } catch (Exception e) {
+            throw new RuntimeException("setDouble failed: " + setter, e);
+        }
+    }
+
+    private static void setStr(Object obj, String setter, String value) {
+        try {
+            obj.getClass().getMethod(setter, String.class).invoke(obj, value);
+        } catch (Exception e) {
+            throw new RuntimeException("setStr failed: " + setter, e);
+        }
     }
 
     private String addLink(JsonObject params) {
@@ -271,7 +449,12 @@ public class DataEditorActions {
     @SuppressWarnings("unchecked")
     private TreeItem<Object> findTreeItemById(Object ctrl, String id) throws Exception {
         TreeView<Object> tree = getTreeView(ctrl);
-        return tree == null ? null : findItemRecursive(tree.getRoot(), id);
+        if (tree == null) return null;
+        // Id-less entries (modifier/condition/repeat/…) are tracked by identity.
+        if (idLessEntries.containsKey(id)) {
+            return findItemByModel(tree.getRoot(), idLessEntries.get(id));
+        }
+        return findItemRecursive(tree.getRoot(), id);
     }
 
     private TreeItem<Object> findItemRecursive(TreeItem<Object> item, String id) {
@@ -279,6 +462,17 @@ public class DataEditorActions {
         if (id.equals(getId(item.getValue()))) return item;
         for (TreeItem<Object> child : item.getChildren()) {
             TreeItem<Object> found = findItemRecursive(child, id);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    /** Find the tree item whose model value is the given object (reference identity). */
+    private TreeItem<Object> findItemByModel(TreeItem<Object> item, Object model) {
+        if (item == null) return null;
+        if (item.getValue() == model) return item;
+        for (TreeItem<Object> child : item.getChildren()) {
+            TreeItem<Object> found = findItemByModel(child, model);
             if (found != null) return found;
         }
         return null;
@@ -339,7 +533,15 @@ public class DataEditorActions {
 
     private void setFieldOnEntry(Object ctrl, String entryId, String field, String value) {
         TreeItem<Object> item = runOnFxGet(() -> findTreeItemById(ctrl, entryId));
-        if (item == null) throw new RuntimeException("Tree item not found for setField: " + entryId);
+        if (item == null) {
+            // Id-less entry that isn't a selectable tree node: mutate the model directly.
+            Object model = idLessEntries.get(entryId);
+            if (model != null) {
+                runOnFx(() -> setFieldReflectively(model, field, value));
+                return;
+            }
+            throw new RuntimeException("Tree item not found for setField: " + entryId);
+        }
         runOnFx(() -> selectItem(ctrl, item));
         sleep(200);
 
@@ -430,6 +632,9 @@ public class DataEditorActions {
         if (type == String.class) return value;
         if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(value);
         if (type == int.class || type == Integer.class) return Integer.parseInt(value);
+        if (type == double.class || type == Double.class) return Double.parseDouble(value);
+        if (type == float.class || type == Float.class) return Float.parseFloat(value);
+        if (type == long.class || type == Long.class) return Long.parseLong(value);
         return value;
     }
 
@@ -554,6 +759,35 @@ public class DataEditorActions {
         putFieldIfPresent(fields, entry, "getDefaultSelectionEntryId", "defaultSelectionEntryId");
         putBoolField(fields, entry, "collective", "isCollective", "getCollective");
         putBoolField(fields, entry, "imported", "isImported", "getImported");
+
+        // Query / modifier / repeat fields (constraint, modifier, condition, repeat, group)
+        putNumField(fields, entry, "getValue", "value");
+        putFieldIfPresent(fields, entry, "getField", "field");
+        putFieldIfPresent(fields, entry, "getScope", "scope");
+        putFieldIfPresent(fields, entry, "getChildId", "childId");
+        putBoolField(fields, entry, "shared", "isShared", "getShared");
+        putBoolField(fields, entry, "percentValue", "isPercentValue", "getPercentValue");
+        putBoolField(fields, entry, "includeChildSelections", "isIncludeChildSelections", "getIncludeChildSelections");
+        putBoolField(fields, entry, "includeChildForces", "isIncludeChildForces", "getIncludeChildForces");
+        putNumField(fields, entry, "getRepeats", "repeats");
+        putBoolField(fields, entry, "roundUp", "isRoundUp", "getRoundUp");
+
+        // Type / description / publication metadata
+        putFieldIfPresent(fields, entry, "getTypeId", "typeId");
+        putFieldIfPresent(fields, entry, "getTypeName", "typeName");
+        putFieldIfPresent(fields, entry, "getDescription", "description");
+        putNumField(fields, entry, "getDefaultCostLimit", "defaultCostLimit");
+        putBoolField(fields, entry, "primary", "isPrimary", "getPrimary");
+        putBoolField(fields, entry, "importRootEntries", "isImportRootEntries", "getImportRootEntries");
+        putFieldIfPresent(fields, entry, "getShortName", "shortName");
+        putFieldIfPresent(fields, entry, "getPublisher", "publisher");
+        putFieldIfPresent(fields, entry, "getPublicationDate", "publicationDate");
+        putFieldIfPresent(fields, entry, "getPublisherUrl", "publisherUrl");
+
+        // Costs and characteristics as composite "cost:<typeId>" / "char:<name>" fields,
+        // matching the in-process reference engine so assertions are engine-agnostic.
+        addCostFields(fields, entry);
+        addCharacteristicFields(fields, entry);
         if (!fields.entrySet().isEmpty()) o.add("fields", fields);
 
         JsonArray children = new JsonArray();
@@ -568,6 +802,9 @@ public class DataEditorActions {
         addChildren(children, entry, "getConstraints",            "constraint");
         addChildren(children, entry, "getModifiers",              "modifier");
         addChildren(children, entry, "getModifierGroups",         "modifierGroup");
+        addChildren(children, entry, "getConditions",             "condition");
+        addChildren(children, entry, "getConditionGroups",        "conditionGroup");
+        addChildren(children, entry, "getRepeats",                "repeat");
         addChildren(children, entry, "getForceEntries",           "forceEntry");
         addChildren(children, entry, "getCategoryEntries",        "categoryEntry");
         if (children.size() > 0) o.add("children", children);
@@ -610,6 +847,74 @@ public class DataEditorActions {
                     return;
                 }
             } catch (Exception ignored) {}
+        }
+    }
+
+    /**
+     * Emit a numeric field, formatting whole doubles without a trailing ".0"
+     * (BattleScribe stores values as doubles, but specs read "2" not "2.0").
+     * Non-numeric returns (e.g. Modifier.getValue() returns a String) are emitted as-is.
+     */
+    private void putNumField(JsonObject fields, Object entry, String getter, String key) {
+        Method m;
+        try {
+            m = entry.getClass().getMethod(getter);
+        } catch (NoSuchMethodException e) {
+            return;
+        }
+        Object raw;
+        try {
+            raw = m.invoke(entry);
+        } catch (Exception e) {
+            return;
+        }
+        if (raw == null) return;
+        if (raw instanceof Double) {
+            fields.addProperty(key, formatNum((Double) raw));
+        } else if (raw instanceof Number) {
+            fields.addProperty(key, raw.toString());
+        } else {
+            String s = raw.toString();
+            if (!s.isEmpty()) fields.addProperty(key, s);
+        }
+    }
+
+    private static String formatNum(double d) {
+        if (d == Math.floor(d) && !Double.isInfinite(d)) {
+            return Long.toString((long) d);
+        }
+        return Double.toString(d);
+    }
+
+    private void addCostFields(JsonObject fields, Object entry) {
+        List<Object> costs = getList(entry, "getCosts");
+        if (costs == null) return;
+        for (Object cost : costs) {
+            String typeId = tryStr(cost, "getTypeId");
+            Object value = invokeOrNull(cost, "getValue");
+            if (typeId != null && !typeId.isEmpty() && value instanceof Double) {
+                fields.addProperty("cost:" + typeId, formatNum((Double) value));
+            }
+        }
+    }
+
+    private void addCharacteristicFields(JsonObject fields, Object entry) {
+        List<Object> chars = getList(entry, "getCharacteristics");
+        if (chars == null) return;
+        for (Object ch : chars) {
+            String name = tryStr(ch, "getName");
+            String value = tryStr(ch, "getValue");
+            if (name != null && !name.isEmpty()) {
+                fields.addProperty("char:" + name, value != null ? value : "");
+            }
+        }
+    }
+
+    private Object invokeOrNull(Object obj, String method) {
+        try {
+            return obj.getClass().getMethod(method).invoke(obj);
+        } catch (Exception e) {
+            return null;
         }
     }
 

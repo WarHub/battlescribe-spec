@@ -97,6 +97,22 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             ["value"] = value,
         }));
 
+    public void SetCost(string entryId, string costTypeId, string? value)
+        => RunAsync(() => CallActionAsync("gamedataSetCostAction", new JsonObject
+        {
+            ["entryId"] = entryId,
+            ["field"] = costTypeId,
+            ["value"] = value,
+        }));
+
+    public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
+        => RunAsync(() => CallActionAsync("gamedataSetCharacteristicAction", new JsonObject
+        {
+            ["entryId"] = entryId,
+            ["field"] = nameOrTypeId,
+            ["value"] = value,
+        }));
+
     public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
         => RunAsync(() => CallActionAsync<GameDataActionOutputs>("gamedataAddLinkAction", new JsonObject
         {

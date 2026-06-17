@@ -1,0 +1,99 @@
+id: condition-types-and-group
+category: condition
+description: >
+  Under a modifier, create a conditionGroup and nest conditions of several types
+  (instanceOf, greaterThan) with childId targeting, plus set the group's and/or type.
+  Verifies conditionGroup creation, group type, and condition type/childId fields.
+
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntries:
+        - id: sse-target
+          name: Target Upgrade
+          type: upgrade
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-mod
+    parentId: se-1
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.add-mod.entryId }}
+    field: field
+    value: hidden
+
+  - action: addEntry
+    id: add-group
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: conditionGroup
+
+  - action: setField
+    entryId: ${{ steps.add-group.entryId }}
+    field: type
+    value: or
+
+  - action: addEntry
+    id: add-cond-a
+    parentId: ${{ steps.add-group.entryId }}
+    entryType: condition
+
+  - action: setField
+    entryId: ${{ steps.add-cond-a.entryId }}
+    field: type
+    value: instanceOf
+
+  - action: setField
+    entryId: ${{ steps.add-cond-a.entryId }}
+    field: childId
+    value: sse-target
+
+  - action: addEntry
+    id: add-cond-b
+    parentId: ${{ steps.add-group.entryId }}
+    entryType: condition
+
+  - action: setField
+    entryId: ${{ steps.add-cond-b.entryId }}
+    field: type
+    value: greaterThan
+
+  - action: setField
+    entryId: ${{ steps.add-cond-b.entryId }}
+    field: value
+    value: "2"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  children:
+                    - entryType: conditionGroup
+                      fields:
+                        type: or
+                      children:
+                        - entryType: condition
+                          fields:
+                            type: instanceOf
+                            childId: sse-target
+                        - entryType: condition
+                          fields:
+                            type: greaterThan
+                            value: "2"

@@ -5,10 +5,8 @@ description: >
   values via setCharacteristic. Verifies the profile's typeId and characteristic values
   are persisted.
 
-# battlescribe-ui skip is W3 debt (setCharacteristic not yet in the Java agent).
 # newrecruit engines lack setCharacteristic support.
 engines:
-  battlescribe-ui: skip
   newrecruit: skip
   newrecruit-ui: skip
 

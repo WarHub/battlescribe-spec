@@ -888,6 +888,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             "getSelectionEntries", "getSelectionEntryGroups", "getEntryLinks",
             "getRules", "getProfiles", "getInfoGroups", "getInfoLinks",
             "getCategoryLinks", "getConstraints", "getModifiers", "getModifierGroups",
+            "getConditions", "getConditionGroups", "getRepeats",
             "getForceEntries", "getCategoryEntries",
         ];
 
@@ -915,6 +916,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             "getSelectionEntries", "getSelectionEntryGroups", "getEntryLinks",
             "getRules", "getProfiles", "getInfoGroups", "getInfoLinks",
             "getCategoryLinks", "getConstraints", "getModifiers", "getModifierGroups",
+            "getConditions", "getConditionGroups", "getRepeats",
             "getForceEntries", "getCategoryEntries",
             "getSharedSelectionEntries", "getSharedSelectionEntryGroups",
             "getSharedRules", "getSharedProfiles",
@@ -1028,6 +1030,9 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         AddChildren(children, entry, "getConstraints", "constraint");
         AddChildren(children, entry, "getModifiers", "modifier");
         AddChildren(children, entry, "getModifierGroups", "modifierGroup");
+        AddChildren(children, entry, "getConditions", "condition");
+        AddChildren(children, entry, "getConditionGroups", "conditionGroup");
+        AddChildren(children, entry, "getRepeats", "repeat");
         AddChildren(children, entry, "getForceEntries", "forceEntry");
         AddChildren(children, entry, "getCategoryEntries", "categoryEntry");
 

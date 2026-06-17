@@ -5,10 +5,8 @@ description: >
   creating the cost where absent and updating it where present. Verifies the
   values are persisted and keyed by cost type.
 
-# battlescribe-ui skip is W3 debt (setCost not yet in the Java agent).
 # newrecruit engines lack setCost support.
 engines:
-  battlescribe-ui: skip
   newrecruit: skip
   newrecruit-ui: skip
 

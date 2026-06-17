@@ -11,23 +11,26 @@ The authoritative surface is the decompiled model under
 
 ## Legend
 - ✅ covered by a spec, passing on both BS anchors
-- 🟦 enabled in the in-process reference engine + spec authored; **BS Data Editor UI pending W3**
+- 🟦 enabled in both BS engines (reference + Data Editor UI) but not yet spec-covered
 - ⬜ not yet covered
 - ➖ not applicable to this entity
 
 ## Engine action/field support (harness status)
 
+Both BS anchors now support the full action/field surface (W2 + W3 done). NewRecruit lacks
+`setCost`/`setCharacteristic`; cost/characteristic specs skip the NR engines.
+
 | Capability | battlescribe (in-proc) | battlescribe-ui | newrecruit (frozen) | newrecruit-ui |
 |---|---|---|---|---|
 | addEntry: core (se, seg, rule, profile, entryLink, forceEntry, categoryEntry) | ✅ | ✅ | ✅ | ✅ |
-| addEntry: constraint, modifier, modifierGroup, condition, conditionGroup, repeat | ✅ (W2) | wired (verify W3) | partial | partial |
-| addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | wired (verify W3) | ? | ? |
-| addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | wired (verify W3) | ? | ? |
-| addEntry: shared* root variants | ✅ (W2) | wired (verify W3) | ? | ? |
+| addEntry: constraint, modifier, modifierGroup, condition, conditionGroup, repeat | ✅ (W2) | ✅ (W3) | partial | partial |
+| addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ? | ? |
+| addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ? | ? |
+| addEntry: shared* root variants | ✅ (W2) | ✅ (W3) | ? | ? |
 | setField: scalar fields (generic reflective/UI) | ✅ | ✅ | ✅ | ✅ |
-| setCost (cost values by type) | ✅ (W2) | **pending W3** | ❌ skip | ❌ skip |
-| setCharacteristic (characteristic values) | ✅ (W2) | **pending W3** | ❌ skip | ❌ skip |
-| state: full query/modifier/cost/characteristic field serialization | ✅ (W2) | **pending W3** | partial | partial |
+| setCost (cost values by type) | ✅ (W2) | ✅ (W3) | ❌ skip | ❌ skip |
+| setCharacteristic (characteristic values) | ✅ (W2) | ✅ (W3) | ❌ skip | ❌ skip |
+| state: full query/modifier/cost/characteristic field serialization | ✅ (W2) | ✅ (W3) | partial | partial |
 
 ## Entity × field coverage
 
@@ -36,7 +39,7 @@ field** on both BS anchors.
 
 ### SelectionEntry  (`selection`/`entry`)
 create ✅ · name ✅ · hidden ✅ · type ✅ · collective ✅ · import ✅ · page ✅ · publicationId ✅ · comment ⬜
-costs 🟦 (`cost/cost-set-values`) · constraints 🟦 (`constraint/constraint-create-and-fields`) · modifiers ⬜ · profiles 🟦 (`profile/…`) · rules ⬜ · categoryLinks ⬜ · infoGroups ⬜ · infoLinks ⬜
+costs ✅ (`cost/cost-set-values`) · constraints ✅ (`constraint/constraint-create-and-fields`) · modifiers ⬜ · profiles ✅ (`profile/…`) · rules ⬜ · categoryLinks ⬜ · infoGroups ⬜ · infoLinks ⬜
 
 ### SelectionEntryGroup
 create ✅ · name ✅ · hidden ✅ · collective ✅ · import ✅ · defaultSelectionEntryId ✅ · page ✅ · publicationId ✅ · comment ⬜
@@ -54,12 +57,12 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment
 create 🟦 · name ⬜ · hidden ⬜ · targetId 🟦 (addLink) · primary ⬜
 
 ### Cost / CostType
-Cost: value-by-type 🟦 (`cost/cost-set-values`) · hidden ⬜
+Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ⬜
 CostType: create 🟦 · name ⬜ · defaultCostLimit ⬜ · hidden ⬜
 
 ### Profile / Characteristic
-Profile: create 🟦 · name ✅ · typeId 🟦 · typeName ⬜ · hidden ⬜ · page ⬜ · publicationId ⬜
-Characteristic: value-by-name 🟦 (`profile/profile-create-with-characteristics`)
+Profile: create ✅ · name ✅ · typeId ✅ · typeName ⬜ · hidden ⬜ · page ⬜ · publicationId ⬜
+Characteristic: value-by-name ✅ (`profile/profile-create-with-characteristics`)
 
 ### ProfileType / CharacteristicType
 ProfileType: create 🟦 · name ⬜ · characteristicTypes ⬜
@@ -69,7 +72,7 @@ CharacteristicType: create 🟦 · name ⬜
 create ✅ · name ✅ · hidden ⬜ · page ⬜ · publicationId ⬜ · description ⬜ · modifiers ⬜
 
 ### Constraint
-create 🟦 · type (min/max) 🟦 · value 🟦 · field 🟦 · scope 🟦 · childId ⬜ · shared ⬜ · percentValue ⬜ · includeChildSelections ⬜ · includeChildForces ⬜
+create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · childId ⬜ · shared ⬜ · percentValue ⬜ · includeChildSelections ⬜ · includeChildForces ⬜
 
 ### Modifier / ModifierGroup
 Modifier: create 🟦 · type ⬜ · field ⬜ · value ⬜ · conditions ⬜ · repeats ⬜
@@ -93,9 +96,10 @@ create 🟦 · name ⬜ · shortName ⬜ · publisher ⬜ · publicationDate ⬜
 name ✅ · revision ⬜ · battleScribeVersion ⬜ · authorName/Contact/Url ⬜ · readme ⬜ · (catalogue) gameSystemId ✅ · library ⬜
 
 ## Tracked debt
-- **W3 (BS Data Editor UI agent)** must add `setCost`/`setCharacteristic` dispatch and expand
-  `buildEntryJson` to emit the full field set, then the 🟦 cells become ✅ and any temporary
-  `battlescribe-ui: skip` on new specs is removed. Requires a JavaFX JDK (`lib/liberica-jdk`,
-  provisioned by `setup.ps1`) to build/verify the agent jar.
+- **W3 (BS Data Editor UI agent): done.** `setCost`/`setCharacteristic` dispatch + the expanded
+  `buildEntryJson` field serialization are implemented and verified; the three sample specs pass
+  on `battlescribe-ui`. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by `setup.ps1`,
+  to build the agent jar.)
 - **NR engines** lack `setCost`/`setCharacteristic`; cost/characteristic specs carry
-  `newrecruit`/`newrecruit-ui` skips until/unless NR support is added.
+  `newrecruit`/`newrecruit-ui` skips until/unless NR support is added. The constraint spec also
+  skips `newrecruit-ui` (NR Editor UI diverges on constraint field round-trip).
