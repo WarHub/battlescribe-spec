@@ -37,8 +37,11 @@ Both BS anchors now support the full action/field surface (W2 + W3 done). NewRec
 Each row = an entity type. Cells mark whether a spec exercises **creation** and **each settable
 field** on both BS anchors.
 
-### SelectionEntry  (`selection`/`entry`)
-create ✅ · name ✅ · hidden ✅ · type ✅ · collective ✅ · import ✅ · page ✅ · publicationId ✅ · comment ⬜
+### SelectionEntry  (`selection`/`entry`, `comment/comment-fields`)
+create ✅ · name ✅ · hidden ✅ · type ✅ · collective ✅ · import ✅ · page ✅ · publicationId ✅ · comment ✅
+
+> `comment` is a `BaseData` field common to every entity (serialized by both engines);
+> `comment/comment-fields` covers it on a selection entry and a rule.
 costs ✅ (`cost/cost-set-values`) · constraints ✅ (`constraint/constraint-create-and-fields`) · modifiers ⬜ · profiles ✅ (`profile/…`) · rules ⬜ · categoryLinks ⬜ · infoGroups ⬜ · infoLinks ⬜
 
 ### SelectionEntryGroup
@@ -58,7 +61,7 @@ create ✅ · name ⬜ · hidden ⬜ · targetId ✅ · primary ✅
 
 ### Cost / CostType  (`cost/…`, `type-def/…`)
 Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ⬜
-CostType: create ✅ · name ✅ · defaultCostLimit ✅ · hidden ⬜
+CostType: create ✅ · name ✅ · defaultCostLimit ✅ · hidden ✅
 
 ### Profile / Characteristic  (`profile/…`)
 Profile: create ✅ · name ✅ · typeId ✅ · typeName ⬜ · hidden ✅ · page ✅ · publicationId ✅

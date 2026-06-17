@@ -1,0 +1,47 @@
+id: comment-fields
+category: comment
+description: >
+  Set the comment (author note) field on a selection entry and on a rule. The comment
+  is a model field present on every data element; this verifies it round-trips.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: setField
+    entryId: se-1
+    field: comment
+    value: Needs points review.
+
+  - action: addEntry
+    id: add-rule
+    parentId: cat-1
+    entryType: rule
+    name: A Rule
+
+  - action: setField
+    entryId: ${{ steps.add-rule.entryId }}
+    field: comment
+    value: Draft wording.
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                comment: Needs points review.
+          rules:
+            - name: A Rule
+              fields:
+                comment: Draft wording.

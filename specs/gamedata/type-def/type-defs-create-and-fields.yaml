@@ -25,6 +25,11 @@ steps:
     field: defaultCostLimit
     value: "2000"
 
+  - action: setField
+    entryId: ${{ steps.add-cost-type.entryId }}
+    field: hidden
+    value: "true"
+
   - action: addEntry
     id: add-profile-type
     parentId: gs-1
@@ -36,6 +41,7 @@ steps:
         id: gs-1
         costTypes:
           - name: Points
+            hidden: true
             fields:
               defaultCostLimit: "2000"
         profileTypes:

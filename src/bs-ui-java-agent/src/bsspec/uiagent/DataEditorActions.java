@@ -793,6 +793,7 @@ public class DataEditorActions {
 
         JsonObject fields = new JsonObject();
         putFieldIfPresent(fields, entry, "getType", "type");
+        putFieldIfPresent(fields, entry, "getComment", "comment");
         putFieldIfPresent(fields, entry, "getTargetId", "targetId");
         putFieldIfPresent(fields, entry, "getPublicationId", "publicationId");
         putFieldIfPresent(fields, entry, "getPage", "page");

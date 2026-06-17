@@ -1041,6 +1041,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         // entry surfaces just the fields meaningful to its type.
         var fields = new Dictionary<string, string?>();
         TryAddField(fields, entry, "getType", "type");
+        TryAddField(fields, entry, "getComment", "comment");
         TryAddField(fields, entry, "getTargetId", "targetId");
         TryAddField(fields, entry, "getPublicationId", "publicationId");
         TryAddField(fields, entry, "getPage", "page");
