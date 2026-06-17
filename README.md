@@ -95,7 +95,7 @@ battlescribe-spec/
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)
-│   ├── BattleScribeSpec.Debugger/ # Spec debugger (bs-spec-debug)
+│   ├── BattleScribeSpec.Cli/      # Spec CLI (bs-spec: run/probe/export-xml/format)
 │   ├── BattleScribeSpec.Runner/   # CLI runner (bs-spec-runner)
 │   ├── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps BattleScribe)
 │   ├── BattleScribeSpec.NewRecruit/        # New Recruit adapter (Playwright)

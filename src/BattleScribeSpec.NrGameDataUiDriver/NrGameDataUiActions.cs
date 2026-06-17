@@ -20,9 +20,9 @@ namespace BattleScribeSpec.NrGameDataUiDriver;
 /// If the editor updates its DOM structure, run the probe workflow to re-discover
 /// selectors:
 /// <code>
-///   dotnet run --project src/BattleScribeSpec.Debugger -- --engine gamedata/newrecruit-ui --probe spec-id
+///   dotnet run --project src/BattleScribeSpec.Cli -- probe --engine newrecruit --ui spec-id
 /// </code>
-/// See .agents/skills/nr-gamedata-ui/ for the full probe workflow documentation.
+/// See .agents/skills/bsspec-cli/references/NR-GAMEDATA-UI.md for the full probe workflow documentation.
 /// </summary>
 public static class NrGameDataUiActions
 {
@@ -401,7 +401,7 @@ public static class NrGameDataUiActions
         throw new NotSupportedException(
             $"NR Editor UI: adding links under non-root parent '{parentId}' is not yet implemented. " +
             $"Currently open catalogue: '{catalogueId}'. " +
-            "Use --probe to discover nested tree selectors and extend AddLinkAsync.");
+            "Use `bs-spec probe` to discover nested tree selectors and extend AddLinkAsync.");
     }
 
     // ===== State reads =====

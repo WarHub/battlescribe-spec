@@ -3,7 +3,7 @@ using System.Net;
 using System.Text;
 using BattleScribeSpec.Roster;
 
-namespace BattleScribeSpec.Debugger;
+namespace BattleScribeSpec.Cli;
 
 /// <summary>
 /// Collects step data during a spec run and generates a self-contained HTML timeline report.

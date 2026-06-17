@@ -3,7 +3,7 @@
     Auto-formats spec YAML files to match SpecLintTests conventions.
 .DESCRIPTION
     Fixes auto-fixable formatting issues in all spec YAML files under specs/ (roster + gamedata).
-    Delegates to the bs-spec-debug --format command (SpecFormatter in BattleScribeSpec.TestKit).
+    Delegates to the `bs-spec format` command (SpecFormatter in BattleScribeSpec.TestKit).
 
     Formatting rules applied:
     - Removes trailing whitespace
@@ -26,7 +26,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
-$debuggerProject = Join-Path $repoRoot 'src' 'BattleScribeSpec.Debugger' 'BattleScribeSpec.Debugger.csproj'
+$cliProject = Join-Path $repoRoot 'src' 'BattleScribeSpec.Cli' 'BattleScribeSpec.Cli.csproj'
 $specsDir = Join-Path $repoRoot 'specs'
 
 if (-not (Test-Path $specsDir)) {
@@ -34,7 +34,7 @@ if (-not (Test-Path $specsDir)) {
     exit 1
 }
 
-$formatArgs = @('run', '--project', $debuggerProject, '--', '--format', $specsDir)
+$formatArgs = @('run', '--project', $cliProject, '--', 'format', $specsDir)
 if ($Check) {
     $formatArgs += '--check'
 }

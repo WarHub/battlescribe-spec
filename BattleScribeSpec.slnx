@@ -6,7 +6,7 @@
     <Project Path="src/BattleScribeSpec.ReferenceAdapter/BattleScribeSpec.ReferenceAdapter.csproj" />
     <Project Path="src/BattleScribeSpec.NewRecruit/BattleScribeSpec.NewRecruit.csproj" />
     <Project Path="src/BattleScribeSpec.NewRecruit.HarTool/BattleScribeSpec.NewRecruit.HarTool.csproj" />
-    <Project Path="src/BattleScribeSpec.Debugger/BattleScribeSpec.Debugger.csproj" />
+    <Project Path="src/BattleScribeSpec.Cli/BattleScribeSpec.Cli.csproj" />
     <Project Path="src/BattleScribeSpec.BsRosterUiDriver/BattleScribeSpec.BsRosterUiDriver.csproj" />
     <Project Path="src/BattleScribeSpec.NrRosterUiDriver/BattleScribeSpec.NrRosterUiDriver.csproj" />
     <Project Path="src/BattleScribeSpec.NrGameDataUiDriver/BattleScribeSpec.NrGameDataUiDriver.csproj" />
@@ -14,5 +14,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BattleScribeSpec.Tests.csproj" />
+    <Project Path="tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj" />
   </Folder>
 </Solution>

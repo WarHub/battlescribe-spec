@@ -1,9 +1,9 @@
 using WarHub.ArmouryModel.Source.BattleScribe;
 
-namespace BattleScribeSpec.Tests;
+namespace BattleScribeSpec.Cli.Tests;
 
 /// <summary>
-/// Tests for the --export-xml mode of the debugger CLI.
+/// Tests for the export-xml subcommand of the bs-spec CLI.
 /// Calls Program.RunAsync directly with args, verifying that XML files
 /// are generated correctly from spec setup data.
 /// </summary>
@@ -30,7 +30,7 @@ public sealed class ExportXmlTests : IDisposable
     {
         var specPath = FindSpec("cost/cost-hidden-limit-validation");
 
-        var exitCode = await Program.RunAsync("--export-xml", _outputDir, specPath);
+        var exitCode = await Program.RunAsync("export-xml", specPath, _outputDir);
 
         Assert.Equal(0, exitCode);
         var specDir = Path.Combine(_outputDir, "cost-hidden-limit-validation");
@@ -43,7 +43,7 @@ public sealed class ExportXmlTests : IDisposable
     {
         var specPath = FindSpec("cost/cost-hidden-limit-validation");
 
-        await Program.RunAsync("--export-xml", _outputDir, specPath);
+        await Program.RunAsync("export-xml", specPath, _outputDir);
 
         var gstXml = File.ReadAllText(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.gst"));
         Assert.Contains("<?xml", gstXml);
@@ -57,7 +57,7 @@ public sealed class ExportXmlTests : IDisposable
     {
         var specPath = FindSpec("cost/cost-hidden-limit-validation");
 
-        await Program.RunAsync("--export-xml", _outputDir, specPath);
+        await Program.RunAsync("export-xml", specPath, _outputDir);
 
         var catXml = File.ReadAllText(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.cat"));
         Assert.Contains("<?xml", catXml);
@@ -71,7 +71,7 @@ public sealed class ExportXmlTests : IDisposable
     {
         var specPath = FindSpec("cost/cost-hidden-limit-validation");
 
-        await Program.RunAsync("--export-xml", _outputDir, specPath);
+        await Program.RunAsync("export-xml", specPath, _outputDir);
 
         var gstXml = File.ReadAllText(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.gst"));
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(gstXml));
@@ -86,7 +86,7 @@ public sealed class ExportXmlTests : IDisposable
     {
         var specPath = FindSpec("cost/cost-hidden-limit-validation");
 
-        await Program.RunAsync("--export-xml", _outputDir, specPath);
+        await Program.RunAsync("export-xml", specPath, _outputDir);
 
         var catXml = File.ReadAllText(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.cat"));
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(catXml));
@@ -101,7 +101,7 @@ public sealed class ExportXmlTests : IDisposable
     {
         var specPath = FindSpec("protocol/protocol-kitchen-sink");
 
-        var exitCode = await Program.RunAsync("--export-xml", _outputDir, specPath);
+        var exitCode = await Program.RunAsync("export-xml", specPath, _outputDir);
 
         Assert.Equal(0, exitCode);
         var specDir = Path.Combine(_outputDir, "protocol-kitchen-sink");
@@ -112,12 +112,12 @@ public sealed class ExportXmlTests : IDisposable
     }
 
     [Fact]
-    public async Task ExportXml_DoesNotRequireEngine()
+    public async Task ExportXml_RequiresNoEngine()
     {
-        // --export-xml should exit before engine creation, even with an invalid engine name
+        // export-xml exposes no --engine/--ui options at all — it never touches an engine.
         var specPath = FindSpec("cost/cost-hidden-limit-validation");
 
-        var exitCode = await Program.RunAsync("--export-xml", _outputDir, "--engine", "nonexistent", specPath);
+        var exitCode = await Program.RunAsync("export-xml", specPath, _outputDir);
 
         Assert.Equal(0, exitCode);
         Assert.True(File.Exists(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.gst")));
@@ -129,7 +129,7 @@ public sealed class ExportXmlTests : IDisposable
         var nestedDir = Path.Combine(_outputDir, "nested", "subdir");
         var specPath = FindSpec("cost/cost-hidden-limit-validation");
 
-        var exitCode = await Program.RunAsync("--export-xml", nestedDir, specPath);
+        var exitCode = await Program.RunAsync("export-xml", specPath, nestedDir);
 
         Assert.Equal(0, exitCode);
         var specDir = Path.Combine(nestedDir, "cost-hidden-limit-validation");
@@ -138,14 +138,15 @@ public sealed class ExportXmlTests : IDisposable
     }
 
     [Fact]
-    public async Task ExportXml_AcceptsProbeFlag()
+    public async Task ExportXml_RejectsUnknownOptions()
     {
+        // Under subcommands, options that don't apply to export-xml (e.g. --engine, --probe)
+        // are parse errors rather than being silently ignored.
         var specPath = FindSpec("cost/cost-hidden-limit-validation");
 
-        var exitCode = await Program.RunAsync("--probe", "--export-xml", _outputDir, specPath);
+        var exitCode = await Program.RunAsync("export-xml", specPath, _outputDir, "--engine", "nonexistent");
 
-        Assert.Equal(0, exitCode);
-        Assert.True(File.Exists(Path.Combine(_outputDir, "cost-hidden-limit-validation", "cost-hidden-limit-validation.gst")));
+        Assert.NotEqual(0, exitCode);
     }
 
     private static string FindSpec(string specId)

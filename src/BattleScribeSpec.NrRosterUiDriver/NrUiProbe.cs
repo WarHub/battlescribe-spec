@@ -8,8 +8,8 @@ namespace BattleScribeSpec.NrRosterUiDriver;
 /// session with game data loaded, allowing ad-hoc DOM exploration and JS evaluation.
 /// Used for discovering UI element selectors and testing interaction patterns.
 ///
-/// Usage via Debugger:
-///   dotnet run --project src/BattleScribeSpec.Debugger -- --probe --engine nr-ui spec-id
+/// Usage via the CLI:
+///   dotnet run --project src/BattleScribeSpec.Cli -- probe --engine newrecruit --ui spec-id
 /// </summary>
 public sealed class NrUiProbe : IAsyncDisposable
 {
