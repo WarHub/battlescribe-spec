@@ -1,0 +1,25 @@
+id: no-errors-clean-state
+category: validation
+description: >
+  A structurally valid game system and catalogue produce no validation errors.
+  Exercises the engine error list with an empty-expected assertion.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+
+steps:
+  - expectedState:
+      errors: []

@@ -192,6 +192,11 @@ public sealed class GameDataRunner
 
     private void AssertExpectedState(GameDataExpectedStateDef expected, int stepIndex)
     {
+        if (expected.Errors is { } expectedErrors)
+        {
+            AssertErrors(stepIndex, expectedErrors);
+        }
+
         var state = _engine.GetState();
 
         if (expected.GameSystem is { } expectedGs)
@@ -223,6 +228,38 @@ public sealed class GameDataRunner
                 }
 
                 AssertCatalogue(stepIndex, ec, actual);
+            }
+        }
+    }
+
+    private void AssertErrors(int stepIndex, List<ExpectedErrorDef> expected)
+    {
+        var actual = _engine.GetValidationErrors();
+
+        // Empty expected list = assert no validation errors.
+        if (expected.Count == 0)
+        {
+            if (actual.Count > 0)
+            {
+                _errors.Add($"Step {stepIndex}: expected no validation errors but got {actual.Count}: " +
+                    $"[{string.Join("; ", actual.Select(e => e.Message))}]");
+            }
+
+            return;
+        }
+
+        foreach (var ee in expected)
+        {
+            var match = actual.FirstOrDefault(a =>
+                (ee.Message is null || (a.Message ?? "").Contains(ee.Message, StringComparison.OrdinalIgnoreCase))
+                && (ee.EntryId is null || a.EntryId == ee.EntryId)
+                && (ee.ConstraintId is null || a.ConstraintId == ee.ConstraintId));
+
+            if (match is null)
+            {
+                _errors.Add($"Step {stepIndex}: expected validation error (message~'{ee.Message}', " +
+                    $"entryId={ee.EntryId}, constraintId={ee.ConstraintId}) not found. " +
+                    $"Actual: [{string.Join("; ", actual.Select(e => e.Message))}]");
             }
         }
     }

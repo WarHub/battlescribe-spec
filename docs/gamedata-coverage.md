@@ -107,6 +107,18 @@ name ✅ · revision ✅ · battleScribeVersion ✅ · authorName ✅ · authorC
 > Root metadata is asserted via a generic `fields:` map on `gameSystem:` / catalogue entries
 > (added to the state records + runner in this work).
 
+## Validation errors  (`validation/…`)
+Specs can assert the editor's validation error list via an `errors:` key on `expectedState`
+(empty list = expect no errors; entries match error messages as case-insensitive substrings).
+- `validation/no-errors-clean-state` — a valid system/catalogue reports no errors.
+- `validation/error-broken-entry-link` — a dangling entry-link target is flagged
+  ("EntryLink must have a target that exists").
+
+The **battlescribe-ui** engine reads the Data Editor's real error list (via the data
+manager's error method). The in-process reference engine does not surface data-model
+validation (the BattleScribe validator is obfuscated/not reliably constructible), so it
+checks structure only; error assertions use a `battlescribe-ui` engine override.
+
 ## BS Data Editor UI surface notes (from probing)
 - **Category links attach to force entries only** — `actAddCategoryLink` is a no-op unless a
   ForceEntry is selected (verified in the decompiled controller). Spec covers it on a force entry.

@@ -75,6 +75,7 @@ public class DataEditorActions {
         if ("gamedataSetCharacteristicAction".equals(method)) return setCharacteristic(p);
         if ("gamedataAddLinkAction".equals(method))     return addLink(p);
         if ("gamedataGetDataState".equals(method))      return getDataState(p);
+        if ("gamedataGetErrors".equals(method))         return getErrors(p);
         throw new IllegalArgumentException("Unknown gamedata action: " + method);
     }
 
@@ -416,6 +417,42 @@ public class DataEditorActions {
             state.add("gameSystem", buildGameSystemJson(root));
             state.add("catalogues", new JsonArray());
         }
+        return state.toString();
+    }
+
+    /**
+     * Read the Data Editor's validation error list. The window controller exposes the data
+     * manager via getDataManager(); its {@code a(boolean)} method returns the list of error
+     * objects (net.battlescribe.engine.b.a), each of which is INamed — getName() is the message.
+     */
+    @SuppressWarnings("unchecked")
+    private String getErrors(JsonObject params) {
+        Object ctrl = findController();
+        Object dm = tryInvoke(ctrl, "getDataManager");
+
+        JsonArray arr = new JsonArray();
+        if (dm != null) {
+            List<Object> errs = new ArrayList<>();
+            try {
+                Object raw = dm.getClass().getMethod("a", boolean.class).invoke(dm, true);
+                if (raw instanceof java.util.Collection) {
+                    errs.addAll((java.util.Collection<Object>) raw);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Data Editor error-list method (getDataManager().a(boolean)) failed", e);
+            }
+            for (Object er : errs) {
+                if (er == null) continue;
+                JsonObject o = new JsonObject();
+                String msg = tryStr(er, "getName");
+                if (msg == null || msg.isEmpty()) msg = er.toString();
+                o.addProperty("message", msg);
+                arr.add(o);
+            }
+        }
+
+        JsonObject state = new JsonObject();
+        state.add("errors", arr);
         return state.toString();
     }
 

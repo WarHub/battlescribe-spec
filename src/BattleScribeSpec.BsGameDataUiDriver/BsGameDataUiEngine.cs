@@ -125,7 +125,32 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         => RunAsync(GetStateAsync);
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
-        => [];
+        => RunAsync(GetErrorsAsync);
+
+    private async Task<IReadOnlyList<ValidationErrorState>> GetErrorsAsync()
+    {
+        ThrowIfDisposed();
+        EnsureSetup();
+
+        var result = await ConnectedClient.CallAsync("gamedataGetErrors");
+        if (result is null)
+        {
+            return [];
+        }
+
+        var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(result.ToJsonString(), JsonOptions);
+        var list = new List<ValidationErrorState>();
+        if (raw is not null && raw.TryGetValue("errors", out var errElem) && errElem.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var e in errElem.EnumerateArray())
+            {
+                var msg = e.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
+                list.Add(new ValidationErrorState(msg));
+            }
+        }
+
+        return list;
+    }
 
     public void Cleanup()
         => RunAsync(() => CleanupAsync());

@@ -186,6 +186,70 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         };
     }
 
+    public IReadOnlyList<Roster.ValidationErrorState> GetValidationErrors()
+    {
+        // Validation lives in the BattleScribe data manager (net.battlescribe.engine.a.e),
+        // the same one the Data Editor uses. Construct it reflectively, load the data, and
+        // read its error list. Defensive: any failure (obfuscation drift) yields no errors.
+        try
+        {
+            if (_gameSystem is null)
+            {
+                return [];
+            }
+
+            var dmType = java.lang.Class.forName("net.battlescribe.engine.a.e");
+            var ctor = dmType.getConstructors().FirstOrDefault(c => c.getParameterCount() == 3);
+            if (ctor is null)
+            {
+                return [];
+            }
+
+            var enumD = java.lang.Class.forName("net.battlescribe.engine.constants.a.e").getField("d").get(null);
+            var depB = java.lang.Class.forName("net.battlescribe.a.c.f").getDeclaredConstructor().newInstance();
+            var depE = java.lang.Class.forName("net.battlescribe.engine.b.e").getDeclaredConstructor().newInstance();
+            var dm = ctor.newInstance([enumD, depB, depE]);
+
+            var cats = new java.util.ArrayList();
+            if (_catalogue is not null)
+            {
+                cats.add(_catalogue);
+            }
+
+            // load: b(GameSystem, Collection<Catalogue>, boolean)
+            var loadMethod = dmType.getMethod("b",
+                java.lang.Class.forName("net.battlescribe.model.data.GameSystem"),
+                java.lang.Class.forName("java.util.Collection"),
+                java.lang.Boolean.TYPE);
+            loadMethod.invoke(dm, [_gameSystem, cats, java.lang.Boolean.FALSE]);
+
+            // a(boolean) → List of error objects; each is INamed (getName() = message).
+            var errMethod = dmType.getMethod("a", java.lang.Boolean.TYPE);
+            var raw = errMethod.invoke(dm, [java.lang.Boolean.TRUE]);
+            if (raw is not JavaList list)
+            {
+                return [];
+            }
+
+            var result = new List<Roster.ValidationErrorState>();
+            var iter = list.iterator();
+            while (iter.hasNext())
+            {
+                var err = iter.next();
+                var msg = err?.GetType().GetMethod("getName")?.Invoke(err, null)?.ToString()
+                    ?? err?.ToString() ?? "";
+                result.Add(new Roster.ValidationErrorState(msg));
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[bs-gamedata] validation unavailable: {ex.Message}");
+            return [];
+        }
+    }
+
     public void Dispose()
     {
         _entriesById.Clear();

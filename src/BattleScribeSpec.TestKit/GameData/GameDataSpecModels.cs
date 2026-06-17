@@ -121,6 +121,14 @@ public sealed class GameDataExpectedStateDef
     public ExpectedGameSystemDataDef? GameSystem { get; set; }
 
     /// <summary>
+    /// Expected validation errors. When set (even to an empty list), the engine's current
+    /// validation errors are asserted: an empty list means "expect no errors"; a non-empty
+    /// list means each expected error must be present (partial match). When null, errors are
+    /// not checked.
+    /// </summary>
+    public List<ExpectedErrorDef>? Errors { get; set; }
+
+    /// <summary>
     /// Per-engine overrides (same pattern as roster ExpectedStateDef).
     /// </summary>
     public Dictionary<string, GameDataExpectedStateDef>? Engines { get; set; }
@@ -139,8 +147,20 @@ public sealed class GameDataExpectedStateDef
         {
             Catalogues = over.Catalogues ?? Catalogues,
             GameSystem = over.GameSystem ?? GameSystem,
+            Errors = over.Errors ?? Errors,
         };
     }
+}
+
+/// <summary>
+/// Expected validation error matcher. <see cref="Message"/> is matched as a
+/// case-insensitive substring; the id fields, when set, must match exactly.
+/// </summary>
+public sealed class ExpectedErrorDef
+{
+    public string? Message { get; set; }
+    public string? EntryId { get; set; }
+    public string? ConstraintId { get; set; }
 }
 
 /// <summary>
