@@ -148,6 +148,20 @@ public sealed class GameDataRunner
                     _exprResolver.Resolve(step.Value));
                 break;
 
+            case "setCost":
+                _engine.SetCost(
+                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setCost requires entryId"),
+                    _exprResolver.Resolve(step.Field) ?? throw new InvalidOperationException($"Step {stepIndex}: setCost requires field (cost type id)"),
+                    _exprResolver.Resolve(step.Value));
+                break;
+
+            case "setCharacteristic":
+                _engine.SetCharacteristic(
+                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setCharacteristic requires entryId"),
+                    _exprResolver.Resolve(step.Field) ?? throw new InvalidOperationException($"Step {stepIndex}: setCharacteristic requires field (characteristic name or type id)"),
+                    _exprResolver.Resolve(step.Value));
+                break;
+
             case "addLink":
                 outputs = _engine.AddLink(
                     parentId ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires parentId"),

@@ -1,0 +1,69 @@
+id: profile-create-with-characteristics
+category: profile
+description: >
+  Add a profile to a selection entry, assign its profile type, and set characteristic
+  values via setCharacteristic. Verifies the profile's typeId and characteristic values
+  are persisted.
+
+# battlescribe-ui skip is W3 debt (setCharacteristic not yet in the Java agent).
+# newrecruit engines lack setCharacteristic support.
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    profileTypes:
+      - id: pt-unit
+        name: Unit
+        characteristicTypes:
+          - id: ct-m
+            name: M
+          - id: ct-t
+            name: T
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-profile
+    parentId: se-1
+    entryType: profile
+    name: Marine
+
+  - action: setField
+    entryId: ${{ steps.add-profile.entryId }}
+    field: typeId
+    value: pt-unit
+
+  - action: setCharacteristic
+    entryId: ${{ steps.add-profile.entryId }}
+    field: M
+    value: "6"
+
+  - action: setCharacteristic
+    entryId: ${{ steps.add-profile.entryId }}
+    field: T
+    value: "4"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - name: Marine
+                  entryType: profile
+                  fields:
+                    typeId: pt-unit
+                    char:M: "6"
+                    char:T: "4"

@@ -92,6 +92,54 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         SetFieldOnObject(entry, field, value);
     }
 
+    public void SetCost(string entryId, string costTypeId, string? value)
+    {
+        var entry = FindById(entryId)
+            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+
+        var costs = GetList(entry, "getCosts")
+            ?? throw new InvalidOperationException($"Entry {entryId} has no costs container");
+
+        var amount = double.TryParse(value, out var d) ? d : 0.0;
+
+        // Find an existing cost for this type, else create one.
+        for (var i = 0; i < costs.size(); i++)
+        {
+            var cost = costs.get(i);
+            if (cost.GetType().GetMethod("getTypeId")?.Invoke(cost, null)?.ToString() == costTypeId)
+            {
+                ((Cost)cost).setValue(amount);
+                return;
+            }
+        }
+
+        costs.add(JavaModelFactory.CreateCost(costTypeId, costTypeId, (decimal)amount));
+    }
+
+    public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
+    {
+        var entry = FindById(entryId)
+            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+
+        var chars = GetList(entry, "getCharacteristics")
+            ?? throw new InvalidOperationException($"Entry {entryId} has no characteristics container (not a profile?)");
+
+        // Match by characteristic name or typeId, else create a new one keyed by name.
+        for (var i = 0; i < chars.size(); i++)
+        {
+            var ch = chars.get(i);
+            var chName = ch.GetType().GetMethod("getName")?.Invoke(ch, null)?.ToString();
+            var chTypeId = ch.GetType().GetMethod("getTypeId")?.Invoke(ch, null)?.ToString();
+            if (chName == nameOrTypeId || chTypeId == nameOrTypeId)
+            {
+                ((Characteristic)ch).setValue(value ?? "");
+                return;
+            }
+        }
+
+        chars.add(JavaModelFactory.CreateCharacteristic(nameOrTypeId, "", value ?? ""));
+    }
+
     public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
     {
         var parent = FindById(parentId)
@@ -577,8 +625,44 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             "entryLink" => AddNewEntryLink(parent, id, name),
             "forceEntry" => AddNewForceEntry(parent, id, name),
             "categoryEntry" => AddNewCategoryEntry(parent, id, name),
+            // ── Shared root containers ──────────────────────────────────────
+            "sharedSelectionEntry" => AddTo(parent, "sharedSelectionEntry", JavaModelFactory.CreateSelectionEntry(id, name, "upgrade")),
+            "sharedSelectionEntryGroup" => AddTo(parent, "sharedSelectionEntryGroup", JavaModelFactory.CreateSelectionEntryGroup(id, name)),
+            "sharedRule" => AddTo(parent, "sharedRule", JavaModelFactory.CreateRule(id, name, "")),
+            "sharedProfile" => AddTo(parent, "sharedProfile", JavaModelFactory.CreateProfile(id, name, "", "")),
+            "sharedInfoGroup" => AddTo(parent, "sharedInfoGroup", JavaModelFactory.CreateInfoGroup(id, name)),
+            // ── Info content ────────────────────────────────────────────────
+            "infoGroup" => AddTo(parent, "infoGroup", JavaModelFactory.CreateInfoGroup(id, name)),
+            "infoLink" => AddTo(parent, "infoLink", JavaModelFactory.CreateInfoLink(id, name, "", "profile")),
+            "categoryLink" => AddTo(parent, "categoryLink", JavaModelFactory.CreateCategoryLink(id, "", name)),
+            "catalogueLink" => AddTo(parent, "catalogueLink", JavaModelFactory.CreateCatalogueLink(id, name, "")),
+            // ── Constraints / modifiers / queries (id-less except constraint) ─
+            "constraint" => AddTo(parent, "constraint", JavaModelFactory.CreateConstraint(id, "min", 0m, "selections", "parent")),
+            "modifier" => AddTo(parent, "modifier", JavaModelFactory.CreateModifier("set", "name", "")),
+            "modifierGroup" => AddTo(parent, "modifierGroup", JavaModelFactory.CreateModifierGroup()),
+            "condition" => AddTo(parent, "condition", JavaModelFactory.CreateCondition("atLeast", 0m, "selections", "parent")),
+            "conditionGroup" => AddTo(parent, "conditionGroup", JavaModelFactory.CreateConditionGroup("and")),
+            "repeat" => AddTo(parent, "repeat", JavaModelFactory.CreateRepeat()),
+            // ── Type definitions (root only) ────────────────────────────────
+            "costType" => AddTo(parent, "costType", JavaModelFactory.CreateCostType(id, name)),
+            "profileType" => AddTo(parent, "profileType", JavaModelFactory.CreateProfileType(id, name)),
+            "characteristicType" => AddTo(parent, "characteristicType", JavaModelFactory.CreateCharacteristicType(id, name)),
+            "publication" => AddTo(parent, "publication", JavaModelFactory.CreatePublication(id, name)),
             _ => throw new InvalidOperationException($"Unsupported entry type for AddEntry: {entryType}"),
         };
+    }
+
+    /// <summary>
+    /// Add a freshly-created Java model object to the container resolved for
+    /// <paramref name="containerKey"/> on <paramref name="parent"/>, returning the object.
+    /// </summary>
+    private static object AddTo(object parent, string containerKey, object created)
+    {
+        var container = GetContainerList(parent, containerKey)
+            ?? throw new InvalidOperationException(
+                $"No suitable container for '{containerKey}' on parent {parent.GetType().Name}");
+        container.add(created);
+        return created;
     }
 
     private static SelectionEntry AddNewSelectionEntry(object parent, string id, string name)
@@ -662,6 +746,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         {
             "selectionEntry" => GetList(parent, "getSelectionEntries"),
             "selectionEntryGroup" => GetList(parent, "getSelectionEntryGroups"),
+            "sharedSelectionEntry" => GetList(parent, "getSharedSelectionEntries"),
             "sharedSelectionEntryGroup" => GetList(parent, "getSharedSelectionEntryGroups"),
             "entryLink" => GetList(parent, "getEntryLinks"),
             "rule" => GetList(parent, "getRules"),
@@ -669,13 +754,22 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             "profile" => GetList(parent, "getProfiles"),
             "sharedProfile" => GetList(parent, "getSharedProfiles"),
             "infoLink" => GetList(parent, "getInfoLinks"),
+            "infoGroup" => GetList(parent, "getInfoGroups"),
+            "sharedInfoGroup" => GetList(parent, "getSharedInfoGroups"),
             "categoryLink" => GetList(parent, "getCategoryLinks"),
+            "catalogueLink" => GetList(parent, "getCatalogueLinks"),
             "forceEntry" => GetList(parent, "getForceEntries"),
             "categoryEntry" => GetList(parent, "getCategoryEntries"),
             "constraint" => GetList(parent, "getConstraints"),
             "modifier" => GetList(parent, "getModifiers"),
             "modifierGroup" => GetList(parent, "getModifierGroups"),
-            "infoGroup" => GetList(parent, "getInfoGroups"),
+            "condition" => GetList(parent, "getConditions"),
+            "conditionGroup" => GetList(parent, "getConditionGroups"),
+            "repeat" => GetList(parent, "getRepeats"),
+            "costType" => GetList(parent, "getCostTypes"),
+            "profileType" => GetList(parent, "getProfileTypes"),
+            "characteristicType" => GetList(parent, "getCharacteristicTypes"),
+            "publication" => GetList(parent, "getPublications"),
             _ => null,
         };
     }
@@ -937,15 +1031,46 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         AddChildren(children, entry, "getForceEntries", "forceEntry");
         AddChildren(children, entry, "getCategoryEntries", "categoryEntry");
 
-        // Collect type-specific fields
+        // Collect type-specific fields. Only non-empty values are emitted, so a given
+        // entry surfaces just the fields meaningful to its type.
         var fields = new Dictionary<string, string?>();
         TryAddField(fields, entry, "getType", "type");
         TryAddField(fields, entry, "getTargetId", "targetId");
         TryAddField(fields, entry, "getPublicationId", "publicationId");
         TryAddField(fields, entry, "getPage", "page");
-        TryAddBoolField(fields, entry, "isCollective", "collective");
-        TryAddBoolField(fields, entry, "isImported", "imported");
+        TryAddBoolField(fields, entry, "collective");
+        TryAddBoolField(fields, entry, "imported");
         TryAddField(fields, entry, "getDefaultSelectionEntryId", "defaultSelectionEntryId");
+
+        // Query / modifier / repeat fields (constraint, modifier, condition, repeat, group)
+        TryAddNumField(fields, entry, "getValue", "value");
+        TryAddField(fields, entry, "getField", "field");
+        TryAddField(fields, entry, "getScope", "scope");
+        TryAddField(fields, entry, "getChildId", "childId");
+        TryAddBoolField(fields, entry, "shared");
+        TryAddBoolField(fields, entry, "percentValue");
+        TryAddBoolField(fields, entry, "includeChildSelections");
+        TryAddBoolField(fields, entry, "includeChildForces");
+        TryAddNumField(fields, entry, "getRepeats", "repeats");
+        TryAddBoolField(fields, entry, "roundUp");
+
+        // Type/description/publication metadata
+        TryAddField(fields, entry, "getTypeId", "typeId");
+        TryAddField(fields, entry, "getTypeName", "typeName");
+        TryAddField(fields, entry, "getDescription", "description");
+        TryAddNumField(fields, entry, "getDefaultCostLimit", "defaultCostLimit");
+        TryAddBoolField(fields, entry, "primary");
+        TryAddBoolField(fields, entry, "importRootEntries");
+        TryAddField(fields, entry, "getShortName", "shortName");
+        TryAddField(fields, entry, "getPublisher", "publisher");
+        TryAddField(fields, entry, "getPublicationDate", "publicationDate");
+        TryAddField(fields, entry, "getPublisherUrl", "publisherUrl");
+
+        // Costs and characteristics are values keyed by type — surface them as
+        // composite fields ("cost:<typeId>", "char:<name>") so they can be asserted
+        // without polluting the children list / child counts.
+        AddCostFields(fields, entry);
+        AddCharacteristicFields(fields, entry);
 
         return new DataEntryState
         {
@@ -989,22 +1114,111 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         }
     }
 
-    private static void TryAddBoolField(Dictionary<string, string?> fields, object entry, string getter, string key)
+    /// <summary>
+    /// Add a boolean field, probing both the <c>is*</c> and <c>get*</c> getter forms
+    /// derived from <paramref name="key"/> (BattleScribe is inconsistent across types).
+    /// Only emits the field when a getter exists and returns a Boolean.
+    /// </summary>
+    private static void TryAddBoolField(Dictionary<string, string?> fields, object entry, string key)
+    {
+        var cap = char.ToUpperInvariant(key[0]) + key[1..];
+        foreach (var getter in new[] { "is" + cap, "get" + cap })
+        {
+            var method = entry.GetType().GetMethod(getter);
+            if (method == null)
+            {
+                continue;
+            }
+
+            var result = method.Invoke(entry, null);
+            if (result is true)
+            {
+                fields[key] = "true";
+                return;
+            }
+
+            if (result is false)
+            {
+                fields[key] = "false";
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Add a numeric field, formatting whole doubles without a trailing ".0"
+    /// (BattleScribe stores values as doubles, but specs read "2" not "2.0").
+    /// </summary>
+    private static void TryAddNumField(Dictionary<string, string?> fields, object entry, string getter, string key)
     {
         var method = entry.GetType().GetMethod(getter);
-        if (method == null)
+        var raw = method?.Invoke(entry, null);
+        if (raw is null)
         {
             return;
         }
 
-        var result = method.Invoke(entry, null);
-        if (result is true)
+        // Skip non-numeric returns (e.g. Modifier.getValue() returns a String — handled by getValue caller order).
+        if (raw is double d)
         {
-            fields[key] = "true";
+            fields[key] = FormatNum(d);
         }
-        else if (result is false)
+        else if (raw is int i)
         {
-            fields[key] = "false";
+            fields[key] = i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            var s = raw.ToString();
+            if (!string.IsNullOrEmpty(s))
+            {
+                fields[key] = s;
+            }
+        }
+    }
+
+    private static string FormatNum(double d) =>
+        d == Math.Floor(d) && !double.IsInfinity(d)
+            ? ((long)d).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static void AddCostFields(Dictionary<string, string?> fields, object entry)
+    {
+        var costs = GetList(entry, "getCosts");
+        if (costs == null)
+        {
+            return;
+        }
+
+        for (var i = 0; i < costs.size(); i++)
+        {
+            var cost = costs.get(i);
+            var typeId = cost.GetType().GetMethod("getTypeId")?.Invoke(cost, null)?.ToString();
+            var value = cost.GetType().GetMethod("getValue")?.Invoke(cost, null);
+            if (!string.IsNullOrEmpty(typeId) && value is double dv)
+            {
+                fields[$"cost:{typeId}"] = FormatNum(dv);
+            }
+        }
+    }
+
+    private static void AddCharacteristicFields(Dictionary<string, string?> fields, object entry)
+    {
+        var chars = GetList(entry, "getCharacteristics");
+        if (chars == null)
+        {
+            return;
+        }
+
+        for (var i = 0; i < chars.size(); i++)
+        {
+            var ch = chars.get(i);
+            var name = ch.GetType().GetMethod("getName")?.Invoke(ch, null)?.ToString();
+            var value = ch.GetType().GetMethod("getValue")?.Invoke(ch, null)?.ToString();
+            if (!string.IsNullOrEmpty(name))
+            {
+                fields[$"char:{name}"] = value ?? "";
+            }
         }
     }
 

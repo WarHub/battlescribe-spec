@@ -164,7 +164,7 @@ public sealed class GameDataSpecLintTests
     private static readonly HashSet<string> KnownActions =
     [
         "addEntry", "removeEntry",
-        "setField", "addLink",
+        "setField", "setCost", "setCharacteristic", "addLink",
         "dump"
     ];
 
@@ -244,14 +244,16 @@ public sealed class GameDataSpecLintTests
 
                     break;
                 case "setField":
+                case "setCost":
+                case "setCharacteristic":
                     if (step.EntryId is null)
                     {
-                        yield return $"step {i + 1}: setField requires 'entryId'";
+                        yield return $"step {i + 1}: {step.Action} requires 'entryId'";
                     }
 
                     if (step.Field is null)
                     {
-                        yield return $"step {i + 1}: setField requires 'field'";
+                        yield return $"step {i + 1}: {step.Action} requires 'field'";
                     }
 
                     break;
