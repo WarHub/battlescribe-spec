@@ -115,6 +115,17 @@ name ✅ · revision ✅ · battleScribeVersion ✅ · authorName ✅ · authorC
 - **characteristicType** creation is a ProfileType edit-panel sub-controller op — not yet driven by
   the agent; covered in-process only.
 
+## Remaining toward literal 100% (lower-value / deferred)
+- **Needs a TestKit state extension** (no container on the state record yet): `sharedInfoGroup`,
+  `catalogueLink` (cross-catalogue/library).
+- **BS Data Editor UI panel automation** (not the main tree controller): `characteristicType`
+  creation (ProfileType edit-panel) — covered in-process only.
+- **UI control quirks**: `infoLink.type` and `entryLink.type` retarget via a combo that can pop a
+  blocking picker — covered via targetId/default type instead.
+- **Misc edge fields**: `Cost.hidden` (costs are set by value via setCost, not as entries),
+  `Profile.typeName` (the editor auto-assigns from the profile type), `ForceEntry` constraints,
+  `CategoryLink` name/hidden, `InfoGroup` hidden, list-modifier types (category add/remove).
+
 ## Tracked debt
 - **W3 (BS Data Editor UI agent): done.** `setCost`/`setCharacteristic` dispatch + the expanded
   `buildEntryJson` field serialization are implemented and verified; the three sample specs pass
