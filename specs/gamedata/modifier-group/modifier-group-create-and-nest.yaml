@@ -1,0 +1,70 @@
+id: modifier-group-create-and-nest
+category: modifier-group
+description: >
+  Add a modifier group to a selection entry, then nest a modifier and a shared
+  condition inside it. Verifies modifier-group creation and that modifiers/conditions
+  can be created within it.
+
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-mg
+    parentId: se-1
+    entryType: modifierGroup
+
+  - action: addEntry
+    id: add-mod
+    parentId: ${{ steps.add-mg.entryId }}
+    entryType: modifier
+
+  - action: setField
+    entryId: ${{ steps.add-mod.entryId }}
+    field: field
+    value: hidden
+
+  - action: addEntry
+    id: add-cond
+    parentId: ${{ steps.add-mg.entryId }}
+    entryType: condition
+
+  - action: setField
+    entryId: ${{ steps.add-cond.entryId }}
+    field: type
+    value: atLeast
+
+  - action: setField
+    entryId: ${{ steps.add-cond.entryId }}
+    field: value
+    value: "1"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifierGroup
+                  children:
+                    - entryType: modifier
+                      fields:
+                        field: hidden
+                    - entryType: condition
+                      fields:
+                        type: atLeast
+                        value: "1"

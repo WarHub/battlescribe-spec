@@ -128,58 +128,16 @@ public class DataEditorActions {
 
         boolean parentIsRoot = runOnFxGet(() -> isRootEntry(parentItem.getValue()));
         String addMethod = actAddMethodName(entryType, parentIsRoot);
-
-        // Id-less entries (modifier/condition/repeat/groups) can't be detected via a new
-        // tree id — diff the parent's model child-list instead and track by identity.
-        if (isIdLessType(entryType)) {
-            return addIdLessEntry(ctrl, parentItem, entryType, addMethod, name);
-        }
-
-        // Snapshot the full tree — the tree may have container nodes with no IDs,
-        // and may be rebuilt after the add operation, making parentItem stale.
-        Set<String> before = runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot()));
-        runOnFx(() -> selectItem(ctrl, parentItem));
-        sleep(500);
-        runOnFx(() -> invokeCtrl(ctrl, addMethod));
-
-        String newId = waitForNewIdInTree(ctrl, before);
-        if (name != null) setFieldOnEntry(ctrl, newId, "name", name);
-
-        JsonObject result = new JsonObject();
-        result.addProperty("entryId", newId);
-        return result.toString();
-    }
-
-    private static final Set<String> ID_LESS_TYPES = new HashSet<>(java.util.Arrays.asList(
-            "modifier", "modifierGroup", "condition", "conditionGroup", "repeat"));
-
-    private static boolean isIdLessType(String entryType) {
-        return ID_LESS_TYPES.contains(entryType);
-    }
-
-    private static String idLessChildGetter(String entryType) {
-        switch (entryType) {
-            case "modifier":       return "getModifiers";
-            case "modifierGroup":  return "getModifierGroups";
-            case "condition":      return "getConditions";
-            case "conditionGroup": return "getConditionGroups";
-            case "repeat":         return "getRepeats";
-            default: throw new RuntimeException("Not an id-less type: " + entryType);
-        }
-    }
-
-    /**
-     * Add an id-less entry by selecting the parent tree node, invoking the controller's
-     * add method, then detecting the new element appended to the parent's model child-list.
-     * The new object is tracked by a synthetic UUID for later setField/remove.
-     */
-    private String addIdLessEntry(Object ctrl, TreeItem<Object> parentItem,
-                                  String entryType, String addMethod, String name) {
         Object parentModel = parentItem.getValue();
-        String getter = idLessChildGetter(entryType);
+        String getter = addContainerGetter(entryType, parentIsRoot);
 
+        // Detect the new entry by diffing the parent's model child-list rather than scanning
+        // the tree for a new id. This works uniformly for id-bearing entries, id-less entries
+        // (modifier/condition/repeat/groups), and entries that aren't rendered as tree nodes
+        // (e.g. category links). Id-bearing entries return their real id; id-less entries get
+        // a synthetic UUID tracked by identity for later setField/remove.
         List<Object> before = new ArrayList<>();
-        List<Object> beforeList = getList(parentModel, getter);
+        List<Object> beforeList = runOnFxGet(() -> getList(parentModel, getter));
         if (beforeList != null) before.addAll(beforeList);
 
         runOnFx(() -> selectItem(ctrl, parentItem));
@@ -189,7 +147,7 @@ public class DataEditorActions {
         Object newObj = null;
         long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
-            List<Object> after = getList(parentModel, getter);
+            List<Object> after = runOnFxGet(() -> getList(parentModel, getter));
             if (after != null && after.size() > before.size()) {
                 for (Object o : after) {
                     if (!containsIdentity(before, o)) { newObj = o; break; }
@@ -203,15 +161,57 @@ public class DataEditorActions {
             throw new RuntimeException("No new " + entryType + " appeared on parent " + getter + "()");
         }
 
-        String id = java.util.UUID.randomUUID().toString();
-        idLessEntries.put(id, newObj);
+        String id = getId(newObj);
+        if (id == null || id.isEmpty()) {
+            id = java.util.UUID.randomUUID().toString();
+            idLessEntries.put(id, newObj);
+        }
         if (name != null) {
-            try { setStr(newObj, "setName", name); } catch (Exception ignored) {}
+            final Object created = newObj;
+            runOnFx(() -> { try { setStr(created, "setName", name); } catch (Exception ignored) {} });
         }
 
         JsonObject result = new JsonObject();
         result.addProperty("entryId", id);
         return result.toString();
+    }
+
+    /** Parent model container getter for a newly added entry of the given type. */
+    private static String addContainerGetter(String entryType, boolean parentIsRoot) {
+        if (parentIsRoot) {
+            // At a game-system / catalogue root, groups and profiles go to shared containers.
+            if ("selectionEntryGroup".equals(entryType)) return "getSharedSelectionEntryGroups";
+            if ("profile".equals(entryType))             return "getSharedProfiles";
+        }
+        switch (entryType) {
+            case "selectionEntry":             return "getSelectionEntries";
+            case "selectionEntryGroup":        return "getSelectionEntryGroups";
+            case "sharedSelectionEntry":       return "getSharedSelectionEntries";
+            case "sharedSelectionEntryGroup":  return "getSharedSelectionEntryGroups";
+            case "sharedRule":                 return "getSharedRules";
+            case "sharedProfile":              return "getSharedProfiles";
+            case "sharedInfoGroup":            return "getSharedInfoGroups";
+            case "entryLink":                  return "getEntryLinks";
+            case "rule":                       return "getRules";
+            case "profile":                    return "getProfiles";
+            case "infoLink":                   return "getInfoLinks";
+            case "infoGroup":                  return "getInfoGroups";
+            case "categoryLink":               return "getCategoryLinks";
+            case "catalogueLink":              return "getCatalogueLinks";
+            case "forceEntry":                 return "getForceEntries";
+            case "categoryEntry":              return "getCategoryEntries";
+            case "constraint":                 return "getConstraints";
+            case "modifier":                   return "getModifiers";
+            case "modifierGroup":              return "getModifierGroups";
+            case "condition":                  return "getConditions";
+            case "conditionGroup":             return "getConditionGroups";
+            case "repeat":                     return "getRepeats";
+            case "costType":                   return "getCostTypes";
+            case "profileType":                return "getProfileTypes";
+            case "characteristicType":         return "getCharacteristicTypes";
+            case "publication":                return "getPublications";
+            default: throw new RuntimeException("Unknown container for entry type: " + entryType);
+        }
     }
 
     private static boolean containsIdentity(List<Object> list, Object o) {
@@ -346,14 +346,46 @@ public class DataEditorActions {
         TreeItem<Object> parentItem = runOnFxGet(() -> findTreeItemById(ctrl, parentId));
         if (parentItem == null) throw new RuntimeException("Parent tree item not found: " + parentId);
 
-        Set<String> before = runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot()));
+        Object parentModel = parentItem.getValue();
+        boolean parentIsRoot = runOnFxGet(() -> isRootEntry(parentModel));
         String addMethod = actAddMethodName(linkType);
+        String getter = addContainerGetter(linkType, parentIsRoot);
+
+        List<Object> before = new ArrayList<>();
+        List<Object> beforeList = runOnFxGet(() -> getList(parentModel, getter));
+        if (beforeList != null) before.addAll(beforeList);
+
         runOnFx(() -> selectItem(ctrl, parentItem));
         sleep(500);
         runOnFx(() -> invokeCtrl(ctrl, addMethod));
 
-        String linkId = waitForNewIdInTree(ctrl, before);
-        setFieldOnEntry(ctrl, linkId, "targetId", targetId);
+        Object newObj = null;
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            List<Object> after = runOnFxGet(() -> getList(parentModel, getter));
+            if (after != null && after.size() > before.size()) {
+                for (Object o : after) {
+                    if (!containsIdentity(before, o)) { newObj = o; break; }
+                }
+                if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
+                if (newObj != null) break;
+            }
+            sleep(POLL_MS);
+        }
+        if (newObj == null) {
+            throw new RuntimeException("No new " + linkType + " appeared on parent " + getter + "()");
+        }
+
+        // Set the target directly on the model — link targets are chosen via a picker in the
+        // UI, which is awkward to drive; the model is what getDataState reads back.
+        final Object link = newObj;
+        runOnFx(() -> setStr(link, "setTargetId", targetId));
+
+        String linkId = getId(newObj);
+        if (linkId == null || linkId.isEmpty()) {
+            linkId = java.util.UUID.randomUUID().toString();
+            idLessEntries.put(linkId, newObj);
+        }
 
         JsonObject result = new JsonObject();
         result.addProperty("entryId", linkId);

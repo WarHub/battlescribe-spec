@@ -44,8 +44,8 @@ costs ✅ (`cost/cost-set-values`) · constraints ✅ (`constraint/constraint-cr
 ### SelectionEntryGroup
 create ✅ · name ✅ · hidden ✅ · collective ✅ · import ✅ · defaultSelectionEntryId ✅ · page ✅ · publicationId ✅ · comment ⬜
 
-### EntryLink
-create ✅ · targetId ✅ · type ⬜ · collective ⬜ · import ⬜ · hidden ⬜
+### EntryLink  (`links/links-create-and-fields`)
+create ✅ · targetId ✅ · type ✅ · collective ⬜ · import ⬜ · hidden ⬜
 
 ### ForceEntry  (`force/force-create-and-nest`)
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ✅ · categoryLinks ⬜ · constraints ⬜
@@ -53,8 +53,8 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment
 ### CategoryEntry
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · constraints ⬜ · modifiers ⬜
 
-### CategoryLink
-create 🟦 · name ⬜ · hidden ⬜ · targetId 🟦 (addLink) · primary ⬜
+### CategoryLink  (`links/links-create-and-fields` — attaches to force entries)
+create ✅ · name ⬜ · hidden ⬜ · targetId ✅ · primary ✅
 
 ### Cost / CostType  (`cost/…`, `type-def/…`)
 Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ⬜
@@ -74,26 +74,40 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · descrip
 ### Constraint  (`constraint/constraint-create-and-fields`)
 create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · childId ⬜ · shared ⬜ · percentValue ⬜ · includeChildSelections ⬜ · includeChildForces ⬜
 
-### Modifier / ModifierGroup  (`modifier/modifier-create-with-condition`)
+### Modifier / ModifierGroup  (`modifier/…`, `modifier-group/…`)
 Modifier: create ✅ · type ✅ · field ✅ · value ✅ · conditions ✅ · repeats ✅
-ModifierGroup: create 🟦 · modifiers ⬜ · conditions ⬜
+ModifierGroup: create ✅ · modifiers ✅ · conditions ✅
 
-### Condition / ConditionGroup  (`condition/condition-types-and-group`)
-Condition: create ✅ · type (instanceOf/greaterThan/atLeast ✅; other 5 ⬜) · value ✅ · field ✅ · scope ✅ · childId ✅ · shared ⬜ · percentValue ⬜
+### Condition / ConditionGroup  (`condition/condition-types-and-group`, `condition/condition-all-types`)
+Condition: create ✅ · type (all 8 ✅) · value ✅ · field ✅ · scope ✅ · childId ✅ · shared ⬜ · percentValue ⬜
 ConditionGroup: create ✅ · type (and/or) ✅
 
 ### Repeat  (`repeat/repeat-create-and-fields`)
 create ✅ · repeats ✅ · roundUp ✅ · value ⬜ · field ✅ · scope ✅ · childId ⬜
 
-### InfoLink / InfoGroup
-InfoLink: create 🟦 · targetId ⬜ · type (profile/rule/infoGroup) ⬜ · name ⬜ · hidden ⬜
-InfoGroup: create 🟦 · name ⬜ · hidden ⬜ · profiles ⬜ · rules ⬜ · infoLinks ⬜
+### InfoLink / InfoGroup  (`links/…`, `info-group/info-group-create-and-nest`)
+InfoLink: create ✅ · targetId ✅ · type (profile/rule/infoGroup) ⬜ · name ⬜ · hidden ⬜
+InfoGroup: create ✅ · name ✅ · hidden ⬜ · profiles ✅ · rules ✅ · infoLinks ⬜
+
+### Shared root containers  (`shared/shared-root-entries`)
+sharedSelectionEntry ✅ · sharedSelectionEntryGroup ✅ · sharedRule ✅ · sharedProfile ✅ · sharedInfoGroup ⬜
 
 ### Publication  (`publication/publication-create-and-fields`)
 create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ⬜
 
 ### GameSystem / Catalogue (root)
 name ✅ · revision ⬜ · battleScribeVersion ⬜ · authorName/Contact/Url ⬜ · readme ⬜ · (catalogue) gameSystemId ✅ · library ⬜
+
+## BS Data Editor UI surface notes (from probing)
+- **Category links attach to force entries only** — `actAddCategoryLink` is a no-op unless a
+  ForceEntry is selected (verified in the decompiled controller). Spec covers it on a force entry.
+- **Profiles require a profile type** — `actAddProfile`/`actAddSharedProfile` only create a profile
+  when at least one profile type exists; specs that add profiles define a `profileType` in setup.
+- **Id-less entries** (modifier/condition/repeat/groups) and **panel-only entries** are detected by
+  diffing the parent's model child-list (the agent no longer relies on new tree ids), so creation
+  works uniformly regardless of tree representation.
+- **characteristicType** creation is a ProfileType edit-panel sub-controller op — not yet driven by
+  the agent; covered in-process only.
 
 ## Tracked debt
 - **W3 (BS Data Editor UI agent): done.** `setCost`/`setCharacteristic` dispatch + the expanded

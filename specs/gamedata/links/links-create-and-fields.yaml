@@ -1,0 +1,86 @@
+id: links-create-and-fields
+category: links
+description: >
+  Create the three link kinds: an entry link (to a shared entry) at catalogue root,
+  an info link (to a shared profile) on a selection entry, and a category link on a
+  force entry with its targetId and primary fields. Verifies link creation and the
+  link field surface. (Category links attach to force entries in the data editor.)
+
+engines:
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      categoryEntries:
+        - id: ce-troops
+          name: Troops
+      forceEntries:
+        - id: fe-1
+          name: Detachment
+      sharedSelectionEntries:
+        - id: sse-bolter
+          name: Bolter
+          type: upgrade
+      sharedProfiles:
+        - id: sp-weapon
+          name: Bolter Profile
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addLink
+    id: add-entry-link
+    parentId: cat-1
+    linkType: entryLink
+    targetId: sse-bolter
+
+  - action: addLink
+    id: add-info-link
+    parentId: se-1
+    linkType: infoLink
+    targetId: sp-weapon
+
+  - action: addEntry
+    id: add-cat-link
+    parentId: fe-1
+    entryType: categoryLink
+
+  - action: setField
+    entryId: ${{ steps.add-cat-link.entryId }}
+    field: targetId
+    value: ce-troops
+
+  - action: setField
+    entryId: ${{ steps.add-cat-link.entryId }}
+    field: primary
+    value: "true"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - entryType: entryLink
+              fields:
+                targetId: sse-bolter
+                type: selectionEntry
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: infoLink
+                  fields:
+                    targetId: sp-weapon
+          forceEntries:
+            - id: fe-1
+              children:
+                - entryType: categoryLink
+                  fields:
+                    targetId: ce-troops
+                    primary: "true"
