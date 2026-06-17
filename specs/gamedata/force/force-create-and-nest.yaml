@@ -29,6 +29,21 @@ steps:
     entryType: categoryEntry
     name: Troops
 
+  - action: addEntry
+    id: add-con
+    parentId: ${{ steps.add-force.entryId }}
+    entryType: constraint
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: type
+    value: max
+
+  - action: setField
+    entryId: ${{ steps.add-con.entryId }}
+    field: value
+    value: "1"
+
   - expectedState:
       gameSystem:
         id: gs-1
@@ -36,6 +51,10 @@ steps:
           - name: Detachment
             entryType: forceEntry
             children:
+              - entryType: constraint
+                fields:
+                  type: max
+                  value: "1"
               - name: Sub-detachment
                 entryType: forceEntry
         categoryEntries:

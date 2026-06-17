@@ -42,6 +42,11 @@ steps:
     entryType: rule
     name: Ability Rule
 
+  - action: setField
+    entryId: ${{ steps.add-ig.entryId }}
+    field: hidden
+    value: "true"
+
   - expectedState:
       catalogues:
         - id: cat-1
@@ -50,6 +55,7 @@ steps:
               children:
                 - name: Abilities
                   entryType: infoGroup
+                  hidden: true
                   children:
                     - name: Ability Profile
                       entryType: profile

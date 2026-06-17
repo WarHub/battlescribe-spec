@@ -50,8 +50,8 @@ create ✅ · name ✅ · hidden ✅ · collective ✅ · import ✅ · defaultS
 ### EntryLink  (`links/links-create-and-fields`, `links/link-fields`)
 create ✅ · targetId ✅ · type ✅ · collective ✅ · import ✅ · hidden ✅
 
-### ForceEntry  (`force/force-create-and-nest`)
-create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ✅ · categoryLinks ⬜ · constraints ⬜
+### ForceEntry  (`force/force-create-and-nest`, `links/…`)
+create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · nested forceEntries ✅ · categoryLinks ✅ · constraints ✅
 
 ### CategoryEntry  (`category/category-entry-with-constraint`)
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ⬜ · constraints ✅ · modifiers ⬜
@@ -90,7 +90,7 @@ create ✅ · repeats ✅ · roundUp ✅ · value ✅ · field ✅ · scope ✅ 
 
 ### InfoLink / InfoGroup  (`links/…`, `info-group/info-group-create-and-nest`)
 InfoLink: create ✅ · targetId ✅ · type (profile/rule/infoGroup) ⬜ · name ⬜ · hidden ⬜
-InfoGroup: create ✅ · name ✅ · hidden ⬜ · profiles ✅ · rules ✅ · infoLinks ⬜
+InfoGroup: create ✅ · name ✅ · hidden ✅ · profiles ✅ · rules ✅ · infoLinks ⬜
 
 ### Shared root containers  (`shared/shared-root-entries`)
 sharedSelectionEntry ✅ · sharedSelectionEntryGroup ✅ · sharedRule ✅ · sharedProfile ✅ · sharedInfoGroup ⬜
