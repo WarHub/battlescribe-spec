@@ -21,10 +21,10 @@ setup:
           type: unit
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: se-1
-    field: publicationId
-    value: pub-codex
+    fields:
+      publicationId: pub-codex
 
   - expectedState:
       catalogues:

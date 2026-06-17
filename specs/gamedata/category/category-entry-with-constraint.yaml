@@ -26,25 +26,21 @@ steps:
     parentId: ${{ steps.add-cat.entryId }}
     entryType: constraint
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-con.entryId }}
-    field: type
-    value: max
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: value
-    value: "2"
+    fields:
+      type: max
+      value: "2"
 
   - action: addEntry
     id: add-mod
     parentId: ${{ steps.add-cat.entryId }}
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: hidden
+    fields:
+      field: hidden
 
   - expectedState:
       gameSystem:

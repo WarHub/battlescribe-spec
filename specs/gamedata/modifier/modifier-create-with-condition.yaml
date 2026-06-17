@@ -28,45 +28,25 @@ steps:
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: type
-    value: set
-
-  - action: setField
-    entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: hidden
-
-  - action: setField
-    entryId: ${{ steps.add-mod.entryId }}
-    field: value
-    value: "true"
+    fields:
+      type: set
+      field: hidden
+      value: "true"
 
   - action: addEntry
     id: add-cond
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-cond.entryId }}
-    field: type
-    value: atLeast
-
-  - action: setField
-    entryId: ${{ steps.add-cond.entryId }}
-    field: value
-    value: "3"
-
-  - action: setField
-    entryId: ${{ steps.add-cond.entryId }}
-    field: field
-    value: selections
-
-  - action: setField
-    entryId: ${{ steps.add-cond.entryId }}
-    field: scope
-    value: roster
+    fields:
+      type: atLeast
+      value: "3"
+      field: selections
+      scope: roster
 
   - expectedState:
       catalogues:

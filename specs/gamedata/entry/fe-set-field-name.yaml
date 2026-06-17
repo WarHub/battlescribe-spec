@@ -12,10 +12,10 @@ setup:
         name: Old Detachment
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: fe-1
-    field: name
-    value: Strike Force
+    fields:
+      name: Strike Force
 
   - expectedState:
       gameSystem:

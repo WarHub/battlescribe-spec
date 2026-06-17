@@ -12,10 +12,10 @@ setup:
         name: Hidden Category
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: ce-1
-    field: hidden
-    value: "true"
+    fields:
+      hidden: "true"
 
   - expectedState:
       gameSystem:

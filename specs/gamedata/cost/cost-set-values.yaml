@@ -29,20 +29,16 @@ setup:
           type: unit
 
 steps:
-  - action: setCost
+  - action: setFields
     entryId: se-1
-    field: pts
-    value: "90"
+    costs:
+      pts: "90"
+      pl: "5"
 
-  - action: setCost
+  - action: setFields
     entryId: se-1
-    field: pl
-    value: "5"
-
-  - action: setCost
-    entryId: se-1
-    field: pts
-    value: "100"
+    costs:
+      pts: "100"
 
   - expectedState:
       catalogues:

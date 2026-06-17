@@ -141,26 +141,42 @@ public sealed class GameDataRunner
                     entryId ?? throw new InvalidOperationException($"Step {stepIndex}: removeEntry requires entryId"));
                 break;
 
-            case "setField":
-                _engine.SetField(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setField requires entryId"),
-                    step.Field ?? throw new InvalidOperationException($"Step {stepIndex}: setField requires field"),
-                    _exprResolver.Resolve(step.Value));
-                break;
+            case "setFields":
+                {
+                    var target = entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setFields requires entryId");
+                    if (step.Fields is null && step.Characteristics is null && step.Costs is null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Step {stepIndex}: setFields requires at least one of 'fields', 'characteristics' or 'costs'");
+                    }
 
-            case "setCost":
-                _engine.SetCost(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setCost requires entryId"),
-                    _exprResolver.Resolve(step.Field) ?? throw new InvalidOperationException($"Step {stepIndex}: setCost requires field (cost type id)"),
-                    _exprResolver.Resolve(step.Value));
-                break;
+                    // Apply scalar fields first (e.g. a profile's typeId before its characteristics).
+                    if (step.Fields is { } fields)
+                    {
+                        foreach (var (field, value) in fields)
+                        {
+                            _engine.SetField(target, field, _exprResolver.Resolve(value));
+                        }
+                    }
 
-            case "setCharacteristic":
-                _engine.SetCharacteristic(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setCharacteristic requires entryId"),
-                    _exprResolver.Resolve(step.Field) ?? throw new InvalidOperationException($"Step {stepIndex}: setCharacteristic requires field (characteristic name or type id)"),
-                    _exprResolver.Resolve(step.Value));
-                break;
+                    if (step.Costs is { } costs)
+                    {
+                        foreach (var (costTypeId, value) in costs)
+                        {
+                            _engine.SetCost(target, _exprResolver.Resolve(costTypeId)!, _exprResolver.Resolve(value));
+                        }
+                    }
+
+                    if (step.Characteristics is { } characteristics)
+                    {
+                        foreach (var (nameOrTypeId, value) in characteristics)
+                        {
+                            _engine.SetCharacteristic(target, _exprResolver.Resolve(nameOrTypeId)!, _exprResolver.Resolve(value));
+                        }
+                    }
+
+                    break;
+                }
 
             case "addLink":
                 outputs = _engine.AddLink(

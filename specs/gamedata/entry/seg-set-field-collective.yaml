@@ -17,10 +17,10 @@ setup:
           name: Squad Wargear
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: seg-1
-    field: collective
-    value: "true"
+    fields:
+      collective: "true"
 
   - expectedState:
       catalogues:

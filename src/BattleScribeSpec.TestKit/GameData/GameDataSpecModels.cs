@@ -50,7 +50,7 @@ public sealed class GameDataStepDef
     public string? Id { get; set; }
 
     /// <summary>
-    /// The action to perform (addEntry, removeEntry, setField, addLink, dump).
+    /// The action to perform (addEntry, removeEntry, setFields, addLink, dump).
     /// </summary>
     public string? Action { get; set; }
 
@@ -73,20 +73,30 @@ public sealed class GameDataStepDef
     public string? Name { get; set; }
 
     /// <summary>
-    /// Target entry ID for removeEntry, setField.
+    /// Target entry ID for removeEntry, setFields.
     /// May contain a ${{ steps.xxx.entryId }} expression.
     /// </summary>
     public string? EntryId { get; set; }
 
     /// <summary>
-    /// Field name for setField.
+    /// Scalar fields to set on the target entry, keyed by field name.
+    /// Used by setFields. Applied before <see cref="Costs"/> and <see cref="Characteristics"/>
+    /// (so e.g. a profile's typeId is set before its characteristics). Values may contain
+    /// ${{ steps.xxx.entryId }} expressions.
     /// </summary>
-    public string? Field { get; set; }
+    public Dictionary<string, string?>? Fields { get; set; }
 
     /// <summary>
-    /// Field value for setField.
+    /// Characteristic values to set on the target entry, keyed by characteristic name or type id.
+    /// Used by setFields. Not supported by the NewRecruit engines.
     /// </summary>
-    public string? Value { get; set; }
+    public Dictionary<string, string?>? Characteristics { get; set; }
+
+    /// <summary>
+    /// Cost values to set on the target entry, keyed by cost type id.
+    /// Used by setFields. Not supported by the NewRecruit engines.
+    /// </summary>
+    public Dictionary<string, string?>? Costs { get; set; }
 
     /// <summary>
     /// Link type for addLink (entryLink, infoLink, categoryLink).

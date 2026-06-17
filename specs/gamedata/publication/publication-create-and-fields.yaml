@@ -25,25 +25,13 @@ steps:
     entryType: publication
     name: Codex
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-pub.entryId }}
-    field: shortName
-    value: Cdx
-
-  - action: setField
-    entryId: ${{ steps.add-pub.entryId }}
-    field: publisher
-    value: Games Workshop
-
-  - action: setField
-    entryId: ${{ steps.add-pub.entryId }}
-    field: publicationDate
-    value: "2023"
-
-  - action: setField
-    entryId: ${{ steps.add-pub.entryId }}
-    field: publisherUrl
-    value: https://example.com
+    fields:
+      shortName: Cdx
+      publisher: Games Workshop
+      publicationDate: "2023"
+      publisherUrl: https://example.com
 
   - expectedState:
       catalogues:

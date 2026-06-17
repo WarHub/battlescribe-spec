@@ -33,10 +33,10 @@ steps:
     linkType: entryLink
     targetId: sseg-1
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-entry-link.entryId }}
-    field: type
-    value: selectionEntryGroup
+    fields:
+      type: selectionEntryGroup
 
   - action: addLink
     id: add-info-link
@@ -44,10 +44,10 @@ steps:
     linkType: infoLink
     targetId: sr-1
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-info-link.entryId }}
-    field: type
-    value: rule
+    fields:
+      type: rule
 
   - expectedState:
       catalogues:

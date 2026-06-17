@@ -18,10 +18,10 @@ setup:
           type: upgrade
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: se-1
-    field: imported
-    value: "false"
+    fields:
+      imported: "false"
 
   - expectedState:
       catalogues:

@@ -14,30 +14,14 @@ setup:
     name: Test System
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: gs-1
-    field: authorName
-    value: Jane Designer
-
-  - action: setField
-    entryId: gs-1
-    field: authorUrl
-    value: https://jane.example.com
-
-  - action: setField
-    entryId: gs-1
-    field: readme
-    value: System design notes.
-
-  - action: setField
-    entryId: gs-1
-    field: revision
-    value: "7"
-
-  - action: setField
-    entryId: gs-1
-    field: battleScribeVersion
-    value: "2.03"
+    fields:
+      authorName: Jane Designer
+      authorUrl: https://jane.example.com
+      readme: System design notes.
+      revision: "7"
+      battleScribeVersion: "2.03"
 
   - expectedState:
       gameSystem:

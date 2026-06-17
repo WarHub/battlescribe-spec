@@ -38,20 +38,13 @@ steps:
     entryType: profile
     name: Marine
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-profile.entryId }}
-    field: typeId
-    value: pt-unit
-
-  - action: setCharacteristic
-    entryId: ${{ steps.add-profile.entryId }}
-    field: M
-    value: "6"
-
-  - action: setCharacteristic
-    entryId: ${{ steps.add-profile.entryId }}
-    field: T
-    value: "4"
+    fields:
+      typeId: pt-unit
+    characteristics:
+      M: "6"
+      T: "4"
 
   - expectedState:
       catalogues:

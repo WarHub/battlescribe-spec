@@ -27,45 +27,25 @@ steps:
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: hidden
+    fields:
+      field: hidden
 
   - action: addEntry
     id: add-repeat
     parentId: ${{ steps.add-mod.entryId }}
     entryType: repeat
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-repeat.entryId }}
-    field: repeats
-    value: "2"
-
-  - action: setField
-    entryId: ${{ steps.add-repeat.entryId }}
-    field: roundUp
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-repeat.entryId }}
-    field: field
-    value: selections
-
-  - action: setField
-    entryId: ${{ steps.add-repeat.entryId }}
-    field: scope
-    value: parent
-
-  - action: setField
-    entryId: ${{ steps.add-repeat.entryId }}
-    field: value
-    value: "3"
-
-  - action: setField
-    entryId: ${{ steps.add-repeat.entryId }}
-    field: childId
-    value: se-1
+    fields:
+      repeats: "2"
+      roundUp: "true"
+      field: selections
+      scope: parent
+      value: "3"
+      childId: se-1
 
   - expectedState:
       catalogues:

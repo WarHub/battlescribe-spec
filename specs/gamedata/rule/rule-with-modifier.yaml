@@ -29,20 +29,12 @@ steps:
     parentId: ${{ steps.add-rule.entryId }}
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: description
-
-  - action: setField
-    entryId: ${{ steps.add-mod.entryId }}
-    field: type
-    value: set
-
-  - action: setField
-    entryId: ${{ steps.add-mod.entryId }}
-    field: value
-    value: Updated rule text.
+    fields:
+      field: description
+      type: set
+      value: Updated rule text.
 
   - expectedState:
       catalogues:

@@ -27,30 +27,14 @@ steps:
     parentId: se-1
     entryType: constraint
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-con.entryId }}
-    field: scope
-    value: force
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: shared
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: percentValue
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: includeChildSelections
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: includeChildForces
-    value: "true"
+    fields:
+      scope: force
+      shared: "true"
+      percentValue: "true"
+      includeChildSelections: "true"
+      includeChildForces: "true"
 
   - expectedState:
       catalogues:

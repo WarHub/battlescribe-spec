@@ -17,8 +17,11 @@ The authoritative surface is the decompiled model under
 
 ## Engine action/field support (harness status)
 
-Both BS anchors now support the full action/field surface (W2 + W3 done). NewRecruit lacks
-`setCost`/`setCharacteristic`; cost/characteristic specs skip the NR engines.
+Both BS anchors now support the full action/field surface (W2 + W3 done). Setting values is
+unified under a single **`setFields`** action carrying three optional maps — `fields`
+(scalar fields), `costs` (cost values by type) and `characteristics` (characteristic values).
+The runner applies `fields` first, then `costs`, then `characteristics`. NewRecruit supports
+only the `fields` map; specs using `costs`/`characteristics` skip the NR engines.
 
 | Capability | battlescribe (in-proc) | battlescribe-ui | newrecruit (frozen) | newrecruit-ui |
 |---|---|---|---|---|
@@ -27,9 +30,9 @@ Both BS anchors now support the full action/field surface (W2 + W3 done). NewRec
 | addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ? | ? |
 | addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ? | ? |
 | addEntry: shared* root variants | ✅ (W2) | ✅ (W3) | ? | ? |
-| setField: scalar fields (generic reflective/UI) | ✅ | ✅ | ✅ | ✅ |
-| setCost (cost values by type) | ✅ (W2) | ✅ (W3) | ❌ skip | ❌ skip |
-| setCharacteristic (characteristic values) | ✅ (W2) | ✅ (W3) | ❌ skip | ❌ skip |
+| setFields → `fields` (scalar fields, generic reflective/UI) | ✅ | ✅ | ✅ | ✅ |
+| setFields → `costs` (cost values by type) | ✅ (W2) | ✅ (W3) | ❌ skip | ❌ skip |
+| setFields → `characteristics` (characteristic values) | ✅ (W2) | ✅ (W3) | ❌ skip | ❌ skip |
 | state: full query/modifier/cost/characteristic field serialization | ✅ (W2) | ✅ (W3) | partial | partial |
 
 ## Entity × field coverage
@@ -156,6 +159,7 @@ field is created and asserted on both the in-process reference engine and the Da
   `buildEntryJson` field serialization are implemented and verified; the three sample specs pass
   on `battlescribe-ui`. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by `setup.ps1`,
   to build the agent jar.)
-- **NR engines** lack `setCost`/`setCharacteristic`; cost/characteristic specs carry
-  `newrecruit`/`newrecruit-ui` skips until/unless NR support is added. The constraint spec also
-  skips `newrecruit-ui` (NR Editor UI diverges on constraint field round-trip).
+- **NR engines** support only the `fields` map of `setFields`; specs that use the `costs` or
+  `characteristics` maps carry `newrecruit`/`newrecruit-ui` skips until/unless NR support is
+  added. The constraint spec also skips `newrecruit-ui` (NR Editor UI diverges on constraint
+  field round-trip).

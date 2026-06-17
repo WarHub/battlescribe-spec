@@ -28,40 +28,40 @@ steps:
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.m-set.entryId }}
-    field: type
-    value: set
+    fields:
+      type: set
 
   - action: addEntry
     id: m-inc
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.m-inc.entryId }}
-    field: type
-    value: increment
+    fields:
+      type: increment
 
   - action: addEntry
     id: m-dec
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.m-dec.entryId }}
-    field: type
-    value: decrement
+    fields:
+      type: decrement
 
   - action: addEntry
     id: m-app
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.m-app.entryId }}
-    field: type
-    value: append
+    fields:
+      type: append
 
   - expectedState:
       catalogues:

@@ -33,25 +33,21 @@ steps:
     parentId: ${{ steps.add-mg.entryId }}
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: hidden
+    fields:
+      field: hidden
 
   - action: addEntry
     id: add-cond
     parentId: ${{ steps.add-mg.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-cond.entryId }}
-    field: type
-    value: atLeast
-
-  - action: setField
-    entryId: ${{ steps.add-cond.entryId }}
-    field: value
-    value: "1"
+    fields:
+      type: atLeast
+      value: "1"
 
   - expectedState:
       catalogues:

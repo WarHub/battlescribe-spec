@@ -32,50 +32,42 @@ steps:
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: hidden
+    fields:
+      field: hidden
 
   - action: addEntry
     id: add-group
     parentId: ${{ steps.add-mod.entryId }}
     entryType: conditionGroup
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-group.entryId }}
-    field: type
-    value: or
+    fields:
+      type: or
 
   - action: addEntry
     id: add-cond-a
     parentId: ${{ steps.add-group.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-cond-a.entryId }}
-    field: type
-    value: instanceOf
-
-  - action: setField
-    entryId: ${{ steps.add-cond-a.entryId }}
-    field: childId
-    value: sse-target
+    fields:
+      type: instanceOf
+      childId: sse-target
 
   - action: addEntry
     id: add-cond-b
     parentId: ${{ steps.add-group.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-cond-b.entryId }}
-    field: type
-    value: greaterThan
-
-  - action: setField
-    entryId: ${{ steps.add-cond-b.entryId }}
-    field: value
-    value: "2"
+    fields:
+      type: greaterThan
+      value: "2"
 
   - expectedState:
       catalogues:

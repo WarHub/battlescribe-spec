@@ -16,10 +16,10 @@ setup:
           name: Old Group Name
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: seg-1
-    field: name
-    value: Upgraded Wargear
+    fields:
+      name: Upgraded Wargear
 
   - expectedState:
       catalogues:

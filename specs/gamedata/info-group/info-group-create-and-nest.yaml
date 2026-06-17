@@ -55,25 +55,17 @@ steps:
     parentId: ${{ steps.add-ig.entryId }}
     entryType: infoLink
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-infolink.entryId }}
-    field: targetId
-    value: sp-ability
+    fields:
+      targetId: sp-ability
+      name: Linked Ability
+      hidden: "true"
 
-  - action: setField
-    entryId: ${{ steps.add-infolink.entryId }}
-    field: name
-    value: Linked Ability
-
-  - action: setField
-    entryId: ${{ steps.add-infolink.entryId }}
-    field: hidden
-    value: "true"
-
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-ig.entryId }}
-    field: hidden
-    value: "true"
+    fields:
+      hidden: "true"
 
   - expectedState:
       catalogues:

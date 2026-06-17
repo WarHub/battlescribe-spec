@@ -18,30 +18,14 @@ setup:
       gameSystemId: gs-1
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: cat-1
-    field: authorName
-    value: Jane Designer
-
-  - action: setField
-    entryId: cat-1
-    field: authorContact
-    value: jane@example.com
-
-  - action: setField
-    entryId: cat-1
-    field: authorUrl
-    value: https://jane.example.com
-
-  - action: setField
-    entryId: cat-1
-    field: readme
-    value: Catalogue notes.
-
-  - action: setField
-    entryId: cat-1
-    field: library
-    value: "true"
+    fields:
+      authorName: Jane Designer
+      authorContact: jane@example.com
+      authorUrl: https://jane.example.com
+      readme: Catalogue notes.
+      library: "true"
 
   - expectedState:
       catalogues:

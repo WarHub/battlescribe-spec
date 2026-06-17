@@ -21,15 +21,11 @@ steps:
     entryType: costType
     name: Points
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-cost-type.entryId }}
-    field: defaultCostLimit
-    value: "2000"
-
-  - action: setField
-    entryId: ${{ steps.add-cost-type.entryId }}
-    field: hidden
-    value: "true"
+    fields:
+      defaultCostLimit: "2000"
+      hidden: "true"
 
   - action: addEntry
     id: add-profile-type

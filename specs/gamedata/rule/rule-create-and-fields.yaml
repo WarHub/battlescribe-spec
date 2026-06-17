@@ -28,25 +28,13 @@ steps:
     entryType: rule
     name: Objective Secured
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-rule.entryId }}
-    field: description
-    value: This unit controls objectives regardless of enemy models.
-
-  - action: setField
-    entryId: ${{ steps.add-rule.entryId }}
-    field: page
-    value: "112"
-
-  - action: setField
-    entryId: ${{ steps.add-rule.entryId }}
-    field: publicationId
-    value: pub-1
-
-  - action: setField
-    entryId: ${{ steps.add-rule.entryId }}
-    field: hidden
-    value: "true"
+    fields:
+      description: This unit controls objectives regardless of enemy models.
+      page: "112"
+      publicationId: pub-1
+      hidden: "true"
 
   - expectedState:
       catalogues:

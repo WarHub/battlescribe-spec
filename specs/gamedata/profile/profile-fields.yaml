@@ -35,25 +35,13 @@ steps:
     entryType: profile
     name: Marine
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-profile.entryId }}
-    field: page
-    value: "27"
-
-  - action: setField
-    entryId: ${{ steps.add-profile.entryId }}
-    field: publicationId
-    value: pub-1
-
-  - action: setField
-    entryId: ${{ steps.add-profile.entryId }}
-    field: hidden
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-profile.entryId }}
-    field: typeName
-    value: Infantry
+    fields:
+      page: "27"
+      publicationId: pub-1
+      hidden: "true"
+      typeName: Infantry
 
   - expectedState:
       catalogues:

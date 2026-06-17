@@ -31,40 +31,24 @@ steps:
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: hidden
+    fields:
+      field: hidden
 
   - action: addEntry
     id: add-con
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-con.entryId }}
-    field: scope
-    value: roster
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: childId
-    value: ce-troops
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: shared
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: percentValue
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-con.entryId }}
-    field: includeChildSelections
-    value: "true"
+    fields:
+      scope: roster
+      childId: ce-troops
+      shared: "true"
+      percentValue: "true"
+      includeChildSelections: "true"
 
   - expectedState:
       catalogues:

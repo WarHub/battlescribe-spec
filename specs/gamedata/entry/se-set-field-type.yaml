@@ -18,10 +18,10 @@ setup:
           type: upgrade
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: se-1
-    field: type
-    value: unit
+    fields:
+      type: unit
 
   - expectedState:
       catalogues:
@@ -31,10 +31,10 @@ steps:
               fields:
                 type: unit
 
-  - action: setField
+  - action: setFields
     entryId: se-1
-    field: type
-    value: model
+    fields:
+      type: model
 
   - expectedState:
       catalogues:
@@ -44,10 +44,10 @@ steps:
               fields:
                 type: model
 
-  - action: setField
+  - action: setFields
     entryId: se-1
-    field: type
-    value: upgrade
+    fields:
+      type: upgrade
 
   - expectedState:
       catalogues:

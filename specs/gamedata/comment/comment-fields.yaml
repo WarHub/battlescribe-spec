@@ -30,20 +30,20 @@ setup:
               name: Wargear
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: se-1
-    field: comment
-    value: Needs points review.
+    fields:
+      comment: Needs points review.
 
-  - action: setField
+  - action: setFields
     entryId: seg-1
-    field: comment
-    value: Optional wargear group.
+    fields:
+      comment: Optional wargear group.
 
-  - action: setField
+  - action: setFields
     entryId: fe-1
-    field: comment
-    value: Battalion detachment.
+    fields:
+      comment: Battalion detachment.
 
   - action: addEntry
     id: add-rule
@@ -51,10 +51,10 @@ steps:
     entryType: rule
     name: A Rule
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-rule.entryId }}
-    field: comment
-    value: Draft wording.
+    fields:
+      comment: Draft wording.
 
   - expectedState:
       catalogues:

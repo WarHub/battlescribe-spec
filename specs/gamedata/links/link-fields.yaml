@@ -28,20 +28,12 @@ steps:
     linkType: entryLink
     targetId: sse-1
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-link.entryId }}
-    field: collective
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-link.entryId }}
-    field: imported
-    value: "true"
-
-  - action: setField
-    entryId: ${{ steps.add-link.entryId }}
-    field: hidden
-    value: "true"
+    fields:
+      collective: "true"
+      imported: "true"
+      hidden: "true"
 
   - expectedState:
       catalogues:

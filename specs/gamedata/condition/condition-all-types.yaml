@@ -29,90 +29,90 @@ steps:
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: hidden
+    fields:
+      field: hidden
 
   - action: addEntry
     id: c-lt
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.c-lt.entryId }}
-    field: type
-    value: lessThan
+    fields:
+      type: lessThan
 
   - action: addEntry
     id: c-gt
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.c-gt.entryId }}
-    field: type
-    value: greaterThan
+    fields:
+      type: greaterThan
 
   - action: addEntry
     id: c-eq
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.c-eq.entryId }}
-    field: type
-    value: equalTo
+    fields:
+      type: equalTo
 
   - action: addEntry
     id: c-ne
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.c-ne.entryId }}
-    field: type
-    value: notEqualTo
+    fields:
+      type: notEqualTo
 
   - action: addEntry
     id: c-al
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.c-al.entryId }}
-    field: type
-    value: atLeast
+    fields:
+      type: atLeast
 
   - action: addEntry
     id: c-am
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.c-am.entryId }}
-    field: type
-    value: atMost
+    fields:
+      type: atMost
 
   - action: addEntry
     id: c-io
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.c-io.entryId }}
-    field: type
-    value: instanceOf
+    fields:
+      type: instanceOf
 
   - action: addEntry
     id: c-nio
     parentId: ${{ steps.add-mod.entryId }}
     entryType: condition
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.c-nio.entryId }}
-    field: type
-    value: notInstanceOf
+    fields:
+      type: notInstanceOf
 
   - expectedState:
       catalogues:

@@ -38,15 +38,11 @@ steps:
     entryType: catalogueLink
     name: Library Link
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-cl.entryId }}
-    field: targetId
-    value: cat-library
-
-  - action: setField
-    entryId: ${{ steps.add-cl.entryId }}
-    field: importRootEntries
-    value: "true"
+    fields:
+      targetId: cat-library
+      importRootEntries: "true"
 
   # Valid target: the link resolves, targetId is retained, and there are no errors.
   - expectedState:
@@ -60,10 +56,10 @@ steps:
                 importRootEntries: "true"
 
   # Re-point at a catalogue that does not exist: the Data Editor flags the dangling target.
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-cl.entryId }}
-    field: targetId
-    value: does-not-exist
+    fields:
+      targetId: does-not-exist
 
   - expectedState:
       errors:

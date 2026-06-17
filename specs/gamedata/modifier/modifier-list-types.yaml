@@ -28,40 +28,40 @@ steps:
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.m-add.entryId }}
-    field: type
-    value: add
+    fields:
+      type: add
 
   - action: addEntry
     id: m-rem
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.m-rem.entryId }}
-    field: type
-    value: remove
+    fields:
+      type: remove
 
   - action: addEntry
     id: m-setp
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.m-setp.entryId }}
-    field: type
-    value: set-primary
+    fields:
+      type: set-primary
 
   - action: addEntry
     id: m-unsetp
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.m-unsetp.entryId }}
-    field: type
-    value: unset-primary
+    fields:
+      type: unset-primary
 
   - expectedState:
       catalogues:

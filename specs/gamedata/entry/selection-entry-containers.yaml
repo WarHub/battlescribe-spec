@@ -46,25 +46,21 @@ steps:
     parentId: se-1
     entryType: infoLink
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-il.entryId }}
-    field: targetId
-    value: sr-keyword
-
-  - action: setField
-    entryId: ${{ steps.add-il.entryId }}
-    field: name
-    value: Linked Keyword
+    fields:
+      targetId: sr-keyword
+      name: Linked Keyword
 
   - action: addEntry
     id: add-mod
     parentId: se-1
     entryType: modifier
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-mod.entryId }}
-    field: field
-    value: hidden
+    fields:
+      field: hidden
 
   - expectedState:
       catalogues:
