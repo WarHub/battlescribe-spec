@@ -276,6 +276,11 @@ public sealed class GameDataRunner
         {
             AssertEntryList(stepIndex, $"{prefix}.sharedSelectionEntryGroups", expected.SharedSelectionEntryGroups, actual.SharedSelectionEntryGroups);
         }
+
+        if (expected.SharedInfoGroups is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.sharedInfoGroups", expected.SharedInfoGroups, actual.SharedInfoGroups);
+        }
     }
 
     private void AssertCatalogue(int stepIndex, ExpectedCatalogueDataDef expected, CatalogueDataState actual)
@@ -355,6 +360,16 @@ public sealed class GameDataRunner
         if (expected.Publications is not null)
         {
             AssertEntryList(stepIndex, $"{prefix}.publications", expected.Publications, actual.Publications);
+        }
+
+        if (expected.SharedInfoGroups is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.sharedInfoGroups", expected.SharedInfoGroups, actual.SharedInfoGroups);
+        }
+
+        if (expected.CatalogueLinks is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.catalogueLinks", expected.CatalogueLinks, actual.CatalogueLinks);
         }
     }
 

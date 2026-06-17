@@ -93,7 +93,10 @@ InfoLink: create ✅ · targetId ✅ · type (profile/rule/infoGroup) ✅ · nam
 InfoGroup: create ✅ · name ✅ · hidden ✅ · profiles ✅ · rules ✅ · infoLinks ⬜
 
 ### Shared root containers  (`shared/shared-root-entries`)
-sharedSelectionEntry ✅ · sharedSelectionEntryGroup ✅ · sharedRule ✅ · sharedProfile ✅ · sharedInfoGroup ⬜
+sharedSelectionEntry ✅ · sharedSelectionEntryGroup ✅ · sharedRule ✅ · sharedProfile ✅ · sharedInfoGroup ✅
+
+### CatalogueLink  (`links/catalogue-link`)
+create ✅ · targetId ✅ (in-proc; UI clears dangling cross-catalogue targets) · importRootEntries ✅
 
 ### Publication  (`publication/publication-create-and-fields`)
 create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ✅

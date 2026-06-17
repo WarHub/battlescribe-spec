@@ -1,0 +1,55 @@
+id: catalogue-link
+category: links
+description: >
+  Add a catalogue link to a catalogue and set its targetId and importRootEntries.
+  Verifies catalogue-link creation and its fields (cross-catalogue reference).
+
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-cl
+    parentId: cat-1
+    entryType: catalogueLink
+    name: Library Link
+
+  - action: setField
+    entryId: ${{ steps.add-cl.entryId }}
+    field: targetId
+    value: cat-library
+
+  - action: setField
+    entryId: ${{ steps.add-cl.entryId }}
+    field: importRootEntries
+    value: "true"
+
+  # The Data Editor validates a catalogue link's target against loaded catalogues and
+  # clears a dangling targetId, so battlescribe-ui asserts only importRootEntries here
+  # (targetId is verified in-process). Cross-catalogue linking is otherwise out of scope.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          catalogueLinks:
+            - entryType: catalogueLink
+              fields:
+                targetId: cat-library
+                importRootEntries: "true"
+      engines:
+        battlescribe-ui:
+          catalogues:
+            - id: cat-1
+              catalogueLinks:
+                - entryType: catalogueLink
+                  fields:
+                    importRootEntries: "true"

@@ -773,6 +773,7 @@ public class DataEditorActions {
         o.add("sharedSelectionEntryGroups",  buildList(gs, "getSharedSelectionEntryGroups","selectionEntryGroup"));
         o.add("sharedRules",                 buildList(gs, "getSharedRules",               "rule"));
         o.add("sharedProfiles",              buildList(gs, "getSharedProfiles",            "profile"));
+        o.add("sharedInfoGroups",            buildList(gs, "getSharedInfoGroups",          "infoGroup"));
         return o;
     }
 
@@ -794,6 +795,8 @@ public class DataEditorActions {
         o.add("sharedSelectionEntryGroups", buildList(cat, "getSharedSelectionEntryGroups","selectionEntryGroup"));
         o.add("sharedRules",                buildList(cat, "getSharedRules",               "rule"));
         o.add("sharedProfiles",             buildList(cat, "getSharedProfiles",            "profile"));
+        o.add("sharedInfoGroups",           buildList(cat, "getSharedInfoGroups",          "infoGroup"));
+        o.add("catalogueLinks",             buildList(cat, "getCatalogueLinks",            "catalogueLink"));
         return o;
     }
 

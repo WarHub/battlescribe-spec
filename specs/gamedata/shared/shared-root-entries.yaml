@@ -49,6 +49,12 @@ steps:
     entryType: sharedProfile
     name: Shared Profile
 
+  - action: addEntry
+    id: add-sinfogroup
+    parentId: cat-1
+    entryType: sharedInfoGroup
+    name: Shared Abilities
+
   - expectedState:
       catalogues:
         - id: cat-1
@@ -64,3 +70,6 @@ steps:
           sharedProfiles:
             - name: Shared Profile
               entryType: profile
+          sharedInfoGroups:
+            - name: Shared Abilities
+              entryType: infoGroup

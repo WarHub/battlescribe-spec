@@ -175,6 +175,8 @@ public sealed class ExpectedCatalogueDataDef
     public List<ExpectedDataEntryDef>? ForceEntries { get; set; }
     public List<ExpectedDataEntryDef>? CategoryEntries { get; set; }
     public List<ExpectedDataEntryDef>? Publications { get; set; }
+    public List<ExpectedDataEntryDef>? SharedInfoGroups { get; set; }
+    public List<ExpectedDataEntryDef>? CatalogueLinks { get; set; }
 
     /// <summary>
     /// Assert total entry count across all containers.
@@ -205,6 +207,7 @@ public sealed class ExpectedGameSystemDataDef
     public List<ExpectedDataEntryDef>? SelectionEntries { get; set; }
     public List<ExpectedDataEntryDef>? SharedSelectionEntries { get; set; }
     public List<ExpectedDataEntryDef>? SharedSelectionEntryGroups { get; set; }
+    public List<ExpectedDataEntryDef>? SharedInfoGroups { get; set; }
 }
 
 /// <summary>

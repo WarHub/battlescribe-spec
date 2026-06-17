@@ -971,6 +971,8 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             Publications = ReadEntryList(cat.getPublications(), "publication"),
             CostTypes = ReadEntryList(cat.getCostTypes(), "costType"),
             ProfileTypes = ReadEntryList(cat.getProfileTypes(), "profileType"),
+            SharedInfoGroups = ReadEntryList(cat.getSharedInfoGroups(), "infoGroup"),
+            CatalogueLinks = ReadEntryList(cat.getCatalogueLinks(), "catalogueLink"),
         };
     }
 
@@ -993,6 +995,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             Publications = ReadEntryList(gs.getPublications(), "publication"),
             CostTypes = ReadEntryList(gs.getCostTypes(), "costType"),
             ProfileTypes = ReadEntryList(gs.getProfileTypes(), "profileType"),
+            SharedInfoGroups = ReadEntryList(gs.getSharedInfoGroups(), "infoGroup"),
         };
     }
 
