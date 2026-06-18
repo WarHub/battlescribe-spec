@@ -43,6 +43,13 @@ public interface IGameDataEngine : IDisposable
     /// </summary>
     void Cleanup() { }
 
+    /// <summary>
+    /// Select the active file (catalogue or game system) for subsequent UI-driven edits.
+    /// Specs with more than one catalogue declare which one is "open" before editing it.
+    /// Engines that read all files at once (or edit a single artifact) may treat this as a no-op.
+    /// </summary>
+    void OpenFile(string id) { }
+
     // ===== Structural mutations =====
 
     /// <summary>

@@ -5,9 +5,6 @@ description: >
   (type, value, field, scope, percentValue), verifying each is persisted. Exercises
   constraint creation plus the full constraint field surface in one spec.
 
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

@@ -7,8 +7,9 @@ description: >
   retained. Then re-point the link at a non-existent catalogue and verify the Data Editor
   flags the dangling target.
 
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:
@@ -32,6 +33,10 @@ setup:
       library: true
 
 steps:
+  # Two catalogues are loaded; declare cat-1 as the active file before editing it.
+  - action: openCatalogue
+    entryId: cat-1
+
   - action: addEntry
     id: add-cl
     parentId: cat-1

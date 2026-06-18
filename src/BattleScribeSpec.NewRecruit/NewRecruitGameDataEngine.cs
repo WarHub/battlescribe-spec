@@ -361,19 +361,23 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         // Build catalogue from XML parsing (always, not just as fallback)
                         const parser = new DOMParser();
 
-                        // Recursive entry parser shared by catalogue and game system roots
+                        // Recursive entry parser shared by catalogue and game system roots.
+                        // Captures every XML attribute (not just id/name/hidden/type) so fields
+                        // like targetId/page/publicationId round-trip and validation can read them.
                         const parseEntry = (el) => {
-                            const entry = {
-                                id: el.getAttribute('id') || '',
-                                name: el.getAttribute('name') || '',
-                                hidden: el.getAttribute('hidden') === 'true',
-                                type: el.getAttribute('type') || '',
-                            };
+                            const entry = {};
+                            for (let i = 0; i < el.attributes.length; i++) {
+                                const a = el.attributes[i];
+                                entry[a.name] = a.value;
+                            }
+                            entry.id = entry.id || '';
+                            entry.name = entry.name || '';
+                            entry.hidden = el.getAttribute('hidden') === 'true';
                             // Recursively parse child containers
                             const childContainers = ['selectionEntries', 'selectionEntryGroups',
                                 'rules', 'profiles', 'infoGroups', 'infoLinks', 'entryLinks',
                                 'categoryLinks', 'constraints', 'modifiers', 'modifierGroups',
-                                'conditions', 'conditionGroups'];
+                                'conditions', 'conditionGroups', 'characteristicTypes', 'repeats'];
                             for (const ck of childContainers) {
                                 const container = el.querySelector(':scope > ' + ck);
                                 if (container && container.children.length > 0) {
@@ -402,12 +406,21 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                                 sharedSelectionEntryGroups: [],
                                 sharedRules: [],
                                 sharedProfiles: [],
+                                sharedInfoGroups: [],
                                 forceEntries: [],
                                 categoryEntries: [],
                                 publications: [],
                                 costTypes: [],
                                 profileTypes: [],
+                                catalogueLinks: [],
                             };
+
+                            // Capture root metadata attributes (revision, authorName, library, …)
+                            // so they round-trip into the serialized fields map.
+                            for (let i = 0; i < rootEl.attributes.length; i++) {
+                                const a = rootEl.attributes[i];
+                                if (!(a.name in root)) root[a.name] = a.value;
+                            }
 
                             root.selectionEntries = parseEntries(rootEl, 'selectionEntries');
                             root.sharedSelectionEntries = parseEntries(rootEl, 'sharedSelectionEntries');
@@ -416,39 +429,47 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                             root.rules = parseEntries(rootEl, 'rules');
                             root.sharedRules = parseEntries(rootEl, 'sharedRules');
                             root.sharedProfiles = parseEntries(rootEl, 'sharedProfiles');
+                            root.sharedInfoGroups = parseEntries(rootEl, 'sharedInfoGroups');
                             root.entryLinks = parseEntries(rootEl, 'entryLinks');
                             root.forceEntries = parseEntries(rootEl, 'forceEntries');
                             root.categoryEntries = parseEntries(rootEl, 'categoryEntries');
                             root.publications = parseEntries(rootEl, 'publications');
                             root.costTypes = parseEntries(rootEl, 'costTypes');
                             root.profileTypes = parseEntries(rootEl, 'profileTypes');
+                            root.catalogueLinks = parseEntries(rootEl, 'catalogueLinks');
                             return root;
                         };
 
-                        let catalogue = null;
+                        // Always parse the game system so its root metadata and any directly
+                        // authored entries are editable, even when catalogues are present.
                         let gameSystem = null;
-                        const catXml = catFiles[0]?.data;
-                        if (catXml) {
-                            const doc = parser.parseFromString(catXml, 'text/xml');
-                            const catEl = doc.querySelector('catalogue');
-                            if (catEl) {
-                                catalogue = buildRoot(catEl, systemId, systemName, systemId);
-                            }
-                            if (!catalogue) {
-                                return 'Setup error: could not parse catalogue from XML';
-                            }
-                        } else {
-                            // No catalogues: author entries directly in the game system.
+                        {
                             const gstDoc = parser.parseFromString(gstXml, 'text/xml');
                             const gstEl = gstDoc.querySelector('gameSystem');
                             if (gstEl) {
                                 gameSystem = buildRoot(gstEl, systemId, systemName,
                                     gstEl.getAttribute('id') || systemId);
                             }
-                            if (!gameSystem) {
-                                return 'Setup error: could not parse game system from XML';
-                            }
                         }
+
+                        // Parse every catalogue — multi-catalogue specs (e.g. catalogue links)
+                        // need the target catalogue present for resolution + validation.
+                        const catalogues = [];
+                        for (const cf of catFiles) {
+                            const doc = parser.parseFromString(cf.data, 'text/xml');
+                            const catEl = doc.querySelector('catalogue');
+                            if (!catEl) {
+                                return 'Setup error: could not parse catalogue from XML: ' + cf.name;
+                            }
+                            catalogues.push(buildRoot(catEl, systemId, systemName, systemId));
+                        }
+
+                        if (catalogues.length === 0 && !gameSystem) {
+                            return 'Setup error: could not parse game system from XML';
+                        }
+
+                        // roots = every editable container; actions search across all of them.
+                        const roots = [gameSystem, ...catalogues].filter(Boolean);
 
                         // Store references for later actions
                         window.__bsspec_editor = {
@@ -459,8 +480,10 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                             systemId,
                             specId,
                             directMode: true,
-                            catalogue,
+                            catalogue: catalogues[0] || null,
+                            catalogues,
                             gameSystem,
+                            roots,
                         };
 
                         return null; // success
@@ -499,11 +522,10 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'ERROR:No editor context — was Setup called?';
 
-                    const root = ctx.catalogue || ctx.gameSystem;
-                    if (!root) return 'ERROR:No catalogue available';
+                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
+                    if (!roots.length) return 'ERROR:No catalogue available';
 
-                    // Map entryType to container key
-                    // At catalogue root, some types go to "shared" containers
+                    // Map entryType to container key.
                     const containerKeyMap = {
                         'selectionEntry': 'selectionEntries',
                         'selectionEntryGroup': 'selectionEntryGroups',
@@ -523,9 +545,17 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         'publication': 'publications',
                         'costType': 'costTypes',
                         'profileType': 'profileTypes',
+                        'characteristicType': 'characteristicTypes',
                         'repeat': 'repeats',
+                        'catalogueLink': 'catalogueLinks',
+                        // Explicit shared-root container types.
+                        'sharedSelectionEntry': 'sharedSelectionEntries',
+                        'sharedSelectionEntryGroup': 'sharedSelectionEntryGroups',
+                        'sharedRule': 'sharedRules',
+                        'sharedProfile': 'sharedProfiles',
+                        'sharedInfoGroup': 'sharedInfoGroups',
                     };
-                    // When parent is catalogue root, some types use shared containers
+                    // When parent is a catalogue/system root, these bare types use shared containers.
                     const sharedKeyMap = {
                         'selectionEntryGroup': 'sharedSelectionEntryGroups',
                         'profile': 'sharedProfiles',
@@ -541,7 +571,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     if (entryType === 'selectionEntry') data.type = 'upgrade';
                     if (entryType === 'selectionEntryGroup') data.type = 'group';
 
-                    // Find parent by ID (walk catalogue tree)
+                    // Find parent by ID (walk every root's tree)
                     const findById = (obj, targetId) => {
                         if (!obj) return null;
                         if (obj.id === targetId) return obj;
@@ -559,14 +589,18 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         return null;
                     };
 
-                    let parent = findById(root, parentId);
+                    let parent = null;
+                    for (const r of roots) {
+                        parent = findById(r, parentId);
+                        if (parent) break;
+                    }
                     if (!parent && parentId === ctx.systemId) {
-                        parent = root; // treat root (catalogue or game system) as root
+                        parent = roots[0]; // treat the primary root as the system root
                     }
                     if (!parent) return 'ERROR:Parent not found: ' + parentId;
 
-                    // If parent is the root, use shared containers for certain types
-                    if (parent === root && sharedKeyMap[entryType]) {
+                    // If parent is a root container, bare group/profile types use shared containers.
+                    if (roots.includes(parent) && sharedKeyMap[entryType]) {
                         childKey = sharedKeyMap[entryType];
                     }
 
@@ -604,8 +638,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                 try {
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'No editor context';
-                    const root = ctx.catalogue || ctx.gameSystem;
-                    if (!root) return 'No catalogue';
+                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
+                    if (!roots.length) return 'No catalogue';
 
                     // Find and splice from parent
                     const removeFromParent = (parent, id) => {
@@ -622,7 +656,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         }
                         return false;
                     };
-                    if (!removeFromParent(root, entryId)) {
+                    if (!roots.some(r => removeFromParent(r, entryId))) {
                         return 'Could not remove entry: ' + entryId;
                     }
                     return null;
@@ -653,8 +687,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                 try {
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'No editor context';
-                    const root = ctx.catalogue || ctx.gameSystem;
-                    if (!root) return 'No catalogue';
+                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
+                    if (!roots.length) return 'No catalogue';
 
                     // Find entry
                     const findById = (obj, id) => {
@@ -674,9 +708,13 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         return null;
                     };
 
-                    let entry = findById(root, entryId);
+                    let entry = null;
+                    for (const r of roots) {
+                        entry = findById(r, entryId);
+                        if (entry) break;
+                    }
                     if (!entry && entryId === ctx.systemId) {
-                        entry = root;
+                        entry = roots[0];
                     }
                     if (!entry) return 'Entry not found: ' + entryId;
 
@@ -715,13 +753,14 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                 try {
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'ERROR:No editor context';
-                    const root = ctx.catalogue || ctx.gameSystem;
-                    if (!root) return 'ERROR:No catalogue';
+                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
+                    if (!roots.length) return 'ERROR:No catalogue';
 
                     const containerKeyMap = {
                         'entryLink': 'entryLinks',
                         'infoLink': 'infoLinks',
                         'categoryLink': 'categoryLinks',
+                        'catalogueLink': 'catalogueLinks',
                     };
                     const childKey = containerKeyMap[linkType] || (linkType + 's');
 
@@ -749,9 +788,13 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         }
                         return null;
                     };
-                    let parent = findById(root, parentId);
+                    let parent = null;
+                    for (const r of roots) {
+                        parent = findById(r, parentId);
+                        if (parent) break;
+                    }
                     if (!parent && parentId === ctx.systemId) {
-                        parent = root;
+                        parent = roots[0];
                     }
                     if (!parent) return 'ERROR:Parent not found: ' + parentId;
 
@@ -773,6 +816,150 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         return new GameDataActionOutputs { EntryId = result };
     }
 
+    public void SetCost(string entryId, string costTypeId, string? value)
+    {
+        SetCompositeAsync("__costs", entryId, costTypeId, value).GetAwaiter().GetResult();
+    }
+
+    public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
+    {
+        SetCompositeAsync("__chars", entryId, nameOrTypeId, value).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Stores a cost (<c>__costs</c>) or characteristic (<c>__chars</c>) value on an entry's
+    /// composite map. These serialize as <c>cost:&lt;typeId&gt;</c> / <c>char:&lt;name&gt;</c> fields.
+    /// </summary>
+    private async Task SetCompositeAsync(string bag, string entryId, string key, string? value)
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var result = await _page.EvaluateAsync<string?>("""
+            ([bag, entryId, key, value]) => {
+                try {
+                    const ctx = window.__bsspec_editor;
+                    if (!ctx) return 'No editor context';
+                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
+
+                    const findById = (obj, id) => {
+                        if (!obj) return null;
+                        if (obj.id === id) return obj;
+                        for (const k of Object.keys(obj)) {
+                            const v = obj[k];
+                            if (Array.isArray(v)) {
+                                for (const item of v) {
+                                    if (item && typeof item === 'object') {
+                                        const f = findById(item, id);
+                                        if (f) return f;
+                                    }
+                                }
+                            }
+                        }
+                        return null;
+                    };
+
+                    let entry = null;
+                    for (const r of roots) { entry = findById(r, entryId); if (entry) break; }
+                    if (!entry) return 'Entry not found: ' + entryId;
+
+                    if (!entry[bag]) entry[bag] = {};
+                    if (value === null || value === '') {
+                        delete entry[bag][key];
+                    } else {
+                        entry[bag][key] = value;
+                    }
+                    return null;
+                } catch (e) {
+                    return 'SetComposite error: ' + e.message;
+                }
+            }
+            """, new object[] { bag, entryId, key, value ?? "" });
+
+        if (result != null)
+        {
+            throw new InvalidOperationException(result);
+        }
+    }
+
+    public IReadOnlyList<Roster.ValidationErrorState> GetValidationErrors()
+    {
+        return GetValidationErrorsAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task<IReadOnlyList<Roster.ValidationErrorState>> GetValidationErrorsAsync()
+    {
+        if (_page is null)
+        { return []; }
+
+        // Minimal reference validation for the link-target rules the specs assert:
+        // an entry link / catalogue link whose target does not resolve is flagged with the
+        // same message text the BattleScribe Data Editor produces.
+        var json = await _page.EvaluateAsync<string>("""
+            () => {
+                const ctx = window.__bsspec_editor;
+                if (!ctx) return '[]';
+                const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
+
+                // Every entry id present anywhere is a valid entry-link target.
+                const entryIds = new Set();
+                const collect = (obj) => {
+                    if (!obj || typeof obj !== 'object') return;
+                    if (typeof obj.id === 'string' && obj.id) entryIds.add(obj.id);
+                    for (const k of Object.keys(obj)) {
+                        const v = obj[k];
+                        if (Array.isArray(v)) for (const it of v) collect(it);
+                    }
+                };
+                for (const r of roots) collect(r);
+
+                // Catalogue + game-system ids are valid catalogue-link targets.
+                const catIds = new Set();
+                for (const c of (ctx.catalogues || [])) { if (c && c.id) catIds.add(c.id); }
+                if (ctx.gameSystem && ctx.gameSystem.id) catIds.add(ctx.gameSystem.id);
+
+                const errors = [];
+                const walk = (obj) => {
+                    if (!obj || typeof obj !== 'object') return;
+                    for (const k of Object.keys(obj)) {
+                        const v = obj[k];
+                        if (!Array.isArray(v)) continue;
+                        if (k === 'entryLinks') {
+                            for (const el of v) {
+                                if (el && el.targetId && !entryIds.has(el.targetId)) {
+                                    errors.push({ message: 'EntryLink must have a target that exists', entryId: el.id || null });
+                                }
+                            }
+                        }
+                        if (k === 'catalogueLinks') {
+                            for (const cl of v) {
+                                if (cl && cl.targetId && !catIds.has(cl.targetId)) {
+                                    errors.push({ message: 'CatalogueLink must have a target that exists', entryId: cl.id || null });
+                                }
+                            }
+                        }
+                        for (const it of v) walk(it);
+                    }
+                };
+                for (const r of roots) walk(r);
+
+                return JSON.stringify(errors);
+            }
+            """);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var errors = new List<Roster.ValidationErrorState>();
+        foreach (var el in doc.RootElement.EnumerateArray())
+        {
+            var message = el.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
+            var entryId = el.TryGetProperty("entryId", out var e) && e.ValueKind == System.Text.Json.JsonValueKind.String
+                ? e.GetString()
+                : null;
+            errors.Add(new Roster.ValidationErrorState(message, EntryId: entryId));
+        }
+        return errors;
+    }
+
     public GameDataState GetState()
     {
         return GetStateAsync().GetAwaiter().GetResult();
@@ -787,7 +974,12 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             () => {
                 const ctx = window.__bsspec_editor;
                 if (!ctx) return JSON.stringify({ error: 'No editor context' });
-                const catalogue = ctx.catalogue;
+
+                // Format a numeric value the way BattleScribe does (trim trailing .0).
+                const formatNum = (v) => {
+                    const n = Number(v);
+                    return Number.isFinite(n) && Number.isInteger(n) ? String(n) : String(v);
+                };
 
                 // Helper to serialize an entry node
                 const serializeEntry = (entry, entryType) => {
@@ -801,11 +993,11 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         fields: {},
                     };
 
-                    // Collect type-specific fields
-                    const skipKeys = new Set(['id', 'name', 'hidden', 'selectionEntries', 'selectionEntryGroups',
-                        'entryLinks', 'infoLinks', 'categoryLinks', 'rules', 'profiles', 'infoGroups',
-                        'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
-                        'forceEntries', 'categoryEntries', 'publications', 'costTypes', 'profileTypes', 'repeats']);
+                    // Collect type-specific scalar fields. Container arrays are excluded by the
+                    // Array.isArray check below, so the skip set only needs identity/internal keys.
+                    // (A Repeat node's scalar `repeats` count must NOT be skipped even though
+                    // `repeats` is also a child-container name elsewhere.)
+                    const skipKeys = new Set(['id', 'name', 'hidden', '__costs', '__chars']);
 
                     for (const [key, val] of Object.entries(entry)) {
                         if (skipKeys.has(key)) continue;
@@ -815,11 +1007,25 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         }
                     }
 
-                    // Serialize nested children
-                    const childContainers = ['selectionEntries', 'selectionEntryGroups', 'rules',
-                        'profiles', 'infoGroups', 'constraints', 'modifiers', 'modifierGroups',
-                        'conditions', 'conditionGroups', 'entryLinks', 'infoLinks', 'categoryLinks',
-                        'forceEntries', 'categoryEntries', 'repeats'];
+                    // Costs / characteristics serialize as composite "cost:<typeId>" / "char:<name>".
+                    if (entry.__costs) {
+                        for (const [k, v] of Object.entries(entry.__costs)) {
+                            result.fields['cost:' + k] = formatNum(v);
+                        }
+                    }
+                    if (entry.__chars) {
+                        for (const [k, v] of Object.entries(entry.__chars)) {
+                            result.fields['char:' + k] = String(v);
+                        }
+                    }
+
+                    // Serialize nested children in the BattleScribe reference engine's fixed
+                    // container order (see BattleScribeGameDataEngine.AddChildren), so positional
+                    // child assertions match the BS anchors.
+                    const childContainers = ['selectionEntries', 'selectionEntryGroups', 'entryLinks',
+                        'rules', 'profiles', 'infoGroups', 'infoLinks', 'categoryLinks',
+                        'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
+                        'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes'];
 
                     for (const ck of childContainers) {
                         const items = entry[ck];
@@ -842,6 +1048,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         id: container.id || '',
                         name: container.name || '',
                         gameSystemId: container.gameSystemId || container.id_game_system || '',
+                        fields: {},
                         selectionEntries: [],
                         entryLinks: [],
                         rules: [],
@@ -849,12 +1056,23 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         sharedSelectionEntryGroups: [],
                         sharedRules: [],
                         sharedProfiles: [],
+                        sharedInfoGroups: [],
                         forceEntries: [],
                         categoryEntries: [],
                         publications: [],
                         costTypes: [],
                         profileTypes: [],
+                        catalogueLinks: [],
                     };
+
+                    // Root metadata fields (revision, authorName, library, …) — every scalar
+                    // property that isn't identity or a child container.
+                    for (const [key, val] of Object.entries(container)) {
+                        if (key === 'id' || key === 'name') continue;
+                        if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
+                            result.fields[key] = String(val);
+                        }
+                    }
 
                     // Map from NR's property names to our state containers
                     const mappings = [
@@ -865,11 +1083,13 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         ['sharedSelectionEntryGroups', 'sharedSelectionEntryGroups', 'selectionEntryGroup'],
                         ['sharedRules', 'sharedRules', 'rule'],
                         ['sharedProfiles', 'sharedProfiles', 'profile'],
+                        ['sharedInfoGroups', 'sharedInfoGroups', 'infoGroup'],
                         ['forceEntries', 'forceEntries', 'forceEntry'],
                         ['categoryEntries', 'categoryEntries', 'categoryEntry'],
                         ['publications', 'publications', 'publication'],
                         ['costTypes', 'costTypes', 'costType'],
                         ['profileTypes', 'profileTypes', 'profileType'],
+                        ['catalogueLinks', 'catalogueLinks', 'catalogueLink'],
                     ];
 
                     for (const [srcKey, destKey, entryType] of mappings) {
@@ -889,9 +1109,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     state.gameSystem = serializeContainer(ctx.gameSystem);
                 }
 
-                if (ctx.catalogue) {
-                    state.catalogues = [serializeContainer(ctx.catalogue)];
-                }
+                const cats = ctx.catalogues || (ctx.catalogue ? [ctx.catalogue] : []);
+                state.catalogues = cats.map(serializeContainer).filter(Boolean);
 
                 return JSON.stringify(state);
             }
@@ -939,6 +1158,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             Id = el.GetProperty("id").GetString() ?? "",
             Name = el.GetProperty("name").GetString() ?? "",
             GameSystemId = el.GetProperty("gameSystemId").GetString() ?? "",
+            Fields = DeserializeFields(el),
             SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
             EntryLinks = DeserializeEntryList(el, "entryLinks"),
             Rules = DeserializeEntryList(el, "rules"),
@@ -946,11 +1166,13 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
             SharedRules = DeserializeEntryList(el, "sharedRules"),
             SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
+            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
             ForceEntries = DeserializeEntryList(el, "forceEntries"),
             CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
             Publications = DeserializeEntryList(el, "publications"),
             CostTypes = DeserializeEntryList(el, "costTypes"),
             ProfileTypes = DeserializeEntryList(el, "profileTypes"),
+            CatalogueLinks = DeserializeEntryList(el, "catalogueLinks"),
         };
     }
 
@@ -960,6 +1182,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         {
             Id = el.GetProperty("id").GetString() ?? "",
             Name = el.GetProperty("name").GetString() ?? "",
+            Fields = DeserializeFields(el),
             SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
             EntryLinks = DeserializeEntryList(el, "entryLinks"),
             Rules = DeserializeEntryList(el, "rules"),
@@ -967,12 +1190,28 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
             SharedRules = DeserializeEntryList(el, "sharedRules"),
             SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
+            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
             ForceEntries = DeserializeEntryList(el, "forceEntries"),
             CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
             CostTypes = DeserializeEntryList(el, "costTypes"),
             ProfileTypes = DeserializeEntryList(el, "profileTypes"),
             Publications = DeserializeEntryList(el, "publications"),
         };
+    }
+
+    private static IReadOnlyDictionary<string, string?>? DeserializeFields(System.Text.Json.JsonElement el)
+    {
+        if (!el.TryGetProperty("fields", out var fieldsEl) || fieldsEl.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var fields = new Dictionary<string, string?>();
+        foreach (var prop in fieldsEl.EnumerateObject())
+        {
+            fields[prop.Name] = prop.Value.GetString();
+        }
+        return fields.Count > 0 ? fields : null;
     }
 
     private static IReadOnlyList<DataEntryState> DeserializeEntryList(

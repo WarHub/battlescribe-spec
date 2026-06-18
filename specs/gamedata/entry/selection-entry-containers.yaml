@@ -6,10 +6,9 @@ description: >
   entry hosts rules / infoGroups / infoLinks / modifiers (category links attach to force
   entries only, so they are not addable here).
 
-# NewRecruit orders a selection entry's children differently, so the unnamed modifier
-# (matched positionally) lands on the wrong sibling there. NR is not a gate; skip it.
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:

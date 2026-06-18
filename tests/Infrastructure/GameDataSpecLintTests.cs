@@ -165,6 +165,7 @@ public sealed class GameDataSpecLintTests
     [
         "addEntry", "removeEntry",
         "setFields", "addLink",
+        "openCatalogue",
         "dump"
     ];
 
@@ -269,6 +270,13 @@ public sealed class GameDataSpecLintTests
                     if (step.TargetId is null)
                     {
                         yield return $"step {i + 1}: addLink requires 'targetId'";
+                    }
+
+                    break;
+                case "openCatalogue":
+                    if (step.EntryId is null)
+                    {
+                        yield return $"step {i + 1}: openCatalogue requires 'entryId'";
                     }
 
                     break;

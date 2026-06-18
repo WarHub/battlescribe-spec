@@ -3,8 +3,31 @@
 Tracks progress toward **100% coverage of the BattleScribe GameData model surface** — every
 data-model entity type and every settable field — verified against the two BattleScribe anchor
 engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). NewRecruit
-(`newrecruit`, `newrecruit-ui`) is not a gate; specs add `engines: { newrecruit: skip }` where NR
-diverges.
+(`newrecruit`, `newrecruit-ui`) is not a gate; specs add `engines: { newrecruit-ui: skip }` where
+NR's editor UI diverges.
+
+## NewRecruit engine status
+
+- **`newrecruit` (frozen HAR replay + live NR Editor): all 80 GameData specs pass.** The adapter
+  parses the spec's generated XML into an editable in-memory model and exercises the full action
+  surface — `addEntry`/`addLink`/`setFields` (incl. `costs` via `cost:<typeId>` and
+  `characteristics` via `char:<name>` composite fields), root metadata fields, shared-root and
+  type-def containers, catalogue links across multiple catalogues, and link-target validation
+  (`EntryLink/CatalogueLink must have a target that exists`). Child ordering matches the BS
+  reference engine's fixed container order.
+- **`newrecruit-ui` (real NR Editor, Playwright): pure-UI driven, no store writes.** All data
+  mutations go through rendered widgets (context menus, property tables, selects, checkboxes,
+  contenteditable fields, autocompletes) — the Pinia store is only ever read. Covered via UI:
+  every basic entry/group/force/category spec plus `constraint-create-and-fields`,
+  `constraint-advanced-fields`, `category-entry-with-constraint`, `force-create-and-nest`,
+  `rule-create-and-fields`, and `comment-fields`. The remaining advanced families
+  (modifier/condition/repeat query editors, profile characteristics, type defs, links, root
+  fields, shared roots) carry `newrecruit-ui: skip` pending bespoke right-panel widget drivers —
+  some are genuine NR-UI divergences (e.g. the modifier `type` options are gated by the selected
+  field, so a bare `type` change isn't expressible in the UI).
+- **`openCatalogue` spec action**: multi-catalogue specs declare the active file with
+  `action: openCatalogue` so the NR Editor UI edits the intended catalogue (no-op on engines that
+  read all files at once).
 
 The authoritative surface is the decompiled model under
 `../battlescribe-decompiled/BattleScribeEngine/sources/net/battlescribe/model/data/` (51 classes).
@@ -20,20 +43,21 @@ The authoritative surface is the decompiled model under
 Both BS anchors now support the full action/field surface (W2 + W3 done). Setting values is
 unified under a single **`setFields`** action carrying three optional maps — `fields`
 (scalar fields), `costs` (cost values by type) and `characteristics` (characteristic values).
-The runner applies `fields` first, then `costs`, then `characteristics`. NewRecruit supports
-only the `fields` map; specs using `costs`/`characteristics` skip the NR engines.
+The runner applies `fields` first, then `costs`, then `characteristics`. The `newrecruit` adapter
+supports all three maps; `newrecruit-ui` covers the basic + a documented subset of advanced
+families via pure UI (the rest carry `newrecruit-ui: skip`).
 
-| Capability | battlescribe (in-proc) | battlescribe-ui | newrecruit (frozen) | newrecruit-ui |
+| Capability | battlescribe (in-proc) | battlescribe-ui | newrecruit (frozen+live) | newrecruit-ui |
 |---|---|---|---|---|
 | addEntry: core (se, seg, rule, profile, entryLink, forceEntry, categoryEntry) | ✅ | ✅ | ✅ | ✅ |
-| addEntry: constraint, modifier, modifierGroup, condition, conditionGroup, repeat | ✅ (W2) | ✅ (W3) | partial | partial |
-| addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ? | ? |
-| addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ? | ? |
-| addEntry: shared* root variants | ✅ (W2) | ✅ (W3) | ? | ? |
+| addEntry: constraint, modifier, modifierGroup, condition, conditionGroup, repeat | ✅ (W2) | ✅ (W3) | ✅ | constraint ✅ · others skip |
+| addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ✅ | skip |
+| addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ✅ | skip |
+| addEntry: shared* root variants | ✅ (W2) | ✅ (W3) | ✅ | skip |
 | setFields → `fields` (scalar fields, generic reflective/UI) | ✅ | ✅ | ✅ | ✅ |
-| setFields → `costs` (cost values by type) | ✅ (W2) | ✅ (W3) | ❌ skip | ❌ skip |
-| setFields → `characteristics` (characteristic values) | ✅ (W2) | ✅ (W3) | ❌ skip | ❌ skip |
-| state: full query/modifier/cost/characteristic field serialization | ✅ (W2) | ✅ (W3) | partial | partial |
+| setFields → `costs` (cost values by type) | ✅ (W2) | ✅ (W3) | ✅ | skip |
+| setFields → `characteristics` (characteristic values) | ✅ (W2) | ✅ (W3) | ✅ | skip |
+| state: full query/modifier/cost/characteristic field serialization | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
 
 ## Entity × field coverage
 

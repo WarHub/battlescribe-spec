@@ -6,6 +6,8 @@ description: >
   force entry with its targetId and primary fields. Verifies link creation and the
   link field surface. (Category links attach to force entries in the data editor.)
 
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
   newrecruit-ui: skip
 

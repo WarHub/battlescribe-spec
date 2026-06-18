@@ -5,9 +5,9 @@ description: >
   creating the cost where absent and updating it where present. Verifies the
   values are persisted and keyed by cost type.
 
-# newrecruit engines lack setCost support.
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:

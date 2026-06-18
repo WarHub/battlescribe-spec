@@ -324,8 +324,12 @@ public static class NrGameDataUiActions
             const params = new URLSearchParams(window.location.search);
             const systemId = params.get('systemId');
             const gsSys = pinia._s.get('editor')?.gameSystems?.[systemId];
-            const pubs = gsSys?.loadedCatalogues?.[systemId]?.publications ?? [];
-            return pubs.find(p => p.id === pubId)?.name ?? null;
+            // Publications can live on the game system or any loaded catalogue.
+            for (const cat of Object.values(gsSys?.loadedCatalogues ?? {})) {
+                const hit = (cat.publications ?? []).find(p => p.id === pubId);
+                if (hit) return hit.name;
+            }
+            return null;
         }
         """;
 
@@ -440,12 +444,18 @@ public static class NrGameDataUiActions
                         return JSON.stringify({ error: `Game system '${systemId}' not found in editor.gameSystems` });
                     }
 
-                    const catalogue = gsSys.loadedCatalogues?.[catId];
-                    if (!catalogue) {
+                    const loaded = gsSys.loadedCatalogues ?? {};
+                    if (!loaded[catId] && !loaded[systemId]) {
                         return JSON.stringify({ error: `Catalogue '${catId}' not in loadedCatalogues for system '${systemId}'` });
                     }
 
-                    const gameSystemData = gsSys.loadedCatalogues?.[systemId] ?? null;
+                    const gameSystemData = loaded[systemId] ?? null;
+
+                    // Format a numeric value the way BattleScribe does (trim trailing .0).
+                    const formatNum = (v) => {
+                        const n = Number(v);
+                        return Number.isFinite(n) && Number.isInteger(n) ? String(n) : String(v);
+                    };
 
                     // Helper to serialize an entry node
                     const serializeEntry = (entry, entryType) => {
@@ -459,13 +469,14 @@ public static class NrGameDataUiActions
                             fields: {},
                         };
 
-                        const skipKeys = new Set(['id', 'name', 'hidden', 'selectionEntries', 'selectionEntryGroups',
-                            'entryLinks', 'infoLinks', 'categoryLinks', 'rules', 'profiles', 'infoGroups',
-                            'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
-                            'forceEntries', 'categoryEntries', 'publications', 'costTypes', 'profileTypes', 'repeats']);
+                        // Container arrays are excluded by the Array.isArray check below, so the skip
+                        // set only needs identity/internal keys. (A Repeat node's scalar `repeats`
+                        // count must survive even though `repeats` is also a child-container name.)
+                        const skipKeys = new Set(['id', 'name', 'hidden', 'parent', 'catalogue',
+                            'attributes', 'costs', 'characteristics']);
 
                         for (const [key, val] of Object.entries(entry)) {
-                            if (skipKeys.has(key)) continue;
+                            if (skipKeys.has(key) || key.startsWith('$') || key.startsWith('__')) continue;
                             if (typeof val === 'function') continue;
                             if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
                                 // NR stores the import flag as 'import' but the spec protocol uses 'imported'
@@ -474,10 +485,25 @@ public static class NrGameDataUiActions
                             }
                         }
 
-                        const childContainers = ['selectionEntries', 'selectionEntryGroups', 'rules',
-                            'profiles', 'infoGroups', 'constraints', 'modifiers', 'modifierGroups',
-                            'conditions', 'conditionGroups', 'entryLinks', 'infoLinks', 'categoryLinks',
-                            'forceEntries', 'categoryEntries', 'repeats'];
+                        // Costs / characteristics serialize as composite "cost:<typeId>" / "char:<name>"
+                        // (NR keeps the characteristic value in the $text field).
+                        if (Array.isArray(entry.costs)) {
+                            for (const c of entry.costs) {
+                                if (c && c.typeId != null) result.fields['cost:' + c.typeId] = formatNum(c.value);
+                            }
+                        }
+                        if (Array.isArray(entry.characteristics)) {
+                            for (const ch of entry.characteristics) {
+                                if (ch && ch.name) result.fields['char:' + ch.name] = String(ch.$text ?? ch.value ?? '');
+                            }
+                        }
+
+                        // BattleScribe reference engine's fixed container order, so positional
+                        // child assertions match the BS anchors.
+                        const childContainers = ['selectionEntries', 'selectionEntryGroups', 'entryLinks',
+                            'rules', 'profiles', 'infoGroups', 'infoLinks', 'categoryLinks',
+                            'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
+                            'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes'];
 
                         for (const ck of childContainers) {
                             const items = entry[ck];
@@ -499,6 +525,7 @@ public static class NrGameDataUiActions
                             id: container.id || '',
                             name: container.name || '',
                             gameSystemId: container.gameSystemId || container.id_game_system || '',
+                            fields: {},
                             selectionEntries: [],
                             entryLinks: [],
                             rules: [],
@@ -506,12 +533,22 @@ public static class NrGameDataUiActions
                             sharedSelectionEntryGroups: [],
                             sharedRules: [],
                             sharedProfiles: [],
+                            sharedInfoGroups: [],
                             forceEntries: [],
                             categoryEntries: [],
                             publications: [],
                             costTypes: [],
                             profileTypes: [],
+                            catalogueLinks: [],
                         };
+
+                        // Root metadata fields (revision, authorName, library, …).
+                        for (const [key, val] of Object.entries(container)) {
+                            if (key === 'id' || key === 'name') continue;
+                            if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
+                                r.fields[key] = String(val);
+                            }
+                        }
 
                         const mappings = [
                             ['selectionEntries', 'selectionEntries', 'selectionEntry'],
@@ -521,11 +558,13 @@ public static class NrGameDataUiActions
                             ['sharedSelectionEntryGroups', 'sharedSelectionEntryGroups', 'selectionEntryGroup'],
                             ['sharedRules', 'sharedRules', 'rule'],
                             ['sharedProfiles', 'sharedProfiles', 'profile'],
+                            ['sharedInfoGroups', 'sharedInfoGroups', 'infoGroup'],
                             ['forceEntries', 'forceEntries', 'forceEntry'],
                             ['categoryEntries', 'categoryEntries', 'categoryEntry'],
                             ['publications', 'publications', 'publication'],
                             ['costTypes', 'costTypes', 'costType'],
                             ['profileTypes', 'profileTypes', 'profileType'],
+                            ['catalogueLinks', 'catalogueLinks', 'catalogueLink'],
                         ];
 
                         for (const [srcKey, destKey, entryType] of mappings) {
@@ -537,9 +576,15 @@ public static class NrGameDataUiActions
                         return r;
                     };
 
+                    // Surface every loaded catalogue (multi-catalogue specs assert on a catalogue
+                    // other than the one the editor happens to have open); the system-id entry is
+                    // the game system, not a catalogue.
                     const state = { catalogues: [], gameSystem: null };
                     if (gameSystemData) state.gameSystem = serializeContainer(gameSystemData);
-                    if (catalogue) state.catalogues = [serializeContainer(catalogue)];
+                    state.catalogues = Object.entries(loaded)
+                        .filter(([k]) => k !== systemId)
+                        .map(([, c]) => serializeContainer(c))
+                        .filter(Boolean);
 
                     return JSON.stringify(state);
                 } catch (e) {
@@ -570,7 +615,7 @@ public static class NrGameDataUiActions
     /// After this method returns, callers can click the locator to select the entry and
     /// open its properties panel.
     /// </summary>
-    private static async Task<ILocator> FindTreeNodeByIdAsync(IPage page, string entryId)
+    internal static async Task<ILocator> FindTreeNodeByIdAsync(IPage page, string entryId)
     {
         // Step 1: Look up the entry's name and collection key in the Pinia editorStore.
         // NR Editor stores catalogue data as:
@@ -849,7 +894,7 @@ public static class NrGameDataUiActions
     /// Returns the ID of the currently open catalogue by reading the <c>id</c> query
     /// parameter from the page URL (e.g. <c>.../catalogue?systemId=gs-1&amp;id=cat-1</c>).
     /// </summary>
-    private static async Task<string> GetCurrentCatalogueIdAsync(IPage page)
+    internal static async Task<string> GetCurrentCatalogueIdAsync(IPage page)
         => await page.EvaluateAsync<string>(
             "() => new URLSearchParams(window.location.search).get('id') ?? ''") ?? "";
 
@@ -866,7 +911,7 @@ public static class NrGameDataUiActions
     ///   <item>The form is a table where each row is <c>&lt;tr&gt;&lt;td&gt;{Label}&lt;/td&gt;&lt;td&gt;&lt;input&gt;&lt;/td&gt;&lt;/tr&gt;</c>.</item>
     /// </list>
     /// </summary>
-    private static async Task<GameDataActionOutputs> AddEntryToRootSectionAsync(
+    internal static async Task<GameDataActionOutputs> AddEntryToRootSectionAsync(
         IPage page, string entryType, string? name)
     {
         var sectionClass = GetSectionCssClass(entryType);
@@ -915,7 +960,7 @@ public static class NrGameDataUiActions
     /// icon image src. After creating the link, sets the <c>targetId</c> field in the
     /// properties panel.
     /// </summary>
-    private static async Task<GameDataActionOutputs> AddLinkToRootSectionAsync(
+    internal static async Task<GameDataActionOutputs> AddLinkToRootSectionAsync(
         IPage page, string linkType, string targetId)
     {
         var sectionClass = GetSectionCssClass(linkType);
@@ -1015,6 +1060,7 @@ public static class NrGameDataUiActions
             Id = el.GetProperty("id").GetString() ?? "",
             Name = el.GetProperty("name").GetString() ?? "",
             GameSystemId = el.GetProperty("gameSystemId").GetString() ?? "",
+            Fields = DeserializeFields(el),
             SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
             EntryLinks = DeserializeEntryList(el, "entryLinks"),
             Rules = DeserializeEntryList(el, "rules"),
@@ -1022,11 +1068,13 @@ public static class NrGameDataUiActions
             SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
             SharedRules = DeserializeEntryList(el, "sharedRules"),
             SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
+            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
             ForceEntries = DeserializeEntryList(el, "forceEntries"),
             CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
             Publications = DeserializeEntryList(el, "publications"),
             CostTypes = DeserializeEntryList(el, "costTypes"),
             ProfileTypes = DeserializeEntryList(el, "profileTypes"),
+            CatalogueLinks = DeserializeEntryList(el, "catalogueLinks"),
         };
 
     private static GameSystemDataState DeserializeGameSystem(System.Text.Json.JsonElement el) =>
@@ -1034,6 +1082,7 @@ public static class NrGameDataUiActions
         {
             Id = el.GetProperty("id").GetString() ?? "",
             Name = el.GetProperty("name").GetString() ?? "",
+            Fields = DeserializeFields(el),
             SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
             EntryLinks = DeserializeEntryList(el, "entryLinks"),
             Rules = DeserializeEntryList(el, "rules"),
@@ -1041,12 +1090,28 @@ public static class NrGameDataUiActions
             SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
             SharedRules = DeserializeEntryList(el, "sharedRules"),
             SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
+            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
             ForceEntries = DeserializeEntryList(el, "forceEntries"),
             CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
             CostTypes = DeserializeEntryList(el, "costTypes"),
             ProfileTypes = DeserializeEntryList(el, "profileTypes"),
             Publications = DeserializeEntryList(el, "publications"),
         };
+
+    private static IReadOnlyDictionary<string, string?>? DeserializeFields(System.Text.Json.JsonElement el)
+    {
+        if (!el.TryGetProperty("fields", out var fieldsEl) || fieldsEl.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var fields = new Dictionary<string, string?>();
+        foreach (var prop in fieldsEl.EnumerateObject())
+        {
+            fields[prop.Name] = prop.Value.GetString();
+        }
+        return fields.Count > 0 ? fields : null;
+    }
 
     private static IReadOnlyList<DataEntryState> DeserializeEntryList(
         System.Text.Json.JsonElement parent, string propertyName)

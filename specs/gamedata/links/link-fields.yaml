@@ -5,6 +5,8 @@ description: >
   entry-link field surface beyond targetId/type. (Link type is covered in
   links-create-and-fields.)
 
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
   newrecruit-ui: skip
 

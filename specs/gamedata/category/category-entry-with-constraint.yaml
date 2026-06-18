@@ -5,10 +5,6 @@ description: >
   inside it. Verifies category-entry creation and that constraints and modifiers can
   be created on it.
 
-engines:
-  newrecruit: skip
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

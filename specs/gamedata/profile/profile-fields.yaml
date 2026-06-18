@@ -4,8 +4,8 @@ description: >
   Set the metadata fields of a profile: typeName, page, publicationId and hidden.
   Verifies the profile field surface beyond typeId and characteristics.
 
-# The NewRecruit Data Editor UI does not expose these fields the same way and times out
-# there. NR is not a gate; skip the NR editor UI.
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
   newrecruit-ui: skip
 

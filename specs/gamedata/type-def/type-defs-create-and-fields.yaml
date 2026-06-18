@@ -5,8 +5,9 @@ description: >
   and a profile type with a nested characteristic type. Verifies creation and fields for
   the root type-definition entities.
 
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:

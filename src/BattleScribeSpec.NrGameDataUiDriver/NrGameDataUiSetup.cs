@@ -212,6 +212,59 @@ public static class NrGameDataUiSetup
     /// finds the item by name and double-clicks it, then waits for the editor route and the
     /// item to appear in <c>loadedCatalogues</c>.
     /// </summary>
+    /// <summary>
+    /// Switches the editor to a different loaded file (catalogue or game system) by id, driven
+    /// through the UI: returns to the system list and double-clicks the matching item. Used by
+    /// the spec <c>openCatalogue</c> action so multi-catalogue specs can declare the active file.
+    /// </summary>
+    internal static async Task NavigateToFileAsync(IPage page, string id)
+    {
+        // Already open?
+        var currentId = await page.EvaluateAsync<string?>(
+            "() => new URLSearchParams(location.search).get('id')");
+        if (currentId == id)
+        {
+            return;
+        }
+
+        // Resolve the file's display name (read-only) from the loaded catalogues or systems store.
+        var name = await page.EvaluateAsync<string?>(
+            """
+            (id) => {
+                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                const ed = pinia?._s?.get('editor');
+                const sId = new URLSearchParams(location.search).get('systemId');
+                const loaded = ed?.gameSystems?.[sId]?.loadedCatalogues ?? {};
+                if (loaded[id]?.name) return loaded[id].name;
+                // Fall back to scanning all systems' catalogue indexes.
+                for (const gs of Object.values(ed?.gameSystems ?? {})) {
+                    for (const c of Object.values(gs?.cataloguesById ?? gs?.catalogues ?? {})) {
+                        if (c?.id === id && c?.name) return c.name;
+                    }
+                }
+                return null;
+            }
+            """, id);
+
+        _ = name ?? throw new InvalidOperationException(
+            $"NR Editor UI: cannot resolve a name for file id '{id}' to open it.");
+
+        // Return to the system list and double-click the target file.
+        await page.GoBackAsync(new PageGoBackOptions { Timeout = 15_000 });
+        await page.WaitForSelectorAsync(".item.unselectable:not(.add)", new() { Timeout = 10_000 });
+        var item = page.Locator(".item.unselectable:not(.add)", new PageLocatorOptions { HasText = name });
+        await item.First.DblClickAsync();
+        await page.WaitForURLAsync("**/catalogue**", new() { Timeout = 15_000 });
+        await page.WaitForFunctionAsync(
+            """
+            (id) => {
+                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                const sId = new URLSearchParams(location.search).get('systemId');
+                return !!pinia?._s?.get('editor')?.gameSystems?.[sId]?.loadedCatalogues?.[id];
+            }
+            """, id, new PageWaitForFunctionOptions { Timeout = 15_000 });
+    }
+
     private static async Task<string?> NavigateToEditableAsync(
         IPage page,
         string itemName)

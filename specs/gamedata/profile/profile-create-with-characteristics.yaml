@@ -5,9 +5,9 @@ description: >
   values via setCharacteristic. Verifies the profile's typeId and characteristic values
   are persisted.
 
-# newrecruit engines lack setCharacteristic support.
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:

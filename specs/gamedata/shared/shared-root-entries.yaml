@@ -5,8 +5,9 @@ description: >
   a shared selection entry group, a shared rule, and a shared profile. Verifies creation
   into each shared container.
 
+# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
+# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
 engines:
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:
