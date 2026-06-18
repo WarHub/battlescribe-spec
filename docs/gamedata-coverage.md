@@ -16,15 +16,21 @@ NR's editor UI diverges.
   (`EntryLink/CatalogueLink must have a target that exists`). Child ordering matches the BS
   reference engine's fixed container order.
 - **`newrecruit-ui` (real NR Editor, Playwright): pure-UI driven, no store writes.** All data
-  mutations go through rendered widgets (context menus, property tables, selects, checkboxes,
-  contenteditable fields, autocompletes) — the Pinia store is only ever read. Covered via UI:
-  every basic entry/group/force/category spec plus `constraint-create-and-fields`,
+  mutations go through rendered widgets (context menus + submenus, property tables, selects,
+  checkboxes, contenteditable fields, autocompletes) — the Pinia store is only ever read. Covered
+  via UI: every basic entry/group/force/category spec; `constraint-create-and-fields`,
   `constraint-advanced-fields`, `category-entry-with-constraint`, `force-create-and-nest`,
-  `rule-create-and-fields`, and `comment-fields`. The remaining advanced families
-  (modifier/condition/repeat query editors, profile characteristics, type defs, links, root
-  fields, shared roots) carry `newrecruit-ui: skip` pending bespoke right-panel widget drivers —
-  some are genuine NR-UI divergences (e.g. the modifier `type` options are gated by the selected
-  field, so a bare `type` change isn't expressible in the UI).
+  `rule-create-and-fields`, `comment-fields`; **root fields** (`root-fields-gamesystem`,
+  `root-fields-catalogue`), **publication** (`publication-create-and-fields`), **costs**
+  (`cost-set-values`), **profiles + characteristics** (`profile-create-with-characteristics`,
+  `profile-fields`), **entry-link fields** (`link-fields`), and **broken-link validation**
+  (`error-broken-entry-link`). The remaining advanced families (modifier/condition/repeat query
+  editors, info groups, type defs, the remaining link specs, shared roots) still carry
+  `newrecruit-ui: skip` pending bespoke right-panel widget drivers.
+  - **Genuine NR-UI divergences** (asserted on the BS anchors only, via a per-engine
+    `expectedState` override): `gameSystem.battleScribeVersion` has no editor widget; an entry
+    link's `collective` checkbox is disabled (NR derives it); and an entry link's `type` /
+    Target list won't surface a shared `selectionEntryGroup`, so `link-types` is skipped.
 - **`openCatalogue` spec action**: multi-catalogue specs declare the active file with
   `action: openCatalogue` so the NR Editor UI edits the intended catalogue (no-op on engines that
   read all files at once).
@@ -52,11 +58,11 @@ families via pure UI (the rest carry `newrecruit-ui: skip`).
 | addEntry: core (se, seg, rule, profile, entryLink, forceEntry, categoryEntry) | ✅ | ✅ | ✅ | ✅ |
 | addEntry: constraint, modifier, modifierGroup, condition, conditionGroup, repeat | ✅ (W2) | ✅ (W3) | ✅ | constraint ✅ · others skip |
 | addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ✅ | skip |
-| addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ✅ | skip |
+| addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ✅ | publication ✅ · others skip |
 | addEntry: shared* root variants | ✅ (W2) | ✅ (W3) | ✅ | skip |
 | setFields → `fields` (scalar fields, generic reflective/UI) | ✅ | ✅ | ✅ | ✅ |
-| setFields → `costs` (cost values by type) | ✅ (W2) | ✅ (W3) | ✅ | skip |
-| setFields → `characteristics` (characteristic values) | ✅ (W2) | ✅ (W3) | ✅ | skip |
+| setFields → `costs` (cost values by type) | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
+| setFields → `characteristics` (characteristic values) | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
 | state: full query/modifier/cost/characteristic field serialization | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
 
 ## Entity × field coverage
@@ -183,7 +189,9 @@ field is created and asserted on both the in-process reference engine and the Da
   `buildEntryJson` field serialization are implemented and verified; the three sample specs pass
   on `battlescribe-ui`. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by `setup.ps1`,
   to build the agent jar.)
-- **NR engines** support only the `fields` map of `setFields`; specs that use the `costs` or
-  `characteristics` maps carry `newrecruit`/`newrecruit-ui` skips until/unless NR support is
-  added. The constraint spec also skips `newrecruit-ui` (NR Editor UI diverges on constraint
-  field round-trip).
+- **`newrecruit-ui` remaining clusters** still skipped pending bespoke widget drivers: the
+  modifier/condition/repeat query editors, info groups, type defs, the remaining link specs
+  (`links-create-and-fields`, `link-types`, `catalogue-link`), and shared-root entries. The driver
+  now covers root fields, publication, costs, characteristics, profiles, and entry-link fields via
+  pure UI (context menus + submenus, the right-panel property table incl. contenteditable rows,
+  cost/characteristic widgets, and reference autocompletes).

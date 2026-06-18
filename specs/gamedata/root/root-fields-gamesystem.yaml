@@ -4,11 +4,6 @@ description: >
   Set game-system root metadata fields (authorName, authorUrl, readme, revision)
   and verify they round-trip. These are BaseRootEntry fields on the game system.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1
@@ -33,3 +28,14 @@ steps:
           readme: System design notes.
           revision: "7"
           battleScribeVersion: "2.03"
+      engines:
+        # NR's game-system root editor has no battleScribeVersion widget, so the field can't be
+        # set via its UI; assert the remaining root fields (the BS anchors still cover the version).
+        newrecruit-ui:
+          gameSystem:
+            id: gs-1
+            fields:
+              authorName: Jane Designer
+              authorUrl: https://jane.example.com
+              readme: System design notes.
+              revision: "7"

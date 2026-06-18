@@ -5,11 +5,6 @@ description: >
   entry-link field surface beyond targetId/type. (Link type is covered in
   links-create-and-fields.)
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1
@@ -47,3 +42,15 @@ steps:
                 targetId: sse-1
                 collective: "true"
                 imported: "true"
+      engines:
+        # NR disables the `collective` checkbox on an entry link (it derives it), so it can't be
+        # set via the UI; assert the remaining link flags (the BS anchors still cover collective).
+        newrecruit-ui:
+          catalogues:
+            - id: cat-1
+              entryLinks:
+                - entryType: entryLink
+                  hidden: true
+                  fields:
+                    targetId: sse-1
+                    imported: "true"

@@ -75,6 +75,26 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
         => RunAsync(() => SetupAsync(gameSystem, catalogues));
 
+    public void OpenFile(string id)
+        => RunAsync(() => OpenFileAsync(id));
+
+    /// <summary>
+    /// Select the active file. The Data Editor loads every same-system file at once and addresses
+    /// entries by id, so there is no separate "active document" that changes where a mutation
+    /// lands — the meaningful contract is that the id refers to a loaded file. Validates against
+    /// the live model and throws on an unknown id so a mistyped <c>openCatalogue</c> fails loudly.
+    /// </summary>
+    private async Task OpenFileAsync(string id)
+    {
+        var state = await GetStateAsync();
+        var known = state.GameSystem?.Id == id || state.Catalogues.Any(c => c.Id == id);
+        if (!known)
+        {
+            throw new InvalidOperationException(
+                $"openCatalogue: no loaded catalogue or game system with id '{id}'");
+        }
+    }
+
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
         => RunAsync(() => CallActionAsync<GameDataActionOutputs>("gamedataAddEntryAction", new JsonObject
         {

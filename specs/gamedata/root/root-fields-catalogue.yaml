@@ -4,11 +4,6 @@ description: >
   Set catalogue root metadata fields (authorName, authorContact, authorUrl, readme)
   and toggle the library flag. Verifies the catalogue root field surface.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

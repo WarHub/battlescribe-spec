@@ -205,22 +205,72 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     }
 
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
-        => _ui.AddEntryAsync(parentId, entryType, name).GetAwaiter().GetResult();
+        => Run($"addEntry-{entryType}", () => _ui.AddEntryAsync(parentId, entryType, name));
 
     public void RemoveEntry(string entryId)
-        => NrGameDataUiActions.RemoveEntryAsync(_page!, entryId).GetAwaiter().GetResult();
+        => Run($"removeEntry", () => NrGameDataUiActions.RemoveEntryAsync(_page!, entryId));
 
     public void SetField(string entryId, string field, string? value)
-        => _ui.SetFieldAsync(entryId, field, value).GetAwaiter().GetResult();
+        => Run($"setField-{field}", () => _ui.SetFieldAsync(entryId, field, value));
 
     public void SetCost(string entryId, string costTypeId, string? value)
-        => _ui.SetCostAsync(entryId, costTypeId, value).GetAwaiter().GetResult();
+        => Run($"setCost-{costTypeId}", () => _ui.SetCostAsync(entryId, costTypeId, value));
 
     public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
-        => _ui.SetCharacteristicAsync(entryId, nameOrTypeId, value).GetAwaiter().GetResult();
+        => Run($"setCharacteristic-{nameOrTypeId}", () => _ui.SetCharacteristicAsync(entryId, nameOrTypeId, value));
 
     public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
-        => _ui.AddLinkAsync(parentId, linkType, targetId).GetAwaiter().GetResult();
+        => Run($"addLink-{linkType}", () => _ui.AddLinkAsync(parentId, linkType, targetId));
+
+    /// <summary>
+    /// Runs an action; on failure, captures a diagnostics bundle <b>at the failure point</b>
+    /// (before the runner's Cleanup navigates away) when NR_GAMEDATA_UI_DIAGNOSTICS is set, then
+    /// rethrows. Gated by env var so normal runs aren't slowed; <c>bs-spec verify --diagnostics</c>
+    /// sets it.
+    /// </summary>
+    private T Run<T>(string label, Func<Task<T>> action)
+    {
+        try
+        {
+            return action().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            CaptureFailureDiagnostics(label);
+            throw;
+        }
+    }
+
+    private void Run(string label, Func<Task> action)
+    {
+        try
+        {
+            action().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            CaptureFailureDiagnostics(label);
+            throw;
+        }
+    }
+
+    private void CaptureFailureDiagnostics(string label)
+    {
+        if (Environment.GetEnvironmentVariable("NR_GAMEDATA_UI_DIAGNOSTICS") is null || _diagnostics is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var report = _diagnostics.CaptureFullReportAsync().GetAwaiter().GetResult();
+            NrGameDataUiDiagnostics.SaveReportAsync(report, $"{_specId}-{label}").GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Best-effort — diagnostics must never mask the original failure.
+        }
+    }
 
     /// <summary>Selects/opens the given catalogue (or game system) for editing in the NR Editor.</summary>
     public void OpenFile(string id)
@@ -263,9 +313,14 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
                     const cats = Object.values(gsSys.loadedCatalogues ?? {});
                     const catIds = new Set(Object.keys(gsSys.loadedCatalogues ?? {}));
 
+                    // NR's reactive model has back-references (parent/catalogue) and shared arrays,
+                    // so a naive recursion over every array can cycle and overflow the stack (which
+                    // the catch below would swallow as "no errors"). Guard every descent with a seen-set.
                     const entryIds = new Set();
+                    const seenCollect = new WeakSet();
                     const collect = (obj) => {
-                        if (!obj || typeof obj !== 'object') return;
+                        if (!obj || typeof obj !== 'object' || seenCollect.has(obj)) return;
+                        seenCollect.add(obj);
                         if (typeof obj.id === 'string' && obj.id) entryIds.add(obj.id);
                         for (const k of Object.keys(obj)) {
                             const v = obj[k];
@@ -275,8 +330,10 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
                     for (const c of cats) collect(c);
 
                     const errors = [];
+                    const seenWalk = new WeakSet();
                     const walk = (obj) => {
-                        if (!obj || typeof obj !== 'object') return;
+                        if (!obj || typeof obj !== 'object' || seenWalk.has(obj)) return;
+                        seenWalk.add(obj);
                         for (const k of Object.keys(obj)) {
                             const v = obj[k];
                             if (!Array.isArray(v)) continue;

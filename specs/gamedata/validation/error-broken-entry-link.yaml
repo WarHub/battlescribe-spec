@@ -6,11 +6,6 @@ description: >
   and the Data Editor (battlescribe-ui) construct the real BattleScribe data manager and
   report the same error, so the assertion runs on both anchors.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

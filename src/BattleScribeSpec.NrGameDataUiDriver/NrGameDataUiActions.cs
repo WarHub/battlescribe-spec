@@ -180,12 +180,19 @@ public static class NrGameDataUiActions
 
         // Several fields use NR Editor's custom autocomplete widget (not a standard input/select).
         // Handle these before the generic input strategies.
-        if (field is "publicationId" or "defaultSelectionEntryId" or "targetId")
+        if (field is "publicationId" or "defaultSelectionEntryId" or "targetId" or "typeId" or "typeName")
         {
             if (value is not null)
             {
-                var lookupJs = field == "publicationId" ? PublicationNameLookupJs : EntryNameLookupJs;
-                var displayName = await page.EvaluateAsync<string?>(lookupJs, value);
+                // typeName IS the profile-type display name — no id→name lookup needed; the others
+                // resolve the target's display name from its id.
+                var displayName = field switch
+                {
+                    "typeName" => value,
+                    "publicationId" => await page.EvaluateAsync<string?>(PublicationNameLookupJs, value),
+                    "typeId" => await page.EvaluateAsync<string?>(ProfileTypeNameLookupJs, value),
+                    _ => await page.EvaluateAsync<string?>(EntryNameLookupJs, value),
+                };
                 await SetAutocompleteFieldAsync(page, rightPanel, fieldLabel, value, displayName);
             }
             return;
@@ -201,10 +208,29 @@ public static class NrGameDataUiActions
             // Strategy 2: Table row approach for text/select fields.
             // NR Editor renders: <tr><td>Label:</td><td><input or select></td></tr>
             // The td label is NOT a <label> element so GetByLabel does not find these inputs.
+            // Match the label *cell* precisely (tolerant of a trailing colon) so a label like
+            // "Publication" doesn't also match "Publication Date:" / "Publication URL:".
             fieldInput = rightPanel.Locator("table.editorTable tr")
-                .Filter(new LocatorFilterOptions { HasText = fieldLabel })
+                .Filter(new LocatorFilterOptions
+                {
+                    Has = page.Locator("td").Filter(new LocatorFilterOptions
+                    {
+                        HasTextRegex = new System.Text.RegularExpressions.Regex(
+                            $"^\\s*{System.Text.RegularExpressions.Regex.Escape(fieldLabel)}:?\\s*$"),
+                    }),
+                })
                 .Locator("td:last-child input, td:last-child select")
                 .First;
+        }
+
+        // A disabled control genuinely cannot be set through the UI (e.g. `collective` on an
+        // entry link, which NR derives rather than exposes). Skip it rather than timing out; the
+        // spec accounts for it via a per-engine expectedState override.
+        if (await fieldInput.CountAsync() > 0 && await fieldInput.IsDisabledAsync())
+        {
+            Console.Error.WriteLine(
+                $"[nr-gamedata-ui] field '{field}' control is disabled in NR's UI — skipping.");
+            return;
         }
 
         if (value is null)
@@ -327,6 +353,103 @@ public static class NrGameDataUiActions
             // Publications can live on the game system or any loaded catalogue.
             for (const cat of Object.values(gsSys?.loadedCatalogues ?? {})) {
                 const hit = (cat.publications ?? []).find(p => p.id === pubId);
+                if (hit) return hit.name;
+            }
+            return null;
+        }
+        """;
+
+    /// <summary>
+    /// JS to determine a link target's kind (the value NR's "Link Type" select expects) by finding
+    /// which collection holds the id across all loaded catalogues. Argument: targetId; returns one
+    /// of selectionEntry/selectionEntryGroup/rule/profile/infoGroup, or null if not found.
+    /// </summary>
+    private const string LinkTargetKindLookupJs = """
+        (targetId) => {
+            const pinia = document.querySelector('#__nuxt')
+                ?.__vue_app__?.config?.globalProperties?.$pinia;
+            if (!pinia) return null;
+            const systemId = new URLSearchParams(location.search).get('systemId');
+            const gsSys = pinia._s.get('editor')?.gameSystems?.[systemId];
+            if (!gsSys) return null;
+            const kindByCol = {
+                selectionEntries: 'selectionEntry', sharedSelectionEntries: 'selectionEntry',
+                selectionEntryGroups: 'selectionEntryGroup', sharedSelectionEntryGroups: 'selectionEntryGroup',
+                rules: 'rule', sharedRules: 'rule',
+                profiles: 'profile', sharedProfiles: 'profile',
+                infoGroups: 'infoGroup', sharedInfoGroups: 'infoGroup',
+            };
+            const seen = new WeakSet();
+            const search = (obj) => {
+                if (!obj || typeof obj !== 'object' || seen.has(obj)) return null;
+                seen.add(obj);
+                for (const col of Object.keys(kindByCol)) {
+                    const arr = obj[col];
+                    if (Array.isArray(arr)) for (const e of arr) if (e && e.id === targetId) return kindByCol[col];
+                }
+                for (const k of Object.keys(obj)) {
+                    const v = obj[k];
+                    if (Array.isArray(v)) for (const it of v) { const r = search(it); if (r) return r; }
+                }
+                return null;
+            };
+            for (const c of Object.values(gsSys.loadedCatalogues ?? {})) { const r = search(c); if (r) return r; }
+            return null;
+        }
+        """;
+
+    /// <summary>
+    /// NR filters a link's "Target" autocomplete by its "Link Type" select, so a non-default
+    /// target (group/rule/profile/infoGroup) isn't listed until the type matches. Sets the Link
+    /// Type select from the target's kind before the target is chosen. No-op if the row/kind is absent.
+    /// </summary>
+    internal static async Task SetLinkTypeFromTargetAsync(IPage page, ILocator rightPanel, string targetId)
+    {
+        var kind = await page.EvaluateAsync<string?>(LinkTargetKindLookupJs, targetId);
+        if (kind is null)
+        {
+            return;
+        }
+
+        var typeSelect = rightPanel.Locator("table.editorTable tr")
+            .Filter(new LocatorFilterOptions
+            {
+                Has = page.Locator("td").Filter(new LocatorFilterOptions
+                {
+                    HasTextRegex = new System.Text.RegularExpressions.Regex("^\\s*Link Type:?\\s*$"),
+                }),
+            })
+            .Locator("td:last-child select").First;
+        if (await typeSelect.CountAsync() == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await typeSelect.SelectOptionAsync(new SelectOptionValue { Value = kind });
+            await page.WaitForTimeoutAsync(200);
+        }
+        catch
+        {
+            // Type not selectable (e.g. only one option) — leave as-is.
+        }
+    }
+
+    /// <summary>
+    /// JS expression to look up a profile-type name by ID from the Pinia editorStore (profile
+    /// types live on the game system or any loaded catalogue). Argument: typeId; returns name.
+    /// </summary>
+    private const string ProfileTypeNameLookupJs = """
+        (typeId) => {
+            const pinia = document.querySelector('#__nuxt')
+                ?.__vue_app__?.config?.globalProperties?.$pinia;
+            if (!pinia) return null;
+            const params = new URLSearchParams(window.location.search);
+            const systemId = params.get('systemId');
+            const gsSys = pinia._s.get('editor')?.gameSystems?.[systemId];
+            for (const cat of Object.values(gsSys?.loadedCatalogues ?? {})) {
+                const hit = (cat.profileTypes ?? []).find(p => p.id === typeId);
                 if (hit) return hit.name;
             }
             return null;
@@ -633,7 +756,7 @@ public static class NrGameDataUiActions
                     const cols = [
                         'selectionEntries','categoryEntries','selectionEntryGroups',
                         'forceEntries','entryLinks','infoLinks','categoryLinks',
-                        'rules','profileTypes','costTypes','publications',
+                        'rules','profiles','infoGroups','profileTypes','costTypes','publications',
                         'sharedSelectionEntries','sharedSelectionEntryGroups',
                         'sharedProfiles','sharedRules','sharedInfoGroups'
                     ];
@@ -794,8 +917,15 @@ public static class NrGameDataUiActions
         "defaultAmount" => "Default Amount",
         "page" => "Page",
         "publicationId" => "Publication",
+        "typeId" => "Profile Type",
+        "typeName" => "Profile Type",
         "defaultSelectionEntryId" => "Default Selection",
         "targetId" => "Target:",
+        // Publication editor labels (NR uses "Publication:" for the publisher field).
+        "shortName" => "Short Name",
+        "publisher" => "Publication",
+        "publicationDate" => "Publication Date",
+        "publisherUrl" => "Publication URL",
         _ => char.ToUpperInvariant(field[0]) + field[1..], // Capitalize first letter
     };
 
@@ -990,8 +1120,10 @@ public static class NrGameDataUiActions
         // Read the auto-generated entry ID
         var entryId = await idRow.Locator("td:last-child input[type='text']").InputValueAsync();
 
-        // Set the target entry via the properties panel Target: autocomplete widget
+        // Set the target entry via the properties panel Target: autocomplete widget. NR filters
+        // that list by the link's "Link Type", so align the type to the target's kind first.
         var rightPanel = page.Locator(".rightPanel");
+        await SetLinkTypeFromTargetAsync(page, rightPanel, targetId);
         var targetFieldLabel = GetFieldLabel("targetId");
         var targetName = await page.EvaluateAsync<string?>(EntryNameLookupJs, targetId);
         await SetAutocompleteFieldAsync(page, rightPanel, targetFieldLabel, targetId, targetName);

@@ -41,13 +41,68 @@ public sealed class NrGameDataUiDiagnostics
     /// <summary>Returns all browser console messages since diagnostics were attached.</summary>
     public IReadOnlyList<string> GetConsoleLog() => _consoleMessages;
 
-    /// <summary>Captures the outer HTML of the body element (truncated to 8 KB).</summary>
+    /// <summary>
+    /// Captures targeted DOM the driver actually interacts with — the right-panel property editor,
+    /// any open context menu, and the selected tree node — as <b>cleaned, structural</b> HTML
+    /// (images/svg/style/script and Vue scoped-id attributes stripped) plus a compact summary of
+    /// editor rows and context-menu items. Far more useful for selector discovery than a raw dump.
+    /// </summary>
     public async Task<string?> CaptureDomSnapshotAsync()
     {
         try
         {
-            return await _page.EvaluateAsync<string?>(
-                "() => document.body?.outerHTML?.substring(0, 8192) ?? null");
+            return await _page.EvaluateAsync<string?>("""
+                () => {
+                    const clean = (el) => {
+                        const c = el.cloneNode(true);
+                        c.querySelectorAll('img,svg,script,style,path').forEach(n => n.remove());
+                        c.querySelectorAll('*').forEach(n => {
+                            [...n.attributes].forEach(a => {
+                                if (a.name.startsWith('data-v-') || a.name === 'style') n.removeAttribute(a.name);
+                            });
+                        });
+                        return c.outerHTML.replace(/\s+/g, ' ').replace(/> </g, '>\n<');
+                    };
+                    const parts = [];
+
+                    // Compact summary: every labelled editor row (label → control type/value).
+                    const rp = document.querySelector('.rightPanel');
+                    if (rp) {
+                        const rows = [...rp.querySelectorAll('tr')].map(tr => {
+                            const label = (tr.querySelector('td')?.innerText || '').trim();
+                            const ctl = tr.querySelector('td:last-child input, td:last-child select, td:last-child textarea, td:last-child .editableDiv, td:last-child .autocomplete');
+                            if (!label && !ctl) return null;
+                            const kind = ctl ? (ctl.tagName.toLowerCase() + (ctl.type ? `[${ctl.type}]` : '') + (ctl.id ? `#${ctl.id}` : '') + (ctl.className ? `.${[...ctl.classList].join('.')}` : '')) : '(no control)';
+                            const val = ctl && 'value' in ctl ? ` = "${ctl.value}"` : '';
+                            return `  • ${label}  →  ${kind}${val}`;
+                        }).filter(Boolean);
+                        const booleans = [...rp.querySelectorAll('input[type=checkbox]')].map(cb => `  • checkbox #${cb.id} checked=${cb.checked}`);
+                        parts.push('=== right-panel rows ===\n' + rows.join('\n') + (booleans.length ? '\n' + booleans.join('\n') : ''));
+                    }
+
+                    const menus = [...document.querySelectorAll('.context-menu')];
+                    menus.forEach((cm, i) => {
+                        const items = [...cm.querySelectorAll(':scope > div')].map(d => `  • "${(d.innerText || '').trim()}" visible=${d.offsetParent !== null}`);
+                        parts.push(`=== context-menu[${i}] items ===\n` + items.join('\n'));
+                    });
+
+                    // Cleaned HTML of the panels for deeper inspection.
+                    const dump = (label, sel) => {
+                        const el = document.querySelector(sel);
+                        if (el) parts.push(`=== ${label} (${sel}) ===\n` + clean(el));
+                    };
+                    dump('right panel HTML', '.rightPanel');
+                    dump('context menu HTML', '.context-menu');
+                    const selNode = document.querySelector('#editor-entries h3.selected');
+                    if (selNode) parts.push('=== selected tree node ===\n' + clean(selNode));
+
+                    if (parts.length === 0) {
+                        const body = document.body ? clean(document.body) : '';
+                        return body.substring(0, 12000);
+                    }
+                    return parts.join('\n\n');
+                }
+                """);
         }
         catch
         {

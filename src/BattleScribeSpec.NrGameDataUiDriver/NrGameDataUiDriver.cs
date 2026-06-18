@@ -69,7 +69,14 @@ public sealed class NrGameDataUiDriver
         {
             await SelectAsync(parentId);
             await RightClickSelectedAsync();
-            await ClickContextItemAsync(AddChildLabel(entryType));
+            if (SubmenuAddTypes.Contains(entryType))
+            {
+                await OpenSubmenuAndPickFirstAsync(AddChildLabel(entryType));
+            }
+            else
+            {
+                await ClickContextItemAsync(AddChildLabel(entryType));
+            }
             await WaitEditorReadyAsync();
             var uid = await ReadUniqueIdAsync();
             token = uid ?? NewSyntheticToken();
@@ -104,7 +111,7 @@ public sealed class NrGameDataUiDriver
         // Nested link: right-click the parent node and pick the "Link" item, then set the target.
         await SelectAsync(parentId);
         await RightClickSelectedAsync();
-        await ClickContextItemAsync("Link");
+        await OpenSubmenuAndPickFirstAsync("Link");
         await WaitEditorReadyAsync();
         var uid = await ReadUniqueIdAsync();
         var token = uid ?? NewSyntheticToken();
@@ -122,10 +129,28 @@ public sealed class NrGameDataUiDriver
     {
         await SelectAsync(entryId);
 
-        // Rich-text/composite fields and the bespoke query editors go through the driver;
-        // plain named-entity scalar fields use the proven table/checkbox/autocomplete path.
+        // Rich-text/composite fields, the bespoke query editors, and the root metadata panel go
+        // through the driver (which operates on the already-selected node and makes no "Unique ID"
+        // assumption). Plain named-entity scalar fields use the proven static table/checkbox/
+        // autocomplete path, which re-selects the entry by tree node.
         var rp = _page.Locator(".rightPanel");
         var advancedEditor = await rp.Locator(".constraint, .modifier, .query").CountAsync() > 0;
+        if (await IsRootAsync(entryId))
+        {
+            // NR's root editor does not expose every BattleScribe root field. Skip the ones it
+            // genuinely lacks (the spec asserts these only on the BS anchors via a per-engine
+            // expectedState override) rather than failing to find a widget.
+            if (RootFieldsNrCannotEdit.Contains(field))
+            {
+                Console.Error.WriteLine(
+                    $"[nr-gamedata-ui] root field '{field}' is not editable in NR's UI — skipping.");
+                return;
+            }
+
+            await EditOpenFieldAsync(field, value);
+            return;
+        }
+
         if (field is "comment" or "description" || advancedEditor)
         {
             await EditOpenFieldAsync(field, value);
@@ -133,6 +158,21 @@ public sealed class NrGameDataUiDriver
         }
 
         await NrGameDataUiActions.SetFieldAsync(_page, entryId, field, value);
+    }
+
+    /// <summary>Root (catalogue/game-system) fields BattleScribe has but NR's editor UI doesn't expose.</summary>
+    private static readonly HashSet<string> RootFieldsNrCannotEdit = new(StringComparer.Ordinal)
+    {
+        "battleScribeVersion",
+    };
+
+    /// <summary>True when the token is the open catalogue or its game system (the editable roots).</summary>
+    private async Task<bool> IsRootAsync(string token)
+    {
+        var rootId = await NrGameDataUiActions.GetCurrentCatalogueIdAsync(_page);
+        var systemId = await _page.EvaluateAsync<string?>(
+            "() => new URLSearchParams(location.search).get('systemId')");
+        return token == rootId || token == systemId;
     }
 
     public async Task SetCostAsync(string entryId, string costTypeId, string? value)
@@ -160,6 +200,17 @@ public sealed class NrGameDataUiDriver
         if (_selectedToken is not null && _parentOf.TryGetValue(_selectedToken, out var p) && p == token)
         {
             await ClickBreadcrumbAncestorAsync(1);
+            _selectedToken = token;
+            return;
+        }
+
+        // Selecting the catalogue/game-system root itself (root metadata fields): the root renders
+        // as the first tree node inside `#editor-entries .head`.
+        if (await IsRootAsync(token))
+        {
+            var rootNode = _page.Locator("#editor-entries .head h3:is(.normalTitle, .arrowTitle)").First;
+            await rootNode.ClickAsync();
+            await WaitEditorReadyAsync();
             _selectedToken = token;
             return;
         }
@@ -198,6 +249,40 @@ public sealed class NrGameDataUiDriver
         }
         await crumbs.Nth(index).ClickAsync();
         await WaitEditorReadyAsync();
+    }
+
+    /// <summary>Entry types whose context-menu item opens a submenu (e.g. Profile → profile types).</summary>
+    private static readonly HashSet<string> SubmenuAddTypes = new(StringComparer.Ordinal)
+    {
+        "profile",
+    };
+
+    /// <summary>
+    /// Some "add child" menu items (Profile, Link) are submenu triggers — the item carries a
+    /// "❯" and a <c>context-menu-id</c>, and hovering it opens a second <c>.context-menu</c>
+    /// listing the concrete options (e.g. the profile types). Hovers the trigger and clicks the
+    /// first option. NR requires the choice at creation time; a later <c>setFields</c> can still
+    /// adjust it where the editor exposes the field.
+    /// </summary>
+    private async Task OpenSubmenuAndPickFirstAsync(string parentLabel)
+    {
+        // Hover the trigger in the (visible) main menu; the submenu is a pre-rendered
+        // .context-menu that becomes visible on hover.
+        var trigger = _page.Locator(".context-menu:visible > div")
+            .Filter(new LocatorFilterOptions
+            {
+                HasTextRegex = new System.Text.RegularExpressions.Regex(
+                    $"^\\s*{System.Text.RegularExpressions.Regex.Escape(parentLabel)}\\b"),
+            });
+        await trigger.First.HoverAsync();
+        await _page.WaitForTimeoutAsync(400);
+
+        // The submenu is the visible menu that lacks the main menu's "Remove" item.
+        var submenu = _page.Locator(".context-menu:visible")
+            .Filter(new LocatorFilterOptions { HasNotText = "Remove" });
+        await submenu.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+        await submenu.First.Locator("> div").First.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
+        await _page.WaitForTimeoutAsync(400);
     }
 
     private async Task ClickContextItemAsync(string label)
@@ -453,7 +538,7 @@ public sealed class NrGameDataUiDriver
     {
         var label = FieldLabel(field);
 
-        // Checkbox via associated <label for>.
+        // Checkbox via associated <label for> (e.g. Hidden, Library).
         var byLabel = rp.GetByLabel(label, new LocatorGetByLabelOptions { Exact = false });
         if (await byLabel.CountAsync() > 0 && await IsCheckboxAsync(byLabel.First))
         {
@@ -461,10 +546,18 @@ public sealed class NrGameDataUiDriver
             return;
         }
 
-        // Table row: <td>Label:</td><td><input/select></td>
+        // Table row whose label *cell* matches precisely (tolerant of a trailing colon). The value
+        // cell may be a text/number input, a select, or a contenteditable .editableDiv.
         var input = rp.Locator("table.editorTable tr")
-            .Filter(new LocatorFilterOptions { HasText = label })
-            .Locator("td:last-child input, td:last-child select")
+            .Filter(new LocatorFilterOptions
+            {
+                Has = _page.Locator("td").Filter(new LocatorFilterOptions
+                {
+                    HasTextRegex = new System.Text.RegularExpressions.Regex(
+                        $"^\\s*{System.Text.RegularExpressions.Regex.Escape(label)}:?\\s*$"),
+                }),
+            })
+            .Locator("td:last-child input, td:last-child select, td:last-child textarea, td:last-child .editableDiv")
             .First;
         if (await input.CountAsync() == 0)
         {
@@ -481,6 +574,13 @@ public sealed class NrGameDataUiDriver
         if (string.Equals(tag, "SELECT", StringComparison.OrdinalIgnoreCase))
         {
             await SelectByValueOrLabelAsync(input, value);
+        }
+        else if (string.Equals(tag, "DIV", StringComparison.OrdinalIgnoreCase))
+        {
+            // contenteditable .editableDiv (e.g. Readme, Author Contact).
+            await input.ClickAsync();
+            await input.FillAsync(value ?? "");
+            await input.PressAsync("Tab");
         }
         else
         {
@@ -510,13 +610,21 @@ public sealed class NrGameDataUiDriver
             """, costTypeId) ?? costTypeId;
 
         var rp = _page.Locator(".rightPanel");
-        // Costs render in a row labelled with the cost-type name and a numeric input.
-        var input = rp.Locator("table.editorTable tr")
-            .Filter(new LocatorFilterOptions { HasText = name })
-            .Locator("input").First;
+        // Each cost renders as `.costs > div` with a `<label>{name}: </label>` and a numeric input.
+        // Match the cost div by its label so the value lands on the right cost type.
+        var costDiv = rp.Locator(".costs > div")
+            .Filter(new LocatorFilterOptions
+            {
+                Has = _page.Locator("label").Filter(new LocatorFilterOptions
+                {
+                    HasTextRegex = new System.Text.RegularExpressions.Regex(
+                        $"^\\s*{System.Text.RegularExpressions.Regex.Escape(name)}:?\\s*$"),
+                }),
+            });
+        var input = costDiv.Locator("input").First;
         if (await input.CountAsync() == 0)
         {
-            input = rp.Locator($"tr:has-text(\"{name}\") input, .costs input").First;
+            throw new InvalidOperationException($"NR Editor UI: cost input for '{name}' not found.");
         }
         await input.FillAsync(value ?? "");
         await input.PressAsync("Tab");
@@ -526,10 +634,19 @@ public sealed class NrGameDataUiDriver
     private async Task EditCharacteristicAsync(string name, string? value)
     {
         var rp = _page.Locator(".rightPanel");
-        // Characteristics render in a table row labelled with the characteristic name.
-        var input = rp.Locator("table tr")
-            .Filter(new LocatorFilterOptions { HasText = name })
-            .Locator("input, textarea, .editableDiv").First;
+        // Characteristics render in a table row whose label cell is the characteristic name
+        // (e.g. "M: "). Match the label *cell* precisely so a one-letter name like "M" doesn't
+        // also match "Name:" / "Comment".
+        var input = rp.Locator("table.editorTable tr")
+            .Filter(new LocatorFilterOptions
+            {
+                Has = _page.Locator("td").Filter(new LocatorFilterOptions
+                {
+                    HasTextRegex = new System.Text.RegularExpressions.Regex(
+                        $"^\\s*{System.Text.RegularExpressions.Regex.Escape(name)}:?\\s*$"),
+                }),
+            })
+            .Locator("td:last-child input, td:last-child textarea, td:last-child .editableDiv").First;
         if (await input.CountAsync() == 0)
         {
             throw new InvalidOperationException($"NR Editor UI: characteristic input '{name}' not found.");
@@ -553,6 +670,8 @@ public sealed class NrGameDataUiDriver
     private async Task SetTargetAutocompleteAsync(string targetId)
     {
         var rp = _page.Locator(".rightPanel");
+        // Align the link's type to the target's kind so the Target list includes it.
+        await NrGameDataUiActions.SetLinkTypeFromTargetAsync(_page, rp, targetId);
         await SetReferenceAutocompleteAsync(rp, "targetId", targetId);
     }
 
@@ -706,6 +825,14 @@ public sealed class NrGameDataUiDriver
         "publicationId" => "Publication",
         "defaultSelectionEntryId" => "Default Selection",
         "targetId" => "Target",
+        // Root metadata (catalogue / game system) editor labels.
+        "authorName" => "Author Name",
+        "authorContact" => "Author Contact",
+        "authorUrl" => "Author Website",
+        "readme" => "Readme",
+        "revision" => "Revision Number",
+        "library" => "Library",
+        "battleScribeVersion" => "BattleScribe Version",
         _ => char.ToUpperInvariant(field[0]) + field[1..],
     };
 }

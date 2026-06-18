@@ -506,6 +506,39 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         return errors;
     }
 
+    public void OpenFile(string id) => OpenFileAsync(id).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Select the active file. Every action resolves its parent/entry by id across all loaded
+    /// roots, so this records the active catalogue (for context) and, crucially, validates that
+    /// the id refers to a loaded file — a mistyped <c>openCatalogue</c> fails loudly instead of
+    /// silently editing the wrong place.
+    /// </summary>
+    private async Task OpenFileAsync(string id)
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var result = await _page.EvaluateAsync<string?>("""
+            (id) => {
+                const ctx = window.__bsspec_editor;
+                if (!ctx) return 'ERROR:No editor context — was Setup called?';
+                const roots = ctx.roots || [];
+                let match = roots.find(r => r && r.id === id);
+                if (!match && id === ctx.systemId) match = ctx.gameSystem;
+                if (!match) return 'ERROR:openCatalogue: no loaded file with id ' + id;
+                ctx.activeRootId = id;
+                if (match !== ctx.gameSystem) ctx.catalogue = match;
+                return null;
+            }
+            """, id);
+
+        if (result?.StartsWith("ERROR:", StringComparison.Ordinal) == true)
+        {
+            throw new InvalidOperationException(result[6..]);
+        }
+    }
+
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
     {
         return AddEntryAsync(parentId, entryType, name).GetAwaiter().GetResult();

@@ -4,8 +4,9 @@ description: >
   Set the type field of an entry link (to selectionEntryGroup) and an info link
   (to rule). Verifies the link type enums round-trip.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
+# newrecruit-ui: NR's entry-link "Link Type" select only offers selectionEntry and its Target
+# autocomplete won't surface a shared selectionEntryGroup, so linking a group isn't expressible
+# in the editor UI; covered on the BS anchors.
 engines:
   newrecruit-ui: skip
 

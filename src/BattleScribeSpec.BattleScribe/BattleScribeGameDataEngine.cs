@@ -64,6 +64,24 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         return errors;
     }
 
+    /// <summary>
+    /// Select the active file. Switching catalogue makes it the <i>primary</i> for validation
+    /// (the others become imported link targets) and the profile-type context for adds. Opening
+    /// the game system is a no-op (it is always the root context). Throws on an unknown id so a
+    /// mistyped <c>openCatalogue</c> fails loudly rather than silently editing the wrong file.
+    /// </summary>
+    public void OpenFile(string id)
+    {
+        if (_gameSystem is not null && _gameSystem.getId() == id)
+        {
+            return;
+        }
+
+        _catalogue = _catalogues.FirstOrDefault(c => c.getId() == id)
+            ?? throw new InvalidOperationException(
+                $"openCatalogue: no loaded catalogue or game system with id '{id}'");
+    }
+
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
     {
         var parent = FindById(parentId)
@@ -264,7 +282,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
                 dmType = java.lang.Class.forName("net.battlescribe.engine.a.d");
                 dm = NewDataManager(dmType, platform, logger, perf);
 
-                var primary = _catalogues[0];
+                var primary = _catalogue ?? _catalogues[0];
                 var imported = new java.util.HashMap();
                 var allCats = new java.util.ArrayList();
                 foreach (var cat in _catalogues)
