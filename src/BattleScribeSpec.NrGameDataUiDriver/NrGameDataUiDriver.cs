@@ -69,9 +69,17 @@ public sealed class NrGameDataUiDriver
         {
             await SelectAsync(parentId);
             await RightClickSelectedAsync();
-            if (SubmenuAddTypes.Contains(entryType))
+            if (entryType == "profile")
             {
-                await OpenSubmenuAndPickFirstAsync(AddChildLabel(entryType));
+                // "Profile ❯" submenu lists the profile types; pick the first (only one in specs).
+                await OpenSubmenuAndPickAsync("Profile", null);
+            }
+            else if (LinkAddTypes.Contains(entryType))
+            {
+                // "Link ❯" submenu lists target kinds (Entry/Group/Profile/Rule/InfoGroup/Association).
+                // The choice sets the container (entryLinks vs infoLinks); a later targetId aligns the
+                // exact type. Pick a representative kind for the requested link family.
+                await OpenSubmenuAndPickAsync("Link", LinkSubmenuItemForType(entryType));
             }
             else
             {
@@ -108,10 +116,12 @@ public sealed class NrGameDataUiDriver
             return new GameDataActionOutputs { EntryId = rootToken };
         }
 
-        // Nested link: right-click the parent node and pick the "Link" item, then set the target.
+        // Nested link: right-click the parent, open the "Link ❯" submenu and pick the item matching
+        // the target's kind (so the right link container is created), then set the target.
         await SelectAsync(parentId);
         await RightClickSelectedAsync();
-        await OpenSubmenuAndPickFirstAsync("Link");
+        var kind = await NrGameDataUiActions.LinkTargetKindAsync(_page, targetId);
+        await OpenSubmenuAndPickAsync("Link", LinkSubmenuItemForKind(kind) ?? LinkSubmenuItemForType(linkType));
         await WaitEditorReadyAsync();
         var uid = await ReadUniqueIdAsync();
         var token = uid ?? NewSyntheticToken();
@@ -151,13 +161,17 @@ public sealed class NrGameDataUiDriver
             return;
         }
 
-        if (field is "comment" or "description" || advancedEditor)
+        // Idless nodes (modifier/condition/repeat/groups) have no tree id, so the static path
+        // (which re-selects via FindTreeNodeByIdAsync) can't target them — they're already selected,
+        // so edit the open panel directly through the driver.
+        var idless = _idless.Contains(entryId) || entryId.StartsWith("__nr", StringComparison.Ordinal);
+        if (field is "comment" or "description" || advancedEditor || idless)
         {
             await EditOpenFieldAsync(field, value);
             return;
         }
 
-        await NrGameDataUiActions.SetFieldAsync(_page, entryId, field, value);
+        await NrGameDataUiActions.SetFieldAsync(_page, field, value);
     }
 
     /// <summary>Root (catalogue/game-system) fields BattleScribe has but NR's editor UI doesn't expose.</summary>
@@ -251,20 +265,41 @@ public sealed class NrGameDataUiDriver
         await WaitEditorReadyAsync();
     }
 
-    /// <summary>Entry types whose context-menu item opens a submenu (e.g. Profile → profile types).</summary>
-    private static readonly HashSet<string> SubmenuAddTypes = new(StringComparer.Ordinal)
+    /// <summary>Link entry types added through the "Link ❯" submenu (target-kind chooser). A
+    /// categoryLink is NOT here — a force entry adds it via a direct "Category" context item.</summary>
+    private static readonly HashSet<string> LinkAddTypes = new(StringComparer.Ordinal)
     {
-        "profile",
+        "entryLink", "infoLink",
+    };
+
+    /// <summary>The "Link ❯" submenu item to pick for a link family (sets entryLinks vs infoLinks).</summary>
+    private static string LinkSubmenuItemForType(string entryType) => entryType switch
+    {
+        "entryLink" => "Entry",
+        "infoLink" => "Rule",
+        "categoryLink" => "Association",
+        _ => "Entry",
+    };
+
+    /// <summary>The "Link ❯" submenu item matching a resolved target kind, or null if unknown.</summary>
+    private static string? LinkSubmenuItemForKind(string? kind) => kind switch
+    {
+        "selectionEntry" => "Entry",
+        "selectionEntryGroup" => "Group",
+        "rule" => "Rule",
+        "profile" => "Profile",
+        "infoGroup" => "InfoGroup",
+        _ => null,
     };
 
     /// <summary>
     /// Some "add child" menu items (Profile, Link) are submenu triggers — the item carries a
     /// "❯" and a <c>context-menu-id</c>, and hovering it opens a second <c>.context-menu</c>
-    /// listing the concrete options (e.g. the profile types). Hovers the trigger and clicks the
-    /// first option. NR requires the choice at creation time; a later <c>setFields</c> can still
-    /// adjust it where the editor exposes the field.
+    /// listing the concrete options. Hovers the trigger and clicks the option matching
+    /// <paramref name="itemMatch"/> (or the first option when null). NR requires the choice at
+    /// creation time; a later <c>setFields</c> can still adjust it where the editor exposes it.
     /// </summary>
-    private async Task OpenSubmenuAndPickFirstAsync(string parentLabel)
+    private async Task OpenSubmenuAndPickAsync(string parentLabel, string? itemMatch)
     {
         // Hover the trigger in the (visible) main menu; the submenu is a pre-rendered
         // .context-menu that becomes visible on hover.
@@ -281,7 +316,17 @@ public sealed class NrGameDataUiDriver
         var submenu = _page.Locator(".context-menu:visible")
             .Filter(new LocatorFilterOptions { HasNotText = "Remove" });
         await submenu.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
-        await submenu.First.Locator("> div").First.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
+
+        var item = submenu.First.Locator("> div");
+        if (itemMatch is not null)
+        {
+            item = submenu.First.Locator("> div").Filter(new LocatorFilterOptions
+            {
+                HasTextRegex = new System.Text.RegularExpressions.Regex(
+                    $"^\\s*{System.Text.RegularExpressions.Regex.Escape(itemMatch)}\\s*$"),
+            });
+        }
+        await item.First.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
         await _page.WaitForTimeoutAsync(400);
     }
 
@@ -348,7 +393,8 @@ public sealed class NrGameDataUiDriver
         "condition" => "Condition",
         "conditionGroup" => "Condition Group",
         "repeat" => "Repeat",
-        "categoryLink" => "Link",
+        "categoryLink" => "Category",
+        "characteristicType" => "Characteristic Type",
         _ => entryType,
     };
 
@@ -382,6 +428,31 @@ public sealed class NrGameDataUiDriver
         if (await constraint.CountAsync() > 0)
         {
             if (await EditConstraintFieldAsync(rp, constraint.First, field, value))
+            {
+                return;
+            }
+        }
+
+        // 2a. Repeat editor: a "Repeat" fieldset whose `.condition` block holds two number inputs
+        // (the repeat count + the per-value) and "Percentage?/Round up?" checks, plus `.query`.
+        var repeatFieldset = rp.Locator("fieldset").Filter(new LocatorFilterOptions
+        {
+            Has = _page.Locator("legend:text-is(\"Repeat\")"),
+        });
+        if (await repeatFieldset.CountAsync() > 0)
+        {
+            if (await EditRepeatFieldAsync(rp, field, value))
+            {
+                return;
+            }
+        }
+
+        // 2b. Condition editor: a `.condition` block (type/value/percentValue) plus the shared
+        // `.query` block (field/scope/childForces) and a "Filter By" section.
+        var condition = rp.Locator(".condition");
+        if (await condition.CountAsync() > 0)
+        {
+            if (await EditConditionFieldAsync(rp, condition.First, field, value))
             {
                 return;
             }
@@ -447,6 +518,163 @@ public sealed class NrGameDataUiDriver
         }
     }
 
+    private async Task<bool> EditConditionFieldAsync(ILocator rp, ILocator condition, string field, string? value)
+    {
+        switch (field)
+        {
+            case "type":
+                await condition.Locator("select").First.SelectOptionAsync(new SelectOptionValue { Value = value });
+                await _page.WaitForTimeoutAsync(150);
+                return true;
+            case "value":
+                {
+                    var num = condition.Locator("input[type='number']").First;
+                    await num.FillAsync(value ?? "");
+                    await num.PressAsync("Tab");
+                    await _page.WaitForTimeoutAsync(150);
+                    return true;
+                }
+            case "percentValue":
+                await SetCheckboxAsync(condition.Locator("#percent"), value);
+                return true;
+            case "field":
+                await SetIconSelectAsync(rp.Locator(".query .select-container.modType, .query .modType").First, value);
+                return true;
+            case "scope":
+                await PickAutocompleteContainerAsync(rp.Locator(".query .inQuery .autocomplete").First, ScopeLabel(value));
+                return true;
+            case "includeChildSelections":
+                await SetCheckboxAsync(rp.Locator("#childSelections"), value);
+                return true;
+            case "includeChildForces":
+                await SetCheckboxAsync(rp.Locator("#childForces"), value);
+                return true;
+            case "shared":
+                // NR keeps `shared` checked and disables the checkbox ("recommended on conditions").
+                return true;
+            case "childId":
+                {
+                    // The "Filter By" section's "Child:" autocomplete targets an entry/category by name.
+                    var name = await ResolveDisplayNameAsync("childId", value ?? "");
+                    var row = rp.Locator("table.editorTable tr").Filter(new LocatorFilterOptions
+                    {
+                        Has = _page.Locator("td").Filter(new LocatorFilterOptions
+                        {
+                            HasTextRegex = new System.Text.RegularExpressions.Regex("^\\s*Child:?\\s*$"),
+                        }),
+                    });
+                    await PickAutocompleteContainerAsync(row.Locator(".autocomplete").First, name ?? value);
+                    return true;
+                }
+            default:
+                return false;
+        }
+    }
+
+    private async Task<bool> EditRepeatFieldAsync(ILocator rp, string field, string? value)
+    {
+        var condition = rp.Locator(".condition").First; // the "Repeat" fieldset's body
+        switch (field)
+        {
+            case "repeats":
+                {
+                    var num = condition.Locator("input[type='number']").First;
+                    await num.FillAsync(value ?? "");
+                    await num.PressAsync("Tab");
+                    await _page.WaitForTimeoutAsync(150);
+                    return true;
+                }
+            case "value":
+                {
+                    // Second number input: "N times for every <value> …".
+                    var num = condition.Locator("input[type='number']").Nth(1);
+                    await num.FillAsync(value ?? "");
+                    await num.PressAsync("Tab");
+                    await _page.WaitForTimeoutAsync(150);
+                    return true;
+                }
+            case "roundUp":
+                // "Round up?" and "Percentage?" share id=percent, so target by the label text.
+                await SetCheckboxAsync(LabeledCheckbox(rp, "Round up?"), value);
+                return true;
+            case "percentValue":
+                await SetCheckboxAsync(LabeledCheckbox(rp, "Percentage?"), value);
+                return true;
+            case "field":
+                await SetIconSelectAsync(rp.Locator(".query .select-container.modType, .query .modType").First, value);
+                return true;
+            case "scope":
+                await PickAutocompleteContainerAsync(rp.Locator(".query .inQuery .autocomplete").First, ScopeLabel(value));
+                return true;
+            case "includeChildSelections":
+                await SetCheckboxAsync(rp.Locator("#childSelections"), value);
+                return true;
+            case "includeChildForces":
+                await SetCheckboxAsync(rp.Locator("#childForces"), value);
+                return true;
+            case "shared":
+                await SetCheckboxAsync(rp.Locator("#shared"), value);
+                return true;
+            case "childId":
+                {
+                    var name = await ResolveDisplayNameAsync("childId", value ?? "");
+                    var row = rp.Locator("table.editorTable tr").Filter(new LocatorFilterOptions
+                    {
+                        Has = _page.Locator("td").Filter(new LocatorFilterOptions
+                        {
+                            HasTextRegex = new System.Text.RegularExpressions.Regex("^\\s*Child:?\\s*$"),
+                        }),
+                    });
+                    await PickAutocompleteContainerAsync(row.Locator(".autocomplete").First, name ?? value);
+                    return true;
+                }
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Locates a checkbox by its sibling label's exact text (for duplicate-id checkboxes).</summary>
+    private static ILocator LabeledCheckbox(ILocator rp, string labelText) =>
+        rp.Locator($"div:has(> label:text-is(\"{labelText}\")) > input[type='checkbox']").First;
+
+    /// <summary>Maps a BattleScribe query scope value to its NR autocomplete display label.</summary>
+    private static string ScopeLabel(string? value) => value switch
+    {
+        "self" => "Self",
+        "parent" => "Parent",
+        "ancestor" => "Ancestor",
+        "force" => "Force",
+        "roster" => "Roster",
+        "primary-category" => "Primary Category",
+        "primary-catalogue" => "Primary Catalogue",
+        "root-entry" => "Root Entry",
+        _ => value ?? "",
+    };
+
+    /// <summary>Picks an option from an NR autocomplete given its container locator (no row label).</summary>
+    private async Task PickAutocompleteContainerAsync(ILocator container, string? match)
+    {
+        if (match is null)
+        {
+            return;
+        }
+        await container.Locator(".autocomplete-input").First.ClickAsync();
+        await _page.WaitForTimeoutAsync(300);
+        var suggestions = container.Locator(".suggestions:not(.hidden) > div");
+        await suggestions.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+        var pick = suggestions.Filter(new LocatorFilterOptions
+        {
+            HasTextRegex = new System.Text.RegularExpressions.Regex(
+                $"^\\s*{System.Text.RegularExpressions.Regex.Escape(match)}\\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase),
+        });
+        if (await pick.CountAsync() == 0)
+        {
+            pick = suggestions.Filter(new LocatorFilterOptions { HasText = match });
+        }
+        await pick.First.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
+        await _page.WaitForTimeoutAsync(250);
+    }
+
     private async Task<bool> EditModifierFieldAsync(ILocator modifier, string field, string? value)
     {
         switch (field)
@@ -461,7 +689,8 @@ public sealed class NrGameDataUiDriver
                 return true;
             case "value":
                 {
-                    // After choosing the field, the value control is either a select (booleans) or input.
+                    // After choosing the field, the value control depends on the field's data type:
+                    // a select (boolean), an input (number), or a contenteditable .editableDiv (string).
                     var sel = modifier.Locator("select").Nth(1);
                     if (await sel.CountAsync() > 0 && await sel.IsVisibleAsync())
                     {
@@ -473,8 +702,17 @@ public sealed class NrGameDataUiDriver
                         }
                         catch
                         {
-                            // fall through to input
+                            // fall through to input / editableDiv
                         }
+                    }
+                    var ce = modifier.Locator(".editableDiv");
+                    if (await ce.CountAsync() > 0 && await ce.Last.IsVisibleAsync())
+                    {
+                        await ce.Last.ClickAsync();
+                        await ce.Last.FillAsync(value ?? "");
+                        await ce.Last.PressAsync("Tab");
+                        await _page.WaitForTimeoutAsync(150);
+                        return true;
                     }
                     var input = modifier.Locator("input").Last;
                     await input.FillAsync(value ?? "");
@@ -685,7 +923,7 @@ public sealed class NrGameDataUiDriver
         {
             "publicationId" => "Publication",
             "defaultSelectionEntryId" => "Default",
-            "targetId" => "Target",
+            "targetId" => "Target:", // "Target:" disambiguates from the "Target ID:" row
             "typeName" => "Type",
             _ => FieldLabel(field),
         };

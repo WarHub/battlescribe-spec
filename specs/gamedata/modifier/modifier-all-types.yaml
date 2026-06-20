@@ -5,15 +5,13 @@ description: >
   (set, increment, decrement, append) and verify the type field of each is
   persisted. Exercises the modifier-type enum.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1
     name: Test System
+    costTypes:
+      - id: pts
+        name: pts
   catalogues:
     - id: cat-1
       name: Test Catalogue
@@ -23,6 +21,9 @@ setup:
           name: Tactical Squad
           type: unit
 
+# Each modifier sets a `field` whose data type admits the modifier `type` before the type itself:
+# NR gates the modifier type dropdown on the selected field (boolean→set, numeric→increment/
+# decrement, string→append). The expectedState asserts only `type` (the enum under test).
 steps:
   - action: addEntry
     id: m-set
@@ -32,6 +33,7 @@ steps:
   - action: setFields
     entryId: ${{ steps.m-set.entryId }}
     fields:
+      field: hidden
       type: set
 
   - action: addEntry
@@ -42,6 +44,7 @@ steps:
   - action: setFields
     entryId: ${{ steps.m-inc.entryId }}
     fields:
+      field: pts
       type: increment
 
   - action: addEntry
@@ -52,6 +55,7 @@ steps:
   - action: setFields
     entryId: ${{ steps.m-dec.entryId }}
     fields:
+      field: pts
       type: decrement
 
   - action: addEntry
@@ -62,6 +66,7 @@ steps:
   - action: setFields
     entryId: ${{ steps.m-app.entryId }}
     fields:
+      field: name
       type: append
 
   - expectedState:

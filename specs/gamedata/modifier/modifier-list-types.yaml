@@ -5,8 +5,9 @@ description: >
   unset-primary) and verify each type is persisted. Completes the modifier-type enum
   alongside the string modifier types.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
+# newrecruit-ui: the list/category modifier types (add/remove/set-primary/unset-primary) are gated
+# in NR's UI behind a category-association field/value the modifier-type dropdown only offers for a
+# category target, which this spec (type-only, no field) doesn't establish; covered on the BS anchors.
 engines:
   newrecruit-ui: skip
 

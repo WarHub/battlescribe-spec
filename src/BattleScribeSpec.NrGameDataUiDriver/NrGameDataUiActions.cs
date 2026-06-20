@@ -160,13 +160,12 @@ public static class NrGameDataUiActions
     ///     <c>&lt;label&gt;</c> element — located by filtering the tr by its first-cell text.</item>
     /// </list>
     /// </summary>
-    public static async Task SetFieldAsync(IPage page, string entryId, string field, string? value)
+    public static async Task SetFieldAsync(IPage page, string field, string? value)
     {
-        // Click the entry to select it and open its properties panel
-        var node = await FindTreeNodeByIdAsync(page, entryId);
-        await node.ClickAsync();
-
-        // Wait for properties to appear — "Unique ID" row is the reliable signal
+        // The caller (NrGameDataUiDriver) has already selected the entry, so the right panel is
+        // open on it — re-selecting here via the tree is redundant and fragile for deeply-nested
+        // named entities (e.g. an infoLink under an infoGroup) and after a rename. Just confirm
+        // the panel is ready.
         await page.Locator(".rightPanel tr")
             .Filter(new LocatorFilterOptions { HasText = "Unique ID" })
             .WaitForAsync(new LocatorWaitForOptions
@@ -177,6 +176,46 @@ public static class NrGameDataUiActions
 
         var fieldLabel = GetFieldLabel(field);
         var rightPanel = page.Locator(".rightPanel");
+
+        // Catalogue links carry an #importRoot checkbox and a raw "Target ID:" text input. Use the
+        // text input for the target (the autocomplete only lists existing catalogues, so it can't
+        // express the spec's re-point to a non-existent target) and #importRoot for importRootEntries.
+        var isCatalogueLink = await rightPanel.Locator("#importRoot").CountAsync() > 0;
+        if (isCatalogueLink && field == "targetId")
+        {
+            var tidInput = rightPanel.Locator("table.editorTable tr")
+                .Filter(new LocatorFilterOptions
+                {
+                    Has = page.Locator("td").Filter(new LocatorFilterOptions
+                    {
+                        HasTextRegex = new System.Text.RegularExpressions.Regex("^\\s*Target ID:?\\s*$"),
+                    }),
+                })
+                .Locator("td:last-child input").First;
+            await tidInput.FillAsync(value ?? "");
+            await tidInput.PressAsync("Tab");
+            await page.WaitForTimeoutAsync(300);
+            return;
+        }
+
+        if (field == "importRootEntries")
+        {
+            var cb = rightPanel.Locator("#importRoot").First;
+            if (value == "false")
+            {
+                if (await cb.IsCheckedAsync())
+                {
+                    await cb.UncheckAsync();
+                }
+            }
+            else if (!await cb.IsCheckedAsync())
+            {
+                await cb.CheckAsync();
+            }
+
+            await page.WaitForTimeoutAsync(200);
+            return;
+        }
 
         // Several fields use NR Editor's custom autocomplete widget (not a standard input/select).
         // Handle these before the generic input strategies.
@@ -193,6 +232,12 @@ public static class NrGameDataUiActions
                     "typeId" => await page.EvaluateAsync<string?>(ProfileTypeNameLookupJs, value),
                     _ => await page.EvaluateAsync<string?>(EntryNameLookupJs, value),
                 };
+                // A link's Target autocomplete is filtered by its Link Type — align it to the
+                // target's kind first so the target appears in the list.
+                if (field == "targetId")
+                {
+                    await SetLinkTypeFromTargetAsync(page, rightPanel, value);
+                }
                 await SetAutocompleteFieldAsync(page, rightPanel, fieldLabel, value, displayName);
             }
             return;
@@ -403,6 +448,10 @@ public static class NrGameDataUiActions
     /// target (group/rule/profile/infoGroup) isn't listed until the type matches. Sets the Link
     /// Type select from the target's kind before the target is chosen. No-op if the row/kind is absent.
     /// </summary>
+    /// <summary>Resolves a link target's kind (selectionEntry/selectionEntryGroup/rule/profile/infoGroup).</summary>
+    internal static Task<string?> LinkTargetKindAsync(IPage page, string targetId)
+        => page.EvaluateAsync<string?>(LinkTargetKindLookupJs, targetId);
+
     internal static async Task SetLinkTypeFromTargetAsync(IPage page, ILocator rightPanel, string targetId)
     {
         var kind = await page.EvaluateAsync<string?>(LinkTargetKindLookupJs, targetId);
@@ -915,6 +964,7 @@ public static class NrGameDataUiActions
         "imported" => "Import",
         "collective" => "Collective",
         "defaultAmount" => "Default Amount",
+        "defaultCostLimit" => "Default Cost Limit",
         "page" => "Page",
         "publicationId" => "Publication",
         "typeId" => "Profile Type",
@@ -1053,8 +1103,12 @@ public static class NrGameDataUiActions
             new LocatorClickOptions { Button = MouseButton.Right });
         await page.WaitForTimeoutAsync(300);
 
-        // Click the add menu item — identified by the entry type icon image
-        await page.Locator($".context-menu div:has(img[src*=\"{entryType}\"])").ClickAsync(
+        // Click the add menu item — identified by the entry type icon image. Shared root entries
+        // reuse the base entry's icon (e.g. a sharedSelectionEntry uses the selectionEntry icon).
+        var iconType = entryType.StartsWith("shared", StringComparison.Ordinal)
+            ? char.ToLowerInvariant(entryType["shared".Length]) + entryType[("shared".Length + 1)..]
+            : entryType;
+        await page.Locator($".context-menu div:has(img[src*=\"{iconType}\"])").ClickAsync(
             new LocatorClickOptions { Timeout = 5_000 });
 
         // Wait for the properties form to open — the "Unique ID" row is the reliable signal
@@ -1147,6 +1201,11 @@ public static class NrGameDataUiActions
         "publication" => "publications",
         "costType" => "costTypes",
         "profileType" => "profileTypes",
+        "sharedSelectionEntry" => "sharedSelectionEntries",
+        "sharedSelectionEntryGroup" => "sharedSelectionEntryGroups",
+        "sharedRule" => "sharedRules",
+        "sharedProfile" => "sharedProfiles",
+        "sharedInfoGroup" => "sharedInfoGroups",
         _ => entryType + "s",
     };
 

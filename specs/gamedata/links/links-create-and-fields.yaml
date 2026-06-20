@@ -6,8 +6,10 @@ description: >
   force entry with its targetId and primary fields. Verifies link creation and the
   link field surface. (Category links attach to force entries in the data editor.)
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
+# newrecruit-ui: NR adds a force-entry category link via a direct "Category" item that auto-targets
+# a category and exposes no targetId/primary/name/hidden panel (force categories are managed via the
+# category list), so the categoryLink field surface isn't UI-expressible. The entryLink/infoLink
+# surfaces are covered on newrecruit-ui by link-fields, selection-entry-containers and info-group.
 engines:
   newrecruit-ui: skip
 

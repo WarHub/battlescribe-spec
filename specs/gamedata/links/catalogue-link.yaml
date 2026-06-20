@@ -7,11 +7,6 @@ description: >
   retained. Then re-point the link at a non-existent catalogue and verify the Data Editor
   flags the dangling target.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

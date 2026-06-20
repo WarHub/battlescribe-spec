@@ -17,20 +17,26 @@ NR's editor UI diverges.
   reference engine's fixed container order.
 - **`newrecruit-ui` (real NR Editor, Playwright): pure-UI driven, no store writes.** All data
   mutations go through rendered widgets (context menus + submenus, property tables, selects,
-  checkboxes, contenteditable fields, autocompletes) — the Pinia store is only ever read. Covered
-  via UI: every basic entry/group/force/category spec; `constraint-create-and-fields`,
-  `constraint-advanced-fields`, `category-entry-with-constraint`, `force-create-and-nest`,
-  `rule-create-and-fields`, `comment-fields`; **root fields** (`root-fields-gamesystem`,
-  `root-fields-catalogue`), **publication** (`publication-create-and-fields`), **costs**
-  (`cost-set-values`), **profiles + characteristics** (`profile-create-with-characteristics`,
-  `profile-fields`), **entry-link fields** (`link-fields`), and **broken-link validation**
-  (`error-broken-entry-link`). The remaining advanced families (modifier/condition/repeat query
-  editors, info groups, type defs, the remaining link specs, shared roots) still carry
-  `newrecruit-ui: skip` pending bespoke right-panel widget drivers.
-  - **Genuine NR-UI divergences** (asserted on the BS anchors only, via a per-engine
-    `expectedState` override): `gameSystem.battleScribeVersion` has no editor widget; an entry
-    link's `collective` checkbox is disabled (NR derives it); and an entry link's `type` /
-    Target list won't surface a shared `selectionEntryGroup`, so `link-types` is skipped.
+  checkboxes, contenteditable fields, autocompletes) — the Pinia store is only ever read.
+  **77 of 80 GameData specs are driven via the real NR Editor UI** (the rest are genuine UI
+  divergences, below). Covered families: every basic entry/group/force/category spec; constraints;
+  root fields; publication; costs; profiles + characteristics; **the full query-editor tier**
+  (modifier types, conditions incl. condition groups, repeats, modifier groups, modifier-on-rule);
+  info groups; type defs (incl. nested characteristicType); shared-root entries; entry-link fields;
+  catalogue links (incl. the dangling-target re-point via the raw "Target ID" input); and
+  broken-link validation.
+  - **Genuine NR-UI divergences** (the 3 remaining `newrecruit-ui: skip`; asserted on the BS
+    anchors, and where a partial spec is still driven, omitted for NR via a per-engine
+    `expectedState` override):
+    - `gameSystem.battleScribeVersion` has no editor widget (driven for the rest of
+      `root-fields-gamesystem`); an entry link's `collective` checkbox is disabled, NR derives it
+      (driven for the rest of `link-fields`).
+    - `link-types`: NR's entry-link Target list won't surface a shared `selectionEntryGroup`.
+    - `links-create-and-fields`: a force-entry categoryLink is added via a direct "Category" item
+      that auto-targets a category and exposes no targetId/primary/name/hidden panel (the
+      entryLink/infoLink surfaces are covered by `link-fields`/`selection-entry-containers`/`info-group`).
+    - `modifier-list-types`: the list/category modifier types are gated behind a category-target
+      field the type-only spec doesn't establish.
 - **`openCatalogue` spec action**: multi-catalogue specs declare the active file with
   `action: openCatalogue` so the NR Editor UI edits the intended catalogue (no-op on engines that
   read all files at once).
@@ -56,10 +62,10 @@ families via pure UI (the rest carry `newrecruit-ui: skip`).
 | Capability | battlescribe (in-proc) | battlescribe-ui | newrecruit (frozen+live) | newrecruit-ui |
 |---|---|---|---|---|
 | addEntry: core (se, seg, rule, profile, entryLink, forceEntry, categoryEntry) | ✅ | ✅ | ✅ | ✅ |
-| addEntry: constraint, modifier, modifierGroup, condition, conditionGroup, repeat | ✅ (W2) | ✅ (W3) | ✅ | constraint ✅ · others skip |
-| addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ✅ | skip |
-| addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ✅ | publication ✅ · others skip |
-| addEntry: shared* root variants | ✅ (W2) | ✅ (W3) | ✅ | skip |
+| addEntry: constraint, modifier, modifierGroup, condition, conditionGroup, repeat | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
+| addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ✅ | infoGroup/infoLink/catalogueLink ✅ · categoryLink skip |
+| addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
+| addEntry: shared* root variants | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
 | setFields → `fields` (scalar fields, generic reflective/UI) | ✅ | ✅ | ✅ | ✅ |
 | setFields → `costs` (cost values by type) | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
 | setFields → `characteristics` (characteristic values) | ✅ (W2) | ✅ (W3) | ✅ | ✅ |

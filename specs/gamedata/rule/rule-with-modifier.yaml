@@ -4,11 +4,6 @@ description: >
   Add a rule to a catalogue and nest a modifier inside it that sets the rule's
   description. Verifies that modifiers can be created on a rule.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

@@ -4,11 +4,6 @@ description: >
   Add an info group to a selection entry and nest a profile and a rule inside it.
   Verifies info-group creation and that profiles/rules can be created within it.
 
-# newrecruit-ui: bespoke NR Editor panel/query widgets for this entity family are not
-# yet driven by the pure-UI driver (no store writes allowed); tracked for follow-up.
-engines:
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1
