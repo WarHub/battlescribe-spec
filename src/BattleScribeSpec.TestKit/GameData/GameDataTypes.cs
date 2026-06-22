@@ -32,8 +32,8 @@ public record GameSystemDataState
     public string Name { get; init; } = "";
 
     /// <summary>
-    /// Root-level metadata fields (revision, battleScribeVersion, authorName,
-    /// authorContact, authorUrl, readme). Only non-default values need to be included.
+    /// Root-level metadata fields (revision, authorName, authorContact, authorUrl, readme).
+    /// Only non-default values need to be included.
     /// </summary>
     public IReadOnlyDictionary<string, string?>? Fields { get; init; }
     public IReadOnlyList<DataEntryState> ForceEntries { get; init; } = [];
@@ -62,8 +62,8 @@ public record CatalogueDataState
     public string GameSystemId { get; init; } = "";
 
     /// <summary>
-    /// Root-level metadata fields (revision, battleScribeVersion, authorName,
-    /// authorContact, authorUrl, readme, library, gameSystemRevision).
+    /// Root-level metadata fields (revision, authorName, authorContact, authorUrl, readme,
+    /// library, gameSystemRevision).
     /// </summary>
     public IReadOnlyDictionary<string, string?>? Fields { get; init; }
     public IReadOnlyList<DataEntryState> SelectionEntries { get; init; } = [];

@@ -21,6 +21,7 @@ setup:
       sharedProfiles:
         - id: sp-ability
           name: Shared Ability
+          typeId: pt-1
       selectionEntries:
         - id: se-1
           name: Tactical Squad

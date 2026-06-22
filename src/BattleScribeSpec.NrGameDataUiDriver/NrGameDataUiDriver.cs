@@ -147,16 +147,6 @@ public sealed class NrGameDataUiDriver
         var advancedEditor = await rp.Locator(".constraint, .modifier, .query").CountAsync() > 0;
         if (await IsRootAsync(entryId))
         {
-            // NR's root editor does not expose every BattleScribe root field. Skip the ones it
-            // genuinely lacks (the spec asserts these only on the BS anchors via a per-engine
-            // expectedState override) rather than failing to find a widget.
-            if (RootFieldsNrCannotEdit.Contains(field))
-            {
-                Console.Error.WriteLine(
-                    $"[nr-gamedata-ui] root field '{field}' is not editable in NR's UI — skipping.");
-                return;
-            }
-
             await EditOpenFieldAsync(field, value);
             return;
         }
@@ -173,12 +163,6 @@ public sealed class NrGameDataUiDriver
 
         await NrGameDataUiActions.SetFieldAsync(_page, field, value);
     }
-
-    /// <summary>Root (catalogue/game-system) fields BattleScribe has but NR's editor UI doesn't expose.</summary>
-    private static readonly HashSet<string> RootFieldsNrCannotEdit = new(StringComparer.Ordinal)
-    {
-        "battleScribeVersion",
-    };
 
     /// <summary>True when the token is the open catalogue or its game system (the editable roots).</summary>
     private async Task<bool> IsRootAsync(string token)
@@ -1079,7 +1063,6 @@ public sealed class NrGameDataUiDriver
         "readme" => "Readme",
         "revision" => "Revision Number",
         "library" => "Library",
-        "battleScribeVersion" => "BattleScribe Version",
         _ => char.ToUpperInvariant(field[0]) + field[1..],
     };
 }

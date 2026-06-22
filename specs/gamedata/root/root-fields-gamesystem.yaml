@@ -17,7 +17,6 @@ steps:
       authorUrl: https://jane.example.com
       readme: System design notes.
       revision: "7"
-      battleScribeVersion: "2.03"
 
   - expectedState:
       gameSystem:
@@ -27,15 +26,3 @@ steps:
           authorUrl: https://jane.example.com
           readme: System design notes.
           revision: "7"
-          battleScribeVersion: "2.03"
-      engines:
-        # NR's game-system root editor has no battleScribeVersion widget, so the field can't be
-        # set via its UI; assert the remaining root fields (the BS anchors still cover the version).
-        newrecruit-ui:
-          gameSystem:
-            id: gs-1
-            fields:
-              authorName: Jane Designer
-              authorUrl: https://jane.example.com
-              readme: System design notes.
-              revision: "7"

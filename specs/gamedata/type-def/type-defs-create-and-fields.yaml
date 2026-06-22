@@ -48,3 +48,19 @@ steps:
             children:
               - name: Range
                 entryType: characteristicType
+      engines:
+        # The BattleScribe Data Editor has no widget for a cost type's defaultCostLimit — its
+        # CostType panel edits only `hidden` (setDefaultCostLimit is never UI-called). So
+        # battlescribe-ui can't set it; assert only what the editor can drive. The other three
+        # engines (battlescribe / newrecruit / newrecruit-ui) cover defaultCostLimit above.
+        battlescribe-ui:
+          gameSystem:
+            id: gs-1
+            costTypes:
+              - name: Points
+                hidden: true
+            profileTypes:
+              - name: Weapon
+                children:
+                  - name: Range
+                    entryType: characteristicType

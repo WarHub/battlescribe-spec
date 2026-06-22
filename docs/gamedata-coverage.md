@@ -27,11 +27,12 @@ and omits just that field via a per-engine `expectedState` override.
   defs (incl. nested characteristicType); shared-root entries; entry-link and info-link types and
   fields; category links on force entries; catalogue links (incl. the dangling-target re-point via
   the raw "Target ID" input); and broken-link validation.
-  - **Per-field NR-UI divergences** (the spec still runs on `newrecruit-ui`; just the one
-    NR-derived/unmodelled field is omitted for NR via a per-engine `expectedState` override, and
-    asserted on the BS anchors):
-    - `gameSystem.battleScribeVersion` has no editor widget (driven for the rest of
-      `root-fields-gamesystem`).
+  - **Per-field divergences** (the spec still runs on every engine; just the one field a given
+    engine's editor can't drive is omitted there via a per-engine `expectedState` override, and
+    asserted on the engines that can):
+    - a cost type's `defaultCostLimit` has no widget in the BattleScribe Data Editor (its CostType
+      panel edits only `hidden`), so `type-defs-create-and-fields` omits it for `battlescribe-ui`;
+      the other three engines cover it.
     - an entry link's `collective` checkbox is disabled — NR derives it (driven for the rest of
       `link-fields`).
     - a force-entry `categoryLink.primary` is not modelled by NR's editor (no widget, not
@@ -111,7 +112,7 @@ create ✅ · targetId ✅ · hidden ✅ · name ➖ (derived from target) · pr
 
 ### Cost / CostType  (`cost/…`, `type-def/…`)
 Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ➖ (not editable per-cost; hide via `costType.hidden`)
-CostType: create ✅ · name ✅ · defaultCostLimit ✅ · hidden ✅
+CostType: create ✅ · name ✅ · defaultCostLimit ✅ (no widget in the BS Data Editor → asserted on the other 3 engines via a `battlescribe-ui` override) · hidden ✅
 
 ### Profile / Characteristic  (`profile/…`)
 Profile: create ✅ · name ✅ · typeId ✅ · typeName ✅ · hidden ✅ · page ✅ · publicationId ✅
@@ -163,7 +164,11 @@ create ✅ · targetId ✅ · importRootEntries ✅
 create ✅ · name ✅ · shortName ✅ · publisher ✅ · publicationDate ✅ · publisherUrl ✅
 
 ### GameSystem / Catalogue (root)  (`root/root-fields-gamesystem`, `root/root-fields-catalogue`)
-name ✅ · revision ✅ · battleScribeVersion ✅ · authorName ✅ · authorContact ✅ · authorUrl ✅ · readme ✅ · (catalogue) gameSystemId ✅ · library ✅
+name ✅ · revision ✅ · authorName ✅ · authorContact ✅ · authorUrl ✅ · readme ✅ · (catalogue) gameSystemId ✅ · library ✅
+
+> `battleScribeVersion` is intentionally **not** a spec field: it is a save-stamp written by the
+> serializer, never user-editable in any editor. The XML attribute is still emitted (files require
+> it); no engine sets or asserts it as a data field.
 
 > Root metadata is asserted via a generic `fields:` map on `gameSystem:` / catalogue entries
 > (added to the state records + runner in this work).
@@ -208,14 +213,21 @@ Editor — cost visibility is controlled by `costType.hidden` (covered). Every o
 field is created and asserted on both the in-process reference engine and the Data Editor UI.
 
 ## Tracked debt
-- **W3 (BS Data Editor UI agent): done.** `setCost`/`setCharacteristic` dispatch + the expanded
-  `buildEntryJson` field serialization are implemented and verified; the three sample specs pass
-  on `battlescribe-ui`. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by `setup.ps1`,
-  to build the agent jar.)
+- **`battlescribe-ui` (BS Data Editor agent): fully UI-driven, 80/80.** Every mutation goes through a
+  real JavaFX widget (text fields, checkboxes, combos incl. the Link Type combo, cost/value/revision
+  Spinners, characteristic TextAreas, the modifier value control, the catalogue open path) — reading
+  state is the only non-UI code. There is **no** reflective-mutation path at all (`setFieldReflectively`
+  was removed): an unresolvable field throws. The one field the Data Editor has no widget for,
+  `defaultCostLimit` (its CostType panel edits only `hidden`), is **skipped** on `battlescribe-ui` and
+  asserted on the other three engines via a `battlescribe-ui` `expectedState` override — never written
+  behind the UI's back. `openCatalogue` drives the editor's real open path
+  (`dataSource.f/c(path)` + the `a(BaseRootEntry)` display) for the staged file; only the native OS
+  file picker is substituted. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by
+  `setup.ps1`, to build the agent jar.)
 - **`newrecruit-ui`: all 80 GameData specs are driven via the real NR Editor UI** — no spec is
   skipped. The driver covers every family via pure UI (context menus + submenus, the right-panel
   property table incl. contenteditable rows, cost/characteristic widgets, the query/modifier
   editors incl. category-modifier value autocompletes, link "Link Type" selects, and reference
   autocompletes). The only per-field omissions on NR are values NR derives or doesn't model
-  (`gameSystem.battleScribeVersion`, entry-link `collective`, category-link `primary`), each handled
-  via a per-engine `expectedState` override while the spec still runs on `newrecruit-ui`.
+  (entry-link `collective`, category-link `primary`), each handled via a per-engine `expectedState`
+  override while the spec still runs on `newrecruit-ui`.

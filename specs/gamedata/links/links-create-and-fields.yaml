@@ -33,9 +33,13 @@ setup:
         - id: sse-bolter
           name: Bolter
           type: upgrade
+      profileTypes:
+        - id: pt-weapon
+          name: Weapon
       sharedProfiles:
         - id: sp-weapon
           name: Bolter Profile
+          typeId: pt-weapon
       selectionEntries:
         - id: se-1
           name: Tactical Squad

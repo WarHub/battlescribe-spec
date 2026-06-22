@@ -54,6 +54,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     private BsRosterApp? _app;
     private AgentClient? _client;
     private string? _specId;
+    private string? _gameSystemId;
     private bool _disposed;
 
     /// <summary>Engine name constant for per-engine spec overrides.</summary>
@@ -79,20 +80,30 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         => RunAsync(() => OpenFileAsync(id));
 
     /// <summary>
-    /// Select the active file. The Data Editor loads every same-system file at once and addresses
-    /// entries by id, so there is no separate "active document" that changes where a mutation
-    /// lands — the meaningful contract is that the id refers to a loaded file. Validates against
-    /// the live model and throws on an unknown id so a mistyped <c>openCatalogue</c> fails loudly.
+    /// Open the selected file through the Data Editor's real open path (the same load + display the
+    /// File→Open menu runs after the native picker, which can't be driven in-process). Setup stages
+    /// every same-system file to the data directory and opens a primary default; this re-opens the
+    /// requested one as the active document. The staged path is <c>{id}.cat</c> (or the game
+    /// system's <c>system.gst</c>), matching <see cref="BuildXmlFiles"/>.
     /// </summary>
     private async Task OpenFileAsync(string id)
     {
-        var state = await GetStateAsync();
-        var known = state.GameSystem?.Id == id || state.Catalogues.Any(c => c.Id == id);
-        if (!known)
+        if (_app is null)
+        {
+            throw new InvalidOperationException("openCatalogue: engine not set up.");
+        }
+
+        var gsDir = Path.Combine(_app.DataDirectoryPath, _gameSystemId ?? "");
+        var path = id == _gameSystemId
+            ? Path.Combine(gsDir, "system.gst")
+            : Path.Combine(gsDir, $"{id}.cat");
+        if (!File.Exists(path))
         {
             throw new InvalidOperationException(
-                $"openCatalogue: no loaded catalogue or game system with id '{id}'");
+                $"openCatalogue: no staged file for id '{id}' (expected {path}).");
         }
+
+        await CallActionAsync("gamedataOpenCatalogueAction", new JsonObject { ["path"] = path });
     }
 
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
@@ -202,6 +213,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     {
         ThrowIfDisposed();
         await CleanupAsync();
+        _gameSystemId = gameSystem.Id; // for resolving openCatalogue paths
 
         try
         {

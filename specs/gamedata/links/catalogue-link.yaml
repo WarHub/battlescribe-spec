@@ -70,3 +70,15 @@ steps:
             - entryType: catalogueLink
               fields:
                 targetId: does-not-exist
+      engines:
+        # The BattleScribe Data Editor's catalogue-link target field resolves the typed id and clears
+        # it when no such catalogue exists — so the dangling link keeps an empty target (not the literal
+        # "does-not-exist"), while still being flagged. The retained-literal-id is the in-process
+        # reference's behaviour; the editor sanitises it. Assert the link + the dangling error only.
+        battlescribe-ui:
+          errors:
+            - message: CatalogueLink must have a target that exists
+          catalogues:
+            - id: cat-1
+              catalogueLinks:
+                - entryType: catalogueLink

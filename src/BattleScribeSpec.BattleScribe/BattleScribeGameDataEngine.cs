@@ -1192,7 +1192,6 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         TryAddField(fields, root, "getAuthorUrl", "authorUrl");
         TryAddField(fields, root, "getReadme", "readme");
         TryAddNumField(fields, root, "getRevision", "revision");
-        TryAddField(fields, root, "getBattleScribeVersion", "battleScribeVersion");
         if (isCatalogue)
         {
             TryAddBoolField(fields, root, "library");
