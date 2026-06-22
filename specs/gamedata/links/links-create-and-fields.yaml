@@ -3,15 +3,17 @@ category: links
 description: >
   Create the three link kinds: an entry link (to a shared entry) at catalogue root,
   an info link (to a shared profile) on a selection entry, and a category link on a
-  force entry with its targetId and primary fields. Verifies link creation and the
+  force entry with its targetId and hidden fields. Verifies link creation and the
   link field surface. (Category links attach to force entries in the data editor.)
 
-# newrecruit-ui: NR adds a force-entry category link via a direct "Category" item that auto-targets
-# a category and exposes no targetId/primary/name/hidden panel (force categories are managed via the
-# category list), so the categoryLink field surface isn't UI-expressible. The entryLink/infoLink
-# surfaces are covered on newrecruit-ui by link-fields, selection-entry-containers and info-group.
-engines:
-  newrecruit-ui: skip
+# Category-link field surface (probed against the real editors):
+#  - targetId — the only meaningful settable field; which category the link points at.
+#  - hidden   — settable and persisted on every engine (set it before the target on NR's UI, whose
+#               category-link form collapses once a target is chosen).
+#  - name     — NOT asserted: derived from the target on NR (a set value is overwritten), defaulted
+#               on the BS engines; it is not a stable cross-engine field.
+#  - primary  — NOT asserted: it defaults false on all three BS engines (in-proc reference, frozen
+#               NR, and the real Data Editor) and NR's editor neither exposes nor models it.
 
 setup:
   gameSystem:
@@ -59,11 +61,10 @@ steps:
 
   - action: setFields
     entryId: ${{ steps.add-cat-link.entryId }}
+    # hidden before targetId: NR's category-link form collapses once a target is selected.
     fields:
-      targetId: ce-troops
-      primary: "true"
-      name: Troops Link
       hidden: "true"
+      targetId: ce-troops
 
   - expectedState:
       catalogues:
@@ -82,9 +83,7 @@ steps:
           forceEntries:
             - id: fe-1
               children:
-                - name: Troops Link
-                  entryType: categoryLink
+                - entryType: categoryLink
                   hidden: true
                   fields:
                     targetId: ce-troops
-                    primary: "true"

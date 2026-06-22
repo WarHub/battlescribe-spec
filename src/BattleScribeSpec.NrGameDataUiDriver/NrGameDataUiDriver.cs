@@ -690,7 +690,16 @@ public sealed class NrGameDataUiDriver
             case "value":
                 {
                     // After choosing the field, the value control depends on the field's data type:
-                    // a select (boolean), an input (number), or a contenteditable .editableDiv (string).
+                    // an autocomplete (category — the value is a category picked by name), a select
+                    // (boolean), an input (number), or a contenteditable .editableDiv (string).
+                    var auto = modifier.Locator(".autocomplete");
+                    if (await auto.CountAsync() > 0 && await auto.Last.IsVisibleAsync())
+                    {
+                        // The category value is stored as the category's id; the picker lists names.
+                        var catName = await ResolveDisplayNameAsync("targetId", value ?? "") ?? value;
+                        await PickAutocompleteContainerAsync(auto.Last, catName);
+                        return true;
+                    }
                     var sel = modifier.Locator("select").Nth(1);
                     if (await sel.CountAsync() > 0 && await sel.IsVisibleAsync())
                     {

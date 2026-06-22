@@ -5,11 +5,12 @@ description: >
   unset-primary) and verify each type is persisted. Completes the modifier-type enum
   alongside the string modifier types.
 
-# newrecruit-ui: the list/category modifier types (add/remove/set-primary/unset-primary) are gated
-# in NR's UI behind a category-association field/value the modifier-type dropdown only offers for a
-# category target, which this spec (type-only, no field) doesn't establish; covered on the BS anchors.
-engines:
-  newrecruit-ui: skip
+# Each modifier targets a category (`field: category`, `value: <categoryId>`): the
+# add/remove/set-primary/unset-primary types belong to the CategoryModifierType enum, which is only
+# valid on a category-typed field. NR's editor (correctly) only offers those types once the field is
+# `category`, and the real-life modifier always carries the target category — a type-only modifier
+# with no field is a degenerate form. The expectedState asserts `type` (the enum under test) and
+# `field`.
 
 setup:
   gameSystem:
@@ -19,6 +20,9 @@ setup:
     - id: cat-1
       name: Test Catalogue
       gameSystemId: gs-1
+      categoryEntries:
+        - id: ce-troops
+          name: Troops
       selectionEntries:
         - id: se-1
           name: Tactical Squad
@@ -33,6 +37,8 @@ steps:
   - action: setFields
     entryId: ${{ steps.m-add.entryId }}
     fields:
+      field: category
+      value: ce-troops
       type: add
 
   - action: addEntry
@@ -43,6 +49,8 @@ steps:
   - action: setFields
     entryId: ${{ steps.m-rem.entryId }}
     fields:
+      field: category
+      value: ce-troops
       type: remove
 
   - action: addEntry
@@ -53,6 +61,8 @@ steps:
   - action: setFields
     entryId: ${{ steps.m-setp.entryId }}
     fields:
+      field: category
+      value: ce-troops
       type: set-primary
 
   - action: addEntry
@@ -63,6 +73,8 @@ steps:
   - action: setFields
     entryId: ${{ steps.m-unsetp.entryId }}
     fields:
+      field: category
+      value: ce-troops
       type: unset-primary
 
   - expectedState:
@@ -74,12 +86,16 @@ steps:
                 - entryType: modifier
                   fields:
                     type: add
+                    field: category
                 - entryType: modifier
                   fields:
                     type: remove
+                    field: category
                 - entryType: modifier
                   fields:
                     type: set-primary
+                    field: category
                 - entryType: modifier
                   fields:
                     type: unset-primary
+                    field: category

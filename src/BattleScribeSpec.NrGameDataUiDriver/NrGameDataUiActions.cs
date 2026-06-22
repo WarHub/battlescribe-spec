@@ -217,6 +217,36 @@ public static class NrGameDataUiActions
             return;
         }
 
+        // A link renders its kind enum in a "Link Type:" select (entryLink: selectionEntry/
+        // selectionEntryGroup; infoLink: profile/rule/infoGroup). This is a different row from a
+        // selection entry's own "Type:" (unit/upgrade), which the generic path below still handles —
+        // so only intercept `type` when a "Link Type:" select is actually present.
+        if (field == "type")
+        {
+            var linkTypeSelect = rightPanel.Locator("table.editorTable tr")
+                .Filter(new LocatorFilterOptions
+                {
+                    Has = page.Locator("td").Filter(new LocatorFilterOptions
+                    {
+                        HasTextRegex = new System.Text.RegularExpressions.Regex("^\\s*Link Type:?\\s*$"),
+                    }),
+                })
+                .Locator("td:last-child select").First;
+            if (await linkTypeSelect.CountAsync() > 0)
+            {
+                try
+                {
+                    await linkTypeSelect.SelectOptionAsync(new SelectOptionValue { Value = value });
+                }
+                catch
+                {
+                    await linkTypeSelect.SelectOptionAsync(new SelectOptionValue { Label = value });
+                }
+                await page.WaitForTimeoutAsync(200);
+                return;
+            }
+        }
+
         // Several fields use NR Editor's custom autocomplete widget (not a standard input/select).
         // Handle these before the generic input strategies.
         if (field is "publicationId" or "defaultSelectionEntryId" or "targetId" or "typeId" or "typeName")

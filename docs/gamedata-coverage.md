@@ -3,8 +3,10 @@
 Tracks progress toward **100% coverage of the BattleScribe GameData model surface** — every
 data-model entity type and every settable field — verified against the two BattleScribe anchor
 engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). NewRecruit
-(`newrecruit`, `newrecruit-ui`) is not a gate; specs add `engines: { newrecruit-ui: skip }` where
-NR's editor UI diverges.
+(`newrecruit`, `newrecruit-ui`) is not a gate, but **all 80 GameData specs are now driven via the
+real NR Editor UI** — no spec carries `engines: { newrecruit-ui: skip }`. Where a single field is a
+genuine NR limitation (it derives or doesn't model the value), the spec still runs on `newrecruit-ui`
+and omits just that field via a per-engine `expectedState` override.
 
 ## NewRecruit engine status
 
@@ -18,25 +20,23 @@ NR's editor UI diverges.
 - **`newrecruit-ui` (real NR Editor, Playwright): pure-UI driven, no store writes.** All data
   mutations go through rendered widgets (context menus + submenus, property tables, selects,
   checkboxes, contenteditable fields, autocompletes) — the Pinia store is only ever read.
-  **77 of 80 GameData specs are driven via the real NR Editor UI** (the rest are genuine UI
-  divergences, below). Covered families: every basic entry/group/force/category spec; constraints;
-  root fields; publication; costs; profiles + characteristics; **the full query-editor tier**
-  (modifier types, conditions incl. condition groups, repeats, modifier groups, modifier-on-rule);
-  info groups; type defs (incl. nested characteristicType); shared-root entries; entry-link fields;
-  catalogue links (incl. the dangling-target re-point via the raw "Target ID" input); and
-  broken-link validation.
-  - **Genuine NR-UI divergences** (the 3 remaining `newrecruit-ui: skip`; asserted on the BS
-    anchors, and where a partial spec is still driven, omitted for NR via a per-engine
-    `expectedState` override):
+  **All 80 GameData specs are driven via the real NR Editor UI.** Covered families: every basic
+  entry/group/force/category spec; constraints; root fields; publication; costs; profiles +
+  characteristics; **the full query-editor tier** (modifier types incl. the list/category types,
+  conditions incl. condition groups, repeats, modifier groups, modifier-on-rule); info groups; type
+  defs (incl. nested characteristicType); shared-root entries; entry-link and info-link types and
+  fields; category links on force entries; catalogue links (incl. the dangling-target re-point via
+  the raw "Target ID" input); and broken-link validation.
+  - **Per-field NR-UI divergences** (the spec still runs on `newrecruit-ui`; just the one
+    NR-derived/unmodelled field is omitted for NR via a per-engine `expectedState` override, and
+    asserted on the BS anchors):
     - `gameSystem.battleScribeVersion` has no editor widget (driven for the rest of
-      `root-fields-gamesystem`); an entry link's `collective` checkbox is disabled, NR derives it
-      (driven for the rest of `link-fields`).
-    - `link-types`: NR's entry-link Target list won't surface a shared `selectionEntryGroup`.
-    - `links-create-and-fields`: a force-entry categoryLink is added via a direct "Category" item
-      that auto-targets a category and exposes no targetId/primary/name/hidden panel (the
-      entryLink/infoLink surfaces are covered by `link-fields`/`selection-entry-containers`/`info-group`).
-    - `modifier-list-types`: the list/category modifier types are gated behind a category-target
-      field the type-only spec doesn't establish.
+      `root-fields-gamesystem`).
+    - an entry link's `collective` checkbox is disabled — NR derives it (driven for the rest of
+      `link-fields`).
+    - a force-entry `categoryLink.primary` is not modelled by NR's editor (no widget, not
+      serialized) and defaults `false` on all three BS engines, so `links-create-and-fields` asserts
+      `categoryLink` by `targetId` + `hidden` only (both consistent and settable on every engine).
 - **`openCatalogue` spec action**: multi-catalogue specs declare the active file with
   `action: openCatalogue` so the NR Editor UI edits the intended catalogue (no-op on engines that
   read all files at once).
@@ -63,7 +63,7 @@ families via pure UI (the rest carry `newrecruit-ui: skip`).
 |---|---|---|---|---|
 | addEntry: core (se, seg, rule, profile, entryLink, forceEntry, categoryEntry) | ✅ | ✅ | ✅ | ✅ |
 | addEntry: constraint, modifier, modifierGroup, condition, conditionGroup, repeat | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
-| addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ✅ | infoGroup/infoLink/catalogueLink ✅ · categoryLink skip |
+| addEntry: infoGroup, infoLink, categoryLink, catalogueLink | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
 | addEntry: costType, profileType, characteristicType, publication | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
 | addEntry: shared* root variants | ✅ (W2) | ✅ (W3) | ✅ | ✅ |
 | setFields → `fields` (scalar fields, generic reflective/UI) | ✅ | ✅ | ✅ | ✅ |
@@ -86,8 +86,12 @@ costs ✅ (`cost/cost-set-values`) · constraints ✅ (`constraint/constraint-cr
 ### SelectionEntryGroup
 create ✅ · name ✅ · hidden ✅ · collective ✅ · import ✅ · defaultSelectionEntryId ✅ · page ✅ · publicationId ✅ · comment ✅ (`comment/comment-fields`)
 
-### EntryLink  (`links/links-create-and-fields`, `links/link-fields`)
+### EntryLink  (`links/links-create-and-fields`, `links/link-fields`, `links/link-types`)
 create ✅ · targetId ✅ · type ✅ · collective ✅ · import ✅ · hidden ✅
+
+> `type` round-trips both enum values (`link-types`): a root entry link targets a `selectionEntry`
+> (root links cannot target a group), and an entry link **inside a selection entry** is re-typed to
+> `selectionEntryGroup` — NR only offers the group link type for non-root links.
 
 ### ForceEntry  (`force/force-create-and-nest`, `links/…`)
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ✅ (`comment/comment-fields`) · nested forceEntries ✅ · categoryLinks ✅ · constraints ✅
@@ -96,7 +100,14 @@ create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment
 create ✅ · name ✅ · hidden ✅ · page ✅ · publicationId ✅ · comment ✅ · constraints ✅ · modifiers ✅
 
 ### CategoryLink  (`links/links-create-and-fields` — attaches to force entries)
-create ✅ · name ✅ · hidden ✅ · targetId ✅ · primary ✅
+create ✅ · targetId ✅ · hidden ✅ · name ➖ (derived from target) · primary ➖ (see below)
+
+> A force-entry category link's only meaningful settable field is `targetId` (which category it
+> points at); `hidden` is also settable and persists on every engine. `name` is derived from the
+> target (NR overwrites a set value; the BS engines default it), so it is not asserted. `primary`
+> is **not modelled by NR's editor** (no widget, never serialized) and defaults `false` on all three
+> BS engines (in-proc reference, frozen NR, and the real Data Editor) — i.e. a force category link is
+> not implicitly primary — so it is not asserted.
 
 ### Cost / CostType  (`cost/…`, `type-def/…`)
 Cost: value-by-type ✅ (`cost/cost-set-values`) · hidden ➖ (not editable per-cost; hide via `costType.hidden`)
@@ -119,6 +130,12 @@ create ✅ · type (min/max) ✅ · value ✅ · field ✅ · scope ✅ · child
 ### Modifier / ModifierGroup  (`modifier/…`, `modifier-group/…`)
 Modifier: create ✅ · type (all 8: set/increment/decrement/append/add/remove/set-primary/unset-primary ✅) · field ✅ · value ✅ · conditions ✅ · repeats ✅
 ModifierGroup: create ✅ · modifiers ✅ · conditions ✅
+
+> The modifier `type` belongs to a data-type-specific enum keyed by the modifier's `field`:
+> boolean→`set`, number→`increment`/`decrement`/`set`, string→those + `append`, and **category→
+> `add`/`remove`/`set-primary`/`unset-primary`**. `modifier-all-types` sets a field that admits each
+> string type; `modifier-list-types` sets `field: category` + `value: <categoryId>` for the category
+> types (a type-only modifier with no field is a degenerate form NR's editor correctly won't produce).
 
 ### Condition / ConditionGroup  (`condition/condition-types-and-group`, `condition/condition-all-types`)
 Condition: create ✅ · type (all 8 ✅) · value ✅ · field ✅ · scope ✅ · childId ✅ · shared ✅ · percentValue ✅ · includeChildSelections ✅
@@ -195,9 +212,10 @@ field is created and asserted on both the in-process reference engine and the Da
   `buildEntryJson` field serialization are implemented and verified; the three sample specs pass
   on `battlescribe-ui`. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by `setup.ps1`,
   to build the agent jar.)
-- **`newrecruit-ui` remaining clusters** still skipped pending bespoke widget drivers: the
-  modifier/condition/repeat query editors, info groups, type defs, the remaining link specs
-  (`links-create-and-fields`, `link-types`, `catalogue-link`), and shared-root entries. The driver
-  now covers root fields, publication, costs, characteristics, profiles, and entry-link fields via
-  pure UI (context menus + submenus, the right-panel property table incl. contenteditable rows,
-  cost/characteristic widgets, and reference autocompletes).
+- **`newrecruit-ui`: all 80 GameData specs are driven via the real NR Editor UI** — no spec is
+  skipped. The driver covers every family via pure UI (context menus + submenus, the right-panel
+  property table incl. contenteditable rows, cost/characteristic widgets, the query/modifier
+  editors incl. category-modifier value autocompletes, link "Link Type" selects, and reference
+  autocompletes). The only per-field omissions on NR are values NR derives or doesn't model
+  (`gameSystem.battleScribeVersion`, entry-link `collective`, category-link `primary`), each handled
+  via a per-engine `expectedState` override while the spec still runs on `newrecruit-ui`.
