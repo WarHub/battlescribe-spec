@@ -779,8 +779,11 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
 
+        // NOTE: JavaModelFactory.CreateCategoryLink is (id, targetId, name) — unlike its siblings
+        // CreateEntryLink / CreateInfoLink / CreateCatalogueLink, which are (id, name, targetId).
+        // Pass targetId before name here.
         return JavaModelFactory.CreateCategoryLink(
-            spec.Id, spec.Name ?? "", spec.TargetId,
+            spec.Id, spec.TargetId, spec.Name ?? "",
             primary: spec.Primary,
             hidden: spec.Hidden,
             constraints: constraints,
@@ -910,7 +913,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
     private static CategoryLink CreateCategoryLink(string id, string targetId)
     {
-        return JavaModelFactory.CreateCategoryLink(id, "", targetId);
+        return JavaModelFactory.CreateCategoryLink(id, targetId, "");
     }
 
     // ===== Container resolution =====

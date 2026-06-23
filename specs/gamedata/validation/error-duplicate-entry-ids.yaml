@@ -1,0 +1,34 @@
+id: error-duplicate-entry-ids
+category: validation
+description: >
+  Two selection entries sharing the same id within one catalogue produce a validation error
+  ("All data element ids must be unique"). Both BattleScribe anchors construct the real data
+  manager and report it. NewRecruit's reference validator models only dangling link targets,
+  not duplicate ids, so it reports no error there (asserted via a per-engine override).
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: dup-id
+          name: First Trooper
+          type: unit
+        - id: dup-id
+          name: Second Trooper
+          type: unit
+
+steps:
+  - expectedState:
+      errors:
+        - message: All data element ids must be unique
+      engines:
+        # NR's reference validator models only dangling link targets, not duplicate ids.
+        newrecruit:
+          errors: []
+        newrecruit-ui:
+          errors: []

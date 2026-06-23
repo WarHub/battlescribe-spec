@@ -1,0 +1,53 @@
+id: error-cleared-after-fix
+category: validation
+description: >
+  A validation error clears once the underlying problem is fixed. Start with a dangling entry
+  link (flagged on every engine — entry-link targets are modelled by NewRecruit's reference
+  validator too), then re-point it at an entry that exists; the error list goes empty on every
+  engine. Exercises both the error-detection path and the edit (setFields targetId) path.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntries:
+        - id: sse-valid
+          name: Bolter
+          type: upgrade
+      entryLinks:
+        - id: el-1
+          name: Weapon Link
+          targetId: does-not-exist
+          type: selectionEntry
+
+steps:
+  # Dangling target: flagged on every engine.
+  - expectedState:
+      errors:
+        - message: EntryLink must have a target that exists
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - id: el-1
+              fields:
+                targetId: does-not-exist
+
+  # Re-point the link at an entry that exists.
+  - action: setFields
+    entryId: el-1
+    fields:
+      targetId: sse-valid
+
+  # The error clears on every engine.
+  - expectedState:
+      errors: []
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - id: el-1
+              fields:
+                targetId: sse-valid

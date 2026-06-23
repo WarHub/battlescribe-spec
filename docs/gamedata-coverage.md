@@ -3,14 +3,16 @@
 Tracks progress toward **100% coverage of the BattleScribe GameData model surface** — every
 data-model entity type and every settable field — verified against the two BattleScribe anchor
 engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). NewRecruit
-(`newrecruit`, `newrecruit-ui`) is not a gate, but **all 80 GameData specs are now driven via the
-real NR Editor UI** — no spec carries `engines: { newrecruit-ui: skip }`. Where a single field is a
-genuine NR limitation (it derives or doesn't model the value), the spec still runs on `newrecruit-ui`
-and omits just that field via a per-engine `expectedState` override.
+(`newrecruit`, `newrecruit-ui`) is not a gate, but **all 86 GameData specs run on the real NR
+Editor** — no spec carries `engines: { newrecruit-ui: skip }`. Every mutation is driven via the
+real NR Editor UI; the validation specs (see "Validation / data-integrity errors" below) stage data
+and read the editor's error list. Where a single field is a genuine NR limitation (it derives or
+doesn't model the value), or an error class NR's reference validator doesn't model, the spec still
+runs on `newrecruit-ui` and overrides just that field / error via a per-engine `expectedState`.
 
 ## NewRecruit engine status
 
-- **`newrecruit` (frozen HAR replay + live NR Editor): all 80 GameData specs pass.** The adapter
+- **`newrecruit` (frozen HAR replay + live NR Editor): all 86 GameData specs pass.** The adapter
   parses the spec's generated XML into an editable in-memory model and exercises the full action
   surface — `addEntry`/`addLink`/`setFields` (incl. `costs` via `cost:<typeId>` and
   `characteristics` via `char:<name>` composite fields), root metadata fields, shared-root and
@@ -20,7 +22,7 @@ and omits just that field via a per-engine `expectedState` override.
 - **`newrecruit-ui` (real NR Editor, Playwright): pure-UI driven, no store writes.** All data
   mutations go through rendered widgets (context menus + submenus, property tables, selects,
   checkboxes, contenteditable fields, autocompletes) — the Pinia store is only ever read.
-  **All 80 GameData specs are driven via the real NR Editor UI.** Covered families: every basic
+  **All 86 GameData specs run on the real NR Editor UI.** Covered families: every basic
   entry/group/force/category spec; constraints; root fields; publication; costs; profiles +
   characteristics; **the full query-editor tier** (modifier types incl. the list/category types,
   conditions incl. condition groups, repeats, modifier groups, modifier-on-rule); info groups; type
@@ -173,22 +175,70 @@ name ✅ · revision ✅ · authorName ✅ · authorContact ✅ · authorUrl ✅
 > Root metadata is asserted via a generic `fields:` map on `gameSystem:` / catalogue entries
 > (added to the state records + runner in this work).
 
-## Validation errors  (`validation/…`)
+## Validation / data-integrity errors  (`validation/…`)  — issues #31 + #173
 Specs can assert the editor's validation error list via an `errors:` key on `expectedState`
 (empty list = expect no errors; entries match error messages as case-insensitive substrings).
-- `validation/no-errors-clean-state` — a valid system/catalogue reports no errors.
+All validation specs run on **all four engines** (both BS anchors + both NR engines).
+
+**Referential integrity (dangling targets)**
 - `validation/error-broken-entry-link` — a dangling entry-link target is flagged
   ("EntryLink must have a target that exists").
-- `links/catalogue-link` — a valid cross-catalogue link reports no errors, while a dangling
-  catalogue-link target is flagged ("CatalogueLink must have a target that exists").
+- `validation/error-broken-info-link` — a dangling info-link target is flagged
+  ("InfoLink must have a target that exists").
+- `links/catalogue-link` — a valid cross-catalogue link reports no errors, while **re-pointing**
+  it at a non-existent catalogue is flagged ("CatalogueLink must have a target that exists").
+
+**Duplicate IDs**
+- `validation/error-duplicate-entry-ids` — two entries sharing an id within one catalogue are
+  flagged ("All data element ids must be unique").
+
+**Semantic errors (query-scope resolution)**
+- `validation/error-constraint-bad-scope` — a constraint whose `scope` resolves to neither a
+  scope keyword nor an existing ancestor id is flagged ("Constraint must have a scope that exists").
+- `validation/error-condition-bad-scope` — same, for a condition inside a modifier
+  ("Condition must have a scope that exists").
+
+**Error lifecycle (#173 acceptance criteria)**
+- `validation/no-errors-clean-state` — a valid system/catalogue reports no errors.
+- `validation/error-cleared-after-fix` — a dangling entry link is flagged, then re-pointed at an
+  entry that exists (via `setFields targetId`); the error clears on every engine.
+- `validation/error-multiple-in-one-file` — a dangling entry link **and** a dangling info link
+  coexist and both are reported.
 
 Both BS anchors surface validation. The **battlescribe-ui** engine reads the Data Editor's
-live error list. The **in-process reference engine** now constructs the same BattleScribe
+live error list. The **in-process reference engine** constructs the same BattleScribe
 data manager directly (`engine.a.d` for a catalogue, `engine.a.e` for a game system; both
 built with the DESKTOP platform constant, a no-op logger, and a perf tracker) and calls its
-`a(true)` validation method — so `errors:` assertions run on **both** anchors (no per-engine
-override needed). Construction is defensive: if the obfuscated classes ever drift, validation
-degrades to an empty list rather than throwing.
+`a(true)` validation method — so `errors:` assertions run on **both** anchors. Construction is
+defensive: if the obfuscated classes ever drift, validation degrades to an empty list rather
+than throwing.
+
+**NewRecruit reference validator scope.** NR has no equivalent of the BattleScribe Data Editor's
+error list, so the NR engines compute a small *reference* validation in JS over the editor store:
+they flag **entry-link** and **catalogue-link** dangling targets only. Validation specs whose
+error class NR does not model (info-link dangling, duplicate ids, query-scope) keep the spec
+running on every engine via a per-engine `errors:` override (`newrecruit` / `newrecruit-ui`)
+rather than a `skip` — the structural state is still asserted everywhere, and the error is
+asserted on the engines that model it. `error-cleared-after-fix` and the entry-link half of
+`error-multiple-in-one-file` use the NR-modelled classes, so they assert on NR too.
+
+**BattleScribe auto-cleans some dangling references at load** (so they are *not* flagged):
+- A **CategoryLink** with a non-existent target is removed by the data manager during load — the
+  link does not survive to be validated. (The in-process engine reproduces this: building the data
+  manager from the live model drops the dangling category link.) No load-time spec asserts a
+  category-link dangling error because no engine produces one.
+- A **defaultSelectionEntryId** that is not a child of its group is cleared at load, so
+  "Default SelectionEntry must exist within the SelectionEntryGroup" is likewise not surfaced
+  from a loaded file.
+- Note the **load vs. edit** distinction: a catalogue link that is *loaded* dangling is cleaned,
+  but one *edited* to a dangling target in a live session is retained and flagged (see
+  `links/catalogue-link`, which creates the dangling state by edit).
+
+**Not yet covered (needs new infra, deferred):** malformed / schema-invalid `.gst`/`.cat` *load*
+(#31). GameData specs declare setup as a structured game-system + catalogue model, not raw file
+content; asserting load-time XML/schema failures would require a raw-file setup mode
+(a `setupFromFiles` path for gamedata) plumbed through every engine — out of scope for the
+spec-only validation matrix here.
 
 ## BS Data Editor UI surface notes (from probing)
 - **Category links attach to force entries only** — `actAddCategoryLink` is a no-op unless a
@@ -213,7 +263,7 @@ Editor — cost visibility is controlled by `costType.hidden` (covered). Every o
 field is created and asserted on both the in-process reference engine and the Data Editor UI.
 
 ## Tracked debt
-- **`battlescribe-ui` (BS Data Editor agent): fully UI-driven, 80/80.** Every mutation goes through a
+- **`battlescribe-ui` (BS Data Editor agent): fully UI-driven, 86/86.** Every mutation goes through a
   real JavaFX widget (text fields, checkboxes, combos incl. the Link Type combo, cost/value/revision
   Spinners, characteristic TextAreas, the modifier value control, the catalogue open path) — reading
   state is the only non-UI code. There is **no** reflective-mutation path at all (`setFieldReflectively`
@@ -224,7 +274,7 @@ field is created and asserted on both the in-process reference engine and the Da
   (`dataSource.f/c(path)` + the `a(BaseRootEntry)` display) for the staged file; only the native OS
   file picker is substituted. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by
   `setup.ps1`, to build the agent jar.)
-- **`newrecruit-ui`: all 80 GameData specs are driven via the real NR Editor UI** — no spec is
+- **`newrecruit-ui`: all 86 GameData specs run on the real NR Editor UI** — no spec is
   skipped. The driver covers every family via pure UI (context menus + submenus, the right-panel
   property table incl. contenteditable rows, cost/characteristic widgets, the query/modifier
   editors incl. category-modifier value autocompletes, link "Link Type" selects, and reference
