@@ -89,7 +89,7 @@ characteristicType `kind`/`defaultValue`; `localConditionGroups`; constraint `me
 roster-format axis) are listed per-file as the live-confirm backlog — they were not reachable by the
 current seed/driver path (the game-system type-def add-paths and roster runtime are next).
 
-## Encoded as executable specs (Phase 2 — in progress)
+## Encoded as executable specs (Phase 2 — complete for the catalogue/gameSystem axis)
 
 The NR-superset is now modelled end-to-end (wham AST + `CatXmlGenerator` + Protocol + both NR
 engines' read paths) and exercised by specs under `specs/gamedata/nr/`, each with
@@ -116,13 +116,26 @@ generic `[XmlEnum]` reflection helper.
 All confirmed **gamedata/catalogue** additions are now encoded and green on both NR engines —
 including the positional condition `before` (`condition-before`, serialises as `type="before"` on the
 `<localConditionGroup>`) and `field=limit::<costType>` (`query-vocab`, serialises verbatim as
-`field="limit::pts"`), both confirmed byte-for-byte via `discover xml`. Remaining to encode: the
-**roster-format** (`.ros`) additions (needs the roster-engine export path). wham changes live in the
-submodule and must be committed upstream + re-pinned (`.deps/wham`).
+`field="limit::pts"`), both confirmed byte-for-byte via `discover xml`.
 
-## Phase 2 (full encoding) — remaining
+The **roster-format** (`.ros`) axis has been audited (see [`roster-additions.md`](roster-additions.md)):
+there are **no confirmed `.ros` format additions** — `customName`/`customNotes` are baseline original
+BattleScribe roster format (the NR difference is behavioural and already covered), and runtime ops like
+`duplicateForce` are exercised by `specs/roster/protocol/protocol-kitchen-sink.yaml`. The one open
+question (whether roster *selections* serialise chosen-association state) is deferred with reason — it
+needs a live army-builder export spike, as the catalogue `discover` trick drives the editor, not the
+army builder.
 
-Encoding these as executable specs with `engines: { battlescribe: skip, battlescribe-ui: skip }`,
-and extending the modelled surface (`ProtocolMessages.cs`, `GameDataTypes.cs`, `spec-schema.json`,
-`CatXmlGenerator.cs`, the GameData drivers) to the NR-superset. The `discover xml` round-trip becomes
-the spec oracle.
+wham changes are committed upstream (PR WarHub/wham#308) and `.deps/wham` is pinned to that branch;
+re-pin to the merged wham SHA before the parent PR (WarHub/battlescribe-spec#267) merges.
+
+## Remaining
+
+The catalogue/gameSystem axis is fully encoded, modelled, and green on both NR engines. What is left:
+
+- **Re-pin `.deps/wham`** to the merged wham SHA once WarHub/wham#308 lands (currently pinned to its
+  branch), then the parent PR can merge.
+- **Roster association-state spike** (the single deferred `.ros` question) — see
+  [`roster-additions.md`](roster-additions.md). Only worth pursuing if NR is found to serialise
+  chosen-association state on roster selections; everything else on the roster axis is either baseline
+  format or a behavioural difference already covered.
