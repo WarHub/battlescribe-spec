@@ -19,6 +19,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 {
     private GameSystem? _gameSystem;
     private Catalogue? _catalogue;
+    private readonly List<Catalogue> _catalogues = [];
     private string _specId = "";
 
     // Lookup maps for finding entries by ID
@@ -32,16 +33,22 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         try
         {
             _entriesById.Clear();
+            _catalogues.Clear();
 
             // Build game system from protocol types (reuse BattleScribeEngine patterns)
             _gameSystem = BuildGameSystem(gameSystem);
 
-            // Build catalogues (we support one primary catalogue for now)
-            if (catalogues.Length > 0)
+            // Build every catalogue (a catalogueLink target lives in a second, library
+            // catalogue, so all catalogues must be present and indexed). The first is the
+            // primary edited catalogue for root-level operations.
+            foreach (var catSpec in catalogues)
             {
-                _catalogue = BuildCatalogue(catalogues[0]);
-                IndexAllEntries(_catalogue);
+                var built = BuildCatalogue(catSpec);
+                _catalogues.Add(built);
+                IndexAllEntries(built);
             }
+
+            _catalogue = _catalogues.FirstOrDefault();
 
             // Also index game system entries
             if (_gameSystem != null)
@@ -57,10 +64,33 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         return errors;
     }
 
+    /// <summary>
+    /// Select the active file. Switching catalogue makes it the <i>primary</i> for validation
+    /// (the others become imported link targets) and the profile-type context for adds. Opening
+    /// the game system is a no-op (it is always the root context). Throws on an unknown id so a
+    /// mistyped <c>openCatalogue</c> fails loudly rather than silently editing the wrong file.
+    /// </summary>
+    public void OpenFile(string id)
+    {
+        if (_gameSystem is not null && _gameSystem.getId() == id)
+        {
+            return;
+        }
+
+        _catalogue = _catalogues.FirstOrDefault(c => c.getId() == id)
+            ?? throw new InvalidOperationException(
+                $"openCatalogue: no loaded catalogue or game system with id '{id}'");
+    }
+
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
     {
         var parent = FindById(parentId)
             ?? throw new InvalidOperationException($"Parent not found: {parentId}");
+
+        // Fail with a clear error (rather than silently producing an entry the Data Editor
+        // would reject) for entry types the editor only adds under a precondition. Keeps the
+        // in-process reference engine consistent with the battlescribe-ui anchor.
+        ValidateAddPreconditions(parent, entryType);
 
         var id = Guid.NewGuid().ToString();
         var entryName = name ?? $"New {entryType}";
@@ -72,11 +102,47 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         return new GameDataActionOutputs { EntryId = id };
     }
 
+    /// <summary>
+    /// Throw a clear error when an AddEntry would violate a Data Editor precondition:
+    /// a category link only attaches to a force entry, and a profile needs a profile type
+    /// to assign. Mirrors the guards in the BattleScribe Data Editor controller so both
+    /// anchors agree on what is and isn't a valid add.
+    /// </summary>
+    private void ValidateAddPreconditions(object parent, string entryType)
+    {
+        if (entryType == "categoryLink" && parent is not ForceEntry)
+        {
+            throw new InvalidOperationException(
+                $"categoryLink can only be added to a ForceEntry; parent is a {parent.GetType().Name}");
+        }
+
+        if ((entryType == "profile" || entryType == "sharedProfile") && !ProfileTypeExists())
+        {
+            throw new InvalidOperationException(
+                "profile requires at least one profileType in the game system or catalogue");
+        }
+    }
+
+    private bool ProfileTypeExists() =>
+        HasProfileType(_gameSystem) || HasProfileType(_catalogue);
+
+    private static bool HasProfileType(object? root)
+    {
+        if (root is null)
+        {
+            return false;
+        }
+
+        var list = GetList(root, "getProfileTypes");
+        return list is not null && list.size() > 0;
+    }
+
     public void RemoveEntry(string entryId)
     {
-        // Walk all container lists to find and remove the entry
-        if (!RemoveFromParent(_catalogue, entryId) &&
-            !RemoveFromParent(_gameSystem, entryId))
+        // Walk all container lists across every catalogue and the game system.
+        var removed = _catalogues.Any(cat => RemoveFromParent(cat, entryId))
+            || RemoveFromParent(_gameSystem, entryId);
+        if (!removed)
         {
             throw new InvalidOperationException($"Could not remove entry: {entryId}");
         }
@@ -90,6 +156,54 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             ?? throw new InvalidOperationException($"Entry not found: {entryId}");
 
         SetFieldOnObject(entry, field, value);
+    }
+
+    public void SetCost(string entryId, string costTypeId, string? value)
+    {
+        var entry = FindById(entryId)
+            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+
+        var costs = GetList(entry, "getCosts")
+            ?? throw new InvalidOperationException($"Entry {entryId} has no costs container");
+
+        var amount = double.TryParse(value, out var d) ? d : 0.0;
+
+        // Find an existing cost for this type, else create one.
+        for (var i = 0; i < costs.size(); i++)
+        {
+            var cost = costs.get(i);
+            if (cost.GetType().GetMethod("getTypeId")?.Invoke(cost, null)?.ToString() == costTypeId)
+            {
+                ((Cost)cost).setValue(amount);
+                return;
+            }
+        }
+
+        costs.add(JavaModelFactory.CreateCost(costTypeId, costTypeId, (decimal)amount));
+    }
+
+    public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
+    {
+        var entry = FindById(entryId)
+            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+
+        var chars = GetList(entry, "getCharacteristics")
+            ?? throw new InvalidOperationException($"Entry {entryId} has no characteristics container (not a profile?)");
+
+        // Match by characteristic name or typeId, else create a new one keyed by name.
+        for (var i = 0; i < chars.size(); i++)
+        {
+            var ch = chars.get(i);
+            var chName = ch.GetType().GetMethod("getName")?.Invoke(ch, null)?.ToString();
+            var chTypeId = ch.GetType().GetMethod("getTypeId")?.Invoke(ch, null)?.ToString();
+            if (chName == nameOrTypeId || chTypeId == nameOrTypeId)
+            {
+                ((Characteristic)ch).setValue(value ?? "");
+                return;
+            }
+        }
+
+        chars.add(JavaModelFactory.CreateCharacteristic(nameOrTypeId, "", value ?? ""));
     }
 
     public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
@@ -119,11 +233,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
     public GameDataState GetState()
     {
-        var catalogues = new List<CatalogueDataState>();
-        if (_catalogue != null)
-        {
-            catalogues.Add(ReadCatalogueState(_catalogue));
-        }
+        var catalogues = _catalogues.Select(ReadCatalogueState).ToList();
 
         GameSystemDataState? gsState = null;
         if (_gameSystem != null)
@@ -138,9 +248,125 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         };
     }
 
+    public IReadOnlyList<Roster.ValidationErrorState> GetValidationErrors()
+    {
+        // Validation lives in the BattleScribe data manager — the same class the Data Editor
+        // builds. Construct it reflectively over the live model, load, and read its error list
+        // via a(true) (full validation, matching the editor). Two concrete managers exist:
+        //   - engine.a.d : catalogue editing — a(GameSystem, Catalogue, Map, Collection)
+        //   - engine.a.e : game-system-only  — b(GameSystem, Collection, boolean)
+        // Both share the ctor (platform=DESKTOP, logger, perf tracker). Defensive: any failure
+        // (obfuscation drift) yields no errors.
+        try
+        {
+            if (_gameSystem is null)
+            {
+                return [];
+            }
+
+            // Shared constructor dependencies. The platform enum is a nested type
+            // (enum e inside class net.battlescribe.engine.constants.a), so its binary
+            // name uses '$'; field "d" is the DESKTOP constant the Data Editor uses.
+            var platform = java.lang.Class.forName("net.battlescribe.engine.constants.a$e").getField("d").get(null);
+            // The Data Editor's logger lives in DataUtils (not in the engine IKVM assembly),
+            // so supply our own no-op implementation of the engine logger interface.
+            var logger = new SilentEngineLogger();
+            var perf = java.lang.Class.forName("net.battlescribe.engine.b.e").getDeclaredConstructor().newInstance();
+
+            java.lang.Class dmType;
+            object dm;
+
+            if (_catalogues.Count > 0)
+            {
+                // Catalogue editing: index the primary catalogue plus all others (link targets).
+                dmType = java.lang.Class.forName("net.battlescribe.engine.a.d");
+                dm = NewDataManager(dmType, platform, logger, perf);
+
+                var primary = _catalogue ?? _catalogues[0];
+                var imported = new java.util.HashMap();
+                var allCats = new java.util.ArrayList();
+                foreach (var cat in _catalogues)
+                {
+                    allCats.add(cat);
+                    if (!ReferenceEquals(cat, primary))
+                    {
+                        imported.put(cat.getId(), cat);
+                    }
+                }
+
+                // a(GameSystem, Catalogue, Map<String,Catalogue>, Collection<Catalogue>)
+                var init = dmType.getMethod("a",
+                    java.lang.Class.forName("net.battlescribe.model.data.GameSystem"),
+                    java.lang.Class.forName("net.battlescribe.model.data.Catalogue"),
+                    java.lang.Class.forName("java.util.Map"),
+                    java.lang.Class.forName("java.util.Collection"));
+                init.invoke(dm, [_gameSystem, primary, imported, allCats]);
+            }
+            else
+            {
+                // Game-system-only editing.
+                dmType = java.lang.Class.forName("net.battlescribe.engine.a.e");
+                dm = NewDataManager(dmType, platform, logger, perf);
+
+                // b(GameSystem, Collection<Catalogue>, boolean)
+                var init = dmType.getMethod("b",
+                    java.lang.Class.forName("net.battlescribe.model.data.GameSystem"),
+                    java.lang.Class.forName("java.util.Collection"),
+                    java.lang.Boolean.TYPE);
+                init.invoke(dm, [_gameSystem, new java.util.ArrayList(), java.lang.Boolean.FALSE]);
+            }
+
+            // a(boolean) → List of error objects; each is INamed (getName() = message).
+            var errMethod = dmType.getMethod("a", java.lang.Boolean.TYPE);
+            var raw = errMethod.invoke(dm, [java.lang.Boolean.TRUE]);
+            if (raw is not JavaList list)
+            {
+                return [];
+            }
+
+            var result = new List<Roster.ValidationErrorState>();
+            var iter = list.iterator();
+            while (iter.hasNext())
+            {
+                var err = iter.next();
+                var msg = err?.GetType().GetMethod("getName")?.Invoke(err, null)?.ToString()
+                    ?? err?.ToString() ?? "";
+                result.Add(new Roster.ValidationErrorState(msg));
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[bs-gamedata] validation unavailable: {ex.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// No-op implementation of the BattleScribe engine logger interface
+    /// (<c>net.battlescribe.engine.b.c</c>). The data manager logs verbosely during load /
+    /// validation; we discard it. Implemented in C# (IKVM lets a managed type satisfy a Java
+    /// interface) because the engine ships no usable logger in its own assembly.
+    /// </summary>
+    private sealed class SilentEngineLogger : net.battlescribe.engine.b.c
+    {
+        public void a(string str) { }
+
+        public void b(string str) { }
+    }
+
+    private static object NewDataManager(java.lang.Class dmType, object platform, object logger, object perf)
+    {
+        var ctor = dmType.getConstructors().FirstOrDefault(c => c.getParameterCount() == 3)
+            ?? throw new InvalidOperationException($"No 3-arg constructor on {dmType.getName()}");
+        return ctor.newInstance([platform, logger, perf]);
+    }
+
     public void Dispose()
     {
         _entriesById.Clear();
+        _catalogues.Clear();
         _gameSystem = null;
         _catalogue = null;
     }
@@ -577,8 +803,44 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             "entryLink" => AddNewEntryLink(parent, id, name),
             "forceEntry" => AddNewForceEntry(parent, id, name),
             "categoryEntry" => AddNewCategoryEntry(parent, id, name),
+            // ── Shared root containers ──────────────────────────────────────
+            "sharedSelectionEntry" => AddTo(parent, "sharedSelectionEntry", JavaModelFactory.CreateSelectionEntry(id, name, "upgrade")),
+            "sharedSelectionEntryGroup" => AddTo(parent, "sharedSelectionEntryGroup", JavaModelFactory.CreateSelectionEntryGroup(id, name)),
+            "sharedRule" => AddTo(parent, "sharedRule", JavaModelFactory.CreateRule(id, name, "")),
+            "sharedProfile" => AddTo(parent, "sharedProfile", JavaModelFactory.CreateProfile(id, name, "", "")),
+            "sharedInfoGroup" => AddTo(parent, "sharedInfoGroup", JavaModelFactory.CreateInfoGroup(id, name)),
+            // ── Info content ────────────────────────────────────────────────
+            "infoGroup" => AddTo(parent, "infoGroup", JavaModelFactory.CreateInfoGroup(id, name)),
+            "infoLink" => AddTo(parent, "infoLink", JavaModelFactory.CreateInfoLink(id, name, "", "profile")),
+            "categoryLink" => AddTo(parent, "categoryLink", JavaModelFactory.CreateCategoryLink(id, "", name)),
+            "catalogueLink" => AddTo(parent, "catalogueLink", JavaModelFactory.CreateCatalogueLink(id, name, "")),
+            // ── Constraints / modifiers / queries (id-less except constraint) ─
+            "constraint" => AddTo(parent, "constraint", JavaModelFactory.CreateConstraint(id, "min", 0m, "selections", "parent")),
+            "modifier" => AddTo(parent, "modifier", JavaModelFactory.CreateModifier("set", "name", "")),
+            "modifierGroup" => AddTo(parent, "modifierGroup", JavaModelFactory.CreateModifierGroup()),
+            "condition" => AddTo(parent, "condition", JavaModelFactory.CreateCondition("atLeast", 0m, "selections", "parent")),
+            "conditionGroup" => AddTo(parent, "conditionGroup", JavaModelFactory.CreateConditionGroup("and")),
+            "repeat" => AddTo(parent, "repeat", JavaModelFactory.CreateRepeat()),
+            // ── Type definitions (root only) ────────────────────────────────
+            "costType" => AddTo(parent, "costType", JavaModelFactory.CreateCostType(id, name)),
+            "profileType" => AddTo(parent, "profileType", JavaModelFactory.CreateProfileType(id, name)),
+            "characteristicType" => AddTo(parent, "characteristicType", JavaModelFactory.CreateCharacteristicType(id, name)),
+            "publication" => AddTo(parent, "publication", JavaModelFactory.CreatePublication(id, name)),
             _ => throw new InvalidOperationException($"Unsupported entry type for AddEntry: {entryType}"),
         };
+    }
+
+    /// <summary>
+    /// Add a freshly-created Java model object to the container resolved for
+    /// <paramref name="containerKey"/> on <paramref name="parent"/>, returning the object.
+    /// </summary>
+    private static object AddTo(object parent, string containerKey, object created)
+    {
+        var container = GetContainerList(parent, containerKey)
+            ?? throw new InvalidOperationException(
+                $"No suitable container for '{containerKey}' on parent {parent.GetType().Name}");
+        container.add(created);
+        return created;
     }
 
     private static SelectionEntry AddNewSelectionEntry(object parent, string id, string name)
@@ -662,6 +924,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         {
             "selectionEntry" => GetList(parent, "getSelectionEntries"),
             "selectionEntryGroup" => GetList(parent, "getSelectionEntryGroups"),
+            "sharedSelectionEntry" => GetList(parent, "getSharedSelectionEntries"),
             "sharedSelectionEntryGroup" => GetList(parent, "getSharedSelectionEntryGroups"),
             "entryLink" => GetList(parent, "getEntryLinks"),
             "rule" => GetList(parent, "getRules"),
@@ -669,13 +932,22 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             "profile" => GetList(parent, "getProfiles"),
             "sharedProfile" => GetList(parent, "getSharedProfiles"),
             "infoLink" => GetList(parent, "getInfoLinks"),
+            "infoGroup" => GetList(parent, "getInfoGroups"),
+            "sharedInfoGroup" => GetList(parent, "getSharedInfoGroups"),
             "categoryLink" => GetList(parent, "getCategoryLinks"),
+            "catalogueLink" => GetList(parent, "getCatalogueLinks"),
             "forceEntry" => GetList(parent, "getForceEntries"),
             "categoryEntry" => GetList(parent, "getCategoryEntries"),
             "constraint" => GetList(parent, "getConstraints"),
             "modifier" => GetList(parent, "getModifiers"),
             "modifierGroup" => GetList(parent, "getModifierGroups"),
-            "infoGroup" => GetList(parent, "getInfoGroups"),
+            "condition" => GetList(parent, "getConditions"),
+            "conditionGroup" => GetList(parent, "getConditionGroups"),
+            "repeat" => GetList(parent, "getRepeats"),
+            "costType" => GetList(parent, "getCostTypes"),
+            "profileType" => GetList(parent, "getProfileTypes"),
+            "characteristicType" => GetList(parent, "getCharacteristicTypes"),
+            "publication" => GetList(parent, "getPublications"),
             _ => null,
         };
     }
@@ -725,9 +997,12 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
     private object? FindById(string id)
     {
-        if (_catalogue != null && _catalogue.getId() == id)
+        foreach (var cat in _catalogues)
         {
-            return _catalogue;
+            if (cat.getId() == id)
+            {
+                return cat;
+            }
         }
 
         if (_gameSystem != null && _gameSystem.getId() == id)
@@ -794,6 +1069,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             "getSelectionEntries", "getSelectionEntryGroups", "getEntryLinks",
             "getRules", "getProfiles", "getInfoGroups", "getInfoLinks",
             "getCategoryLinks", "getConstraints", "getModifiers", "getModifierGroups",
+            "getConditions", "getConditionGroups", "getRepeats",
             "getForceEntries", "getCategoryEntries",
         ];
 
@@ -821,6 +1097,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             "getSelectionEntries", "getSelectionEntryGroups", "getEntryLinks",
             "getRules", "getProfiles", "getInfoGroups", "getInfoLinks",
             "getCategoryLinks", "getConstraints", "getModifiers", "getModifierGroups",
+            "getConditions", "getConditionGroups", "getRepeats",
             "getForceEntries", "getCategoryEntries",
             "getSharedSelectionEntries", "getSharedSelectionEntryGroups",
             "getSharedRules", "getSharedProfiles",
@@ -862,6 +1139,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             Id = cat.getId() ?? "",
             Name = cat.getName() ?? "",
             GameSystemId = cat.getGameSystemId() ?? "",
+            Fields = ReadRootFields(cat, isCatalogue: true),
             SelectionEntries = ReadEntryList(cat.getSelectionEntries(), "selectionEntry"),
             EntryLinks = ReadEntryList(cat.getEntryLinks(), "entryLink"),
             Rules = ReadEntryList(cat.getRules(), "rule"),
@@ -874,6 +1152,8 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             Publications = ReadEntryList(cat.getPublications(), "publication"),
             CostTypes = ReadEntryList(cat.getCostTypes(), "costType"),
             ProfileTypes = ReadEntryList(cat.getProfileTypes(), "profileType"),
+            SharedInfoGroups = ReadEntryList(cat.getSharedInfoGroups(), "infoGroup"),
+            CatalogueLinks = ReadEntryList(cat.getCatalogueLinks(), "catalogueLink"),
         };
     }
 
@@ -883,6 +1163,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         {
             Id = gs.getId() ?? "",
             Name = gs.getName() ?? "",
+            Fields = ReadRootFields(gs, isCatalogue: false),
             SelectionEntries = ReadEntryList(gs.getSelectionEntries(), "selectionEntry"),
             EntryLinks = ReadEntryList(gs.getEntryLinks(), "entryLink"),
             Rules = ReadEntryList(gs.getRules(), "rule"),
@@ -895,7 +1176,29 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             Publications = ReadEntryList(gs.getPublications(), "publication"),
             CostTypes = ReadEntryList(gs.getCostTypes(), "costType"),
             ProfileTypes = ReadEntryList(gs.getProfileTypes(), "profileType"),
+            SharedInfoGroups = ReadEntryList(gs.getSharedInfoGroups(), "infoGroup"),
         };
+    }
+
+    /// <summary>
+    /// Read root-level metadata fields (author info, revision, version, library) from a
+    /// game system or catalogue into a generic field dictionary.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string?>? ReadRootFields(object root, bool isCatalogue)
+    {
+        var fields = new Dictionary<string, string?>();
+        TryAddField(fields, root, "getAuthorName", "authorName");
+        TryAddField(fields, root, "getAuthorContact", "authorContact");
+        TryAddField(fields, root, "getAuthorUrl", "authorUrl");
+        TryAddField(fields, root, "getReadme", "readme");
+        TryAddNumField(fields, root, "getRevision", "revision");
+        if (isCatalogue)
+        {
+            TryAddBoolField(fields, root, "library");
+            TryAddNumField(fields, root, "getGameSystemRevision", "gameSystemRevision");
+        }
+
+        return fields.Count > 0 ? fields : null;
     }
 
     private static IReadOnlyList<DataEntryState> ReadEntryList(JavaList? list, string entryType)
@@ -934,18 +1237,54 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         AddChildren(children, entry, "getConstraints", "constraint");
         AddChildren(children, entry, "getModifiers", "modifier");
         AddChildren(children, entry, "getModifierGroups", "modifierGroup");
+        AddChildren(children, entry, "getConditions", "condition");
+        AddChildren(children, entry, "getConditionGroups", "conditionGroup");
+        AddChildren(children, entry, "getRepeats", "repeat");
         AddChildren(children, entry, "getForceEntries", "forceEntry");
         AddChildren(children, entry, "getCategoryEntries", "categoryEntry");
+        AddChildren(children, entry, "getCharacteristicTypes", "characteristicType");
 
-        // Collect type-specific fields
+        // Collect type-specific fields. Only non-empty values are emitted, so a given
+        // entry surfaces just the fields meaningful to its type.
         var fields = new Dictionary<string, string?>();
         TryAddField(fields, entry, "getType", "type");
+        TryAddField(fields, entry, "getComment", "comment");
         TryAddField(fields, entry, "getTargetId", "targetId");
         TryAddField(fields, entry, "getPublicationId", "publicationId");
         TryAddField(fields, entry, "getPage", "page");
-        TryAddBoolField(fields, entry, "isCollective", "collective");
-        TryAddBoolField(fields, entry, "isImported", "imported");
+        TryAddBoolField(fields, entry, "collective");
+        TryAddBoolField(fields, entry, "imported");
         TryAddField(fields, entry, "getDefaultSelectionEntryId", "defaultSelectionEntryId");
+
+        // Query / modifier / repeat fields (constraint, modifier, condition, repeat, group)
+        TryAddNumField(fields, entry, "getValue", "value");
+        TryAddField(fields, entry, "getField", "field");
+        TryAddField(fields, entry, "getScope", "scope");
+        TryAddField(fields, entry, "getChildId", "childId");
+        TryAddBoolField(fields, entry, "shared");
+        TryAddBoolField(fields, entry, "percentValue");
+        TryAddBoolField(fields, entry, "includeChildSelections");
+        TryAddBoolField(fields, entry, "includeChildForces");
+        TryAddNumField(fields, entry, "getRepeats", "repeats");
+        TryAddBoolField(fields, entry, "roundUp");
+
+        // Type/description/publication metadata
+        TryAddField(fields, entry, "getTypeId", "typeId");
+        TryAddField(fields, entry, "getTypeName", "typeName");
+        TryAddField(fields, entry, "getDescription", "description");
+        TryAddNumField(fields, entry, "getDefaultCostLimit", "defaultCostLimit");
+        TryAddBoolField(fields, entry, "primary");
+        TryAddBoolField(fields, entry, "importRootEntries");
+        TryAddField(fields, entry, "getShortName", "shortName");
+        TryAddField(fields, entry, "getPublisher", "publisher");
+        TryAddField(fields, entry, "getPublicationDate", "publicationDate");
+        TryAddField(fields, entry, "getPublisherUrl", "publisherUrl");
+
+        // Costs and characteristics are values keyed by type — surface them as
+        // composite fields ("cost:<typeId>", "char:<name>") so they can be asserted
+        // without polluting the children list / child counts.
+        AddCostFields(fields, entry);
+        AddCharacteristicFields(fields, entry);
 
         return new DataEntryState
         {
@@ -989,22 +1328,111 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         }
     }
 
-    private static void TryAddBoolField(Dictionary<string, string?> fields, object entry, string getter, string key)
+    /// <summary>
+    /// Add a boolean field, probing both the <c>is*</c> and <c>get*</c> getter forms
+    /// derived from <paramref name="key"/> (BattleScribe is inconsistent across types).
+    /// Only emits the field when a getter exists and returns a Boolean.
+    /// </summary>
+    private static void TryAddBoolField(Dictionary<string, string?> fields, object entry, string key)
+    {
+        var cap = char.ToUpperInvariant(key[0]) + key[1..];
+        foreach (var getter in new[] { "is" + cap, "get" + cap })
+        {
+            var method = entry.GetType().GetMethod(getter);
+            if (method == null)
+            {
+                continue;
+            }
+
+            var result = method.Invoke(entry, null);
+            if (result is true)
+            {
+                fields[key] = "true";
+                return;
+            }
+
+            if (result is false)
+            {
+                fields[key] = "false";
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Add a numeric field, formatting whole doubles without a trailing ".0"
+    /// (BattleScribe stores values as doubles, but specs read "2" not "2.0").
+    /// </summary>
+    private static void TryAddNumField(Dictionary<string, string?> fields, object entry, string getter, string key)
     {
         var method = entry.GetType().GetMethod(getter);
-        if (method == null)
+        var raw = method?.Invoke(entry, null);
+        if (raw is null)
         {
             return;
         }
 
-        var result = method.Invoke(entry, null);
-        if (result is true)
+        // Skip non-numeric returns (e.g. Modifier.getValue() returns a String — handled by getValue caller order).
+        if (raw is double d)
         {
-            fields[key] = "true";
+            fields[key] = FormatNum(d);
         }
-        else if (result is false)
+        else if (raw is int i)
         {
-            fields[key] = "false";
+            fields[key] = i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            var s = raw.ToString();
+            if (!string.IsNullOrEmpty(s))
+            {
+                fields[key] = s;
+            }
+        }
+    }
+
+    private static string FormatNum(double d) =>
+        d == Math.Floor(d) && !double.IsInfinity(d)
+            ? ((long)d).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static void AddCostFields(Dictionary<string, string?> fields, object entry)
+    {
+        var costs = GetList(entry, "getCosts");
+        if (costs == null)
+        {
+            return;
+        }
+
+        for (var i = 0; i < costs.size(); i++)
+        {
+            var cost = costs.get(i);
+            var typeId = cost.GetType().GetMethod("getTypeId")?.Invoke(cost, null)?.ToString();
+            var value = cost.GetType().GetMethod("getValue")?.Invoke(cost, null);
+            if (!string.IsNullOrEmpty(typeId) && value is double dv)
+            {
+                fields[$"cost:{typeId}"] = FormatNum(dv);
+            }
+        }
+    }
+
+    private static void AddCharacteristicFields(Dictionary<string, string?> fields, object entry)
+    {
+        var chars = GetList(entry, "getCharacteristics");
+        if (chars == null)
+        {
+            return;
+        }
+
+        for (var i = 0; i < chars.size(); i++)
+        {
+            var ch = chars.get(i);
+            var name = ch.GetType().GetMethod("getName")?.Invoke(ch, null)?.ToString();
+            var value = ch.GetType().GetMethod("getValue")?.Invoke(ch, null)?.ToString();
+            if (!string.IsNullOrEmpty(name))
+            {
+                fields[$"char:{name}"] = value ?? "";
+            }
         }
     }
 

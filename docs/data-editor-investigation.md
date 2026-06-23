@@ -168,7 +168,7 @@ Toolbar: `btnSaveDataFile`, `btnSaveDataFileAs`, `btnAddData`, `btnErrorMessages
 | RepeatEditPanel | value, repeats, field, scope, childId, shared, roundUp |
 | ProfileEditPanel | typeId, typeName, characteristics[] (name, typeId, $text) |
 | ProfileTypeEditPanel | characteristicTypes[] (name, id) |
-| CostTypeEditPanel | name, defaultCostLimit, hidden |
+| CostTypeEditPanel | name (shared #txtName), hidden — **no defaultCostLimit widget** (CostTypeEditPanelController wires only chkHidden; setDefaultCostLimit is never UI-called) |
 | PublicationEditPanel | name, shortName, publisher, publicationDate, publisherUrl |
 | LinkEditPanel | targetId, type |
 | SelectionEntryEditPanel | type (unit/model/upgrade), collective |

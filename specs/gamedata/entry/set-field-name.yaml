@@ -17,10 +17,10 @@ setup:
           type: unit
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: se-unit
-    field: name
-    value: New Name
+    fields:
+      name: New Name
 
   - expectedState:
       catalogues:

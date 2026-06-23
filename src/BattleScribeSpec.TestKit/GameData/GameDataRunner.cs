@@ -141,12 +141,47 @@ public sealed class GameDataRunner
                     entryId ?? throw new InvalidOperationException($"Step {stepIndex}: removeEntry requires entryId"));
                 break;
 
-            case "setField":
-                _engine.SetField(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setField requires entryId"),
-                    step.Field ?? throw new InvalidOperationException($"Step {stepIndex}: setField requires field"),
-                    _exprResolver.Resolve(step.Value));
+            case "openCatalogue":
+                _engine.OpenFile(
+                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: openCatalogue requires entryId"));
                 break;
+
+            case "setFields":
+                {
+                    var target = entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setFields requires entryId");
+                    if (step.Fields is null && step.Characteristics is null && step.Costs is null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Step {stepIndex}: setFields requires at least one of 'fields', 'characteristics' or 'costs'");
+                    }
+
+                    // Apply scalar fields first (e.g. a profile's typeId before its characteristics).
+                    if (step.Fields is { } fields)
+                    {
+                        foreach (var (field, value) in fields)
+                        {
+                            _engine.SetField(target, field, _exprResolver.Resolve(value));
+                        }
+                    }
+
+                    if (step.Costs is { } costs)
+                    {
+                        foreach (var (costTypeId, value) in costs)
+                        {
+                            _engine.SetCost(target, _exprResolver.Resolve(costTypeId)!, _exprResolver.Resolve(value));
+                        }
+                    }
+
+                    if (step.Characteristics is { } characteristics)
+                    {
+                        foreach (var (nameOrTypeId, value) in characteristics)
+                        {
+                            _engine.SetCharacteristic(target, _exprResolver.Resolve(nameOrTypeId)!, _exprResolver.Resolve(value));
+                        }
+                    }
+
+                    break;
+                }
 
             case "addLink":
                 outputs = _engine.AddLink(
@@ -178,6 +213,11 @@ public sealed class GameDataRunner
 
     private void AssertExpectedState(GameDataExpectedStateDef expected, int stepIndex)
     {
+        if (expected.Errors is { } expectedErrors)
+        {
+            AssertErrors(stepIndex, expectedErrors);
+        }
+
         var state = _engine.GetState();
 
         if (expected.GameSystem is { } expectedGs)
@@ -213,6 +253,38 @@ public sealed class GameDataRunner
         }
     }
 
+    private void AssertErrors(int stepIndex, List<ExpectedErrorDef> expected)
+    {
+        var actual = _engine.GetValidationErrors();
+
+        // Empty expected list = assert no validation errors.
+        if (expected.Count == 0)
+        {
+            if (actual.Count > 0)
+            {
+                _errors.Add($"Step {stepIndex}: expected no validation errors but got {actual.Count}: " +
+                    $"[{string.Join("; ", actual.Select(e => e.Message))}]");
+            }
+
+            return;
+        }
+
+        foreach (var ee in expected)
+        {
+            var match = actual.FirstOrDefault(a =>
+                (ee.Message is null || (a.Message ?? "").Contains(ee.Message, StringComparison.OrdinalIgnoreCase))
+                && (ee.EntryId is null || a.EntryId == ee.EntryId)
+                && (ee.ConstraintId is null || a.ConstraintId == ee.ConstraintId));
+
+            if (match is null)
+            {
+                _errors.Add($"Step {stepIndex}: expected validation error (message~'{ee.Message}', " +
+                    $"entryId={ee.EntryId}, constraintId={ee.ConstraintId}) not found. " +
+                    $"Actual: [{string.Join("; ", actual.Select(e => e.Message))}]");
+            }
+        }
+    }
+
     private void AssertGameSystem(int stepIndex, ExpectedGameSystemDataDef expected, GameSystemDataState actual)
     {
         var prefix = "gameSystem";
@@ -225,6 +297,8 @@ public sealed class GameDataRunner
         {
             AssertEqual(stepIndex, $"{prefix}.name", expected.Name, actual.Name);
         }
+
+        AssertRootFields(stepIndex, prefix, expected.Fields, actual.Fields);
 
         if (expected.ForceEntries is not null)
         {
@@ -260,6 +334,11 @@ public sealed class GameDataRunner
         {
             AssertEntryList(stepIndex, $"{prefix}.sharedSelectionEntryGroups", expected.SharedSelectionEntryGroups, actual.SharedSelectionEntryGroups);
         }
+
+        if (expected.SharedInfoGroups is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.sharedInfoGroups", expected.SharedInfoGroups, actual.SharedInfoGroups);
+        }
     }
 
     private void AssertCatalogue(int stepIndex, ExpectedCatalogueDataDef expected, CatalogueDataState actual)
@@ -269,6 +348,8 @@ public sealed class GameDataRunner
         {
             AssertEqual(stepIndex, $"{prefix}.name", expected.Name, actual.Name);
         }
+
+        AssertRootFields(stepIndex, prefix, expected.Fields, actual.Fields);
 
         if (expected.EntryCount is { } ec)
         {
@@ -337,6 +418,16 @@ public sealed class GameDataRunner
         if (expected.Publications is not null)
         {
             AssertEntryList(stepIndex, $"{prefix}.publications", expected.Publications, actual.Publications);
+        }
+
+        if (expected.SharedInfoGroups is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.sharedInfoGroups", expected.SharedInfoGroups, actual.SharedInfoGroups);
+        }
+
+        if (expected.CatalogueLinks is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.catalogueLinks", expected.CatalogueLinks, actual.CatalogueLinks);
         }
     }
 
@@ -422,6 +513,22 @@ public sealed class GameDataRunner
                 actual.Fields?.TryGetValue(key, out actualValue);
                 AssertEqual(stepIndex, $"{prefix}.fields[{key}]", expectedValue ?? "", actualValue ?? "");
             }
+        }
+    }
+
+    private void AssertRootFields(int stepIndex, string prefix,
+        Dictionary<string, string?>? expected, IReadOnlyDictionary<string, string?>? actual)
+    {
+        if (expected is not { Count: > 0 })
+        {
+            return;
+        }
+
+        foreach (var (key, expectedValue) in expected)
+        {
+            string? actualValue = null;
+            actual?.TryGetValue(key, out actualValue);
+            AssertEqual(stepIndex, $"{prefix}.fields[{key}]", expectedValue ?? "", actualValue ?? "");
         }
     }
 

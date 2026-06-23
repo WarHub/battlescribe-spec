@@ -1,0 +1,54 @@
+id: category-entry-with-constraint
+category: category
+description: >
+  Add a category entry to the game system and nest a max constraint and a modifier
+  inside it. Verifies category-entry creation and that constraints and modifiers can
+  be created on it.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+
+steps:
+  - action: addEntry
+    id: add-cat
+    parentId: gs-1
+    entryType: categoryEntry
+    name: HQ
+
+  - action: addEntry
+    id: add-con
+    parentId: ${{ steps.add-cat.entryId }}
+    entryType: constraint
+
+  - action: setFields
+    entryId: ${{ steps.add-con.entryId }}
+    fields:
+      type: max
+      value: "2"
+
+  - action: addEntry
+    id: add-mod
+    parentId: ${{ steps.add-cat.entryId }}
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.add-mod.entryId }}
+    fields:
+      field: hidden
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        categoryEntries:
+          - name: HQ
+            entryType: categoryEntry
+            children:
+              - entryType: constraint
+                fields:
+                  type: max
+                  value: "2"
+              - entryType: modifier
+                fields:
+                  field: hidden

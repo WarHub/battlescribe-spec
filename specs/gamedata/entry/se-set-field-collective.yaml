@@ -24,10 +24,10 @@ setup:
               type: model
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: se-1
-    field: collective
-    value: "true"
+    fields:
+      collective: "true"
 
   - expectedState:
       catalogues:

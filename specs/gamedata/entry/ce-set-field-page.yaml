@@ -13,10 +13,10 @@ setup:
         name: Fast Attack
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: ce-1
-    field: page
-    value: "23"
+    fields:
+      page: "23"
 
   - expectedState:
       gameSystem:

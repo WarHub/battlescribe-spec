@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Run all tests except those requiring live NR or sequential mode. -->
+<!-- Run all tests except those requiring live NR, sequential mode, or the BattleScribe
+     desktop Data Editor (BsGameDataUi — slow, needs the BS app + Java agent; run it
+     explicitly via the bs-ui-gamedata profile). -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Engine!=LiveNrGameDataUi&amp;Mode!=Sequential</TestCaseFilter>
+    <TestCaseFilter>Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Engine!=LiveNrGameDataUi&amp;Engine!=BsGameDataUi&amp;Mode!=Sequential</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

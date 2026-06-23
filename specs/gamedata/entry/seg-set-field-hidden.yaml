@@ -17,10 +17,10 @@ setup:
           name: Hidden Options
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: seg-1
-    field: hidden
-    value: "true"
+    fields:
+      hidden: "true"
 
   - expectedState:
       catalogues:

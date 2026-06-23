@@ -1,0 +1,84 @@
+id: catalogue-link
+category: links
+description: >
+  Add a catalogue link from one catalogue to a second (library) catalogue in the same game
+  system, and set its targetId / importRootEntries. With the target catalogue present and
+  indexed by the editor, the link resolves cleanly (no validation error) and the targetId is
+  retained. Then re-point the link at a non-existent catalogue and verify the Data Editor
+  flags the dangling target.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+    - id: cat-library
+      name: Shared Library
+      gameSystemId: gs-1
+      library: true
+
+steps:
+  # Two catalogues are loaded; declare cat-1 as the active file before editing it.
+  - action: openCatalogue
+    entryId: cat-1
+
+  - action: addEntry
+    id: add-cl
+    parentId: cat-1
+    entryType: catalogueLink
+    name: Library Link
+
+  - action: setFields
+    entryId: ${{ steps.add-cl.entryId }}
+    fields:
+      targetId: cat-library
+      importRootEntries: "true"
+
+  # Valid target: the link resolves, targetId is retained, and there are no errors.
+  - expectedState:
+      errors: []
+      catalogues:
+        - id: cat-1
+          catalogueLinks:
+            - entryType: catalogueLink
+              fields:
+                targetId: cat-library
+                importRootEntries: "true"
+
+  # Re-point at a catalogue that does not exist: the Data Editor flags the dangling target.
+  - action: setFields
+    entryId: ${{ steps.add-cl.entryId }}
+    fields:
+      targetId: does-not-exist
+
+  - expectedState:
+      errors:
+        - message: CatalogueLink must have a target that exists
+      catalogues:
+        - id: cat-1
+          catalogueLinks:
+            - entryType: catalogueLink
+              fields:
+                targetId: does-not-exist
+      engines:
+        # The BattleScribe Data Editor's catalogue-link target field resolves the typed id and clears
+        # it when no such catalogue exists — so the dangling link keeps an empty target (not the literal
+        # "does-not-exist"), while still being flagged. The retained-literal-id is the in-process
+        # reference's behaviour; the editor sanitises it. Assert the link + the dangling error only.
+        battlescribe-ui:
+          errors:
+            - message: CatalogueLink must have a target that exists
+          catalogues:
+            - id: cat-1
+              catalogueLinks:
+                - entryType: catalogueLink

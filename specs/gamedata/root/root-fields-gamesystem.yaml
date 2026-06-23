@@ -1,0 +1,28 @@
+id: root-fields-gamesystem
+category: root
+description: >
+  Set game-system root metadata fields (authorName, authorUrl, readme, revision)
+  and verify they round-trip. These are BaseRootEntry fields on the game system.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+
+steps:
+  - action: setFields
+    entryId: gs-1
+    fields:
+      authorName: Jane Designer
+      authorUrl: https://jane.example.com
+      readme: System design notes.
+      revision: "7"
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        fields:
+          authorName: Jane Designer
+          authorUrl: https://jane.example.com
+          readme: System design notes.
+          revision: "7"

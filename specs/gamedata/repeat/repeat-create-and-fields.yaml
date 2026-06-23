@@ -1,0 +1,61 @@
+id: repeat-create-and-fields
+category: repeat
+description: >
+  Add a repeat to a modifier and set its fields (repeats count, roundUp, field,
+  scope). Verifies repeat creation and its query-field surface.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-mod
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.add-mod.entryId }}
+    fields:
+      field: hidden
+
+  - action: addEntry
+    id: add-repeat
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: repeat
+
+  - action: setFields
+    entryId: ${{ steps.add-repeat.entryId }}
+    fields:
+      repeats: "2"
+      roundUp: "true"
+      field: selections
+      scope: parent
+      value: "3"
+      childId: se-1
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  children:
+                    - entryType: repeat
+                      fields:
+                        repeats: "2"
+                        roundUp: "true"
+                        field: selections
+                        scope: parent
+                        value: "3"
+                        childId: se-1

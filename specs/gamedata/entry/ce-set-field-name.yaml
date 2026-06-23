@@ -12,10 +12,10 @@ setup:
         name: Old Category
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: ce-1
-    field: name
-    value: Heavy Support
+    fields:
+      name: Heavy Support
 
   - expectedState:
       gameSystem:

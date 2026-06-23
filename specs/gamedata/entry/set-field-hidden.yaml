@@ -17,10 +17,10 @@ setup:
           type: unit
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: se-unit
-    field: hidden
-    value: "true"
+    fields:
+      hidden: "true"
 
   - expectedState:
       catalogues:

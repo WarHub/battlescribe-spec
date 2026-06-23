@@ -1,0 +1,58 @@
+id: force-create-and-nest
+category: force
+description: >
+  Add a force entry to the game system, nest a child force entry under it, and add
+  a category entry. Verifies force-entry creation, nesting, and category-entry creation
+  at the game-system root.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+
+steps:
+  - action: addEntry
+    id: add-force
+    parentId: gs-1
+    entryType: forceEntry
+    name: Detachment
+
+  - action: addEntry
+    id: add-subforce
+    parentId: ${{ steps.add-force.entryId }}
+    entryType: forceEntry
+    name: Sub-detachment
+
+  - action: addEntry
+    id: add-cat
+    parentId: gs-1
+    entryType: categoryEntry
+    name: Troops
+
+  - action: addEntry
+    id: add-con
+    parentId: ${{ steps.add-force.entryId }}
+    entryType: constraint
+
+  - action: setFields
+    entryId: ${{ steps.add-con.entryId }}
+    fields:
+      type: max
+      value: "1"
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        forceEntries:
+          - name: Detachment
+            entryType: forceEntry
+            children:
+              - entryType: constraint
+                fields:
+                  type: max
+                  value: "1"
+              - name: Sub-detachment
+                entryType: forceEntry
+        categoryEntries:
+          - name: Troops
+            entryType: categoryEntry

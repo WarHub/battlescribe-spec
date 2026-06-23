@@ -17,10 +17,10 @@ setup:
           name: Local Group
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: seg-1
-    field: imported
-    value: "false"
+    fields:
+      imported: "false"
 
   - expectedState:
       catalogues:

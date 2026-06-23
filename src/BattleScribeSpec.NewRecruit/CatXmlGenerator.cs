@@ -127,6 +127,11 @@ public static class CatXmlGenerator
     {
         var node = Catalogue(gamesystem: gamesystem, name: catalogue.Name, id: catalogue.Id);
 
+        if (catalogue.Library)
+        {
+            node = node.WithIsLibrary(true);
+        }
+
         if (catalogue.SelectionEntries is { } selectionEntries)
         {
             node = node.AddSelectionEntries(selectionEntries.Select(MapSelectionEntry));

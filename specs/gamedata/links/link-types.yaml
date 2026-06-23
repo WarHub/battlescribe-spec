@@ -1,0 +1,84 @@
+id: link-types
+category: links
+description: >
+  Exercise the link type enums. A root entry link must target a selection entry
+  (root links cannot target a group), so the group link is added inside a selection
+  entry: an entry link there is re-typed to selectionEntryGroup. An info link on the
+  same entry is typed to rule. Verifies the entry-link and info-link type enums
+  round-trip.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntries:
+        - id: sse-1
+          name: Shared Upgrade
+          type: upgrade
+      sharedSelectionEntryGroups:
+        - id: sseg-1
+          name: Wargear Group
+      sharedRules:
+        - id: sr-1
+          name: Shared Rule
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  # Root entry link → a shared selection entry (the only valid root link target).
+  - action: addLink
+    id: add-root-link
+    parentId: cat-1
+    linkType: entryLink
+    targetId: sse-1
+
+  # Entry link inside a selection entry → a shared selection entry group; re-type it to
+  # selectionEntryGroup (NR only offers this link type for non-root links).
+  - action: addLink
+    id: add-group-link
+    parentId: se-1
+    linkType: entryLink
+    targetId: sseg-1
+
+  - action: setFields
+    entryId: ${{ steps.add-group-link.entryId }}
+    fields:
+      type: selectionEntryGroup
+
+  # Info link on the same selection entry → a shared rule.
+  - action: addLink
+    id: add-info-link
+    parentId: se-1
+    linkType: infoLink
+    targetId: sr-1
+
+  - action: setFields
+    entryId: ${{ steps.add-info-link.entryId }}
+    fields:
+      type: rule
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - entryType: entryLink
+              fields:
+                targetId: sse-1
+                type: selectionEntry
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: entryLink
+                  fields:
+                    targetId: sseg-1
+                    type: selectionEntryGroup
+                - entryType: infoLink
+                  fields:
+                    targetId: sr-1
+                    type: rule

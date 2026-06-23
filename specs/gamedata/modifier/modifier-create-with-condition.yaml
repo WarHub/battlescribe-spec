@@ -1,0 +1,64 @@
+id: modifier-create-with-condition
+category: modifier
+description: >
+  Add a modifier to a selection entry, set its type/field/value, then nest a
+  condition under it and set the condition's query fields. Verifies modifier and
+  nested-condition creation plus their field surfaces in one spec.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-mod
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.add-mod.entryId }}
+    fields:
+      type: set
+      field: hidden
+      value: "true"
+
+  - action: addEntry
+    id: add-cond
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.add-cond.entryId }}
+    fields:
+      type: atLeast
+      value: "3"
+      field: selections
+      scope: roster
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  fields:
+                    type: set
+                    field: hidden
+                    value: "true"
+                  children:
+                    - entryType: condition
+                      fields:
+                        type: atLeast
+                        value: "3"
+                        field: selections
+                        scope: roster

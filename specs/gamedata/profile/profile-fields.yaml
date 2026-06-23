@@ -1,0 +1,53 @@
+id: profile-fields
+category: profile
+description: >
+  Set the metadata fields of a profile: typeName, page, publicationId and hidden.
+  Verifies the profile field surface beyond typeId and characteristics.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    profileTypes:
+      - id: pt-1
+        name: Infantry
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      publications:
+        - id: pub-1
+          name: Core Book
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-profile
+    parentId: se-1
+    entryType: profile
+    name: Marine
+
+  - action: setFields
+    entryId: ${{ steps.add-profile.entryId }}
+    fields:
+      page: "27"
+      publicationId: pub-1
+      hidden: "true"
+      typeName: Infantry
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - name: Marine
+                  entryType: profile
+                  hidden: true
+                  fields:
+                    page: "27"
+                    publicationId: pub-1
+                    typeName: Infantry

@@ -1,0 +1,44 @@
+id: rule-create-and-fields
+category: rule
+description: >
+  Add a rule to a catalogue and set its description, page, publication and hidden
+  fields. Verifies rule creation and the rule field surface.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      publications:
+        - id: pub-1
+          name: Core Book
+
+steps:
+  - action: addEntry
+    id: add-rule
+    parentId: cat-1
+    entryType: rule
+    name: Objective Secured
+
+  - action: setFields
+    entryId: ${{ steps.add-rule.entryId }}
+    fields:
+      description: This unit controls objectives regardless of enemy models.
+      page: "112"
+      publicationId: pub-1
+      hidden: "true"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          rules:
+            - name: Objective Secured
+              entryType: rule
+              hidden: true
+              fields:
+                description: This unit controls objectives regardless of enemy models.
+                page: "112"
+                publicationId: pub-1

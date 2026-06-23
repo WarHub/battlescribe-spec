@@ -43,6 +43,13 @@ public interface IGameDataEngine : IDisposable
     /// </summary>
     void Cleanup() { }
 
+    /// <summary>
+    /// Select the active file (catalogue or game system) for subsequent UI-driven edits.
+    /// Specs with more than one catalogue declare which one is "open" before editing it.
+    /// Engines that read all files at once (or edit a single artifact) may treat this as a no-op.
+    /// </summary>
+    void OpenFile(string id) { }
+
     // ===== Structural mutations =====
 
     /// <summary>
@@ -70,6 +77,25 @@ public interface IGameDataEngine : IDisposable
     /// <param name="field">Field name to set.</param>
     /// <param name="value">New value (null to clear).</param>
     void SetField(string entryId, string field, string? value);
+
+    /// <summary>
+    /// Set a cost value on an entry, keyed by cost type. Creates the cost if absent.
+    /// </summary>
+    /// <param name="entryId">ID of the entry (selection entry, group, link…) to modify.</param>
+    /// <param name="costTypeId">ID of the cost type the value applies to.</param>
+    /// <param name="value">New numeric cost value (as a string).</param>
+    void SetCost(string entryId, string costTypeId, string? value) =>
+        throw new NotSupportedException("SetCost is not supported by this engine.");
+
+    /// <summary>
+    /// Set a characteristic value on a profile entry, keyed by characteristic name or type ID.
+    /// Creates the characteristic if absent.
+    /// </summary>
+    /// <param name="entryId">ID of the profile entry to modify.</param>
+    /// <param name="nameOrTypeId">Characteristic name or characteristic-type ID.</param>
+    /// <param name="value">New characteristic value.</param>
+    void SetCharacteristic(string entryId, string nameOrTypeId, string? value) =>
+        throw new NotSupportedException("SetCharacteristic is not supported by this engine.");
 
     // ===== Link management =====
 

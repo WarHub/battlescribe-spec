@@ -16,10 +16,10 @@ setup:
         name: Vanguard
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: fe-1
-    field: publicationId
-    value: pub-rules
+    fields:
+      publicationId: pub-rules
 
   - expectedState:
       gameSystem:

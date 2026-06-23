@@ -1,0 +1,61 @@
+id: constraint-create-and-fields
+category: constraint
+description: >
+  Add min and max constraints to a selection entry and set their query fields
+  (type, value, field, scope, percentValue), verifying each is persisted. Exercises
+  constraint creation plus the full constraint field surface in one spec.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-min
+    parentId: se-1
+    entryType: constraint
+
+  - action: setFields
+    entryId: ${{ steps.add-min.entryId }}
+    fields:
+      type: min
+      value: "1"
+      field: selections
+      scope: parent
+
+  - action: addEntry
+    id: add-max
+    parentId: se-1
+    entryType: constraint
+
+  - action: setFields
+    entryId: ${{ steps.add-max.entryId }}
+    fields:
+      type: max
+      value: "3"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: constraint
+                  fields:
+                    type: min
+                    value: "1"
+                    field: selections
+                    scope: parent
+                - entryType: constraint
+                  fields:
+                    type: max
+                    value: "3"

@@ -1,0 +1,93 @@
+id: links-create-and-fields
+category: links
+description: >
+  Create the three link kinds: an entry link (to a shared entry) at catalogue root,
+  an info link (to a shared profile) on a selection entry, and a category link on a
+  force entry with its targetId and hidden fields. Verifies link creation and the
+  link field surface. (Category links attach to force entries in the data editor.)
+
+# Category-link field surface (probed against the real editors):
+#  - targetId — the only meaningful settable field; which category the link points at.
+#  - hidden   — settable and persisted on every engine (set it before the target on NR's UI, whose
+#               category-link form collapses once a target is chosen).
+#  - name     — NOT asserted: derived from the target on NR (a set value is overwritten), defaulted
+#               on the BS engines; it is not a stable cross-engine field.
+#  - primary  — NOT asserted: it defaults false on all three BS engines (in-proc reference, frozen
+#               NR, and the real Data Editor) and NR's editor neither exposes nor models it.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      categoryEntries:
+        - id: ce-troops
+          name: Troops
+      forceEntries:
+        - id: fe-1
+          name: Detachment
+      sharedSelectionEntries:
+        - id: sse-bolter
+          name: Bolter
+          type: upgrade
+      profileTypes:
+        - id: pt-weapon
+          name: Weapon
+      sharedProfiles:
+        - id: sp-weapon
+          name: Bolter Profile
+          typeId: pt-weapon
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addLink
+    id: add-entry-link
+    parentId: cat-1
+    linkType: entryLink
+    targetId: sse-bolter
+
+  - action: addLink
+    id: add-info-link
+    parentId: se-1
+    linkType: infoLink
+    targetId: sp-weapon
+
+  - action: addEntry
+    id: add-cat-link
+    parentId: fe-1
+    entryType: categoryLink
+
+  - action: setFields
+    entryId: ${{ steps.add-cat-link.entryId }}
+    # hidden before targetId: NR's category-link form collapses once a target is selected.
+    fields:
+      hidden: "true"
+      targetId: ce-troops
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - entryType: entryLink
+              fields:
+                targetId: sse-bolter
+                type: selectionEntry
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: infoLink
+                  fields:
+                    targetId: sp-weapon
+          forceEntries:
+            - id: fe-1
+              children:
+                - entryType: categoryLink
+                  hidden: true
+                  fields:
+                    targetId: ce-troops

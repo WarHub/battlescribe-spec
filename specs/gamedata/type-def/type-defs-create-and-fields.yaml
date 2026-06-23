@@ -1,0 +1,66 @@
+id: type-defs-create-and-fields
+category: type-def
+description: >
+  Create the game-system data-type definitions: a cost type (with default cost limit),
+  and a profile type with a nested characteristic type. Verifies creation and fields for
+  the root type-definition entities.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+
+steps:
+  - action: addEntry
+    id: add-cost-type
+    parentId: gs-1
+    entryType: costType
+    name: Points
+
+  - action: setFields
+    entryId: ${{ steps.add-cost-type.entryId }}
+    fields:
+      defaultCostLimit: "2000"
+      hidden: "true"
+
+  - action: addEntry
+    id: add-profile-type
+    parentId: gs-1
+    entryType: profileType
+    name: Weapon
+
+  - action: addEntry
+    id: add-char-type
+    parentId: ${{ steps.add-profile-type.entryId }}
+    entryType: characteristicType
+    name: Range
+
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        costTypes:
+          - name: Points
+            hidden: true
+            fields:
+              defaultCostLimit: "2000"
+        profileTypes:
+          - name: Weapon
+            children:
+              - name: Range
+                entryType: characteristicType
+      engines:
+        # The BattleScribe Data Editor has no widget for a cost type's defaultCostLimit — its
+        # CostType panel edits only `hidden` (setDefaultCostLimit is never UI-called). So
+        # battlescribe-ui can't set it; assert only what the editor can drive. The other three
+        # engines (battlescribe / newrecruit / newrecruit-ui) cover defaultCostLimit above.
+        battlescribe-ui:
+          gameSystem:
+            id: gs-1
+            costTypes:
+              - name: Points
+                hidden: true
+            profileTypes:
+              - name: Weapon
+                children:
+                  - name: Range
+                    entryType: characteristicType

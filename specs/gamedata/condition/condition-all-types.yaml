@@ -1,0 +1,144 @@
+id: condition-all-types
+category: condition
+description: >
+  Under one modifier, create a condition of each of the eight condition types
+  (lessThan, greaterThan, equalTo, notEqualTo, atLeast, atMost, instanceOf,
+  notInstanceOf) and verify the type field of each is persisted. Exercises the
+  complete condition-type enum.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-mod
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.add-mod.entryId }}
+    fields:
+      field: hidden
+
+  - action: addEntry
+    id: c-lt
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.c-lt.entryId }}
+    fields:
+      type: lessThan
+
+  - action: addEntry
+    id: c-gt
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.c-gt.entryId }}
+    fields:
+      type: greaterThan
+
+  - action: addEntry
+    id: c-eq
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.c-eq.entryId }}
+    fields:
+      type: equalTo
+
+  - action: addEntry
+    id: c-ne
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.c-ne.entryId }}
+    fields:
+      type: notEqualTo
+
+  - action: addEntry
+    id: c-al
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.c-al.entryId }}
+    fields:
+      type: atLeast
+
+  - action: addEntry
+    id: c-am
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.c-am.entryId }}
+    fields:
+      type: atMost
+
+  - action: addEntry
+    id: c-io
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.c-io.entryId }}
+    fields:
+      type: instanceOf
+
+  - action: addEntry
+    id: c-nio
+    parentId: ${{ steps.add-mod.entryId }}
+    entryType: condition
+
+  - action: setFields
+    entryId: ${{ steps.c-nio.entryId }}
+    fields:
+      type: notInstanceOf
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  children:
+                    - entryType: condition
+                      fields:
+                        type: lessThan
+                    - entryType: condition
+                      fields:
+                        type: greaterThan
+                    - entryType: condition
+                      fields:
+                        type: equalTo
+                    - entryType: condition
+                      fields:
+                        type: notEqualTo
+                    - entryType: condition
+                      fields:
+                        type: atLeast
+                    - entryType: condition
+                      fields:
+                        type: atMost
+                    - entryType: condition
+                      fields:
+                        type: instanceOf
+                    - entryType: condition
+                      fields:
+                        type: notInstanceOf

@@ -1,0 +1,31 @@
+id: error-broken-entry-link
+category: validation
+description: >
+  An entry link whose target does not exist produces a validation error. Verifies that
+  the engine's error list is extracted and matched. Both the in-process reference engine
+  and the Data Editor (battlescribe-ui) construct the real BattleScribe data manager and
+  report the same error, so the assertion runs on both anchors.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      entryLinks:
+        - id: el-broken
+          name: Broken Link
+          targetId: does-not-exist
+          type: selectionEntry
+
+steps:
+  - expectedState:
+      errors:
+        - message: EntryLink must have a target that exists
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - id: el-broken
+              entryType: entryLink

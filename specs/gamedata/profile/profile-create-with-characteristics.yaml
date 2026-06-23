@@ -1,0 +1,55 @@
+id: profile-create-with-characteristics
+category: profile
+description: >
+  Add a profile to a selection entry, assign its profile type, and set characteristic
+  values via setCharacteristic. Verifies the profile's typeId and characteristic values
+  are persisted.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    profileTypes:
+      - id: pt-unit
+        name: Unit
+        characteristicTypes:
+          - id: ct-m
+            name: M
+          - id: ct-t
+            name: T
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-profile
+    parentId: se-1
+    entryType: profile
+    name: Marine
+
+  - action: setFields
+    entryId: ${{ steps.add-profile.entryId }}
+    fields:
+      typeId: pt-unit
+    characteristics:
+      M: "6"
+      T: "4"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - name: Marine
+                  entryType: profile
+                  fields:
+                    typeId: pt-unit
+                    char:M: "6"
+                    char:T: "4"

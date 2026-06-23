@@ -1,0 +1,45 @@
+id: cost-set-values
+category: cost
+description: >
+  Set cost values on a selection entry for multiple cost types via setCost,
+  creating the cost where absent and updating it where present. Verifies the
+  values are persisted and keyed by cost type.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+      - id: pl
+        name: Power Level
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: setFields
+    entryId: se-1
+    costs:
+      pts: "90"
+      pl: "5"
+
+  - action: setFields
+    entryId: se-1
+    costs:
+      pts: "100"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                cost:pts: "100"
+                cost:pl: "5"

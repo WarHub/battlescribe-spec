@@ -16,6 +16,8 @@ public sealed class BsRosterApp : IAsyncDisposable
     private readonly bool _ownsHome;
 
     private Process? _process;
+    /// <summary>Cancels the long-lived agent-stderr pump on disposal.</summary>
+    private readonly CancellationTokenSource _stderrCts = new();
 
     /// <summary>The TCP port the agent is listening on, or null if not started.</summary>
     public int? AgentPort { get; private set; }
@@ -54,16 +56,31 @@ public sealed class BsRosterApp : IAsyncDisposable
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
 
+        // Pump the agent JVM's stderr for the WHOLE process lifetime (not just startup), teeing it to
+        // a log file when BSUI_AGENT_STDERR_LOG is set. This is the harness's window into agent-side
+        // diagnostics (System.err in the agent), which the request/response protocol can't surface.
         var stderrLines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var stderrLogPath = Environment.GetEnvironmentVariable("BSUI_AGENT_STDERR_LOG");
         _ = Task.Run(async () =>
         {
             try
             {
-                while (await process.StandardError.ReadLineAsync(cts.Token)
+                while (await process.StandardError.ReadLineAsync(_stderrCts.Token)
                     is { } line)
                 {
                     stderrLines.Enqueue(line);
                     Console.Error.WriteLine($"[BS stderr] {line}");
+                    if (stderrLogPath is not null)
+                    {
+                        try
+                        {
+                            await File.AppendAllTextAsync(stderrLogPath, line + "\n");
+                        }
+                        catch
+                        {
+                            // best-effort logging
+                        }
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -160,6 +177,8 @@ public sealed class BsRosterApp : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _stderrCts.Cancel();
+        _stderrCts.Dispose();
         if (_process is not null && !_process.HasExited)
         {
             try

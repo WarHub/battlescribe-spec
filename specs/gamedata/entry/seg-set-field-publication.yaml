@@ -20,10 +20,10 @@ setup:
           name: Standard Wargear
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: seg-1
-    field: publicationId
-    value: pub-core
+    fields:
+      publicationId: pub-core
 
   - expectedState:
       catalogues:

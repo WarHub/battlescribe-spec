@@ -18,10 +18,10 @@ setup:
           type: unit
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: se-1
-    field: page
-    value: "42"
+    fields:
+      page: "42"
 
   - expectedState:
       catalogues:

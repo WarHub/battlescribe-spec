@@ -164,7 +164,8 @@ public sealed class GameDataSpecLintTests
     private static readonly HashSet<string> KnownActions =
     [
         "addEntry", "removeEntry",
-        "setField", "addLink",
+        "setFields", "addLink",
+        "openCatalogue",
         "dump"
     ];
 
@@ -243,15 +244,15 @@ public sealed class GameDataSpecLintTests
                     }
 
                     break;
-                case "setField":
+                case "setFields":
                     if (step.EntryId is null)
                     {
-                        yield return $"step {i + 1}: setField requires 'entryId'";
+                        yield return $"step {i + 1}: setFields requires 'entryId'";
                     }
 
-                    if (step.Field is null)
+                    if (step.Fields is null && step.Characteristics is null && step.Costs is null)
                     {
-                        yield return $"step {i + 1}: setField requires 'field'";
+                        yield return $"step {i + 1}: setFields requires at least one of 'fields', 'characteristics' or 'costs'";
                     }
 
                     break;
@@ -269,6 +270,13 @@ public sealed class GameDataSpecLintTests
                     if (step.TargetId is null)
                     {
                         yield return $"step {i + 1}: addLink requires 'targetId'";
+                    }
+
+                    break;
+                case "openCatalogue":
+                    if (step.EntryId is null)
+                    {
+                        yield return $"step {i + 1}: openCatalogue requires 'entryId'";
                     }
 
                     break;

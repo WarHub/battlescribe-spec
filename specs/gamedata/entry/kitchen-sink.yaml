@@ -51,15 +51,15 @@ steps:
     entryType: selectionEntry
     name: Sergeant
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-wargear.entryId }}
-    field: defaultSelectionEntryId
-    value: ${{ steps.add-bolter.entryId }}
+    fields:
+      defaultSelectionEntryId: ${{ steps.add-bolter.entryId }}
 
-  - action: setField
+  - action: setFields
     entryId: ${{ steps.add-sgt.entryId }}
-    field: hidden
-    value: "true"
+    fields:
+      hidden: "true"
 
   - action: addEntry
     id: add-rule

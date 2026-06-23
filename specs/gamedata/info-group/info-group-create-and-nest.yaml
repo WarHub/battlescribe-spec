@@ -1,0 +1,84 @@
+id: info-group-create-and-nest
+category: info-group
+description: >
+  Add an info group to a selection entry and nest a profile and a rule inside it.
+  Verifies info-group creation and that profiles/rules can be created within it.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    profileTypes:
+      - id: pt-1
+        name: Abilities
+        characteristicTypes:
+          - id: ct-1
+            name: Description
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedProfiles:
+        - id: sp-ability
+          name: Shared Ability
+          typeId: pt-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: addEntry
+    id: add-ig
+    parentId: se-1
+    entryType: infoGroup
+    name: Abilities
+
+  - action: addEntry
+    id: add-profile
+    parentId: ${{ steps.add-ig.entryId }}
+    entryType: profile
+    name: Ability Profile
+
+  - action: addEntry
+    id: add-rule
+    parentId: ${{ steps.add-ig.entryId }}
+    entryType: rule
+    name: Ability Rule
+
+  - action: addEntry
+    id: add-infolink
+    parentId: ${{ steps.add-ig.entryId }}
+    entryType: infoLink
+
+  - action: setFields
+    entryId: ${{ steps.add-infolink.entryId }}
+    fields:
+      targetId: sp-ability
+      name: Linked Ability
+      hidden: "true"
+
+  - action: setFields
+    entryId: ${{ steps.add-ig.entryId }}
+    fields:
+      hidden: "true"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - name: Abilities
+                  entryType: infoGroup
+                  hidden: true
+                  children:
+                    - name: Ability Profile
+                      entryType: profile
+                    - name: Ability Rule
+                      entryType: rule
+                    - name: Linked Ability
+                      entryType: infoLink
+                      hidden: true
+                      fields:
+                        targetId: sp-ability

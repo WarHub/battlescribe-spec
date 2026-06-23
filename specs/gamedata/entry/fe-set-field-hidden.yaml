@@ -12,10 +12,10 @@ setup:
         name: Secret Force
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: fe-1
-    field: hidden
-    value: "true"
+    fields:
+      hidden: "true"
 
   - expectedState:
       gameSystem:

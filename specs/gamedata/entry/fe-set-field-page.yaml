@@ -13,10 +13,10 @@ setup:
         name: Patrol Detachment
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: fe-1
-    field: page
-    value: "7"
+    fields:
+      page: "7"
 
   - expectedState:
       gameSystem:

@@ -1,0 +1,89 @@
+id: modifier-all-types
+category: modifier
+description: >
+  On one selection entry, create a modifier of each string modifier type
+  (set, increment, decrement, append) and verify the type field of each is
+  persisted. Exercises the modifier-type enum.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+# Each modifier sets a `field` whose data type admits the modifier `type` before the type itself:
+# NR gates the modifier type dropdown on the selected field (boolean→set, numeric→increment/
+# decrement, string→append). The expectedState asserts only `type` (the enum under test).
+steps:
+  - action: addEntry
+    id: m-set
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.m-set.entryId }}
+    fields:
+      field: hidden
+      type: set
+
+  - action: addEntry
+    id: m-inc
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.m-inc.entryId }}
+    fields:
+      field: pts
+      type: increment
+
+  - action: addEntry
+    id: m-dec
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.m-dec.entryId }}
+    fields:
+      field: pts
+      type: decrement
+
+  - action: addEntry
+    id: m-app
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.m-app.entryId }}
+    fields:
+      field: name
+      type: append
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  fields:
+                    type: set
+                - entryType: modifier
+                  fields:
+                    type: increment
+                - entryType: modifier
+                  fields:
+                    type: decrement
+                - entryType: modifier
+                  fields:
+                    type: append

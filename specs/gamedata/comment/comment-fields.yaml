@@ -1,0 +1,72 @@
+id: comment-fields
+category: comment
+description: >
+  Set the comment (author note) field on a selection entry, a selection entry group, a
+  force entry, and a rule. The comment is a model field present on every data element;
+  this verifies it round-trips across the entity kinds that expose it.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      forceEntries:
+        - id: fe-1
+          name: Detachment
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+          selectionEntryGroups:
+            - id: seg-1
+              name: Wargear
+
+steps:
+  - action: setFields
+    entryId: se-1
+    fields:
+      comment: Needs points review.
+
+  - action: setFields
+    entryId: seg-1
+    fields:
+      comment: Optional wargear group.
+
+  - action: setFields
+    entryId: fe-1
+    fields:
+      comment: Battalion detachment.
+
+  - action: addEntry
+    id: add-rule
+    parentId: cat-1
+    entryType: rule
+    name: A Rule
+
+  - action: setFields
+    entryId: ${{ steps.add-rule.entryId }}
+    fields:
+      comment: Draft wording.
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          forceEntries:
+            - id: fe-1
+              fields:
+                comment: Battalion detachment.
+          selectionEntries:
+            - id: se-1
+              fields:
+                comment: Needs points review.
+              children:
+                - id: seg-1
+                  fields:
+                    comment: Optional wargear group.
+          rules:
+            - name: A Rule
+              fields:
+                comment: Draft wording.

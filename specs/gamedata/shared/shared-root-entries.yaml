@@ -1,0 +1,71 @@
+id: shared-root-entries
+category: shared
+description: >
+  Add shared entries to a catalogue's shared root containers: a shared selection entry,
+  a shared selection entry group, a shared rule, and a shared profile. Verifies creation
+  into each shared container.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    profileTypes:
+      - id: pt-1
+        name: Abilities
+        characteristicTypes:
+          - id: ct-1
+            name: Description
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-sse
+    parentId: cat-1
+    entryType: sharedSelectionEntry
+    name: Shared Bolter
+
+  - action: addEntry
+    id: add-sseg
+    parentId: cat-1
+    entryType: sharedSelectionEntryGroup
+    name: Shared Wargear
+
+  - action: addEntry
+    id: add-srule
+    parentId: cat-1
+    entryType: sharedRule
+    name: Shared Rule
+
+  - action: addEntry
+    id: add-sprofile
+    parentId: cat-1
+    entryType: sharedProfile
+    name: Shared Profile
+
+  - action: addEntry
+    id: add-sinfogroup
+    parentId: cat-1
+    entryType: sharedInfoGroup
+    name: Shared Abilities
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          sharedSelectionEntries:
+            - name: Shared Bolter
+              entryType: selectionEntry
+          sharedSelectionEntryGroups:
+            - name: Shared Wargear
+              entryType: selectionEntryGroup
+          sharedRules:
+            - name: Shared Rule
+              entryType: rule
+          sharedProfiles:
+            - name: Shared Profile
+              entryType: profile
+          sharedInfoGroups:
+            - name: Shared Abilities
+              entryType: infoGroup

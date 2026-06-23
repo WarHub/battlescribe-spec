@@ -17,10 +17,10 @@ setup:
           name: Wargear Options
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: seg-1
-    field: page
-    value: "15"
+    fields:
+      page: "15"
 
   - expectedState:
       catalogues:

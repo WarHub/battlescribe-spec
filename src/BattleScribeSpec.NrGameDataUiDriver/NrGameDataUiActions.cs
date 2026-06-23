@@ -160,13 +160,12 @@ public static class NrGameDataUiActions
     ///     <c>&lt;label&gt;</c> element — located by filtering the tr by its first-cell text.</item>
     /// </list>
     /// </summary>
-    public static async Task SetFieldAsync(IPage page, string entryId, string field, string? value)
+    public static async Task SetFieldAsync(IPage page, string field, string? value)
     {
-        // Click the entry to select it and open its properties panel
-        var node = await FindTreeNodeByIdAsync(page, entryId);
-        await node.ClickAsync();
-
-        // Wait for properties to appear — "Unique ID" row is the reliable signal
+        // The caller (NrGameDataUiDriver) has already selected the entry, so the right panel is
+        // open on it — re-selecting here via the tree is redundant and fragile for deeply-nested
+        // named entities (e.g. an infoLink under an infoGroup) and after a rename. Just confirm
+        // the panel is ready.
         await page.Locator(".rightPanel tr")
             .Filter(new LocatorFilterOptions { HasText = "Unique ID" })
             .WaitForAsync(new LocatorWaitForOptions
@@ -178,14 +177,97 @@ public static class NrGameDataUiActions
         var fieldLabel = GetFieldLabel(field);
         var rightPanel = page.Locator(".rightPanel");
 
+        // Catalogue links carry an #importRoot checkbox and a raw "Target ID:" text input. Use the
+        // text input for the target (the autocomplete only lists existing catalogues, so it can't
+        // express the spec's re-point to a non-existent target) and #importRoot for importRootEntries.
+        var isCatalogueLink = await rightPanel.Locator("#importRoot").CountAsync() > 0;
+        if (isCatalogueLink && field == "targetId")
+        {
+            var tidInput = rightPanel.Locator("table.editorTable tr")
+                .Filter(new LocatorFilterOptions
+                {
+                    Has = page.Locator("td").Filter(new LocatorFilterOptions
+                    {
+                        HasTextRegex = new System.Text.RegularExpressions.Regex("^\\s*Target ID:?\\s*$"),
+                    }),
+                })
+                .Locator("td:last-child input").First;
+            await tidInput.FillAsync(value ?? "");
+            await tidInput.PressAsync("Tab");
+            await page.WaitForTimeoutAsync(300);
+            return;
+        }
+
+        if (field == "importRootEntries")
+        {
+            var cb = rightPanel.Locator("#importRoot").First;
+            if (value == "false")
+            {
+                if (await cb.IsCheckedAsync())
+                {
+                    await cb.UncheckAsync();
+                }
+            }
+            else if (!await cb.IsCheckedAsync())
+            {
+                await cb.CheckAsync();
+            }
+
+            await page.WaitForTimeoutAsync(200);
+            return;
+        }
+
+        // A link renders its kind enum in a "Link Type:" select (entryLink: selectionEntry/
+        // selectionEntryGroup; infoLink: profile/rule/infoGroup). This is a different row from a
+        // selection entry's own "Type:" (unit/upgrade), which the generic path below still handles —
+        // so only intercept `type` when a "Link Type:" select is actually present.
+        if (field == "type")
+        {
+            var linkTypeSelect = rightPanel.Locator("table.editorTable tr")
+                .Filter(new LocatorFilterOptions
+                {
+                    Has = page.Locator("td").Filter(new LocatorFilterOptions
+                    {
+                        HasTextRegex = new System.Text.RegularExpressions.Regex("^\\s*Link Type:?\\s*$"),
+                    }),
+                })
+                .Locator("td:last-child select").First;
+            if (await linkTypeSelect.CountAsync() > 0)
+            {
+                try
+                {
+                    await linkTypeSelect.SelectOptionAsync(new SelectOptionValue { Value = value });
+                }
+                catch
+                {
+                    await linkTypeSelect.SelectOptionAsync(new SelectOptionValue { Label = value });
+                }
+                await page.WaitForTimeoutAsync(200);
+                return;
+            }
+        }
+
         // Several fields use NR Editor's custom autocomplete widget (not a standard input/select).
         // Handle these before the generic input strategies.
-        if (field is "publicationId" or "defaultSelectionEntryId" or "targetId")
+        if (field is "publicationId" or "defaultSelectionEntryId" or "targetId" or "typeId" or "typeName")
         {
             if (value is not null)
             {
-                var lookupJs = field == "publicationId" ? PublicationNameLookupJs : EntryNameLookupJs;
-                var displayName = await page.EvaluateAsync<string?>(lookupJs, value);
+                // typeName IS the profile-type display name — no id→name lookup needed; the others
+                // resolve the target's display name from its id.
+                var displayName = field switch
+                {
+                    "typeName" => value,
+                    "publicationId" => await page.EvaluateAsync<string?>(PublicationNameLookupJs, value),
+                    "typeId" => await page.EvaluateAsync<string?>(ProfileTypeNameLookupJs, value),
+                    _ => await page.EvaluateAsync<string?>(EntryNameLookupJs, value),
+                };
+                // A link's Target autocomplete is filtered by its Link Type — align it to the
+                // target's kind first so the target appears in the list.
+                if (field == "targetId")
+                {
+                    await SetLinkTypeFromTargetAsync(page, rightPanel, value);
+                }
                 await SetAutocompleteFieldAsync(page, rightPanel, fieldLabel, value, displayName);
             }
             return;
@@ -201,10 +283,29 @@ public static class NrGameDataUiActions
             // Strategy 2: Table row approach for text/select fields.
             // NR Editor renders: <tr><td>Label:</td><td><input or select></td></tr>
             // The td label is NOT a <label> element so GetByLabel does not find these inputs.
+            // Match the label *cell* precisely (tolerant of a trailing colon) so a label like
+            // "Publication" doesn't also match "Publication Date:" / "Publication URL:".
             fieldInput = rightPanel.Locator("table.editorTable tr")
-                .Filter(new LocatorFilterOptions { HasText = fieldLabel })
+                .Filter(new LocatorFilterOptions
+                {
+                    Has = page.Locator("td").Filter(new LocatorFilterOptions
+                    {
+                        HasTextRegex = new System.Text.RegularExpressions.Regex(
+                            $"^\\s*{System.Text.RegularExpressions.Regex.Escape(fieldLabel)}:?\\s*$"),
+                    }),
+                })
                 .Locator("td:last-child input, td:last-child select")
                 .First;
+        }
+
+        // A disabled control genuinely cannot be set through the UI (e.g. `collective` on an
+        // entry link, which NR derives rather than exposes). Skip it rather than timing out; the
+        // spec accounts for it via a per-engine expectedState override.
+        if (await fieldInput.CountAsync() > 0 && await fieldInput.IsDisabledAsync())
+        {
+            Console.Error.WriteLine(
+                $"[nr-gamedata-ui] field '{field}' control is disabled in NR's UI — skipping.");
+            return;
         }
 
         if (value is null)
@@ -324,8 +425,113 @@ public static class NrGameDataUiActions
             const params = new URLSearchParams(window.location.search);
             const systemId = params.get('systemId');
             const gsSys = pinia._s.get('editor')?.gameSystems?.[systemId];
-            const pubs = gsSys?.loadedCatalogues?.[systemId]?.publications ?? [];
-            return pubs.find(p => p.id === pubId)?.name ?? null;
+            // Publications can live on the game system or any loaded catalogue.
+            for (const cat of Object.values(gsSys?.loadedCatalogues ?? {})) {
+                const hit = (cat.publications ?? []).find(p => p.id === pubId);
+                if (hit) return hit.name;
+            }
+            return null;
+        }
+        """;
+
+    /// <summary>
+    /// JS to determine a link target's kind (the value NR's "Link Type" select expects) by finding
+    /// which collection holds the id across all loaded catalogues. Argument: targetId; returns one
+    /// of selectionEntry/selectionEntryGroup/rule/profile/infoGroup, or null if not found.
+    /// </summary>
+    private const string LinkTargetKindLookupJs = """
+        (targetId) => {
+            const pinia = document.querySelector('#__nuxt')
+                ?.__vue_app__?.config?.globalProperties?.$pinia;
+            if (!pinia) return null;
+            const systemId = new URLSearchParams(location.search).get('systemId');
+            const gsSys = pinia._s.get('editor')?.gameSystems?.[systemId];
+            if (!gsSys) return null;
+            const kindByCol = {
+                selectionEntries: 'selectionEntry', sharedSelectionEntries: 'selectionEntry',
+                selectionEntryGroups: 'selectionEntryGroup', sharedSelectionEntryGroups: 'selectionEntryGroup',
+                rules: 'rule', sharedRules: 'rule',
+                profiles: 'profile', sharedProfiles: 'profile',
+                infoGroups: 'infoGroup', sharedInfoGroups: 'infoGroup',
+            };
+            const seen = new WeakSet();
+            const search = (obj) => {
+                if (!obj || typeof obj !== 'object' || seen.has(obj)) return null;
+                seen.add(obj);
+                for (const col of Object.keys(kindByCol)) {
+                    const arr = obj[col];
+                    if (Array.isArray(arr)) for (const e of arr) if (e && e.id === targetId) return kindByCol[col];
+                }
+                for (const k of Object.keys(obj)) {
+                    const v = obj[k];
+                    if (Array.isArray(v)) for (const it of v) { const r = search(it); if (r) return r; }
+                }
+                return null;
+            };
+            for (const c of Object.values(gsSys.loadedCatalogues ?? {})) { const r = search(c); if (r) return r; }
+            return null;
+        }
+        """;
+
+    /// <summary>
+    /// NR filters a link's "Target" autocomplete by its "Link Type" select, so a non-default
+    /// target (group/rule/profile/infoGroup) isn't listed until the type matches. Sets the Link
+    /// Type select from the target's kind before the target is chosen. No-op if the row/kind is absent.
+    /// </summary>
+    /// <summary>Resolves a link target's kind (selectionEntry/selectionEntryGroup/rule/profile/infoGroup).</summary>
+    internal static Task<string?> LinkTargetKindAsync(IPage page, string targetId)
+        => page.EvaluateAsync<string?>(LinkTargetKindLookupJs, targetId);
+
+    internal static async Task SetLinkTypeFromTargetAsync(IPage page, ILocator rightPanel, string targetId)
+    {
+        var kind = await page.EvaluateAsync<string?>(LinkTargetKindLookupJs, targetId);
+        if (kind is null)
+        {
+            return;
+        }
+
+        var typeSelect = rightPanel.Locator("table.editorTable tr")
+            .Filter(new LocatorFilterOptions
+            {
+                Has = page.Locator("td").Filter(new LocatorFilterOptions
+                {
+                    HasTextRegex = new System.Text.RegularExpressions.Regex("^\\s*Link Type:?\\s*$"),
+                }),
+            })
+            .Locator("td:last-child select").First;
+        if (await typeSelect.CountAsync() == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await typeSelect.SelectOptionAsync(new SelectOptionValue { Value = kind });
+            await page.WaitForTimeoutAsync(200);
+        }
+        catch
+        {
+            // Type not selectable (e.g. only one option) — leave as-is.
+        }
+    }
+
+    /// <summary>
+    /// JS expression to look up a profile-type name by ID from the Pinia editorStore (profile
+    /// types live on the game system or any loaded catalogue). Argument: typeId; returns name.
+    /// </summary>
+    private const string ProfileTypeNameLookupJs = """
+        (typeId) => {
+            const pinia = document.querySelector('#__nuxt')
+                ?.__vue_app__?.config?.globalProperties?.$pinia;
+            if (!pinia) return null;
+            const params = new URLSearchParams(window.location.search);
+            const systemId = params.get('systemId');
+            const gsSys = pinia._s.get('editor')?.gameSystems?.[systemId];
+            for (const cat of Object.values(gsSys?.loadedCatalogues ?? {})) {
+                const hit = (cat.profileTypes ?? []).find(p => p.id === typeId);
+                if (hit) return hit.name;
+            }
+            return null;
         }
         """;
 
@@ -440,12 +646,18 @@ public static class NrGameDataUiActions
                         return JSON.stringify({ error: `Game system '${systemId}' not found in editor.gameSystems` });
                     }
 
-                    const catalogue = gsSys.loadedCatalogues?.[catId];
-                    if (!catalogue) {
+                    const loaded = gsSys.loadedCatalogues ?? {};
+                    if (!loaded[catId] && !loaded[systemId]) {
                         return JSON.stringify({ error: `Catalogue '${catId}' not in loadedCatalogues for system '${systemId}'` });
                     }
 
-                    const gameSystemData = gsSys.loadedCatalogues?.[systemId] ?? null;
+                    const gameSystemData = loaded[systemId] ?? null;
+
+                    // Format a numeric value the way BattleScribe does (trim trailing .0).
+                    const formatNum = (v) => {
+                        const n = Number(v);
+                        return Number.isFinite(n) && Number.isInteger(n) ? String(n) : String(v);
+                    };
 
                     // Helper to serialize an entry node
                     const serializeEntry = (entry, entryType) => {
@@ -459,13 +671,14 @@ public static class NrGameDataUiActions
                             fields: {},
                         };
 
-                        const skipKeys = new Set(['id', 'name', 'hidden', 'selectionEntries', 'selectionEntryGroups',
-                            'entryLinks', 'infoLinks', 'categoryLinks', 'rules', 'profiles', 'infoGroups',
-                            'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
-                            'forceEntries', 'categoryEntries', 'publications', 'costTypes', 'profileTypes', 'repeats']);
+                        // Container arrays are excluded by the Array.isArray check below, so the skip
+                        // set only needs identity/internal keys. (A Repeat node's scalar `repeats`
+                        // count must survive even though `repeats` is also a child-container name.)
+                        const skipKeys = new Set(['id', 'name', 'hidden', 'parent', 'catalogue',
+                            'attributes', 'costs', 'characteristics']);
 
                         for (const [key, val] of Object.entries(entry)) {
-                            if (skipKeys.has(key)) continue;
+                            if (skipKeys.has(key) || key.startsWith('$') || key.startsWith('__')) continue;
                             if (typeof val === 'function') continue;
                             if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
                                 // NR stores the import flag as 'import' but the spec protocol uses 'imported'
@@ -474,10 +687,25 @@ public static class NrGameDataUiActions
                             }
                         }
 
-                        const childContainers = ['selectionEntries', 'selectionEntryGroups', 'rules',
-                            'profiles', 'infoGroups', 'constraints', 'modifiers', 'modifierGroups',
-                            'conditions', 'conditionGroups', 'entryLinks', 'infoLinks', 'categoryLinks',
-                            'forceEntries', 'categoryEntries', 'repeats'];
+                        // Costs / characteristics serialize as composite "cost:<typeId>" / "char:<name>"
+                        // (NR keeps the characteristic value in the $text field).
+                        if (Array.isArray(entry.costs)) {
+                            for (const c of entry.costs) {
+                                if (c && c.typeId != null) result.fields['cost:' + c.typeId] = formatNum(c.value);
+                            }
+                        }
+                        if (Array.isArray(entry.characteristics)) {
+                            for (const ch of entry.characteristics) {
+                                if (ch && ch.name) result.fields['char:' + ch.name] = String(ch.$text ?? ch.value ?? '');
+                            }
+                        }
+
+                        // BattleScribe reference engine's fixed container order, so positional
+                        // child assertions match the BS anchors.
+                        const childContainers = ['selectionEntries', 'selectionEntryGroups', 'entryLinks',
+                            'rules', 'profiles', 'infoGroups', 'infoLinks', 'categoryLinks',
+                            'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
+                            'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes'];
 
                         for (const ck of childContainers) {
                             const items = entry[ck];
@@ -499,6 +727,7 @@ public static class NrGameDataUiActions
                             id: container.id || '',
                             name: container.name || '',
                             gameSystemId: container.gameSystemId || container.id_game_system || '',
+                            fields: {},
                             selectionEntries: [],
                             entryLinks: [],
                             rules: [],
@@ -506,12 +735,22 @@ public static class NrGameDataUiActions
                             sharedSelectionEntryGroups: [],
                             sharedRules: [],
                             sharedProfiles: [],
+                            sharedInfoGroups: [],
                             forceEntries: [],
                             categoryEntries: [],
                             publications: [],
                             costTypes: [],
                             profileTypes: [],
+                            catalogueLinks: [],
                         };
+
+                        // Root metadata fields (revision, authorName, library, …).
+                        for (const [key, val] of Object.entries(container)) {
+                            if (key === 'id' || key === 'name') continue;
+                            if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
+                                r.fields[key] = String(val);
+                            }
+                        }
 
                         const mappings = [
                             ['selectionEntries', 'selectionEntries', 'selectionEntry'],
@@ -521,11 +760,13 @@ public static class NrGameDataUiActions
                             ['sharedSelectionEntryGroups', 'sharedSelectionEntryGroups', 'selectionEntryGroup'],
                             ['sharedRules', 'sharedRules', 'rule'],
                             ['sharedProfiles', 'sharedProfiles', 'profile'],
+                            ['sharedInfoGroups', 'sharedInfoGroups', 'infoGroup'],
                             ['forceEntries', 'forceEntries', 'forceEntry'],
                             ['categoryEntries', 'categoryEntries', 'categoryEntry'],
                             ['publications', 'publications', 'publication'],
                             ['costTypes', 'costTypes', 'costType'],
                             ['profileTypes', 'profileTypes', 'profileType'],
+                            ['catalogueLinks', 'catalogueLinks', 'catalogueLink'],
                         ];
 
                         for (const [srcKey, destKey, entryType] of mappings) {
@@ -537,9 +778,15 @@ public static class NrGameDataUiActions
                         return r;
                     };
 
+                    // Surface every loaded catalogue (multi-catalogue specs assert on a catalogue
+                    // other than the one the editor happens to have open); the system-id entry is
+                    // the game system, not a catalogue.
                     const state = { catalogues: [], gameSystem: null };
                     if (gameSystemData) state.gameSystem = serializeContainer(gameSystemData);
-                    if (catalogue) state.catalogues = [serializeContainer(catalogue)];
+                    state.catalogues = Object.entries(loaded)
+                        .filter(([k]) => k !== systemId)
+                        .map(([, c]) => serializeContainer(c))
+                        .filter(Boolean);
 
                     return JSON.stringify(state);
                 } catch (e) {
@@ -570,7 +817,7 @@ public static class NrGameDataUiActions
     /// After this method returns, callers can click the locator to select the entry and
     /// open its properties panel.
     /// </summary>
-    private static async Task<ILocator> FindTreeNodeByIdAsync(IPage page, string entryId)
+    internal static async Task<ILocator> FindTreeNodeByIdAsync(IPage page, string entryId)
     {
         // Step 1: Look up the entry's name and collection key in the Pinia editorStore.
         // NR Editor stores catalogue data as:
@@ -588,7 +835,7 @@ public static class NrGameDataUiActions
                     const cols = [
                         'selectionEntries','categoryEntries','selectionEntryGroups',
                         'forceEntries','entryLinks','infoLinks','categoryLinks',
-                        'rules','profileTypes','costTypes','publications',
+                        'rules','profiles','infoGroups','profileTypes','costTypes','publications',
                         'sharedSelectionEntries','sharedSelectionEntryGroups',
                         'sharedProfiles','sharedRules','sharedInfoGroups'
                     ];
@@ -747,10 +994,18 @@ public static class NrGameDataUiActions
         "imported" => "Import",
         "collective" => "Collective",
         "defaultAmount" => "Default Amount",
+        "defaultCostLimit" => "Default Cost Limit",
         "page" => "Page",
         "publicationId" => "Publication",
+        "typeId" => "Profile Type",
+        "typeName" => "Profile Type",
         "defaultSelectionEntryId" => "Default Selection",
         "targetId" => "Target:",
+        // Publication editor labels (NR uses "Publication:" for the publisher field).
+        "shortName" => "Short Name",
+        "publisher" => "Publication",
+        "publicationDate" => "Publication Date",
+        "publisherUrl" => "Publication URL",
         _ => char.ToUpperInvariant(field[0]) + field[1..], // Capitalize first letter
     };
 
@@ -849,7 +1104,7 @@ public static class NrGameDataUiActions
     /// Returns the ID of the currently open catalogue by reading the <c>id</c> query
     /// parameter from the page URL (e.g. <c>.../catalogue?systemId=gs-1&amp;id=cat-1</c>).
     /// </summary>
-    private static async Task<string> GetCurrentCatalogueIdAsync(IPage page)
+    internal static async Task<string> GetCurrentCatalogueIdAsync(IPage page)
         => await page.EvaluateAsync<string>(
             "() => new URLSearchParams(window.location.search).get('id') ?? ''") ?? "";
 
@@ -866,7 +1121,7 @@ public static class NrGameDataUiActions
     ///   <item>The form is a table where each row is <c>&lt;tr&gt;&lt;td&gt;{Label}&lt;/td&gt;&lt;td&gt;&lt;input&gt;&lt;/td&gt;&lt;/tr&gt;</c>.</item>
     /// </list>
     /// </summary>
-    private static async Task<GameDataActionOutputs> AddEntryToRootSectionAsync(
+    internal static async Task<GameDataActionOutputs> AddEntryToRootSectionAsync(
         IPage page, string entryType, string? name)
     {
         var sectionClass = GetSectionCssClass(entryType);
@@ -878,8 +1133,12 @@ public static class NrGameDataUiActions
             new LocatorClickOptions { Button = MouseButton.Right });
         await page.WaitForTimeoutAsync(300);
 
-        // Click the add menu item — identified by the entry type icon image
-        await page.Locator($".context-menu div:has(img[src*=\"{entryType}\"])").ClickAsync(
+        // Click the add menu item — identified by the entry type icon image. Shared root entries
+        // reuse the base entry's icon (e.g. a sharedSelectionEntry uses the selectionEntry icon).
+        var iconType = entryType.StartsWith("shared", StringComparison.Ordinal)
+            ? char.ToLowerInvariant(entryType["shared".Length]) + entryType[("shared".Length + 1)..]
+            : entryType;
+        await page.Locator($".context-menu div:has(img[src*=\"{iconType}\"])").ClickAsync(
             new LocatorClickOptions { Timeout = 5_000 });
 
         // Wait for the properties form to open — the "Unique ID" row is the reliable signal
@@ -915,7 +1174,7 @@ public static class NrGameDataUiActions
     /// icon image src. After creating the link, sets the <c>targetId</c> field in the
     /// properties panel.
     /// </summary>
-    private static async Task<GameDataActionOutputs> AddLinkToRootSectionAsync(
+    internal static async Task<GameDataActionOutputs> AddLinkToRootSectionAsync(
         IPage page, string linkType, string targetId)
     {
         var sectionClass = GetSectionCssClass(linkType);
@@ -945,8 +1204,10 @@ public static class NrGameDataUiActions
         // Read the auto-generated entry ID
         var entryId = await idRow.Locator("td:last-child input[type='text']").InputValueAsync();
 
-        // Set the target entry via the properties panel Target: autocomplete widget
+        // Set the target entry via the properties panel Target: autocomplete widget. NR filters
+        // that list by the link's "Link Type", so align the type to the target's kind first.
         var rightPanel = page.Locator(".rightPanel");
+        await SetLinkTypeFromTargetAsync(page, rightPanel, targetId);
         var targetFieldLabel = GetFieldLabel("targetId");
         var targetName = await page.EvaluateAsync<string?>(EntryNameLookupJs, targetId);
         await SetAutocompleteFieldAsync(page, rightPanel, targetFieldLabel, targetId, targetName);
@@ -970,6 +1231,11 @@ public static class NrGameDataUiActions
         "publication" => "publications",
         "costType" => "costTypes",
         "profileType" => "profileTypes",
+        "sharedSelectionEntry" => "sharedSelectionEntries",
+        "sharedSelectionEntryGroup" => "sharedSelectionEntryGroups",
+        "sharedRule" => "sharedRules",
+        "sharedProfile" => "sharedProfiles",
+        "sharedInfoGroup" => "sharedInfoGroups",
         _ => entryType + "s",
     };
 
@@ -1015,6 +1281,7 @@ public static class NrGameDataUiActions
             Id = el.GetProperty("id").GetString() ?? "",
             Name = el.GetProperty("name").GetString() ?? "",
             GameSystemId = el.GetProperty("gameSystemId").GetString() ?? "",
+            Fields = DeserializeFields(el),
             SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
             EntryLinks = DeserializeEntryList(el, "entryLinks"),
             Rules = DeserializeEntryList(el, "rules"),
@@ -1022,11 +1289,13 @@ public static class NrGameDataUiActions
             SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
             SharedRules = DeserializeEntryList(el, "sharedRules"),
             SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
+            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
             ForceEntries = DeserializeEntryList(el, "forceEntries"),
             CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
             Publications = DeserializeEntryList(el, "publications"),
             CostTypes = DeserializeEntryList(el, "costTypes"),
             ProfileTypes = DeserializeEntryList(el, "profileTypes"),
+            CatalogueLinks = DeserializeEntryList(el, "catalogueLinks"),
         };
 
     private static GameSystemDataState DeserializeGameSystem(System.Text.Json.JsonElement el) =>
@@ -1034,6 +1303,7 @@ public static class NrGameDataUiActions
         {
             Id = el.GetProperty("id").GetString() ?? "",
             Name = el.GetProperty("name").GetString() ?? "",
+            Fields = DeserializeFields(el),
             SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
             EntryLinks = DeserializeEntryList(el, "entryLinks"),
             Rules = DeserializeEntryList(el, "rules"),
@@ -1041,12 +1311,28 @@ public static class NrGameDataUiActions
             SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
             SharedRules = DeserializeEntryList(el, "sharedRules"),
             SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
+            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
             ForceEntries = DeserializeEntryList(el, "forceEntries"),
             CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
             CostTypes = DeserializeEntryList(el, "costTypes"),
             ProfileTypes = DeserializeEntryList(el, "profileTypes"),
             Publications = DeserializeEntryList(el, "publications"),
         };
+
+    private static IReadOnlyDictionary<string, string?>? DeserializeFields(System.Text.Json.JsonElement el)
+    {
+        if (!el.TryGetProperty("fields", out var fieldsEl) || fieldsEl.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var fields = new Dictionary<string, string?>();
+        foreach (var prop in fieldsEl.EnumerateObject())
+        {
+            fields[prop.Name] = prop.Value.GetString();
+        }
+        return fields.Count > 0 ? fields : null;
+    }
 
     private static IReadOnlyList<DataEntryState> DeserializeEntryList(
         System.Text.Json.JsonElement parent, string propertyName)

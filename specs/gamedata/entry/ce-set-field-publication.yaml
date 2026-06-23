@@ -16,10 +16,10 @@ setup:
         name: Dedicated Transport
 
 steps:
-  - action: setField
+  - action: setFields
     entryId: ce-1
-    field: publicationId
-    value: pub-index
+    fields:
+      publicationId: pub-index
 
   - expectedState:
       gameSystem:
