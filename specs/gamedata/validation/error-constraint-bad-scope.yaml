@@ -1,0 +1,46 @@
+id: error-constraint-bad-scope
+category: validation
+description: >
+  A constraint whose scope references neither a known scope keyword (self / parent / force /
+  roster / ...) nor an existing ancestor entry id produces a validation error
+  ("Constraint must have a scope that exists"). Both BattleScribe anchors construct the real
+  data manager and report it. NewRecruit's reference validator models only dangling link
+  targets, not query-scope resolution, so it reports no error there (per-engine override).
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+          constraints:
+            - id: con-bad-scope
+              type: max
+              value: 1
+              field: selections
+              scope: does-not-exist-scope
+
+steps:
+  - expectedState:
+      errors:
+        - message: Constraint must have a scope that exists
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: constraint
+                  fields:
+                    scope: does-not-exist-scope
+      engines:
+        # NR's reference validator models only dangling link targets, not query-scope resolution.
+        newrecruit:
+          errors: []
+        newrecruit-ui:
+          errors: []

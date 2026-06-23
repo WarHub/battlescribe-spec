@@ -1,0 +1,50 @@
+id: error-multiple-in-one-file
+category: validation
+description: >
+  Multiple independent validation errors in a single file are all reported: a dangling entry
+  link and a dangling info link coexist, and the error list contains both. Both BattleScribe
+  anchors report both. NewRecruit's reference validator models the entry-link dangling target
+  but not the info-link one, so it reports only the entry-link error there (per-engine override).
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      entryLinks:
+        - id: el-broken
+          name: Broken Entry Link
+          targetId: missing-entry
+          type: selectionEntry
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+          infoLinks:
+            - id: il-broken
+              name: Broken Info Link
+              targetId: missing-profile
+              type: profile
+
+steps:
+  - expectedState:
+      errors:
+        - message: EntryLink must have a target that exists
+        - message: InfoLink must have a target that exists
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - id: el-broken
+              fields:
+                targetId: missing-entry
+      engines:
+        # NR's reference validator models entry-link dangling targets but not info-link ones.
+        newrecruit:
+          errors:
+            - message: EntryLink must have a target that exists
+        newrecruit-ui:
+          errors:
+            - message: EntryLink must have a target that exists

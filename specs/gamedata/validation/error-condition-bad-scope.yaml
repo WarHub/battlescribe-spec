@@ -1,0 +1,46 @@
+id: error-condition-bad-scope
+category: validation
+description: >
+  A condition (inside a modifier) whose scope references neither a known scope keyword nor an
+  existing ancestor entry id produces a validation error ("Condition must have a scope that
+  exists"). Both BattleScribe anchors construct the real data manager and report it.
+  NewRecruit's reference validator models only dangling link targets, not query-scope
+  resolution, so it reports no error there (per-engine override).
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+          modifiers:
+            - type: set
+              field: hidden
+              value: "true"
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: does-not-exist-scope
+                  childId: se-1
+
+steps:
+  - expectedState:
+      errors:
+        - message: Condition must have a scope that exists
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+      engines:
+        # NR's reference validator models only dangling link targets, not query-scope resolution.
+        newrecruit:
+          errors: []
+        newrecruit-ui:
+          errors: []

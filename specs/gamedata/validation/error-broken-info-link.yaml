@@ -1,0 +1,45 @@
+id: error-broken-info-link
+category: validation
+description: >
+  An info link whose target does not exist produces a validation error
+  ("InfoLink must have a target that exists"). Both BattleScribe anchors construct the real
+  data manager and report it. NewRecruit's reference validator models only entry-link /
+  catalogue-link dangling targets, so it reports no error there (asserted via a per-engine
+  override); the structural state (the dangling info link) is asserted on every engine.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+          infoLinks:
+            - id: il-broken
+              name: Broken Info Link
+              targetId: does-not-exist
+              type: profile
+
+steps:
+  - expectedState:
+      errors:
+        - message: InfoLink must have a target that exists
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: infoLink
+                  fields:
+                    targetId: does-not-exist
+      engines:
+        # NR's reference validator models only entry-link / catalogue-link dangling targets.
+        newrecruit:
+          errors: []
+        newrecruit-ui:
+          errors: []
