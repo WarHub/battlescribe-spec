@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Xml.Serialization;
 using BattleScribeSpec.Protocol;
 using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
@@ -167,6 +169,16 @@ public static class CatXmlGenerator
             node = node.AddSharedInfoGroups(sharedInfoGroups.Select(MapInfoGroup));
         }
 
+        if (catalogue.SharedForceEntries is { } sharedForceEntries)
+        {
+            node = node.AddSharedForceEntries(sharedForceEntries.Select(MapForceEntry));
+        }
+
+        if (catalogue.SharedAssociations is { } sharedAssociations)
+        {
+            node = node.AddSharedAssociations(sharedAssociations.Select(MapAssociation));
+        }
+
         if (catalogue.Rules is { } rules)
         {
             node = node.AddRules(rules.Select(MapRule));
@@ -330,17 +342,26 @@ public static class CatXmlGenerator
 
     private static ProfileTypeNode MapProfileType(ProtocolProfileType spec)
     {
-        var node = ProfileType(comment: null, id: spec.Id, name: spec.Name);
+        var node = ProfileType(comment: null, id: spec.Id, name: spec.Name, kindValue: spec.Kind);
         if (spec.CharacteristicTypes is { } characteristicTypes)
         {
             node = node.AddCharacteristicTypes(characteristicTypes.Select(MapCharacteristicType));
+        }
+        if (spec.AttributeTypes is { } attributeTypes)
+        {
+            node = node.AddAttributeTypes(attributeTypes.Select(MapAttributeType));
         }
 
         return node;
     }
 
     private static CharacteristicTypeNode MapCharacteristicType(ProtocolCharacteristicType spec) =>
-        CharacteristicType(comment: null, id: spec.Id, name: spec.Name);
+        CharacteristicType(comment: null, id: spec.Id, name: spec.Name,
+            kindValue: spec.Kind, defaultValue: spec.DefaultValue);
+
+    // NewRecruit addition.
+    private static AttributeTypeNode MapAttributeType(ProtocolAttributeType spec) =>
+        AttributeType(comment: null, id: spec.Id, name: spec.Name);
 
     private static SelectionEntryNode MapSelectionEntry(ProtocolSelectionEntry spec)
     {
@@ -417,8 +438,30 @@ public static class CatXmlGenerator
             node = node.AddInfoLinks(infoLinks.Select(MapInfoLink));
         }
 
+        if (spec.Associations is { } associations)
+        {
+            node = node.AddAssociations(associations.Select(MapAssociation));
+        }
+
         return node;
     }
+
+    // NewRecruit addition: associations relate a selection to a query-resolved set of selections.
+    private static AssociationNode MapAssociation(ProtocolAssociation spec) =>
+        Association(
+            comment: null,
+            field: spec.Field,
+            scope: spec.Scope,
+            value: 0m,
+            isValuePercentage: false,
+            shared: false,
+            includeChildSelections: false,
+            includeChildForces: false,
+            id: spec.Id,
+            name: spec.Name,
+            min: spec.Min,
+            max: spec.Max,
+            childId: spec.ChildId);
 
     private static SelectionEntryGroupNode MapSelectionEntryGroup(ProtocolSelectionEntryGroup spec)
     {
@@ -586,7 +629,10 @@ public static class CatXmlGenerator
             includeChildSelections: spec.IncludeChildSelections,
             includeChildForces: spec.IncludeChildForces,
             id: spec.Id,
-            type: MapConstraintKind(spec.Type));
+            type: MapConstraintKind(spec.Type),
+            negative: spec.Negative,
+            automatic: spec.Automatic,
+            message: string.IsNullOrWhiteSpace(spec.Message) ? null : spec.Message);
 
     private static ModifierNode MapModifier(ProtocolModifier spec)
     {
@@ -607,8 +653,28 @@ public static class CatXmlGenerator
             node = node.AddRepeats(repeats.Select(MapRepeat));
         }
 
+        if (spec.LocalConditionGroups is { } localConditionGroups)
+        {
+            node = node.AddLocalConditionGroups(localConditionGroups.Select(MapLocalConditionGroup));
+        }
+
         return node;
     }
+
+    // NewRecruit addition.
+    private static LocalConditionGroupNode MapLocalConditionGroup(ProtocolLocalConditionGroup spec) =>
+        LocalConditionGroup(
+            comment: null,
+            field: spec.Field,
+            scope: spec.Scope,
+            value: spec.Value,
+            isValuePercentage: false,
+            shared: false,
+            includeChildSelections: spec.IncludeChildSelections,
+            includeChildForces: spec.IncludeChildForces,
+            childId: string.IsNullOrWhiteSpace(spec.ChildId) ? null : spec.ChildId,
+            type: MapConditionKind(spec.Type),
+            repeatCount: spec.Repeats);
 
     private static ModifierGroupNode MapModifierGroup(ProtocolModifierGroup spec)
     {
@@ -910,53 +976,36 @@ public static class CatXmlGenerator
         {
             "min" or "atLeast" => ConstraintKind.Minimum,
             "max" or "atMost" => ConstraintKind.Maximum,
+            "exactly" => ConstraintKind.Exactly, // NewRecruit addition.
             _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unsupported constraint kind."),
         };
 
-    private static ModifierKind MapModifierKind(string value) =>
-        value switch
-        {
-            "set" => ModifierKind.Set,
-            "increment" => ModifierKind.Increment,
-            "decrement" => ModifierKind.Decrement,
-            "append" => ModifierKind.Append,
-            "add" => ModifierKind.Add,
-            "remove" => ModifierKind.Remove,
-            "set-primary" => ModifierKind.SetPrimary,
-            "unset-primary" => ModifierKind.UnsetPrimary,
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unsupported modifier kind."),
-        };
+    private static ModifierKind MapModifierKind(string value) => MapXmlEnum<ModifierKind>(value);
 
-    private static ConditionKind MapConditionKind(string value) =>
-        value switch
-        {
-            "lessThan" => ConditionKind.LessThan,
-            "greaterThan" => ConditionKind.GreaterThan,
-            "equalTo" => ConditionKind.EqualTo,
-            "notEqualTo" => ConditionKind.NotEqualTo,
-            "atLeast" => ConditionKind.AtLeast,
-            "atMost" => ConditionKind.AtMost,
-            "instanceOf" => ConditionKind.InstanceOf,
-            "notInstanceOf" => ConditionKind.NotInstanceOf,
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unsupported condition kind."),
-        };
+    private static ConditionKind MapConditionKind(string value) => MapXmlEnum<ConditionKind>(value);
 
-    private static ConditionGroupKind MapConditionGroupKind(string value) =>
-        value switch
-        {
-            "and" => ConditionGroupKind.And,
-            "or" => ConditionGroupKind.Or,
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unsupported condition group kind."),
-        };
+    private static ConditionGroupKind MapConditionGroupKind(string value) => MapXmlEnum<ConditionGroupKind>(value);
 
-    private static SelectionEntryKind MapSelectionEntryKind(string value) =>
-        value switch
+    private static SelectionEntryKind MapSelectionEntryKind(string value) => MapXmlEnum<SelectionEntryKind>(value);
+
+    /// <summary>
+    /// Maps a BattleScribe/NewRecruit XML attribute string to its wham enum member by matching the
+    /// member's <see cref="XmlEnumAttribute"/> name. This auto-tracks the wham enums (incl. NR
+    /// additions) without a hand-maintained per-value switch.
+    /// </summary>
+    private static TEnum MapXmlEnum<TEnum>(string value) where TEnum : struct, Enum
+    {
+        foreach (var field in typeof(TEnum).GetFields(BindingFlags.Public | BindingFlags.Static))
         {
-            "upgrade" => SelectionEntryKind.Upgrade,
-            "model" => SelectionEntryKind.Model,
-            "unit" => SelectionEntryKind.Unit,
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unsupported selection entry kind."),
-        };
+            var xmlName = field.GetCustomAttribute<XmlEnumAttribute>()?.Name;
+            if (xmlName == value)
+            {
+                return (TEnum)field.GetValue(null)!;
+            }
+        }
+        throw new ArgumentOutOfRangeException(
+            nameof(value), value, $"Unsupported {typeof(TEnum).Name} value.");
+    }
 
     private static EntryLinkKind MapEntryLinkKind(string value) =>
         value switch

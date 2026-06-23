@@ -1,0 +1,40 @@
+id: nr-type-def-additions
+category: nr
+description: >
+  NewRecruit type-definition additions: a profile type carries an `attributeType` (export-only,
+  parallel to characteristicType) and a `kind`; a characteristic type carries `kind` and
+  `defaultValue`. Original BattleScribe models none of these, so it is skipped; both NewRecruit
+  engines must round-trip them.
+tags: [newrecruit-addition, attributeType, characteristicType, profileType]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    profileTypes:
+      - id: pt-1
+        name: Weapon
+        characteristicTypes:
+          - id: ct-range
+            name: Range
+            defaultValue: "12"
+        attributeTypes:
+          - id: at-keywords
+            name: Keywords
+
+steps:
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        profileTypes:
+          - id: pt-1
+            name: Weapon
+            children:
+              - entryType: characteristicType
+                name: Range
+              - entryType: attributeType
+                name: Keywords

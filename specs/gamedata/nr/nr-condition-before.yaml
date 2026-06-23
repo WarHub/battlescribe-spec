@@ -1,0 +1,48 @@
+id: nr-condition-before
+category: nr
+description: >
+  NewRecruit addition: the `before` condition type, valid only inside a `localConditionGroup`
+  (the NR editor gates it via `allowPositional`; "Is Before" in Condition.vue). A modifier carries a
+  localConditionGroup whose `type` is `before`. Original BattleScribe models neither the node nor the
+  type, so it is skipped; both NewRecruit engines must round-trip the `before` type.
+tags: [newrecruit-addition, localConditionGroup, condition]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          modifiers:
+            - type: set
+              field: hidden
+              value: "true"
+              localConditionGroups:
+                - type: before
+                  field: selections
+                  scope: parent
+                  value: 1
+                  repeats: 1
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  children:
+                    - entryType: localConditionGroup
+                      fields:
+                        type: before

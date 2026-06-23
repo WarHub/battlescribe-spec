@@ -42,10 +42,12 @@
     },
     "constraintType": {
       "type": "string",
-      "enum": ["min", "max"]
+      "comment": "min/max are original BattleScribe; exactly is a NewRecruit addition.",
+      "enum": ["min", "max", "exactly"]
     },
     "conditionType": {
       "type": "string",
+      "comment": "always/never/before are NewRecruit additions (before only valid in a localConditionGroup).",
       "enum": [
         "atLeast",
         "atMost",
@@ -54,24 +56,42 @@
         "lessThan",
         "notEqualTo",
         "instanceOf",
-        "notInstanceOf"
+        "notInstanceOf",
+        "always",
+        "never",
+        "before"
       ]
     },
     "modifierType": {
       "type": "string",
-      "enum": ["set", "add", "increment", "decrement", "append", "remove", "set-primary", "unset-primary"]
+      "comment": "set..unset-primary are original BattleScribe; the rest are NewRecruit additions.",
+      "enum": [
+        "set", "add", "increment", "decrement", "append", "remove", "set-primary", "unset-primary",
+        "multiply", "divide", "modulo", "power", "exponent", "triangular", "ceil", "floor",
+        "cumulative-add", "cumulative-multiply", "cumulative-power", "prepend", "replace", "hide"
+      ]
     },
     "scopeValue": {
       "type": "string",
-      "enum": ["self", "parent", "force", "roster", "primary-category", "primary-catalogue", "ancestor"]
+      "comment": "root-entry and the type scopes (unit/model/upgrade/model-or-unit) are NewRecruit additions.",
+      "enum": [
+        "self", "parent", "force", "roster", "primary-category", "primary-catalogue", "ancestor",
+        "root-entry", "unit", "model", "upgrade", "model-or-unit"
+      ]
     },
     "conditionGroupType": {
       "type": "string",
-      "enum": ["and", "or"]
+      "comment": "and/or are original BattleScribe; the boolean/numeric/comparison kinds are NewRecruit additions.",
+      "enum": [
+        "and", "or", "not", "count",
+        "add", "subtract", "multiply", "divide", "modulo", "power", "min", "max",
+        "greater", "greaterOrEqual", "less", "lessOrEqual", "equal", "notEqual"
+      ]
     },
     "selectionEntryType": {
       "type": "string",
-      "enum": ["unit", "model", "upgrade"]
+      "comment": "unit/model/upgrade are original BattleScribe; unit-group/mount/crew are NewRecruit additions.",
+      "enum": ["unit", "model", "upgrade", "unit-group", "mount", "crew"]
     },
     "entryLinkType": {
       "type": "string",

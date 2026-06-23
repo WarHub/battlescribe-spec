@@ -705,7 +705,8 @@ public static class NrGameDataUiActions
                         const childContainers = ['selectionEntries', 'selectionEntryGroups', 'entryLinks',
                             'rules', 'profiles', 'infoGroups', 'infoLinks', 'categoryLinks',
                             'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
-                            'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes'];
+                            'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes',
+                            'associations', 'attributeTypes', 'localConditionGroups'];
 
                         for (const ck of childContainers) {
                             const items = entry[ck];
@@ -742,6 +743,8 @@ public static class NrGameDataUiActions
                             costTypes: [],
                             profileTypes: [],
                             catalogueLinks: [],
+                            sharedForceEntries: [],
+                            sharedAssociations: [],
                         };
 
                         // Root metadata fields (revision, authorName, library, …).
@@ -767,6 +770,8 @@ public static class NrGameDataUiActions
                             ['costTypes', 'costTypes', 'costType'],
                             ['profileTypes', 'profileTypes', 'profileType'],
                             ['catalogueLinks', 'catalogueLinks', 'catalogueLink'],
+                            ['sharedForceEntries', 'sharedForceEntries', 'forceEntry'],
+                            ['sharedAssociations', 'sharedAssociations', 'association'],
                         ];
 
                         for (const [srcKey, destKey, entryType] of mappings) {
@@ -1290,6 +1295,8 @@ public static class NrGameDataUiActions
             SharedRules = DeserializeEntryList(el, "sharedRules"),
             SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
             SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
+            SharedForceEntries = DeserializeEntryList(el, "sharedForceEntries"),
+            SharedAssociations = DeserializeEntryList(el, "sharedAssociations"),
             ForceEntries = DeserializeEntryList(el, "forceEntries"),
             CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
             Publications = DeserializeEntryList(el, "publications"),

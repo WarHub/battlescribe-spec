@@ -418,6 +418,207 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         return await _page.EvaluateAsync<T>(expression);
     }
 
+    /// <summary>
+    /// Serializes every currently-loaded file (game system + catalogues) to BattleScribe XML
+    /// using NR's own bundled serializer (<c>convertToXml</c>), and returns the result as JSON
+    /// <c>{ "files": { "&lt;path&gt;": "&lt;xml&gt;" }, "debug": [..] }</c>.
+    ///
+    /// NR's <c>convertToXml</c> is module-scoped (not directly reachable), but the editor store's
+    /// <c>saveCatalogueInFiles(data)</c> calls it and then hands the bytes to <c>writeFile</c>,
+    /// which forwards to <c>electron.invoke("saveFile", path, content)</c>. In the browser
+    /// (no Electron) <c>writeFile</c> normally no-ops; we temporarily stub <c>globalThis.electron</c>
+    /// so the serialized content is captured in-page instead of written to disk. This is the same
+    /// serializer the editor's "Download" button uses, so the XML is byte-for-byte what NR emits.
+    /// </summary>
+    public async Task<string> ExportLoadedFilesJsonAsync()
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        return await _page.EvaluateAsync<string>("""
+            async () => {
+                const debug = [];
+                const files = {};
+                const orig = globalThis.electron;
+                // Stub the electron bridge so writeFile() forwards the serialized bytes to us.
+                globalThis.electron = {
+                    invoke: async (cmd, p, d) => {
+                        if (cmd === 'saveFile') {
+                            files[p] = (typeof d === 'string') ? d : '[binary:' + (d?.byteLength ?? d?.length ?? '?') + ']';
+                        }
+                        return undefined;
+                    },
+                };
+                try {
+                    const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const editor = pinia?._s?.get('editor');
+                    const store = globalThis.$store || editor;
+                    if (!store) { debug.push('no editor store'); return JSON.stringify({ files, debug }); }
+                    const systemId = new URLSearchParams(location.search).get('systemId');
+                    const gsSys = editor?.gameSystems?.[systemId];
+                    debug.push('systemId=' + systemId + ' gsSys=' + !!gsSys + ' $store=' + !!globalThis.$store);
+
+                    // Enumerate candidate file objects: the game system plus every loaded catalogue.
+                    const seen = new Set();
+                    const candidates = [];
+                    const add = (o) => { if (o && typeof o === 'object' && !seen.has(o)) { seen.add(o); candidates.push(o); } };
+                    add(gsSys?.gameSystem);
+                    for (const c of Object.values(gsSys?.loadedCatalogues ?? {})) add(c);
+                    debug.push('candidates=' + candidates.length);
+
+                    for (const data of candidates) {
+                        try {
+                            if (!data.fullFilePath) {
+                                data.fullFilePath = data.gameSystemId ? (data.id + '.cat') : 'system.gst';
+                            }
+                            await store.saveCatalogueInFiles(data);
+                            debug.push('saved ' + data.fullFilePath + ' id=' + data.id);
+                        } catch (e) {
+                            debug.push('err id=' + (data && data.id) + ': ' + (e && e.message));
+                        }
+                    }
+                    // Let any not-yet-awaited writes settle.
+                    await new Promise((r) => setTimeout(r, 50));
+                } catch (e) {
+                    debug.push('fatal: ' + (e && e.message));
+                } finally {
+                    globalThis.electron = orig;
+                }
+                return JSON.stringify({ files, debug });
+            }
+            """);
+    }
+
+    /// <summary>
+    /// Dumps every <c>&lt;select&gt;</c> currently rendered in the right-hand property panel,
+    /// with each option's value + visible text and the nearest label/legend for context.
+    /// Used by <c>discover enums</c> to enumerate NR's dropdown vocabularies (modifier/condition/
+    /// constraint types, link types, entry types, etc.) without guessing from source.
+    /// </summary>
+    public async Task<string> DumpSelectsJsonAsync()
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        return await _page.EvaluateAsync<string>("""
+            () => {
+                const out = [];
+                const panel = document.querySelector('.rightPanel') || document.body;
+                for (const sel of panel.querySelectorAll('select')) {
+                    // Nearest contextual label: the row's first cell, a wrapping fieldset legend,
+                    // or a preceding label.
+                    let context = '';
+                    const tr = sel.closest('tr');
+                    if (tr) { const td = tr.querySelector('td'); if (td) context = td.innerText.trim(); }
+                    if (!context) {
+                        const fs = sel.closest('fieldset');
+                        const lg = fs?.querySelector('legend');
+                        if (lg) context = lg.innerText.trim();
+                    }
+                    if (!context) {
+                        const cls = sel.closest('.constraint,.modifier,.condition,.repeat,.query');
+                        if (cls) context = cls.className;
+                    }
+                    out.push({
+                        context,
+                        options: [...sel.options].map(o => ({ value: o.value, text: (o.textContent || '').trim() })),
+                    });
+                }
+                return JSON.stringify(out);
+            }
+            """);
+    }
+
+    /// <summary>
+    /// Opens every icon-select and autocomplete widget in the right panel in turn and reads its
+    /// suggestion list, returning <c>{ "&lt;widget-context&gt;": ["opt", ...] }</c>. These widgets back
+    /// NR's <c>field</c> (modType icon-select) and <c>scope</c> (autocomplete) vocabularies, which a
+    /// plain <c>&lt;select&gt;</c> dump can't see. Best-effort: failures per widget are skipped.
+    /// </summary>
+    public async Task<string> DumpOpenableWidgetsJsonAsync()
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var result = new Dictionary<string, string[]>();
+        var inputs = _page.Locator(".rightPanel .iconselect-input, .rightPanel .autocomplete-input");
+        var count = await inputs.CountAsync();
+        for (var i = 0; i < count; i++)
+        {
+            try
+            {
+                var input = inputs.Nth(i);
+                if (!await input.IsVisibleAsync())
+                { continue; }
+                var context = await input.EvaluateAsync<string>(
+                    "el => { const c = el.closest('.constraint,.modifier,.condition,.repeat,.query,tr,fieldset'); " +
+                    "const tr = el.closest('tr'); const td = tr && tr.querySelector('td'); " +
+                    "return (td && td.innerText.trim()) || (c && (c.className||'').toString()) || ''; }");
+                await input.ClickAsync(new LocatorClickOptions { Timeout = 3_000 });
+                await _page.WaitForTimeoutAsync(250);
+                var suggestions = _page.Locator(".suggestions:not(.hidden) > div");
+                var opts = await suggestions.AllTextContentsAsync();
+                var key = $"[{i}] {context}";
+                result[key] = [.. opts.Select(o => o.Trim()).Where(o => o.Length > 0)];
+                // Close the popup before moving on.
+                await _page.Keyboard.PressAsync("Escape");
+                await _page.WaitForTimeoutAsync(100);
+            }
+            catch
+            {
+                // Best-effort enumeration — skip widgets that don't open cleanly.
+            }
+        }
+        return System.Text.Json.JsonSerializer.Serialize(result);
+    }
+
+    /// <summary>
+    /// Right-clicks the given tree node (Playwright selector) and returns the resulting context-menu
+    /// item labels, then hovers any submenu trigger (label containing "❯") and captures its sub-items.
+    /// Used by <c>discover nodes</c> to enumerate which node types the editor can create where.
+    /// Returns JSON <c>{ "menu": ["..."], "submenus": { "Link": ["..."] } }</c>.
+    /// </summary>
+    public async Task<string> RightClickAndDumpMenuJsonAsync(string nodeSelector)
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var node = _page.Locator(nodeSelector).First;
+        await node.ScrollIntoViewIfNeededAsync();
+        await node.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
+        await _page.WaitForTimeoutAsync(300);
+
+        var menuItems = await _page.Locator(".context-menu:visible > div").AllTextContentsAsync();
+        var trimmed = menuItems.Select(m => m.Trim().Replace("\n", " ")).Where(m => m.Length > 0).ToArray();
+
+        var submenus = new Dictionary<string, string[]>();
+        foreach (var item in trimmed)
+        {
+            if (!item.Contains('❯') && !item.Contains('►') && !item.Contains('▶'))
+            { continue; }
+            var label = item.Split('❯', '►', '▶')[0].Trim();
+            try
+            {
+                var trigger = _page.Locator(".context-menu:visible > div")
+                    .Filter(new LocatorFilterOptions { HasText = label });
+                await trigger.First.HoverAsync(new LocatorHoverOptions { Timeout = 2_000 });
+                await _page.WaitForTimeoutAsync(350);
+                var subItems = await _page.Locator(".context-menu:visible")
+                    .Filter(new LocatorFilterOptions { HasNotText = "Remove" })
+                    .First.Locator("> div").AllTextContentsAsync();
+                submenus[label] = [.. subItems.Select(s => s.Trim()).Where(s => s.Length > 0)];
+            }
+            catch
+            {
+                // Submenu didn't open — skip.
+            }
+        }
+
+        await _page.Keyboard.PressAsync("Escape");
+        await _page.WaitForTimeoutAsync(100);
+        return System.Text.Json.JsonSerializer.Serialize(new { menu = trimmed, submenus });
+    }
+
     public void Dispose()
     {
         if (_disposed)

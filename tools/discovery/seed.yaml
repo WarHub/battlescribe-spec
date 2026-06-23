@@ -1,0 +1,28 @@
+id: discovery-seed
+category: entry
+description: >
+  Seed dataset for automated NR schema discovery (bs-spec discover nodes/enums/xml).
+  Provides a game system + catalogue scaffold with a cost type and a category so the
+  editor's cost/category-dependent widgets render; the discover commands create one of
+  every node type on top of this and dump the resulting menus, dropdowns, and XML.
+  Not a conformance spec — lives outside specs/ so the test suite does not run it.
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Discovery System
+    costTypes:
+      - id: pts
+        name: pts
+  catalogues:
+    - id: cat-1
+      name: Discovery Catalogue
+      gameSystemId: gs-1
+      categoryEntries:
+        - id: cat-hq
+          name: HQ
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1

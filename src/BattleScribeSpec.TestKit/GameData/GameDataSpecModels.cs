@@ -208,6 +208,10 @@ public sealed class ExpectedCatalogueDataDef
     public List<ExpectedDataEntryDef>? SharedInfoGroups { get; set; }
     public List<ExpectedDataEntryDef>? CatalogueLinks { get; set; }
 
+    // NewRecruit additions.
+    public List<ExpectedDataEntryDef>? SharedForceEntries { get; set; }
+    public List<ExpectedDataEntryDef>? SharedAssociations { get; set; }
+
     /// <summary>
     /// Assert total entry count across all containers.
     /// </summary>

@@ -1,0 +1,61 @@
+id: nr-modifier-local-condition-group
+category: nr
+description: >
+  NewRecruit additions: a modifier carries a `localConditionGroup` (NR-only child node with its
+  own query + condition type + repeat count), and a constraint carries the NR-only `negative` and
+  `automatic` flags. Original BattleScribe models neither, so it is skipped; both NewRecruit engines
+  must round-trip them.
+tags: [newrecruit-addition, localConditionGroup, constraint]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          constraints:
+            - id: con-1
+              type: min
+              field: selections
+              scope: parent
+              value: 1
+              negative: true
+              automatic: true
+          modifiers:
+            - type: set
+              field: hidden
+              value: "true"
+              localConditionGroups:
+                - type: atLeast
+                  field: selections
+                  scope: parent
+                  value: 1
+                  repeats: 1
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: constraint
+                  fields:
+                    type: min
+                    negative: "true"
+                    automatic: "true"
+                - entryType: modifier
+                  children:
+                    - entryType: localConditionGroup
+                      fields:
+                        type: atLeast

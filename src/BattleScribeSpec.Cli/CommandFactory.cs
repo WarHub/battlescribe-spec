@@ -15,6 +15,7 @@ internal static class CommandFactory
         root.Subcommands.Add(ProbeCommand.Create());
         root.Subcommands.Add(ExportXmlCommand.Create());
         root.Subcommands.Add(FormatCommand.Create());
+        root.Subcommands.Add(DiscoverCommand.Create());
 
         return root;
     }

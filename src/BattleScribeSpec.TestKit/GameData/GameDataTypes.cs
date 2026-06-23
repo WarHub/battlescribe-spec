@@ -49,6 +49,10 @@ public record GameSystemDataState
     public IReadOnlyList<DataEntryState> SharedRules { get; init; } = [];
     public IReadOnlyList<DataEntryState> SharedProfiles { get; init; } = [];
     public IReadOnlyList<DataEntryState> SharedInfoGroups { get; init; } = [];
+
+    // NewRecruit additions.
+    public IReadOnlyList<DataEntryState> SharedForceEntries { get; init; } = [];
+    public IReadOnlyList<DataEntryState> SharedAssociations { get; init; } = [];
 }
 
 /// <summary>
@@ -80,6 +84,10 @@ public record CatalogueDataState
     public IReadOnlyList<DataEntryState> ProfileTypes { get; init; } = [];
     public IReadOnlyList<DataEntryState> SharedInfoGroups { get; init; } = [];
     public IReadOnlyList<DataEntryState> CatalogueLinks { get; init; } = [];
+
+    // NewRecruit additions.
+    public IReadOnlyList<DataEntryState> SharedForceEntries { get; init; } = [];
+    public IReadOnlyList<DataEntryState> SharedAssociations { get; init; } = [];
 }
 
 /// <summary>

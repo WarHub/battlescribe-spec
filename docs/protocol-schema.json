@@ -228,7 +228,7 @@
     },
     "constraintType": {
       "type": "string",
-      "enum": ["min", "max"]
+      "enum": ["min", "max", "exactly"]
     },
     "conditionType": {
       "type": "string",
@@ -240,20 +240,31 @@
         "lessThan",
         "notEqualTo",
         "instanceOf",
-        "notInstanceOf"
+        "notInstanceOf",
+        "always",
+        "never",
+        "before"
       ]
     },
     "modifierType": {
       "type": "string",
-      "enum": ["set", "add", "increment", "decrement", "append", "remove", "set-primary", "unset-primary"]
+      "enum": [
+        "set", "add", "increment", "decrement", "append", "remove", "set-primary", "unset-primary",
+        "multiply", "divide", "modulo", "power", "exponent", "triangular", "ceil", "floor",
+        "cumulative-add", "cumulative-multiply", "cumulative-power", "prepend", "replace", "hide"
+      ]
     },
     "conditionGroupType": {
       "type": "string",
-      "enum": ["and", "or"]
+      "enum": [
+        "and", "or", "not", "count",
+        "add", "subtract", "multiply", "divide", "modulo", "power", "min", "max",
+        "greater", "greaterOrEqual", "less", "lessOrEqual", "equal", "notEqual"
+      ]
     },
     "selectionEntryType": {
       "type": "string",
-      "enum": ["unit", "model", "upgrade"]
+      "enum": ["unit", "model", "upgrade", "unit-group", "mount", "crew"]
     },
     "entryLinkType": {
       "type": "string",
@@ -569,6 +580,14 @@
         "forceEntries": {
           "type": "array",
           "items": { "$ref": "#/$defs/forceEntry" }
+        },
+        "sharedForceEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/forceEntry" }
+        },
+        "sharedAssociations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/association" }
         }
       }
     },
@@ -591,9 +610,14 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
+        "kind": { "type": "string" },
         "characteristicTypes": {
           "type": "array",
           "items": { "$ref": "#/$defs/characteristicType" }
+        },
+        "attributeTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/attributeType" }
         }
       }
     },
@@ -603,7 +627,9 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" }
+        "name": { "type": "string" },
+        "kind": { "type": "string" },
+        "defaultValue": { "type": "string" }
       }
     },
     "forceEntry": {
@@ -754,6 +780,10 @@
         "infoLinks": {
           "type": "array",
           "items": { "$ref": "#/$defs/infoLink" }
+        },
+        "associations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/association" }
         }
       }
     },
@@ -949,7 +979,10 @@
         "shared": { "type": "boolean" },
         "includeChildSelections": { "type": "boolean" },
         "includeChildForces": { "type": "boolean" },
-        "percentValue": { "type": "boolean" }
+        "percentValue": { "type": "boolean" },
+        "negative": { "type": "boolean" },
+        "automatic": { "type": "boolean" },
+        "message": { "type": "string" }
       }
     },
     "modifier": {
@@ -971,6 +1004,10 @@
         "repeats": {
           "type": "array",
           "items": { "$ref": "#/$defs/repeat" }
+        },
+        "localConditionGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/localConditionGroup" }
         }
       }
     },
@@ -1045,6 +1082,41 @@
         "includeChildSelections": { "type": "boolean" },
         "includeChildForces": { "type": "boolean" },
         "percentValue": { "type": "boolean" }
+      }
+    },
+    "localConditionGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/conditionType" },
+        "value": { "type": "number" },
+        "field": { "type": "string" },
+        "scope": { "type": "string" },
+        "childId": { "type": "string" },
+        "includeChildSelections": { "type": "boolean" },
+        "includeChildForces": { "type": "boolean" },
+        "repeats": { "type": "integer" }
+      }
+    },
+    "association": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" },
+        "scope": { "type": "string" },
+        "childId": { "type": "string" },
+        "field": { "type": "string" }
+      }
+    },
+    "attributeType": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
       }
     },
     "rule": {

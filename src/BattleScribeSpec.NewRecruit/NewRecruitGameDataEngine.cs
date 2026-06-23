@@ -377,7 +377,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                             const childContainers = ['selectionEntries', 'selectionEntryGroups',
                                 'rules', 'profiles', 'infoGroups', 'infoLinks', 'entryLinks',
                                 'categoryLinks', 'constraints', 'modifiers', 'modifierGroups',
-                                'conditions', 'conditionGroups', 'characteristicTypes', 'repeats'];
+                                'conditions', 'conditionGroups', 'characteristicTypes', 'repeats',
+                                'associations', 'attributeTypes', 'localConditionGroups'];
                             for (const ck of childContainers) {
                                 const container = el.querySelector(':scope > ' + ck);
                                 if (container && container.children.length > 0) {
@@ -437,6 +438,9 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                             root.costTypes = parseEntries(rootEl, 'costTypes');
                             root.profileTypes = parseEntries(rootEl, 'profileTypes');
                             root.catalogueLinks = parseEntries(rootEl, 'catalogueLinks');
+                            // NewRecruit additions.
+                            root.sharedForceEntries = parseEntries(rootEl, 'sharedForceEntries');
+                            root.sharedAssociations = parseEntries(rootEl, 'sharedAssociations');
                             return root;
                         };
 
@@ -1058,7 +1062,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     const childContainers = ['selectionEntries', 'selectionEntryGroups', 'entryLinks',
                         'rules', 'profiles', 'infoGroups', 'infoLinks', 'categoryLinks',
                         'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
-                        'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes'];
+                        'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes',
+                        'associations', 'attributeTypes', 'localConditionGroups'];
 
                     for (const ck of childContainers) {
                         const items = entry[ck];
@@ -1096,6 +1101,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         costTypes: [],
                         profileTypes: [],
                         catalogueLinks: [],
+                        sharedForceEntries: [],
+                        sharedAssociations: [],
                     };
 
                     // Root metadata fields (revision, authorName, library, …) — every scalar
@@ -1123,6 +1130,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         ['costTypes', 'costTypes', 'costType'],
                         ['profileTypes', 'profileTypes', 'profileType'],
                         ['catalogueLinks', 'catalogueLinks', 'catalogueLink'],
+                        ['sharedForceEntries', 'sharedForceEntries', 'forceEntry'],
+                        ['sharedAssociations', 'sharedAssociations', 'association'],
                     ];
 
                     for (const [srcKey, destKey, entryType] of mappings) {
@@ -1206,6 +1215,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             CostTypes = DeserializeEntryList(el, "costTypes"),
             ProfileTypes = DeserializeEntryList(el, "profileTypes"),
             CatalogueLinks = DeserializeEntryList(el, "catalogueLinks"),
+            SharedForceEntries = DeserializeEntryList(el, "sharedForceEntries"),
+            SharedAssociations = DeserializeEntryList(el, "sharedAssociations"),
         };
     }
 

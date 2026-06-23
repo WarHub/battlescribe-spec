@@ -379,6 +379,10 @@ public sealed class NrGameDataUiDriver
         "repeat" => "Repeat",
         "categoryLink" => "Category",
         "characteristicType" => "Characteristic Type",
+        // NR-specific additions over original BattleScribe.
+        "association" => "Association",
+        "attributeType" => "Attribute Type",
+        "localConditionGroup" => "Local Condition Group",
         _ => entryType,
     };
 

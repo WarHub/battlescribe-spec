@@ -1,0 +1,62 @@
+id: nr-query-vocab
+category: nr
+description: >
+  NewRecruit extends the query vocabulary: the `associations` query field (count associations), the
+  `root-entry` scope, and the `limit::<costType>` query field (query a cost *limit* rather than a
+  cost — NR's Query.vue builds `value: limit::${costType.id}`, serialised verbatim). Asserted on
+  constraints. Original BattleScribe models none of these, so it is skipped; both NewRecruit engines
+  must preserve them.
+tags: [newrecruit-addition, query, scope]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          constraints:
+            - id: con-assoc
+              type: min
+              field: associations
+              scope: parent
+              value: 1
+            - id: con-root
+              type: max
+              field: selections
+              scope: root-entry
+              value: 5
+            - id: con-limit
+              type: max
+              field: "limit::pts"
+              scope: parent
+              value: 100
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: constraint
+                  fields:
+                    field: associations
+                - entryType: constraint
+                  fields:
+                    scope: root-entry
+                - entryType: constraint
+                  fields:
+                    field: "limit::pts"

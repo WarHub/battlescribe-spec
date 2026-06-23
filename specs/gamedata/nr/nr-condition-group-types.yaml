@@ -1,0 +1,55 @@
+id: nr-condition-group-types
+category: nr
+description: >
+  NewRecruit extends conditionGroup beyond the baseline and/or into boolean (not/count) and
+  numeric/comparison kinds. This asserts a representative set round-trips. Original BattleScribe
+  models only and/or, so it is skipped; both NewRecruit engines must preserve the new kinds.
+tags: [newrecruit-addition, conditionGroupType]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          modifiers:
+            - type: set
+              field: hidden
+              value: "true"
+              conditionGroups:
+                - type: and
+                - type: not
+                - type: count
+                - type: greaterOrEqual
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  children:
+                    - entryType: conditionGroup
+                      fields:
+                        type: and
+                    - entryType: conditionGroup
+                      fields:
+                        type: not
+                    - entryType: conditionGroup
+                      fields:
+                        type: count
+                    - entryType: conditionGroup
+                      fields:
+                        type: greaterOrEqual
