@@ -856,6 +856,14 @@ public sealed class SpecLintTests
         // ProtocolSerializer is a static utility class (abstract+sealed in IL) — not a data type.
         // Already excluded by !t.IsAbstract, listed here for completeness.
         // typeof(ProtocolSerializer), // static class — not reachable via typeof in this context
+
+        // NewRecruit-only catalogue-authoring additions over the BattleScribe data format. The
+        // kitchen-sink is a cross-engine roster spec that also runs on the BattleScribe engine, which
+        // does not support these nodes — so they cannot live in its setup. They are exercised by the
+        // dedicated NR gamedata specs under specs/gamedata/nr/ (which skip both BattleScribe engines).
+        typeof(ProtocolAssociation),
+        typeof(ProtocolAttributeType),
+        typeof(ProtocolLocalConditionGroup),
     ];
 
     /// <summary>

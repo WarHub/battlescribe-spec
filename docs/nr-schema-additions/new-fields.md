@@ -22,7 +22,7 @@ NR additions (`enums.json` → `constraint.widgets[0] query`): **Associations** 
 **`<costType> Limit`** (serialised as `field="limit::<costTypeId>"` — query a cost *limit* rather
 than a cost).
 
-- **Spec'd** (`specs/gamedata/nr/query-vocab.yaml`): `associations`, `root-entry` scope, and
+- **Spec'd** (`specs/gamedata/nr/nr-query-vocab.yaml`): `associations`, `root-entry` scope, and
   `limit::pts` (a constraint with `field: "limit::pts"`, against a gameSystem costType `pts`). Both NR
   engines pass; BattleScribe skipped. The `limit::<costTypeId>` form is a free-string query field that
   serialises verbatim as `field="limit::pts"` (confirmed via `discover xml` →

@@ -20,7 +20,7 @@ NR: unit, model, upgrade, **unit-group**, **mount**, **crew**.
 NR: min, max, **exactly**.
 
 - Evidence: `enums.json` → `constraint.selects[Constraint]`. Baseline: `exactly` → 0 hits in v2.03 XSD.
-- **Spec'd** (`specs/gamedata/nr/association-and-exactly.yaml`): both NR engines pass; BattleScribe
+- **Spec'd** (`specs/gamedata/nr/nr-association-and-exactly.yaml`): both NR engines pass; BattleScribe
   skipped. **Round-trip note:** NR keeps `exactly` as a first-class value in its editor model/store
   (asserts as `type: exactly`), but its serializer (`convertToXml`) **expands `exactly` to a
   min+max pair** (`<id>-min`/`<id>-max`) on export for BattleScribe compatibility — visible by diffing
@@ -35,8 +35,8 @@ notInstanceOf.
 NR adds: **always**, **never** (`enums.json` → `condition.selects[Condition]`), and the positional
 **before** ("Is Before") — source `Condition.vue:21`, valid only inside a `localConditionGroup`.
 
-- **Spec'd:** `always`/`never` in `specs/gamedata/nr/condition-types.yaml`; `before` in
-  `specs/gamedata/nr/condition-before.yaml` (a modifier's `localConditionGroup` with `type: before`).
+- **Spec'd:** `always`/`never` in `specs/gamedata/nr/nr-condition-types.yaml`; `before` in
+  `specs/gamedata/nr/nr-condition-before.yaml` (a modifier's `localConditionGroup` with `type: before`).
   Both NR engines pass; BattleScribe skipped. Serialises verbatim as `type="before"` on the
   `<localConditionGroup>` (confirmed via `discover xml` → `artifacts/discover/nr-condition-before/`).
 
