@@ -10,6 +10,33 @@ and read the editor's error list. Where a single field is a genuine NR limitatio
 doesn't model the value), or an error class NR's reference validator doesn't model, the spec still
 runs on `newrecruit-ui` and overrides just that field / error via a per-engine `expectedState`.
 
+## NewRecruit schema additions (NR-superset specs)
+
+Beyond the BattleScribe-anchored surface above, NewRecruit **evolved** the data format with nodes,
+enum values, and attributes that original BattleScribe never had. These are catalogued in
+[`nr-schema-additions/`](nr-schema-additions/README.md) and encoded as executable specs under
+`specs/gamedata/nr/` that **invert the gate**: `engines: { battlescribe: skip, battlescribe-ui: skip }`
+(original BattleScribe can't represent them), and **both `newrecruit` and `newrecruit-ui` must pass**.
+The model surface (wham AST + `CatXmlGenerator` + Protocol + both NR read paths + the assertion model)
+was extended to the NR-superset to support them.
+
+Covered (9 specs, all green on both NR engines):
+
+| Addition | Spec |
+|----------|------|
+| `associations`/`association` node; constraint `exactly` | `association-and-exactly` |
+| selection-entry types `unit-group`/`mount`/`crew` | `selection-entry-types` |
+| `attributeType`; characteristicType/profileType `kind`; characteristicType `defaultValue` | `type-def-additions` |
+| `localConditionGroup` node; constraint `negative`/`automatic` | `modifier-local-condition-group` |
+| conditionGroup kinds (`not`/`count`/comparison/numeric) | `condition-group-types` |
+| modifier types (`multiply`/`divide`/`cumulative-add`/`prepend`/`replace`/…) | `modifier-extended-types` |
+| condition types `always`/`never` | `condition-types` |
+| query `field=associations`, `scope=root-entry` | `query-vocab` |
+| catalogue-root `sharedForceEntries`/`sharedAssociations` | `shared-collections` |
+
+> Note: NR keeps `exactly` in its editor model but **serializes it to a min+max pair** on export.
+> Remaining: roster-format (`.ros`) additions; the niche `before` condition and `field=limit::<costType>`.
+
 ## NewRecruit engine status
 
 - **`newrecruit` (frozen HAR replay + live NR Editor): all 86 GameData specs pass.** The adapter

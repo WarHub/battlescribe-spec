@@ -429,6 +429,16 @@ public sealed class GameDataRunner
         {
             AssertEntryList(stepIndex, $"{prefix}.catalogueLinks", expected.CatalogueLinks, actual.CatalogueLinks);
         }
+
+        if (expected.SharedForceEntries is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.sharedForceEntries", expected.SharedForceEntries, actual.SharedForceEntries);
+        }
+
+        if (expected.SharedAssociations is not null)
+        {
+            AssertEntryList(stepIndex, $"{prefix}.sharedAssociations", expected.SharedAssociations, actual.SharedAssociations);
+        }
     }
 
     private void AssertEntryList(int stepIndex, string prefix,

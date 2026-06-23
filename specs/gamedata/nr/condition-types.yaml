@@ -1,0 +1,53 @@
+id: nr-condition-types
+category: nr
+description: >
+  NewRecruit adds the `always` and `never` condition types (unconditional true/false). Original
+  BattleScribe models only the comparison/instanceOf set, so it is skipped; both NewRecruit engines
+  must preserve the new condition types.
+tags: [newrecruit-addition, conditionType]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          modifiers:
+            - type: set
+              field: hidden
+              value: "true"
+              conditions:
+                - type: always
+                  field: selections
+                  scope: parent
+                  value: 0
+                - type: never
+                  field: selections
+                  scope: parent
+                  value: 0
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  children:
+                    - entryType: condition
+                      fields:
+                        type: always
+                    - entryType: condition
+                      fields:
+                        type: never

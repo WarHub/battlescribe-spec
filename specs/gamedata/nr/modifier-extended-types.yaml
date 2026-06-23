@@ -1,0 +1,66 @@
+id: nr-modifier-extended-types
+category: nr
+description: >
+  NewRecruit extends modifier types beyond the BattleScribe set: numeric ops (multiply/divide/power/
+  cumulative-add) on a numeric field, and string ops (prepend/replace) on a string field. Original
+  BattleScribe models none of these, so it is skipped; both NewRecruit engines must preserve them.
+tags: [newrecruit-addition, modifierType]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          modifiers:
+            - type: multiply
+              field: pts
+              value: "2"
+            - type: divide
+              field: pts
+              value: "2"
+            - type: cumulative-add
+              field: pts
+              value: "1"
+            - type: prepend
+              field: name
+              value: "Elite "
+            - type: replace
+              field: name
+              value: "X"
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  fields:
+                    type: multiply
+                - entryType: modifier
+                  fields:
+                    type: divide
+                - entryType: modifier
+                  fields:
+                    type: cumulative-add
+                - entryType: modifier
+                  fields:
+                    type: prepend
+                - entryType: modifier
+                  fields:
+                    type: replace

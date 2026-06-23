@@ -278,6 +278,12 @@ public class ProtocolCatalogue
     public List<ProtocolCategoryEntry>? CategoryEntries { get; set; }
 
     public List<ProtocolForceEntry>? ForceEntries { get; set; }
+
+    /// <summary>NewRecruit addition: shared force-entry collection.</summary>
+    public List<ProtocolForceEntry>? SharedForceEntries { get; set; }
+
+    /// <summary>NewRecruit addition: shared association collection.</summary>
+    public List<ProtocolAssociation>? SharedAssociations { get; set; }
 }
 
 public sealed class ProtocolCostType
@@ -299,10 +305,30 @@ public sealed class ProtocolProfileType
 
     public string Name { get; set; } = "";
 
+    /// <summary>NewRecruit addition.</summary>
+    public string? Kind { get; set; }
+
     public List<ProtocolCharacteristicType>? CharacteristicTypes { get; set; }
+
+    /// <summary>NewRecruit addition: export-only attribute types (parallel to characteristic types).</summary>
+    public List<ProtocolAttributeType>? AttributeTypes { get; set; }
 }
 
 public sealed class ProtocolCharacteristicType
+{
+    public string Id { get; set; } = "";
+
+    public string Name { get; set; } = "";
+
+    /// <summary>NewRecruit addition.</summary>
+    public string? Kind { get; set; }
+
+    /// <summary>NewRecruit addition.</summary>
+    public string? DefaultValue { get; set; }
+}
+
+/// <summary>NewRecruit addition: export-only attribute type on a profile type.</summary>
+public sealed class ProtocolAttributeType
 {
     public string Id { get; set; } = "";
 
@@ -408,6 +434,30 @@ public sealed class ProtocolSelectionEntry
     public List<ProtocolInfoGroup>? InfoGroups { get; set; }
 
     public List<ProtocolInfoLink>? InfoLinks { get; set; }
+
+    /// <summary>NewRecruit addition: associations relating this entry to query-resolved selections.</summary>
+    public List<ProtocolAssociation>? Associations { get; set; }
+}
+
+/// <summary>
+/// NewRecruit addition: an association relating a selection to a min/max number of other
+/// selections resolved by a query (scope/field/childId). Not in original BattleScribe v2.03.
+/// </summary>
+public sealed class ProtocolAssociation
+{
+    public string Id { get; set; } = "";
+
+    public string Name { get; set; } = "";
+
+    public int Min { get; set; }
+
+    public int Max { get; set; }
+
+    public string? Scope { get; set; }
+
+    public string? ChildId { get; set; }
+
+    public string? Field { get; set; }
 }
 
 public sealed class ProtocolSelectionEntryGroup
@@ -557,6 +607,15 @@ public sealed class ProtocolConstraint
     public bool IncludeChildForces { get; set; }
 
     public bool PercentValue { get; set; }
+
+    /// <summary>NewRecruit addition.</summary>
+    public bool Negative { get; set; }
+
+    /// <summary>NewRecruit addition.</summary>
+    public bool Automatic { get; set; }
+
+    /// <summary>NewRecruit addition: custom constraint-violation message.</summary>
+    public string? Message { get; set; }
 }
 
 public sealed class ProtocolModifier
@@ -572,6 +631,32 @@ public sealed class ProtocolModifier
     public List<ProtocolConditionGroup>? ConditionGroups { get; set; }
 
     public List<ProtocolRepeat>? Repeats { get; set; }
+
+    /// <summary>NewRecruit addition: a modifier's local condition groups.</summary>
+    public List<ProtocolLocalConditionGroup>? LocalConditionGroups { get; set; }
+}
+
+/// <summary>
+/// NewRecruit addition: a modifier's local condition group — a query (field/scope/childId/value)
+/// plus a condition <see cref="Type"/> and a repeat count.
+/// </summary>
+public sealed class ProtocolLocalConditionGroup
+{
+    public string Type { get; set; } = "atLeast";
+
+    public decimal Value { get; set; }
+
+    public string Field { get; set; } = "selections";
+
+    public string Scope { get; set; } = "parent";
+
+    public string? ChildId { get; set; }
+
+    public bool IncludeChildSelections { get; set; }
+
+    public bool IncludeChildForces { get; set; }
+
+    public int Repeats { get; set; }
 }
 
 public sealed class ProtocolModifierGroup

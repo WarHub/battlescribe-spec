@@ -1,0 +1,53 @@
+id: nr-association-and-exactly
+category: nr
+description: >
+  NewRecruit additions pilot: a selection entry carries an `association` (an NR-only node type)
+  and an `exactly` constraint (an NR-only enum value). Original BattleScribe models neither, so
+  both BattleScribe engines are skipped; both NewRecruit engines must round-trip them.
+tags: [newrecruit-addition, association, constraint]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Squad
+          type: unit
+          constraints:
+            - id: con-1
+              type: exactly
+              field: selections
+              scope: parent
+              value: 3
+          associations:
+            - id: assoc-1
+              name: Bodyguard
+              min: 1
+              max: 2
+              scope: parent
+              childId: any
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              name: Squad
+              children:
+                - entryType: constraint
+                  fields:
+                    type: exactly
+                - entryType: association
+                  fields:
+                    min: "1"
+                    max: "2"

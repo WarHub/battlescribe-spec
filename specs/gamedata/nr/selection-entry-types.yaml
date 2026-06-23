@@ -1,0 +1,45 @@
+id: nr-selection-entry-types
+category: nr
+description: >
+  NewRecruit added selection-entry types beyond the original unit/model/upgrade: unit-group,
+  mount, crew. Original BattleScribe models only the three baseline types, so it is skipped; both
+  NewRecruit engines must preserve the new type values.
+tags: [newrecruit-addition, selectionEntryType]
+
+engines:
+  battlescribe: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-ug
+          name: Squad Group
+          type: unit-group
+        - id: se-mount
+          name: Warhorse
+          type: mount
+        - id: se-crew
+          name: Gun Crew
+          type: crew
+
+steps:
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-ug
+              fields:
+                type: unit-group
+            - id: se-mount
+              fields:
+                type: mount
+            - id: se-crew
+              fields:
+                type: crew
