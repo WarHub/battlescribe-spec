@@ -94,7 +94,7 @@ internal static class DiscoverCommand
         var (engine, gs, cats, dir) = await SetUpAsync(specInput, headless, outputDir);
         if (engine is null)
         { return 1; }
-        using var _e = engine;
+        using var engineScope = engine;
 
         // Also emit the raw CatXmlGenerator input (what we feed NR) so it can be diffed against NR's
         // re-serialized output below — the diff reveals NR's load-time normalizations.
@@ -138,7 +138,7 @@ internal static class DiscoverCommand
         var (engine, gs, cats, dir) = await SetUpAsync(specInput, headless, outputDir);
         if (engine is null)
         { return 1; }
-        using var _e = engine;
+        using var engineScope = engine;
 
         var catId = cats.Length > 0 ? cats[0].Id : gs.Id;
         var gsId = gs.Id;
@@ -281,7 +281,7 @@ internal static class DiscoverCommand
         var (engine, gs, cats, dir) = await SetUpAsync(specInput, headless, outputDir);
         if (engine is null)
         { return 1; }
-        using var _e = engine;
+        using var engineScope = engine;
 
         var catId = cats.Length > 0 ? cats[0].Id : gs.Id;
         var results = new Dictionary<string, object>();
