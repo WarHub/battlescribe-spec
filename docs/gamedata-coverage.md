@@ -305,14 +305,17 @@ is reused.
 - `roundtrip/roundtrip-root-metadata` — author/revision on both the game system (`.gst`) and the
   catalogue (`.cat`) survive.
 
-**Engine coverage.** The in-process **`battlescribe`** reference engine implements `Reload` by
-round-tripping each model object through BattleScribe's own DataUtils serializer
-(`a(GameSystem/Catalogue, OutputStream)` → `e`/`f(InputStream)`) — this is the verified anchor.
-The store-direct **`newrecruit`** engine is an in-memory structural mirror with no on-disk form, so
-round-trip specs `skip` it. The two real editor UIs are pending their persistence wiring (tracked on
-#30): **`battlescribe-ui`** needs the Java agent's save-and-reopen (`#btnSaveDataFile` +
-`openCataloguePath`, both present), and **`newrecruit-ui`** needs the export+reupload reload spike
-(`ExportLoadedFilesJsonAsync` capture → write → reload the editor from the files).
+**Engine coverage.** Round-trip is verified on all three XML-based engines; the store-direct
+**`newrecruit`** engine is an in-memory structural mirror with no on-disk form, so round-trip specs
+`skip` it.
+- **`battlescribe`** (reference) round-trips each model object through BattleScribe's own DataUtils
+  serializer in memory (`a(GameSystem/Catalogue, OutputStream)` → `e`/`f(InputStream)`).
+- **`battlescribe-ui`** (real Data Editor) serializes the open document's live model back to its
+  file via the same DataUtils serializer (Java-agent `gamedataSaveAndReloadAction`) and re-opens it
+  through the editor's real open path.
+- **`newrecruit-ui`** (real NR Editor) exports the loaded files as XML (the editor's own
+  serialization via `ExportLoadedFilesJsonAsync`), then feeds them back through the file-input
+  pipeline so NR's real `BSXmlToJson` parse runs, and reopens the active file.
 
 ## BS Data Editor UI surface notes (from probing)
 - **Category links attach to force entries only** — `actAddCategoryLink` is a no-op unless a

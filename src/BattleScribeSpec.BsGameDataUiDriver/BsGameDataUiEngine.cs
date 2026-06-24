@@ -152,6 +152,9 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             ["targetId"] = targetId,
         }));
 
+    public void Reload()
+        => RunAsync(() => CallActionAsync("gamedataSaveAndReloadAction", []));
+
     public GameDataState GetState()
         => RunAsync(GetStateAsync);
 

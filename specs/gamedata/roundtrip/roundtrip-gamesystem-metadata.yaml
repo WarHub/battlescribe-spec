@@ -8,7 +8,6 @@ description: >
 # See roundtrip-add-entry for the engine-gating rationale (#30).
 engines:
   newrecruit: skip
-  battlescribe-ui: skip
 
 setup:
   gameSystem:

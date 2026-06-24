@@ -5,14 +5,12 @@ description: >
   selection entry, asserts it is present, reloads (serialize to .cat/.gst and load back), then
   asserts the same structure — proving persistence preserved the new entry.
 
-# Round-trip is about the XML-based engines. The in-process reference engine serializes the
-# BattleScribe model through its own .cat/.gst serializer and back. The store-direct `newrecruit`
-# engine is an in-memory structural mirror with no on-disk form, so it skips. The two real editor
-# UIs are pending their save/reload wiring (#30): battlescribe-ui needs the Java agent's
-# save-and-reopen, newrecruit-ui needs the export+reupload reload spike.
+# Round-trip is about the XML-based engines: the in-process reference engine, the real BattleScribe
+# Data Editor (battlescribe-ui, save-and-reopen via the Java agent), and the real NR Editor
+# (newrecruit-ui, export → reupload → reopen) all serialize to .cat/.gst and load back. The
+# store-direct `newrecruit` engine is an in-memory structural mirror with no on-disk form, so it skips.
 engines:
   newrecruit: skip
-  battlescribe-ui: skip
 
 setup:
   gameSystem:

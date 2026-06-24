@@ -14,6 +14,8 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -49,6 +51,8 @@ public class DataEditorActions {
     private final EngineAccessor engineAccessor;
     /** Cached controller — cleared on each new setup call. */
     private Object cachedController = null;
+    /** Path of the file most recently opened — the save target for {@code reload}. */
+    private String lastOpenedPath = null;
     /**
      * Identity map for id-less model entries (modifier, modifierGroup, condition,
      * conditionGroup, repeat). BattleScribe gives these no id attribute, so the
@@ -77,6 +81,7 @@ public class DataEditorActions {
         if ("gamedataSetCostAction".equals(method))     return setCost(p);
         if ("gamedataSetCharacteristicAction".equals(method)) return setCharacteristic(p);
         if ("gamedataAddLinkAction".equals(method))     return addLink(p);
+        if ("gamedataSaveAndReloadAction".equals(method)) return saveAndReload(p);
         if ("gamedataGetDataState".equals(method))      return getDataState(p);
         if ("gamedataGetErrors".equals(method))         return getErrors(p);
         throw new IllegalArgumentException("Unknown gamedata action: " + method);
@@ -135,6 +140,63 @@ public class DataEditorActions {
             throw new RuntimeException("File loading timed out after " + LOAD_TIMEOUT_MS + "ms");
         } catch (Exception e) {
             throw new RuntimeException("File loading failed", e);
+        }
+        lastOpenedPath = path;
+    }
+
+    /**
+     * Round-trip save + reload for round-trip specs: serialize the open document's live model back
+     * to the file it was opened from (BattleScribe's own DataUtils serializer, the inverse of the
+     * load path), then re-open that file through the real open path. A round-trip spec re-asserts
+     * its {@code expectedState} after this, so a still-holding assertion proves persistence kept the
+     * data. Catalogue specs reopen the catalogue (the game system stays loaded in the data manager).
+     */
+    private String saveAndReload(JsonObject params) {
+        if (lastOpenedPath == null) {
+            throw new RuntimeException("No file has been opened; nothing to reload");
+        }
+        Object ctrl = findController();
+        Object dm = runOnFxGet(() -> ctrl.getClass().getMethod("getDataManager").invoke(ctrl));
+        if (dm == null) throw new RuntimeException("Data manager not available for reload");
+        Object root = tryInvoke(dm, "c");
+        if (root == null) throw new RuntimeException("No open document to save for reload");
+
+        serializeToFile(root, lastOpenedPath);
+
+        idLessEntries.clear(); // reopening rebuilds the tree; old identity refs are stale
+        openCataloguePath(lastOpenedPath);
+        return "{}";
+    }
+
+    /**
+     * Serialize a BattleScribe model object (GameSystem / Catalogue) to a file via the DataUtils
+     * serializer {@code net.battlescribe.a.c.e.a(model, OutputStream)} — the write counterpart of
+     * the {@code e}/{@code f} readers the open path uses. The class is obfuscated, so the matching
+     * static {@code a} overload is found by parameter shape.
+     */
+    private void serializeToFile(Object model, String path) {
+        try {
+            Class<?> dataUtils = Class.forName("net.battlescribe.a.c.e");
+            Method serialize = null;
+            for (Method m : dataUtils.getMethods()) {
+                Class<?>[] pt = m.getParameterTypes();
+                if (m.getName().equals("a") && pt.length == 2
+                        && OutputStream.class.isAssignableFrom(pt[1])
+                        && pt[0].isInstance(model)) {
+                    serialize = m;
+                    break;
+                }
+            }
+            if (serialize == null) {
+                throw new RuntimeException("DataUtils serialize a(" + model.getClass().getName() + ", OutputStream) not found");
+            }
+            try (OutputStream out = new FileOutputStream(path)) {
+                serialize.invoke(null, model, out);
+            }
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize model for reload: " + e.getMessage(), e);
         }
     }
 
