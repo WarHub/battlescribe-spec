@@ -19,6 +19,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 {
     private GameSystem? _gameSystem;
     private Catalogue? _catalogue;
+    private bool _openIsGameSystem;
     private readonly List<Catalogue> _catalogues = [];
     private string _specId = "";
 
@@ -74,13 +75,19 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     {
         if (_gameSystem is not null && _gameSystem.getId() == id)
         {
+            _openIsGameSystem = true;
             return;
         }
 
         _catalogue = _catalogues.FirstOrDefault(c => c.getId() == id)
             ?? throw new InvalidOperationException(
-                $"openCatalogue: no loaded catalogue or game system with id '{id}'");
+                $"openFile: no loaded catalogue or game system with id '{id}'");
+        _openIsGameSystem = false;
     }
+
+    /// <summary>The model backing the active file: the open catalogue, or the game system when it is
+    /// the open file (or when no catalogue is loaded).</summary>
+    private object? ActiveModel => (_openIsGameSystem ? (object?)_gameSystem : _catalogue) ?? _gameSystem;
 
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
     {
@@ -287,10 +294,6 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     /// </summary>
     private static object RoundTripModel(Type dataUtils, object model, Type modelType, string readMethod)
     {
-        var write = dataUtils.GetMethod("a",
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-            [modelType, typeof(java.io.OutputStream)])
-            ?? throw new InvalidOperationException($"DataUtils serialize 'a({modelType.Name}, OutputStream)' not found.");
         var read = dataUtils.GetMethod(readMethod,
             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
             [typeof(java.io.InputStream)])
@@ -298,11 +301,45 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
         try
         {
-            var baos = new java.io.ByteArrayOutputStream();
-            write.Invoke(null, [model, baos]);
-            var bais = new java.io.ByteArrayInputStream(baos.toByteArray());
+            var bytes = SerializeModel(dataUtils, model, modelType);
+            var bais = new java.io.ByteArrayInputStream(bytes);
             return read.Invoke(null, [bais])
                 ?? throw new InvalidOperationException($"DataUtils.{readMethod} returned null on reload.");
+        }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw; // unreachable
+        }
+    }
+
+    /// <summary>Serialize a model object to BattleScribe XML bytes via DataUtils <c>a(model, OutputStream)</c>.</summary>
+    private static byte[] SerializeModel(Type dataUtils, object model, Type modelType)
+    {
+        var write = dataUtils.GetMethod("a",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            [modelType, typeof(java.io.OutputStream)])
+            ?? throw new InvalidOperationException($"DataUtils serialize 'a({modelType.Name}, OutputStream)' not found.");
+        var baos = new java.io.ByteArrayOutputStream();
+        write.Invoke(null, [model, baos]);
+        return baos.toByteArray();
+    }
+
+    /// <summary>
+    /// Serialize the active file (open catalogue, or game system) to its BattleScribe XML form. The
+    /// root element (<c>catalogue</c>/<c>gameSystem</c>) identifies the file type to the caller.
+    /// </summary>
+    public string ExportActiveFile()
+    {
+        var model = ActiveModel
+            ?? throw new InvalidOperationException("ExportActiveFile: no active file (setup not run?)");
+        var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
+            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+        var modelType = model is GameSystem ? typeof(GameSystem) : typeof(Catalogue);
+        try
+        {
+            var bytes = SerializeModel(dataUtils, model, modelType);
+            return System.Text.Encoding.UTF8.GetString(bytes);
         }
         catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
         {

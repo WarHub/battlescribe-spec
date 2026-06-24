@@ -294,6 +294,38 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         _openId = id;
     }
 
+    public string ExportActiveFile() => ExportActiveFileAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Export the active file's XML — NR's own serialization (via <see cref="ExportLoadedFilesJsonAsync"/>),
+    /// selecting the loaded file matching the open id (catalogue <c>{id}.cat</c>, else the game system
+    /// <c>system.gst</c>). This is the NR base producer for snapshot assertions.
+    /// </summary>
+    private async Task<string> ExportActiveFileAsync()
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var files = ParseExportedFiles(await ExportLoadedFilesJsonAsync());
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException("ExportActiveFile: NR Editor export produced no text XML files.");
+        }
+
+        var catName = _openId + ".cat";
+        var pick = files.FirstOrDefault(f => f.Name == catName);
+        if (pick.Xml is null)
+        {
+            pick = files.FirstOrDefault(f => f.Name.EndsWith(".gst", StringComparison.OrdinalIgnoreCase));
+        }
+        if (pick.Xml is null)
+        {
+            pick = files[0];
+        }
+
+        return pick.Xml;
+    }
+
     public void Reload() => ReloadAsync().GetAwaiter().GetResult();
 
     /// <summary>

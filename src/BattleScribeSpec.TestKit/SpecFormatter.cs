@@ -26,7 +26,7 @@ namespace BattleScribeSpec;
 public static class SpecFormatter
 {
     private static readonly Regex StepItemPattern =
-        new(@"^  - (action|expectedState):", RegexOptions.Compiled);
+        new(@"^  - (action|expectedState|expectedFile|id):", RegexOptions.Compiled);
 
     private static readonly Regex ExpectedStatePattern =
         new(@"^  - expectedState:$", RegexOptions.Compiled);

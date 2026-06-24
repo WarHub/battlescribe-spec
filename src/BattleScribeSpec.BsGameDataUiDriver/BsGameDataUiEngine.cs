@@ -157,6 +157,16 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     public void Reload()
         => RunAsync(() => CallActionAsync("gamedataSaveAndReloadAction", []));
 
+    public string ExportActiveFile()
+        => RunAsync(ExportActiveFileAsync);
+
+    private async Task<string> ExportActiveFileAsync()
+    {
+        var result = await ConnectedClient.CallAsync("gamedataExportFileAction");
+        return result?["xml"]?.GetValue<string>()
+            ?? throw new InvalidOperationException("gamedataExportFileAction returned no xml.");
+    }
+
     public GameDataState GetState()
         => RunAsync(GetStateAsync);
 

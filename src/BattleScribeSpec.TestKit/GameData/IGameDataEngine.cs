@@ -122,6 +122,14 @@ public interface IGameDataEngine : IDisposable
     void Reload() =>
         throw new NotSupportedException("Reload is not supported by this engine.");
 
+    /// <summary>
+    /// Serialize the active (open) file to its on-disk BattleScribe XML form and return it. The file
+    /// type (catalogue vs game system) is encoded by the XML root element. Used by <c>expectedFile</c>
+    /// assertions to pin exact serialized output. Engines that can't export throw.
+    /// </summary>
+    string ExportActiveFile() =>
+        throw new NotSupportedException("ExportActiveFile is not supported by this engine.");
+
     // ===== State queries =====
 
     /// <summary>

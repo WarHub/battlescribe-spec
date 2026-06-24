@@ -12,6 +12,16 @@ public sealed class GameDataRunner
     private readonly string? _engineName;
     private readonly List<string> _errors = [];
     private readonly GameDataExpressionResolver _exprResolver = new();
+    private string _specId = "";
+    private string? _specDir;
+
+    /// <summary>
+    /// When true, <c>expectedFile</c> assertions (re)write the expected side-file from the actual
+    /// export instead of comparing. Defaults to the <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var so the
+    /// xUnit conformance harness honors it; the CLI also sets it via <c>--update-snapshots</c>.
+    /// </summary>
+    public bool UpdateSnapshots { get; set; }
+        = Environment.GetEnvironmentVariable("BSSPEC_UPDATE_SNAPSHOTS") is "1" or "true";
 
     /// <summary>
     /// Called after each step completes (for debug dumping).
@@ -31,6 +41,8 @@ public sealed class GameDataRunner
     public SpecResult Run(GameDataSpecFile spec)
     {
         _errors.Clear();
+        _specId = spec.Id;
+        _specDir = spec.SourceDirectory;
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -63,13 +75,20 @@ public sealed class GameDataRunner
                     {
                         ExecuteAction(step, i);
                     }
-                    else if (step.ExpectedState is not null)
+                    else if (step.ExpectedState is not null || step.ExpectedFile is not null)
                     {
-                        ExecuteAssertion(step, i);
+                        if (step.ExpectedState is not null)
+                        {
+                            ExecuteAssertion(step, i);
+                        }
+                        if (step.ExpectedFile is not null)
+                        {
+                            ExecuteFileAssertion(step, i);
+                        }
                     }
                     else
                     {
-                        _errors.Add($"Step {i}: neither 'action' nor 'expectedState' defined");
+                        _errors.Add($"Step {i}: neither 'action', 'expectedState' nor 'expectedFile' defined");
                     }
 
                     NotifyStepCompleted(i, step);
@@ -119,6 +138,136 @@ public sealed class GameDataRunner
         {
             // Don't let dump failures break spec execution
         }
+    }
+
+    /// <summary>
+    /// Export the active file and byte-compare it to the expected (inline or side-file). In
+    /// update-snapshots mode, (re)write the expected side-file from the actual export instead.
+    /// </summary>
+    private void ExecuteFileAssertion(GameDataStepDef step, int stepIndex)
+    {
+        var def = step.ExpectedFile!.ForEngine(_engineName);
+        var actual = NormalizeNewlines(_engine.ExportActiveFile());
+        var ext = FileExtFromRoot(actual);
+
+        // Inline expected content (author-maintained; never rewritten by --update-snapshots).
+        if (def.Content is { } inline)
+        {
+            var expectedInline = NormalizeNewlines(_exprResolver.Resolve(inline) ?? inline);
+            if (expectedInline != actual)
+            {
+                ReportFileMismatch(stepIndex, "(inline)", expectedInline, actual);
+            }
+            return;
+        }
+
+        // Side-file resolved by the step's id.
+        if (step.Id is not { Length: > 0 } key)
+        {
+            _errors.Add($"Step {stepIndex}: expectedFile side-file requires the step to have an 'id'");
+            return;
+        }
+        if (_specDir is null)
+        {
+            _errors.Add($"Step {stepIndex}: expectedFile side-file needs a spec loaded from disk (no SourceDirectory)");
+            return;
+        }
+
+        var engine = _engineName ?? GameDataSnapshotResolver.BaseEngineName;
+
+        if (UpdateSnapshots)
+        {
+            WriteSnapshot(engine, key, ext, actual);
+            return;
+        }
+
+        var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, ext);
+        if (path is null)
+        {
+            _errors.Add($"Step {stepIndex}: no expected file for snapshot '{key}' (engine '{engine}', .{ext}); " +
+                "run with --update-snapshots (or BSSPEC_UPDATE_SNAPSHOTS=1) to create it");
+            return;
+        }
+
+        var expected = NormalizeNewlines(File.ReadAllText(path));
+        expected = NormalizeNewlines(_exprResolver.Resolve(expected) ?? expected);
+        if (expected != actual)
+        {
+            ReportFileMismatch(stepIndex, Path.GetFileName(path), expected, actual);
+        }
+    }
+
+    /// <summary>(Re)write an expected side-file: base from the base engine, override (only on divergence) otherwise.</summary>
+    private void WriteSnapshot(string engine, string key, string ext, string actual)
+    {
+        var basePath = GameDataSnapshotResolver.BasePath(_specDir!, _specId, key, ext);
+        if (GameDataSnapshotResolver.IsBaseEngine(engine))
+        {
+            SafeWriteSnapshot(basePath, actual);
+            return;
+        }
+
+        var overridePath = GameDataSnapshotResolver.OverridePath(_specDir!, _specId, key, engine, ext);
+        var baseContent = File.Exists(basePath) ? NormalizeNewlines(File.ReadAllText(basePath)) : null;
+        if (baseContent == actual)
+        {
+            if (File.Exists(overridePath))
+            {
+                File.Delete(overridePath);
+            }
+            return;
+        }
+
+        if (baseContent is null)
+        {
+            Console.Error.WriteLine($"[snapshot] base missing for '{key}'; wrote '{engine}' override. " +
+                $"Generate the base ('{GameDataSnapshotResolver.BaseEngineName}') first.");
+        }
+
+        SafeWriteSnapshot(overridePath, actual);
+    }
+
+    private static void SafeWriteSnapshot(string path, string content)
+    {
+        // Don't clobber an author-maintained templated expected.
+        if (File.Exists(path) && File.ReadAllText(path).Contains("${{", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var dir = Path.GetDirectoryName(path);
+        if (dir is { Length: > 0 })
+        {
+            Directory.CreateDirectory(dir);
+        }
+        File.WriteAllText(path, content);
+    }
+
+    private static string NormalizeNewlines(string s) => s.Replace("\r\n", "\n");
+
+    private static string FileExtFromRoot(string xml)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*(gameSystem|catalogue|roster)\b");
+        return m.Success && m.Groups[1].Value == "gameSystem" ? "gst" : "cat";
+    }
+
+    private void ReportFileMismatch(int stepIndex, string source, string expected, string actual)
+    {
+        var e = expected.Split('\n');
+        var a = actual.Split('\n');
+        var detail = $"expected {e.Length} line(s), actual {a.Length} line(s)";
+        for (var i = 0; i < Math.Max(e.Length, a.Length); i++)
+        {
+            var el = i < e.Length ? e[i] : "(missing)";
+            var al = i < a.Length ? a[i] : "(missing)";
+            if (el != al)
+            {
+                detail = $"first diff at line {i + 1}:\n      expected: {el}\n      actual:   {al}";
+                break;
+            }
+        }
+
+        _errors.Add($"Step {stepIndex}: exported file does not match expected ({source}). {detail}");
     }
 
     private void ExecuteAction(GameDataStepDef step, int stepIndex)

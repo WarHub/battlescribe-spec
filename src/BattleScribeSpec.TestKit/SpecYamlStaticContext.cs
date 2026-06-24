@@ -36,6 +36,7 @@ namespace BattleScribeSpec;
 [YamlSerializable(typeof(ExpectedGameSystemDataDef))]
 [YamlSerializable(typeof(ExpectedDataEntryDef))]
 [YamlSerializable(typeof(ExpectedErrorDef))]
+[YamlSerializable(typeof(ExpectedFileDef))]
 // Protocol setup data types (used in YAML setup section)
 [YamlSerializable(typeof(ProtocolGameSystem))]
 [YamlSerializable(typeof(ProtocolCatalogue))]

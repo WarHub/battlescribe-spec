@@ -13,6 +13,13 @@ public static class GameDataSnapshotResolver
     public const string BaseEngineName = "newrecruit";
 
     /// <summary>
+    /// True for the NewRecruit-family engines whose output IS the base (store-direct and the NR UI
+    /// produce the same NR serialization). Either may write the base file; other engines write overrides.
+    /// </summary>
+    public static bool IsBaseEngine(string engine)
+        => engine == BaseEngineName || engine == BaseEngineName + "-ui";
+
+    /// <summary>
     /// Resolve the existing snapshot file for an engine, preferring a per-engine override over the
     /// base, and the flat layout over the folder layout. Returns null when none exists.
     /// </summary>

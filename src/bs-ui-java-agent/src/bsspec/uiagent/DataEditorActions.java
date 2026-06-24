@@ -82,6 +82,7 @@ public class DataEditorActions {
         if ("gamedataSetCharacteristicAction".equals(method)) return setCharacteristic(p);
         if ("gamedataAddLinkAction".equals(method))     return addLink(p);
         if ("gamedataSaveAndReloadAction".equals(method)) return saveAndReload(p);
+        if ("gamedataExportFileAction".equals(method)) return exportFile(p);
         if ("gamedataGetDataState".equals(method))      return getDataState(p);
         if ("gamedataGetErrors".equals(method))         return getErrors(p);
         throw new IllegalArgumentException("Unknown gamedata action: " + method);
@@ -169,12 +170,41 @@ public class DataEditorActions {
     }
 
     /**
+     * Export the open document's serialized BattleScribe XML as a JSON {@code {"xml": ...}} result.
+     * The root element (catalogue/gameSystem) identifies the file type to the C# caller.
+     */
+    private String exportFile(JsonObject params) {
+        Object ctrl = findController();
+        Object dm = runOnFxGet(() -> ctrl.getClass().getMethod("getDataManager").invoke(ctrl));
+        if (dm == null) throw new RuntimeException("Data manager not available for export");
+        Object root = tryInvoke(dm, "c");
+        if (root == null) throw new RuntimeException("No open document to export");
+        String xml = new String(serializeToBytes(root), java.nio.charset.StandardCharsets.UTF_8);
+        JsonObject result = new JsonObject();
+        result.addProperty("xml", xml);
+        return result.toString();
+    }
+
+    /**
      * Serialize a BattleScribe model object (GameSystem / Catalogue) to a file via the DataUtils
      * serializer {@code net.battlescribe.a.c.e.a(model, OutputStream)} — the write counterpart of
-     * the {@code e}/{@code f} readers the open path uses. The class is obfuscated, so the matching
-     * static {@code a} overload is found by parameter shape.
+     * the {@code e}/{@code f} readers the open path uses.
      */
     private void serializeToFile(Object model, String path) {
+        try (OutputStream out = new FileOutputStream(path)) {
+            out.write(serializeToBytes(model));
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize model: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Serialize a BattleScribe model object to XML bytes via the DataUtils serializer. The class is
+     * obfuscated, so the matching static {@code a(model, OutputStream)} overload is found by shape.
+     */
+    private byte[] serializeToBytes(Object model) {
         try {
             Class<?> dataUtils = Class.forName("net.battlescribe.a.c.e");
             Method serialize = null;
@@ -190,13 +220,13 @@ public class DataEditorActions {
             if (serialize == null) {
                 throw new RuntimeException("DataUtils serialize a(" + model.getClass().getName() + ", OutputStream) not found");
             }
-            try (OutputStream out = new FileOutputStream(path)) {
-                serialize.invoke(null, model, out);
-            }
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            serialize.invoke(null, model, baos);
+            return baos.toByteArray();
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize model for reload: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to serialize model: " + e.getMessage(), e);
         }
     }
 

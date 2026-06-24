@@ -190,14 +190,21 @@ public sealed class GameDataSpecLintTests
             var step = spec.Steps[i];
             var hasAction = step.Action is not null;
             var hasExpected = step.ExpectedState is not null;
-            if (!hasAction && !hasExpected)
+            var hasExpectedFile = step.ExpectedFile is not null;
+            if (!hasAction && !hasExpected && !hasExpectedFile)
             {
-                yield return $"step {i + 1} has neither 'action' nor 'expectedState'";
+                yield return $"step {i + 1} has none of 'action', 'expectedState' or 'expectedFile'";
             }
 
-            if (hasAction && hasExpected)
+            if (hasAction && (hasExpected || hasExpectedFile))
             {
-                yield return $"step {i + 1} has both 'action' and 'expectedState'";
+                yield return $"step {i + 1} has both an action and an assertion (expectedState/expectedFile)";
+            }
+
+            // A side-file expectedFile (no inline content) is keyed by the step id.
+            if (hasExpectedFile && step.ExpectedFile!.Content is null && step.Id is not { Length: > 0 })
+            {
+                yield return $"step {i + 1}: expectedFile without inline 'content' requires the step to have an 'id'";
             }
         }
     }
