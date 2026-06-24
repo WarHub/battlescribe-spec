@@ -143,9 +143,9 @@ public sealed class GameDataRunner
                     entryId ?? throw new InvalidOperationException($"Step {stepIndex}: removeEntry requires entryId"));
                 break;
 
-            case "openCatalogue":
+            case "openFile":
                 _engine.OpenFile(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: openCatalogue requires entryId"));
+                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: openFile requires entryId"));
                 break;
 
             case "setFields":
