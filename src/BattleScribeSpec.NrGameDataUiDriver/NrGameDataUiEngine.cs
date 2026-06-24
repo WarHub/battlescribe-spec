@@ -219,8 +219,8 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         }
     }
 
-    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
-        => Run($"addEntry-{entryType}", () => _ui.AddEntryAsync(parentId, entryType, name));
+    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
+        => Run($"addEntry-{entryType}", () => _ui.AddEntryAsync(parentId, entryType, name, id));
 
     public void RemoveEntry(string entryId)
         => Run($"removeEntry", () => NrGameDataUiActions.RemoveEntryAsync(_page!, entryId));
@@ -234,8 +234,8 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
         => Run($"setCharacteristic-{nameOrTypeId}", () => _ui.SetCharacteristicAsync(entryId, nameOrTypeId, value));
 
-    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
-        => Run($"addLink-{linkType}", () => _ui.AddLinkAsync(parentId, linkType, targetId));
+    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
+        => Run($"addLink-{linkType}", () => _ui.AddLinkAsync(parentId, linkType, targetId, id));
 
     /// <summary>
     /// Runs an action; on failure, captures a diagnostics bundle <b>at the failure point</b>

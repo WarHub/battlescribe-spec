@@ -130,10 +130,12 @@ public sealed class GameDataRunner
         switch (step.Action)
         {
             case "addEntry":
+                // On addEntry, entryId (if given) is the declared id for the created entry.
                 outputs = _engine.AddEntry(
                     parentId ?? throw new InvalidOperationException($"Step {stepIndex}: addEntry requires parentId"),
                     step.EntryType ?? throw new InvalidOperationException($"Step {stepIndex}: addEntry requires entryType"),
-                    step.Name);
+                    step.Name,
+                    entryId);
                 break;
 
             case "removeEntry":
@@ -184,10 +186,12 @@ public sealed class GameDataRunner
                 }
 
             case "addLink":
+                // On addLink, entryId (if given) is the declared id for the created link.
                 outputs = _engine.AddLink(
                     parentId ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires parentId"),
                     step.LinkType ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires linkType"),
-                    _exprResolver.Resolve(step.TargetId) ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires targetId"));
+                    _exprResolver.Resolve(step.TargetId) ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires targetId"),
+                    entryId);
                 break;
 
             case "reload":

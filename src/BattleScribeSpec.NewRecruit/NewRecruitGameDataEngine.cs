@@ -543,18 +543,18 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         }
     }
 
-    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
+    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
     {
-        return AddEntryAsync(parentId, entryType, name).GetAwaiter().GetResult();
+        return AddEntryAsync(parentId, entryType, name, id).GetAwaiter().GetResult();
     }
 
-    private async Task<GameDataActionOutputs> AddEntryAsync(string parentId, string entryType, string? name)
+    private async Task<GameDataActionOutputs> AddEntryAsync(string parentId, string entryType, string? name, string? declaredId)
     {
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
         var result = await _page.EvaluateAsync<string?>("""
-            ([parentId, entryType, name]) => {
+            ([parentId, entryType, name, declaredId]) => {
                 try {
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'ERROR:No editor context — was Setup called?';
@@ -599,9 +599,9 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     };
                     let childKey = containerKeyMap[entryType] || (entryType + 's');
 
-                    // Generate a unique ID
-                    const id = crypto.randomUUID ? crypto.randomUUID()
-                        : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16));
+                    // Use the declared id if provided (for byte-reproducible exports), else generate one.
+                    const id = declaredId || (crypto.randomUUID ? crypto.randomUUID()
+                        : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16)));
 
                     // Create the entry object
                     const data = { id, name: name || 'New ' + entryType, hidden: false };
@@ -650,7 +650,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     return 'ERROR:AddEntry: ' + e.message;
                 }
             }
-            """, new object[] { parentId, entryType, name ?? "" });
+            """, new object[] { parentId, entryType, name ?? "", declaredId ?? "" });
 
         if (result?.StartsWith("ERROR:", StringComparison.Ordinal) == true)
         {
@@ -775,18 +775,18 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         }
     }
 
-    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
+    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
     {
-        return AddLinkAsync(parentId, linkType, targetId).GetAwaiter().GetResult();
+        return AddLinkAsync(parentId, linkType, targetId, id).GetAwaiter().GetResult();
     }
 
-    private async Task<GameDataActionOutputs> AddLinkAsync(string parentId, string linkType, string targetId)
+    private async Task<GameDataActionOutputs> AddLinkAsync(string parentId, string linkType, string targetId, string? declaredId)
     {
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
         var result = await _page.EvaluateAsync<string?>("""
-            ([parentId, linkType, targetId]) => {
+            ([parentId, linkType, targetId, declaredId]) => {
                 try {
                     const ctx = window.__bsspec_editor;
                     if (!ctx) return 'ERROR:No editor context';
@@ -801,8 +801,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     };
                     const childKey = containerKeyMap[linkType] || (linkType + 's');
 
-                    const id = crypto.randomUUID ? crypto.randomUUID()
-                        : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16));
+                    const id = declaredId || (crypto.randomUUID ? crypto.randomUUID()
+                        : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16)));
 
                     const data = { id, targetId, name: '', hidden: false };
                     if (linkType === 'entryLink') data.type = 'selectionEntry';
@@ -843,7 +843,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     return 'ERROR:AddLink: ' + e.message;
                 }
             }
-            """, new object[] { parentId, linkType, targetId });
+            """, new object[] { parentId, linkType, targetId, declaredId ?? "" });
 
         if (result?.StartsWith("ERROR:", StringComparison.Ordinal) == true)
         {

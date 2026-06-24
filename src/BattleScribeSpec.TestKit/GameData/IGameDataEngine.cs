@@ -59,8 +59,10 @@ public interface IGameDataEngine : IDisposable
     /// <param name="parentId">ID of the parent (catalogue/entry) to add into.</param>
     /// <param name="entryType">Type of entry to create (selectionEntry, selectionEntryGroup, profile, rule, etc.).</param>
     /// <param name="name">Optional name for the new entry.</param>
+    /// <param name="id">Optional explicit id to assign the created entry (instead of a generated one).
+    /// Specs that snapshot exported files declare ids so the output is byte-reproducible.</param>
     /// <returns>Outputs containing the ID of the created entry.</returns>
-    GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null);
+    GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null);
 
     /// <summary>
     /// Remove an entry from the data tree by its ID.
@@ -105,8 +107,9 @@ public interface IGameDataEngine : IDisposable
     /// <param name="parentId">ID of the parent to add the link into.</param>
     /// <param name="linkType">Type of link (entryLink, infoLink, categoryLink).</param>
     /// <param name="targetId">ID of the target entry the link points to.</param>
+    /// <param name="id">Optional explicit id to assign the created link (instead of a generated one).</param>
     /// <returns>Outputs containing the ID of the created link.</returns>
-    GameDataActionOutputs AddLink(string parentId, string linkType, string targetId);
+    GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null);
 
     // ===== Persistence =====
 

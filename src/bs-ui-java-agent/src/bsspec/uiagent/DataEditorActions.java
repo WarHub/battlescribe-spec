@@ -259,6 +259,8 @@ public class DataEditorActions {
         if (id == null || id.isEmpty()) {
             id = java.util.UUID.randomUUID().toString();
             idLessEntries.put(id, newObj);
+        } else {
+            id = applyDeclaredId(ctrl, params, id);
         }
         if (name != null) {
             setFieldOnEntry(ctrl, id, "name", name); // drive the panel's #txtName, not the model
@@ -267,6 +269,20 @@ public class DataEditorActions {
         JsonObject result = new JsonObject();
         result.addProperty("entryId", id);
         return result.toString();
+    }
+
+    /**
+     * If the request declared an {@code entryId}, re-id the just-created (id-bearing) entry through
+     * the editor's unique-id field (#txtUniqueId) so subsequent edits and exports are
+     * byte-reproducible. Id-less entries (no id attribute) are left untouched. Returns the effective id.
+     */
+    private String applyDeclaredId(Object ctrl, JsonObject params, String currentId) {
+        String declaredId = optString(params, "entryId");
+        if (declaredId != null && !declaredId.isEmpty() && !declaredId.equals(currentId)) {
+            setFieldOnEntry(ctrl, currentId, "id", declaredId);
+            return declaredId;
+        }
+        return currentId;
     }
 
     /**
@@ -661,6 +677,8 @@ public class DataEditorActions {
         if (linkId == null || linkId.isEmpty()) {
             linkId = java.util.UUID.randomUUID().toString();
             idLessEntries.put(linkId, newObj);
+        } else {
+            linkId = applyDeclaredId(ctrl, params, linkId);
         }
 
         // Mirror how a user links a non-default target: set the Link Type to match the target's kind

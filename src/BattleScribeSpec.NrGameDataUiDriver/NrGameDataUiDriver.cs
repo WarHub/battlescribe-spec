@@ -54,7 +54,7 @@ public sealed class NrGameDataUiDriver
         _parentOf.Clear();
     }
 
-    public async Task<GameDataActionOutputs> AddEntryAsync(string parentId, string entryType, string? name)
+    public async Task<GameDataActionOutputs> AddEntryAsync(string parentId, string entryType, string? name, string? declaredId = null)
     {
         var rootId = await NrGameDataUiActions.GetCurrentCatalogueIdAsync(_page);
 
@@ -98,12 +98,13 @@ public sealed class NrGameDataUiDriver
             }
         }
 
+        token = await ApplyDeclaredIdAsync(token, declaredId);
         _parentOf[token] = parentId;
         _selectedToken = token;
         return new GameDataActionOutputs { EntryId = token };
     }
 
-    public async Task<GameDataActionOutputs> AddLinkAsync(string parentId, string linkType, string targetId)
+    public async Task<GameDataActionOutputs> AddLinkAsync(string parentId, string linkType, string targetId, string? declaredId = null)
     {
         var rootId = await NrGameDataUiActions.GetCurrentCatalogueIdAsync(_page);
 
@@ -111,6 +112,7 @@ public sealed class NrGameDataUiDriver
         {
             var outputs = await NrGameDataUiActions.AddLinkToRootSectionAsync(_page, linkType, targetId);
             var rootToken = outputs.EntryId ?? NewSyntheticToken();
+            rootToken = await ApplyDeclaredIdAsync(rootToken, declaredId);
             _parentOf[rootToken] = parentId;
             _selectedToken = rootToken;
             return new GameDataActionOutputs { EntryId = rootToken };
@@ -130,6 +132,7 @@ public sealed class NrGameDataUiDriver
             _idless.Add(token);
         }
         await SetTargetAutocompleteAsync(targetId);
+        token = await ApplyDeclaredIdAsync(token, declaredId);
         _parentOf[token] = parentId;
         _selectedToken = token;
         return new GameDataActionOutputs { EntryId = token };
@@ -359,6 +362,38 @@ public sealed class NrGameDataUiDriver
         await nameInput.FillAsync(name);
         await nameInput.PressAsync("Tab");
         await _page.WaitForTimeoutAsync(150);
+    }
+
+    /// <summary>Writes the editor's "Unique ID" field for the currently-selected entry.</summary>
+    private async Task SetUniqueIdInEditorAsync(string id)
+    {
+        var idRow = _page.Locator(".rightPanel tr").Filter(new LocatorFilterOptions { HasText = "Unique ID" });
+        var idInput = idRow.First.Locator("td:last-child input[type='text']").First;
+        await idInput.ClickAsync(new LocatorClickOptions { ClickCount = 3 });
+        await idInput.FillAsync(id);
+        await idInput.PressAsync("Tab");
+        await _page.WaitForTimeoutAsync(150);
+    }
+
+    /// <summary>
+    /// If a declared id is given, re-id the just-created (id-bearing) entry through the editor's
+    /// "Unique ID" field so exports are byte-reproducible, and remap identity tracking. Id-less
+    /// tokens (synthetic) are left untouched. Returns the effective token.
+    /// </summary>
+    private async Task<string> ApplyDeclaredIdAsync(string token, string? declaredId)
+    {
+        if (string.IsNullOrEmpty(declaredId) || declaredId == token || _idless.Contains(token))
+        {
+            return token;
+        }
+        await SelectAsync(token);
+        await SetUniqueIdInEditorAsync(declaredId);
+        if (_parentOf.TryGetValue(token, out var parent))
+        {
+            _parentOf.Remove(token);
+            _parentOf[declaredId] = parent;
+        }
+        return declaredId;
     }
 
     private static string AddChildLabel(string entryType) => entryType switch

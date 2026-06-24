@@ -106,12 +106,13 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         await CallActionAsync("gamedataOpenCatalogueAction", new JsonObject { ["path"] = path });
     }
 
-    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
+    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
         => RunAsync(() => CallActionAsync<GameDataActionOutputs>("gamedataAddEntryAction", new JsonObject
         {
             ["parentId"] = parentId,
             ["entryType"] = entryType,
             ["name"] = name,
+            ["entryId"] = id,
         }));
 
     public void RemoveEntry(string entryId)
@@ -144,12 +145,13 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             ["value"] = value,
         }));
 
-    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
+    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
         => RunAsync(() => CallActionAsync<GameDataActionOutputs>("gamedataAddLinkAction", new JsonObject
         {
             ["parentId"] = parentId,
             ["linkType"] = linkType,
             ["targetId"] = targetId,
+            ["entryId"] = id,
         }));
 
     public void Reload()

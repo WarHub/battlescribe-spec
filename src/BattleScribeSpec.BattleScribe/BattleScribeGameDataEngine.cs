@@ -82,7 +82,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
                 $"openCatalogue: no loaded catalogue or game system with id '{id}'");
     }
 
-    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
+    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
     {
         var parent = FindById(parentId)
             ?? throw new InvalidOperationException($"Parent not found: {parentId}");
@@ -92,7 +92,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         // in-process reference engine consistent with the battlescribe-ui anchor.
         ValidateAddPreconditions(parent, entryType);
 
-        var id = Guid.NewGuid().ToString();
+        id ??= Guid.NewGuid().ToString();
         var entryName = name ?? $"New {entryType}";
 
         // Create the Java model object for this entry type and add to parent
@@ -206,12 +206,12 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         chars.add(JavaModelFactory.CreateCharacteristic(nameOrTypeId, "", value ?? ""));
     }
 
-    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
+    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
     {
         var parent = FindById(parentId)
             ?? throw new InvalidOperationException($"Parent not found: {parentId}");
 
-        var id = Guid.NewGuid().ToString();
+        id ??= Guid.NewGuid().ToString();
 
         object link = linkType switch
         {
