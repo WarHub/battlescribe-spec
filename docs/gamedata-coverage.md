@@ -229,10 +229,6 @@ All validation specs run on **all four engines** (both BS anchors + both NR engi
   ("Constraint must have a field that exists").
 - `validation/error-condition-bad-scope` — a condition (inside a modifier) with an unresolvable
   `scope` ("Condition must have a scope that exists").
-- `validation/error-condition-bad-type` — a condition whose `type` is not a known kind
-  ("Condition must have a type that exists"). NR's setup enum-validates `ConditionKind` and rejects
-  the unknown value before staging, so this spec `skip`s the NR engines (the invalid construct is
-  unrepresentable there) rather than overriding the error.
 - `validation/error-condition-bad-child` — a condition whose `childId` references a missing entry
   ("Condition must have a child that exists").
 - `validation/error-modifier-bad-field` — a modifier whose `field` is unresolvable; BattleScribe
@@ -278,6 +274,12 @@ asserted on the engines that model it. `error-cleared-after-fix` and the entry-l
   type-definition collections at load.
 - **Circular catalogue links** (two library catalogues importing each other) load without a
   validation error.
+- An **unknown condition/modifier `type`** (an out-of-enum `ConditionKind`/modifier kind) is
+  unreachable through any real path: the XML serializer (`CatXmlGenerator`, used by `battlescribe-ui`)
+  and NR's store both enum-validate and reject it at staging time, so no editor can author it. The
+  in-process reference flags "Condition must have a type that exists" only because it builds the
+  model directly — there is no cross-engine spec for it (it would run on the reference alone). The
+  reachable type-resolution gaps that *are* specced sit on the `field`/`child`/`scope` axes above.
 - Note the **load vs. edit** distinction: a catalogue link that is *loaded* dangling is cleaned,
   but one *edited* to a dangling target in a live session is retained and flagged (see
   `links/catalogue-link`, which creates the dangling state by edit).
