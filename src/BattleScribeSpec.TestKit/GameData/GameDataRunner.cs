@@ -190,6 +190,10 @@ public sealed class GameDataRunner
                     _exprResolver.Resolve(step.TargetId) ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires targetId"));
                 break;
 
+            case "reload":
+                _engine.Reload();
+                break;
+
             default:
                 _errors.Add($"Step {stepIndex}: unknown action '{step.Action}'");
                 break;

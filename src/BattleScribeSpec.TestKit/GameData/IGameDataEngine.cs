@@ -108,6 +108,17 @@ public interface IGameDataEngine : IDisposable
     /// <returns>Outputs containing the ID of the created link.</returns>
     GameDataActionOutputs AddLink(string parentId, string linkType, string targetId);
 
+    // ===== Persistence =====
+
+    /// <summary>
+    /// Serialize the current edited state to its on-disk form (.cat/.gst) and reload it,
+    /// replacing the in-memory model with what a fresh load of the saved files produces.
+    /// Used by round-trip specs: a repeated <c>expectedState</c> placed after a reload verifies
+    /// that save + reload preserved semantics. Engines that cannot persist throw.
+    /// </summary>
+    void Reload() =>
+        throw new NotSupportedException("Reload is not supported by this engine.");
+
     // ===== State queries =====
 
     /// <summary>

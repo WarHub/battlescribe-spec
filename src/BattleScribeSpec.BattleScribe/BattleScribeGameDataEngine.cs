@@ -231,6 +231,86 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         return new GameDataActionOutputs { EntryId = id };
     }
 
+    /// <summary>
+    /// Round-trip the current model through BattleScribe's own XML serializer: serialize the
+    /// game system and every catalogue to their on-disk (.gst/.cat) form and deserialize them
+    /// back, replacing the in-memory model with the result. This is the reference "save + reload"
+    /// — round-trip specs place a repeated <c>expectedState</c> after a reload to assert that
+    /// persistence preserved semantics. The byte round-trip exercises the same DataUtils
+    /// serializer (<c>net.battlescribe.a.c.e</c>) a disk save/load would; disk is incidental.
+    /// </summary>
+    public void Reload()
+    {
+        if (_gameSystem is null && _catalogues.Count == 0)
+        {
+            return;
+        }
+
+        var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
+            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+
+        // Preserve which file is currently "open" so the reload doesn't reset the primary.
+        var openId = _catalogue?.getId();
+
+        if (_gameSystem is not null)
+        {
+            _gameSystem = (GameSystem)RoundTripModel(dataUtils, _gameSystem, typeof(GameSystem), "e");
+        }
+
+        for (var i = 0; i < _catalogues.Count; i++)
+        {
+            _catalogues[i] = (Catalogue)RoundTripModel(dataUtils, _catalogues[i], typeof(Catalogue), "f");
+        }
+
+        // Rebuild the id index from the freshly deserialized model.
+        _entriesById.Clear();
+        foreach (var cat in _catalogues)
+        {
+            IndexAllEntries(cat);
+        }
+
+        if (_gameSystem is not null)
+        {
+            IndexGameSystemEntries(_gameSystem);
+        }
+
+        _catalogue = openId is not null
+            ? _catalogues.FirstOrDefault(c => c.getId() == openId) ?? _catalogues.FirstOrDefault()
+            : _catalogues.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Serialize a model object to bytes via DataUtils <c>a(model, OutputStream)</c> and
+    /// deserialize it back via the supplied reader method (<c>e</c> for game system, <c>f</c> for
+    /// catalogue). Static-method reflection mirrors <see cref="BattleScribeEngine"/>: IKVM
+    /// obfuscation makes the class directly uncallable, so methods are resolved by exact signature.
+    /// </summary>
+    private static object RoundTripModel(Type dataUtils, object model, Type modelType, string readMethod)
+    {
+        var write = dataUtils.GetMethod("a",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            [modelType, typeof(java.io.OutputStream)])
+            ?? throw new InvalidOperationException($"DataUtils serialize 'a({modelType.Name}, OutputStream)' not found.");
+        var read = dataUtils.GetMethod(readMethod,
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            [typeof(java.io.InputStream)])
+            ?? throw new InvalidOperationException($"DataUtils deserialize '{readMethod}(InputStream)' not found.");
+
+        try
+        {
+            var baos = new java.io.ByteArrayOutputStream();
+            write.Invoke(null, [model, baos]);
+            var bais = new java.io.ByteArrayInputStream(baos.toByteArray());
+            return read.Invoke(null, [bais])
+                ?? throw new InvalidOperationException($"DataUtils.{readMethod} returned null on reload.");
+        }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw; // unreachable
+        }
+    }
+
     public GameDataState GetState()
     {
         var catalogues = _catalogues.Select(ReadCatalogueState).ToList();

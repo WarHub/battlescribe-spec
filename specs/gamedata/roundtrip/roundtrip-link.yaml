@@ -1,0 +1,49 @@
+id: roundtrip-link
+category: roundtrip
+description: >
+  Round-trip fidelity for links: an entry link added to a catalogue, pointing at a shared
+  selection entry, survives a save + reload with its target intact.
+
+# See roundtrip-add-entry for the engine-gating rationale (#30).
+engines:
+  newrecruit: skip
+  battlescribe-ui: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      sharedSelectionEntries:
+        - id: sse-1
+          name: Shared Wargear
+          type: upgrade
+
+steps:
+  - action: addLink
+    id: add-link
+    parentId: cat-1
+    linkType: entryLink
+    targetId: sse-1
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - entryType: entryLink
+              fields:
+                targetId: sse-1
+
+  - action: reload
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - entryType: entryLink
+              fields:
+                targetId: sse-1

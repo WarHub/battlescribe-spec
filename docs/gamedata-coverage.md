@@ -283,10 +283,34 @@ asserted on the engines that model it. `error-cleared-after-fix` and the entry-l
   `links/catalogue-link`, which creates the dangling state by edit).
 
 **Not yet covered (needs new infra, deferred):** malformed / schema-invalid `.gst`/`.cat` *load*
-(#31). GameData specs declare setup as a structured game-system + catalogue model, not raw file
-content; asserting load-time XML/schema failures would require a raw-file setup mode
+(#31 / #268). GameData specs declare setup as a structured game-system + catalogue model, not raw
+file content; asserting load-time XML/schema failures would require a raw-file setup mode
 (a `setupFromFiles` path for gamedata) plumbed through every engine — out of scope for the
 spec-only validation matrix here.
+
+## Round-trip (save → reload)  (`roundtrip/…`)  — issue #30
+The `reload` action serializes the current edited state to its on-disk `.cat`/`.gst` form and loads
+it back, replacing the in-memory model. A round-trip spec mutates, asserts an `expectedState`, runs
+`reload`, and asserts the **same** `expectedState` again — so a repeated assertion that still holds
+proves persistence preserved the data. No new comparator: the existing partial-match `expectedState`
+is reused.
+
+- `roundtrip/roundtrip-add-entry` — an added/named entry survives.
+- `roundtrip/roundtrip-set-fields` — a scalar field (`hidden`), a cost value, and a profile
+  characteristic survive.
+- `roundtrip/roundtrip-link` — an entry link keeps its target.
+- `roundtrip/roundtrip-nested` — a selection-entry → group → child subtree survives intact.
+- `roundtrip/roundtrip-root-metadata` — author/revision on both the game system (`.gst`) and the
+  catalogue (`.cat`) survive.
+
+**Engine coverage.** The in-process **`battlescribe`** reference engine implements `Reload` by
+round-tripping each model object through BattleScribe's own DataUtils serializer
+(`a(GameSystem/Catalogue, OutputStream)` → `e`/`f(InputStream)`) — this is the verified anchor.
+The store-direct **`newrecruit`** engine is an in-memory structural mirror with no on-disk form, so
+round-trip specs `skip` it. The two real editor UIs are pending their persistence wiring (tracked on
+#30): **`battlescribe-ui`** needs the Java agent's save-and-reopen (`#btnSaveDataFile` +
+`openCataloguePath`, both present), and **`newrecruit-ui`** needs the export+reupload reload spike
+(`ExportLoadedFilesJsonAsync` capture → write → reload the editor from the files).
 
 ## BS Data Editor UI surface notes (from probing)
 - **Category links attach to force entries only** — `actAddCategoryLink` is a no-op unless a

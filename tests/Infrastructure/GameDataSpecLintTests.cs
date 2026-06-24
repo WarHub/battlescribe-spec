@@ -166,6 +166,7 @@ public sealed class GameDataSpecLintTests
         "addEntry", "removeEntry",
         "setFields", "addLink",
         "openCatalogue",
+        "reload",
         "dump"
     ];
 

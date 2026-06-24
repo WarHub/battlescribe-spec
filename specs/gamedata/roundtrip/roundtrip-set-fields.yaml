@@ -1,0 +1,79 @@
+id: roundtrip-set-fields
+category: roundtrip
+description: >
+  Round-trip fidelity for property mutations: a scalar field, a cost value, and a profile
+  characteristic set on an entry all survive a save + reload. Exercises the three field kinds the
+  editor edits (scalar / cost / characteristic) through serialization.
+
+# See roundtrip-add-entry for the engine-gating rationale (#30).
+engines:
+  newrecruit: skip
+  battlescribe-ui: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    profileTypes:
+      - id: pt-unit
+        name: Unit
+        characteristicTypes:
+          - id: cht-m
+            name: M
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+
+steps:
+  - action: setFields
+    entryId: se-1
+    fields:
+      hidden: "true"
+    costs:
+      pts: "90"
+
+  - action: addEntry
+    id: add-profile
+    parentId: se-1
+    entryType: profile
+    name: Stats
+
+  - action: setFields
+    entryId: ${{ steps.add-profile.entryId }}
+    fields:
+      typeId: pt-unit
+    characteristics:
+      M: "6"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              hidden: true
+              fields:
+                cost:pts: "90"
+
+  - action: reload
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              hidden: true
+              fields:
+                cost:pts: "90"
+              children:
+                - entryType: profile
+                  fields:
+                    char:M: "6"
