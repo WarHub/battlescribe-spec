@@ -326,6 +326,45 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         return pick.Xml;
     }
 
+    public string LoadFile(string xml) => LoadFileAsync(xml).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Load a catalogue/game system from XML into the editor (single-file upload, no reset) and open
+    /// it for editing. Returns the loaded file's root id, tracked for export/reopen.
+    /// </summary>
+    private async Task<string> LoadFileAsync(string xml)
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var (id, name, isGameSystem) = ParseRoot(xml);
+        if (id.Length == 0)
+        {
+            throw new InvalidOperationException("LoadFile: could not read a root id from the XML.");
+        }
+
+        var fileName = isGameSystem ? "system.gst" : id + ".cat";
+        var errors = await NrGameDataUiSetup.LoadFileAsync(_page, fileName, xml, id, name);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException("LoadFile failed: " + string.Join("; ", errors));
+        }
+
+        _idToName[id] = name;
+        _openId = id;
+        return id;
+    }
+
+    private static (string Id, string Name, bool IsGameSystem) ParseRoot(string xml)
+    {
+        var rootTag = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*(catalogue|gameSystem)\b[^>]*>").Value;
+        var isGameSystem = rootTag.Contains("<gameSystem", StringComparison.Ordinal)
+            || System.Text.RegularExpressions.Regex.IsMatch(rootTag, @"<\s*gameSystem\b");
+        var id = System.Text.RegularExpressions.Regex.Match(rootTag, @"\bid=""([^""]*)""").Groups[1].Value;
+        var name = System.Text.RegularExpressions.Regex.Match(rootTag, @"\bname=""([^""]*)""").Groups[1].Value;
+        return (id, name, isGameSystem);
+    }
+
     public void Reload() => ReloadAsync().GetAwaiter().GetResult();
 
     /// <summary>

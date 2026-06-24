@@ -414,4 +414,43 @@ public static class NrGameDataUiSetup
 
         return errors;
     }
+
+    /// <summary>
+    /// Load a single additional file (catalogue or game system) from XML WITHOUT resetting existing
+    /// state, then open it. The hidden file input is only actionable on the file-list view, so this
+    /// returns there client-side (preserving the in-memory store) before uploading. Used by
+    /// <c>openFile</c> with a source.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> LoadFileAsync(IPage page, string fileName, string xml, string newId, string newName)
+    {
+        var errors = new List<string>();
+
+        // Return to the file-list view (client-side back — does NOT reset the Pinia store), where the
+        // hidden file input lives.
+        try
+        {
+            await page.GoBackAsync(new PageGoBackOptions { Timeout = 10_000 });
+            await page.WaitForSelectorAsync(".item.unselectable:not(.add)", new() { Timeout = 10_000 });
+        }
+        catch
+        {
+            // Possibly already on the list view; the upload below will fail clearly if not.
+        }
+
+        var payload = new FilePayload
+        {
+            Name = fileName,
+            MimeType = "application/xml",
+            Buffer = Encoding.UTF8.GetBytes(xml),
+        };
+        await page.Locator("input[type=file]").SetInputFilesAsync([payload]);
+
+        var navResult = await NavigateToEditableAsync(page, newName);
+        if (navResult is not null)
+        {
+            errors.Add($"NR Editor could not open loaded file '{newId}' ({newName}): {navResult}");
+        }
+
+        return errors;
+    }
 }

@@ -282,9 +282,11 @@ public sealed class GameDataSpecLintTests
 
                     break;
                 case "openFile":
-                    if (step.EntryId is null)
+                    // openFile opens a loaded file (entryId), loads inline XML (content), or loads a
+                    // side-file keyed by the step id.
+                    if (step.EntryId is null && step.Content is null && step.Id is not { Length: > 0 })
                     {
-                        yield return $"step {i + 1}: openFile requires 'entryId'";
+                        yield return $"step {i + 1}: openFile requires 'entryId', 'content', or a step 'id' for a side-file";
                     }
 
                     break;

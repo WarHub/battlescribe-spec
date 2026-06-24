@@ -119,6 +119,13 @@ public sealed class GameDataStepDef
     /// resolved next to the spec, keyed by this step's <see cref="Id"/>.
     /// </summary>
     public ExpectedFileDef? ExpectedFile { get; set; }
+
+    /// <summary>
+    /// Inline BattleScribe XML for an <c>openFile</c> action that loads a file from content (rather
+    /// than opening an already-loaded file by <see cref="EntryId"/> or a side-file keyed by
+    /// <see cref="Id"/>). The file type is derived from the XML root element.
+    /// </summary>
+    public string? Content { get; set; }
 }
 
 /// <summary>

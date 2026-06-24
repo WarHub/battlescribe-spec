@@ -348,6 +348,59 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         }
     }
 
+    /// <summary>
+    /// Deserialize a catalogue or game system from BattleScribe XML (root element decides which),
+    /// add it to the loaded model, index it, and open it. Returns the loaded file's root id.
+    /// </summary>
+    public string LoadFile(string xml)
+    {
+        var isGameSystem = System.Text.RegularExpressions.Regex.IsMatch(xml, @"<\s*gameSystem\b");
+        var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
+            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+        var read = dataUtils.GetMethod(isGameSystem ? "e" : "f",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            [typeof(java.io.InputStream)])
+            ?? throw new InvalidOperationException("DataUtils deserialize (e/f) not found.");
+
+        try
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(xml);
+            var bais = new java.io.ByteArrayInputStream(bytes);
+            var model = read.Invoke(null, [bais])
+                ?? throw new InvalidOperationException("LoadFile: DataUtils returned null.");
+
+            if (isGameSystem)
+            {
+                _gameSystem = (GameSystem)model;
+                IndexGameSystemEntries(_gameSystem);
+                _openIsGameSystem = true;
+                return _gameSystem.getId();
+            }
+
+            var cat = (Catalogue)model;
+            // Replace an existing catalogue with the same id, else append.
+            var existing = _catalogues.FindIndex(c => c.getId() == cat.getId());
+            if (existing >= 0)
+            {
+                _catalogues[existing] = cat;
+            }
+            else
+            {
+                _catalogues.Add(cat);
+            }
+
+            IndexAllEntries(cat);
+            _catalogue = cat;
+            _openIsGameSystem = false;
+            return cat.getId();
+        }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw; // unreachable
+        }
+    }
+
     public GameDataState GetState()
     {
         var catalogues = _catalogues.Select(ReadCatalogueState).ToList();

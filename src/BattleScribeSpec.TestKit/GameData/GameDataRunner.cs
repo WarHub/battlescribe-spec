@@ -270,6 +270,43 @@ public sealed class GameDataRunner
         _errors.Add($"Step {stepIndex}: exported file does not match expected ({source}). {detail}");
     }
 
+    /// <summary>
+    /// openFile: open an already-loaded file by <paramref name="entryId"/>, or load a file from
+    /// inline <c>content</c> / a side-file keyed by the step id and open it. Returns the opened id.
+    /// </summary>
+    private GameDataActionOutputs ExecuteOpenFile(GameDataStepDef step, int stepIndex, string? entryId)
+    {
+        // Open an already-loaded file by id.
+        if (entryId is { Length: > 0 })
+        {
+            _engine.OpenFile(entryId);
+            return new GameDataActionOutputs { EntryId = entryId };
+        }
+
+        // Load from inline content and open.
+        if (step.Content is { } inline)
+        {
+            var xml = _exprResolver.Resolve(inline) ?? inline;
+            return new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };
+        }
+
+        // Load from a side-file keyed by the step id and open.
+        if (step.Id is { Length: > 0 } key && _specDir is not null)
+        {
+            var engine = _engineName ?? GameDataSnapshotResolver.BaseEngineName;
+            var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, "cat")
+                ?? GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, "gst")
+                ?? throw new InvalidOperationException(
+                    $"Step {stepIndex}: openFile found no side-file for key '{key}' (engine '{engine}', .cat/.gst) next to the spec");
+            var xml = File.ReadAllText(path);
+            xml = _exprResolver.Resolve(xml) ?? xml;
+            return new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };
+        }
+
+        throw new InvalidOperationException(
+            $"Step {stepIndex}: openFile requires 'entryId' (open a loaded file), 'content' (inline XML), or a step 'id' matching a side-file");
+    }
+
     private void ExecuteAction(GameDataStepDef step, int stepIndex)
     {
         var entryId = _exprResolver.Resolve(step.EntryId);
@@ -293,8 +330,7 @@ public sealed class GameDataRunner
                 break;
 
             case "openFile":
-                _engine.OpenFile(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: openFile requires entryId"));
+                outputs = ExecuteOpenFile(step, stepIndex, entryId);
                 break;
 
             case "setFields":

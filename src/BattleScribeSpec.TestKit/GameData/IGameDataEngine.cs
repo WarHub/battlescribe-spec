@@ -130,6 +130,15 @@ public interface IGameDataEngine : IDisposable
     string ExportActiveFile() =>
         throw new NotSupportedException("ExportActiveFile is not supported by this engine.");
 
+    /// <summary>
+    /// Load a file from BattleScribe XML (a catalogue or game system, identified by the root element)
+    /// into the engine alongside the already-loaded files, and open it as the active file for further
+    /// editing. Returns the loaded file's root id. Used by the <c>openFile</c> action when given a
+    /// file source (inline content or a side-file). Engines that can't load mid-spec throw.
+    /// </summary>
+    string LoadFile(string xml) =>
+        throw new NotSupportedException("LoadFile is not supported by this engine.");
+
     // ===== State queries =====
 
     /// <summary>

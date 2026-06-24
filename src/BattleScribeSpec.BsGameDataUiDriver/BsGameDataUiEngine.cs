@@ -167,6 +167,43 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             ?? throw new InvalidOperationException("gamedataExportFileAction returned no xml.");
     }
 
+    public string LoadFile(string xml)
+        => RunAsync(() => LoadFileAsync(xml));
+
+    /// <summary>
+    /// Load a catalogue/game system from XML: stage it to the data directory (matching the setup
+    /// naming) and open it through the Data Editor's real open path. Returns the loaded root id.
+    /// </summary>
+    private async Task<string> LoadFileAsync(string xml)
+    {
+        if (_app is null)
+        {
+            throw new InvalidOperationException("LoadFile: engine not set up.");
+        }
+
+        var (id, isGameSystem) = ParseRoot(xml);
+        if (id.Length == 0)
+        {
+            throw new InvalidOperationException("LoadFile: could not read a root id from the XML.");
+        }
+
+        var gsDir = Path.Combine(_app.DataDirectoryPath, _gameSystemId ?? "");
+        Directory.CreateDirectory(gsDir);
+        var path = Path.Combine(gsDir, isGameSystem ? "system.gst" : $"{id}.cat");
+        await File.WriteAllTextAsync(path, xml);
+
+        await CallActionAsync("gamedataOpenCatalogueAction", new JsonObject { ["path"] = path });
+        return id;
+    }
+
+    private static (string Id, bool IsGameSystem) ParseRoot(string xml)
+    {
+        var rootTag = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*(catalogue|gameSystem)\b[^>]*>").Value;
+        var isGameSystem = System.Text.RegularExpressions.Regex.IsMatch(rootTag, @"<\s*gameSystem\b");
+        var id = System.Text.RegularExpressions.Regex.Match(rootTag, @"\bid=""([^""]*)""").Groups[1].Value;
+        return (id, isGameSystem);
+    }
+
     public GameDataState GetState()
         => RunAsync(GetStateAsync);
 
