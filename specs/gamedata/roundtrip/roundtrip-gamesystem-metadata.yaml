@@ -1,0 +1,29 @@
+id: roundtrip-gamesystem-metadata
+category: roundtrip
+description: >
+  Round-trip fidelity for game-system (.gst) root metadata: an author field set on the open game
+  system survives a save + reload. The game-system-only counterpart of roundtrip-root-metadata,
+  exercising the .gst file's root serialization.
+
+# See roundtrip-add-entry for the engine-gating rationale (#30).
+engines:
+  newrecruit: skip
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+
+steps:
+  - action: setFields
+    entryId: gs-1
+    fields:
+      authorName: Ada Lovelace
+
+  - action: reload
+
+  - expectedState:
+      gameSystem:
+        fields:
+          authorName: Ada Lovelace

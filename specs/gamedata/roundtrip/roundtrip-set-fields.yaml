@@ -9,14 +9,13 @@ description: >
 engines:
   newrecruit: skip
   battlescribe-ui: skip
-  newrecruit-ui: skip
 
 setup:
   gameSystem:
     id: gs-1
     name: Test System
     costTypes:
-      - id: ct-pts
+      - id: pts
         name: pts
     profileTypes:
       - id: pt-unit

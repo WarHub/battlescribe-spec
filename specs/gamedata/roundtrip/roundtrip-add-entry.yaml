@@ -13,7 +13,6 @@ description: >
 engines:
   newrecruit: skip
   battlescribe-ui: skip
-  newrecruit-ui: skip
 
 setup:
   gameSystem:

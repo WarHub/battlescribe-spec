@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
@@ -31,6 +32,11 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     private NrGameDataUiDiagnostics? _diagnostics;
     private string _specId = "";
     private bool _disposed;
+
+    // Open-file tracking, so Reload can reopen whatever file was active. Maps each loaded file's
+    // id to its display name (NavigateToEditableAsync matches on the name shown in the file list).
+    private readonly Dictionary<string, string> _idToName = new(StringComparer.Ordinal);
+    private string? _openId;
 
     /// <summary>Base URL of the NR Editor being tested.</summary>
     public string BaseUrl { get; }
@@ -191,6 +197,15 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
             if (errors.Count > 0)
             { return errors; }
 
+            // Remember the loaded files (id -> display name) and which one is open, so Reload can
+            // round-trip through the editor's export and reopen the same file. Setup opens the last
+            // catalogue, or the game system itself when there are none.
+            _idToName.Clear();
+            _idToName[gameSystem.Id] = gameSystem.Name;
+            foreach (var cat in catalogues)
+            { _idToName[cat.Id] = cat.Name; }
+            _openId = catalogues.Length > 0 ? catalogues[^1].Id : gameSystem.Id;
+
             // Store spec context for diagnostics
             await _page.EvaluateAsync(
                 "(specId) => { window.__bsspec_editor_ui = window.__bsspec_editor_ui || {}; window.__bsspec_editor_ui.specId = specId; }",
@@ -274,7 +289,70 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
     /// <summary>Selects/opens the given catalogue (or game system) for editing in the NR Editor.</summary>
     public void OpenFile(string id)
-        => _ui.OpenFileAsync(id).GetAwaiter().GetResult();
+    {
+        _ui.OpenFileAsync(id).GetAwaiter().GetResult();
+        _openId = id;
+    }
+
+    public void Reload() => ReloadAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Round-trips the edited state through the real NR Editor: export the loaded files as
+    /// BattleScribe XML (the editor's own serialization of the mutated stores), then reload that XML
+    /// through the file-input pipeline so NR's <c>BSXmlToJson</c> parse runs, and reopen the file
+    /// that was active. A round-trip spec re-asserts its <c>expectedState</c> after this.
+    /// </summary>
+    private async Task ReloadAsync()
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var files = ParseExportedFiles(await ExportLoadedFilesJsonAsync());
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Reload: the NR Editor export produced no text XML files to reload.");
+        }
+
+        var reopenName = _openId is not null && _idToName.TryGetValue(_openId, out var name)
+            ? name
+            : _idToName.Values.FirstOrDefault()
+                ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
+
+        var errors = await NrGameDataUiSetup.ReloadFromXmlAsync(_page, BaseUrl, files, reopenName);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException("Reload failed: " + string.Join("; ", errors));
+        }
+
+        // The reset clears our spec-context marker; restore it for diagnostics.
+        await _page.EvaluateAsync(
+            "(specId) => { window.__bsspec_editor_ui = window.__bsspec_editor_ui || {}; window.__bsspec_editor_ui.specId = specId; }",
+            _specId);
+    }
+
+    /// <summary>
+    /// Extracts (fileName, xml) pairs from <see cref="ExportLoadedFilesJsonAsync"/>'s
+    /// <c>{ files: { path: xml }, debug: [] }</c> payload, skipping any binary-marker entries.
+    /// </summary>
+    private static List<(string Name, string Xml)> ParseExportedFiles(string exportJson)
+    {
+        var result = new List<(string, string)>();
+        using var doc = JsonDocument.Parse(exportJson);
+        if (doc.RootElement.TryGetProperty("files", out var filesEl)
+            && filesEl.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in filesEl.EnumerateObject())
+            {
+                var xml = prop.Value.GetString();
+                if (xml is null || xml.StartsWith("[binary:", StringComparison.Ordinal))
+                { continue; }
+                result.Add((Path.GetFileName(prop.Name), xml));
+            }
+        }
+
+        return result;
+    }
 
     private NrGameDataUiDriver _ui = null!;
 

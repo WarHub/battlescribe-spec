@@ -349,4 +349,69 @@ public static class NrGameDataUiSetup
         await page.GotoAsync(editorBaseUrl);
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
+
+    /// <summary>
+    /// Reloads the editor from already-serialized BattleScribe XML — typically the editor's own
+    /// export of the current, mutated state — and reopens the file named <paramref name="reopenName"/>.
+    /// Resets the stores, feeds the XML through the same hidden file input the initial load uses (so
+    /// NR's real <c>BSXmlToJson</c> parse runs), waits for the catalogues store, then navigates back
+    /// into the editor. Used by <see cref="NrGameDataUiEngine.Reload"/> for round-trip specs.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> ReloadFromXmlAsync(
+        IPage page,
+        string editorBaseUrl,
+        IReadOnlyList<(string Name, string Xml)> files,
+        string reopenName)
+    {
+        var errors = new List<string>();
+        if (files.Count == 0)
+        {
+            errors.Add("Reload: no exported XML files to reload");
+            return errors;
+        }
+
+        // Reset stores and return home, exactly as between test runs.
+        await CleanupCatalogueAsync(page, editorBaseUrl);
+
+        // GST first, then CATs — mirrors the initial upload ordering.
+        var payloads = files
+            .OrderByDescending(f => f.Name.EndsWith(".gst", StringComparison.OrdinalIgnoreCase))
+            .Select(f => new FilePayload
+            {
+                Name = f.Name,
+                MimeType = "application/xml",
+                Buffer = Encoding.UTF8.GetBytes(f.Xml),
+            })
+            .ToList();
+
+        await page.Locator("input[type=file]").SetInputFilesAsync(payloads);
+
+        try
+        {
+            await page.WaitForFunctionAsync(
+                """
+                () => {
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const cs = pinia?._s?.get('catalogues');
+                    return cs?.dict && Object.keys(cs.dict).length > 0;
+                }
+                """,
+                null,
+                new PageWaitForFunctionOptions { Timeout = 15_000 });
+        }
+        catch (TimeoutException ex)
+        {
+            errors.Add($"NR Editor did not populate catalogues store after reload upload: {ex.Message}");
+            return errors;
+        }
+
+        var navResult = await NavigateToEditableAsync(page, reopenName);
+        if (navResult is not null)
+        {
+            errors.Add(navResult);
+        }
+
+        return errors;
+    }
 }

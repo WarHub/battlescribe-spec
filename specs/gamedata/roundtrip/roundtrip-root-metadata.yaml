@@ -1,14 +1,13 @@
 id: roundtrip-root-metadata
 category: roundtrip
 description: >
-  Round-trip fidelity for root metadata: author and revision fields set on the game system (.gst)
-  and the catalogue (.cat) survive a save + reload. Exercises both file types' root serialization.
+  Round-trip fidelity for catalogue (.cat) root metadata: author and revision fields set on the
+  open catalogue survive a save + reload.
 
 # See roundtrip-add-entry for the engine-gating rationale (#30).
 engines:
   newrecruit: skip
   battlescribe-ui: skip
-  newrecruit-ui: skip
 
 setup:
   gameSystem:
@@ -21,11 +20,6 @@ setup:
 
 steps:
   - action: setFields
-    entryId: gs-1
-    fields:
-      authorName: Ada Lovelace
-
-  - action: setFields
     entryId: cat-1
     fields:
       authorName: Grace Hopper
@@ -34,9 +28,6 @@ steps:
   - action: reload
 
   - expectedState:
-      gameSystem:
-        fields:
-          authorName: Ada Lovelace
       catalogues:
         - id: cat-1
           fields:
