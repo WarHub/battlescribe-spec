@@ -1,0 +1,42 @@
+id: error-condition-bad-type
+category: validation
+description: >
+  A condition whose type is not one of the known condition kinds (atLeast / atMost / equalTo /
+  greaterThan / lessThan / instanceOf / ...) produces a validation error
+  ("Condition must have a type that exists"). Complements error-condition-bad-scope (the scope
+  axis). BattleScribe accepts the unknown type as a raw string and flags it at validation time,
+  so both BattleScribe anchors report it.
+
+# NewRecruit's setup enum-validates ConditionKind and rejects an unknown value before any data is
+# staged, so the invalid construct cannot be represented on the NR engines at all — skip there.
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+          modifiers:
+            - type: set
+              field: hidden
+              value: "true"
+              conditions:
+                - type: not-a-real-condition-type
+                  field: selections
+                  scope: parent
+                  value: 1
+                  childId: se-1
+
+steps:
+  - expectedState:
+      errors:
+        - message: Condition must have a type that exists

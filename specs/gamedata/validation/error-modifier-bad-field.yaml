@@ -1,0 +1,46 @@
+id: error-modifier-bad-field
+category: validation
+description: >
+  A modifier whose field references neither a known field keyword (hidden / name / a cost type
+  id / a characteristic / ...) nor a resolvable target produces validation errors. BattleScribe
+  flags BOTH "Modifier must have a field that exists" and "Modifier must have a type that exists"
+  — the unresolvable field cascades into the modifier's type resolution. A modifier with a valid
+  field (e.g. hidden) reports neither. Both BattleScribe anchors report it; NewRecruit's reference
+  validator models only dangling link targets, so it reports no error (per-engine override).
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+          modifiers:
+            - type: set
+              field: does-not-exist-field
+              value: "true"
+
+steps:
+  - expectedState:
+      errors:
+        - message: Modifier must have a field that exists
+        - message: Modifier must have a type that exists
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  fields:
+                    field: does-not-exist-field
+      engines:
+        # NR's reference validator models only dangling link targets, not modifier-field resolution.
+        newrecruit:
+          errors: []
+        newrecruit-ui:
+          errors: []

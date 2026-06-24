@@ -214,16 +214,30 @@ All validation specs run on **all four engines** (both BS anchors + both NR engi
   ("InfoLink must have a target that exists").
 - `links/catalogue-link` — a valid cross-catalogue link reports no errors, while **re-pointing**
   it at a non-existent catalogue is flagged ("CatalogueLink must have a target that exists").
+- `validation/error-broken-after-delete` — an entry link that resolves cleanly becomes a dangling
+  error once its target is **deleted** by an edit (the dynamic counterpart of `error-broken-entry-link`).
+  Modelled by every engine including NR, so it asserts the error on all four.
 
 **Duplicate IDs**
 - `validation/error-duplicate-entry-ids` — two entries sharing an id within one catalogue are
   flagged ("All data element ids must be unique").
 
-**Semantic errors (query-scope resolution)**
+**Semantic errors (query resolution — scope / field / type / child axes)**
 - `validation/error-constraint-bad-scope` — a constraint whose `scope` resolves to neither a
   scope keyword nor an existing ancestor id is flagged ("Constraint must have a scope that exists").
-- `validation/error-condition-bad-scope` — same, for a condition inside a modifier
-  ("Condition must have a scope that exists").
+- `validation/error-constraint-bad-field` — a constraint whose `field` is unresolvable is flagged
+  ("Constraint must have a field that exists").
+- `validation/error-condition-bad-scope` — a condition (inside a modifier) with an unresolvable
+  `scope` ("Condition must have a scope that exists").
+- `validation/error-condition-bad-type` — a condition whose `type` is not a known kind
+  ("Condition must have a type that exists"). NR's setup enum-validates `ConditionKind` and rejects
+  the unknown value before staging, so this spec `skip`s the NR engines (the invalid construct is
+  unrepresentable there) rather than overriding the error.
+- `validation/error-condition-bad-child` — a condition whose `childId` references a missing entry
+  ("Condition must have a child that exists").
+- `validation/error-modifier-bad-field` — a modifier whose `field` is unresolvable; BattleScribe
+  flags **both** "Modifier must have a field that exists" and "Modifier must have a type that exists"
+  (the unresolvable field cascades into type resolution). A valid field reports neither.
 
 **Error lifecycle (#173 acceptance criteria)**
 - `validation/no-errors-clean-state` — a valid system/catalogue reports no errors.
@@ -257,6 +271,13 @@ asserted on the engines that model it. `error-cleared-after-fix` and the entry-l
 - A **defaultSelectionEntryId** that is not a child of its group is cleared at load, so
   "Default SelectionEntry must exist within the SelectionEntryGroup" is likewise not surfaced
   from a loaded file.
+- A **Profile** with a dangling `typeId` and a **CostValue** with a dangling `typeId` produce no
+  validation error from a loaded file (the unresolved type reference is not surfaced).
+- **Duplicate cost-type ids** and **duplicate profile-type ids** are not flagged — unlike duplicate
+  *entry* ids ("All data element ids must be unique"), the uniqueness check does not extend to those
+  type-definition collections at load.
+- **Circular catalogue links** (two library catalogues importing each other) load without a
+  validation error.
 - Note the **load vs. edit** distinction: a catalogue link that is *loaded* dangling is cleaned,
   but one *edited* to a dangling target in a live session is retained and flagged (see
   `links/catalogue-link`, which creates the dangling state by edit).

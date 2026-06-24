@@ -1,0 +1,42 @@
+id: error-condition-bad-child
+category: validation
+description: >
+  A condition whose childId references an entry that does not exist produces a validation error
+  ("Condition must have a child that exists"). Complements error-condition-bad-scope and
+  error-condition-bad-type (the scope/type axes). Both BattleScribe anchors report it;
+  NewRecruit's reference validator models only dangling link targets, not condition-child
+  resolution, so it reports no error (per-engine override).
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+          modifiers:
+            - type: set
+              field: hidden
+              value: "true"
+              conditions:
+                - type: atLeast
+                  field: selections
+                  scope: parent
+                  value: 1
+                  childId: does-not-exist-child
+
+steps:
+  - expectedState:
+      errors:
+        - message: Condition must have a child that exists
+      engines:
+        # NR's reference validator models only dangling link targets, not condition-child resolution.
+        newrecruit:
+          errors: []
+        newrecruit-ui:
+          errors: []
