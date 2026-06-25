@@ -1,0 +1,26 @@
+id: export-add-entry
+category: export
+description: >
+  Add a named selection entry with a declared id, then assert the catalogue's exact serialized
+  .cat content against a per-engine snapshot (NewRecruit base + battlescribe overrides). Declaring
+  the id makes the export byte-reproducible.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    parentId: cat-1
+    entryType: selectionEntry
+    name: Space Marine
+    entryId: se-marine
+
+  - id: after-add
+    expectedFile: {}

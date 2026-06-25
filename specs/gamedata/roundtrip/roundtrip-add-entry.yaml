@@ -1,0 +1,44 @@
+id: roundtrip-add-entry
+category: roundtrip
+description: >
+  Round-trip fidelity: an entry added and named via the editor survives a save + reload. Adds a
+  selection entry, asserts it is present, reloads (serialize to .cat/.gst and load back), then
+  asserts the same structure — proving persistence preserved the new entry.
+
+# Round-trip is about the XML-serializing engines: the in-process reference engine, the real
+# BattleScribe Data Editor (battlescribe-ui, save-and-reopen via the Java agent), and both NR Editor
+# engines — store-direct `newrecruit` and UI-driven `newrecruit-ui` — which serialize the real NR
+# store to .cat/.gst (via saveCatalogueInFiles) and load it back.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-unit
+    parentId: cat-1
+    entryType: selectionEntry
+    name: Space Marine
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - name: Space Marine
+              entryType: selectionEntry
+
+  - action: reload
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - name: Space Marine
+              entryType: selectionEntry

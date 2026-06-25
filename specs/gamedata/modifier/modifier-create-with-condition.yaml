@@ -6,6 +6,7 @@ description: >
   nested-condition creation plus their field surfaces in one spec.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

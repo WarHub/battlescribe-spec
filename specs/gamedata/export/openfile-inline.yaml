@@ -1,0 +1,46 @@
+id: openfile-inline
+category: export
+description: >
+  Load a catalogue from inline XML via openFile, open it, add an entry with a declared id, and
+  assert the merged state. Exercises mid-spec file loading.
+
+# newrecruit-ui: mid-spec file load through the SPA file-list is unreliable (the hidden file input
+# is only actionable on the list view and re-navigating into the freshly uploaded file mid-session
+# is flaky), so openFile-from-source is not supported there yet — tracked as a follow-up.
+engines:
+  newrecruit-ui: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Seed Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-2" name="Loaded Catalogue" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+        <selectionEntries>
+          <selectionEntry id="se-loaded" name="Loaded Unit" hidden="false" type="unit"/>
+        </selectionEntries>
+      </catalogue>
+
+  - action: addEntry
+    parentId: cat-2
+    entryType: selectionEntry
+    name: Added Unit
+    entryId: se-added
+
+  - expectedState:
+      catalogues:
+        - id: cat-2
+          selectionEntries:
+            - id: se-loaded
+              name: Loaded Unit
+            - id: se-added
+              name: Added Unit

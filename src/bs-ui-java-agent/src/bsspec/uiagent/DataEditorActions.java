@@ -11,9 +11,12 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -40,7 +43,9 @@ public class DataEditorActions {
 
     private static final int POLL_MS = 200;
     private static final int POLL_TIMEOUT_MS = 10_000;
-    private static final int LOAD_TIMEOUT_MS = 120_000;
+    // Kept under the C# AgentClient call timeout (90s) so a genuinely stuck reopen surfaces as a
+    // clean Java-side error rather than the C# side reporting a confusing "JavaFX deadlock".
+    private static final int LOAD_TIMEOUT_MS = 75_000;
     private static final int FX_TIMEOUT_MS = 60_000;
     /** Grace period for an edit-panel control to appear after selecting an entry. */
     private static final int FIELD_GRACE_MS = 2_000;
@@ -49,6 +54,8 @@ public class DataEditorActions {
     private final EngineAccessor engineAccessor;
     /** Cached controller — cleared on each new setup call. */
     private Object cachedController = null;
+    /** Path of the file most recently opened — the save target for {@code reload}. */
+    private String lastOpenedPath = null;
     /**
      * Identity map for id-less model entries (modifier, modifierGroup, condition,
      * conditionGroup, repeat). BattleScribe gives these no id attribute, so the
@@ -70,13 +77,15 @@ public class DataEditorActions {
                 : new JsonObject();
 
         if ("gamedataLoadFilesAction".equals(method))   return loadFiles(p);
-        if ("gamedataOpenCatalogueAction".equals(method)) return openCatalogue(p);
+        if ("gamedataOpenFileAction".equals(method))    return openFile(p);
         if ("gamedataAddEntryAction".equals(method))    return addEntry(p);
         if ("gamedataRemoveEntryAction".equals(method)) return removeEntry(p);
         if ("gamedataSetFieldAction".equals(method))    return setField(p);
         if ("gamedataSetCostAction".equals(method))     return setCost(p);
         if ("gamedataSetCharacteristicAction".equals(method)) return setCharacteristic(p);
         if ("gamedataAddLinkAction".equals(method))     return addLink(p);
+        if ("gamedataSaveAndReloadAction".equals(method)) return saveAndReload(p);
+        if ("gamedataExportFileAction".equals(method)) return exportFile(p);
         if ("gamedataGetDataState".equals(method))      return getDataState(p);
         if ("gamedataGetErrors".equals(method))         return getErrors(p);
         throw new IllegalArgumentException("Unknown gamedata action: " + method);
@@ -87,7 +96,7 @@ public class DataEditorActions {
     /**
      * Setup-time load: stage is done by the C# side; here we open the primary file (the first
      * catalogue, or the game system if there are none) through the editor's real open path so a
-     * default document is loaded for specs that don't issue an explicit {@code openCatalogue}.
+     * default document is loaded for specs that don't issue an explicit {@code openFile}.
      */
     private String loadFiles(JsonObject params) {
         cachedController = null; // reset cache on new load
@@ -100,13 +109,13 @@ public class DataEditorActions {
     }
 
     /**
-     * The {@code openCatalogue} action: open the selected file via the editor's real open path —
+     * The {@code openFile} action: open the selected file via the editor's real open path —
      * {@code dataSource.f(path)} (catalogue) / {@code dataSource.c(path)} (game system) to load it,
      * then the window controller's private {@code a(BaseRootEntry)} display method, exactly as
      * {@code actLoadDataFile} runs after the (un-driveable) native file picker. The C# side passes
      * the staged path for the requested id.
      */
-    private String openCatalogue(JsonObject params) {
+    private String openFile(JsonObject params) {
         idLessEntries.clear(); // reopening rebuilds the tree; old identity refs are stale
         openCataloguePath(requireString(params, "path"));
         return "{}";
@@ -129,12 +138,131 @@ public class DataEditorActions {
             try { loadMethod.invoke(ctrl, finalFlat); future.complete(null); }
             catch (Exception e) { future.completeExceptionally(e); }
         });
-        try {
-            future.get(LOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            throw new RuntimeException("File loading timed out after " + LOAD_TIMEOUT_MS + "ms");
+        // Poll the load future. If the editor's display logic blocks the FX thread on a modal dialog
+        // (e.g. the on-disk-change watcher popping "reload from disk?" after a saveAndReload rewrote
+        // the open file), don't guess at it — fail loudly with the dialog's identity so it becomes a
+        // known, deterministically-handled modal rather than an intermittent 90s deadlock. We can then
+        // add an explicit handler for that specific dialog at this specific moment. Platform.runLater
+        // tasks still run inside a modal showAndWait nested loop, so the detection probe succeeds even
+        // while the load is "stuck".
+        long start = System.currentTimeMillis();
+        while (true) {
+            try {
+                future.get(1000, TimeUnit.MILLISECONDS);
+                break;
+            } catch (TimeoutException e) {
+                String modal = describeBlockingModals();
+                if (modal != null) {
+                    if (isExternalChangeConfirm(modal)) {
+                        // Known: the external-change watcher fired because saveAndReload rewrote the
+                        // open file. Answer NO — keep our just-saved data; this controlled reopen is
+                        // the reload. Firing the button unblocks the FX thread so the load completes.
+                        System.err.println("[agent] reopen: answering external-change 'Confirm' dialog NO; " + modal);
+                        answerModalButton("btnNegative");
+                    } else {
+                        // Unknown modal: don't guess. Fail loudly with its identity so it can be given
+                        // an explicit handler at this specific moment.
+                        throw new RuntimeException("Unhandled modal dialog blocked the reopen of " + path
+                                + " — add an explicit handler in DataEditorActions. " + modal);
+                    }
+                }
+                if (System.currentTimeMillis() - start > LOAD_TIMEOUT_MS) {
+                    throw new RuntimeException("File loading timed out after " + LOAD_TIMEOUT_MS
+                            + "ms (no modal dialog detected) for " + path);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("File loading failed", e);
+            }
+        }
+        lastOpenedPath = path;
+    }
+
+    /**
+     * Round-trip save + reload for round-trip specs: serialize the open document's live model back
+     * to the file it was opened from (BattleScribe's own DataUtils serializer, the inverse of the
+     * load path), then re-open that file through the real open path. A round-trip spec re-asserts
+     * its {@code expectedState} after this, so a still-holding assertion proves persistence kept the
+     * data. Catalogue specs reopen the catalogue (the game system stays loaded in the data manager).
+     */
+    private String saveAndReload(JsonObject params) {
+        if (lastOpenedPath == null) {
+            throw new RuntimeException("No file has been opened; nothing to reload");
+        }
+        Object ctrl = findController();
+        Object dm = runOnFxGet(() -> ctrl.getClass().getMethod("getDataManager").invoke(ctrl));
+        if (dm == null) throw new RuntimeException("Data manager not available for reload");
+        Object root = tryInvoke(dm, "c");
+        if (root == null) throw new RuntimeException("No open document to save for reload");
+
+        serializeToFile(root, lastOpenedPath);
+
+        idLessEntries.clear(); // reopening rebuilds the tree; old identity refs are stale
+        // Overwriting the open file trips the editor's external-change watcher, which asynchronously
+        // pops the "Confirm" reload dialog. openCataloguePath's poll loop answers it (NO — our
+        // in-memory was just serialized to this file, and we reopen it explicitly below) and throws on
+        // any other, unknown modal.
+        openCataloguePath(lastOpenedPath);
+        return "{}";
+    }
+
+    /**
+     * Export the open document's serialized BattleScribe XML as a JSON {@code {"xml": ...}} result.
+     * The root element (catalogue/gameSystem) identifies the file type to the C# caller.
+     */
+    private String exportFile(JsonObject params) {
+        Object ctrl = findController();
+        Object dm = runOnFxGet(() -> ctrl.getClass().getMethod("getDataManager").invoke(ctrl));
+        if (dm == null) throw new RuntimeException("Data manager not available for export");
+        Object root = tryInvoke(dm, "c");
+        if (root == null) throw new RuntimeException("No open document to export");
+        String xml = new String(serializeToBytes(root), java.nio.charset.StandardCharsets.UTF_8);
+        JsonObject result = new JsonObject();
+        result.addProperty("xml", xml);
+        return result.toString();
+    }
+
+    /**
+     * Serialize a BattleScribe model object (GameSystem / Catalogue) to a file via the DataUtils
+     * serializer {@code net.battlescribe.a.c.e.a(model, OutputStream)} — the write counterpart of
+     * the {@code e}/{@code f} readers the open path uses.
+     */
+    private void serializeToFile(Object model, String path) {
+        try (OutputStream out = new FileOutputStream(path)) {
+            out.write(serializeToBytes(model));
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("File loading failed", e);
+            throw new RuntimeException("Failed to serialize model: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Serialize a BattleScribe model object to XML bytes via the DataUtils serializer. The class is
+     * obfuscated, so the matching static {@code a(model, OutputStream)} overload is found by shape.
+     */
+    private byte[] serializeToBytes(Object model) {
+        try {
+            Class<?> dataUtils = Class.forName("net.battlescribe.a.c.e");
+            Method serialize = null;
+            for (Method m : dataUtils.getMethods()) {
+                Class<?>[] pt = m.getParameterTypes();
+                if (m.getName().equals("a") && pt.length == 2
+                        && OutputStream.class.isAssignableFrom(pt[1])
+                        && pt[0].isInstance(model)) {
+                    serialize = m;
+                    break;
+                }
+            }
+            if (serialize == null) {
+                throw new RuntimeException("DataUtils serialize a(" + model.getClass().getName() + ", OutputStream) not found");
+            }
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            serialize.invoke(null, model, baos);
+            return baos.toByteArray();
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize model: " + e.getMessage(), e);
         }
     }
 
@@ -197,6 +325,8 @@ public class DataEditorActions {
         if (id == null || id.isEmpty()) {
             id = java.util.UUID.randomUUID().toString();
             idLessEntries.put(id, newObj);
+        } else {
+            id = applyDeclaredId(ctrl, params, id);
         }
         if (name != null) {
             setFieldOnEntry(ctrl, id, "name", name); // drive the panel's #txtName, not the model
@@ -205,6 +335,20 @@ public class DataEditorActions {
         JsonObject result = new JsonObject();
         result.addProperty("entryId", id);
         return result.toString();
+    }
+
+    /**
+     * If the request declared an {@code entryId}, re-id the just-created (id-bearing) entry through
+     * the editor's unique-id field (#txtUniqueId) so subsequent edits and exports are
+     * byte-reproducible. Id-less entries (no id attribute) are left untouched. Returns the effective id.
+     */
+    private String applyDeclaredId(Object ctrl, JsonObject params, String currentId) {
+        String declaredId = optString(params, "entryId");
+        if (declaredId != null && !declaredId.isEmpty() && !declaredId.equals(currentId)) {
+            setFieldOnEntry(ctrl, currentId, "id", declaredId);
+            return declaredId;
+        }
+        return currentId;
     }
 
     /**
@@ -599,6 +743,8 @@ public class DataEditorActions {
         if (linkId == null || linkId.isEmpty()) {
             linkId = java.util.UUID.randomUUID().toString();
             idLessEntries.put(linkId, newObj);
+        } else {
+            linkId = applyDeclaredId(ctrl, params, linkId);
         }
 
         // Mirror how a user links a non-default target: set the Link Type to match the target's kind
@@ -1465,6 +1611,98 @@ public class DataEditorActions {
 
     @FunctionalInterface
     private interface FxAction { void run() throws Exception; }
+
+    /**
+     * Describe every modal dialog currently blocking the FX thread (excluding the main Data Editor
+     * window) — title, label text and button id/text for each — or {@code null} if there are none.
+     * Runs via Platform.runLater so it executes even inside a modal showAndWait nested event loop.
+     * Used to turn an intermittent reopen deadlock into a deterministic, identifiable failure.
+     */
+    private String describeBlockingModals() {
+        try {
+            CompletableFuture<String> f = new CompletableFuture<>();
+            Platform.runLater(() -> {
+                StringBuilder sb = new StringBuilder();
+                for (Window w : new ArrayList<>(Window.getWindows())) {
+                    if (!(w instanceof Stage)) continue;
+                    Stage s = (Stage) w;
+                    if (!s.isShowing() || s.getModality() == Modality.NONE) continue;
+                    String title = s.getTitle();
+                    if (title != null && title.startsWith("Data Editor")) continue; // not the main window
+                    sb.append("Modal dialog: title='").append(title).append("'");
+                    if (s.getScene() != null && s.getScene().getRoot() != null) {
+                        Node root = s.getScene().getRoot();
+                        for (Node n : root.lookupAll(".label")) {
+                            if (n instanceof javafx.scene.control.Labeled) {
+                                String t = ((javafx.scene.control.Labeled) n).getText();
+                                if (t != null && !t.isBlank()) sb.append(" label='").append(t.trim()).append("'");
+                            }
+                        }
+                        for (Node n : root.lookupAll(".text")) {
+                            if (n instanceof javafx.scene.text.Text) {
+                                String t = ((javafx.scene.text.Text) n).getText();
+                                if (t != null && !t.isBlank()) sb.append(" text='").append(t.trim()).append("'");
+                            }
+                        }
+                        for (Node n : root.lookupAll(".button")) {
+                            if (n instanceof ButtonBase) {
+                                ButtonBase b = (ButtonBase) n;
+                                sb.append(" button[id=").append(b.getId()).append(",text='")
+                                  .append(b.getText()).append("']");
+                            }
+                        }
+                    }
+                    sb.append("; ");
+                }
+                f.complete(sb.length() == 0 ? null : sb.toString().trim());
+            });
+            return f.get(5, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            return "modal-detection failed: " + e;
+        }
+    }
+
+    /**
+     * Recognizes BattleScribe's external-change "Confirm" dialog (the editor detected the open file
+     * changed on disk and asks whether to reload). Identified by the {@code Confirm} title plus the
+     * standard {@code btnPositive}/{@code btnNegative} buttons. This is the only modal saveAndReload
+     * provokes (by rewriting the open file); any other modal is treated as unknown and fails.
+     */
+    private boolean isExternalChangeConfirm(String modalDesc) {
+        return modalDesc != null
+                && modalDesc.contains("title='Confirm'")
+                && modalDesc.contains("id=btnPositive")
+                && modalDesc.contains("id=btnNegative");
+    }
+
+    /**
+     * Fire the button with the given fx:id on every modal dialog (excluding the main Data Editor
+     * window). Runs via Platform.runLater so it executes inside the dialog's showAndWait nested loop,
+     * which closes the dialog and unblocks the FX thread. Returns true if any button was fired.
+     */
+    private boolean answerModalButton(String buttonId) {
+        try {
+            CompletableFuture<Boolean> f = new CompletableFuture<>();
+            Platform.runLater(() -> {
+                boolean fired = false;
+                for (Window w : new ArrayList<>(Window.getWindows())) {
+                    if (!(w instanceof Stage)) continue;
+                    Stage s = (Stage) w;
+                    if (!s.isShowing() || s.getModality() == Modality.NONE) continue;
+                    String title = s.getTitle();
+                    if (title != null && title.startsWith("Data Editor")) continue;
+                    if (s.getScene() == null || s.getScene().getRoot() == null) continue;
+                    Node btn = s.getScene().getRoot().lookup("#" + buttonId);
+                    if (btn instanceof ButtonBase) { ((ButtonBase) btn).fire(); fired = true; }
+                }
+                f.complete(fired);
+            });
+            return f.get(5, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            System.err.println("[agent] failed to fire modal button #" + buttonId + ": " + e);
+            return false;
+        }
+    }
 
     private void runOnFx(FxAction action) {
         if (Platform.isFxApplicationThread()) {

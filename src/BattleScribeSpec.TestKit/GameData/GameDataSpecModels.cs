@@ -36,6 +36,15 @@ public sealed class GameDataSetupDef
     /// Catalogue definitions for the spec.
     /// </summary>
     public List<ProtocolCatalogue>? Catalogues { get; set; }
+
+    /// <summary>
+    /// Id of the file (catalogue or game system) to open for editing — the active file that
+    /// mutations, <c>reload</c>, and <c>expectedFile</c> export apply to. Required: engines disagree
+    /// on which loaded file is "active" by default (the reference and Data Editor open the first
+    /// catalogue, NewRecruit the last), so every spec declares it explicitly. An <c>openFile</c> step
+    /// may switch the active file later in the spec.
+    /// </summary>
+    public string? Edit { get; set; }
 }
 
 /// <summary>
@@ -112,6 +121,20 @@ public sealed class GameDataStepDef
     /// Expected state after this step (assertions).
     /// </summary>
     public GameDataExpectedStateDef? ExpectedState { get; set; }
+
+    /// <summary>
+    /// Assert the exact serialized content of the active file after this step (byte-exact). The
+    /// expected content is either inline (<see cref="ExpectedFileDef.Content"/>) or a side-file
+    /// resolved next to the spec, keyed by this step's <see cref="Id"/>.
+    /// </summary>
+    public ExpectedFileDef? ExpectedFile { get; set; }
+
+    /// <summary>
+    /// Inline BattleScribe XML for an <c>openFile</c> action that loads a file from content (rather
+    /// than opening an already-loaded file by <see cref="EntryId"/> or a side-file keyed by
+    /// <see cref="Id"/>). The file type is derived from the XML root element.
+    /// </summary>
+    public string? Content { get; set; }
 }
 
 /// <summary>
@@ -158,6 +181,39 @@ public sealed class GameDataExpectedStateDef
             Catalogues = over.Catalogues ?? Catalogues,
             GameSystem = over.GameSystem ?? GameSystem,
             Errors = over.Errors ?? Errors,
+        };
+    }
+}
+
+/// <summary>
+/// File-export assertion. The active file is exported and byte-compared to an expected file —
+/// either inline <see cref="Content"/>, or a side-file resolved next to the spec by the step's id
+/// (with per-engine override files over an NR base). The file type (.cat/.gst) is derived from the
+/// exported XML's root element unless <see cref="FileType"/> overrides it.
+/// </summary>
+public sealed class ExpectedFileDef
+{
+    /// <summary>Inline expected XML; when set, the side-file resolver is not used for this engine.</summary>
+    public string? Content { get; set; }
+
+    /// <summary>Optional file-type override ("catalogue"/"gameSystem"); normally read from the root.</summary>
+    public string? FileType { get; set; }
+
+    /// <summary>Per-engine overrides (inline content / file type), same pattern as expectedState.</summary>
+    public Dictionary<string, ExpectedFileDef>? Engines { get; set; }
+
+    /// <summary>Returns the effective expectation for an engine, merging its override on top of base.</summary>
+    public ExpectedFileDef ForEngine(string? engineName)
+    {
+        if (engineName is null || Engines is null || !Engines.TryGetValue(engineName, out var over))
+        {
+            return this;
+        }
+
+        return new ExpectedFileDef
+        {
+            Content = over.Content ?? Content,
+            FileType = over.FileType ?? FileType,
         };
     }
 }

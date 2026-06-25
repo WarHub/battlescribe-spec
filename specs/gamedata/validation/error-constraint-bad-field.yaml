@@ -1,0 +1,47 @@
+id: error-constraint-bad-field
+category: validation
+description: >
+  A constraint whose field references neither a known field keyword (selections / forces / a
+  cost type id / ...) nor a resolvable target produces a validation error
+  ("Constraint must have a field that exists"). Both BattleScribe anchors construct the real
+  data manager and report it. NewRecruit's reference validator models only dangling link
+  targets, not constraint-field resolution, so it reports no error there (per-engine override).
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Trooper
+          type: unit
+          constraints:
+            - id: con-bad-field
+              type: max
+              value: 1
+              field: does-not-exist-field
+              scope: parent
+
+steps:
+  - expectedState:
+      errors:
+        - message: Constraint must have a field that exists
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: constraint
+                  fields:
+                    field: does-not-exist-field
+      engines:
+        # NR's reference validator models only dangling link targets, not constraint-field resolution.
+        newrecruit:
+          errors: []
+        newrecruit-ui:
+          errors: []

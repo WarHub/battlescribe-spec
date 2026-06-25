@@ -6,6 +6,7 @@ description: >
   at the game-system root.
 
 setup:
+  edit: gs-1
   gameSystem:
     id: gs-1
     name: Test System

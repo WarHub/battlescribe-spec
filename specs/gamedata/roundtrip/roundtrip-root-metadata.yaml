@@ -1,0 +1,31 @@
+id: roundtrip-root-metadata
+category: roundtrip
+description: >
+  Round-trip fidelity for catalogue (.cat) root metadata: author and revision fields set on the
+  open catalogue survive a save + reload.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: setFields
+    entryId: cat-1
+    fields:
+      authorName: Grace Hopper
+      revision: "7"
+
+  - action: reload
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          fields:
+            authorName: Grace Hopper
+            revision: "7"

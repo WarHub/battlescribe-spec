@@ -32,6 +32,11 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     private string _specId = "";
     private bool _disposed;
 
+    // Open-file tracking, so Reload can reopen whatever file was active. Maps each loaded file's
+    // id to its display name (NavigateToEditableAsync matches on the name shown in the file list).
+    private readonly Dictionary<string, string> _idToName = new(StringComparer.Ordinal);
+    private string? _openId;
+
     /// <summary>Base URL of the NR Editor being tested.</summary>
     public string BaseUrl { get; }
 
@@ -141,7 +146,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         _page = await context.NewPageAsync();
         _diagnostics = new NrGameDataUiDiagnostics(_page);
         _ui = new NrGameDataUiDriver(_page);
-        await NrGameDataUiSetup.SetupStaticFileRoutingAsync(_page, staticDir);
+        await NrEditorStore.SetupStaticFileRoutingAsync(_page, staticDir);
         await _page.GotoAsync(BaseUrl, new PageGotoOptions
         {
             WaitUntil = WaitUntilState.Load,
@@ -187,9 +192,18 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
         try
         {
-            var errors = await NrGameDataUiSetup.LoadAndOpenCatalogueAsync(_page, gameSystem, catalogues);
+            var errors = await NrEditorStore.LoadAndOpenCatalogueAsync(_page, gameSystem, catalogues);
             if (errors.Count > 0)
             { return errors; }
+
+            // Remember the loaded files (id -> display name) and which one is open, so Reload can
+            // round-trip through the editor's export and reopen the same file. Setup opens the last
+            // catalogue, or the game system itself when there are none.
+            _idToName.Clear();
+            _idToName[gameSystem.Id] = gameSystem.Name;
+            foreach (var cat in catalogues)
+            { _idToName[cat.Id] = cat.Name; }
+            _openId = catalogues.Length > 0 ? catalogues[^1].Id : gameSystem.Id;
 
             // Store spec context for diagnostics
             await _page.EvaluateAsync(
@@ -204,8 +218,8 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         }
     }
 
-    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
-        => Run($"addEntry-{entryType}", () => _ui.AddEntryAsync(parentId, entryType, name));
+    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
+        => Run($"addEntry-{entryType}", () => _ui.AddEntryAsync(parentId, entryType, name, id));
 
     public void RemoveEntry(string entryId)
         => Run($"removeEntry", () => NrGameDataUiActions.RemoveEntryAsync(_page!, entryId));
@@ -219,8 +233,8 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
         => Run($"setCharacteristic-{nameOrTypeId}", () => _ui.SetCharacteristicAsync(entryId, nameOrTypeId, value));
 
-    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
-        => Run($"addLink-{linkType}", () => _ui.AddLinkAsync(parentId, linkType, targetId));
+    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
+        => Run($"addLink-{linkType}", () => _ui.AddLinkAsync(parentId, linkType, targetId, id));
 
     /// <summary>
     /// Runs an action; on failure, captures a diagnostics bundle <b>at the failure point</b>
@@ -274,7 +288,108 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
     /// <summary>Selects/opens the given catalogue (or game system) for editing in the NR Editor.</summary>
     public void OpenFile(string id)
-        => _ui.OpenFileAsync(id).GetAwaiter().GetResult();
+    {
+        _ui.OpenFileAsync(id).GetAwaiter().GetResult();
+        _openId = id;
+    }
+
+    public string ExportActiveFile() => ExportActiveFileAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Export the active file's XML — NR's own serialization (via <see cref="ExportLoadedFilesJsonAsync"/>),
+    /// selecting the loaded file matching the open id (catalogue <c>{id}.cat</c>, else the game system
+    /// <c>system.gst</c>). This is the NR base producer for snapshot assertions.
+    /// </summary>
+    private async Task<string> ExportActiveFileAsync()
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var files = NrEditorStore.ParseExportedFiles(await NrEditorStore.ExportLoadedFilesJsonAsync(_page));
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException("ExportActiveFile: NR Editor export produced no text XML files.");
+        }
+
+        var catName = _openId + ".cat";
+        var pick = files.FirstOrDefault(f => f.Name == catName);
+        if (pick.Xml is null)
+        {
+            pick = files.FirstOrDefault(f => f.Name.EndsWith(".gst", StringComparison.OrdinalIgnoreCase));
+        }
+        if (pick.Xml is null)
+        {
+            pick = files[0];
+        }
+
+        return pick.Xml;
+    }
+
+    public string LoadFile(string xml) => LoadFileAsync(xml).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Load a catalogue/game system from XML into the editor (single-file upload, no reset) and open
+    /// it for editing. Returns the loaded file's root id, tracked for export/reopen.
+    /// </summary>
+    private async Task<string> LoadFileAsync(string xml)
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var (id, name, isGameSystem) = NrEditorStore.ParseRoot(xml);
+        if (id.Length == 0)
+        {
+            throw new InvalidOperationException("LoadFile: could not read a root id from the XML.");
+        }
+
+        var fileName = isGameSystem ? "system.gst" : id + ".cat";
+        var errors = await NrEditorStore.LoadFileAsync(_page, fileName, xml, id, name);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException("LoadFile failed: " + string.Join("; ", errors));
+        }
+
+        _idToName[id] = name;
+        _openId = id;
+        return id;
+    }
+
+    public void Reload() => ReloadAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Round-trips the edited state through the real NR Editor: export the loaded files as
+    /// BattleScribe XML (the editor's own serialization of the mutated stores), then reload that XML
+    /// through the file-input pipeline so NR's <c>BSXmlToJson</c> parse runs, and reopen the file
+    /// that was active. A round-trip spec re-asserts its <c>expectedState</c> after this.
+    /// </summary>
+    private async Task ReloadAsync()
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var files = NrEditorStore.ParseExportedFiles(await NrEditorStore.ExportLoadedFilesJsonAsync(_page));
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Reload: the NR Editor export produced no text XML files to reload.");
+        }
+
+        var reopenName = _openId is not null && _idToName.TryGetValue(_openId, out var name)
+            ? name
+            : _idToName.Values.FirstOrDefault()
+                ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
+
+        var errors = await NrEditorStore.ReloadFromXmlAsync(_page, BaseUrl, files, reopenName);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException("Reload failed: " + string.Join("; ", errors));
+        }
+
+        // The reset clears our spec-context marker; restore it for diagnostics.
+        await _page.EvaluateAsync(
+            "(specId) => { window.__bsspec_editor_ui = window.__bsspec_editor_ui || {}; window.__bsspec_editor_ui.specId = specId; }",
+            _specId);
+    }
 
     private NrGameDataUiDriver _ui = null!;
 
@@ -286,7 +401,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        return await NrGameDataUiActions.ReadStateAsync(_page);
+        return await NrEditorStore.ReadStateAsync(_page);
     }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
@@ -297,83 +412,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { return []; }
 
-        // Reference validation for the link-target rules the specs assert, read directly from
-        // the NR Editor store: an entry link / catalogue link whose target does not resolve.
-        var json = await _page.EvaluateAsync<string>("""
-            () => {
-                try {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    if (!pinia) return '[]';
-                    const editor = pinia._s.get('editor');
-                    const systemId = new URLSearchParams(window.location.search).get('systemId');
-                    const gsSys = editor?.gameSystems?.[systemId];
-                    if (!gsSys) return '[]';
-
-                    const cats = Object.values(gsSys.loadedCatalogues ?? {});
-                    const catIds = new Set(Object.keys(gsSys.loadedCatalogues ?? {}));
-
-                    // NR's reactive model has back-references (parent/catalogue) and shared arrays,
-                    // so a naive recursion over every array can cycle and overflow the stack (which
-                    // the catch below would swallow as "no errors"). Guard every descent with a seen-set.
-                    const entryIds = new Set();
-                    const seenCollect = new WeakSet();
-                    const collect = (obj) => {
-                        if (!obj || typeof obj !== 'object' || seenCollect.has(obj)) return;
-                        seenCollect.add(obj);
-                        if (typeof obj.id === 'string' && obj.id) entryIds.add(obj.id);
-                        for (const k of Object.keys(obj)) {
-                            const v = obj[k];
-                            if (Array.isArray(v)) for (const it of v) collect(it);
-                        }
-                    };
-                    for (const c of cats) collect(c);
-
-                    const errors = [];
-                    const seenWalk = new WeakSet();
-                    const walk = (obj) => {
-                        if (!obj || typeof obj !== 'object' || seenWalk.has(obj)) return;
-                        seenWalk.add(obj);
-                        for (const k of Object.keys(obj)) {
-                            const v = obj[k];
-                            if (!Array.isArray(v)) continue;
-                            if (k === 'entryLinks') {
-                                for (const el of v) {
-                                    if (el && el.targetId && !entryIds.has(el.targetId)) {
-                                        errors.push({ message: 'EntryLink must have a target that exists', entryId: el.id || null });
-                                    }
-                                }
-                            }
-                            if (k === 'catalogueLinks') {
-                                for (const cl of v) {
-                                    if (cl && cl.targetId && !catIds.has(cl.targetId)) {
-                                        errors.push({ message: 'CatalogueLink must have a target that exists', entryId: cl.id || null });
-                                    }
-                                }
-                            }
-                            for (const it of v) walk(it);
-                        }
-                    };
-                    for (const c of cats) walk(c);
-
-                    return JSON.stringify(errors);
-                } catch (e) {
-                    return '[]';
-                }
-            }
-            """);
-
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        var errors = new List<ValidationErrorState>();
-        foreach (var el in doc.RootElement.EnumerateArray())
-        {
-            var message = el.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
-            var entryId = el.TryGetProperty("entryId", out var e) && e.ValueKind == System.Text.Json.JsonValueKind.String
-                ? e.GetString()
-                : null;
-            errors.Add(new ValidationErrorState(message, EntryId: entryId));
-        }
-        return errors;
+        return await NrEditorStore.GetValidationErrorsAsync(_page);
     }
 
     public void Cleanup()
@@ -386,7 +425,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
         try
         {
-            await NrGameDataUiSetup.CleanupCatalogueAsync(_page, BaseUrl);
+            await NrEditorStore.CleanupCatalogueAsync(_page, BaseUrl);
         }
         catch
         {
@@ -435,58 +474,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        return await _page.EvaluateAsync<string>("""
-            async () => {
-                const debug = [];
-                const files = {};
-                const orig = globalThis.electron;
-                // Stub the electron bridge so writeFile() forwards the serialized bytes to us.
-                globalThis.electron = {
-                    invoke: async (cmd, p, d) => {
-                        if (cmd === 'saveFile') {
-                            files[p] = (typeof d === 'string') ? d : '[binary:' + (d?.byteLength ?? d?.length ?? '?') + ']';
-                        }
-                        return undefined;
-                    },
-                };
-                try {
-                    const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const editor = pinia?._s?.get('editor');
-                    const store = globalThis.$store || editor;
-                    if (!store) { debug.push('no editor store'); return JSON.stringify({ files, debug }); }
-                    const systemId = new URLSearchParams(location.search).get('systemId');
-                    const gsSys = editor?.gameSystems?.[systemId];
-                    debug.push('systemId=' + systemId + ' gsSys=' + !!gsSys + ' $store=' + !!globalThis.$store);
-
-                    // Enumerate candidate file objects: the game system plus every loaded catalogue.
-                    const seen = new Set();
-                    const candidates = [];
-                    const add = (o) => { if (o && typeof o === 'object' && !seen.has(o)) { seen.add(o); candidates.push(o); } };
-                    add(gsSys?.gameSystem);
-                    for (const c of Object.values(gsSys?.loadedCatalogues ?? {})) add(c);
-                    debug.push('candidates=' + candidates.length);
-
-                    for (const data of candidates) {
-                        try {
-                            if (!data.fullFilePath) {
-                                data.fullFilePath = data.gameSystemId ? (data.id + '.cat') : 'system.gst';
-                            }
-                            await store.saveCatalogueInFiles(data);
-                            debug.push('saved ' + data.fullFilePath + ' id=' + data.id);
-                        } catch (e) {
-                            debug.push('err id=' + (data && data.id) + ': ' + (e && e.message));
-                        }
-                    }
-                    // Let any not-yet-awaited writes settle.
-                    await new Promise((r) => setTimeout(r, 50));
-                } catch (e) {
-                    debug.push('fatal: ' + (e && e.message));
-                } finally {
-                    globalThis.electron = orig;
-                }
-                return JSON.stringify({ files, debug });
-            }
-            """);
+        return await NrEditorStore.ExportLoadedFilesJsonAsync(_page);
     }
 
     /// <summary>

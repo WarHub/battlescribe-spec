@@ -12,6 +12,16 @@ public sealed class GameDataRunner
     private readonly string? _engineName;
     private readonly List<string> _errors = [];
     private readonly GameDataExpressionResolver _exprResolver = new();
+    private string _specId = "";
+    private string? _specDir;
+
+    /// <summary>
+    /// When true, <c>expectedFile</c> assertions (re)write the expected side-file from the actual
+    /// export instead of comparing. Defaults to the <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var so the
+    /// xUnit conformance harness honors it; the CLI also sets it via <c>--update-snapshots</c>.
+    /// </summary>
+    public bool UpdateSnapshots { get; set; }
+        = Environment.GetEnvironmentVariable("BSSPEC_UPDATE_SNAPSHOTS") is "1" or "true";
 
     /// <summary>
     /// Called after each step completes (for debug dumping).
@@ -31,6 +41,8 @@ public sealed class GameDataRunner
     public SpecResult Run(GameDataSpecFile spec)
     {
         _errors.Clear();
+        _specId = spec.Id;
+        _specDir = spec.SourceDirectory;
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -49,6 +61,16 @@ public sealed class GameDataRunner
                 return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
             }
 
+            // Explicitly open the declared file for editing, so the active file (what mutations,
+            // reload, and export apply to) is deterministic across engines rather than relying on
+            // each engine's implicit first/last-catalogue default.
+            if (string.IsNullOrWhiteSpace(spec.Setup.Edit))
+            {
+                _errors.Add("Setup error: setup.edit is required (the id of the file to open for editing)");
+                return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
+            }
+            _engine.OpenFile(spec.Setup.Edit);
+
             // Execute steps
             for (var i = 0; i < spec.Steps.Count; i++)
             {
@@ -63,13 +85,20 @@ public sealed class GameDataRunner
                     {
                         ExecuteAction(step, i);
                     }
-                    else if (step.ExpectedState is not null)
+                    else if (step.ExpectedState is not null || step.ExpectedFile is not null)
                     {
-                        ExecuteAssertion(step, i);
+                        if (step.ExpectedState is not null)
+                        {
+                            ExecuteAssertion(step, i);
+                        }
+                        if (step.ExpectedFile is not null)
+                        {
+                            ExecuteFileAssertion(step, i);
+                        }
                     }
                     else
                     {
-                        _errors.Add($"Step {i}: neither 'action' nor 'expectedState' defined");
+                        _errors.Add($"Step {i}: neither 'action', 'expectedState' nor 'expectedFile' defined");
                     }
 
                     NotifyStepCompleted(i, step);
@@ -121,6 +150,208 @@ public sealed class GameDataRunner
         }
     }
 
+    /// <summary>
+    /// Export the active file and byte-compare it to the expected (inline or side-file). In
+    /// update-snapshots mode, (re)write the expected side-file from the actual export instead.
+    /// </summary>
+    private void ExecuteFileAssertion(GameDataStepDef step, int stepIndex)
+    {
+        var def = step.ExpectedFile!.ForEngine(_engineName);
+        var actual = NormalizeNewlines(_engine.ExportActiveFile());
+        var ext = FileExtFromRoot(actual);
+
+        // Inline expected content (author-maintained; never rewritten by --update-snapshots).
+        if (def.Content is { } inline)
+        {
+            var expectedInline = NormalizeNewlines(_exprResolver.Resolve(inline) ?? inline);
+            if (expectedInline != actual)
+            {
+                ReportFileMismatch(stepIndex, "(inline)", expectedInline, actual);
+            }
+            return;
+        }
+
+        // Side-file resolved by the step's id.
+        if (step.Id is not { Length: > 0 } key)
+        {
+            _errors.Add($"Step {stepIndex}: expectedFile side-file requires the step to have an 'id'");
+            return;
+        }
+        if (_specDir is null)
+        {
+            _errors.Add($"Step {stepIndex}: expectedFile side-file needs a spec loaded from disk (no SourceDirectory)");
+            return;
+        }
+
+        var engine = _engineName ?? GameDataSnapshotResolver.BaseEngineName;
+
+        if (UpdateSnapshots)
+        {
+            WriteSnapshot(engine, key, ext, actual);
+            return;
+        }
+
+        var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, ext);
+        if (path is null)
+        {
+            _errors.Add($"Step {stepIndex}: no expected file for snapshot '{key}' (engine '{engine}', .{ext}); " +
+                "run with --update-snapshots (or BSSPEC_UPDATE_SNAPSHOTS=1) to create it");
+            return;
+        }
+
+        var expected = NormalizeNewlines(File.ReadAllText(path));
+        expected = NormalizeNewlines(_exprResolver.Resolve(expected) ?? expected);
+        if (expected != actual)
+        {
+            ReportFileMismatch(stepIndex, Path.GetFileName(path), expected, actual);
+        }
+    }
+
+    /// <summary>
+    /// (Re)write an expected side-file. The base engine writes the base (no infix). A non-base engine
+    /// writes its family override (e.g. battlescribe + battlescribe-ui → <c>.battlescribe.</c>) when it
+    /// is the family-canonical engine; a family <em>variant</em> (e.g. battlescribe-ui) shares that
+    /// family file when its output matches and otherwise pins an exact-engine override the resolver
+    /// prefers over the family file. Overrides equal to the base are removed.
+    /// </summary>
+    private void WriteSnapshot(string engine, string key, string ext, string actual)
+    {
+        var basePath = GameDataSnapshotResolver.BasePath(_specDir!, _specId, key, ext);
+        if (GameDataSnapshotResolver.IsBaseEngine(engine))
+        {
+            SafeWriteSnapshot(basePath, actual);
+            return;
+        }
+
+        var family = GameDataSnapshotResolver.Family(engine);
+        var familyPath = GameDataSnapshotResolver.OverridePath(_specDir!, _specId, key, family, ext);
+        var exactPath = GameDataSnapshotResolver.OverridePath(_specDir!, _specId, key, engine, ext);
+        var baseContent = File.Exists(basePath) ? NormalizeNewlines(File.ReadAllText(basePath)) : null;
+
+        // Matches the base: no override needed; drop any stale override this engine owns.
+        if (baseContent == actual)
+        {
+            DeleteSnapshotIfExists(exactPath);
+            if (engine == family)
+            {
+                DeleteSnapshotIfExists(familyPath);
+            }
+            return;
+        }
+
+        if (baseContent is null)
+        {
+            Console.Error.WriteLine($"[snapshot] base missing for '{key}'. " +
+                $"Generate the base ('{GameDataSnapshotResolver.BaseEngineName}') first.");
+        }
+
+        // The family-canonical engine (name == family) owns the shared family override.
+        if (engine == family)
+        {
+            SafeWriteSnapshot(familyPath, actual);
+            return;
+        }
+
+        // A family variant (e.g. battlescribe-ui): share the family file when identical, else pin an
+        // exact-engine override the resolver prefers over the family file.
+        var familyContent = File.Exists(familyPath) ? NormalizeNewlines(File.ReadAllText(familyPath)) : null;
+        if (familyContent == actual)
+        {
+            DeleteSnapshotIfExists(exactPath);
+            return;
+        }
+
+        SafeWriteSnapshot(exactPath, actual);
+    }
+
+    private static void DeleteSnapshotIfExists(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static void SafeWriteSnapshot(string path, string content)
+    {
+        // Don't clobber an author-maintained templated expected.
+        if (File.Exists(path) && File.ReadAllText(path).Contains("${{", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var dir = Path.GetDirectoryName(path);
+        if (dir is { Length: > 0 })
+        {
+            Directory.CreateDirectory(dir);
+        }
+        File.WriteAllText(path, content);
+    }
+
+    private static string NormalizeNewlines(string s) => s.Replace("\r\n", "\n");
+
+    private static string FileExtFromRoot(string xml)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*(gameSystem|catalogue|roster)\b");
+        return m.Success && m.Groups[1].Value == "gameSystem" ? "gst" : "cat";
+    }
+
+    private void ReportFileMismatch(int stepIndex, string source, string expected, string actual)
+    {
+        var e = expected.Split('\n');
+        var a = actual.Split('\n');
+        var detail = $"expected {e.Length} line(s), actual {a.Length} line(s)";
+        for (var i = 0; i < Math.Max(e.Length, a.Length); i++)
+        {
+            var el = i < e.Length ? e[i] : "(missing)";
+            var al = i < a.Length ? a[i] : "(missing)";
+            if (el != al)
+            {
+                detail = $"first diff at line {i + 1}:\n      expected: {el}\n      actual:   {al}";
+                break;
+            }
+        }
+
+        _errors.Add($"Step {stepIndex}: exported file does not match expected ({source}). {detail}");
+    }
+
+    /// <summary>
+    /// openFile: open an already-loaded file by <paramref name="entryId"/>, or load a file from
+    /// inline <c>content</c> / a side-file keyed by the step id and open it. Returns the opened id.
+    /// </summary>
+    private GameDataActionOutputs ExecuteOpenFile(GameDataStepDef step, int stepIndex, string? entryId)
+    {
+        // Open an already-loaded file by id.
+        if (entryId is { Length: > 0 })
+        {
+            _engine.OpenFile(entryId);
+            return new GameDataActionOutputs { EntryId = entryId };
+        }
+
+        // Load from inline content and open.
+        if (step.Content is { } inline)
+        {
+            var xml = _exprResolver.Resolve(inline) ?? inline;
+            return new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };
+        }
+
+        // Load from a side-file keyed by the step id and open.
+        if (step.Id is { Length: > 0 } key && _specDir is not null)
+        {
+            var engine = _engineName ?? GameDataSnapshotResolver.BaseEngineName;
+            var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, "cat")
+                ?? GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, "gst")
+                ?? throw new InvalidOperationException(
+                    $"Step {stepIndex}: openFile found no side-file for key '{key}' (engine '{engine}', .cat/.gst) next to the spec");
+            var xml = File.ReadAllText(path);
+            xml = _exprResolver.Resolve(xml) ?? xml;
+            return new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };
+        }
+
+        throw new InvalidOperationException(
+            $"Step {stepIndex}: openFile requires 'entryId' (open a loaded file), 'content' (inline XML), or a step 'id' matching a side-file");
+    }
+
     private void ExecuteAction(GameDataStepDef step, int stepIndex)
     {
         var entryId = _exprResolver.Resolve(step.EntryId);
@@ -130,10 +361,12 @@ public sealed class GameDataRunner
         switch (step.Action)
         {
             case "addEntry":
+                // On addEntry, entryId (if given) is the declared id for the created entry.
                 outputs = _engine.AddEntry(
                     parentId ?? throw new InvalidOperationException($"Step {stepIndex}: addEntry requires parentId"),
                     step.EntryType ?? throw new InvalidOperationException($"Step {stepIndex}: addEntry requires entryType"),
-                    step.Name);
+                    step.Name,
+                    entryId);
                 break;
 
             case "removeEntry":
@@ -141,9 +374,8 @@ public sealed class GameDataRunner
                     entryId ?? throw new InvalidOperationException($"Step {stepIndex}: removeEntry requires entryId"));
                 break;
 
-            case "openCatalogue":
-                _engine.OpenFile(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: openCatalogue requires entryId"));
+            case "openFile":
+                outputs = ExecuteOpenFile(step, stepIndex, entryId);
                 break;
 
             case "setFields":
@@ -184,10 +416,16 @@ public sealed class GameDataRunner
                 }
 
             case "addLink":
+                // On addLink, entryId (if given) is the declared id for the created link.
                 outputs = _engine.AddLink(
                     parentId ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires parentId"),
                     step.LinkType ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires linkType"),
-                    _exprResolver.Resolve(step.TargetId) ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires targetId"));
+                    _exprResolver.Resolve(step.TargetId) ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires targetId"),
+                    entryId);
+                break;
+
+            case "reload":
+                _engine.Reload();
                 break;
 
             default:

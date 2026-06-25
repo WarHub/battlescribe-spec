@@ -1,0 +1,47 @@
+id: error-broken-after-delete
+category: validation
+description: >
+  Referential integrity is re-checked after an edit: an entry link that resolves cleanly becomes
+  a validation error once its target is deleted. Starts with a valid EntryLink (no errors), removes
+  the target entry, then asserts "EntryLink must have a target that exists". Exercises the
+  edit -> error path (the dynamic counterpart of error-broken-entry-link). EntryLink target
+  resolution is modelled by every engine including NewRecruit's reference validator, so no
+  per-engine override is needed.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-target
+          name: Target Upgrade
+          type: upgrade
+      entryLinks:
+        - id: el-1
+          name: Link To Target
+          targetId: se-target
+          type: selectionEntry
+
+steps:
+  # The link resolves cleanly while its target exists.
+  - expectedState:
+      errors: []
+
+  # Delete the target the link points at.
+  - action: removeEntry
+    entryId: se-target
+
+  # The now-dangling link is flagged.
+  - expectedState:
+      errors:
+        - message: EntryLink must have a target that exists
+      catalogues:
+        - id: cat-1
+          entryLinks:
+            - id: el-1
+              entryType: entryLink

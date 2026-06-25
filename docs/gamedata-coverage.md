@@ -2,13 +2,16 @@
 
 Tracks progress toward **100% coverage of the BattleScribe GameData model surface** — every
 data-model entity type and every settable field — verified against the two BattleScribe anchor
-engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). NewRecruit
-(`newrecruit`, `newrecruit-ui`) is not a gate, but **all 86 GameData specs run on the real NR
-Editor** — no spec carries `engines: { newrecruit-ui: skip }`. Every mutation is driven via the
-real NR Editor UI; the validation specs (see "Validation / data-integrity errors" below) stage data
-and read the editor's error list. Where a single field is a genuine NR limitation (it derives or
-doesn't model the value), or an error class NR's reference validator doesn't model, the spec still
-runs on `newrecruit-ui` and overrides just that field / error via a per-engine `expectedState`.
+engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). The suite is **109
+GameData specs**. NewRecruit (`newrecruit`, `newrecruit-ui`) is not a gate, but **both NR engines
+drive the real NR Editor's Pinia store**: store-direct `newrecruit` mutates the real
+`loadedCatalogues` objects via direct JS, and `newrecruit-ui` mutates the same store through rendered
+widgets. **`newrecruit` runs all 109 specs; `newrecruit-ui` runs all but one** (only
+`export/openfile-inline` carries `newrecruit-ui: skip` — mid-spec file load through the SPA file-list
+is flaky). The validation specs (see "Validation / data-integrity errors" below) stage data and read
+the engine's error list. Where a single field is a genuine NR limitation (it derives or doesn't model
+the value), or an error class NR's reference validator doesn't model, the spec still runs on the NR
+engines and overrides just that field / error via a per-engine `expectedState`.
 
 ## NewRecruit schema additions (NR-superset specs)
 
@@ -39,17 +42,21 @@ Covered (9 specs, all green on both NR engines):
 
 ## NewRecruit engine status
 
-- **`newrecruit` (frozen HAR replay + live NR Editor): all 86 GameData specs pass.** The adapter
-  parses the spec's generated XML into an editable in-memory model and exercises the full action
-  surface — `addEntry`/`addLink`/`setFields` (incl. `costs` via `cost:<typeId>` and
-  `characteristics` via `char:<name>` composite fields), root metadata fields, shared-root and
-  type-def containers, catalogue links across multiple catalogues, and link-target validation
-  (`EntryLink/CatalogueLink must have a target that exists`). Child ordering matches the BS
+- **`newrecruit` (store-direct, frozen static bundle + live NR Editor): all 109 GameData specs pass.**
+  Setup loads the spec's generated XML through NR's real upload+open pipeline (shared `NrEditorStore`),
+  populating the editor's Pinia `loadedCatalogues`. Mutations are fast **direct-JS** writes to those
+  real store objects (the distinction from `newrecruit-ui`'s widget clicks); state, validation, export
+  and reload all read/serialize through the same real store, so its serialized output matches
+  `newrecruit-ui` byte-for-byte. It exercises the full action surface — `addEntry`/`addLink`/`setFields`
+  (incl. `costs`/`characteristics` written to the store's real arrays), root metadata fields,
+  shared-root and type-def containers, catalogue links across multiple catalogues, and link-target
+  validation (`EntryLink/CatalogueLink must have a target that exists`). Child ordering matches the BS
   reference engine's fixed container order.
 - **`newrecruit-ui` (real NR Editor, Playwright): pure-UI driven, no store writes.** All data
   mutations go through rendered widgets (context menus + submenus, property tables, selects,
   checkboxes, contenteditable fields, autocompletes) — the Pinia store is only ever read.
-  **All 86 GameData specs run on the real NR Editor UI.** Covered families: every basic
+  **All but one GameData spec run on the real NR Editor UI** (only `export/openfile-inline` skips —
+  mid-spec file load via the SPA file-list is flaky). Covered families: every basic
   entry/group/force/category spec; constraints; root fields; publication; costs; profiles +
   characteristics; **the full query-editor tier** (modifier types incl. the list/category types,
   conditions incl. condition groups, repeats, modifier groups, modifier-on-rule); info groups; type
@@ -67,9 +74,20 @@ Covered (9 specs, all green on both NR engines):
     - a force-entry `categoryLink.primary` is not modelled by NR's editor (no widget, not
       serialized) and defaults `false` on all three BS engines, so `links-create-and-fields` asserts
       `categoryLink` by `targetId` + `hidden` only (both consistent and settable on every engine).
-- **`openCatalogue` spec action**: multi-catalogue specs declare the active file with
-  `action: openCatalogue` so the NR Editor UI edits the intended catalogue (no-op on engines that
-  read all files at once).
+- **`setup.edit` (required active file)**: every spec declares the file it edits — a catalogue id or
+  the game system id — because engines disagree on the default (the reference and Data Editor open the
+  first catalogue, NR the last). The runner opens it after setup so the active file is deterministic.
+  An `openFile` spec action may switch it later, or load a file mid-spec from inline `content:` XML or a
+  side-file. (On the BS Data Editor wire `openFile` is the `gamedataOpenFileAction` JSON-RPC method; the
+  file type is derived from the XML root element.)
+- **`export/completeness`**: a single setup-driven catalogue (plus a library catalogue + a reference
+  game system) exercising every common BattleScribe v2.03 node type, deep nesting, varied fields, ids,
+  and nested/cross-catalogue links + a `catalogueLink`, then byte-asserts the exported `.cat` on all
+  four engines. A serializer/schema regression check distinct from the action-driven, state-asserted
+  `entry/kitchen-sink`. Two snapshots: a NewRecruit base (shared by both NR engines) and a
+  `.battlescribe.` family override (shared by `battlescribe` + `battlescribe-ui`). The in-process
+  `battlescribe` engine replicates the Data Editor's on-load cost normalization (a zero cost per cost
+  type, names resolved) so it matches `battlescribe-ui` byte-for-byte.
 
 The authoritative surface is the decompiled model under
 `../battlescribe-decompiled/BattleScribeEngine/sources/net/battlescribe/model/data/` (51 classes).
@@ -214,16 +232,26 @@ All validation specs run on **all four engines** (both BS anchors + both NR engi
   ("InfoLink must have a target that exists").
 - `links/catalogue-link` — a valid cross-catalogue link reports no errors, while **re-pointing**
   it at a non-existent catalogue is flagged ("CatalogueLink must have a target that exists").
+- `validation/error-broken-after-delete` — an entry link that resolves cleanly becomes a dangling
+  error once its target is **deleted** by an edit (the dynamic counterpart of `error-broken-entry-link`).
+  Modelled by every engine including NR, so it asserts the error on all four.
 
 **Duplicate IDs**
 - `validation/error-duplicate-entry-ids` — two entries sharing an id within one catalogue are
   flagged ("All data element ids must be unique").
 
-**Semantic errors (query-scope resolution)**
+**Semantic errors (query resolution — scope / field / type / child axes)**
 - `validation/error-constraint-bad-scope` — a constraint whose `scope` resolves to neither a
   scope keyword nor an existing ancestor id is flagged ("Constraint must have a scope that exists").
-- `validation/error-condition-bad-scope` — same, for a condition inside a modifier
-  ("Condition must have a scope that exists").
+- `validation/error-constraint-bad-field` — a constraint whose `field` is unresolvable is flagged
+  ("Constraint must have a field that exists").
+- `validation/error-condition-bad-scope` — a condition (inside a modifier) with an unresolvable
+  `scope` ("Condition must have a scope that exists").
+- `validation/error-condition-bad-child` — a condition whose `childId` references a missing entry
+  ("Condition must have a child that exists").
+- `validation/error-modifier-bad-field` — a modifier whose `field` is unresolvable; BattleScribe
+  flags **both** "Modifier must have a field that exists" and "Modifier must have a type that exists"
+  (the unresolvable field cascades into type resolution). A valid field reports neither.
 
 **Error lifecycle (#173 acceptance criteria)**
 - `validation/no-errors-clean-state` — a valid system/catalogue reports no errors.
@@ -257,15 +285,68 @@ asserted on the engines that model it. `error-cleared-after-fix` and the entry-l
 - A **defaultSelectionEntryId** that is not a child of its group is cleared at load, so
   "Default SelectionEntry must exist within the SelectionEntryGroup" is likewise not surfaced
   from a loaded file.
+- A **Profile** with a dangling `typeId` and a **CostValue** with a dangling `typeId` produce no
+  validation error from a loaded file (the unresolved type reference is not surfaced).
+- **Duplicate cost-type ids** and **duplicate profile-type ids** are not flagged — unlike duplicate
+  *entry* ids ("All data element ids must be unique"), the uniqueness check does not extend to those
+  type-definition collections at load.
+- **Circular catalogue links** (two library catalogues importing each other) load without a
+  validation error.
+- An **unknown condition/modifier `type`** (an out-of-enum `ConditionKind`/modifier kind) is
+  unreachable through any real path: the XML serializer (`CatXmlGenerator`, used by `battlescribe-ui`)
+  and NR's store both enum-validate and reject it at staging time, so no editor can author it. The
+  in-process reference flags "Condition must have a type that exists" only because it builds the
+  model directly — there is no cross-engine spec for it (it would run on the reference alone). The
+  reachable type-resolution gaps that *are* specced sit on the `field`/`child`/`scope` axes above.
 - Note the **load vs. edit** distinction: a catalogue link that is *loaded* dangling is cleaned,
   but one *edited* to a dangling target in a live session is retained and flagged (see
   `links/catalogue-link`, which creates the dangling state by edit).
 
 **Not yet covered (needs new infra, deferred):** malformed / schema-invalid `.gst`/`.cat` *load*
-(#31). GameData specs declare setup as a structured game-system + catalogue model, not raw file
-content; asserting load-time XML/schema failures would require a raw-file setup mode
+(#31 / #268). GameData specs declare setup as a structured game-system + catalogue model, not raw
+file content; asserting load-time XML/schema failures would require a raw-file setup mode
 (a `setupFromFiles` path for gamedata) plumbed through every engine — out of scope for the
 spec-only validation matrix here.
+
+## Round-trip (save → reload)  (`roundtrip/…`)  — issue #30
+The `reload` action serializes the current edited state to its on-disk `.cat`/`.gst` form and loads
+it back, replacing the in-memory model. A round-trip spec mutates, asserts an `expectedState`, runs
+`reload`, and asserts the **same** `expectedState` again — so a repeated assertion that still holds
+proves persistence preserved the data. No new comparator: the existing partial-match `expectedState`
+is reused.
+
+- `roundtrip/roundtrip-add-entry` — an added/named entry survives.
+- `roundtrip/roundtrip-set-fields` — a scalar field (`hidden`), a cost value, and a profile
+  characteristic survive.
+- `roundtrip/roundtrip-link` — an entry link keeps its target.
+- `roundtrip/roundtrip-nested` — a selection-entry → group → child subtree survives intact.
+- `roundtrip/roundtrip-root-metadata` — author/revision on both the game system (`.gst`) and the
+  catalogue (`.cat`) survive.
+
+**Engine coverage.** Round-trip is verified on **all four** engines — each serializes to `.cat`/`.gst`
+and loads back.
+- **`battlescribe`** (reference) round-trips each model object through BattleScribe's own DataUtils
+  serializer in memory (`a(GameSystem/Catalogue, OutputStream)` → `e`/`f(InputStream)`).
+- **`battlescribe-ui`** (real Data Editor) serializes the open document's live model back to its
+  file via the same DataUtils serializer (Java-agent `gamedataSaveAndReloadAction`) and re-opens it
+  through the editor's real open path. (Rewriting the open file trips the editor's external-change
+  watcher; the agent answers that specific `Confirm` dialog and fails loudly on any unknown modal.)
+- **`newrecruit`** (store-direct) and **`newrecruit-ui`** (real NR Editor) both serialize the real NR
+  store via NR's own writer (`saveCatalogueInFiles`) and feed the XML back through NR's `BSXmlToJson`
+  parse, reopening the active file — so the two NR engines round-trip identically (byte-for-byte).
+
+## File export & snapshot assertions  (`expectedFile`)  — issue #30
+A step with `expectedFile` exports the **active file's exact serialized XML** (`ExportActiveFile`) and
+compares it **byte-for-byte** (only `\r\n`→`\n` normalized on read) against expected content — inline
+`content:`, or a side-file next to the spec keyed by the step `id`: `{specId}.{stepId}.{ext}` (the
+**NewRecruit base**) plus optional per-engine overrides `{specId}.{stepId}.{engine}.{ext}` (`ext` ∈
+`cat`/`gst`, from the root element). Both NR engines serialize through NR's own writer, so they share
+the base; the BS engines get overrides only where their serialization diverges. `BSSPEC_UPDATE_SNAPSHOTS=1`
+(or `bs-spec run --update-snapshots`) (re)writes the side-files. **Declared ids** make exports
+reproducible: `addEntry`/`addLink` accept an optional `entryId` (the id to assign the created node),
+echoed back for `${{ steps.<id>.entryId }}` references. `export/export-add-entry` pins a declared-id
+selection entry's `.cat` (NR base + `battlescribe`/`battlescribe-ui` overrides); `export/openfile-inline`
+loads a catalogue from inline XML via `openFile`, edits it, and asserts the merged state.
 
 ## BS Data Editor UI surface notes (from probing)
 - **Category links attach to force entries only** — `actAddCategoryLink` is a no-op unless a
@@ -290,19 +371,21 @@ Editor — cost visibility is controlled by `costType.hidden` (covered). Every o
 field is created and asserted on both the in-process reference engine and the Data Editor UI.
 
 ## Tracked debt
-- **`battlescribe-ui` (BS Data Editor agent): fully UI-driven, 86/86.** Every mutation goes through a
+- **`battlescribe-ui` (BS Data Editor agent): fully UI-driven across the BS-anchored surface** (the 10
+  NR-superset specs under `specs/gamedata/nr/` skip both BS anchors). Every mutation goes through a
   real JavaFX widget (text fields, checkboxes, combos incl. the Link Type combo, cost/value/revision
   Spinners, characteristic TextAreas, the modifier value control, the catalogue open path) — reading
   state is the only non-UI code. There is **no** reflective-mutation path at all (`setFieldReflectively`
   was removed): an unresolvable field throws. The one field the Data Editor has no widget for,
   `defaultCostLimit` (its CostType panel edits only `hidden`), is **skipped** on `battlescribe-ui` and
   asserted on the other three engines via a `battlescribe-ui` `expectedState` override — never written
-  behind the UI's back. `openCatalogue` drives the editor's real open path
+  behind the UI's back. `openFile` (wire: `gamedataOpenFileAction`) drives the editor's real open path
   (`dataSource.f/c(path)` + the `a(BaseRootEntry)` display) for the staged file; only the native OS
   file picker is substituted. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by
   `setup.ps1`, to build the agent jar.)
-- **`newrecruit-ui`: all 86 GameData specs run on the real NR Editor UI** — no spec is
-  skipped. The driver covers every family via pure UI (context menus + submenus, the right-panel
+- **`newrecruit-ui`: all but one GameData spec run on the real NR Editor UI** (only
+  `export/openfile-inline` skips — mid-spec file load via the SPA file-list is flaky). The driver
+  covers every family via pure UI (context menus + submenus, the right-panel
   property table incl. contenteditable rows, cost/characteristic widgets, the query/modifier
   editors incl. category-modifier value autocompletes, link "Link Type" selects, and reference
   autocompletes). The only per-field omissions on NR are values NR derives or doesn't model

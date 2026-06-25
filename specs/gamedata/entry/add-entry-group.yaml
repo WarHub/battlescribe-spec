@@ -5,6 +5,7 @@ description: >
   in the shared selection entry groups container.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

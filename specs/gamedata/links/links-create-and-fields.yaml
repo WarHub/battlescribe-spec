@@ -16,6 +16,7 @@ description: >
 #               NR, and the real Data Editor) and NR's editor neither exposes nor models it.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

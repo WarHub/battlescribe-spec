@@ -8,6 +8,7 @@ description: >
   flags the dangling target.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System
@@ -29,7 +30,7 @@ setup:
 
 steps:
   # Two catalogues are loaded; declare cat-1 as the active file before editing it.
-  - action: openCatalogue
+  - action: openFile
     entryId: cat-1
 
   - action: addEntry

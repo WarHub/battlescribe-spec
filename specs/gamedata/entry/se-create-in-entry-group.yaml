@@ -5,6 +5,7 @@ description: >
   it appears as a child of the group.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

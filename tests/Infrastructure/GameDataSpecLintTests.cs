@@ -84,6 +84,7 @@ public sealed class GameDataSpecLintTests
             violations.AddRange(CheckKnownActions(entry.Spec));
             violations.AddRange(CheckStepsAreActionOrExpectedState(entry.Spec));
             violations.AddRange(CheckSetupHasGameSystem(entry.Spec));
+            violations.AddRange(CheckSetupHasEdit(entry.Spec));
             violations.AddRange(CheckActionParameters(entry.Spec));
         }
 
@@ -165,7 +166,8 @@ public sealed class GameDataSpecLintTests
     [
         "addEntry", "removeEntry",
         "setFields", "addLink",
-        "openCatalogue",
+        "openFile",
+        "reload",
         "dump"
     ];
 
@@ -189,14 +191,21 @@ public sealed class GameDataSpecLintTests
             var step = spec.Steps[i];
             var hasAction = step.Action is not null;
             var hasExpected = step.ExpectedState is not null;
-            if (!hasAction && !hasExpected)
+            var hasExpectedFile = step.ExpectedFile is not null;
+            if (!hasAction && !hasExpected && !hasExpectedFile)
             {
-                yield return $"step {i + 1} has neither 'action' nor 'expectedState'";
+                yield return $"step {i + 1} has none of 'action', 'expectedState' or 'expectedFile'";
             }
 
-            if (hasAction && hasExpected)
+            if (hasAction && (hasExpected || hasExpectedFile))
             {
-                yield return $"step {i + 1} has both 'action' and 'expectedState'";
+                yield return $"step {i + 1} has both an action and an assertion (expectedState/expectedFile)";
+            }
+
+            // A side-file expectedFile (no inline content) is keyed by the step id.
+            if (hasExpectedFile && step.ExpectedFile!.Content is null && step.Id is not { Length: > 0 })
+            {
+                yield return $"step {i + 1}: expectedFile without inline 'content' requires the step to have an 'id'";
             }
         }
     }
@@ -208,6 +217,39 @@ public sealed class GameDataSpecLintTests
         if (spec.Setup?.GameSystem is null)
         {
             yield return "setup.gameSystem is required";
+        }
+    }
+
+    // ── Setup declares the file opened for editing ───────────────────
+    // Engines disagree on which loaded file is "active" by default, so every spec must declare the
+    // file it edits (a catalogue id or the game system id). An openFile step may switch it later.
+
+    private static IEnumerable<string> CheckSetupHasEdit(GameDataSpecFile spec)
+    {
+        var edit = spec.Setup?.Edit;
+        if (string.IsNullOrWhiteSpace(edit))
+        {
+            yield return "setup.edit is required (the id of the catalogue or game system to open for editing)";
+            yield break;
+        }
+
+        var knownIds = new HashSet<string>(StringComparer.Ordinal);
+        if (spec.Setup?.GameSystem?.Id is { Length: > 0 } gsId)
+        {
+            knownIds.Add(gsId);
+        }
+        foreach (var cat in spec.Setup?.Catalogues ?? [])
+        {
+            if (cat.Id is { Length: > 0 } catId)
+            {
+                knownIds.Add(catId);
+            }
+        }
+
+        if (!knownIds.Contains(edit))
+        {
+            yield return $"setup.edit '{edit}' must be the game system id or one of the catalogue ids " +
+                $"({string.Join(", ", knownIds)})";
         }
     }
 
@@ -273,10 +315,12 @@ public sealed class GameDataSpecLintTests
                     }
 
                     break;
-                case "openCatalogue":
-                    if (step.EntryId is null)
+                case "openFile":
+                    // openFile opens a loaded file (entryId), loads inline XML (content), or loads a
+                    // side-file keyed by the step id.
+                    if (step.EntryId is null && step.Content is null && step.Id is not { Length: > 0 })
                     {
-                        yield return $"step {i + 1}: openCatalogue requires 'entryId'";
+                        yield return $"step {i + 1}: openFile requires 'entryId', 'content', or a step 'id' for a side-file";
                     }
 
                     break;

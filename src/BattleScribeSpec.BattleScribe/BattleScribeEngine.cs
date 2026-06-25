@@ -140,7 +140,6 @@ public sealed class BattleScribeEngine : IDisposable
         gs.setName(name);
         gs.setRevision(1);
         gs.setBattleScribeVersion("2.03");
-        gs.setAuthorName("Test");
 
         return Initialize(gs, new Dictionary<string, Catalogue>());
     }

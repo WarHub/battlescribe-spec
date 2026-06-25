@@ -36,7 +36,6 @@ public static class JavaModelFactory
         gs.setName(name);
         gs.setRevision(revision);
         gs.setBattleScribeVersion(bsVersion);
-        gs.setAuthorName("Test");
 
         if (costTypes != null)
         {
@@ -634,7 +633,6 @@ public static class JavaModelFactory
         cat.setGameSystemId(gameSystemId);
         cat.setRevision(revision);
         cat.setBattleScribeVersion(bsVersion);
-        cat.setAuthorName("Test");
         cat.setLibrary(library);
 
         if (selectionEntries != null)
@@ -752,7 +750,8 @@ public static class JavaModelFactory
         IEnumerable<Modifier>? modifiers = null,
         bool collective = false,
         bool import = true,
-        string? publicationId = null)
+        string? publicationId = null,
+        string? page = null)
     {
         var se = new SelectionEntry();
         se.setId(id);
@@ -764,6 +763,11 @@ public static class JavaModelFactory
         if (!string.IsNullOrEmpty(publicationId))
         {
             se.setPublicationId(publicationId);
+        }
+
+        if (!string.IsNullOrEmpty(page))
+        {
+            se.setPage(page);
         }
 
         if (costs != null)
@@ -1411,6 +1415,12 @@ public static class JavaModelFactory
         if (!string.IsNullOrEmpty(type))
         {
             cl.setType(type);
+            // CatalogueLink's serialized @Attribute is its own `type` field, which the inherited
+            // setType does not reach (it sets a base-class field that only getType reads); set the
+            // serialized field directly so the link round-trips to XML.
+            typeof(CatalogueLink)
+                .GetField("type", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)
+                ?.SetValue(cl, type);
         }
 
         return cl;

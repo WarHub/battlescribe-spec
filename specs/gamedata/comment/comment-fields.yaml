@@ -6,6 +6,7 @@ description: >
   this verifies it round-trips across the entity kinds that expose it.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

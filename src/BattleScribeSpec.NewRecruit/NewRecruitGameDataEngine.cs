@@ -5,18 +5,18 @@ using Microsoft.Playwright;
 namespace BattleScribeSpec.NewRecruit;
 
 /// <summary>
-/// IGameDataEngine implementation that drives the NR Editor web app via Playwright.
+/// Store-direct <see cref="IGameDataEngine"/> for the NewRecruit Editor: drives NR's <b>real</b> Pinia
+/// store via Playwright JS, mutating <c>editor.gameSystems[systemId].loadedCatalogues</c> directly.
 ///
-/// The NR Editor is a separate app from the roster builder (newrecruit.eu).
-/// It's deployed at https://giloushaker.github.io/nr-editor/ (or custom URL).
-///
-/// Architecture:
-///   - Setup: generates BattleScribe XML, loads via NR Editor's file import
-///   - Actions: drives editorStore methods (add, remove, move, edit_node)
-///   - State: reads the catalogue tree from NR's reactive store
-///
-/// The adapter accesses Pinia stores via page.EvaluateAsync().
-/// Store discovery is done dynamically on first access.
+/// <para>
+/// Setup, state reads, export, reload, file-load and validation are the shared
+/// <see cref="NrEditorStore"/> helpers — the same real-store code the UI-driven
+/// <c>NrGameDataUiEngine</c> uses. The only difference is mutation: this engine pushes/splices/edits
+/// plain entry objects (NR field names) directly in the loaded store (fast), where the UI driver clicks
+/// rendered widgets. Because both ultimately serialize through NR's own <c>saveCatalogueInFiles</c>, the
+/// exported XML is byte-for-byte identical to the UI driver's — making this a true NR <b>base</b> producer
+/// for snapshot assertions.
+/// </para>
 /// </summary>
 public sealed class NewRecruitGameDataEngine : IGameDataEngine
 {
@@ -25,6 +25,11 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
     private IPage? _page;
     private string _specId = "";
     private bool _disposed;
+
+    // Loaded-file tracking (id -> display name) and the active file id, so export/reload can pick and
+    // reopen the right file — mirrors NrGameDataUiEngine.
+    private readonly Dictionary<string, string> _idToName = new(StringComparer.Ordinal);
+    private string? _openId;
 
     public string BaseUrl { get; }
     public bool Headless { get; }
@@ -95,6 +100,9 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         return null;
     }
 
+    /// <summary>Exposes the Playwright page for probe and diagnostics access.</summary>
+    public IPage Page => _page ?? throw new InvalidOperationException("Engine not initialized.");
+
     private async Task InitializeAsync(float? slowMo)
     {
         _playwright = await Playwright.CreateAsync();
@@ -109,7 +117,6 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             WaitUntil = WaitUntilState.Load,
             Timeout = 60_000,
         });
-        // Wait for the app to initialize (Vue/Nuxt)
         await WaitForAppReadyAsync();
     }
 
@@ -128,8 +135,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         });
         _page = await context.NewPageAsync();
 
-        // Set up route interception that serves local static files
-        await SetupStaticFileRouting(_page, staticDir);
+        // Set up route interception that serves local static files (shared with the UI driver).
+        await NrEditorStore.SetupStaticFileRoutingAsync(_page, staticDir);
 
         // Navigate to the app — all network requests will be served from local files
         await _page.GotoAsync(BaseUrl, new PageGotoOptions
@@ -137,128 +144,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             WaitUntil = WaitUntilState.Load,
             Timeout = 60_000,
         });
-        // Wait for the app to initialize (Vue/Nuxt)
         await WaitForAppReadyAsync();
-    }
-
-    private static readonly Dictionary<string, string> MimeTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        [".html"] = "text/html",
-        [".js"] = "application/javascript",
-        [".mjs"] = "application/javascript",
-        [".css"] = "text/css",
-        [".json"] = "application/json",
-        [".png"] = "image/png",
-        [".jpg"] = "image/jpeg",
-        [".jpeg"] = "image/jpeg",
-        [".gif"] = "image/gif",
-        [".svg"] = "image/svg+xml",
-        [".ico"] = "image/x-icon",
-        [".woff"] = "font/woff",
-        [".woff2"] = "font/woff2",
-        [".ttf"] = "font/ttf",
-        [".otf"] = "font/otf",
-        [".eot"] = "application/vnd.ms-fontobject",
-        [".map"] = "application/json",
-        [".webp"] = "image/webp",
-        [".webm"] = "video/webm",
-        [".mp4"] = "video/mp4",
-        [".txt"] = "text/plain",
-        [".xml"] = "application/xml",
-    };
-
-    private static async Task SetupStaticFileRouting(IPage page, string staticDir)
-    {
-        // Normalize with trailing separator for safe containment check
-        var normalizedDir = Path.GetFullPath(staticDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-
-        await page.RouteAsync("**/*", async route =>
-        {
-            var request = route.Request;
-            var url = new Uri(request.Url);
-            var path = Uri.UnescapeDataString(url.AbsolutePath);
-
-            // Normalize backslashes that could come from %5C decoding
-            path = path.Replace('\\', '/');
-
-            // Strip the /nr-editor/ base URL prefix
-            const string basePrefix = "/nr-editor/";
-            if (path.StartsWith(basePrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                path = path[basePrefix.Length..];
-            }
-            else if (path == "/nr-editor")
-            {
-                path = "";
-            }
-            else if (path.StartsWith('/'))
-            {
-                path = path[1..];
-            }
-
-            // Empty path maps to index.html
-            if (string.IsNullOrEmpty(path) || path == "/")
-            {
-                path = "index.html";
-            }
-
-            // Security: prevent path traversal (trailing separator ensures no prefix collision)
-            var fullPath = Path.GetFullPath(Path.Combine(normalizedDir, path.Replace('/', Path.DirectorySeparatorChar)));
-            if (!fullPath.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase))
-            {
-                await route.FulfillAsync(new RouteFulfillOptions
-                {
-                    Status = 403,
-                    ContentType = "text/plain",
-                    Body = "Forbidden",
-                });
-                return;
-            }
-
-            if (File.Exists(fullPath))
-            {
-                var ext = Path.GetExtension(fullPath);
-                var contentType = MimeTypes.GetValueOrDefault(ext, "application/octet-stream");
-                var body = await File.ReadAllBytesAsync(fullPath);
-
-                await route.FulfillAsync(new RouteFulfillOptions
-                {
-                    Status = 200,
-                    ContentType = contentType,
-                    BodyBytes = body,
-                });
-            }
-            else
-            {
-                // SPA fallback only for navigation requests (HTML pages), not static assets.
-                // Returning index.html for a missing .js/.css would hide real 404s.
-                var ext = Path.GetExtension(fullPath);
-                var isStaticAsset = !string.IsNullOrEmpty(ext) && ext != ".html";
-
-                if (!isStaticAsset)
-                {
-                    var indexPath = Path.Combine(normalizedDir, "index.html");
-                    if (File.Exists(indexPath))
-                    {
-                        var body = await File.ReadAllBytesAsync(indexPath);
-                        await route.FulfillAsync(new RouteFulfillOptions
-                        {
-                            Status = 200,
-                            ContentType = "text/html",
-                            BodyBytes = body,
-                        });
-                        return;
-                    }
-                }
-
-                await route.FulfillAsync(new RouteFulfillOptions
-                {
-                    Status = 404,
-                    ContentType = "text/plain",
-                    Body = "Not Found",
-                });
-            }
-        });
     }
 
     private async Task WaitForAppReadyAsync()
@@ -267,7 +153,6 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         { return; }
 
         // NR Editor may use #app or #__nuxt as the Vue mount point.
-        // Try both patterns for Pinia discovery.
         await _page.WaitForFunctionAsync("""
             () => {
                 const nuxt = document.querySelector('#__nuxt')?.__vue_app__;
@@ -284,284 +169,93 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
     }
 
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
-    {
-        return SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
-    }
+        => SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
 
     private async Task<IReadOnlyList<string>> SetupAsync(
-        ProtocolGameSystem gameSystem,
-        ProtocolCatalogue[] catalogues)
+        ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         if (_page is null)
-        {
-            return ["NR Editor page not initialized"];
-        }
-
-        var errors = new List<string>();
+        { return ["NR Editor page not initialized"]; }
 
         try
         {
-            // Generate BattleScribe XML from protocol types
-            var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-            IReadOnlyList<(string FileName, string Xml)> allCatXml = [];
-            if (catalogues.Length > 0)
-            {
-                allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
-            }
-            var catFiles = allCatXml.Select(c => new { name = c.FileName, data = c.Xml }).ToArray();
+            // Load + open through NR's real upload pipeline (populates loadedCatalogues).
+            var errors = await NrEditorStore.LoadAndOpenCatalogueAsync(_page, gameSystem, catalogues);
+            if (errors.Count > 0)
+            { return errors; }
 
-            // Load data into the NR Editor.
-            // Strategy: load XML files into the editor's store, then open the catalogue.
-            // The editor's loadSystemFromFs populates IndexedDB, after which we must
-            // find and open the catalogue by its actual key (not our spec ID).
-            var setupResult = await _page.EvaluateAsync<string?>("""
-                async ([gstXml, catFiles, systemId, systemName, specId]) => {
-                    try {
-                        // Discover Pinia
-                        const nuxt = document.querySelector('#__nuxt')?.__vue_app__;
-                        const app = document.querySelector('#app')?.__vue_app__;
-                        const vueApp = nuxt || app;
-                        if (!vueApp) return 'Vue app not found (tried #__nuxt and #app)';
+            // Track loaded files (id -> display name) and the active one, so export/reload pick/reopen
+            // correctly. Setup opens the last catalogue, or the game system itself when there are none.
+            _idToName.Clear();
+            _idToName[gameSystem.Id] = gameSystem.Name;
+            foreach (var cat in catalogues)
+            { _idToName[cat.Id] = cat.Name; }
+            _openId = catalogues.Length > 0 ? catalogues[^1].Id : gameSystem.Id;
 
-                        const pinia = vueApp.config?.globalProperties?.$pinia;
-                        if (!pinia) return 'Pinia store not found on Vue app';
-
-                        // Store discovery
-                        const storeIds = [...pinia._s.keys()];
-                        const editorStore = pinia._s.get('editor') || pinia._s.get('editorStore')
-                            || pinia._s.get('catalogue') || pinia._s.get('catalogues');
-                        const sysStore = pinia._s.get('systemsStore') || pinia._s.get('systems')
-                            || pinia._s.get('system');
-
-                        if (!editorStore && !sysStore) {
-                            return 'No editor/system store found. Available: [' + storeIds.join(', ') + ']';
-                        }
-
-                        // Load system files
-                        const loader = sysStore || editorStore;
-                        const files = [
-                            { name: systemId + '.gst', path: '/spec/' + systemId + '.gst', data: gstXml },
-                            ...catFiles.map(c => ({ name: c.name, path: '/spec/' + c.name, data: c.data })),
-                        ];
-
-                        if (loader?.loadSystemFromFs) {
-                            await loader.loadSystemFromFs(files);
-                        } else if (editorStore?.create_system) {
-                            await editorStore.create_system(systemName);
-                        } else {
-                            return 'No load method. Stores: [' + storeIds.join(', ') + ']';
-                        }
-
-                        // After loading, we need to open the catalogue for editing.
-                        // IMPORTANT: Always build our own catalogue from XML to ensure
-                        // all setup entries are correctly represented. NR Editor's native
-                        // loadSystemFromFs + open_catalogue flow doesn't reliably preserve
-                        // all entries in a way we can access via direct manipulation.
-
-                        // Build catalogue from XML parsing (always, not just as fallback)
-                        const parser = new DOMParser();
-
-                        // Recursive entry parser shared by catalogue and game system roots.
-                        // Captures every XML attribute (not just id/name/hidden/type) so fields
-                        // like targetId/page/publicationId round-trip and validation can read them.
-                        const parseEntry = (el) => {
-                            const entry = {};
-                            for (let i = 0; i < el.attributes.length; i++) {
-                                const a = el.attributes[i];
-                                entry[a.name] = a.value;
-                            }
-                            entry.id = entry.id || '';
-                            entry.name = entry.name || '';
-                            entry.hidden = el.getAttribute('hidden') === 'true';
-                            // Recursively parse child containers
-                            const childContainers = ['selectionEntries', 'selectionEntryGroups',
-                                'rules', 'profiles', 'infoGroups', 'infoLinks', 'entryLinks',
-                                'categoryLinks', 'constraints', 'modifiers', 'modifierGroups',
-                                'conditions', 'conditionGroups', 'characteristicTypes', 'repeats',
-                                'associations', 'attributeTypes', 'localConditionGroups'];
-                            for (const ck of childContainers) {
-                                const container = el.querySelector(':scope > ' + ck);
-                                if (container && container.children.length > 0) {
-                                    entry[ck] = [...container.children].map(parseEntry);
-                                }
-                            }
-                            return entry;
-                        };
-                        const parseEntries = (parentEl, tag) => {
-                            const container = parentEl.querySelector(':scope > ' + tag);
-                            if (!container) return [];
-                            return [...container.children].map(parseEntry);
-                        };
-
-                        // Build an editable root (catalogue or game system) from a root element
-                        const buildRoot = (rootEl, rootId, rootName, rootGameSystemId) => {
-                            const root = {
-                                id: rootEl.getAttribute('id') || rootId,
-                                name: rootEl.getAttribute('name') || rootName,
-                                gameSystemId: rootEl.getAttribute('gameSystemId') || rootGameSystemId,
-                                selectionEntries: [],
-                                selectionEntryGroups: [],
-                                entryLinks: [],
-                                rules: [],
-                                sharedSelectionEntries: [],
-                                sharedSelectionEntryGroups: [],
-                                sharedRules: [],
-                                sharedProfiles: [],
-                                sharedInfoGroups: [],
-                                forceEntries: [],
-                                categoryEntries: [],
-                                publications: [],
-                                costTypes: [],
-                                profileTypes: [],
-                                catalogueLinks: [],
-                            };
-
-                            // Capture root metadata attributes (revision, authorName, library, …)
-                            // so they round-trip into the serialized fields map.
-                            for (let i = 0; i < rootEl.attributes.length; i++) {
-                                const a = rootEl.attributes[i];
-                                if (!(a.name in root)) root[a.name] = a.value;
-                            }
-
-                            root.selectionEntries = parseEntries(rootEl, 'selectionEntries');
-                            root.sharedSelectionEntries = parseEntries(rootEl, 'sharedSelectionEntries');
-                            root.sharedSelectionEntryGroups = parseEntries(rootEl, 'sharedSelectionEntryGroups');
-                            root.selectionEntryGroups = parseEntries(rootEl, 'selectionEntryGroups');
-                            root.rules = parseEntries(rootEl, 'rules');
-                            root.sharedRules = parseEntries(rootEl, 'sharedRules');
-                            root.sharedProfiles = parseEntries(rootEl, 'sharedProfiles');
-                            root.sharedInfoGroups = parseEntries(rootEl, 'sharedInfoGroups');
-                            root.entryLinks = parseEntries(rootEl, 'entryLinks');
-                            root.forceEntries = parseEntries(rootEl, 'forceEntries');
-                            root.categoryEntries = parseEntries(rootEl, 'categoryEntries');
-                            root.publications = parseEntries(rootEl, 'publications');
-                            root.costTypes = parseEntries(rootEl, 'costTypes');
-                            root.profileTypes = parseEntries(rootEl, 'profileTypes');
-                            root.catalogueLinks = parseEntries(rootEl, 'catalogueLinks');
-                            // NewRecruit additions.
-                            root.sharedForceEntries = parseEntries(rootEl, 'sharedForceEntries');
-                            root.sharedAssociations = parseEntries(rootEl, 'sharedAssociations');
-                            return root;
-                        };
-
-                        // Always parse the game system so its root metadata and any directly
-                        // authored entries are editable, even when catalogues are present.
-                        let gameSystem = null;
-                        {
-                            const gstDoc = parser.parseFromString(gstXml, 'text/xml');
-                            const gstEl = gstDoc.querySelector('gameSystem');
-                            if (gstEl) {
-                                gameSystem = buildRoot(gstEl, systemId, systemName,
-                                    gstEl.getAttribute('id') || systemId);
-                            }
-                        }
-
-                        // Parse every catalogue — multi-catalogue specs (e.g. catalogue links)
-                        // need the target catalogue present for resolution + validation.
-                        const catalogues = [];
-                        for (const cf of catFiles) {
-                            const doc = parser.parseFromString(cf.data, 'text/xml');
-                            const catEl = doc.querySelector('catalogue');
-                            if (!catEl) {
-                                return 'Setup error: could not parse catalogue from XML: ' + cf.name;
-                            }
-                            catalogues.push(buildRoot(catEl, systemId, systemName, systemId));
-                        }
-
-                        if (catalogues.length === 0 && !gameSystem) {
-                            return 'Setup error: could not parse game system from XML';
-                        }
-
-                        // roots = every editable container; actions search across all of them.
-                        const roots = [gameSystem, ...catalogues].filter(Boolean);
-
-                        // Store references for later actions
-                        window.__bsspec_editor = {
-                            pinia,
-                            editorStore,
-                            sysStore,
-                            storeIds,
-                            systemId,
-                            specId,
-                            directMode: true,
-                            catalogue: catalogues[0] || null,
-                            catalogues,
-                            gameSystem,
-                            roots,
-                        };
-
-                        return null; // success
-                    } catch(e) {
-                        return 'Setup error: ' + e.message + (e.stack ? '\n' + e.stack : '');
-                    }
-                }
-                """, new object[] { gstXml, catFiles, gameSystem.Id, gameSystem.Name, _specId });
-
-            if (setupResult != null)
-            {
-                errors.Add(setupResult);
-            }
+            return [];
         }
         catch (Exception ex)
         {
-            errors.Add($"NR Editor setup exception: {ex.Message}");
+            return [$"NR Editor GameData setup exception: {ex.Message}"];
         }
-
-        return errors;
     }
 
+    /// <summary>
+    /// Selects/opens the given catalogue (or game system) for editing — navigates the editor to it so
+    /// state reads (URL-keyed) and subsequent edits target the right file.
+    /// </summary>
     public void OpenFile(string id) => OpenFileAsync(id).GetAwaiter().GetResult();
 
-    /// <summary>
-    /// Select the active file. Every action resolves its parent/entry by id across all loaded
-    /// roots, so this records the active catalogue (for context) and, crucially, validates that
-    /// the id refers to a loaded file — a mistyped <c>openCatalogue</c> fails loudly instead of
-    /// silently editing the wrong place.
-    /// </summary>
     private async Task OpenFileAsync(string id)
     {
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        var result = await _page.EvaluateAsync<string?>("""
-            (id) => {
-                const ctx = window.__bsspec_editor;
-                if (!ctx) return 'ERROR:No editor context — was Setup called?';
-                const roots = ctx.roots || [];
-                let match = roots.find(r => r && r.id === id);
-                if (!match && id === ctx.systemId) match = ctx.gameSystem;
-                if (!match) return 'ERROR:openCatalogue: no loaded file with id ' + id;
-                ctx.activeRootId = id;
-                if (match !== ctx.gameSystem) ctx.catalogue = match;
+        await NrEditorStore.NavigateToFileAsync(_page, id);
+        _openId = id;
+    }
+
+    // ===== Direct-JS mutations on the real loadedCatalogues store =====
+    //
+    // NR's reactive nodes carry parent/catalogue back-references, so every tree walk is cycle-guarded
+    // with a WeakSet and only descends array-valued (container) properties.
+
+    private const string FindInRootsPrelude = """
+        const editor = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+        const systemId = new URLSearchParams(location.search).get('systemId');
+        const loaded = editor?.gameSystems?.[systemId]?.loadedCatalogues ?? {};
+        const roots = Object.values(loaded);
+        const findInRoots = (id) => {
+            const seen = new WeakSet();
+            const rec = (obj) => {
+                if (!obj || typeof obj !== 'object' || seen.has(obj)) return null;
+                seen.add(obj);
+                if (obj.id === id) return obj;
+                for (const k of Object.keys(obj)) {
+                    if (k === 'parent' || k === 'catalogue') continue;
+                    const v = obj[k];
+                    if (Array.isArray(v)) { for (const it of v) { const f = rec(it); if (f) return f; } }
+                }
                 return null;
-            }
-            """, id);
+            };
+            for (const r of roots) { const f = rec(r); if (f) return f; }
+            if (id === systemId && loaded[systemId]) return loaded[systemId];
+            return null;
+        };
+        """;
 
-        if (result?.StartsWith("ERROR:", StringComparison.Ordinal) == true)
-        {
-            throw new InvalidOperationException(result[6..]);
-        }
-    }
+    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
+        => AddEntryAsync(parentId, entryType, name, id).GetAwaiter().GetResult();
 
-    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
-    {
-        return AddEntryAsync(parentId, entryType, name).GetAwaiter().GetResult();
-    }
-
-    private async Task<GameDataActionOutputs> AddEntryAsync(string parentId, string entryType, string? name)
+    private async Task<GameDataActionOutputs> AddEntryAsync(string parentId, string entryType, string? name, string? declaredId)
     {
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
         var result = await _page.EvaluateAsync<string?>("""
-            ([parentId, entryType, name]) => {
+            ([parentId, entryType, name, declaredId]) => {
                 try {
-                    const ctx = window.__bsspec_editor;
-                    if (!ctx) return 'ERROR:No editor context — was Setup called?';
-
-                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
-                    if (!roots.length) return 'ERROR:No catalogue available';
-
+            """ + FindInRootsPrelude + """
                     // Map entryType to container key.
                     const containerKeyMap = {
                         'selectionEntry': 'selectionEntries',
@@ -585,64 +279,44 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                         'characteristicType': 'characteristicTypes',
                         'repeat': 'repeats',
                         'catalogueLink': 'catalogueLinks',
-                        // Explicit shared-root container types.
                         'sharedSelectionEntry': 'sharedSelectionEntries',
                         'sharedSelectionEntryGroup': 'sharedSelectionEntryGroups',
                         'sharedRule': 'sharedRules',
                         'sharedProfile': 'sharedProfiles',
                         'sharedInfoGroup': 'sharedInfoGroups',
                     };
-                    // When parent is a catalogue/system root, these bare types use shared containers.
+                    // When the parent is a catalogue/system root, these bare types use shared containers.
                     const sharedKeyMap = {
                         'selectionEntryGroup': 'sharedSelectionEntryGroups',
                         'profile': 'sharedProfiles',
                     };
                     let childKey = containerKeyMap[entryType] || (entryType + 's');
 
-                    // Generate a unique ID
-                    const id = crypto.randomUUID ? crypto.randomUUID()
-                        : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16));
+                    // Use the declared id if provided (for byte-reproducible exports), else generate one.
+                    const id = declaredId || (crypto.randomUUID ? crypto.randomUUID()
+                        : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16)));
 
-                    // Create the entry object
-                    const data = { id, name: name || 'New ' + entryType, hidden: false };
-                    if (entryType === 'selectionEntry') data.type = 'upgrade';
-                    if (entryType === 'selectionEntryGroup') data.type = 'group';
+                    // Build the entry in NR's shape. NR's serializer emits attributes in object-key
+                    // insertion order, so mirror the UI-created node's field order (type, import, name,
+                    // hidden, id) — selectionEntry/group also get NR's type + import defaults — to make
+                    // the exported XML byte-for-byte identical to the UI driver's.
+                    const data = {};
+                    if (entryType === 'selectionEntry') { data.type = 'upgrade'; data.import = true; }
+                    else if (entryType === 'selectionEntryGroup') { data.type = 'group'; data.import = true; }
+                    data.name = name || 'New ' + entryType;
+                    data.hidden = false;
+                    data.id = id;
 
-                    // Find parent by ID (walk every root's tree)
-                    const findById = (obj, targetId) => {
-                        if (!obj) return null;
-                        if (obj.id === targetId) return obj;
-                        for (const key of Object.keys(obj)) {
-                            const val = obj[key];
-                            if (Array.isArray(val)) {
-                                for (const item of val) {
-                                    if (item && typeof item === 'object') {
-                                        const found = findById(item, targetId);
-                                        if (found) return found;
-                                    }
-                                }
-                            }
-                        }
-                        return null;
-                    };
-
-                    let parent = null;
-                    for (const r of roots) {
-                        parent = findById(r, parentId);
-                        if (parent) break;
-                    }
-                    if (!parent && parentId === ctx.systemId) {
-                        parent = roots[0]; // treat the primary root as the system root
-                    }
+                    let parent = findInRoots(parentId);
                     if (!parent) return 'ERROR:Parent not found: ' + parentId;
 
-                    // If parent is a root container, bare group/profile types use shared containers.
                     if (roots.includes(parent) && sharedKeyMap[entryType]) {
                         childKey = sharedKeyMap[entryType];
                     }
 
-                    // Direct array push
                     if (!parent[childKey]) parent[childKey] = [];
+                    data.parent = parent;
+                    data.catalogue = parent.catalogue || parent;
                     parent[childKey].push(data);
 
                     return id;
@@ -650,7 +324,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     return 'ERROR:AddEntry: ' + e.message;
                 }
             }
-            """, new object[] { parentId, entryType, name ?? "" });
+            """, new object[] { parentId, entryType, name ?? "", declaredId ?? "" });
 
         if (result?.StartsWith("ERROR:", StringComparison.Ordinal) == true)
         {
@@ -660,10 +334,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         return new GameDataActionOutputs { EntryId = result };
     }
 
-    public void RemoveEntry(string entryId)
-    {
-        RemoveEntryAsync(entryId).GetAwaiter().GetResult();
-    }
+    public void RemoveEntry(string entryId) => RemoveEntryAsync(entryId).GetAwaiter().GetResult();
 
     private async Task RemoveEntryAsync(string entryId)
     {
@@ -673,27 +344,28 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         var result = await _page.EvaluateAsync<string?>("""
             (entryId) => {
                 try {
-                    const ctx = window.__bsspec_editor;
-                    if (!ctx) return 'No editor context';
-                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
-                    if (!roots.length) return 'No catalogue';
+                    const editor = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                    const systemId = new URLSearchParams(location.search).get('systemId');
+                    const loaded = editor?.gameSystems?.[systemId]?.loadedCatalogues ?? {};
+                    const roots = Object.values(loaded);
 
-                    // Find and splice from parent
-                    const removeFromParent = (parent, id) => {
-                        if (!parent || typeof parent !== 'object') return false;
+                    const removeFromParent = (parent, id, seen) => {
+                        if (!parent || typeof parent !== 'object' || seen.has(parent)) return false;
+                        seen.add(parent);
                         for (const key of Object.keys(parent)) {
+                            if (key === 'parent' || key === 'catalogue') continue;
                             const val = parent[key];
                             if (Array.isArray(val)) {
                                 const idx = val.findIndex(e => e?.id === id);
                                 if (idx >= 0) { val.splice(idx, 1); return true; }
                                 for (const item of val) {
-                                    if (removeFromParent(item, id)) return true;
+                                    if (removeFromParent(item, id, seen)) return true;
                                 }
                             }
                         }
                         return false;
                     };
-                    if (!roots.some(r => removeFromParent(r, entryId))) {
+                    if (!roots.some(r => removeFromParent(r, entryId, new WeakSet()))) {
                         return 'Could not remove entry: ' + entryId;
                     }
                     return null;
@@ -710,9 +382,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
     }
 
     public void SetField(string entryId, string field, string? value)
-    {
-        SetFieldAsync(entryId, field, value).GetAwaiter().GetResult();
-    }
+        => SetFieldAsync(entryId, field, value).GetAwaiter().GetResult();
 
     private async Task SetFieldAsync(string entryId, string field, string? value)
     {
@@ -722,37 +392,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         var result = await _page.EvaluateAsync<string?>("""
             ([entryId, field, value]) => {
                 try {
-                    const ctx = window.__bsspec_editor;
-                    if (!ctx) return 'No editor context';
-                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
-                    if (!roots.length) return 'No catalogue';
-
-                    // Find entry
-                    const findById = (obj, id) => {
-                        if (!obj) return null;
-                        if (obj.id === id) return obj;
-                        for (const key of Object.keys(obj)) {
-                            const val = obj[key];
-                            if (Array.isArray(val)) {
-                                for (const item of val) {
-                                    if (item && typeof item === 'object') {
-                                        const found = findById(item, id);
-                                        if (found) return found;
-                                    }
-                                }
-                            }
-                        }
-                        return null;
-                    };
-
-                    let entry = null;
-                    for (const r of roots) {
-                        entry = findById(r, entryId);
-                        if (entry) break;
-                    }
-                    if (!entry && entryId === ctx.systemId) {
-                        entry = roots[0];
-                    }
+            """ + FindInRootsPrelude + """
+                    const entry = findInRoots(entryId);
                     if (!entry) return 'Entry not found: ' + entryId;
 
                     // Handle boolean fields
@@ -775,24 +416,18 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         }
     }
 
-    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
-    {
-        return AddLinkAsync(parentId, linkType, targetId).GetAwaiter().GetResult();
-    }
+    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
+        => AddLinkAsync(parentId, linkType, targetId, id).GetAwaiter().GetResult();
 
-    private async Task<GameDataActionOutputs> AddLinkAsync(string parentId, string linkType, string targetId)
+    private async Task<GameDataActionOutputs> AddLinkAsync(string parentId, string linkType, string targetId, string? declaredId)
     {
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
         var result = await _page.EvaluateAsync<string?>("""
-            ([parentId, linkType, targetId]) => {
+            ([parentId, linkType, targetId, declaredId]) => {
                 try {
-                    const ctx = window.__bsspec_editor;
-                    if (!ctx) return 'ERROR:No editor context';
-                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
-                    if (!roots.length) return 'ERROR:No catalogue';
-
+            """ + FindInRootsPrelude + """
                     const containerKeyMap = {
                         'entryLink': 'entryLinks',
                         'infoLink': 'infoLinks',
@@ -801,41 +436,19 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     };
                     const childKey = containerKeyMap[linkType] || (linkType + 's');
 
-                    const id = crypto.randomUUID ? crypto.randomUUID()
-                        : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16));
+                    const id = declaredId || (crypto.randomUUID ? crypto.randomUUID()
+                        : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16)));
 
                     const data = { id, targetId, name: '', hidden: false };
-                    if (linkType === 'entryLink') data.type = 'selectionEntry';
+                    if (linkType === 'entryLink') { data.type = 'selectionEntry'; data.import = true; }
                     if (linkType === 'categoryLink') data.type = 'category';
 
-                    // Find parent
-                    const findById = (obj, pid) => {
-                        if (!obj) return null;
-                        if (obj.id === pid) return obj;
-                        for (const key of Object.keys(obj)) {
-                            const val = obj[key];
-                            if (Array.isArray(val)) {
-                                for (const item of val) {
-                                    if (item && typeof item === 'object') {
-                                        const found = findById(item, pid);
-                                        if (found) return found;
-                                    }
-                                }
-                            }
-                        }
-                        return null;
-                    };
-                    let parent = null;
-                    for (const r of roots) {
-                        parent = findById(r, parentId);
-                        if (parent) break;
-                    }
-                    if (!parent && parentId === ctx.systemId) {
-                        parent = roots[0];
-                    }
+                    const parent = findInRoots(parentId);
                     if (!parent) return 'ERROR:Parent not found: ' + parentId;
 
                     if (!parent[childKey]) parent[childKey] = [];
+                    data.parent = parent;
+                    data.catalogue = parent.catalogue || parent;
                     parent[childKey].push(data);
 
                     return id;
@@ -843,7 +456,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     return 'ERROR:AddLink: ' + e.message;
                 }
             }
-            """, new object[] { parentId, linkType, targetId });
+            """, new object[] { parentId, linkType, targetId, declaredId ?? "" });
 
         if (result?.StartsWith("ERROR:", StringComparison.Ordinal) == true)
         {
@@ -854,64 +467,39 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
     }
 
     public void SetCost(string entryId, string costTypeId, string? value)
-    {
-        SetCompositeAsync("__costs", entryId, costTypeId, value).GetAwaiter().GetResult();
-    }
+        => SetCostAsync(entryId, costTypeId, value).GetAwaiter().GetResult();
 
-    public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
-    {
-        SetCompositeAsync("__chars", entryId, nameOrTypeId, value).GetAwaiter().GetResult();
-    }
-
-    /// <summary>
-    /// Stores a cost (<c>__costs</c>) or characteristic (<c>__chars</c>) value on an entry's
-    /// composite map. These serialize as <c>cost:&lt;typeId&gt;</c> / <c>char:&lt;name&gt;</c> fields.
-    /// </summary>
-    private async Task SetCompositeAsync(string bag, string entryId, string key, string? value)
+    /// <summary>Set/clear a cost on an entry's real <c>costs</c> array (<c>{typeId, value, name}</c>).</summary>
+    private async Task SetCostAsync(string entryId, string costTypeId, string? value)
     {
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
         var result = await _page.EvaluateAsync<string?>("""
-            ([bag, entryId, key, value]) => {
+            ([entryId, costTypeId, value]) => {
                 try {
-                    const ctx = window.__bsspec_editor;
-                    if (!ctx) return 'No editor context';
-                    const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
-
-                    const findById = (obj, id) => {
-                        if (!obj) return null;
-                        if (obj.id === id) return obj;
-                        for (const k of Object.keys(obj)) {
-                            const v = obj[k];
-                            if (Array.isArray(v)) {
-                                for (const item of v) {
-                                    if (item && typeof item === 'object') {
-                                        const f = findById(item, id);
-                                        if (f) return f;
-                                    }
-                                }
-                            }
-                        }
-                        return null;
-                    };
-
-                    let entry = null;
-                    for (const r of roots) { entry = findById(r, entryId); if (entry) break; }
+            """ + FindInRootsPrelude + """
+                    const entry = findInRoots(entryId);
                     if (!entry) return 'Entry not found: ' + entryId;
 
-                    if (!entry[bag]) entry[bag] = {};
+                    if (!Array.isArray(entry.costs)) entry.costs = [];
+                    const idx = entry.costs.findIndex(c => c && c.typeId === costTypeId);
                     if (value === null || value === '') {
-                        delete entry[bag][key];
+                        if (idx >= 0) entry.costs.splice(idx, 1);
                     } else {
-                        entry[bag][key] = value;
+                        const num = Number(value);
+                        if (idx >= 0) {
+                            entry.costs[idx].value = num;
+                        } else {
+                            entry.costs.push({ typeId: costTypeId, name: '', value: num });
+                        }
                     }
                     return null;
                 } catch (e) {
-                    return 'SetComposite error: ' + e.message;
+                    return 'SetCost error: ' + e.message;
                 }
             }
-            """, new object[] { bag, entryId, key, value ?? "" });
+            """, new object[] { entryId, costTypeId, value ?? "" });
 
         if (result != null)
         {
@@ -919,411 +507,220 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         }
     }
 
-    public IReadOnlyList<Roster.ValidationErrorState> GetValidationErrors()
-    {
-        return GetValidationErrorsAsync().GetAwaiter().GetResult();
-    }
+    public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
+        => SetCharacteristicAsync(entryId, nameOrTypeId, value).GetAwaiter().GetResult();
 
-    private async Task<IReadOnlyList<Roster.ValidationErrorState>> GetValidationErrorsAsync()
+    /// <summary>
+    /// Set/clear a characteristic on a profile entry's real <c>characteristics</c> array, matched by
+    /// name or typeId (<c>{name, typeId, $text}</c>; NR keeps the value in <c>$text</c>).
+    /// </summary>
+    private async Task SetCharacteristicAsync(string entryId, string nameOrTypeId, string? value)
     {
         if (_page is null)
-        { return []; }
+        { throw new InvalidOperationException("Page not initialized"); }
 
-        // Minimal reference validation for the link-target rules the specs assert:
-        // an entry link / catalogue link whose target does not resolve is flagged with the
-        // same message text the BattleScribe Data Editor produces.
-        var json = await _page.EvaluateAsync<string>("""
-            () => {
-                const ctx = window.__bsspec_editor;
-                if (!ctx) return '[]';
-                const roots = ctx.roots || [ctx.catalogue || ctx.gameSystem].filter(Boolean);
+        var result = await _page.EvaluateAsync<string?>("""
+            ([entryId, nameOrTypeId, value]) => {
+                try {
+            """ + FindInRootsPrelude + """
+                    const entry = findInRoots(entryId);
+                    if (!entry) return 'Entry not found: ' + entryId;
 
-                // Every entry id present anywhere is a valid entry-link target.
-                const entryIds = new Set();
-                const collect = (obj) => {
-                    if (!obj || typeof obj !== 'object') return;
-                    if (typeof obj.id === 'string' && obj.id) entryIds.add(obj.id);
-                    for (const k of Object.keys(obj)) {
-                        const v = obj[k];
-                        if (Array.isArray(v)) for (const it of v) collect(it);
+                    if (!Array.isArray(entry.characteristics)) entry.characteristics = [];
+                    const idx = entry.characteristics.findIndex(
+                        c => c && (c.name === nameOrTypeId || c.typeId === nameOrTypeId));
+                    if (value === null || value === '') {
+                        if (idx >= 0) entry.characteristics.splice(idx, 1);
+                    } else if (idx >= 0) {
+                        entry.characteristics[idx].$text = value;
+                    } else {
+                        entry.characteristics.push({ name: nameOrTypeId, typeId: nameOrTypeId, $text: value });
                     }
-                };
-                for (const r of roots) collect(r);
-
-                // Catalogue + game-system ids are valid catalogue-link targets.
-                const catIds = new Set();
-                for (const c of (ctx.catalogues || [])) { if (c && c.id) catIds.add(c.id); }
-                if (ctx.gameSystem && ctx.gameSystem.id) catIds.add(ctx.gameSystem.id);
-
-                const errors = [];
-                const walk = (obj) => {
-                    if (!obj || typeof obj !== 'object') return;
-                    for (const k of Object.keys(obj)) {
-                        const v = obj[k];
-                        if (!Array.isArray(v)) continue;
-                        if (k === 'entryLinks') {
-                            for (const el of v) {
-                                if (el && el.targetId && !entryIds.has(el.targetId)) {
-                                    errors.push({ message: 'EntryLink must have a target that exists', entryId: el.id || null });
-                                }
-                            }
-                        }
-                        if (k === 'catalogueLinks') {
-                            for (const cl of v) {
-                                if (cl && cl.targetId && !catIds.has(cl.targetId)) {
-                                    errors.push({ message: 'CatalogueLink must have a target that exists', entryId: cl.id || null });
-                                }
-                            }
-                        }
-                        for (const it of v) walk(it);
-                    }
-                };
-                for (const r of roots) walk(r);
-
-                return JSON.stringify(errors);
+                    return null;
+                } catch (e) {
+                    return 'SetCharacteristic error: ' + e.message;
+                }
             }
-            """);
+            """, new object[] { entryId, nameOrTypeId, value ?? "" });
 
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        var errors = new List<Roster.ValidationErrorState>();
-        foreach (var el in doc.RootElement.EnumerateArray())
+        if (result != null)
         {
-            var message = el.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
-            var entryId = el.TryGetProperty("entryId", out var e) && e.ValueKind == System.Text.Json.JsonValueKind.String
-                ? e.GetString()
-                : null;
-            errors.Add(new Roster.ValidationErrorState(message, EntryId: entryId));
+            throw new InvalidOperationException(result);
         }
-        return errors;
     }
 
-    public GameDataState GetState()
+    // ===== Persistence / export (shared NR real-store serializer) =====
+
+    public string ExportActiveFile() => ExportActiveFileAsync().GetAwaiter().GetResult();
+
+    private async Task<string> ExportActiveFileAsync()
     {
-        return GetStateAsync().GetAwaiter().GetResult();
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var files = NrEditorStore.ParseExportedFiles(await NrEditorStore.ExportLoadedFilesJsonAsync(_page));
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException("ExportActiveFile: NR Editor export produced no text XML files.");
+        }
+
+        var catName = _openId + ".cat";
+        var pick = files.FirstOrDefault(f => f.Name == catName);
+        if (pick.Xml is null)
+        {
+            pick = files.FirstOrDefault(f => f.Name.EndsWith(".gst", StringComparison.OrdinalIgnoreCase));
+        }
+        if (pick.Xml is null)
+        {
+            pick = files[0];
+        }
+
+        return pick.Xml;
     }
+
+    public string LoadFile(string xml) => LoadFileAsync(xml).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Load a catalogue/game-system from XML directly into the real store (parse in-page, inject the
+    /// plain-object tree into <c>loadedCatalogues</c>). This is the store-direct counterpart to the UI
+    /// driver's file-input upload: no navigation, so it's reliable mid-spec. The injected file is read
+    /// by <see cref="NrEditorStore.ReadStateAsync"/> and serialized by NR's exporter like any other.
+    /// </summary>
+    private async Task<string> LoadFileAsync(string xml)
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var result = await _page.EvaluateAsync<string?>("""
+            (xml) => {
+                try {
+                    const editor = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                    const systemId = new URLSearchParams(location.search).get('systemId');
+                    const gsSys = editor?.gameSystems?.[systemId];
+                    if (!gsSys) return 'ERROR:LoadFile: no loaded game system ' + systemId;
+
+                    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+                    const root = doc.querySelector('catalogue') || doc.querySelector('gameSystem');
+                    if (!root) return 'ERROR:LoadFile: XML has no catalogue/gameSystem root';
+
+                    // Recursively parse an element into a plain node, capturing every attribute and
+                    // descending known child containers.
+                    const childContainers = ['selectionEntries', 'selectionEntryGroups', 'rules',
+                        'profiles', 'infoGroups', 'infoLinks', 'entryLinks', 'categoryLinks',
+                        'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
+                        'characteristicTypes', 'repeats', 'associations', 'attributeTypes',
+                        'localConditionGroups', 'characteristics', 'costs'];
+                    const parseEntry = (el) => {
+                        const entry = {};
+                        for (const a of el.attributes) entry[a.name] = a.value;
+                        if ('hidden' in entry) entry.hidden = el.getAttribute('hidden') === 'true';
+                        if ('import' in entry) entry.import = el.getAttribute('import') === 'true';
+                        for (const ck of childContainers) {
+                            const container = el.querySelector(':scope > ' + ck);
+                            if (container && container.children.length > 0) {
+                                entry[ck] = [...container.children].map(parseEntry);
+                            }
+                        }
+                        return entry;
+                    };
+                    const rootContainers = [...childContainers, 'sharedSelectionEntries',
+                        'sharedSelectionEntryGroups', 'sharedRules', 'sharedProfiles', 'sharedInfoGroups',
+                        'forceEntries', 'categoryEntries', 'publications', 'costTypes', 'profileTypes',
+                        'catalogueLinks', 'sharedForceEntries', 'sharedAssociations'];
+                    const node = {};
+                    for (const a of root.attributes) node[a.name] = a.value;
+                    for (const ck of rootContainers) {
+                        const container = root.querySelector(':scope > ' + ck);
+                        if (container && container.children.length > 0) {
+                            node[ck] = [...container.children].map(parseEntry);
+                        }
+                    }
+                    const id = node.id || '';
+                    if (!id) return 'ERROR:LoadFile: root has no id';
+                    node.catalogue = node;
+                    gsSys.loadedCatalogues[id] = node;
+                    return id;
+                } catch (e) {
+                    return 'ERROR:LoadFile: ' + e.message;
+                }
+            }
+            """, xml);
+
+        if (result is null || result.StartsWith("ERROR:", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(result?[6..] ?? "LoadFile: null result");
+        }
+
+        var (_, name, _) = NrEditorStore.ParseRoot(xml);
+        _idToName[result] = name;
+        _openId = result;
+        return result;
+    }
+
+    public void Reload() => ReloadAsync().GetAwaiter().GetResult();
+
+    private async Task ReloadAsync()
+    {
+        if (_page is null)
+        { throw new InvalidOperationException("Page not initialized"); }
+
+        var files = NrEditorStore.ParseExportedFiles(await NrEditorStore.ExportLoadedFilesJsonAsync(_page));
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Reload: the NR Editor export produced no text XML files to reload.");
+        }
+
+        var reopenName = _openId is not null && _idToName.TryGetValue(_openId, out var name)
+            ? name
+            : _idToName.Values.FirstOrDefault()
+                ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
+
+        var errors = await NrEditorStore.ReloadFromXmlAsync(_page, BaseUrl, files, reopenName);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException("Reload failed: " + string.Join("; ", errors));
+        }
+    }
+
+    // ===== State / validation (shared real-store readers) =====
+
+    public GameDataState GetState() => GetStateAsync().GetAwaiter().GetResult();
 
     private async Task<GameDataState> GetStateAsync()
     {
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        var json = await _page.EvaluateAsync<string>("""
-            () => {
-                const ctx = window.__bsspec_editor;
-                if (!ctx) return JSON.stringify({ error: 'No editor context' });
-
-                // Format a numeric value the way BattleScribe does (trim trailing .0).
-                const formatNum = (v) => {
-                    const n = Number(v);
-                    return Number.isFinite(n) && Number.isInteger(n) ? String(n) : String(v);
-                };
-
-                // Helper to serialize an entry node
-                const serializeEntry = (entry, entryType) => {
-                    if (!entry) return null;
-                    const result = {
-                        id: entry.id || '',
-                        name: entry.name || '',
-                        entryType: entryType || entry.type || '',
-                        hidden: !!entry.hidden,
-                        children: [],
-                        fields: {},
-                    };
-
-                    // Collect type-specific scalar fields. Container arrays are excluded by the
-                    // Array.isArray check below, so the skip set only needs identity/internal keys.
-                    // (A Repeat node's scalar `repeats` count must NOT be skipped even though
-                    // `repeats` is also a child-container name elsewhere.)
-                    const skipKeys = new Set(['id', 'name', 'hidden', '__costs', '__chars']);
-
-                    for (const [key, val] of Object.entries(entry)) {
-                        if (skipKeys.has(key)) continue;
-                        if (typeof val === 'function') continue;
-                        if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
-                            result.fields[key] = String(val);
-                        }
-                    }
-
-                    // Costs / characteristics serialize as composite "cost:<typeId>" / "char:<name>".
-                    if (entry.__costs) {
-                        for (const [k, v] of Object.entries(entry.__costs)) {
-                            result.fields['cost:' + k] = formatNum(v);
-                        }
-                    }
-                    if (entry.__chars) {
-                        for (const [k, v] of Object.entries(entry.__chars)) {
-                            result.fields['char:' + k] = String(v);
-                        }
-                    }
-
-                    // Serialize nested children in the BattleScribe reference engine's fixed
-                    // container order (see BattleScribeGameDataEngine.AddChildren), so positional
-                    // child assertions match the BS anchors.
-                    const childContainers = ['selectionEntries', 'selectionEntryGroups', 'entryLinks',
-                        'rules', 'profiles', 'infoGroups', 'infoLinks', 'categoryLinks',
-                        'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
-                        'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes',
-                        'associations', 'attributeTypes', 'localConditionGroups'];
-
-                    for (const ck of childContainers) {
-                        const items = entry[ck];
-                        if (Array.isArray(items)) {
-                            const singularType = ck.replace(/ies$/, 'y').replace(/s$/, '');
-                            for (const item of items) {
-                                const child = serializeEntry(item, singularType);
-                                if (child) result.children.push(child);
-                            }
-                        }
-                    }
-
-                    return result;
-                };
-
-                // Serialize a catalogue/system with explicit containers
-                const serializeContainer = (container) => {
-                    if (!container) return null;
-                    const result = {
-                        id: container.id || '',
-                        name: container.name || '',
-                        gameSystemId: container.gameSystemId || container.id_game_system || '',
-                        fields: {},
-                        selectionEntries: [],
-                        entryLinks: [],
-                        rules: [],
-                        sharedSelectionEntries: [],
-                        sharedSelectionEntryGroups: [],
-                        sharedRules: [],
-                        sharedProfiles: [],
-                        sharedInfoGroups: [],
-                        forceEntries: [],
-                        categoryEntries: [],
-                        publications: [],
-                        costTypes: [],
-                        profileTypes: [],
-                        catalogueLinks: [],
-                        sharedForceEntries: [],
-                        sharedAssociations: [],
-                    };
-
-                    // Root metadata fields (revision, authorName, library, …) — every scalar
-                    // property that isn't identity or a child container.
-                    for (const [key, val] of Object.entries(container)) {
-                        if (key === 'id' || key === 'name') continue;
-                        if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
-                            result.fields[key] = String(val);
-                        }
-                    }
-
-                    // Map from NR's property names to our state containers
-                    const mappings = [
-                        ['selectionEntries', 'selectionEntries', 'selectionEntry'],
-                        ['entryLinks', 'entryLinks', 'entryLink'],
-                        ['rules', 'rules', 'rule'],
-                        ['sharedSelectionEntries', 'sharedSelectionEntries', 'selectionEntry'],
-                        ['sharedSelectionEntryGroups', 'sharedSelectionEntryGroups', 'selectionEntryGroup'],
-                        ['sharedRules', 'sharedRules', 'rule'],
-                        ['sharedProfiles', 'sharedProfiles', 'profile'],
-                        ['sharedInfoGroups', 'sharedInfoGroups', 'infoGroup'],
-                        ['forceEntries', 'forceEntries', 'forceEntry'],
-                        ['categoryEntries', 'categoryEntries', 'categoryEntry'],
-                        ['publications', 'publications', 'publication'],
-                        ['costTypes', 'costTypes', 'costType'],
-                        ['profileTypes', 'profileTypes', 'profileType'],
-                        ['catalogueLinks', 'catalogueLinks', 'catalogueLink'],
-                        ['sharedForceEntries', 'sharedForceEntries', 'forceEntry'],
-                        ['sharedAssociations', 'sharedAssociations', 'association'],
-                    ];
-
-                    for (const [srcKey, destKey, entryType] of mappings) {
-                        const items = container[srcKey];
-                        if (Array.isArray(items)) {
-                            result[destKey] = items.map(e => serializeEntry(e, entryType)).filter(Boolean);
-                        }
-                    }
-
-                    return result;
-                };
-
-                // Build state
-                const state = { catalogues: [], gameSystem: null };
-
-                if (ctx.gameSystem) {
-                    state.gameSystem = serializeContainer(ctx.gameSystem);
-                }
-
-                const cats = ctx.catalogues || (ctx.catalogue ? [ctx.catalogue] : []);
-                state.catalogues = cats.map(serializeContainer).filter(Boolean);
-
-                return JSON.stringify(state);
-            }
-            """);
-
-        return DeserializeState(json);
+        return await NrEditorStore.ReadStateAsync(_page);
     }
 
-    private static GameDataState DeserializeState(string json)
+    public IReadOnlyList<Roster.ValidationErrorState> GetValidationErrors()
+        => GetValidationErrorsAsync().GetAwaiter().GetResult();
+
+    private async Task<IReadOnlyList<Roster.ValidationErrorState>> GetValidationErrorsAsync()
     {
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        if (_page is null)
+        { return []; }
 
-        if (root.TryGetProperty("error", out var errorProp))
-        {
-            throw new InvalidOperationException($"GetState failed: {errorProp.GetString()}");
-        }
-
-        var catalogues = new List<CatalogueDataState>();
-        if (root.TryGetProperty("catalogues", out var catsElement))
-        {
-            foreach (var catEl in catsElement.EnumerateArray())
-            {
-                catalogues.Add(DeserializeCatalogue(catEl));
-            }
-        }
-
-        GameSystemDataState? gameSystem = null;
-        if (root.TryGetProperty("gameSystem", out var gsEl) && gsEl.ValueKind != System.Text.Json.JsonValueKind.Null)
-        {
-            gameSystem = DeserializeGameSystem(gsEl);
-        }
-
-        return new GameDataState
-        {
-            GameSystem = gameSystem,
-            Catalogues = catalogues,
-        };
+        return await NrEditorStore.GetValidationErrorsAsync(_page);
     }
 
-    private static CatalogueDataState DeserializeCatalogue(System.Text.Json.JsonElement el)
-    {
-        return new CatalogueDataState
-        {
-            Id = el.GetProperty("id").GetString() ?? "",
-            Name = el.GetProperty("name").GetString() ?? "",
-            GameSystemId = el.GetProperty("gameSystemId").GetString() ?? "",
-            Fields = DeserializeFields(el),
-            SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
-            EntryLinks = DeserializeEntryList(el, "entryLinks"),
-            Rules = DeserializeEntryList(el, "rules"),
-            SharedSelectionEntries = DeserializeEntryList(el, "sharedSelectionEntries"),
-            SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
-            SharedRules = DeserializeEntryList(el, "sharedRules"),
-            SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
-            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
-            ForceEntries = DeserializeEntryList(el, "forceEntries"),
-            CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
-            Publications = DeserializeEntryList(el, "publications"),
-            CostTypes = DeserializeEntryList(el, "costTypes"),
-            ProfileTypes = DeserializeEntryList(el, "profileTypes"),
-            CatalogueLinks = DeserializeEntryList(el, "catalogueLinks"),
-            SharedForceEntries = DeserializeEntryList(el, "sharedForceEntries"),
-            SharedAssociations = DeserializeEntryList(el, "sharedAssociations"),
-        };
-    }
-
-    private static GameSystemDataState DeserializeGameSystem(System.Text.Json.JsonElement el)
-    {
-        return new GameSystemDataState
-        {
-            Id = el.GetProperty("id").GetString() ?? "",
-            Name = el.GetProperty("name").GetString() ?? "",
-            Fields = DeserializeFields(el),
-            SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
-            EntryLinks = DeserializeEntryList(el, "entryLinks"),
-            Rules = DeserializeEntryList(el, "rules"),
-            SharedSelectionEntries = DeserializeEntryList(el, "sharedSelectionEntries"),
-            SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
-            SharedRules = DeserializeEntryList(el, "sharedRules"),
-            SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
-            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
-            ForceEntries = DeserializeEntryList(el, "forceEntries"),
-            CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
-            CostTypes = DeserializeEntryList(el, "costTypes"),
-            ProfileTypes = DeserializeEntryList(el, "profileTypes"),
-            Publications = DeserializeEntryList(el, "publications"),
-        };
-    }
-
-    private static IReadOnlyDictionary<string, string?>? DeserializeFields(System.Text.Json.JsonElement el)
-    {
-        if (!el.TryGetProperty("fields", out var fieldsEl) || fieldsEl.ValueKind != System.Text.Json.JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        var fields = new Dictionary<string, string?>();
-        foreach (var prop in fieldsEl.EnumerateObject())
-        {
-            fields[prop.Name] = prop.Value.GetString();
-        }
-        return fields.Count > 0 ? fields : null;
-    }
-
-    private static IReadOnlyList<DataEntryState> DeserializeEntryList(
-        System.Text.Json.JsonElement parent, string propertyName)
-    {
-        if (!parent.TryGetProperty(propertyName, out var arr) || arr.ValueKind != System.Text.Json.JsonValueKind.Array)
-        {
-            return [];
-        }
-
-        var entries = new List<DataEntryState>();
-        foreach (var el in arr.EnumerateArray())
-        {
-            entries.Add(DeserializeEntry(el));
-        }
-        return entries;
-    }
-
-    private static DataEntryState DeserializeEntry(System.Text.Json.JsonElement el)
-    {
-        var fields = new Dictionary<string, string?>();
-        if (el.TryGetProperty("fields", out var fieldsEl) && fieldsEl.ValueKind == System.Text.Json.JsonValueKind.Object)
-        {
-            foreach (var prop in fieldsEl.EnumerateObject())
-            {
-                fields[prop.Name] = prop.Value.GetString();
-            }
-        }
-
-        var children = new List<DataEntryState>();
-        if (el.TryGetProperty("children", out var childrenEl) && childrenEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-        {
-            foreach (var childEl in childrenEl.EnumerateArray())
-            {
-                children.Add(DeserializeEntry(childEl));
-            }
-        }
-
-        return new DataEntryState
-        {
-            Id = el.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "",
-            Name = el.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "",
-            EntryType = el.TryGetProperty("entryType", out var typeEl) ? typeEl.GetString() ?? "" : "",
-            Hidden = el.TryGetProperty("hidden", out var hiddenEl) && hiddenEl.GetBoolean(),
-            Children = children,
-            Fields = fields.Count > 0 ? fields : null,
-        };
-    }
-
-    public void Cleanup()
-    {
-        CleanupAsync().GetAwaiter().GetResult();
-    }
+    public void Cleanup() => CleanupAsync().GetAwaiter().GetResult();
 
     private async Task CleanupAsync()
     {
         if (_page is null)
         { return; }
 
-        await _page.EvaluateAsync("""
-            () => {
-                const ctx = window.__bsspec_editor;
-                if (ctx?.editorStore?.reset) {
-                    ctx.editorStore.reset();
-                }
-                window.__bsspec_editor = null;
-            }
-            """);
+        try
+        {
+            await NrEditorStore.CleanupCatalogueAsync(_page, BaseUrl);
+        }
+        catch
+        {
+            // Best-effort cleanup — don't propagate failures to callers.
+        }
     }
 
     public void Dispose()

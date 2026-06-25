@@ -1,3 +1,5 @@
+using YamlDotNet.Serialization;
+
 namespace BattleScribeSpec;
 
 /// <summary>
@@ -7,6 +9,18 @@ namespace BattleScribeSpec;
 public abstract class SpecFileBase
 {
     public required string Id { get; set; }
+
+    /// <summary>
+    /// Absolute path the spec was loaded from. Set by <see cref="SpecLoader"/>; not part of the YAML.
+    /// Used to resolve side-files (e.g. export snapshots) next to the spec. Null when loaded from a
+    /// string (inline-only — side-file references then error clearly).
+    /// </summary>
+    [YamlIgnore]
+    public string? SourcePath { get; set; }
+
+    /// <summary>Directory containing the spec file, or null when loaded from a string.</summary>
+    [YamlIgnore]
+    public string? SourceDirectory => SourcePath is null ? null : System.IO.Path.GetDirectoryName(SourcePath);
 
     public required string Category { get; set; }
 

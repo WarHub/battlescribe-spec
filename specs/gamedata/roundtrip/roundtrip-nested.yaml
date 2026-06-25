@@ -1,0 +1,49 @@
+id: roundtrip-nested
+category: roundtrip
+description: >
+  Round-trip fidelity for nested structure: a selection entry containing a selection entry group
+  with a child entry survives a save + reload with the full subtree and nesting intact.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addEntry
+    id: add-squad
+    parentId: cat-1
+    entryType: selectionEntry
+    name: Tactical Squad
+
+  - action: addEntry
+    id: add-group
+    parentId: ${{ steps.add-squad.entryId }}
+    entryType: selectionEntryGroup
+    name: Wargear
+
+  - action: addEntry
+    id: add-option
+    parentId: ${{ steps.add-group.entryId }}
+    entryType: selectionEntry
+    name: Bolter
+
+  - action: reload
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - name: Tactical Squad
+              entryType: selectionEntry
+              children:
+                - entryType: selectionEntryGroup
+                  name: Wargear
+                  children:
+                    - entryType: selectionEntry
+                      name: Bolter

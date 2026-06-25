@@ -90,7 +90,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     {
         if (_app is null)
         {
-            throw new InvalidOperationException("openCatalogue: engine not set up.");
+            throw new InvalidOperationException("openFile: engine not set up.");
         }
 
         var gsDir = Path.Combine(_app.DataDirectoryPath, _gameSystemId ?? "");
@@ -100,18 +100,19 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         if (!File.Exists(path))
         {
             throw new InvalidOperationException(
-                $"openCatalogue: no staged file for id '{id}' (expected {path}).");
+                $"openFile: no staged file for id '{id}' (expected {path}).");
         }
 
-        await CallActionAsync("gamedataOpenCatalogueAction", new JsonObject { ["path"] = path });
+        await CallActionAsync("gamedataOpenFileAction", new JsonObject { ["path"] = path });
     }
 
-    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null)
+    public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
         => RunAsync(() => CallActionAsync<GameDataActionOutputs>("gamedataAddEntryAction", new JsonObject
         {
             ["parentId"] = parentId,
             ["entryType"] = entryType,
             ["name"] = name,
+            ["entryId"] = id,
         }));
 
     public void RemoveEntry(string entryId)
@@ -144,13 +145,64 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             ["value"] = value,
         }));
 
-    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId)
+    public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
         => RunAsync(() => CallActionAsync<GameDataActionOutputs>("gamedataAddLinkAction", new JsonObject
         {
             ["parentId"] = parentId,
             ["linkType"] = linkType,
             ["targetId"] = targetId,
+            ["entryId"] = id,
         }));
+
+    public void Reload()
+        => RunAsync(() => CallActionAsync("gamedataSaveAndReloadAction", []));
+
+    public string ExportActiveFile()
+        => RunAsync(ExportActiveFileAsync);
+
+    private async Task<string> ExportActiveFileAsync()
+    {
+        var result = await ConnectedClient.CallAsync("gamedataExportFileAction");
+        return result?["xml"]?.GetValue<string>()
+            ?? throw new InvalidOperationException("gamedataExportFileAction returned no xml.");
+    }
+
+    public string LoadFile(string xml)
+        => RunAsync(() => LoadFileAsync(xml));
+
+    /// <summary>
+    /// Load a catalogue/game system from XML: stage it to the data directory (matching the setup
+    /// naming) and open it through the Data Editor's real open path. Returns the loaded root id.
+    /// </summary>
+    private async Task<string> LoadFileAsync(string xml)
+    {
+        if (_app is null)
+        {
+            throw new InvalidOperationException("LoadFile: engine not set up.");
+        }
+
+        var (id, isGameSystem) = ParseRoot(xml);
+        if (id.Length == 0)
+        {
+            throw new InvalidOperationException("LoadFile: could not read a root id from the XML.");
+        }
+
+        var gsDir = Path.Combine(_app.DataDirectoryPath, _gameSystemId ?? "");
+        Directory.CreateDirectory(gsDir);
+        var path = Path.Combine(gsDir, isGameSystem ? "system.gst" : $"{id}.cat");
+        await File.WriteAllTextAsync(path, xml);
+
+        await CallActionAsync("gamedataOpenFileAction", new JsonObject { ["path"] = path });
+        return id;
+    }
+
+    private static (string Id, bool IsGameSystem) ParseRoot(string xml)
+    {
+        var rootTag = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*(catalogue|gameSystem)\b[^>]*>").Value;
+        var isGameSystem = System.Text.RegularExpressions.Regex.IsMatch(rootTag, @"<\s*gameSystem\b");
+        var id = System.Text.RegularExpressions.Regex.Match(rootTag, @"\bid=""([^""]*)""").Groups[1].Value;
+        return (id, isGameSystem);
+    }
 
     public GameDataState GetState()
         => RunAsync(GetStateAsync);
@@ -213,7 +265,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     {
         ThrowIfDisposed();
         await CleanupAsync();
-        _gameSystemId = gameSystem.Id; // for resolving openCatalogue paths
+        _gameSystemId = gameSystem.Id; // for resolving openFile paths
 
         try
         {

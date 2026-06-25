@@ -5,6 +5,7 @@ description: >
   fields. Verifies rule creation and the rule field surface.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

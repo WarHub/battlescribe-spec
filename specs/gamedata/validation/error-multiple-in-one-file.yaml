@@ -7,6 +7,7 @@ description: >
   but not the info-link one, so it reports only the entry-link error there (per-engine override).
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System
