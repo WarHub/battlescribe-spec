@@ -11,6 +11,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
@@ -42,7 +43,9 @@ public class DataEditorActions {
 
     private static final int POLL_MS = 200;
     private static final int POLL_TIMEOUT_MS = 10_000;
-    private static final int LOAD_TIMEOUT_MS = 120_000;
+    // Kept under the C# AgentClient call timeout (90s) so a genuinely stuck reopen surfaces as a
+    // clean Java-side error rather than the C# side reporting a confusing "JavaFX deadlock".
+    private static final int LOAD_TIMEOUT_MS = 75_000;
     private static final int FX_TIMEOUT_MS = 60_000;
     /** Grace period for an edit-panel control to appear after selecting an entry. */
     private static final int FIELD_GRACE_MS = 2_000;
@@ -135,12 +138,41 @@ public class DataEditorActions {
             try { loadMethod.invoke(ctrl, finalFlat); future.complete(null); }
             catch (Exception e) { future.completeExceptionally(e); }
         });
-        try {
-            future.get(LOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            throw new RuntimeException("File loading timed out after " + LOAD_TIMEOUT_MS + "ms");
-        } catch (Exception e) {
-            throw new RuntimeException("File loading failed", e);
+        // Poll the load future. If the editor's display logic blocks the FX thread on a modal dialog
+        // (e.g. the on-disk-change watcher popping "reload from disk?" after a saveAndReload rewrote
+        // the open file), don't guess at it — fail loudly with the dialog's identity so it becomes a
+        // known, deterministically-handled modal rather than an intermittent 90s deadlock. We can then
+        // add an explicit handler for that specific dialog at this specific moment. Platform.runLater
+        // tasks still run inside a modal showAndWait nested loop, so the detection probe succeeds even
+        // while the load is "stuck".
+        long start = System.currentTimeMillis();
+        while (true) {
+            try {
+                future.get(1000, TimeUnit.MILLISECONDS);
+                break;
+            } catch (TimeoutException e) {
+                String modal = describeBlockingModals();
+                if (modal != null) {
+                    if (isExternalChangeConfirm(modal)) {
+                        // Known: the external-change watcher fired because saveAndReload rewrote the
+                        // open file. Answer NO — keep our just-saved data; this controlled reopen is
+                        // the reload. Firing the button unblocks the FX thread so the load completes.
+                        System.err.println("[agent] reopen: answering external-change 'Confirm' dialog NO; " + modal);
+                        answerModalButton("btnNegative");
+                    } else {
+                        // Unknown modal: don't guess. Fail loudly with its identity so it can be given
+                        // an explicit handler at this specific moment.
+                        throw new RuntimeException("Unhandled modal dialog blocked the reopen of " + path
+                                + " — add an explicit handler in DataEditorActions. " + modal);
+                    }
+                }
+                if (System.currentTimeMillis() - start > LOAD_TIMEOUT_MS) {
+                    throw new RuntimeException("File loading timed out after " + LOAD_TIMEOUT_MS
+                            + "ms (no modal dialog detected) for " + path);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("File loading failed", e);
+            }
         }
         lastOpenedPath = path;
     }
@@ -165,6 +197,10 @@ public class DataEditorActions {
         serializeToFile(root, lastOpenedPath);
 
         idLessEntries.clear(); // reopening rebuilds the tree; old identity refs are stale
+        // Overwriting the open file trips the editor's external-change watcher, which asynchronously
+        // pops the "Confirm" reload dialog. openCataloguePath's poll loop answers it (NO — our
+        // in-memory was just serialized to this file, and we reopen it explicitly below) and throws on
+        // any other, unknown modal.
         openCataloguePath(lastOpenedPath);
         return "{}";
     }
@@ -1575,6 +1611,98 @@ public class DataEditorActions {
 
     @FunctionalInterface
     private interface FxAction { void run() throws Exception; }
+
+    /**
+     * Describe every modal dialog currently blocking the FX thread (excluding the main Data Editor
+     * window) — title, label text and button id/text for each — or {@code null} if there are none.
+     * Runs via Platform.runLater so it executes even inside a modal showAndWait nested event loop.
+     * Used to turn an intermittent reopen deadlock into a deterministic, identifiable failure.
+     */
+    private String describeBlockingModals() {
+        try {
+            CompletableFuture<String> f = new CompletableFuture<>();
+            Platform.runLater(() -> {
+                StringBuilder sb = new StringBuilder();
+                for (Window w : new ArrayList<>(Window.getWindows())) {
+                    if (!(w instanceof Stage)) continue;
+                    Stage s = (Stage) w;
+                    if (!s.isShowing() || s.getModality() == Modality.NONE) continue;
+                    String title = s.getTitle();
+                    if (title != null && title.startsWith("Data Editor")) continue; // not the main window
+                    sb.append("Modal dialog: title='").append(title).append("'");
+                    if (s.getScene() != null && s.getScene().getRoot() != null) {
+                        Node root = s.getScene().getRoot();
+                        for (Node n : root.lookupAll(".label")) {
+                            if (n instanceof javafx.scene.control.Labeled) {
+                                String t = ((javafx.scene.control.Labeled) n).getText();
+                                if (t != null && !t.isBlank()) sb.append(" label='").append(t.trim()).append("'");
+                            }
+                        }
+                        for (Node n : root.lookupAll(".text")) {
+                            if (n instanceof javafx.scene.text.Text) {
+                                String t = ((javafx.scene.text.Text) n).getText();
+                                if (t != null && !t.isBlank()) sb.append(" text='").append(t.trim()).append("'");
+                            }
+                        }
+                        for (Node n : root.lookupAll(".button")) {
+                            if (n instanceof ButtonBase) {
+                                ButtonBase b = (ButtonBase) n;
+                                sb.append(" button[id=").append(b.getId()).append(",text='")
+                                  .append(b.getText()).append("']");
+                            }
+                        }
+                    }
+                    sb.append("; ");
+                }
+                f.complete(sb.length() == 0 ? null : sb.toString().trim());
+            });
+            return f.get(5, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            return "modal-detection failed: " + e;
+        }
+    }
+
+    /**
+     * Recognizes BattleScribe's external-change "Confirm" dialog (the editor detected the open file
+     * changed on disk and asks whether to reload). Identified by the {@code Confirm} title plus the
+     * standard {@code btnPositive}/{@code btnNegative} buttons. This is the only modal saveAndReload
+     * provokes (by rewriting the open file); any other modal is treated as unknown and fails.
+     */
+    private boolean isExternalChangeConfirm(String modalDesc) {
+        return modalDesc != null
+                && modalDesc.contains("title='Confirm'")
+                && modalDesc.contains("id=btnPositive")
+                && modalDesc.contains("id=btnNegative");
+    }
+
+    /**
+     * Fire the button with the given fx:id on every modal dialog (excluding the main Data Editor
+     * window). Runs via Platform.runLater so it executes inside the dialog's showAndWait nested loop,
+     * which closes the dialog and unblocks the FX thread. Returns true if any button was fired.
+     */
+    private boolean answerModalButton(String buttonId) {
+        try {
+            CompletableFuture<Boolean> f = new CompletableFuture<>();
+            Platform.runLater(() -> {
+                boolean fired = false;
+                for (Window w : new ArrayList<>(Window.getWindows())) {
+                    if (!(w instanceof Stage)) continue;
+                    Stage s = (Stage) w;
+                    if (!s.isShowing() || s.getModality() == Modality.NONE) continue;
+                    String title = s.getTitle();
+                    if (title != null && title.startsWith("Data Editor")) continue;
+                    if (s.getScene() == null || s.getScene().getRoot() == null) continue;
+                    Node btn = s.getScene().getRoot().lookup("#" + buttonId);
+                    if (btn instanceof ButtonBase) { ((ButtonBase) btn).fire(); fired = true; }
+                }
+                f.complete(fired);
+            });
+            return f.get(5, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            System.err.println("[agent] failed to fire modal button #" + buttonId + ": " + e);
+            return false;
+        }
+    }
 
     private void runOnFx(FxAction action) {
         if (Platform.isFxApplicationThread()) {
