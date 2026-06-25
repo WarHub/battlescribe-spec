@@ -142,8 +142,47 @@ public class JsonRpcServer {
             }
             return successResponse(id, result);
         } catch (Throwable e) {
-            return errorResponse(id, -32603, e.getClass().getSimpleName() + ": " + e.getMessage());
+            return errorResponse(id, -32603, describeThrowable(e));
         }
+    }
+
+    /**
+     * Build a diagnostic message that includes the full cause chain and the top
+     * stack frames of the deepest cause. Without this, errors surface as bare
+     * "InvocationTargetException" with no actionable detail.
+     */
+    static String describeThrowable(Throwable e) {
+        StringBuilder sb = new StringBuilder();
+        Throwable t = e;
+        int depth = 0;
+        Throwable deepest = e;
+        while (t != null && depth < 8) {
+            if (depth > 0) {
+                sb.append(" | Caused by: ");
+            }
+            sb.append(t.getClass().getName());
+            if (t.getMessage() != null) {
+                sb.append(": ").append(t.getMessage());
+            }
+            deepest = t;
+            Throwable cause = t.getCause();
+            if (cause == t) {
+                break;
+            }
+            t = cause;
+            depth++;
+        }
+        StackTraceElement[] frames = deepest.getStackTrace();
+        if (frames != null && frames.length > 0) {
+            sb.append(" || at ");
+            for (int i = 0; i < Math.min(8, frames.length); i++) {
+                if (i > 0) {
+                    sb.append("; ");
+                }
+                sb.append(frames[i].toString());
+            }
+        }
+        return sb.toString();
     }
 
     /**

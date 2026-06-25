@@ -220,36 +220,88 @@ public class SceneGraphCommands {
     private String captureScreenshot(String params) {
         JsonObject paramsObject = parseParams(params);
         String windowTitle = getString(paramsObject, "windowTitle", null);
-        Scene scene = findScene(windowTitle);
+        boolean allWindows = getBoolean(paramsObject, "allWindows", false);
+
+        // Capture EVERY open window (main + any modals/dialogs) so callers can see
+        // exactly what is on screen, including the dialog blocking interaction.
+        if (allWindows) {
+            JsonArray shots = new JsonArray();
+            for (Window w : Window.getWindows()) {
+                if (!(w instanceof Stage) || w.getScene() == null || !w.isShowing()) {
+                    continue;
+                }
+                Stage s = (Stage) w;
+                JsonObject shot = snapshotScene(w.getScene());
+                shot.addProperty("title", s.getTitle());
+                shot.addProperty("focused", s.isFocused());
+                shots.add(shot);
+            }
+            JsonObject response = new JsonObject();
+            response.add("windows", shots);
+            return response.toString();
+        }
+
+        // Single window: explicit title, else the FOCUSED window (the modal on top
+        // when a dialog is open), else the first available scene.
+        Scene scene = (windowTitle == null || windowTitle.isEmpty())
+            ? findFocusedScene()
+            : findScene(windowTitle);
         if (scene == null) {
             return jsonError("No scene found");
         }
+        JsonObject response = snapshotScene(scene);
+        if (response.has("error")) {
+            return jsonError(response.get("error").getAsString());
+        }
+        return response.toString();
+    }
 
-        WritableImage image = scene.snapshot(null);
+    /** Snapshot a scene to a {png,width,height} JsonObject (or {error}). Must run on the FX thread. */
+    private JsonObject snapshotScene(Scene scene) {
+        JsonObject out = new JsonObject();
         try {
+            WritableImage image = scene.snapshot(null);
             Class<?> swingFxClass = Class.forName("javafx.embed.swing.SwingFXUtils");
             java.lang.reflect.Method fromFXImage = swingFxClass.getMethod("fromFXImage",
                 javafx.scene.image.Image.class, java.awt.image.BufferedImage.class);
             Object buffered = fromFXImage.invoke(null, image, null);
             if (buffered == null) {
-                return jsonError("Failed to capture scene");
+                out.addProperty("error", "Failed to capture scene");
+                return out;
             }
             try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
                 if (!ImageIO.write((BufferedImage) buffered, "png", baos)) {
                     throw new IOException("No PNG writer available");
                 }
-                String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
-                JsonObject response = new JsonObject();
-                response.addProperty("png", base64);
-                response.addProperty("width", (int) image.getWidth());
-                response.addProperty("height", (int) image.getHeight());
-                return response.toString();
+                out.addProperty("png", Base64.getEncoder().encodeToString(baos.toByteArray()));
+                out.addProperty("width", (int) image.getWidth());
+                out.addProperty("height", (int) image.getHeight());
+                return out;
             }
         } catch (ClassNotFoundException e) {
-            return jsonError("javafx.swing module not available for screenshots");
+            out.addProperty("error", "javafx.swing module not available for screenshots");
+            return out;
         } catch (Exception e) {
-            return jsonError("Screenshot failed: " + e.getMessage());
+            out.addProperty("error", "Screenshot failed: " + e.getMessage());
+            return out;
         }
+    }
+
+    /** The focused window's scene (topmost modal when a dialog is open), else any scene. */
+    private Scene findFocusedScene() {
+        for (Window w : Window.getWindows()) {
+            if (w instanceof Stage && w.isShowing() && w.getScene() != null && ((Stage) w).isFocused()) {
+                return w.getScene();
+            }
+        }
+        // Prefer a modal/dialog if present, else fall back to the first scene.
+        for (Window w : Window.getWindows()) {
+            if (w instanceof Stage && w.isShowing() && w.getScene() != null
+                    && ((Stage) w).getModality() != javafx.stage.Modality.NONE) {
+                return w.getScene();
+            }
+        }
+        return findScene(null);
     }
 
     private String startRecording(String params) {
