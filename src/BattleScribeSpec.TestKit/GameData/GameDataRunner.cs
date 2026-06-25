@@ -61,6 +61,16 @@ public sealed class GameDataRunner
                 return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
             }
 
+            // Explicitly open the declared file for editing, so the active file (what mutations,
+            // reload, and export apply to) is deterministic across engines rather than relying on
+            // each engine's implicit first/last-catalogue default.
+            if (string.IsNullOrWhiteSpace(spec.Setup.Edit))
+            {
+                _errors.Add("Setup error: setup.edit is required (the id of the file to open for editing)");
+                return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
+            }
+            _engine.OpenFile(spec.Setup.Edit);
+
             // Execute steps
             for (var i = 0; i < spec.Steps.Count; i++)
             {
@@ -197,7 +207,13 @@ public sealed class GameDataRunner
         }
     }
 
-    /// <summary>(Re)write an expected side-file: base from the base engine, override (only on divergence) otherwise.</summary>
+    /// <summary>
+    /// (Re)write an expected side-file. The base engine writes the base (no infix). A non-base engine
+    /// writes its family override (e.g. battlescribe + battlescribe-ui → <c>.battlescribe.</c>) when it
+    /// is the family-canonical engine; a family <em>variant</em> (e.g. battlescribe-ui) shares that
+    /// family file when its output matches and otherwise pins an exact-engine override the resolver
+    /// prefers over the family file. Overrides equal to the base are removed.
+    /// </summary>
     private void WriteSnapshot(string engine, string key, string ext, string actual)
     {
         var basePath = GameDataSnapshotResolver.BasePath(_specDir!, _specId, key, ext);
@@ -207,24 +223,53 @@ public sealed class GameDataRunner
             return;
         }
 
-        var overridePath = GameDataSnapshotResolver.OverridePath(_specDir!, _specId, key, engine, ext);
+        var family = GameDataSnapshotResolver.Family(engine);
+        var familyPath = GameDataSnapshotResolver.OverridePath(_specDir!, _specId, key, family, ext);
+        var exactPath = GameDataSnapshotResolver.OverridePath(_specDir!, _specId, key, engine, ext);
         var baseContent = File.Exists(basePath) ? NormalizeNewlines(File.ReadAllText(basePath)) : null;
+
+        // Matches the base: no override needed; drop any stale override this engine owns.
         if (baseContent == actual)
         {
-            if (File.Exists(overridePath))
+            DeleteSnapshotIfExists(exactPath);
+            if (engine == family)
             {
-                File.Delete(overridePath);
+                DeleteSnapshotIfExists(familyPath);
             }
             return;
         }
 
         if (baseContent is null)
         {
-            Console.Error.WriteLine($"[snapshot] base missing for '{key}'; wrote '{engine}' override. " +
+            Console.Error.WriteLine($"[snapshot] base missing for '{key}'. " +
                 $"Generate the base ('{GameDataSnapshotResolver.BaseEngineName}') first.");
         }
 
-        SafeWriteSnapshot(overridePath, actual);
+        // The family-canonical engine (name == family) owns the shared family override.
+        if (engine == family)
+        {
+            SafeWriteSnapshot(familyPath, actual);
+            return;
+        }
+
+        // A family variant (e.g. battlescribe-ui): share the family file when identical, else pin an
+        // exact-engine override the resolver prefers over the family file.
+        var familyContent = File.Exists(familyPath) ? NormalizeNewlines(File.ReadAllText(familyPath)) : null;
+        if (familyContent == actual)
+        {
+            DeleteSnapshotIfExists(exactPath);
+            return;
+        }
+
+        SafeWriteSnapshot(exactPath, actual);
+    }
+
+    private static void DeleteSnapshotIfExists(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
     }
 
     private static void SafeWriteSnapshot(string path, string content)

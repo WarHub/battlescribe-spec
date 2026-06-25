@@ -5,6 +5,7 @@ description: >
   with a child entry survives a save + reload with the full subtree and nesting intact.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

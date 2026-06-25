@@ -6,6 +6,7 @@ description: >
   query-field surface beyond type/value/field/scope.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

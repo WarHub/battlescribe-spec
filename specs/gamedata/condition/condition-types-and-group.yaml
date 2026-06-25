@@ -6,6 +6,7 @@ description: >
   Verifies conditionGroup creation, group type, and condition type/childId fields.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

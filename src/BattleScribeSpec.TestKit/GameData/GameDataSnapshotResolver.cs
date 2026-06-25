@@ -3,21 +3,35 @@ namespace BattleScribeSpec.GameData;
 /// <summary>
 /// Resolves snapshot / side-file paths for file-export assertions and file loads. Files live next to
 /// the spec, keyed by the step's id. Layout is either flat (preferred) — <c>{specId}.{key}.{ext}</c> —
-/// or a per-spec folder — <c>{specId}/{key}.{ext}</c> — each with an optional per-engine override that
-/// adds a <c>.{engine}</c> infix. The base file (no engine infix) is the NewRecruit output; other
-/// engines (e.g. <c>battlescribe</c>) get override files only where their serialization diverges.
+/// or a per-spec folder — <c>{specId}/{key}.{ext}</c> — each with an optional override that adds a
+/// <c>.{engine}</c> infix.
+///
+/// <para>The base file (no infix) is the NewRecruit output. Other engines get an override only where
+/// their serialization diverges, and the override is keyed by the engine <em>family</em> (the name with
+/// any <c>-ui</c> suffix stripped) so the headless and UI variants of one editor — which share a
+/// serializer and therefore emit identical files — share a single override file (e.g.
+/// <c>battlescribe</c> and <c>battlescribe-ui</c> both use <c>{specId}.{key}.battlescribe.{ext}</c>).
+/// An exact-engine override (full <c>{engine}</c> infix, including the <c>-ui</c>) is still honored
+/// first as an escape hatch should a variant ever genuinely diverge.</para>
 /// </summary>
 public static class GameDataSnapshotResolver
 {
-    /// <summary>Engine whose output is the base/default snapshot (written without an engine infix).</summary>
+    /// <summary>Engine family whose output is the base/default snapshot (written without an engine infix).</summary>
     public const string BaseEngineName = "newrecruit";
+
+    /// <summary>
+    /// The snapshot family an engine belongs to: its name with any trailing <c>-ui</c> removed. Engines
+    /// in the same family share a serializer (the editor's headless and UI surfaces) and so share one
+    /// override file. A divergence between variants therefore fails the byte compare instead of hiding.
+    /// </summary>
+    public static string Family(string engine)
+        => engine.EndsWith("-ui", StringComparison.Ordinal) ? engine[..^"-ui".Length] : engine;
 
     /// <summary>
     /// True for the NewRecruit-family engines whose output IS the base (store-direct and the NR UI
     /// produce the same NR serialization). Either may write the base file; other engines write overrides.
     /// </summary>
-    public static bool IsBaseEngine(string engine)
-        => engine == BaseEngineName || engine == BaseEngineName + "-ui";
+    public static bool IsBaseEngine(string engine) => Family(engine) == BaseEngineName;
 
     /// <summary>
     /// Resolve the existing snapshot file for an engine, preferring a per-engine override over the
@@ -36,11 +50,22 @@ public static class GameDataSnapshotResolver
         return null;
     }
 
-    /// <summary>Candidate paths in resolution order: per-engine override (flat, folder) then base (flat, folder).</summary>
+    /// <summary>
+    /// Candidate paths in resolution order: exact-engine override (escape hatch), then the shared
+    /// family override, then the base — each tried flat before folder.
+    /// </summary>
     public static IEnumerable<string> Candidates(string specDir, string specId, string key, string engine, string ext)
     {
         yield return Flat(specDir, specId, key, engine, ext);
         yield return Folder(specDir, specId, key, engine, ext);
+
+        var family = Family(engine);
+        if (family != engine)
+        {
+            yield return Flat(specDir, specId, key, family, ext);
+            yield return Folder(specDir, specId, key, family, ext);
+        }
+
         yield return Flat(specDir, specId, key, null, ext);
         yield return Folder(specDir, specId, key, null, ext);
     }

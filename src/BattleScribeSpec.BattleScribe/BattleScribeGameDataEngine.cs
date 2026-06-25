@@ -45,6 +45,10 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             foreach (var catSpec in catalogues)
             {
                 var built = BuildCatalogue(catSpec);
+                // A real editor stamps the catalogue with the game system's current
+                // revision when the two are associated; mirror that so exports match the
+                // real Data Editor (the factory itself leaves gameSystemRevision at 0).
+                built.setGameSystemRevision(_gameSystem?.getRevision() ?? 0);
                 _catalogues.Add(built);
                 IndexAllEntries(built);
             }
@@ -56,6 +60,10 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             {
                 IndexGameSystemEntries(_gameSystem);
             }
+
+            // Apply the Data Editor's on-load cost normalization so this engine serializes
+            // identically to battlescribe-ui (see NormalizeCosts).
+            NormalizeCosts();
         }
         catch (Exception ex)
         {
@@ -392,6 +400,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             IndexAllEntries(cat);
             _catalogue = cat;
             _openIsGameSystem = false;
+            NormalizeCosts(); // the Data Editor normalizes costs on every file open/load
             return cat.getId();
         }
         catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
@@ -550,10 +559,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
         var forceEntries = spec.ForceEntries?.Select(BuildForceEntry).ToArray();
 
-        var categoryEntries = spec.CategoryEntries?.Select(ce =>
-            JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name, ce.Hidden,
-                ce.Constraints?.Select(BuildConstraint).ToArray(),
-                ce.Modifiers?.Select(BuildModifier).ToArray())).ToArray();
+        var categoryEntries = spec.CategoryEntries?.Select(BuildCategoryEntry).ToArray();
 
         var profileTypes = spec.ProfileTypes?.Select(pt =>
             JavaModelFactory.CreateProfileType(pt.Id, pt.Name,
@@ -621,10 +627,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
                 JavaModelFactory.CreateProfileType(pt.Id, pt.Name,
                     pt.CharacteristicTypes?.Select(ct =>
                         JavaModelFactory.CreateCharacteristicType(ct.Id, ct.Name)))).ToArray(),
-            categoryEntries: spec.CategoryEntries?.Select(ce =>
-                JavaModelFactory.CreateCategoryEntry(ce.Id, ce.Name, ce.Hidden,
-                    ce.Constraints?.Select(BuildConstraint).ToArray(),
-                    ce.Modifiers?.Select(BuildModifier).ToArray())).ToArray(),
+            categoryEntries: spec.CategoryEntries?.Select(BuildCategoryEntry).ToArray(),
             forceEntries: spec.ForceEntries?.Select(BuildForceEntry).ToArray());
 
         if (spec.Publications != null)
@@ -642,6 +645,18 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             foreach (var il in spec.InfoLinks)
             {
                 cat.getInfoLinks().add(BuildInfoLink(il));
+            }
+        }
+
+        if (spec.CatalogueLinks != null)
+        {
+            foreach (var cl in spec.CatalogueLinks)
+            {
+                // type is a required XML attribute; the real editor defaults a catalogue-targeting
+                // link to "catalogue" when unspecified.
+                cat.getCatalogueLinks().add(JavaModelFactory.CreateCatalogueLink(
+                    cl.Id, cl.Name, cl.TargetId, cl.ImportRootEntries,
+                    string.IsNullOrEmpty(cl.Type) ? "catalogue" : cl.Type));
             }
         }
 
@@ -668,7 +683,8 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             categoryLinks: categoryLinks,
             collective: spec.Collective,
             import: spec.Import,
-            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
 
         if (spec.ModifierGroups != null)
         {
@@ -757,21 +773,38 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
     private static EntryLink BuildEntryLink(ProtocolEntryLink spec)
     {
+        var costs = spec.Costs?.Select(c => JavaModelFactory.CreateCost(c.Name, c.TypeId, c.Value)).ToArray();
         var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
         var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
         var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
+        var childEntries = spec.SelectionEntries?.Select(BuildSelectionEntry).ToArray();
+        var childGroups = spec.SelectionEntryGroups?.Select(BuildSelectionEntryGroup).ToArray();
+        var childLinks = spec.EntryLinks?.Select(BuildEntryLink).ToArray();
+        var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+        var infoGroups = spec.InfoGroups?.Select(BuildInfoGroup).ToArray();
+        var infoLinks = spec.InfoLinks?.Select(BuildInfoLink).ToArray();
 
         return JavaModelFactory.CreateEntryLink(
             spec.Id, spec.Name ?? "", spec.TargetId ?? "", spec.Type,
             hidden: spec.Hidden,
             collective: spec.Collective,
             import: spec.Import,
+            costs: costs,
             constraints: constraints,
             modifiers: modifiers,
             modifierGroups: modifierGroups,
             categoryLinks: categoryLinks,
-            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId);
+            selectionEntries: childEntries,
+            selectionEntryGroups: childGroups,
+            entryLinks: childLinks,
+            profiles: profiles,
+            rules: rules,
+            infoGroups: infoGroups,
+            infoLinks: infoLinks,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
     }
 
     private static ForceEntry BuildForceEntry(ProtocolForceEntry spec)
@@ -779,7 +812,12 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var categoryLinks = spec.CategoryLinks?.Select(BuildCategoryLink).ToArray();
         var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
+        var modifierGroups = spec.ModifierGroups?.Select(BuildModifierGroup).ToArray();
         var childForces = spec.ForceEntries?.Select(BuildForceEntry).ToArray();
+        var profiles = spec.Profiles?.Select(BuildProfile).ToArray();
+        var rules = spec.Rules?.Select(BuildRule).ToArray();
+        var infoGroups = spec.InfoGroups?.Select(BuildInfoGroup).ToArray();
+        var infoLinks = spec.InfoLinks?.Select(BuildInfoLink).ToArray();
 
         return JavaModelFactory.CreateForceEntry(
             spec.Id, spec.Name,
@@ -787,7 +825,184 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             categoryLinks: categoryLinks,
             forceEntries: childForces,
             constraints: constraints,
-            modifiers: modifiers);
+            modifiers: modifiers,
+            modifierGroups: modifierGroups,
+            profiles: profiles,
+            rules: rules,
+            infoGroups: infoGroups,
+            infoLinks: infoLinks,
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
+    }
+
+    /// <summary>
+    /// Replicate the BattleScribe Data Editor's on-load cost normalization (the DataManager
+    /// <c>net.battlescribe.engine.a.a#l()</c> → <c>#a(SelectionEntry)</c>): every selection entry gets
+    /// a cost for each cost type (game system + its catalogue, ordered by id), created via the real
+    /// <c>new Cost(costType)</c> constructor — name resolved from the type, value 0. The reference
+    /// engine builds the model directly and so skips this step; applying it makes <c>battlescribe</c>
+    /// serialize byte-identically to the <c>battlescribe-ui</c> Data Editor (a `{driver}` and
+    /// `{driver}-ui` must produce the same files). Idempotent; only selection entries are filled —
+    /// groups and links keep their costs as-is, matching the Data Editor.
+    /// </summary>
+    private void NormalizeCosts()
+    {
+        if (_gameSystem is null)
+        {
+            return;
+        }
+
+        var gsCostTypes = ToCostTypes(GetList(_gameSystem, "getCostTypes"));
+        foreach (var cat in _catalogues)
+        {
+            var costTypes = gsCostTypes
+                .Concat(ToCostTypes(GetList(cat, "getCostTypes")))
+                .GroupBy(ct => ct.getId(), StringComparer.Ordinal)
+                .Select(g => g.First())
+                .OrderBy(ct => ct.getId(), StringComparer.Ordinal)
+                .ToArray();
+            if (costTypes.Length == 0)
+            {
+                continue;
+            }
+
+            foreach (var se in CollectSelectionEntries(cat))
+            {
+                FillMissingCosts(se, costTypes);
+            }
+        }
+    }
+
+    private static List<CostType> ToCostTypes(JavaList? list)
+    {
+        var result = new List<CostType>();
+        if (list is not null)
+        {
+            for (var i = 0; i < list.size(); i++)
+            {
+                result.Add((CostType)list.get(i));
+            }
+        }
+
+        return result;
+    }
+
+    private static void FillMissingCosts(SelectionEntry se, CostType[] costTypes)
+    {
+        var byId = costTypes.ToDictionary(ct => ct.getId(), StringComparer.Ordinal);
+        var costs = se.getCosts();
+        var present = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < costs.size(); i++)
+        {
+            var cost = (Cost)costs.get(i);
+            present.Add(cost.getTypeId());
+            // The Data Editor resolves each cost's name from its cost type on load; mirror it so an
+            // existing cost declared with only a typeId+value still serializes with the type's name.
+            if (byId.TryGetValue(cost.getTypeId(), out var ct))
+            {
+                cost.setName(ct.getName());
+            }
+        }
+
+        foreach (var ct in costTypes)
+        {
+            if (present.Add(ct.getId()))
+            {
+                costs.add(new Cost(ct));
+            }
+        }
+    }
+
+    // Every selection entry in a catalogue (root + shared, recursing through nested entries and both
+    // nested and shared groups). Mirrors the DataManager's J() set; entry links are excluded.
+    private static IEnumerable<SelectionEntry> CollectSelectionEntries(Catalogue cat)
+    {
+        foreach (var listName in new[] { "getSelectionEntries", "getSharedSelectionEntries" })
+        {
+            foreach (var se in WalkEntries(GetList(cat, listName)))
+            {
+                yield return se;
+            }
+        }
+
+        foreach (var seg in ToGroups(GetList(cat, "getSharedSelectionEntryGroups")))
+        {
+            foreach (var se in WalkGroup(seg))
+            {
+                yield return se;
+            }
+        }
+    }
+
+    private static IEnumerable<SelectionEntry> WalkEntries(JavaList? entries)
+    {
+        if (entries is null)
+        {
+            yield break;
+        }
+
+        for (var i = 0; i < entries.size(); i++)
+        {
+            var se = (SelectionEntry)entries.get(i);
+            yield return se;
+            foreach (var child in WalkEntries(GetList(se, "getSelectionEntries")))
+            {
+                yield return child;
+            }
+
+            foreach (var seg in ToGroups(GetList(se, "getSelectionEntryGroups")))
+            {
+                foreach (var child in WalkGroup(seg))
+                {
+                    yield return child;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<SelectionEntry> WalkGroup(SelectionEntryGroup seg)
+    {
+        foreach (var child in WalkEntries(GetList(seg, "getSelectionEntries")))
+        {
+            yield return child;
+        }
+
+        foreach (var childGroup in ToGroups(GetList(seg, "getSelectionEntryGroups")))
+        {
+            foreach (var child in WalkGroup(childGroup))
+            {
+                yield return child;
+            }
+        }
+    }
+
+    private static List<SelectionEntryGroup> ToGroups(JavaList? list)
+    {
+        var result = new List<SelectionEntryGroup>();
+        if (list is not null)
+        {
+            for (var i = 0; i < list.size(); i++)
+            {
+                result.Add((SelectionEntryGroup)list.get(i));
+            }
+        }
+
+        return result;
+    }
+
+    private static CategoryEntry BuildCategoryEntry(ProtocolCategoryEntry spec)
+    {
+        return JavaModelFactory.CreateCategoryEntry(
+            spec.Id, spec.Name, spec.Hidden,
+            constraints: spec.Constraints?.Select(BuildConstraint).ToArray(),
+            modifiers: spec.Modifiers?.Select(BuildModifier).ToArray(),
+            modifierGroups: spec.ModifierGroups?.Select(BuildModifierGroup).ToArray(),
+            profiles: spec.Profiles?.Select(BuildProfile).ToArray(),
+            rules: spec.Rules?.Select(BuildRule).ToArray(),
+            infoGroups: spec.InfoGroups?.Select(BuildInfoGroup).ToArray(),
+            infoLinks: spec.InfoLinks?.Select(BuildInfoLink).ToArray(),
+            publicationId: string.IsNullOrEmpty(spec.PublicationId) ? null : spec.PublicationId,
+            page: string.IsNullOrEmpty(spec.Page) ? null : spec.Page);
     }
 
     private static Rule BuildRule(ProtocolRule spec)

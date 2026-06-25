@@ -5,6 +5,7 @@ description: >
   the entire tree structure is correctly represented.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

@@ -5,6 +5,7 @@ description: >
   Verifies info-group creation and that profiles/rules can be created within it.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

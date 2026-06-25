@@ -432,6 +432,15 @@ whose Java agent speaks JSON-RPC 2.0 (below). That wire is therefore the canonic
 | `GetState` | — | state | Structural snapshot (game system + catalogues) |
 | `GetValidationErrors` | — | errors[] | Validation errors (e.g. broken link targets) |
 
+### Active file (`setup.edit`)
+
+Engines disagree on which loaded file is "active" by default (the reference and the Data Editor open
+the **first** catalogue; NewRecruit the **last**). So every spec declares the file it edits with a
+required **`setup.edit`** — a catalogue id or the game system id. After `Setup`, the runner calls
+`OpenFile(setup.edit)` so the active file (what mutations, `Reload`, and `expectedFile` export apply to)
+is deterministic across engines; an `openFile` step may switch it later. `OpenFile` is idempotent, so
+re-opening the already-active single file is a no-op.
+
 ### Declared ids (byte-reproducible exports)
 
 `AddEntry` / `AddLink` accept an **optional `id`** — the id to assign the created node (all editors
@@ -444,11 +453,26 @@ serialized output declare ids so the export is reproducible; later steps can ref
 `ExportActiveFile` returns the open file's **exact** BattleScribe XML — the editor's own serialization.
 A spec step with `expectedFile` compares it **byte-for-byte** (only `\r\n`→`\n` normalized on read)
 against the expected content, which may be inline (`content:`) or a side-file next to the spec keyed by
-the step `id`: `{specId}.{stepId}.{ext}` (the **NewRecruit base**) with optional per-engine overrides
-`{specId}.{stepId}.{engine}.{ext}` (`ext` ∈ `cat`/`gst`, from the root element). The store-direct
-`newrecruit` and `newrecruit-ui` engines serialize through NR's own writer, so their output is identical
-and shares the base; `battlescribe`/`battlescribe-ui` get overrides only where their serialization
-diverges. `BSSPEC_UPDATE_SNAPSHOTS=1` (or `bs-spec run --update-snapshots`) (re)writes the side-files.
+the step `id`. Side-files resolve in three tiers (`ext` ∈ `cat`/`gst`, from the root element):
+
+1. **Base** `{specId}.{stepId}.{ext}` — the **NewRecruit** output. The store-direct `newrecruit` and
+   `newrecruit-ui` engines serialize through NR's own writer, so their output is identical and shares
+   the base.
+2. **Family override** `{specId}.{stepId}.{family}.{ext}` — one file per editor *family* (an engine name
+   with any `-ui` suffix stripped, e.g. `battlescribe`). The headless reference and the real Data Editor
+   share the same BattleScribe serializer, so `battlescribe` and `battlescribe-ui` normally share the
+   `.battlescribe.` override; it exists only where that serializer diverges from NR's.
+3. **Exact override** `{specId}.{stepId}.{engine}.{ext}` — a single engine (full name, e.g.
+   `battlescribe-ui`), resolved before the family file. A safety net for a variant that genuinely
+   diverges from its family-canonical engine; in practice unused, because **`{driver}` and
+   `{driver}-ui` are required to produce identical files** — the in-process `battlescribe` engine
+   replicates the Data Editor's on-load normalization (e.g. filling a zero cost for every cost type)
+   so it matches `battlescribe-ui` byte-for-byte rather than carrying its own snapshot.
+
+Resolution prefers exact → family → base; the writer keeps each tier minimal (no override is written
+when an engine matches the tier above it). `BSSPEC_UPDATE_SNAPSHOTS=1` (or `bs-spec run
+--update-snapshots`) (re)writes the side-files; generate the base first, then the family-canonical
+engine, then variants.
 
 ### Open / load mid-spec
 

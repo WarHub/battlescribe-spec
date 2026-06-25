@@ -1,0 +1,364 @@
+id: completeness
+category: export
+description: >
+  Serialization completeness / schema check. Builds a richly-populated catalogue plus a small library
+  catalogue (with a reference game system) that exercises every common BattleScribe v2.03 node type,
+  deep nesting, varied field values, ids, and links — including nested and cross-catalogue links and a
+  catalogueLink — then exports the edited catalogue (setup.edit) and byte-compares it against a
+  per-engine snapshot. The snapshot is the contract: any change to XML structure, child ordering,
+  attribute ordering, attribute naming, or which fields serialize is caught here for every engine at
+  once (NewRecruit base + per-engine overrides).
+
+  Unlike entry/kitchen-sink (action-driven, state-asserted), this is setup-driven and byte-asserted —
+  it checks the serializer, not the driver. Keep it exhaustive: when a node type or field is added to
+  the schema, add it here too.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Completeness System
+    # Reference targets used by links/profiles/categoryLinks below.
+    costTypes:
+      - id: ct-pts
+        name: Points
+      - id: ct-pl
+        name: Power Level
+        hidden: true
+        defaultCostLimit: 0
+    profileTypes:
+      - id: pt-weapon
+        name: Weapon
+        characteristicTypes:
+          - id: cht-range
+            name: Range
+          - id: cht-str
+            name: Str
+      - id: pt-ability
+        name: Ability
+        characteristicTypes:
+          - id: cht-desc
+            name: Description
+    categoryEntries:
+      - id: gce-infantry
+        name: Infantry
+      - id: gce-character
+        name: Character
+        hidden: true
+
+  catalogues:
+    # Primary catalogue — the edited/exported file (setup.edit: cat-1). One node of every common
+    # container, with nesting and links.
+    - id: cat-1
+      name: Completeness Catalogue
+      gameSystemId: gs-1
+
+      publications:
+        - id: pub-core
+          name: Core Rulebook
+          shortName: CRB
+          publisher: Games Co
+          publicationDate: "2024"
+          publisherUrl: https://example.test/crb
+
+      costTypes:
+        - id: cct-pts
+          name: Local Points
+
+      profileTypes:
+        - id: cpt-extra
+          name: Extra
+          characteristicTypes:
+            - id: ccht-note
+              name: Note
+
+      categoryEntries:
+        - id: ce-hq
+          name: HQ
+          page: "12"
+          publicationId: pub-core
+          constraints:
+            - id: con-hq-max
+              type: max
+              value: 2
+              field: selections
+              scope: roster
+          modifiers:
+            - type: set
+              field: hidden
+              value: "false"
+
+      forceEntries:
+        - id: fe-detachment
+          name: Detachment
+          page: "5"
+          publicationId: pub-core
+          categoryLinks:
+            - id: cl-fe-hq
+              targetId: ce-hq
+              name: HQ
+              primary: false
+          constraints:
+            - id: con-fe-min
+              type: min
+              value: 1
+              field: selections
+              scope: parent
+          rules:
+            - id: rule-fe
+              name: Detachment Rule
+              description: A force-level rule.
+          forceEntries:
+            - id: fe-sub
+              name: Sub-Detachment
+
+      # Shared root containers.
+      sharedSelectionEntries:
+        - id: sse-bolter
+          name: Boltgun
+          type: upgrade
+          costs:
+            - typeId: ct-pts
+              value: 2
+          profiles:
+            - id: prof-bolter
+              name: Boltgun
+              typeId: pt-weapon
+              typeName: Weapon
+              characteristics:
+                - name: Range
+                  typeId: cht-range
+                  value: "24\""
+                - name: Str
+                  typeId: cht-str
+                  value: "4"
+
+      sharedSelectionEntryGroups:
+        - id: sseg-shared
+          name: Shared Wargear
+          # default points at this group's own child (a valid default; an out-of-group target is
+          # cleaned by the real Data Editor on load).
+          defaultSelectionEntryId: sseg-child-knife
+          selectionEntries:
+            - id: sseg-child-knife
+              name: Combat Knife
+              type: upgrade
+
+      sharedRules:
+        - id: srule-core
+          name: Shared Core Rule
+          description: A shared rule body.
+          page: "7"
+          publicationId: pub-core
+
+      sharedProfiles:
+        - id: sprof-ability
+          name: Feel No Pain
+          typeId: pt-ability
+          typeName: Ability
+          characteristics:
+            - name: Description
+              typeId: cht-desc
+              value: Ignore wounds on a 5+.
+
+      sharedInfoGroups:
+        - id: sig-shared
+          name: Shared Info
+          profiles:
+            - id: prof-sig
+              name: Aura
+              typeId: pt-ability
+              typeName: Ability
+              characteristics:
+                - name: Description
+                  typeId: cht-desc
+                  value: Affects nearby units.
+
+      # Primary selection entry: deep tree with every child kind.
+      selectionEntries:
+        - id: se-squad
+          name: Tactical Squad
+          type: unit
+          page: "40"
+          publicationId: pub-core
+          costs:
+            - typeId: ct-pts
+              value: 90
+          categoryLinks:
+            - id: cl-primary
+              targetId: gce-infantry
+              name: Infantry
+              primary: true
+            - id: cl-secondary
+              targetId: gce-character
+              name: Character
+              primary: false
+          constraints:
+            - id: con-squad-min
+              type: min
+              value: 5
+              field: selections
+              scope: parent
+            - id: con-squad-max
+              type: max
+              value: 10
+              field: selections
+              scope: parent
+              percentValue: false
+          profiles:
+            - id: prof-squad
+              name: Marine
+              typeId: pt-weapon
+              typeName: Weapon
+              characteristics:
+                - name: Range
+                  typeId: cht-range
+                  value: "-"
+                - name: Str
+                  typeId: cht-str
+                  value: "4"
+          rules:
+            - id: rule-squad
+              name: And They Shall Know No Fear
+              description: Auto-pass morale.
+          infoGroups:
+            - id: ig-squad
+              name: Squad Abilities
+              profiles:
+                - id: prof-ig
+                  name: Combat Squads
+                  typeId: pt-ability
+                  typeName: Ability
+                  characteristics:
+                    - name: Description
+                      typeId: cht-desc
+                      value: Split into two units.
+              infoLinks:
+                - id: il-ig-rule
+                  name: Shared Core (linked)
+                  targetId: srule-core
+                  type: rule
+              infoGroups:
+                - id: ig-nested
+                  name: Nested Info
+          infoLinks:
+            - id: il-squad-profile
+              name: Feel No Pain (linked)
+              targetId: sprof-ability
+              type: profile
+          modifiers:
+            - type: increment
+              field: ct-pts
+              value: "10"
+              conditions:
+                - type: atLeast
+                  value: 1
+                  field: selections
+                  scope: parent
+                  childId: sse-bolter
+              conditionGroups:
+                - type: and
+                  conditions:
+                    - type: lessThan
+                      value: 3
+                      field: selections
+                      scope: parent
+                      childId: sse-bolter
+              repeats:
+                - value: 1
+                  repeats: 1
+                  field: selections
+                  scope: parent
+                  childId: sse-bolter
+          modifierGroups:
+            - conditions:
+                - type: greaterThan
+                  value: 0
+                  field: selections
+                  scope: parent
+                  childId: sse-bolter
+              modifiers:
+                - type: set
+                  field: hidden
+                  value: "true"
+          selectionEntryGroups:
+            - id: seg-wargear
+              name: Wargear
+              defaultSelectionEntryId: se-bolter-child
+              selectionEntries:
+                - id: se-bolter-child
+                  name: Bolter
+                  type: upgrade
+                  costs:
+                    - typeId: ct-pts
+                      value: 0
+              entryLinks:
+                - id: el-group-relic
+                  name: Relic Blade (linked)
+                  targetId: lib-sse-relic
+                  type: selectionEntry
+          selectionEntries:
+            - id: se-sergeant
+              name: Sergeant
+              type: model
+          entryLinks:
+            - id: el-squad-bolter
+              name: Boltgun (linked)
+              targetId: sse-bolter
+              type: selectionEntry
+              costs:
+                - typeId: ct-pts
+                  value: 2
+              constraints:
+                - id: con-link-max
+                  type: max
+                  value: 1
+                  field: selections
+                  scope: parent
+              # Nested link: an entryLink inside an entryLink.
+              entryLinks:
+                - id: el-nested-relic
+                  name: Relic Blade (nested linked)
+                  targetId: lib-sse-relic
+                  type: selectionEntry
+
+      # Catalogue-root links.
+      entryLinks:
+        - id: el-root-relic
+          name: Relic Blade (root linked)
+          targetId: lib-sse-relic
+          type: selectionEntry
+
+      rules:
+        - id: rule-root
+          name: Catalogue Rule
+          description: A catalogue-root rule.
+
+      infoLinks:
+        - id: il-root-rule
+          name: Shared Core (root linked)
+          targetId: srule-core
+          type: rule
+
+      catalogueLinks:
+        - id: cl-lib
+          name: Completeness Library (linked)
+          targetId: cat-lib
+          type: catalogue
+          importRootEntries: true
+
+    # Library catalogue: the catalogueLink target, and home of the shared entry the cross-catalogue
+    # entryLinks above point at. setup.edit (cat-1) makes cat-1 the active/exported file regardless of
+    # catalogue order, so a second catalogue no longer changes which file each engine exports.
+    - id: cat-lib
+      name: Completeness Library
+      gameSystemId: gs-1
+      library: true
+      sharedSelectionEntries:
+        - id: lib-sse-relic
+          name: Relic Blade
+          type: upgrade
+
+steps:
+  - id: full
+    expectedFile: {}

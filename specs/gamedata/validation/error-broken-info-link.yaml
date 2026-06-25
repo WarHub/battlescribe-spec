@@ -8,6 +8,7 @@ description: >
   override); the structural state (the dangling info link) is asserted on every engine.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

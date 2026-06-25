@@ -2,11 +2,11 @@
 
 Tracks progress toward **100% coverage of the BattleScribe GameData model surface** — every
 data-model entity type and every settable field — verified against the two BattleScribe anchor
-engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). The suite is **108
+engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). The suite is **109
 GameData specs**. NewRecruit (`newrecruit`, `newrecruit-ui`) is not a gate, but **both NR engines
 drive the real NR Editor's Pinia store**: store-direct `newrecruit` mutates the real
 `loadedCatalogues` objects via direct JS, and `newrecruit-ui` mutates the same store through rendered
-widgets. **`newrecruit` runs all 108 specs; `newrecruit-ui` runs all but one** (only
+widgets. **`newrecruit` runs all 109 specs; `newrecruit-ui` runs all but one** (only
 `export/openfile-inline` carries `newrecruit-ui: skip` — mid-spec file load through the SPA file-list
 is flaky). The validation specs (see "Validation / data-integrity errors" below) stage data and read
 the engine's error list. Where a single field is a genuine NR limitation (it derives or doesn't model
@@ -42,7 +42,7 @@ Covered (9 specs, all green on both NR engines):
 
 ## NewRecruit engine status
 
-- **`newrecruit` (store-direct, frozen static bundle + live NR Editor): all 108 GameData specs pass.**
+- **`newrecruit` (store-direct, frozen static bundle + live NR Editor): all 109 GameData specs pass.**
   Setup loads the spec's generated XML through NR's real upload+open pipeline (shared `NrEditorStore`),
   populating the editor's Pinia `loadedCatalogues`. Mutations are fast **direct-JS** writes to those
   real store objects (the distinction from `newrecruit-ui`'s widget clicks); state, validation, export
@@ -74,10 +74,20 @@ Covered (9 specs, all green on both NR engines):
     - a force-entry `categoryLink.primary` is not modelled by NR's editor (no widget, not
       serialized) and defaults `false` on all three BS engines, so `links-create-and-fields` asserts
       `categoryLink` by `targetId` + `hidden` only (both consistent and settable on every engine).
-- **`openFile` spec action**: multi-catalogue specs declare the active file with
-  `action: openFile` so the editor edits the intended file; it can also load a file mid-spec from
-  inline `content:` XML or a side-file. (On the BS Data Editor wire this is the
-  `gamedataOpenFileAction` JSON-RPC method; the file type is derived from the XML root element.)
+- **`setup.edit` (required active file)**: every spec declares the file it edits — a catalogue id or
+  the game system id — because engines disagree on the default (the reference and Data Editor open the
+  first catalogue, NR the last). The runner opens it after setup so the active file is deterministic.
+  An `openFile` spec action may switch it later, or load a file mid-spec from inline `content:` XML or a
+  side-file. (On the BS Data Editor wire `openFile` is the `gamedataOpenFileAction` JSON-RPC method; the
+  file type is derived from the XML root element.)
+- **`export/completeness`**: a single setup-driven catalogue (plus a library catalogue + a reference
+  game system) exercising every common BattleScribe v2.03 node type, deep nesting, varied fields, ids,
+  and nested/cross-catalogue links + a `catalogueLink`, then byte-asserts the exported `.cat` on all
+  four engines. A serializer/schema regression check distinct from the action-driven, state-asserted
+  `entry/kitchen-sink`. Two snapshots: a NewRecruit base (shared by both NR engines) and a
+  `.battlescribe.` family override (shared by `battlescribe` + `battlescribe-ui`). The in-process
+  `battlescribe` engine replicates the Data Editor's on-load cost normalization (a zero cost per cost
+  type, names resolved) so it matches `battlescribe-ui` byte-for-byte.
 
 The authoritative surface is the decompiled model under
 `../battlescribe-decompiled/BattleScribeEngine/sources/net/battlescribe/model/data/` (51 classes).

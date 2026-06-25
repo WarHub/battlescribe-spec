@@ -5,6 +5,7 @@ description: >
   in the sharedSelectionEntries container with correct fields.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

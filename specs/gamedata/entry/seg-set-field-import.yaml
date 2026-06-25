@@ -5,6 +5,7 @@ description: >
   the state reflects it in the fields dictionary.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

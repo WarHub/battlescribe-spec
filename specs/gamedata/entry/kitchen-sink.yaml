@@ -8,6 +8,7 @@ description: >
   across all engines (no per-engine skips).
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

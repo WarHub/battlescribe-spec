@@ -4,6 +4,7 @@ description: >
   Remove an entry from a catalogue and verify it is no longer present.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

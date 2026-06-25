@@ -5,6 +5,7 @@ description: >
   and verify they round-trip. These are BaseRootEntry fields on the game system.
 
 setup:
+  edit: gs-1
   gameSystem:
     id: gs-1
     name: Test System

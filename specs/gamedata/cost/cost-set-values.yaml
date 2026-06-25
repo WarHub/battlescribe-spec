@@ -6,6 +6,7 @@ description: >
   values are persisted and keyed by cost type.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

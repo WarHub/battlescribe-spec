@@ -8,6 +8,7 @@ description: >
   targets, not query-scope resolution, so it reports no error there (per-engine override).
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

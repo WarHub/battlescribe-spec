@@ -4,6 +4,7 @@ description: >
   Set the hidden field of a category entry and verify the state reflects it.
 
 setup:
+  edit: gs-1
   gameSystem:
     id: gs-1
     name: Test System

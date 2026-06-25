@@ -36,6 +36,15 @@ public sealed class GameDataSetupDef
     /// Catalogue definitions for the spec.
     /// </summary>
     public List<ProtocolCatalogue>? Catalogues { get; set; }
+
+    /// <summary>
+    /// Id of the file (catalogue or game system) to open for editing — the active file that
+    /// mutations, <c>reload</c>, and <c>expectedFile</c> export apply to. Required: engines disagree
+    /// on which loaded file is "active" by default (the reference and Data Editor open the first
+    /// catalogue, NewRecruit the last), so every spec declares it explicitly. An <c>openFile</c> step
+    /// may switch the active file later in the spec.
+    /// </summary>
+    public string? Edit { get; set; }
 }
 
 /// <summary>

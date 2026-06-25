@@ -4,6 +4,7 @@ description: >
   Set the name field of a force entry and verify it is updated.
 
 setup:
+  edit: gs-1
   gameSystem:
     id: gs-1
     name: Test System

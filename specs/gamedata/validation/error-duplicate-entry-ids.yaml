@@ -7,6 +7,7 @@ description: >
   not duplicate ids, so it reports no error there (asserted via a per-engine override).
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

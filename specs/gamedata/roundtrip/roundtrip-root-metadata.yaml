@@ -5,6 +5,7 @@ description: >
   open catalogue survive a save + reload.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System

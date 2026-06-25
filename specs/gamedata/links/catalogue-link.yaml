@@ -8,6 +8,7 @@ description: >
   flags the dangling target.
 
 setup:
+  edit: cat-1
   gameSystem:
     id: gs-1
     name: Test System
