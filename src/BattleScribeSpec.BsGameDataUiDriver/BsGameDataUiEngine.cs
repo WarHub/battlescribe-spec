@@ -90,7 +90,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     {
         if (_app is null)
         {
-            throw new InvalidOperationException("openCatalogue: engine not set up.");
+            throw new InvalidOperationException("openFile: engine not set up.");
         }
 
         var gsDir = Path.Combine(_app.DataDirectoryPath, _gameSystemId ?? "");
@@ -100,10 +100,10 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         if (!File.Exists(path))
         {
             throw new InvalidOperationException(
-                $"openCatalogue: no staged file for id '{id}' (expected {path}).");
+                $"openFile: no staged file for id '{id}' (expected {path}).");
         }
 
-        await CallActionAsync("gamedataOpenCatalogueAction", new JsonObject { ["path"] = path });
+        await CallActionAsync("gamedataOpenFileAction", new JsonObject { ["path"] = path });
     }
 
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
@@ -192,7 +192,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         var path = Path.Combine(gsDir, isGameSystem ? "system.gst" : $"{id}.cat");
         await File.WriteAllTextAsync(path, xml);
 
-        await CallActionAsync("gamedataOpenCatalogueAction", new JsonObject { ["path"] = path });
+        await CallActionAsync("gamedataOpenFileAction", new JsonObject { ["path"] = path });
         return id;
     }
 
@@ -265,7 +265,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     {
         ThrowIfDisposed();
         await CleanupAsync();
-        _gameSystemId = gameSystem.Id; // for resolving openCatalogue paths
+        _gameSystemId = gameSystem.Id; // for resolving openFile paths
 
         try
         {

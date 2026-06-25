@@ -69,7 +69,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     /// Select the active file. Switching catalogue makes it the <i>primary</i> for validation
     /// (the others become imported link targets) and the profile-type context for adds. Opening
     /// the game system is a no-op (it is always the root context). Throws on an unknown id so a
-    /// mistyped <c>openCatalogue</c> fails loudly rather than silently editing the wrong file.
+    /// mistyped <c>openFile</c> fails loudly rather than silently editing the wrong file.
     /// </summary>
     public void OpenFile(string id)
     {

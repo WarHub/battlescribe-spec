@@ -77,7 +77,7 @@ public class DataEditorActions {
                 : new JsonObject();
 
         if ("gamedataLoadFilesAction".equals(method))   return loadFiles(p);
-        if ("gamedataOpenCatalogueAction".equals(method)) return openCatalogue(p);
+        if ("gamedataOpenFileAction".equals(method))    return openFile(p);
         if ("gamedataAddEntryAction".equals(method))    return addEntry(p);
         if ("gamedataRemoveEntryAction".equals(method)) return removeEntry(p);
         if ("gamedataSetFieldAction".equals(method))    return setField(p);
@@ -96,7 +96,7 @@ public class DataEditorActions {
     /**
      * Setup-time load: stage is done by the C# side; here we open the primary file (the first
      * catalogue, or the game system if there are none) through the editor's real open path so a
-     * default document is loaded for specs that don't issue an explicit {@code openCatalogue}.
+     * default document is loaded for specs that don't issue an explicit {@code openFile}.
      */
     private String loadFiles(JsonObject params) {
         cachedController = null; // reset cache on new load
@@ -109,13 +109,13 @@ public class DataEditorActions {
     }
 
     /**
-     * The {@code openCatalogue} action: open the selected file via the editor's real open path —
+     * The {@code openFile} action: open the selected file via the editor's real open path —
      * {@code dataSource.f(path)} (catalogue) / {@code dataSource.c(path)} (game system) to load it,
      * then the window controller's private {@code a(BaseRootEntry)} display method, exactly as
      * {@code actLoadDataFile} runs after the (un-driveable) native file picker. The C# side passes
      * the staged path for the requested id.
      */
-    private String openCatalogue(JsonObject params) {
+    private String openFile(JsonObject params) {
         idLessEntries.clear(); // reopening rebuilds the tree; old identity refs are stale
         openCataloguePath(requireString(params, "path"));
         return "{}";
