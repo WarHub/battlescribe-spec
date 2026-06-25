@@ -400,3 +400,84 @@ while line = readline(stdin):
 - The adapter should handle multiple setup/teardown cycles (one per spec test).
 - stderr is free for diagnostics — the runner ignores it.
 - The runner may terminate the adapter process if it doesn't respond within a timeout.
+
+## GameData Protocol (data-file editing)
+
+The protocol above tests **roster building** from fixed data. **GameData specs** (`specs/gamedata/`)
+test the inverse: **editing the data files themselves** — adding/removing entries, setting fields,
+costs and characteristics, linking, saving and reloading. The data *is* the editable artifact.
+
+### Contract: `IGameDataEngine`
+
+GameData conformance is defined by the **`IGameDataEngine`** interface, not the roster NDJSON wire.
+Most engines implement it **in-process with no serialization** — the in-process BattleScribe reference
+(via IKVM) and both NewRecruit Editor drivers (`newrecruit` store-direct and `newrecruit-ui`, both via
+Playwright). The only engine with a serialized wire is the BattleScribe Data Editor (`battlescribe-ui`),
+whose Java agent speaks JSON-RPC 2.0 (below). That wire is therefore the canonical contract a future
+**external** GameData adapter would implement.
+
+| Operation | Inputs | Output | Notes |
+|-----------|--------|--------|-------|
+| `Setup` | gameSystem, catalogues | errors[] | Load the initial editable data (same shapes as roster `setup`) |
+| `OpenFile` | `id` | — | Select the active file (catalogue or game system) for subsequent edits |
+| `AddEntry` | `parentId`, `entryType`, `name?`, `id?` | `entryId` | Add an entry; **`id` is the declared id** to assign (see below) |
+| `AddLink` | `parentId`, `linkType`, `targetId`, `id?` | `entryId` | Add an entry/info/category link; `id` is the declared id |
+| `RemoveEntry` | `entryId` | — | Remove an entry by id |
+| `SetField` | `entryId`, `field`, `value` | — | Set a scalar field (`name`, `hidden`, `type`, …) |
+| `SetCost` | `entryId`, `costTypeId`, `value` | — | Set/clear a cost, keyed by cost type |
+| `SetCharacteristic` | `entryId`, `nameOrTypeId`, `value` | — | Set/clear a profile characteristic |
+| `Reload` | — | — | Serialize the active file to `.cat`/`.gst` and load it back (round-trip) |
+| `ExportActiveFile` | — | xml | Exact serialized XML of the active file; type read from the root element |
+| `LoadFile` | xml | `id` | Load a catalogue/game system from XML and open it; returns the loaded root id |
+| `GetState` | — | state | Structural snapshot (game system + catalogues) |
+| `GetValidationErrors` | — | errors[] | Validation errors (e.g. broken link targets) |
+
+### Declared ids (byte-reproducible exports)
+
+`AddEntry` / `AddLink` accept an **optional `id`** — the id to assign the created node (all editors
+allow overriding the generated id). The action echoes it back as `entryId`. Specs that assert exact
+serialized output declare ids so the export is reproducible; later steps can reference a created id via
+`${{ steps.<step-id>.entryId }}`.
+
+### File export & snapshot assertions
+
+`ExportActiveFile` returns the open file's **exact** BattleScribe XML — the editor's own serialization.
+A spec step with `expectedFile` compares it **byte-for-byte** (only `\r\n`→`\n` normalized on read)
+against the expected content, which may be inline (`content:`) or a side-file next to the spec keyed by
+the step `id`: `{specId}.{stepId}.{ext}` (the **NewRecruit base**) with optional per-engine overrides
+`{specId}.{stepId}.{engine}.{ext}` (`ext` ∈ `cat`/`gst`, from the root element). The store-direct
+`newrecruit` and `newrecruit-ui` engines serialize through NR's own writer, so their output is identical
+and shares the base; `battlescribe`/`battlescribe-ui` get overrides only where their serialization
+diverges. `BSSPEC_UPDATE_SNAPSHOTS=1` (or `bs-spec run --update-snapshots`) (re)writes the side-files.
+
+### Open / load mid-spec
+
+The `openFile` spec action either opens an already-loaded file by `entryId`, or loads a new file from a
+source — inline `content:` XML, or a side-file keyed by the step `id` — via `LoadFile`, then opens it.
+The file type (catalogue vs game system) is always derived from the XML root element; no type flag is
+sent.
+
+### BattleScribe Data Editor wire (JSON-RPC 2.0)
+
+The `battlescribe-ui` Java agent is driven over **stdio with JSON-RPC 2.0** — one JSON object per line,
+`{"jsonrpc":"2.0","method":…,"id":…,"params":{…}}` → `{"jsonrpc":"2.0","id":…,"result":{…}}` or
+`{…,"error":{"code":-32603,"message":…}}` on a handler throw. XML is carried as a plain JSON string.
+
+| Method | params | result |
+|--------|--------|--------|
+| `gamedataLoadFilesAction` | `gstPath`, `catPaths[]` | `{}` |
+| `gamedataOpenFileAction` | `path` | `{}` — open/load the staged file at `path` (backs both `OpenFile` and `LoadFile`) |
+| `gamedataAddEntryAction` | `parentId`, `entryType`, `name?`, `entryId?` | `{"entryId":…}` |
+| `gamedataAddLinkAction` | `parentId`, `linkType`, `targetId`, `entryId?` | `{"entryId":…}` |
+| `gamedataRemoveEntryAction` | `entryId` | `{}` |
+| `gamedataSetFieldAction` | `entryId`, `field`, `value` | `{}` |
+| `gamedataSetCostAction` | `entryId`, `field` (cost type id), `value` | `{}` |
+| `gamedataSetCharacteristicAction` | `entryId`, `field` (name or type id), `value` | `{}` |
+| `gamedataSaveAndReloadAction` | — | `{}` — serialize the open file and reopen it |
+| `gamedataExportFileAction` | — | `{"xml":…}` |
+| `gamedataGetDataState` | — | `{"gameSystem":…?,"catalogues":[…]}` |
+| `gamedataGetErrors` | — | `{"errors":[{"message":…}, …]}` |
+
+C# maps `OpenFile(id)`/`LoadFile(xml)` onto `gamedataOpenFileAction` by staging the file to a path
+(`{id}.cat` or `system.gst`) and parsing the root id locally. `gamedataExportFileAction` calls the
+editor's own serializer, so its XML is byte-for-byte what the BattleScribe Data Editor writes.
