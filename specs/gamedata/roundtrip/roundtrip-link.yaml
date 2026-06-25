@@ -4,10 +4,6 @@ description: >
   Round-trip fidelity for links: an entry link added to a catalogue, pointing at a shared
   selection entry, survives a save + reload with its target intact.
 
-# See roundtrip-add-entry for the engine-gating rationale (#30).
-engines:
-  newrecruit: skip
-
 setup:
   gameSystem:
     id: gs-1

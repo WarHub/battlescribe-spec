@@ -5,10 +5,6 @@ description: >
   system survives a save + reload. The game-system-only counterpart of roundtrip-root-metadata,
   exercising the .gst file's root serialization.
 
-# See roundtrip-add-entry for the engine-gating rationale (#30).
-engines:
-  newrecruit: skip
-
 setup:
   gameSystem:
     id: gs-1

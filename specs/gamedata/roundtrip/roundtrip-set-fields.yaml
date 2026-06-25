@@ -5,10 +5,6 @@ description: >
   characteristic set on an entry all survive a save + reload. Exercises the three field kinds the
   editor edits (scalar / cost / characteristic) through serialization.
 
-# See roundtrip-add-entry for the engine-gating rationale (#30).
-engines:
-  newrecruit: skip
-
 setup:
   gameSystem:
     id: gs-1

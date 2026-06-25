@@ -1,4 +1,5 @@
 using BattleScribeSpec.GameData;
+using BattleScribeSpec.NewRecruit;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NrGameDataUiDriver;
@@ -49,7 +50,7 @@ public sealed class NrGameDataUiDriver
 
     public async Task OpenFileAsync(string id)
     {
-        await NrGameDataUiSetup.NavigateToFileAsync(_page, id);
+        await NrEditorStore.NavigateToFileAsync(_page, id);
         _selectedToken = null;
         _parentOf.Clear();
     }

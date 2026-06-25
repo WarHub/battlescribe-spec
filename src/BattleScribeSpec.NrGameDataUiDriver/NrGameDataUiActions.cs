@@ -1,4 +1,5 @@
 using BattleScribeSpec.GameData;
+using BattleScribeSpec.NewRecruit;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NrGameDataUiDriver;
@@ -10,7 +11,7 @@ namespace BattleScribeSpec.NrGameDataUiDriver;
 /// rendered catalogue tree interface. The hybrid pattern applies:
 ///   - Mutations: performed through real UI interactions (clicks, context menus, forms)
 ///   - IDs of new entries: read back via JS after each mutation
-///   - State: read from NR Editor's Pinia editorStore (see <see cref="ReadStateAsync"/>)
+///   - State: read from NR Editor's Pinia editorStore (see <see cref="NrEditorStore.ReadStateAsync"/>)
 ///
 /// The NR Editor shows a catalogue tree in the main panel. Entry operations are
 /// accessed via right-click context menus on tree nodes. Field editing happens in
@@ -610,199 +611,6 @@ public static class NrGameDataUiActions
             "Use `bs-spec probe` to discover nested tree selectors and extend AddLinkAsync.");
     }
 
-    // ===== State reads =====
-
-    /// <summary>
-    /// Reads the current GameDataState from NR Editor's Pinia editorStore.
-    /// Called after each mutation to assert expected state in specs.
-    /// </summary>
-    public static async Task<GameDataState> ReadStateAsync(IPage page)
-    {
-        var json = await page.EvaluateAsync<string>("""
-            () => {
-                try {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    if (!pinia) return JSON.stringify({ error: 'Pinia not found' });
-
-                    // Resolve the currently open catalogue and system IDs from the page URL:
-                    // .../catalogue?systemId=gs-1&id=cat-1
-                    const params = new URLSearchParams(window.location.search);
-                    const catId = params.get('id');
-                    const systemId = params.get('systemId');
-                    if (!catId) {
-                        return JSON.stringify({ error: 'No catalogue ID in URL — not on catalogue page? URL: ' + window.location.href });
-                    }
-
-                    // The actual catalogue data lives in editor.gameSystems[systemId].loadedCatalogues[catId].
-                    // The 'catalogues' Pinia store is a dependency tracker (not the data store).
-                    const editorStore = pinia._s.get('editor');
-                    if (!editorStore) {
-                        return JSON.stringify({ error: 'editor store not found. Available: [' + [...pinia._s.keys()].join(', ') + ']' });
-                    }
-
-                    const gsSys = editorStore.gameSystems?.[systemId];
-                    if (!gsSys) {
-                        return JSON.stringify({ error: `Game system '${systemId}' not found in editor.gameSystems` });
-                    }
-
-                    const loaded = gsSys.loadedCatalogues ?? {};
-                    if (!loaded[catId] && !loaded[systemId]) {
-                        return JSON.stringify({ error: `Catalogue '${catId}' not in loadedCatalogues for system '${systemId}'` });
-                    }
-
-                    const gameSystemData = loaded[systemId] ?? null;
-
-                    // Format a numeric value the way BattleScribe does (trim trailing .0).
-                    const formatNum = (v) => {
-                        const n = Number(v);
-                        return Number.isFinite(n) && Number.isInteger(n) ? String(n) : String(v);
-                    };
-
-                    // Helper to serialize an entry node
-                    const serializeEntry = (entry, entryType) => {
-                        if (!entry || typeof entry !== 'object') return null;
-                        const result = {
-                            id: entry.id || '',
-                            name: entry.name || '',
-                            entryType: entryType || entry.type || '',
-                            hidden: !!entry.hidden,
-                            children: [],
-                            fields: {},
-                        };
-
-                        // Container arrays are excluded by the Array.isArray check below, so the skip
-                        // set only needs identity/internal keys. (A Repeat node's scalar `repeats`
-                        // count must survive even though `repeats` is also a child-container name.)
-                        const skipKeys = new Set(['id', 'name', 'hidden', 'parent', 'catalogue',
-                            'attributes', 'costs', 'characteristics']);
-
-                        for (const [key, val] of Object.entries(entry)) {
-                            if (skipKeys.has(key) || key.startsWith('$') || key.startsWith('__')) continue;
-                            if (typeof val === 'function') continue;
-                            if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
-                                // NR stores the import flag as 'import' but the spec protocol uses 'imported'
-                                const fieldKey = key === 'import' ? 'imported' : key;
-                                result.fields[fieldKey] = String(val);
-                            }
-                        }
-
-                        // Costs / characteristics serialize as composite "cost:<typeId>" / "char:<name>"
-                        // (NR keeps the characteristic value in the $text field).
-                        if (Array.isArray(entry.costs)) {
-                            for (const c of entry.costs) {
-                                if (c && c.typeId != null) result.fields['cost:' + c.typeId] = formatNum(c.value);
-                            }
-                        }
-                        if (Array.isArray(entry.characteristics)) {
-                            for (const ch of entry.characteristics) {
-                                if (ch && ch.name) result.fields['char:' + ch.name] = String(ch.$text ?? ch.value ?? '');
-                            }
-                        }
-
-                        // BattleScribe reference engine's fixed container order, so positional
-                        // child assertions match the BS anchors.
-                        const childContainers = ['selectionEntries', 'selectionEntryGroups', 'entryLinks',
-                            'rules', 'profiles', 'infoGroups', 'infoLinks', 'categoryLinks',
-                            'constraints', 'modifiers', 'modifierGroups', 'conditions', 'conditionGroups',
-                            'repeats', 'forceEntries', 'categoryEntries', 'characteristicTypes',
-                            'associations', 'attributeTypes', 'localConditionGroups'];
-
-                        for (const ck of childContainers) {
-                            const items = entry[ck];
-                            if (Array.isArray(items)) {
-                                const singularType = ck.replace(/ies$/, 'y').replace(/s$/, '');
-                                for (const item of items) {
-                                    const child = serializeEntry(item, singularType);
-                                    if (child) result.children.push(child);
-                                }
-                            }
-                        }
-
-                        return result;
-                    };
-
-                    const serializeContainer = (container) => {
-                        if (!container) return null;
-                        const r = {
-                            id: container.id || '',
-                            name: container.name || '',
-                            gameSystemId: container.gameSystemId || container.id_game_system || '',
-                            fields: {},
-                            selectionEntries: [],
-                            entryLinks: [],
-                            rules: [],
-                            sharedSelectionEntries: [],
-                            sharedSelectionEntryGroups: [],
-                            sharedRules: [],
-                            sharedProfiles: [],
-                            sharedInfoGroups: [],
-                            forceEntries: [],
-                            categoryEntries: [],
-                            publications: [],
-                            costTypes: [],
-                            profileTypes: [],
-                            catalogueLinks: [],
-                            sharedForceEntries: [],
-                            sharedAssociations: [],
-                        };
-
-                        // Root metadata fields (revision, authorName, library, …).
-                        for (const [key, val] of Object.entries(container)) {
-                            if (key === 'id' || key === 'name') continue;
-                            if (val !== null && val !== undefined && !Array.isArray(val) && typeof val !== 'object') {
-                                r.fields[key] = String(val);
-                            }
-                        }
-
-                        const mappings = [
-                            ['selectionEntries', 'selectionEntries', 'selectionEntry'],
-                            ['entryLinks', 'entryLinks', 'entryLink'],
-                            ['rules', 'rules', 'rule'],
-                            ['sharedSelectionEntries', 'sharedSelectionEntries', 'selectionEntry'],
-                            ['sharedSelectionEntryGroups', 'sharedSelectionEntryGroups', 'selectionEntryGroup'],
-                            ['sharedRules', 'sharedRules', 'rule'],
-                            ['sharedProfiles', 'sharedProfiles', 'profile'],
-                            ['sharedInfoGroups', 'sharedInfoGroups', 'infoGroup'],
-                            ['forceEntries', 'forceEntries', 'forceEntry'],
-                            ['categoryEntries', 'categoryEntries', 'categoryEntry'],
-                            ['publications', 'publications', 'publication'],
-                            ['costTypes', 'costTypes', 'costType'],
-                            ['profileTypes', 'profileTypes', 'profileType'],
-                            ['catalogueLinks', 'catalogueLinks', 'catalogueLink'],
-                            ['sharedForceEntries', 'sharedForceEntries', 'forceEntry'],
-                            ['sharedAssociations', 'sharedAssociations', 'association'],
-                        ];
-
-                        for (const [srcKey, destKey, entryType] of mappings) {
-                            const items = container[srcKey];
-                            if (Array.isArray(items)) {
-                                r[destKey] = items.map(e => serializeEntry(e, entryType)).filter(Boolean);
-                            }
-                        }
-                        return r;
-                    };
-
-                    // Surface every loaded catalogue (multi-catalogue specs assert on a catalogue
-                    // other than the one the editor happens to have open); the system-id entry is
-                    // the game system, not a catalogue.
-                    const state = { catalogues: [], gameSystem: null };
-                    if (gameSystemData) state.gameSystem = serializeContainer(gameSystemData);
-                    state.catalogues = Object.entries(loaded)
-                        .filter(([k]) => k !== systemId)
-                        .map(([, c]) => serializeContainer(c))
-                        .filter(Boolean);
-
-                    return JSON.stringify(state);
-                } catch (e) {
-                    return JSON.stringify({ error: 'ReadState error: ' + e.message });
-                }
-            }
-            """);
-
-        return DeserializeState(json);
-    }
-
     // ===== Internal helpers =====
 
     /// <summary>
@@ -1109,9 +917,8 @@ public static class NrGameDataUiActions
     /// Returns the ID of the currently open catalogue by reading the <c>id</c> query
     /// parameter from the page URL (e.g. <c>.../catalogue?systemId=gs-1&amp;id=cat-1</c>).
     /// </summary>
-    internal static async Task<string> GetCurrentCatalogueIdAsync(IPage page)
-        => await page.EvaluateAsync<string>(
-            "() => new URLSearchParams(window.location.search).get('id') ?? ''") ?? "";
+    internal static Task<string> GetCurrentCatalogueIdAsync(IPage page)
+        => NrEditorStore.GetCurrentCatalogueIdAsync(page);
 
     /// <summary>
     /// Adds a new entry to a top-level section in the catalogue editor by driving the
@@ -1254,129 +1061,5 @@ public static class NrGameDataUiActions
         {
             return false;
         }
-    }
-
-    private static GameDataState DeserializeState(string json)
-    {
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        var root = doc.RootElement;
-
-        if (root.TryGetProperty("error", out var errorProp))
-        {
-            throw new InvalidOperationException($"ReadState failed: {errorProp.GetString()}");
-        }
-
-        var catalogues = new List<CatalogueDataState>();
-        if (root.TryGetProperty("catalogues", out var catsEl))
-        {
-            foreach (var catEl in catsEl.EnumerateArray())
-            { catalogues.Add(DeserializeCatalogue(catEl)); }
-        }
-
-        GameSystemDataState? gameSystem = null;
-        if (root.TryGetProperty("gameSystem", out var gsEl) && gsEl.ValueKind != System.Text.Json.JsonValueKind.Null)
-        { gameSystem = DeserializeGameSystem(gsEl); }
-
-        return new GameDataState { GameSystem = gameSystem, Catalogues = catalogues };
-    }
-
-    private static CatalogueDataState DeserializeCatalogue(System.Text.Json.JsonElement el) =>
-        new()
-        {
-            Id = el.GetProperty("id").GetString() ?? "",
-            Name = el.GetProperty("name").GetString() ?? "",
-            GameSystemId = el.GetProperty("gameSystemId").GetString() ?? "",
-            Fields = DeserializeFields(el),
-            SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
-            EntryLinks = DeserializeEntryList(el, "entryLinks"),
-            Rules = DeserializeEntryList(el, "rules"),
-            SharedSelectionEntries = DeserializeEntryList(el, "sharedSelectionEntries"),
-            SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
-            SharedRules = DeserializeEntryList(el, "sharedRules"),
-            SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
-            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
-            SharedForceEntries = DeserializeEntryList(el, "sharedForceEntries"),
-            SharedAssociations = DeserializeEntryList(el, "sharedAssociations"),
-            ForceEntries = DeserializeEntryList(el, "forceEntries"),
-            CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
-            Publications = DeserializeEntryList(el, "publications"),
-            CostTypes = DeserializeEntryList(el, "costTypes"),
-            ProfileTypes = DeserializeEntryList(el, "profileTypes"),
-            CatalogueLinks = DeserializeEntryList(el, "catalogueLinks"),
-        };
-
-    private static GameSystemDataState DeserializeGameSystem(System.Text.Json.JsonElement el) =>
-        new()
-        {
-            Id = el.GetProperty("id").GetString() ?? "",
-            Name = el.GetProperty("name").GetString() ?? "",
-            Fields = DeserializeFields(el),
-            SelectionEntries = DeserializeEntryList(el, "selectionEntries"),
-            EntryLinks = DeserializeEntryList(el, "entryLinks"),
-            Rules = DeserializeEntryList(el, "rules"),
-            SharedSelectionEntries = DeserializeEntryList(el, "sharedSelectionEntries"),
-            SharedSelectionEntryGroups = DeserializeEntryList(el, "sharedSelectionEntryGroups"),
-            SharedRules = DeserializeEntryList(el, "sharedRules"),
-            SharedProfiles = DeserializeEntryList(el, "sharedProfiles"),
-            SharedInfoGroups = DeserializeEntryList(el, "sharedInfoGroups"),
-            ForceEntries = DeserializeEntryList(el, "forceEntries"),
-            CategoryEntries = DeserializeEntryList(el, "categoryEntries"),
-            CostTypes = DeserializeEntryList(el, "costTypes"),
-            ProfileTypes = DeserializeEntryList(el, "profileTypes"),
-            Publications = DeserializeEntryList(el, "publications"),
-        };
-
-    private static IReadOnlyDictionary<string, string?>? DeserializeFields(System.Text.Json.JsonElement el)
-    {
-        if (!el.TryGetProperty("fields", out var fieldsEl) || fieldsEl.ValueKind != System.Text.Json.JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        var fields = new Dictionary<string, string?>();
-        foreach (var prop in fieldsEl.EnumerateObject())
-        {
-            fields[prop.Name] = prop.Value.GetString();
-        }
-        return fields.Count > 0 ? fields : null;
-    }
-
-    private static IReadOnlyList<DataEntryState> DeserializeEntryList(
-        System.Text.Json.JsonElement parent, string propertyName)
-    {
-        if (!parent.TryGetProperty(propertyName, out var arr) || arr.ValueKind != System.Text.Json.JsonValueKind.Array)
-        { return []; }
-
-        var entries = new List<DataEntryState>();
-        foreach (var el in arr.EnumerateArray())
-        { entries.Add(DeserializeEntry(el)); }
-        return entries;
-    }
-
-    private static DataEntryState DeserializeEntry(System.Text.Json.JsonElement el)
-    {
-        var fields = new Dictionary<string, string?>();
-        if (el.TryGetProperty("fields", out var fieldsEl) && fieldsEl.ValueKind == System.Text.Json.JsonValueKind.Object)
-        {
-            foreach (var prop in fieldsEl.EnumerateObject())
-            { fields[prop.Name] = prop.Value.GetString(); }
-        }
-
-        var children = new List<DataEntryState>();
-        if (el.TryGetProperty("children", out var childrenEl) && childrenEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-        {
-            foreach (var childEl in childrenEl.EnumerateArray())
-            { children.Add(DeserializeEntry(childEl)); }
-        }
-
-        return new DataEntryState
-        {
-            Id = el.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "",
-            Name = el.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "",
-            EntryType = el.TryGetProperty("entryType", out var typeEl) ? typeEl.GetString() ?? "" : "",
-            Hidden = el.TryGetProperty("hidden", out var hiddenEl) && hiddenEl.GetBoolean(),
-            Children = children,
-            Fields = fields.Count > 0 ? fields : null,
-        };
     }
 }

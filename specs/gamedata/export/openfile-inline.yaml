@@ -4,12 +4,10 @@ description: >
   Load a catalogue from inline XML via openFile, open it, add an entry with a declared id, and
   assert the merged state. Exercises mid-spec file loading.
 
-# store-direct newrecruit gains LoadFile with the NR-store refactor; skip until then.
 # newrecruit-ui: mid-spec file load through the SPA file-list is unreliable (the hidden file input
 # is only actionable on the list view and re-navigating into the freshly uploaded file mid-session
 # is flaky), so openFile-from-source is not supported there yet — tracked as a follow-up.
 engines:
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:

@@ -4,10 +4,6 @@ description: >
   Round-trip fidelity for catalogue (.cat) root metadata: author and revision fields set on the
   open catalogue survive a save + reload.
 
-# See roundtrip-add-entry for the engine-gating rationale (#30).
-engines:
-  newrecruit: skip
-
 setup:
   gameSystem:
     id: gs-1

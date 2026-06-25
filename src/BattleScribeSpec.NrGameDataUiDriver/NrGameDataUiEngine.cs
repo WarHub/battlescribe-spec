@@ -1,4 +1,3 @@
-using System.Text.Json;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
@@ -147,7 +146,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         _page = await context.NewPageAsync();
         _diagnostics = new NrGameDataUiDiagnostics(_page);
         _ui = new NrGameDataUiDriver(_page);
-        await NrGameDataUiSetup.SetupStaticFileRoutingAsync(_page, staticDir);
+        await NrEditorStore.SetupStaticFileRoutingAsync(_page, staticDir);
         await _page.GotoAsync(BaseUrl, new PageGotoOptions
         {
             WaitUntil = WaitUntilState.Load,
@@ -193,7 +192,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
         try
         {
-            var errors = await NrGameDataUiSetup.LoadAndOpenCatalogueAsync(_page, gameSystem, catalogues);
+            var errors = await NrEditorStore.LoadAndOpenCatalogueAsync(_page, gameSystem, catalogues);
             if (errors.Count > 0)
             { return errors; }
 
@@ -306,7 +305,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        var files = ParseExportedFiles(await ExportLoadedFilesJsonAsync());
+        var files = NrEditorStore.ParseExportedFiles(await NrEditorStore.ExportLoadedFilesJsonAsync(_page));
         if (files.Count == 0)
         {
             throw new InvalidOperationException("ExportActiveFile: NR Editor export produced no text XML files.");
@@ -337,14 +336,14 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        var (id, name, isGameSystem) = ParseRoot(xml);
+        var (id, name, isGameSystem) = NrEditorStore.ParseRoot(xml);
         if (id.Length == 0)
         {
             throw new InvalidOperationException("LoadFile: could not read a root id from the XML.");
         }
 
         var fileName = isGameSystem ? "system.gst" : id + ".cat";
-        var errors = await NrGameDataUiSetup.LoadFileAsync(_page, fileName, xml, id, name);
+        var errors = await NrEditorStore.LoadFileAsync(_page, fileName, xml, id, name);
         if (errors.Count > 0)
         {
             throw new InvalidOperationException("LoadFile failed: " + string.Join("; ", errors));
@@ -353,16 +352,6 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         _idToName[id] = name;
         _openId = id;
         return id;
-    }
-
-    private static (string Id, string Name, bool IsGameSystem) ParseRoot(string xml)
-    {
-        var rootTag = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*(catalogue|gameSystem)\b[^>]*>").Value;
-        var isGameSystem = rootTag.Contains("<gameSystem", StringComparison.Ordinal)
-            || System.Text.RegularExpressions.Regex.IsMatch(rootTag, @"<\s*gameSystem\b");
-        var id = System.Text.RegularExpressions.Regex.Match(rootTag, @"\bid=""([^""]*)""").Groups[1].Value;
-        var name = System.Text.RegularExpressions.Regex.Match(rootTag, @"\bname=""([^""]*)""").Groups[1].Value;
-        return (id, name, isGameSystem);
     }
 
     public void Reload() => ReloadAsync().GetAwaiter().GetResult();
@@ -378,7 +367,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        var files = ParseExportedFiles(await ExportLoadedFilesJsonAsync());
+        var files = NrEditorStore.ParseExportedFiles(await NrEditorStore.ExportLoadedFilesJsonAsync(_page));
         if (files.Count == 0)
         {
             throw new InvalidOperationException(
@@ -390,7 +379,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
             : _idToName.Values.FirstOrDefault()
                 ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
 
-        var errors = await NrGameDataUiSetup.ReloadFromXmlAsync(_page, BaseUrl, files, reopenName);
+        var errors = await NrEditorStore.ReloadFromXmlAsync(_page, BaseUrl, files, reopenName);
         if (errors.Count > 0)
         {
             throw new InvalidOperationException("Reload failed: " + string.Join("; ", errors));
@@ -400,29 +389,6 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         await _page.EvaluateAsync(
             "(specId) => { window.__bsspec_editor_ui = window.__bsspec_editor_ui || {}; window.__bsspec_editor_ui.specId = specId; }",
             _specId);
-    }
-
-    /// <summary>
-    /// Extracts (fileName, xml) pairs from <see cref="ExportLoadedFilesJsonAsync"/>'s
-    /// <c>{ files: { path: xml }, debug: [] }</c> payload, skipping any binary-marker entries.
-    /// </summary>
-    private static List<(string Name, string Xml)> ParseExportedFiles(string exportJson)
-    {
-        var result = new List<(string, string)>();
-        using var doc = JsonDocument.Parse(exportJson);
-        if (doc.RootElement.TryGetProperty("files", out var filesEl)
-            && filesEl.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var prop in filesEl.EnumerateObject())
-            {
-                var xml = prop.Value.GetString();
-                if (xml is null || xml.StartsWith("[binary:", StringComparison.Ordinal))
-                { continue; }
-                result.Add((Path.GetFileName(prop.Name), xml));
-            }
-        }
-
-        return result;
     }
 
     private NrGameDataUiDriver _ui = null!;
@@ -435,7 +401,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        return await NrGameDataUiActions.ReadStateAsync(_page);
+        return await NrEditorStore.ReadStateAsync(_page);
     }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
@@ -446,83 +412,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { return []; }
 
-        // Reference validation for the link-target rules the specs assert, read directly from
-        // the NR Editor store: an entry link / catalogue link whose target does not resolve.
-        var json = await _page.EvaluateAsync<string>("""
-            () => {
-                try {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    if (!pinia) return '[]';
-                    const editor = pinia._s.get('editor');
-                    const systemId = new URLSearchParams(window.location.search).get('systemId');
-                    const gsSys = editor?.gameSystems?.[systemId];
-                    if (!gsSys) return '[]';
-
-                    const cats = Object.values(gsSys.loadedCatalogues ?? {});
-                    const catIds = new Set(Object.keys(gsSys.loadedCatalogues ?? {}));
-
-                    // NR's reactive model has back-references (parent/catalogue) and shared arrays,
-                    // so a naive recursion over every array can cycle and overflow the stack (which
-                    // the catch below would swallow as "no errors"). Guard every descent with a seen-set.
-                    const entryIds = new Set();
-                    const seenCollect = new WeakSet();
-                    const collect = (obj) => {
-                        if (!obj || typeof obj !== 'object' || seenCollect.has(obj)) return;
-                        seenCollect.add(obj);
-                        if (typeof obj.id === 'string' && obj.id) entryIds.add(obj.id);
-                        for (const k of Object.keys(obj)) {
-                            const v = obj[k];
-                            if (Array.isArray(v)) for (const it of v) collect(it);
-                        }
-                    };
-                    for (const c of cats) collect(c);
-
-                    const errors = [];
-                    const seenWalk = new WeakSet();
-                    const walk = (obj) => {
-                        if (!obj || typeof obj !== 'object' || seenWalk.has(obj)) return;
-                        seenWalk.add(obj);
-                        for (const k of Object.keys(obj)) {
-                            const v = obj[k];
-                            if (!Array.isArray(v)) continue;
-                            if (k === 'entryLinks') {
-                                for (const el of v) {
-                                    if (el && el.targetId && !entryIds.has(el.targetId)) {
-                                        errors.push({ message: 'EntryLink must have a target that exists', entryId: el.id || null });
-                                    }
-                                }
-                            }
-                            if (k === 'catalogueLinks') {
-                                for (const cl of v) {
-                                    if (cl && cl.targetId && !catIds.has(cl.targetId)) {
-                                        errors.push({ message: 'CatalogueLink must have a target that exists', entryId: cl.id || null });
-                                    }
-                                }
-                            }
-                            for (const it of v) walk(it);
-                        }
-                    };
-                    for (const c of cats) walk(c);
-
-                    return JSON.stringify(errors);
-                } catch (e) {
-                    return '[]';
-                }
-            }
-            """);
-
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        var errors = new List<ValidationErrorState>();
-        foreach (var el in doc.RootElement.EnumerateArray())
-        {
-            var message = el.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
-            var entryId = el.TryGetProperty("entryId", out var e) && e.ValueKind == System.Text.Json.JsonValueKind.String
-                ? e.GetString()
-                : null;
-            errors.Add(new ValidationErrorState(message, EntryId: entryId));
-        }
-        return errors;
+        return await NrEditorStore.GetValidationErrorsAsync(_page);
     }
 
     public void Cleanup()
@@ -535,7 +425,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
         try
         {
-            await NrGameDataUiSetup.CleanupCatalogueAsync(_page, BaseUrl);
+            await NrEditorStore.CleanupCatalogueAsync(_page, BaseUrl);
         }
         catch
         {
@@ -584,58 +474,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        return await _page.EvaluateAsync<string>("""
-            async () => {
-                const debug = [];
-                const files = {};
-                const orig = globalThis.electron;
-                // Stub the electron bridge so writeFile() forwards the serialized bytes to us.
-                globalThis.electron = {
-                    invoke: async (cmd, p, d) => {
-                        if (cmd === 'saveFile') {
-                            files[p] = (typeof d === 'string') ? d : '[binary:' + (d?.byteLength ?? d?.length ?? '?') + ']';
-                        }
-                        return undefined;
-                    },
-                };
-                try {
-                    const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const editor = pinia?._s?.get('editor');
-                    const store = globalThis.$store || editor;
-                    if (!store) { debug.push('no editor store'); return JSON.stringify({ files, debug }); }
-                    const systemId = new URLSearchParams(location.search).get('systemId');
-                    const gsSys = editor?.gameSystems?.[systemId];
-                    debug.push('systemId=' + systemId + ' gsSys=' + !!gsSys + ' $store=' + !!globalThis.$store);
-
-                    // Enumerate candidate file objects: the game system plus every loaded catalogue.
-                    const seen = new Set();
-                    const candidates = [];
-                    const add = (o) => { if (o && typeof o === 'object' && !seen.has(o)) { seen.add(o); candidates.push(o); } };
-                    add(gsSys?.gameSystem);
-                    for (const c of Object.values(gsSys?.loadedCatalogues ?? {})) add(c);
-                    debug.push('candidates=' + candidates.length);
-
-                    for (const data of candidates) {
-                        try {
-                            if (!data.fullFilePath) {
-                                data.fullFilePath = data.gameSystemId ? (data.id + '.cat') : 'system.gst';
-                            }
-                            await store.saveCatalogueInFiles(data);
-                            debug.push('saved ' + data.fullFilePath + ' id=' + data.id);
-                        } catch (e) {
-                            debug.push('err id=' + (data && data.id) + ': ' + (e && e.message));
-                        }
-                    }
-                    // Let any not-yet-awaited writes settle.
-                    await new Promise((r) => setTimeout(r, 50));
-                } catch (e) {
-                    debug.push('fatal: ' + (e && e.message));
-                } finally {
-                    globalThis.electron = orig;
-                }
-                return JSON.stringify({ files, debug });
-            }
-            """);
+        return await NrEditorStore.ExportLoadedFilesJsonAsync(_page);
     }
 
     /// <summary>

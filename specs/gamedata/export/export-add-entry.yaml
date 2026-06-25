@@ -5,10 +5,6 @@ description: >
   .cat content against a per-engine snapshot (NewRecruit base + battlescribe overrides). Declaring
   the id makes the export byte-reproducible.
 
-# store-direct newrecruit gains real XML export in a later phase; skip it until then.
-engines:
-  newrecruit: skip
-
 setup:
   gameSystem:
     id: gs-1
