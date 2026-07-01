@@ -1992,7 +1992,7 @@ public sealed class BattleScribeEngine : IDisposable
         var infoLinks = cl.InfoLinks?.Select(BuildInfoLink).ToArray();
         var pubId = string.IsNullOrEmpty(cl.PublicationId) ? null : cl.PublicationId;
         var page = string.IsNullOrEmpty(cl.Page) ? null : cl.Page;
-        return JavaModelFactory.CreateCategoryLink(cl.Id, cl.TargetId, cl.Name, cl.Primary, cl.Hidden,
+        return JavaModelFactory.CreateCategoryLink(cl.Id, cl.Name, cl.TargetId, cl.Primary, cl.Hidden,
             constraints, modifiers, modifierGroups, profiles, rules, infoGroups, infoLinks, pubId, page);
     }
 

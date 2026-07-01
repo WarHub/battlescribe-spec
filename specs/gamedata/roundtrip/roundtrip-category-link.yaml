@@ -1,0 +1,85 @@
+id: roundtrip-category-link
+category: roundtrip
+description: >
+  Round-trip fidelity for a category link's field mapping. A category link declared on a force
+  entry carries a name that is deliberately distinct from its target ("HQ Slot" pointing at the
+  "HQ" category), plus primary=true. After a save + reload each value must remain on its correct
+  property — in particular targetId must still hold the category id, not the name. This guards the
+  CategoryLink construction argument order (#278): if name and targetId are swapped at
+  construction, targetId would serialize the "HQ Slot" string and this spec goes red.
+
+# Category-link field surface (see specs/gamedata/links/links-create-and-fields.yaml):
+#  - targetId — stable across all engines; asserted everywhere as the primary arg-order signal.
+#  - name     — the counterpart of targetId; NR derives a link's name from its target, so name is
+#               asserted only on the in-process `battlescribe` reference engine.
+#  - primary  — not modelled by NR's editor; asserted only on `battlescribe`.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      categoryEntries:
+        - id: ce-hq
+          name: HQ
+      forceEntries:
+        - id: fe-1
+          name: Detachment
+          categoryLinks:
+            - id: cl-hq
+              name: HQ Slot
+              targetId: ce-hq
+              primary: true
+
+steps:
+  # Fields land on the right properties as loaded.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          forceEntries:
+            - id: fe-1
+              children:
+                - entryType: categoryLink
+                  fields:
+                    targetId: ce-hq
+      engines:
+        battlescribe:
+          catalogues:
+            - id: cat-1
+              forceEntries:
+                - id: fe-1
+                  children:
+                    - entryType: categoryLink
+                      name: HQ Slot
+                      fields:
+                        targetId: ce-hq
+                        primary: "true"
+
+  - action: reload
+
+  # …and survive the save + reload XML round-trip unchanged.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          forceEntries:
+            - id: fe-1
+              children:
+                - entryType: categoryLink
+                  fields:
+                    targetId: ce-hq
+      engines:
+        battlescribe:
+          catalogues:
+            - id: cat-1
+              forceEntries:
+                - id: fe-1
+                  children:
+                    - entryType: categoryLink
+                      name: HQ Slot
+                      fields:
+                        targetId: ce-hq
+                        primary: "true"

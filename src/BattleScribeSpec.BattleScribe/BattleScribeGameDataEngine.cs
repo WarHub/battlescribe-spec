@@ -1164,11 +1164,8 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var constraints = spec.Constraints?.Select(BuildConstraint).ToArray();
         var modifiers = spec.Modifiers?.Select(BuildModifier).ToArray();
 
-        // NOTE: JavaModelFactory.CreateCategoryLink is (id, targetId, name) — unlike its siblings
-        // CreateEntryLink / CreateInfoLink / CreateCatalogueLink, which are (id, name, targetId).
-        // Pass targetId before name here.
         return JavaModelFactory.CreateCategoryLink(
-            spec.Id, spec.TargetId, spec.Name ?? "",
+            spec.Id, spec.Name ?? "", spec.TargetId,
             primary: spec.Primary,
             hidden: spec.Hidden,
             constraints: constraints,
@@ -1200,7 +1197,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
             // ── Info content ────────────────────────────────────────────────
             "infoGroup" => AddTo(parent, "infoGroup", JavaModelFactory.CreateInfoGroup(id, name)),
             "infoLink" => AddTo(parent, "infoLink", JavaModelFactory.CreateInfoLink(id, name, "", "profile")),
-            "categoryLink" => AddTo(parent, "categoryLink", JavaModelFactory.CreateCategoryLink(id, "", name)),
+            "categoryLink" => AddTo(parent, "categoryLink", JavaModelFactory.CreateCategoryLink(id, name, "")),
             "catalogueLink" => AddTo(parent, "catalogueLink", JavaModelFactory.CreateCatalogueLink(id, name, "")),
             // ── Constraints / modifiers / queries (id-less except constraint) ─
             "constraint" => AddTo(parent, "constraint", JavaModelFactory.CreateConstraint(id, "min", 0m, "selections", "parent")),
@@ -1298,7 +1295,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
 
     private static CategoryLink CreateCategoryLink(string id, string targetId)
     {
-        return JavaModelFactory.CreateCategoryLink(id, targetId, "");
+        return JavaModelFactory.CreateCategoryLink(id, "", targetId);
     }
 
     // ===== Container resolution =====
