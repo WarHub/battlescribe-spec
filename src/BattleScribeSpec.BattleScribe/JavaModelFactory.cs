@@ -373,8 +373,13 @@ public static class JavaModelFactory
     /// <summary>
     /// Create a CategoryLink linking a ForceEntry to a CategoryEntry.
     /// </summary>
+    /// <remarks>
+    /// Parameter order matches the sibling link factories
+    /// (<see cref="CreateEntryLink"/> / <see cref="CreateInfoLink"/> /
+    /// <see cref="CreateCatalogueLink"/>): <c>(id, name, targetId, …)</c>.
+    /// </remarks>
     public static CategoryLink CreateCategoryLink(
-        string id, string targetId, string name, bool primary = false,
+        string id, string name, string targetId, bool primary = false,
         bool hidden = false,
         IEnumerable<Constraint>? constraints = null,
         IEnumerable<Modifier>? modifiers = null,
