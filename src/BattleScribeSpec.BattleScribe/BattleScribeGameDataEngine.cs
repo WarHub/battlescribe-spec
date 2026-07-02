@@ -181,7 +181,15 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var costs = GetList(entry, "getCosts")
             ?? throw new InvalidOperationException($"Entry {entryId} has no costs container");
 
-        var amount = double.TryParse(value, out var d) ? d : 0.0;
+        // Spec/protocol cost values are invariant-format ("0.5"); parse invariantly
+        // so a locale with a "," decimal separator doesn't silently yield 0.
+        var amount = double.TryParse(
+            value,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var d)
+            ? d
+            : 0.0;
 
         // Find an existing cost for this type, else create one.
         for (var i = 0; i < costs.size(); i++)
@@ -1368,7 +1376,14 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         }
         else if (paramType == typeof(double) || paramType == typeof(java.lang.Double))
         {
-            converted = double.TryParse(value, out var d) ? d : 0.0;
+            // Invariant-format parse: spec values use "." regardless of machine locale.
+            converted = double.TryParse(
+                value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var d)
+                ? d
+                : 0.0;
         }
         else
         {

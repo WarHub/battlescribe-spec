@@ -1,0 +1,69 @@
+id: cost-fractional-aggregation
+category: cost
+description: >
+  Aggregate fractional costs across sibling selections. Base assertion encodes
+  exact decimal arithmetic: three 0.1 units sum to 0.3, plus a 0.5 unit gives a
+  0.8 roster total. Documents how each engine accumulates non-integer costs
+  (#277); per-engine overrides capture any floating-point drift observed in
+  aggregation.
+
+setup:
+  gameSystem:
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-tenth
+          name: Tenth Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 0.1
+        - id: se-half
+          name: Half Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 0.5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-tenth
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-tenth
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-tenth
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-half
+
+  # Exact decimal contract: 0.1 + 0.1 + 0.1 + 0.5 = 0.8.
+  # BattleScribe matches (its decimal read-back rounds the double sum). NewRecruit
+  # accumulates the roster total in JS double, so it drifts to 0.7999999999999999.
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 0.8
+      engines:
+        # Floating-point deviation in NR's roster-total accumulation.
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 0.7999999999999999

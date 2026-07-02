@@ -1,0 +1,65 @@
+id: modifier-fractional-cost
+category: modifier
+description: >
+  A cost modifier applies a fractional increment at roster build time. Base cost
+  0.1 plus an unconditional +0.2 increment yields exact decimal 0.3. This is where
+  non-integer modifier arithmetic actually runs (#277): the base assertion encodes
+  the exact decimal result and per-engine overrides capture floating-point drift.
+
+setup:
+  gameSystem:
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-1
+          name: Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 0.1
+          modifiers:
+            - type: increment
+              field: pts
+              value: "0.2"
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
+
+  # Exact decimal contract: 0.1 + 0.2 = 0.3.
+  # BattleScribe matches; NewRecruit applies the increment in JS double and
+  # deserializes the full-precision result, drifting to 0.30000000000000004.
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 0.3
+      forces:
+        - selections:
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 0.3
+      engines:
+        # Floating-point deviation in NR's modifier arithmetic.
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 0.30000000000000004
+          forces:
+            - selections:
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 0.30000000000000004

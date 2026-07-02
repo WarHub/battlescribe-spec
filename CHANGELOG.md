@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Non-integer cost conformance** (#277, #285, #286) — new fractional-cost specs
+  across gamedata and roster: `cost-fractional-value`, `cost-fractional-modifier`,
+  and byte-compare `cost-fractional-export` (gamedata); `cost-fractional-per-model`,
+  `cost-fractional-aggregation`, `cost-fractional-over-limit`,
+  `modifier-fractional-cost`, and `modifier-repeat-fractional-cost` (roster). Base
+  assertions encode exact decimal arithmetic; per-engine overrides document where
+  NewRecruit's floating-point roster math drifts (e.g. `0.1 × 3 =
+  0.30000000000000004`) while BattleScribe's decimal read-back stays clean.
+  New research doc `docs/cost-number-formatting.md`.
 - **ID-based protocol** — all action addressing now uses definition IDs (`forceEntryId`,
   `entryId`, `catalogueId`) and instance IDs (`forceId`, `selectionId`) instead of
   array indices. Actions return `outputs` with created element IDs. Step expressions
@@ -62,6 +71,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **BattleScribe gamedata cost parsing locale bug** — `BattleScribeGameDataEngine`
+  parsed spec cost strings with the current culture, so on a locale using `,` as the
+  decimal separator a value like `"0.5"` silently became `0`. Both numeric parse sites
+  now use `NumberStyles.Float` + `InvariantCulture` to match the invariant-format protocol.
 - **NR adapter `DeselectSelectionAsync`** — now uses `decrementAmount()` instead of
   `delete()`, matching BattleScribe's deselect semantics (decrement per-model count
   by 1). Previously `delete()` would completely remove the selection regardless of

@@ -1,0 +1,111 @@
+id: cost-fractional-per-model
+category: cost
+description: >
+  Fractional per-model cost multiplied by selection count. Exercises the
+  double-vs-decimal divergence (#286): the base assertion encodes exact decimal
+  arithmetic (0.1 x 3 = 0.3, 0.5 x 3 = 1.5). Binary-exact 0.5 survives
+  floating-point multiplication; 0.1 does not, so a floating-point engine may
+  need a per-engine override capturing its drifted value.
+
+setup:
+  gameSystem:
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-clean
+              name: Clean Model
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 0.5
+            - id: se-drift
+              name: Drift Model
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 0.1
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-clean
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-clean
+
+  - action: selectChildEntry
+    id: select-drift
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-drift
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-clean.selectionId }}
+    count: 3
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-drift.selectionId }}
+    count: 3
+
+  # Exact decimal contract: 0.5 x 3 = 1.5, 0.1 x 3 = 0.3, total 1.8.
+  # BattleScribe matches the contract: its (decimal)(double) read-back rounds the
+  # 0.1*3 = 0.30000000000000004 double to a clean 0.3. NewRecruit multiplies
+  # cost*count in JS double and deserializes the full-precision result into
+  # decimal, so its per-model Drift cost drifts (roster total stays clean at 1.8).
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 1.8
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Clean Model
+                  number: 3
+                  costs:
+                    - typeId: pts
+                      value: 1.5
+                - name: Drift Model
+                  number: 3
+                  costs:
+                    - typeId: pts
+                      value: 0.3
+      engines:
+        # Floating-point deviation: NR reports 0.1*3 as 0.30000000000000004.
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Clean Model
+                      number: 3
+                      costs:
+                        - typeId: pts
+                          value: 1.5
+                    - name: Drift Model
+                      number: 3
+                      costs:
+                        - typeId: pts
+                          value: 0.30000000000000004

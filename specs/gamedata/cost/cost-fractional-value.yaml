@@ -1,0 +1,49 @@
+id: cost-fractional-value
+category: cost
+description: >
+  Set fractional cost values on a selection entry and read them back as
+  formatted field strings. Exercises non-integer cost formatting fidelity
+  (#277): a binary-exact half (0.5), a repeating-in-binary value (0.1), and a
+  two-decimal value (1.33). Gamedata stores a single literal cost value (no
+  multiplication), so both engines round-trip these cleanly with no trailing
+  ".0" and no floating-point artifact — the base assertion is exact for all
+  engines.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: half
+        name: Half
+      - id: tenth
+        name: Tenth
+      - id: frac
+        name: Frac
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+
+steps:
+  - action: setFields
+    entryId: se-1
+    costs:
+      half: "0.5"
+      tenth: "0.1"
+      frac: "1.33"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              fields:
+                cost:half: "0.5"
+                cost:tenth: "0.1"
+                cost:frac: "1.33"

@@ -1,0 +1,97 @@
+id: modifier-repeat-fractional-cost
+category: modifier
+description: >
+  Repeat-driven fractional cost: a modifier increments a cost by 0.1 for each
+  1 pt of a child selection in the force. With 3 pts present the repeat fires 3
+  times, so the exact decimal result is 0 + 0.1 x 3 = 0.3. Exercises repeat
+  multiplication over non-integer increments (#277). Base encodes exact decimal;
+  per-engine overrides capture floating-point drift.
+
+setup:
+  gameSystem:
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-marker
+              name: Marker
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 1
+        - id: se-unit
+          name: Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 0
+          modifiers:
+            # For each 1 pt of se-marker in the force, increment pts by 0.1.
+            - type: increment
+              field: pts
+              value: "0.1"
+              repeats:
+                - value: 1
+                  repeats: 1
+                  field: pts
+                  scope: force
+                  childId: se-marker
+                  includeChildSelections: true
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-marker
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-marker
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-marker.selectionId }}
+    count: 3
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-unit
+
+  # se-marker = 3 pts in force -> floor(3/1) x 1 = 3 repetitions -> 0 + 0.1 x 3 = 0.3.
+  # BattleScribe matches; NewRecruit computes the repeat increment in JS double
+  # and drifts to 0.30000000000000004.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+            - name: Unit
+              costs:
+                - typeId: pts
+                  value: 0.3
+      engines:
+        # Floating-point deviation in NR's repeat arithmetic.
+        newrecruit:
+          forces:
+            - selections:
+                - name: Squad
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 0.30000000000000004
