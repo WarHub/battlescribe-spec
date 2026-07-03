@@ -8,12 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Roster export byte-compare** — roster specs now support `expectedFile` (mirroring
-  gamedata), byte-comparing an engine's exported `.ros` XML against a per-engine
-  snapshot. Adds `IRosterEngine.ExportRosterXml()` (BattleScribe via DataUtils) and the
-  `roster-fractional-cost-export` spec, which locks BattleScribe's exact roster
-  serialization incl. non-integer cost formatting. Per-run instance ids are normalized
-  to `__id__`. NewRecruit roster export is a follow-up (skipped for now).
+- **Cross-engine roster export byte-compare** — roster specs now support `expectedFile`
+  (mirroring gamedata), byte-comparing an engine's exported `.ros` XML against a
+  per-engine snapshot. Adds `IRosterEngine.ExportRosterXml()` for **both** engines —
+  BattleScribe via DataUtils `a(Roster, OutputStream)`, NewRecruit by navigating to the
+  roster editor and capturing its own serializer output (`exportRos` → `Blob`) — and the
+  `roster-fractional-cost-export` spec locking each engine's exact roster serialization
+  incl. non-integer cost formatting. Per-run instance ids are normalized to `__id__`.
 - **Non-integer cost conformance** (#277, #285, #286) — new fractional-cost specs
   across gamedata and roster: `cost-fractional-value`, `cost-fractional-modifier`,
   and byte-compare `cost-fractional-export` (gamedata); `cost-fractional-per-model`,

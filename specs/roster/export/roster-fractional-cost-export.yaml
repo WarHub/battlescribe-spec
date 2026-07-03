@@ -12,14 +12,6 @@ description: >
   NewRecruit Mongo ObjectIds); the compare then reflects structure, ordering, and
   cost formatting rather than volatile ids.
 
-  NewRecruit is skipped for now: its roster serializer is module-scoped and export
-  targets a zipped .rosz, so capturing the raw .ros is a follow-up. The
-  cross-engine machinery (ExportRosterXml + per-engine snapshots) is in place; NR
-  just needs its export hook wired, after which the newrecruit override drops in.
-engines:
-  newrecruit: skip
-  newrecruit-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

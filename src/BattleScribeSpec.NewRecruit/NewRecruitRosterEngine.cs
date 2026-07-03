@@ -499,6 +499,102 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return GetRosterState().ValidationErrors;
     }
 
+    public string ExportRosterXml() => ExportRosterXmlAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Capture NewRecruit's own <c>.ros</c> serialization for byte-compare. NR's roster serializer
+    /// (<c>Sb</c>/<c>fX</c>) and the <c>.ros</c> export are module-scoped, reachable only through the
+    /// roster editor's export menu. So we navigate to the editor (mounting that menu bound to the
+    /// current list), temporarily hook <c>Blob</c> to capture the <c>text/ros</c> payload and neutralize
+    /// the download click, then invoke the mounted component's <c>exportRos()</c> method and read back
+    /// the exact XML NR would have downloaded.
+    /// </summary>
+    private async Task<string> ExportRosterXmlAsync()
+    {
+        var listKey = await Browser.Page.EvaluateAsync<string?>("window.__bsspec?.row?.list_key");
+        if (listKey != null)
+        {
+            await Browser.NavigateToEditorAsync(listKey);
+        }
+
+        var json = await Browser.Page.EvaluateAsync<string?>(ExportRosterJs) ?? "{}";
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("text", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            return t.GetString()!;
+        }
+
+        // NewRecruit supports roster export, so a capture failure is a real regression (e.g. an NR
+        // update changed exportRos / the editor mount) — surface it rather than silently skipping.
+        var err = doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : "unknown";
+        throw new InvalidOperationException($"NewRecruit roster export failed: {err}");
+    }
+
+    private const string ExportRosterJs = """
+        async () => {
+            const captured = { text: null };
+            const OrigBlob = window.Blob;
+            const origClick = HTMLAnchorElement.prototype.click;
+            // Hook Blob to grab the raw .ros text; neutralize the anchor click so no real download fires.
+            window.Blob = function (parts, opts) {
+                try {
+                    const p = parts && parts[0];
+                    if (typeof p === 'string' && p.indexOf('<roster') >= 0) captured.text = p;
+                } catch (e) {}
+                return new OrigBlob(parts, opts);
+            };
+            HTMLAnchorElement.prototype.click = function () {};
+            try {
+                const el = document.querySelector('#__nuxt') || document.body;
+                const app = el?.__vue_app__ || document.querySelector('#__nuxt')?.__vue_app__;
+                const root = app?._instance
+                    || app?._container?._vnode?.component
+                    || el?.__vueParentComponent
+                    || el?.firstElementChild?.__vueParentComponent;
+                if (!root) {
+                    return JSON.stringify({ error: 'no root instance; appKeys=' + (app ? Object.keys(app).join(',') : 'no-app') });
+                }
+                // BFS the whole component tree for a mounted component exposing exportRos().
+                const seen = new Set();
+                const queue = [root];
+                let target = null;
+                while (queue.length) {
+                    const inst = queue.shift();
+                    if (!inst || seen.has(inst)) continue;
+                    seen.add(inst);
+                    const px = inst.proxy;
+                    if (px && typeof px.exportRos === 'function') { target = px; break; }
+                    const pushVnode = (vn) => {
+                        if (!vn || typeof vn !== 'object') return;
+                        if (vn.component) queue.push(vn.component);
+                        const ch = vn.children;
+                        if (Array.isArray(ch)) ch.forEach(pushVnode);
+                        else if (ch && ch.component) queue.push(ch.component);
+                        if (vn.suspense) { pushVnode(vn.suspense.activeBranch); }
+                        if (Array.isArray(vn.dynamicChildren)) vn.dynamicChildren.forEach(pushVnode);
+                    };
+                    pushVnode(inst.subTree);
+                }
+                if (!target) return JSON.stringify({ error: 'no mounted component exposes exportRos()' });
+                // Point the menu's list at our loaded roster (window.__bsspec has {army, row:{name,...}}),
+                // so exportRos() serializes exactly the spec's roster rather than the menu's own context.
+                const bsspec = window.__bsspec;
+                const listBefore = target.list;
+                try { if (bsspec && bsspec.army) target.list = bsspec; } catch (e) {}
+                await target.exportRos();
+                await new Promise((r) => setTimeout(r, 40));
+                try { target.list = listBefore; } catch (e) {}
+                if (captured.text == null) return JSON.stringify({ error: 'exportRos() produced no <roster payload' });
+                return JSON.stringify({ text: captured.text });
+            } catch (e) {
+                return JSON.stringify({ error: String((e && e.message) || e) });
+            } finally {
+                window.Blob = OrigBlob;
+                HTMLAnchorElement.prototype.click = origClick;
+            }
+        }
+        """;
+
     public void Cleanup()
     {
         CleanupAsync().GetAwaiter().GetResult();

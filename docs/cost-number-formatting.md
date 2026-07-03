@@ -119,7 +119,9 @@ NewRecruit (frozen HAR replay):
   `value="1.33"` verbatim. The base `.cat` is the BattleScribe form; NewRecruit's
   only override reason is the structural `type="catalogue"` attribute — **not** cost
   formatting. The roster export snapshot (`roster-fractional-cost-export`) likewise
-  locks BattleScribe's `.ros` cost formatting (`value="0.5"`) exactly.
+  locks each engine's `.ros` cost formatting: both write `value="0.5"` identically,
+  and NewRecruit's structural differences (`generatedBy`, `from="entry"`, attribute
+  ordering) land in its `.newrecruit.ros` override.
 - **Multiplication / accumulation with binary-inexact fractions is where
   NewRecruit drifts:**
   - `0.1 × 3` per-model → NR `0.30000000000000004`, BS `0.3` (`cost-fractional-per-model`).
