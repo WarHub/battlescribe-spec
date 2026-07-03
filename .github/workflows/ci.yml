@@ -91,13 +91,21 @@ jobs:
           repositories: newrecruit-har,battlescribe-archive
       # Content-pinned download caches (keyed by testdata.json / package versions).
       - uses: actions/cache@v4
-        with: { path: lib/battlescribe,        key: bsapp-${{ hashFiles('testdata.json') }} }
+        with:
+          path: lib/battlescribe
+          key: bsapp-${{ hashFiles('testdata.json') }}
       - uses: actions/cache@v4
-        with: { path: .testdata/newrecruit-har, key: nrhar-${{ hashFiles('testdata.json') }} }
+        with:
+          path: .testdata/newrecruit-har
+          key: nrhar-${{ hashFiles('testdata.json') }}
       - uses: actions/cache@v4
-        with: { path: .testdata/nr-editor,      key: nreditor-${{ hashFiles('testdata.json') }} }
+        with:
+          path: .testdata/nr-editor
+          key: nreditor-${{ hashFiles('testdata.json') }}
       - uses: actions/cache@v4
-        with: { path: ~/.cache/ms-playwright,   key: pw-linux-${{ hashFiles('Directory.Packages.props') }} }
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
       - uses: actions/cache@v4
         with:
           path: src/bs-ui-java-agent/bs-ui-java-agent.jar
@@ -192,7 +200,9 @@ jobs:
           owner: WarHub
           repositories: newrecruit-har,battlescribe-archive
       - uses: actions/cache@v4
-        with: { path: lib/battlescribe, key: bsapp-${{ hashFiles('testdata.json') }} }
+        with:
+          path: lib/battlescribe
+          key: bsapp-${{ hashFiles('testdata.json') }}
       - uses: actions/cache@v4
         with:
           path: src/bs-ui-java-agent/bs-ui-java-agent.jar
@@ -246,9 +256,13 @@ jobs:
           owner: WarHub
           repositories: newrecruit-har,battlescribe-archive
       - uses: actions/cache@v4
-        with: { path: .testdata/newrecruit-har, key: nrhar-${{ hashFiles('testdata.json') }} }
+        with:
+          path: .testdata/newrecruit-har
+          key: nrhar-${{ hashFiles('testdata.json') }}
       - uses: actions/cache@v4
-        with: { path: ~/.cache/ms-playwright,   key: pw-linux-${{ hashFiles('Directory.Packages.props') }} }
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
       - name: Setup dependencies
         run: pwsh ./setup.ps1 -SkipJavaAgent -SkipWh40k
         env:
