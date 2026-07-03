@@ -1,0 +1,89 @@
+id: cost-fractional-modifier
+category: cost
+description: >
+  Create cost modifiers carrying fractional amounts (set / increment / decrement)
+  on a cost field and verify the modifier value persists verbatim. Modifier
+  values are stored as strings in the data model, so fractional amounts round-trip
+  exactly on every engine with no formatting drift (#277). Application of these
+  modifiers (where floating-point arithmetic occurs) is covered by the roster
+  modifier specs.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Tactical Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 1
+
+steps:
+  - action: addEntry
+    id: m-set
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.m-set.entryId }}
+    fields:
+      field: pts
+      type: set
+      value: "0.5"
+
+  - action: addEntry
+    id: m-inc
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.m-inc.entryId }}
+    fields:
+      field: pts
+      type: increment
+      value: "0.1"
+
+  - action: addEntry
+    id: m-dec
+    parentId: se-1
+    entryType: modifier
+
+  - action: setFields
+    entryId: ${{ steps.m-dec.entryId }}
+    fields:
+      field: pts
+      type: decrement
+      value: "1.33"
+
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          selectionEntries:
+            - id: se-1
+              children:
+                - entryType: modifier
+                  fields:
+                    type: set
+                    field: pts
+                    value: "0.5"
+                - entryType: modifier
+                  fields:
+                    type: increment
+                    field: pts
+                    value: "0.1"
+                - entryType: modifier
+                  fields:
+                    type: decrement
+                    field: pts
+                    value: "1.33"

@@ -279,6 +279,8 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors() => Engine.GetValidationErrors();
 
+    public string ExportRosterXml() => Engine.ExportRosterXml();
+
     // ===== DataSource support (file-based setup + name-based actions) =====
 
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)

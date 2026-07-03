@@ -563,16 +563,16 @@ public sealed class SpecLintTests
         for (var i = 0; i < spec.Steps.Count; i++)
         {
             var step = spec.Steps[i];
-            var hasAction = step.Action is not null;
-            var hasExpected = step.ExpectedState is not null;
-            if (!hasAction && !hasExpected)
+            var kinds = (step.Action is not null ? 1 : 0)
+                + (step.ExpectedState is not null ? 1 : 0)
+                + (step.ExpectedFile is not null ? 1 : 0);
+            if (kinds == 0)
             {
-                yield return $"step {i + 1} has neither 'action' nor 'expectedState'";
+                yield return $"step {i + 1} has none of 'action', 'expectedState', 'expectedFile'";
             }
-
-            if (hasAction && hasExpected)
+            else if (kinds > 1)
             {
-                yield return $"step {i + 1} has both 'action' and 'expectedState'";
+                yield return $"step {i + 1} has more than one of 'action', 'expectedState', 'expectedFile'";
             }
         }
     }
@@ -653,9 +653,9 @@ public sealed class SpecLintTests
             yield return "'steps' is empty";
             yield break;
         }
-        if (spec.Steps[^1].ExpectedState is null)
+        if (spec.Steps[^1].ExpectedState is null && spec.Steps[^1].ExpectedFile is null)
         {
-            yield return "last step must be 'expectedState'";
+            yield return "last step must be 'expectedState' or 'expectedFile'";
         }
     }
 

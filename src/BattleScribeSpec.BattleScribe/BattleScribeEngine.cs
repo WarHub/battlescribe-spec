@@ -1325,6 +1325,33 @@ public sealed class BattleScribeEngine : IDisposable
     }
 
     /// <summary>
+    /// Serialize the current roster to its BattleScribe <c>.ros</c> XML via DataUtils
+    /// <c>a(Roster, OutputStream)</c> — the same serializer path used for catalogue/game-system export.
+    /// </summary>
+    public string ExportRosterXml()
+    {
+        var roster = GetRoster();
+        var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
+            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+        var write = dataUtils.GetMethod("a",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            [typeof(BsRoster), typeof(java.io.OutputStream)])
+            ?? throw new InvalidOperationException("DataUtils serialize 'a(Roster, OutputStream)' not found.");
+        var baos = new java.io.ByteArrayOutputStream();
+        try
+        {
+            write.Invoke(null, [roster, baos]);
+        }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw; // unreachable
+        }
+
+        return System.Text.Encoding.UTF8.GetString(baos.toByteArray());
+    }
+
+    /// <summary>
     /// Load a catalogue and all its linked catalogue dependencies from a data directory.
     /// Recursively discovers and loads linked catalogues by parsing CatalogueLink elements.
     /// </summary>

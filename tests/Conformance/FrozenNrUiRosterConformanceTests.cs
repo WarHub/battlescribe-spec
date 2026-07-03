@@ -19,8 +19,10 @@ public sealed class FrozenNrUiRosterConformanceTests
     private const string LogPrefix = "[FROZEN-UI] ";
 
     /// <summary>
-    /// The spec(s) this UI driver runs against. Only kitchen-sink for now —
-    /// the NR UI driver validates core protocol conformance, not all 312 specs.
+    /// The spec(s) this UI driver runs against. Only kitchen-sink — the NR UI driver validates core
+    /// protocol conformance, not all 312 specs. The frozen HAR supports a single roster-creation flow
+    /// per run, so exactly one roster-building spec runs here; kitchen-sink's trailing
+    /// <c>expectedFile</c> step exercises the UI export path (Export button → .ros) within that flow.
     /// </summary>
     private static readonly string[] TargetSpecs = ["protocol/protocol-kitchen-sink"];
 

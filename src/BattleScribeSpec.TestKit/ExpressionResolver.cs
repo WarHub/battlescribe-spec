@@ -23,6 +23,128 @@ public sealed class ExpressionResolver
     }
 
     /// <summary>
+    /// Reverse map: minted instance id (a value produced by some step) → the <c>${{ steps.… }}</c>
+    /// token that resolves to it. Used to templatize a roster export on snapshot-write, turning the
+    /// run's volatile ids back into stable, meaningful step references. Covers <c>forceId</c>,
+    /// <c>selectionId</c>, and each auto-/multi-selection in the step's <c>selections</c> map.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> BuildIdReverseIndex()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (stepId, outputs) in _stepOutputs)
+        {
+            if (outputs.ForceId is { Length: > 0 } fid)
+            {
+                map[fid] = $"{ExprStart} steps.{stepId}.forceId {ExprEnd}";
+            }
+            if (outputs.SelectionId is { Length: > 0 } sid)
+            {
+                map[sid] = $"{ExprStart} steps.{stepId}.selectionId {ExprEnd}";
+            }
+            if (outputs.Selections is { } sels)
+            {
+                foreach (var (entryId, selId) in sels)
+                {
+                    if (selId is { Length: > 0 })
+                    {
+                        map[selId] = $"{ExprStart} steps.{stepId}.selections.{entryId} {ExprEnd}";
+                    }
+                }
+            }
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Match an <paramref name="actual"/> string against a <paramref name="template"/> that may carry
+    /// embedded <c>${{ steps.… }}</c> tokens (each resolved to this run's minted id) and
+    /// <c>${{ match("regex") }}</c> tokens (each a regex fragment for a volatile id no step captured).
+    /// Compares line-by-line so a failure reports the first diverging line. Lines with no tokens must
+    /// match verbatim.
+    /// </summary>
+    public bool TryMatchTemplate(string template, string actual, out string? failDetail)
+    {
+        var t = template.Split('\n');
+        var a = actual.Split('\n');
+        for (var i = 0; i < Math.Max(t.Length, a.Length); i++)
+        {
+            var tl = i < t.Length ? t[i] : null;
+            var al = i < a.Length ? a[i] : null;
+            if (tl is null || al is null || !System.Text.RegularExpressions.Regex.IsMatch(al, LineRegex(tl)))
+            {
+                failDetail = $"expected {t.Length} line(s), actual {a.Length} line(s); first diff at line {i + 1}:\n" +
+                    $"      expected: {tl ?? "(missing)"}\n      actual:   {al ?? "(missing)"}";
+                return false;
+            }
+        }
+
+        failDetail = null;
+        return true;
+    }
+
+    /// <summary>Build an anchored regex for one template line: literals escaped, tokens expanded.</summary>
+    private string LineRegex(string line)
+    {
+        var sb = new System.Text.StringBuilder(@"\A");
+        var i = 0;
+        while (i < line.Length)
+        {
+            var start = line.IndexOf(ExprStart, i, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                sb.Append(System.Text.RegularExpressions.Regex.Escape(line[i..]));
+                break;
+            }
+
+            sb.Append(System.Text.RegularExpressions.Regex.Escape(line[i..start]));
+            var end = line.IndexOf(ExprEnd, start, StringComparison.Ordinal);
+            if (end < 0)
+            {
+                throw new InvalidOperationException($"Unterminated '{ExprStart}' in template line: {line}");
+            }
+
+            var expr = line[(start + ExprStart.Length)..end].Trim();
+            sb.Append(TokenToRegex(expr));
+            i = end + ExprEnd.Length;
+        }
+
+        sb.Append(@"\z");
+        return sb.ToString();
+    }
+
+    /// <summary>A single <c>${{ … }}</c> token → a regex fragment (match() as-is, steps.* as a literal).</summary>
+    private string TokenToRegex(string expr)
+    {
+        if (expr.StartsWith("match(", StringComparison.Ordinal))
+        {
+            return "(?:" + ExtractMatchArg(expr) + ")";
+        }
+
+        // A steps.* reference resolves to this run's concrete id, matched literally.
+        return System.Text.RegularExpressions.Regex.Escape(ResolveExpression(expr, $"{ExprStart} {expr} {ExprEnd}"));
+    }
+
+    /// <summary>Extract the regex argument from <c>match("regex")</c> (single or double quotes).</summary>
+    private static string ExtractMatchArg(string expr)
+    {
+        var open = expr.IndexOf('(');
+        var close = expr.LastIndexOf(')');
+        if (open < 0 || close < open)
+        {
+            throw new InvalidOperationException($"Malformed match() expression: {expr}");
+        }
+
+        var arg = expr[(open + 1)..close].Trim();
+        if (arg.Length >= 2 && ((arg[0] == '"' && arg[^1] == '"') || (arg[0] == '\'' && arg[^1] == '\'')))
+        {
+            arg = arg[1..^1];
+        }
+
+        return arg;
+    }
+
+    /// <summary>
     /// Resolve a string value that may contain a ${{ }} expression.
     /// Returns the original value if it's not an expression.
     /// </summary>

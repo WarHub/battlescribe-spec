@@ -1,0 +1,75 @@
+id: cost-fractional-over-limit
+category: cost
+description: >
+  A fractional roster cost limit is enforced against a fractional running total.
+  Three 0.1 selections (exact decimal 0.3) exceed a 0.25 pts limit, producing a
+  structured over-limit error owned by the roster. Exercises non-integer cost
+  limits and over-limit-by-a-fraction reporting (#277). Base encodes exact
+  decimal; per-engine overrides capture floating-point drift in the running total.
+tags:
+  - validation-errors
+  - structured-errors
+
+setup:
+  gameSystem:
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: 0.25
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-1
+          name: Tenth Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 0.1
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  # 0.1 + 0.1 = 0.2 <= 0.25 limit: no error yet.
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
+
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 0.2
+
+  # Third selection -> 0.3 > 0.25 limit: over-limit error on the roster.
+  # Both engines enforce the fractional limit and place the same structured error;
+  # only NR's running total drifts (0.30000000000000004) from the exact decimal 0.3.
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
+
+  - expectedState:
+      errors:
+        - on: roster
+          from: costLimits/pts
+      costs:
+        - typeId: pts
+          value: 0.3
+      engines:
+        # Floating-point deviation in NR's running total (limit enforcement is identical).
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 0.30000000000000004
+          errors:
+            - on: roster
+              from: costLimits/pts

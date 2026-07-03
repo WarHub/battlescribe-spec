@@ -71,22 +71,29 @@ public static class SpecValidator
 
                 var hasAction = step.Action is not null;
                 var hasExpectedState = step.ExpectedState is not null;
+                var hasExpectedFile = step.ExpectedFile is not null;
+                var kinds = (hasAction ? 1 : 0) + (hasExpectedState ? 1 : 0) + (hasExpectedFile ? 1 : 0);
 
-                if (hasAction && hasExpectedState)
+                if (kinds > 1)
                 {
-                    errors.Add($"{stepLabel}: step has both 'action' and 'expectedState' — must have exactly one");
+                    errors.Add($"{stepLabel}: step has more than one of 'action', 'expectedState', 'expectedFile' — must have exactly one");
                 }
-                else if (!hasAction && !hasExpectedState)
+                else if (kinds == 0)
                 {
-                    errors.Add($"{stepLabel}: step has neither 'action' nor 'expectedState' — must have exactly one");
+                    errors.Add($"{stepLabel}: step has none of 'action', 'expectedState', 'expectedFile' — must have exactly one");
                 }
                 else if (hasAction)
                 {
                     ValidateActionStep(step, stepLabel, errors);
                 }
-                else
+                else if (hasExpectedState)
                 {
                     ValidateAssertionStep(step, stepLabel, errors);
+                }
+                else if (step.Id is null)
+                {
+                    // expectedFile side-file snapshots are keyed by the step id.
+                    errors.Add($"{stepLabel}: 'expectedFile' step requires an 'id' (the snapshot key)");
                 }
             }
         }

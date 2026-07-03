@@ -356,6 +356,97 @@ public sealed class NrRosterUiEngine : IRosterEngine
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
         => NewRecruitStateReader.ReadValidationErrorsAsync(Browser.Page).GetAwaiter().GetResult();
 
+    public string ExportRosterXml() => ExportRosterXmlAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Export the roster the way a user would: open the list's export menu and click the <c>.ros</c>
+    /// entry, with the download <em>mocked</em> — we hook <c>Blob</c> to grab the serialized payload and
+    /// swallow the anchor click so no real file download fires — then return the captured XML. Unlike
+    /// the store-direct engine, this exercises NewRecruit's actual export UI end-to-end.
+    /// </summary>
+    private async Task<string> ExportRosterXmlAsync()
+    {
+        var page = Browser.Page;
+        string? xml;
+        await page.EvaluateAsync(CaptureHookJs);
+        try
+        {
+            // "Export" is a toolbar button that opens the export options (.ros/.rosz/.json/...).
+            await page.Locator(".outOfMenuButton").Filter(new() { HasText = "Export" }).First
+                .ClickAsync(new() { Timeout = 10_000 });
+
+            var rosButton = page.GetByText(".ros", new() { Exact = true });
+            if (await rosButton.CountAsync() == 0)
+            {
+                var dump = await page.EvaluateAsync<string>("""
+                    () => {
+                        const out = [];
+                        for (const el of document.querySelectorAll('button, [class*=Bt], [class*=menu], [class*=Menu], [class*=option], span, a')) {
+                            const t = (el.innerText || el.textContent || '').trim();
+                            if (t && t.length < 30 && el.offsetParent !== null) out.push(t);
+                        }
+                        return JSON.stringify([...new Set(out)].slice(0, 50));
+                    }
+                    """);
+                throw new InvalidOperationException(
+                    "NR UI roster export: opened Export but found no '.ros' entry. Visible text: " + dump);
+            }
+
+            await rosButton.First.ClickAsync(new() { Timeout = 5_000 });
+            await page.WaitForTimeoutAsync(150);
+            xml = await page.EvaluateAsync<string?>("window.__bsspec_rosCapture ?? null");
+        }
+        finally
+        {
+            await page.EvaluateAsync(RestoreHookJs);
+            // Return to the app home so the next spec's setup (which, once frozen, skips navigation)
+            // starts from the expected page rather than this roster's editor. The UI engine shares one
+            // browser across specs, so leaving the editor open would time out the next Setup.
+            try
+            {
+                await Browser.NavigateToAppAsync();
+                await Browser.WaitForPiniaAsync();
+            }
+            catch
+            {
+                // Best-effort; a failure here surfaces as the next spec's setup error.
+            }
+        }
+
+        if (string.IsNullOrEmpty(xml))
+        {
+            throw new InvalidOperationException("NR UI roster export: clicked .ros but captured no <roster payload.");
+        }
+
+        // Re-indent NR's single-line export to a readable, git-diffable layout (adapter feature).
+        return NrRosterXml.Pretty(xml);
+    }
+
+    // Hook Blob to capture the .ros text NR's exporter writes, and swallow the download anchor click.
+    private const string CaptureHookJs = """
+        () => {
+            window.__bsspec_rosCapture = null;
+            if (!window.__bsspec_origBlob) window.__bsspec_origBlob = window.Blob;
+            if (!window.__bsspec_origClick) window.__bsspec_origClick = HTMLAnchorElement.prototype.click;
+            const OrigBlob = window.__bsspec_origBlob;
+            window.Blob = function (parts, opts) {
+                try {
+                    const p = parts && parts[0];
+                    if (typeof p === 'string' && p.indexOf('<roster') >= 0) window.__bsspec_rosCapture = p;
+                } catch (e) {}
+                return new OrigBlob(parts, opts);
+            };
+            HTMLAnchorElement.prototype.click = function () {};
+        }
+        """;
+
+    private const string RestoreHookJs = """
+        () => {
+            if (window.__bsspec_origBlob) window.Blob = window.__bsspec_origBlob;
+            if (window.__bsspec_origClick) HTMLAnchorElement.prototype.click = window.__bsspec_origClick;
+        }
+        """;
+
     // ===== Diagnostics =====
 
     /// <summary>
@@ -400,6 +491,46 @@ public sealed class NrRosterUiEngine : IRosterEngine
         _forceEntryNames.Clear();
         _entryNames.Clear();
         _childSelectionParent.Clear();
+
+        // The UI engine shares one browser across specs. Delete any lists this spec created and return
+        // to a clean /app, so the next spec's roster creation isn't confused by leftover list rows
+        // (e.g. the Create List dialog's controls become ambiguous once a prior list is present).
+        try
+        {
+            ResetBrowserStateAsync().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Best-effort; the next spec's setup will surface any real problem.
+        }
+    }
+
+    private async Task ResetBrowserStateAsync()
+    {
+        if (!Browser.FrozenReady && !Browser.IsFrozen)
+        {
+            return;
+        }
+
+        await Browser.Page.EvaluateAsync("""
+            () => {
+                try {
+                    const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const ls = pinia?._s?.get('lists');
+                    if (ls) {
+                        if (Array.isArray(ls.lists)) ls.lists.splice(0, ls.lists.length);
+                        ls.currentList = null;
+                    }
+                } catch (e) {}
+                try {
+                    for (const k of Object.keys(localStorage)) {
+                        if (/list/i.test(k)) localStorage.removeItem(k);
+                    }
+                } catch (e) {}
+            }
+            """);
+        await Browser.NavigateToAppAsync();
+        await Browser.WaitForPiniaAsync();
     }
 
     public void Dispose()

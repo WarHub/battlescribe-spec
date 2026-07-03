@@ -1440,3 +1440,12 @@ steps:
       costLimitCount: 1
       forces:
         - categoryCount: 4
+
+  # Byte-compare the fully-built roster's exported .ros against a per-engine snapshot
+  # (NewRecruit base + battlescribe override). This exercises IRosterEngine.ExportRosterXml()
+  # end-to-end — including the NewRecruit UI engine's real Export-button flow — on the one
+  # spec the frozen NR-UI suite runs. Per-run instance ids are templated: step-produced ids
+  # resolve to ${{ steps.* }} refs, the rest to ${{ match('...') }} regex wildcards
+  # (single-quoted so the snapshot stays well-formed XML).
+  - id: exported-roster
+    expectedFile: {}

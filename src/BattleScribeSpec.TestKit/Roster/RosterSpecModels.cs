@@ -119,6 +119,57 @@ public sealed class StepDef
     public List<string>? SkipEngines { get; set; }
 
     public ExpectedStateDef? ExpectedState { get; set; }
+
+    /// <summary>
+    /// Byte-compare the exported roster XML against a per-engine snapshot (or inline content),
+    /// mirroring gamedata <c>expectedFile</c>. The step must carry an <c>id</c> (the snapshot key).
+    /// </summary>
+    public GameData.ExpectedFileDef? ExpectedFile { get; set; }
+
+    /// <summary>
+    /// Per-engine overrides for this step's <em>action inputs</em>. Each key is an engine name; its
+    /// value's non-null action-parameter fields (e.g. <c>value</c>, <c>count</c>, <c>entryId</c>)
+    /// replace the base for that engine. Lets one step feed a different input per engine — the
+    /// action-side counterpart to <see cref="ExpectedStateDef.Engines"/> / <see cref="SkipEngines"/>.
+    /// The step's <c>action</c>, <c>id</c>, and assertions are never overridden.
+    /// </summary>
+    public Dictionary<string, StepDef>? Engines { get; set; }
+
+    /// <summary>
+    /// Effective step for the given engine: an engine override's non-null action-input fields replace
+    /// the base. Action, id, skip list, assertions, and the override map itself are kept from the base.
+    /// </summary>
+    public StepDef ForEngine(string? engineName)
+    {
+        if (engineName is null || Engines is null || !Engines.TryGetValue(engineName, out var o))
+        {
+            return this;
+        }
+
+        return new StepDef
+        {
+            // Identity / dispatch / assertions — never overridden.
+            Id = Id,
+            Action = Action,
+            SkipEngines = SkipEngines,
+            ExpectedState = ExpectedState,
+            ExpectedFile = ExpectedFile,
+            Engines = Engines,
+            // Action inputs — overridable per engine.
+            ForceEntryId = o.ForceEntryId ?? ForceEntryId,
+            EntryId = o.EntryId ?? EntryId,
+            CatalogueId = o.CatalogueId ?? CatalogueId,
+            ForceId = o.ForceId ?? ForceId,
+            SelectionId = o.SelectionId ?? SelectionId,
+            CostTypeId = o.CostTypeId ?? CostTypeId,
+            Count = o.Count ?? Count,
+            Value = o.Value ?? Value,
+            CustomName = o.CustomName ?? CustomName,
+            CustomNotes = o.CustomNotes ?? CustomNotes,
+            CategoryEntryId = o.CategoryEntryId ?? CategoryEntryId,
+            Path = o.Path ?? Path,
+        };
+    }
 }
 
 /// <summary>

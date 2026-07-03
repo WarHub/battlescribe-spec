@@ -1,0 +1,43 @@
+id: cost-fractional-export
+category: export
+description: >
+  Serialize a selection entry carrying fractional costs and byte-compare the
+  exported catalogue against a per-engine snapshot (NewRecruit base + battlescribe
+  override). Locks the exact XML formatting of non-integer cost values — 0.5, 0.1,
+  1.33 — as each engine writes them (#277 / #286 byte-for-byte export parity). The
+  declared ids make the export byte-reproducible.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: half
+        name: Half
+      - id: tenth
+        name: Tenth
+      - id: frac
+        name: Frac
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Fractional Unit
+          type: unit
+          costs:
+            - name: Half
+              typeId: half
+              value: 0.5
+            - name: Tenth
+              typeId: tenth
+              value: 0.1
+            - name: Frac
+              typeId: frac
+              value: 1.33
+
+steps:
+  - id: fractional
+    expectedFile: {}

@@ -151,12 +151,33 @@
           "items": { "type": "string" },
           "description": "Engine names to skip this action step for (e.g., [\"battlescribe\"])"
         },
-        "expectedState": { "$ref": "#/$defs/expectedState" }
+        "engines": {
+          "type": "object",
+          "additionalProperties": { "type": "object" },
+          "description": "Per-engine overrides for this step's action inputs (e.g. a different value/count per engine)."
+        },
+        "expectedState": { "$ref": "#/$defs/expectedState" },
+        "expectedFile": { "$ref": "#/$defs/expectedFile" }
       },
       "oneOf": [
         { "required": ["action"] },
-        { "required": ["expectedState"] }
+        { "required": ["expectedState"] },
+        { "required": ["expectedFile", "id"] }
       ]
+    },
+
+    "expectedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Byte-compare the engine's exported file against a per-engine snapshot (keyed by the step id) or inline content.",
+      "properties": {
+        "content": { "type": "string" },
+        "fileType": { "type": "string" },
+        "engines": {
+          "type": "object",
+          "additionalProperties": { "type": "object" }
+        }
+      }
     },
 
     "gameSystem": {

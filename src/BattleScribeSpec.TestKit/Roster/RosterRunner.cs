@@ -1,3 +1,4 @@
+using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Roster;
@@ -14,6 +15,16 @@ public sealed class RosterRunner
     private readonly ExpressionResolver _exprResolver = new();
     private bool _isDataSourceMode;
     private IReadOnlyList<string> _catalogueIds = [];
+    private string _specId = "";
+    private string? _specDir;
+
+    /// <summary>
+    /// When true, <c>expectedFile</c> assertions (re)write the expected snapshot from the actual
+    /// export instead of comparing. Mirrors <see cref="GameDataRunner"/>; defaults to the
+    /// <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var so the xUnit harness honors it.
+    /// </summary>
+    public bool UpdateSnapshots { get; set; }
+        = Environment.GetEnvironmentVariable("BSSPEC_UPDATE_SNAPSHOTS") is "1" or "true";
 
     /// <summary>
     /// Called after each step (action, assertion, or dump) completes.
@@ -43,6 +54,8 @@ public sealed class RosterRunner
         _errors.Clear();
         _isDataSourceMode = false;
         _catalogueIds = [];
+        _specId = spec.Id;
+        _specDir = spec.SourceDirectory;
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -91,9 +104,13 @@ public sealed class RosterRunner
                     {
                         ExecuteAssertion(step, i);
                     }
+                    else if (step.ExpectedFile is not null)
+                    {
+                        ExecuteFileAssertion(step, i);
+                    }
                     else
                     {
-                        _errors.Add($"Step {i}: neither 'action' nor 'expectedState' defined");
+                        _errors.Add($"Step {i}: neither 'action', 'expectedState' nor 'expectedFile' defined");
                     }
 
                     NotifyStepCompleted(i, step);
@@ -192,6 +209,9 @@ public sealed class RosterRunner
             return;
         }
 
+        // Apply any per-engine action-input overrides for this step.
+        step = step.ForEngine(_engineName);
+
         // Resolve expressions in instance ID fields
         var forceId = _exprResolver.Resolve(step.ForceId);
         var selectionId = _exprResolver.Resolve(step.SelectionId);
@@ -288,6 +308,71 @@ public sealed class RosterRunner
             var effective = step.ExpectedState.ForEngine(_engineName);
             AssertExpectedState(effective, stepIndex);
         }
+    }
+
+    /// <summary>
+    /// Export the roster and byte-compare it to a per-engine snapshot (or inline content), or (re)write
+    /// the snapshot in update mode. Engines that cannot export a roster are skipped silently.
+    /// </summary>
+    private void ExecuteFileAssertion(StepDef step, int stepIndex)
+    {
+        string rosterXml;
+        try
+        {
+            rosterXml = _engine.ExportRosterXml();
+        }
+        catch (NotSupportedException)
+        {
+            // Engine can't serialize a roster (e.g. a UI-only driver) — the byte-compare doesn't apply.
+            return;
+        }
+
+        var error = ExportSnapshotAssertion.AssertOrUpdate(
+            step.ExpectedFile!.ForEngine(_engineName),
+            rosterXml,
+            _engineName,
+            _specId,
+            _specDir,
+            step.Id,
+            stepIndex,
+            UpdateSnapshots,
+            _exprResolver.Resolve,
+            onDiverge: null,
+            templateMatch: _exprResolver.TryMatchTemplate,
+            templatizeForWrite: TemplatizeRosterInstanceIds);
+        if (error is not null)
+        {
+            _errors.Add(error);
+        }
+    }
+
+    /// <summary>
+    /// Rewrite per-run instance ids into stable template tokens so roster snapshots are deterministic
+    /// and meaningful. Every bare <c>id="…"</c> in a <c>.ros</c> is an engine-minted instance id
+    /// (BattleScribe GUIDs, NewRecruit Mongo ObjectIds); all stable references use a capital-I attribute
+    /// (<c>entryId</c>, <c>typeId</c>, <c>catalogueId</c>, …), left untouched. Ids that a step produced
+    /// (force/selection/auto-selection) become <c>${{ steps.… }}</c> references via the resolver's
+    /// reverse index; the remainder (the roster's own id, auto-created category ids) become a
+    /// <c>${{ match('…') }}</c> regex wildcard (single-quoted and quote-free so the snapshot stays
+    /// well-formed XML).
+    /// </summary>
+    private string TemplatizeRosterInstanceIds(string xml)
+    {
+        var reverse = _exprResolver.BuildIdReverseIndex();
+        return System.Text.RegularExpressions.Regex.Replace(xml, "\\bid=\"([^\"]*)\"", m =>
+        {
+            var value = m.Groups[1].Value;
+            // Ids no step captured (the roster's own id, auto-created category ids) are volatile
+            // and engine-shaped in incompatible ways — BattleScribe GUIDs, NewRecruit short base36-ish
+            // ids, or a reused entryId like "(No Category)" (spaces/parens). The wildcard is kept
+            // QUOTE-FREE so the snapshot stays well-formed XML (a literal " would close the id="…"
+            // attribute): match()'s argument is single-quoted, and the character class is a positive
+            // set covering every id shape we mint rather than the "any non-quote" negation.
+            var token = reverse.TryGetValue(value, out var stepRef)
+                ? stepRef
+                : "${{ match('[- 0-9A-Za-z()_.:]+') }}";
+            return $"id=\"{token}\"";
+        });
     }
 
     private void AssertExpectedState(ExpectedStateDef? expected, int stepIndex)

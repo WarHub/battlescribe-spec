@@ -27,6 +27,7 @@ public static class SpecLoader
     {
         var yaml = File.ReadAllText(yamlPath);
         var spec = Deserializer.Deserialize<SpecFile>(yaml);
+        spec.SourcePath = Path.GetFullPath(yamlPath);
         if (string.IsNullOrEmpty(spec.Id))
         {
             spec.Id = Path.GetFileNameWithoutExtension(yamlPath);
