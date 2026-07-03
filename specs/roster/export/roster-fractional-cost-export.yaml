@@ -1,0 +1,56 @@
+id: roster-fractional-cost-export
+category: export
+description: >
+  Build a small roster with a fractional per-model cost, then byte-compare the
+  exported .ros XML against a per-engine snapshot (BattleScribe base + newrecruit
+  override). Locks each engine's exact roster serialization — element/attribute
+  ordering and non-integer cost formatting (#277) — the roster-side counterpart to
+  the gamedata cost-fractional-export byte-compare.
+
+  Per-run instance ids (roster/force/selection/category id="...") are normalized to
+  "__id__" before comparison, since each engine mints its own (BattleScribe GUIDs,
+  NewRecruit Mongo ObjectIds); the compare then reflects structure, ordering, and
+  cost formatting rather than volatile ids.
+
+  NewRecruit is skipped for now: its roster serializer is module-scoped and export
+  targets a zipped .rosz, so capturing the raw .ros is a follow-up. The
+  cross-engine machinery (ExportRosterXml + per-engine snapshots) is in place; NR
+  just needs its export hook wired, after which the newrecruit override drops in.
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-1
+          name: Half Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 0.5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-1
+
+  - id: exported
+    expectedFile: {}

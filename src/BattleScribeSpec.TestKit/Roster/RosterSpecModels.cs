@@ -119,6 +119,12 @@ public sealed class StepDef
     public List<string>? SkipEngines { get; set; }
 
     public ExpectedStateDef? ExpectedState { get; set; }
+
+    /// <summary>
+    /// Byte-compare the exported roster XML against a per-engine snapshot (or inline content),
+    /// mirroring gamedata <c>expectedFile</c>. The step must carry an <c>id</c> (the snapshot key).
+    /// </summary>
+    public GameData.ExpectedFileDef? ExpectedFile { get; set; }
 }
 
 /// <summary>

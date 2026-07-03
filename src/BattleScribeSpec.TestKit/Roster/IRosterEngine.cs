@@ -120,6 +120,15 @@ public interface IRosterEngine : IDisposable
     /// </summary>
     IReadOnlyList<ValidationErrorState> GetValidationErrors();
 
+    /// <summary>
+    /// Serialize the current roster to its BattleScribe <c>.ros</c> XML form for byte-compare
+    /// (<c>expectedFile</c>) assertions. Engines that cannot export a roster leave this unsupported,
+    /// and the file assertion is skipped for them. The root <c>roster</c> element identifies the file
+    /// type to the snapshot resolver.
+    /// </summary>
+    string ExportRosterXml()
+        => throw new NotSupportedException("This engine does not support roster XML export.");
+
     // ===== Lifecycle =====
 
     /// <summary>

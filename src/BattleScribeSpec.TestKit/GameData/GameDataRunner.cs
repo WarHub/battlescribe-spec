@@ -156,167 +156,20 @@ public sealed class GameDataRunner
     /// </summary>
     private void ExecuteFileAssertion(GameDataStepDef step, int stepIndex)
     {
-        var def = step.ExpectedFile!.ForEngine(_engineName);
-        var actual = NormalizeNewlines(_engine.ExportActiveFile());
-        var ext = FileExtFromRoot(actual);
-
-        // Inline expected content (author-maintained; never rewritten by --update-snapshots).
-        if (def.Content is { } inline)
+        var error = ExportSnapshotAssertion.AssertOrUpdate(
+            step.ExpectedFile!.ForEngine(_engineName),
+            _engine.ExportActiveFile(),
+            _engineName,
+            _specId,
+            _specDir,
+            step.Id,
+            stepIndex,
+            UpdateSnapshots,
+            _exprResolver.Resolve);
+        if (error is not null)
         {
-            var expectedInline = NormalizeNewlines(_exprResolver.Resolve(inline) ?? inline);
-            if (expectedInline != actual)
-            {
-                ReportFileMismatch(stepIndex, "(inline)", expectedInline, actual);
-            }
-            return;
+            _errors.Add(error);
         }
-
-        // Side-file resolved by the step's id.
-        if (step.Id is not { Length: > 0 } key)
-        {
-            _errors.Add($"Step {stepIndex}: expectedFile side-file requires the step to have an 'id'");
-            return;
-        }
-        if (_specDir is null)
-        {
-            _errors.Add($"Step {stepIndex}: expectedFile side-file needs a spec loaded from disk (no SourceDirectory)");
-            return;
-        }
-
-        var engine = _engineName ?? GameDataSnapshotResolver.BaseEngineName;
-
-        if (UpdateSnapshots)
-        {
-            WriteSnapshot(engine, key, ext, actual);
-            return;
-        }
-
-        var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, ext);
-        if (path is null)
-        {
-            _errors.Add($"Step {stepIndex}: no expected file for snapshot '{key}' (engine '{engine}', .{ext}); " +
-                "run with --update-snapshots (or BSSPEC_UPDATE_SNAPSHOTS=1) to create it");
-            return;
-        }
-
-        var expected = NormalizeNewlines(File.ReadAllText(path));
-        expected = NormalizeNewlines(_exprResolver.Resolve(expected) ?? expected);
-        if (expected != actual)
-        {
-            ReportFileMismatch(stepIndex, Path.GetFileName(path), expected, actual);
-        }
-    }
-
-    /// <summary>
-    /// (Re)write an expected side-file. The base engine writes the base (no infix). A non-base engine
-    /// writes its family override (e.g. battlescribe + battlescribe-ui → <c>.battlescribe.</c>) when it
-    /// is the family-canonical engine; a family <em>variant</em> (e.g. battlescribe-ui) shares that
-    /// family file when its output matches and otherwise pins an exact-engine override the resolver
-    /// prefers over the family file. Overrides equal to the base are removed.
-    /// </summary>
-    private void WriteSnapshot(string engine, string key, string ext, string actual)
-    {
-        var basePath = GameDataSnapshotResolver.BasePath(_specDir!, _specId, key, ext);
-        if (GameDataSnapshotResolver.IsBaseEngine(engine))
-        {
-            SafeWriteSnapshot(basePath, actual);
-            return;
-        }
-
-        var family = GameDataSnapshotResolver.Family(engine);
-        var familyPath = GameDataSnapshotResolver.OverridePath(_specDir!, _specId, key, family, ext);
-        var exactPath = GameDataSnapshotResolver.OverridePath(_specDir!, _specId, key, engine, ext);
-        var baseContent = File.Exists(basePath) ? NormalizeNewlines(File.ReadAllText(basePath)) : null;
-
-        // Matches the base: no override needed; drop any stale override this engine owns.
-        if (baseContent == actual)
-        {
-            DeleteSnapshotIfExists(exactPath);
-            if (engine == family)
-            {
-                DeleteSnapshotIfExists(familyPath);
-            }
-            return;
-        }
-
-        if (baseContent is null)
-        {
-            Console.Error.WriteLine($"[snapshot] base missing for '{key}'. " +
-                $"Generate the base ('{GameDataSnapshotResolver.BaseEngineName}') first.");
-        }
-
-        // The family-canonical engine (name == family) owns the shared family override.
-        if (engine == family)
-        {
-            SafeWriteSnapshot(familyPath, actual);
-            return;
-        }
-
-        // A family variant (e.g. battlescribe-ui): share the family file when identical, else pin an
-        // exact-engine override the resolver prefers over the family file.
-        var familyContent = File.Exists(familyPath) ? NormalizeNewlines(File.ReadAllText(familyPath)) : null;
-        if (familyContent == actual)
-        {
-            DeleteSnapshotIfExists(exactPath);
-            return;
-        }
-
-        SafeWriteSnapshot(exactPath, actual);
-    }
-
-    private static void DeleteSnapshotIfExists(string path)
-    {
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-        }
-    }
-
-    private static void SafeWriteSnapshot(string path, string content)
-    {
-        // Don't clobber an author-maintained templated expected.
-        if (File.Exists(path) && File.ReadAllText(path).Contains("${{", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var dir = Path.GetDirectoryName(path);
-        if (dir is { Length: > 0 })
-        {
-            Directory.CreateDirectory(dir);
-        }
-        File.WriteAllText(path, content);
-    }
-
-    // Normalize CRLF -> LF and canonicalize to exactly one trailing newline. Engines differ on
-    // whether ExportActiveFile() ends the document with a newline (NewRecruit does, BattleScribe does
-    // not); that EOF newline carries no meaning, so we compare — and write snapshots — with a single
-    // trailing "\n". Keeps snapshot files POSIX-clean and leaves only meaningful bytes as overrides.
-    private static string NormalizeNewlines(string s) => s.Replace("\r\n", "\n").TrimEnd('\n') + "\n";
-
-    private static string FileExtFromRoot(string xml)
-    {
-        var m = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*(gameSystem|catalogue|roster)\b");
-        return m.Success && m.Groups[1].Value == "gameSystem" ? "gst" : "cat";
-    }
-
-    private void ReportFileMismatch(int stepIndex, string source, string expected, string actual)
-    {
-        var e = expected.Split('\n');
-        var a = actual.Split('\n');
-        var detail = $"expected {e.Length} line(s), actual {a.Length} line(s)";
-        for (var i = 0; i < Math.Max(e.Length, a.Length); i++)
-        {
-            var el = i < e.Length ? e[i] : "(missing)";
-            var al = i < a.Length ? a[i] : "(missing)";
-            if (el != al)
-            {
-                detail = $"first diff at line {i + 1}:\n      expected: {el}\n      actual:   {al}";
-                break;
-            }
-        }
-
-        _errors.Add($"Step {stepIndex}: exported file does not match expected ({source}). {detail}");
     }
 
     /// <summary>
