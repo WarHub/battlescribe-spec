@@ -6,18 +6,20 @@ namespace BattleScribeSpec.GameData;
 /// or a per-spec folder — <c>{specId}/{key}.{ext}</c> — each with an optional override that adds a
 /// <c>.{engine}</c> infix.
 ///
-/// <para>The base file (no infix) is the NewRecruit output. Other engines get an override only where
-/// their serialization diverges, and the override is keyed by the engine <em>family</em> (the name with
-/// any <c>-ui</c> suffix stripped) so the headless and UI variants of one editor — which share a
-/// serializer and therefore emit identical files — share a single override file (e.g.
-/// <c>battlescribe</c> and <c>battlescribe-ui</c> both use <c>{specId}.{key}.battlescribe.{ext}</c>).
-/// An exact-engine override (full <c>{engine}</c> infix, including the <c>-ui</c>) is still honored
-/// first as an escape hatch should a variant ever genuinely diverge.</para>
+/// <para>The base file (no infix) is the BattleScribe output — BattleScribe is the reference
+/// implementation against which the other editors are compared. Any other engine (including
+/// NewRecruit) gets an override only where its serialization diverges from that base, keyed by the
+/// engine <em>family</em> (the name with any <c>-ui</c> suffix stripped) so the headless and UI
+/// variants of one editor — which share a serializer and therefore emit identical files — share a
+/// single override file (e.g. <c>newrecruit</c> and <c>newrecruit-ui</c> both use
+/// <c>{specId}.{key}.newrecruit.{ext}</c>). An exact-engine override (full <c>{engine}</c> infix,
+/// including the <c>-ui</c>) is still honored first as an escape hatch should a variant ever
+/// genuinely diverge.</para>
 /// </summary>
 public static class GameDataSnapshotResolver
 {
     /// <summary>Engine family whose output is the base/default snapshot (written without an engine infix).</summary>
-    public const string BaseEngineName = "newrecruit";
+    public const string BaseEngineName = "battlescribe";
 
     /// <summary>
     /// The snapshot family an engine belongs to: its name with any trailing <c>-ui</c> removed. Engines
@@ -28,8 +30,9 @@ public static class GameDataSnapshotResolver
         => engine.EndsWith("-ui", StringComparison.Ordinal) ? engine[..^"-ui".Length] : engine;
 
     /// <summary>
-    /// True for the NewRecruit-family engines whose output IS the base (store-direct and the NR UI
-    /// produce the same NR serialization). Either may write the base file; other engines write overrides.
+    /// True for the BattleScribe-family engines whose output IS the base (the headless Java engine and
+    /// the BattleScribe UI produce the same serialization). Either may write the base file; other
+    /// engines write overrides.
     /// </summary>
     public static bool IsBaseEngine(string engine) => Family(engine) == BaseEngineName;
 

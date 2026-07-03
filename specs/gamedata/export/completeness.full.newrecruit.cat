@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<catalogue id="cat-1" name="Completeness Catalogue" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+<catalogue id="cat-1" name="Completeness Catalogue" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema" type="catalogue">
   <publications>
     <publication id="pub-core" name="Core Rulebook" shortName="CRB" publisher="Games Co" publicationDate="2024" publisherUrl="https://example.test/crb"/>
   </publications>
   <costTypes>
-    <costType id="cct-pts" name="Local Points" defaultCostLimit="-1.0" hidden="false"/>
+    <costType id="cct-pts" name="Local Points" defaultCostLimit="-1" hidden="false"/>
   </costTypes>
   <profileTypes>
     <profileType id="cpt-extra" name="Extra">
@@ -19,14 +19,14 @@
         <modifier type="set" field="hidden" value="false"/>
       </modifiers>
       <constraints>
-        <constraint field="selections" scope="roster" value="2.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-hq-max" type="max"/>
+        <constraint field="selections" scope="roster" value="2" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-hq-max" type="max"/>
       </constraints>
     </categoryEntry>
   </categoryEntries>
   <forceEntries>
     <forceEntry id="fe-detachment" name="Detachment" publicationId="pub-core" page="5" hidden="false">
       <constraints>
-        <constraint field="selections" scope="parent" value="1.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-fe-min" type="min"/>
+        <constraint field="selections" scope="parent" value="1" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-fe-min" type="min"/>
       </constraints>
       <rules>
         <rule id="rule-fe" name="Detachment Rule" hidden="false">
@@ -46,15 +46,15 @@
       <modifiers>
         <modifier type="increment" field="ct-pts" value="10">
           <repeats>
-            <repeat field="selections" scope="parent" value="1.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" childId="sse-bolter" repeats="1" roundUp="false"/>
+            <repeat field="selections" scope="parent" value="1" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" childId="sse-bolter" repeats="1" roundUp="false"/>
           </repeats>
           <conditions>
-            <condition field="selections" scope="parent" value="1.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" childId="sse-bolter" type="atLeast"/>
+            <condition field="selections" scope="parent" value="1" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" childId="sse-bolter" type="atLeast"/>
           </conditions>
           <conditionGroups>
             <conditionGroup type="and">
               <conditions>
-                <condition field="selections" scope="parent" value="3.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" childId="sse-bolter" type="lessThan"/>
+                <condition field="selections" scope="parent" value="3" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" childId="sse-bolter" type="lessThan"/>
               </conditions>
             </conditionGroup>
           </conditionGroups>
@@ -63,7 +63,7 @@
       <modifierGroups>
         <modifierGroup>
           <conditions>
-            <condition field="selections" scope="parent" value="0.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" childId="sse-bolter" type="greaterThan"/>
+            <condition field="selections" scope="parent" value="0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" childId="sse-bolter" type="greaterThan"/>
           </conditions>
           <modifiers>
             <modifier type="set" field="hidden" value="true"/>
@@ -71,8 +71,8 @@
         </modifierGroup>
       </modifierGroups>
       <constraints>
-        <constraint field="selections" scope="parent" value="5.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-squad-min" type="min"/>
-        <constraint field="selections" scope="parent" value="10.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-squad-max" type="max"/>
+        <constraint field="selections" scope="parent" value="5" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-squad-min" type="min"/>
+        <constraint field="selections" scope="parent" value="10" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-squad-max" type="max"/>
       </constraints>
       <profiles>
         <profile id="prof-squad" name="Marine" hidden="false" typeId="pt-weapon" typeName="Weapon">
@@ -100,64 +100,54 @@
             <infoGroup id="ig-nested" name="Nested Info" hidden="false"/>
           </infoGroups>
           <infoLinks>
-            <infoLink id="il-ig-rule" name="Shared Core (linked)" hidden="false" targetId="srule-core" type="rule"/>
+            <infoLink id="il-ig-rule" name="Shared Core Rule" hidden="false" targetId="srule-core" type="rule"/>
           </infoLinks>
         </infoGroup>
       </infoGroups>
       <infoLinks>
-        <infoLink id="il-squad-profile" name="Feel No Pain (linked)" hidden="false" targetId="sprof-ability" type="profile"/>
+        <infoLink id="il-squad-profile" name="Feel No Pain" hidden="false" targetId="sprof-ability" type="profile"/>
       </infoLinks>
       <categoryLinks>
         <categoryLink id="cl-primary" name="Infantry" hidden="false" targetId="gce-infantry" primary="true"/>
         <categoryLink id="cl-secondary" name="Character" hidden="false" targetId="gce-character" primary="false"/>
       </categoryLinks>
       <selectionEntries>
-        <selectionEntry id="se-sergeant" name="Sergeant" hidden="false" collective="false" import="true" type="model">
-          <costs>
-            <cost name="Local Points" typeId="cct-pts" value="0.0"/>
-            <cost name="Power Level" typeId="ct-pl" value="0.0"/>
-            <cost name="Points" typeId="ct-pts" value="0.0"/>
-          </costs>
-        </selectionEntry>
+        <selectionEntry id="se-sergeant" name="Sergeant" hidden="false" collective="false" import="true" type="model"/>
       </selectionEntries>
       <selectionEntryGroups>
         <selectionEntryGroup id="seg-wargear" name="Wargear" hidden="false" collective="false" import="true" defaultSelectionEntryId="se-bolter-child">
           <selectionEntries>
             <selectionEntry id="se-bolter-child" name="Bolter" hidden="false" collective="false" import="true" type="upgrade">
               <costs>
-                <cost name="Points" typeId="ct-pts" value="0.0"/>
-                <cost name="Local Points" typeId="cct-pts" value="0.0"/>
-                <cost name="Power Level" typeId="ct-pl" value="0.0"/>
+                <cost typeId="ct-pts" value="0"/>
               </costs>
             </selectionEntry>
           </selectionEntries>
           <entryLinks>
-            <entryLink id="el-group-relic" name="Relic Blade (linked)" hidden="false" collective="false" import="true" targetId="lib-sse-relic" type="selectionEntry"/>
+            <entryLink id="el-group-relic" name="Relic Blade" hidden="false" collective="false" import="true" targetId="lib-sse-relic" type="selectionEntry"/>
           </entryLinks>
         </selectionEntryGroup>
       </selectionEntryGroups>
       <entryLinks>
-        <entryLink id="el-squad-bolter" name="Boltgun (linked)" hidden="false" collective="false" import="true" targetId="sse-bolter" type="selectionEntry">
+        <entryLink id="el-squad-bolter" name="Boltgun" hidden="false" collective="false" import="true" targetId="sse-bolter" type="selectionEntry">
           <constraints>
-            <constraint field="selections" scope="parent" value="1.0" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-link-max" type="max"/>
+            <constraint field="selections" scope="parent" value="1" percentValue="false" shared="false" includeChildSelections="false" includeChildForces="false" id="con-link-max" type="max"/>
           </constraints>
           <entryLinks>
-            <entryLink id="el-nested-relic" name="Relic Blade (nested linked)" hidden="false" collective="false" import="true" targetId="lib-sse-relic" type="selectionEntry"/>
+            <entryLink id="el-nested-relic" name="Relic Blade" hidden="false" collective="false" import="true" targetId="lib-sse-relic" type="selectionEntry"/>
           </entryLinks>
           <costs>
-            <cost name="" typeId="ct-pts" value="2.0"/>
+            <cost typeId="ct-pts" value="2"/>
           </costs>
         </entryLink>
       </entryLinks>
       <costs>
-        <cost name="Points" typeId="ct-pts" value="90.0"/>
-        <cost name="Local Points" typeId="cct-pts" value="0.0"/>
-        <cost name="Power Level" typeId="ct-pl" value="0.0"/>
+        <cost typeId="ct-pts" value="90"/>
       </costs>
     </selectionEntry>
   </selectionEntries>
   <entryLinks>
-    <entryLink id="el-root-relic" name="Relic Blade (root linked)" hidden="false" collective="false" import="true" targetId="lib-sse-relic" type="selectionEntry"/>
+    <entryLink id="el-root-relic" name="Relic Blade" hidden="false" collective="false" import="true" targetId="lib-sse-relic" type="selectionEntry"/>
   </entryLinks>
   <rules>
     <rule id="rule-root" name="Catalogue Rule" hidden="false">
@@ -165,7 +155,7 @@
     </rule>
   </rules>
   <infoLinks>
-    <infoLink id="il-root-rule" name="Shared Core (root linked)" hidden="false" targetId="srule-core" type="rule"/>
+    <infoLink id="il-root-rule" name="Shared Core Rule" hidden="false" targetId="srule-core" type="rule"/>
   </infoLinks>
   <sharedSelectionEntries>
     <selectionEntry id="sse-bolter" name="Boltgun" hidden="false" collective="false" import="true" type="upgrade">
@@ -178,22 +168,14 @@
         </profile>
       </profiles>
       <costs>
-        <cost name="Points" typeId="ct-pts" value="2.0"/>
-        <cost name="Local Points" typeId="cct-pts" value="0.0"/>
-        <cost name="Power Level" typeId="ct-pl" value="0.0"/>
+        <cost typeId="ct-pts" value="2"/>
       </costs>
     </selectionEntry>
   </sharedSelectionEntries>
   <sharedSelectionEntryGroups>
     <selectionEntryGroup id="sseg-shared" name="Shared Wargear" hidden="false" collective="false" import="true" defaultSelectionEntryId="sseg-child-knife">
       <selectionEntries>
-        <selectionEntry id="sseg-child-knife" name="Combat Knife" hidden="false" collective="false" import="true" type="upgrade">
-          <costs>
-            <cost name="Local Points" typeId="cct-pts" value="0.0"/>
-            <cost name="Power Level" typeId="ct-pl" value="0.0"/>
-            <cost name="Points" typeId="ct-pts" value="0.0"/>
-          </costs>
-        </selectionEntry>
+        <selectionEntry id="sseg-child-knife" name="Combat Knife" hidden="false" collective="false" import="true" type="upgrade"/>
       </selectionEntries>
     </selectionEntryGroup>
   </sharedSelectionEntryGroups>

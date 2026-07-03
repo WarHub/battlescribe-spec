@@ -288,7 +288,11 @@ public sealed class GameDataRunner
         File.WriteAllText(path, content);
     }
 
-    private static string NormalizeNewlines(string s) => s.Replace("\r\n", "\n");
+    // Normalize CRLF -> LF and canonicalize to exactly one trailing newline. Engines differ on
+    // whether ExportActiveFile() ends the document with a newline (NewRecruit does, BattleScribe does
+    // not); that EOF newline carries no meaning, so we compare — and write snapshots — with a single
+    // trailing "\n". Keeps snapshot files POSIX-clean and leaves only meaningful bytes as overrides.
+    private static string NormalizeNewlines(string s) => s.Replace("\r\n", "\n").TrimEnd('\n') + "\n";
 
     private static string FileExtFromRoot(string xml)
     {
