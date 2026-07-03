@@ -34,39 +34,11 @@ jobs:
           "thorough=$($thorough.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           Write-Host "thorough = $thorough"
 
-  # ── Build once; every test job consumes artifacts/bin and runs --no-build. ──
-  build:
-    if: github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-          fetch-depth: 0
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
-      # No --locked-mode: SDK-implicit packages (e.g. Microsoft.NET.ILLink.Tasks) vary by SDK
-      # patch, so a lockfile pinned on one SDK breaks locked restore on another (NU1004). The
-      # lockfile is kept for the setup-dotnet cache key and determinism, not strict enforcement.
-      - run: dotnet restore
-      - run: dotnet build --no-restore
-      - name: Upload build output
-        uses: actions/upload-artifact@v7
-        with:
-          name: build-output
-          path: artifacts/bin/**
-          retention-days: 1
-
-  # ── FAST base — runs on every push/PR. Proves every engine, adapter, submodule
-  #    and dependency works end-to-end, with only kitchen-sink-scale specs for the
-  #    two heavy UI suites. Target ~6-8 min. ──
+  # ── FAST base — every push/PR. Proves every engine, adapter, submodule and
+  #    dependency works end-to-end; only the two heavy UI suites are trimmed
+  #    (BS GameData UI → kitchen-sink; NR GameData UI runs full but parallelized). ──
   fast:
     if: github.event.pull_request.draft != true
-    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -79,11 +51,6 @@ jobs:
           dotnet-version: '10.0.x'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
-      - name: Download build output
-        uses: actions/download-artifact@v7
-        with:
-          name: build-output
-          path: artifacts/bin
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -109,10 +76,6 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
-      - uses: actions/cache@v4
-        with:
-          path: src/bs-ui-java-agent/bs-ui-java-agent.jar
-          key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
       - name: Setup dependencies
         run: pwsh ./setup.ps1 -SkipWh40k
         env:
@@ -125,6 +88,8 @@ jobs:
           java-package: 'jdk+fx'
       - name: Build bs-ui-java-agent
         run: pwsh -File src/bs-ui-java-agent/build.ps1
+      - name: Build
+        run: dotnet build
 
       # Offline suite: unit + lint + protocol + BattleScribe reference engine.
       - name: Core offline suite
@@ -173,7 +138,7 @@ jobs:
   # ── THOROUGH: full BS GameData UI (opt-in). Warm start + sharded across N jobs.
   #    The matrix MUST match GameDataConformanceTestBase.ShardCount. ──
   thorough-ui-bs:
-    needs: [gate, build]
+    needs: [gate]
     if: needs.gate.outputs.thorough == 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -185,15 +150,12 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-      - uses: actions/setup-dotnet@v5
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
-      - uses: actions/download-artifact@v7
-        with:
-          name: build-output
-          path: artifacts/bin
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -206,10 +168,6 @@ jobs:
         with:
           path: lib/battlescribe
           key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
-        with:
-          path: src/bs-ui-java-agent/bs-ui-java-agent.jar
-          key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
       - name: Setup dependencies
         run: pwsh ./setup.ps1 -SkipPlaywright -SkipWh40k
         env:
@@ -222,6 +180,8 @@ jobs:
           java-package: 'jdk+fx'
       - name: Build bs-ui-java-agent
         run: pwsh -File src/bs-ui-java-agent/build.ps1
+      - name: Build
+        run: dotnet build
       - name: BS GameData UI (shard ${{ matrix.shard }}, warm start)
         run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&Shard=${{ matrix.shard }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
@@ -234,22 +194,19 @@ jobs:
           path: |
             artifacts/bs-ui-diagnostics/
 
-  # ── LIVE NR conformance (opt-in) — unchanged behaviour, now build-once. ──
+  # ── LIVE NR conformance (opt-in). ──
   nr-conformance:
-    needs: [gate, build]
+    needs: [gate]
     if: needs.gate.outputs.thorough == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v5
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
-      - uses: actions/download-artifact@v7
-        with:
-          name: build-output
-          path: artifacts/bin
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -258,6 +215,12 @@ jobs:
           private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
           owner: WarHub
           repositories: newrecruit-har,battlescribe-archive
+      # nr-conformance still needs the BS app: the BattleScribe project IKVM-compiles
+      # lib/battlescribe/lib/*.jar at build time.
+      - uses: actions/cache@v4
+        with:
+          path: lib/battlescribe
+          key: bsapp-${{ hashFiles('testdata.json') }}
       - uses: actions/cache@v4
         with:
           path: .testdata/newrecruit-har
@@ -270,6 +233,8 @@ jobs:
         run: pwsh ./setup.ps1 -SkipJavaAgent -SkipWh40k
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      - name: Build
+        run: dotnet build
       - name: Run NR smoke tests
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live-smoke --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
@@ -296,7 +261,7 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [gate, build, fast, thorough-ui-bs, nr-conformance]
+    needs: [gate, fast, thorough-ui-bs, nr-conformance]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -308,7 +273,6 @@ jobs:
         shell: pwsh
         run: |
           $results = @{
-            'build'          = '${{ needs.build.result }}'
             'fast'           = '${{ needs.fast.result }}'
             'thorough-ui-bs' = '${{ needs.thorough-ui-bs.result }}'
             'nr-conformance' = '${{ needs.nr-conformance.result }}'
@@ -371,7 +335,6 @@ jobs:
         shell: pwsh
         run: |
           $failed = @()
-          if ('${{ needs.build.result }}' -eq 'failure') { $failed += 'build' }
           if ('${{ needs.fast.result }}' -eq 'failure') { $failed += 'fast' }
           if ('${{ needs.thorough-ui-bs.result }}' -eq 'failure') { $failed += 'thorough-ui-bs' }
           if ('${{ needs.nr-conformance.result }}' -eq 'failure') { $failed += 'nr-conformance' }
