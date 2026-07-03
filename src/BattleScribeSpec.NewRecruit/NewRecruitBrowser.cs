@@ -96,10 +96,32 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         await RegisterHelpersOnPageAsync(Page);
         if (harFilePath is not null)
         {
+            // Fallback for requests the recorded HAR doesn't contain. Registered before the HAR route
+            // so it runs *after* it (Playwright handlers fire most-recent-first): the HAR serves what it
+            // has and falls back here for the rest. API calls (e.g. POST /api/rpc list sync) are
+            // benign-fulfilled with an empty JSON body so the SPA doesn't hang awaiting them across
+            // repeated roster flows — the root cause of the single-spec-per-HAR limit — while cosmetic
+            // assets (missing icons, etc.) are aborted as before.
+            await Page.RouteAsync("**", async route =>
+            {
+                if (route.Request.Url.Contains("/api/", StringComparison.Ordinal))
+                {
+                    await route.FulfillAsync(new RouteFulfillOptions
+                    {
+                        Status = 200,
+                        ContentType = "application/json",
+                        Body = "{}",
+                    });
+                }
+                else
+                {
+                    await route.AbortAsync();
+                }
+            });
             await Page.RouteFromHARAsync(harFilePath, new PageRouteFromHAROptions
             {
                 Url = "**",
-                NotFound = HarNotFound.Abort,
+                NotFound = HarNotFound.Fallback,
             });
         }
         // In frozen mode, go directly to /app since HAR replay has issues

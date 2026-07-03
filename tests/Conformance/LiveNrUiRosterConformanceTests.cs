@@ -19,8 +19,7 @@ public sealed class LiveNrUiRosterConformanceTests
     /// <summary>
     /// The spec(s) this UI driver runs against. Only kitchen-sink for now.
     /// </summary>
-    private static readonly string[] TargetSpecs =
-        ["protocol/protocol-kitchen-sink", "export/roster-fractional-cost-export"];
+    private static readonly string[] TargetSpecs = ["protocol/protocol-kitchen-sink"];
 
     public LiveNrUiRosterConformanceTests(ITestOutputHelper output, LiveNrUiRosterFixture fixture)
     {

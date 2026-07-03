@@ -14,10 +14,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   BattleScribe via DataUtils `a(Roster, OutputStream)`; NewRecruit (store-direct) by
   invoking its `exportRos` serializer and capturing the `Blob`; NewRecruit UI by clicking
   the real **Export → .ros** toolbar button with the download mocked (Blob hook + swallowed
-  anchor click) — and the `roster-fractional-cost-export` spec locking each engine's exact
-  roster serialization incl. non-integer cost formatting. Per-run instance ids normalized
-  to `__id__`. (Frozen NR-UI runs one roster-building spec per HAR, so the UI export byte-
-  compare is exercised by the live UI suite.)
+  anchor click) — locking each engine's exact roster serialization incl. non-integer cost
+  formatting (BattleScribe writes `value="320.0"`, NewRecruit `value="320"`). Per-run
+  instance ids normalized to `__id__`. Exercised by the dedicated `roster-fractional-cost-export`
+  spec and by a trailing `expectedFile` step added to `protocol-kitchen-sink`, so the frozen
+  NR-UI suite (which runs kitchen-sink) byte-compares the real Export-button flow.
+- **Frozen NR replay resilience** — the HAR route now falls back to a benign empty-JSON response
+  for un-recorded `/api/*` calls instead of aborting, so the SPA no longer hangs on background
+  list-sync RPCs across repeated flows; the NR-UI engine also clears created lists between specs.
 - **Non-integer cost conformance** (#277, #285, #286) — new fractional-cost specs
   across gamedata and roster: `cost-fractional-value`, `cost-fractional-modifier`,
   and byte-compare `cost-fractional-export` (gamedata); `cost-fractional-per-model`,

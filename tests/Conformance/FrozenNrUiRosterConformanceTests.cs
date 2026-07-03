@@ -20,9 +20,9 @@ public sealed class FrozenNrUiRosterConformanceTests
 
     /// <summary>
     /// The spec(s) this UI driver runs against. Only kitchen-sink — the NR UI driver validates core
-    /// protocol conformance, not all 312 specs. Note: the frozen HAR only records a single
-    /// roster-creation flow, so exactly one roster-building spec can run here; the roster export UI
-    /// (roster-fractional-cost-export) is therefore exercised by the live UI suite instead.
+    /// protocol conformance, not all 312 specs. The frozen HAR supports a single roster-creation flow
+    /// per run, so exactly one roster-building spec runs here; kitchen-sink's trailing
+    /// <c>expectedFile</c> step exercises the UI export path (Export button → .ros) within that flow.
     /// </summary>
     private static readonly string[] TargetSpecs = ["protocol/protocol-kitchen-sink"];
 

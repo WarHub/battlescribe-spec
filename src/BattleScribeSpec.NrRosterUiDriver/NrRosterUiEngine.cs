@@ -490,6 +490,46 @@ public sealed class NrRosterUiEngine : IRosterEngine
         _forceEntryNames.Clear();
         _entryNames.Clear();
         _childSelectionParent.Clear();
+
+        // The UI engine shares one browser across specs. Delete any lists this spec created and return
+        // to a clean /app, so the next spec's roster creation isn't confused by leftover list rows
+        // (e.g. the Create List dialog's controls become ambiguous once a prior list is present).
+        try
+        {
+            ResetBrowserStateAsync().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Best-effort; the next spec's setup will surface any real problem.
+        }
+    }
+
+    private async Task ResetBrowserStateAsync()
+    {
+        if (!Browser.FrozenReady && !Browser.IsFrozen)
+        {
+            return;
+        }
+
+        await Browser.Page.EvaluateAsync("""
+            () => {
+                try {
+                    const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const ls = pinia?._s?.get('lists');
+                    if (ls) {
+                        if (Array.isArray(ls.lists)) ls.lists.splice(0, ls.lists.length);
+                        ls.currentList = null;
+                    }
+                } catch (e) {}
+                try {
+                    for (const k of Object.keys(localStorage)) {
+                        if (/list/i.test(k)) localStorage.removeItem(k);
+                    }
+                } catch (e) {}
+            }
+            """);
+        await Browser.NavigateToAppAsync();
+        await Browser.WaitForPiniaAsync();
     }
 
     public void Dispose()
