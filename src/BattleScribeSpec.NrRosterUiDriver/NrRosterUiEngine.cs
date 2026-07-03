@@ -418,7 +418,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
             throw new InvalidOperationException("NR UI roster export: clicked .ros but captured no <roster payload.");
         }
 
-        return xml;
+        // Re-indent NR's single-line export to a readable, git-diffable layout (adapter feature).
+        return NrRosterXml.Pretty(xml);
     }
 
     // Hook Blob to capture the .ros text NR's exporter writes, and swallow the download anchor click.

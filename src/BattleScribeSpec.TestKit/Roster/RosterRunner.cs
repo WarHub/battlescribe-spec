@@ -209,6 +209,9 @@ public sealed class RosterRunner
             return;
         }
 
+        // Apply any per-engine action-input overrides for this step.
+        step = step.ForEngine(_engineName);
+
         // Resolve expressions in instance ID fields
         var forceId = _exprResolver.Resolve(step.ForceId);
         var selectionId = _exprResolver.Resolve(step.SelectionId);
@@ -326,14 +329,17 @@ public sealed class RosterRunner
 
         var error = ExportSnapshotAssertion.AssertOrUpdate(
             step.ExpectedFile!.ForEngine(_engineName),
-            NormalizeRosterInstanceIds(rosterXml),
+            rosterXml,
             _engineName,
             _specId,
             _specDir,
             step.Id,
             stepIndex,
             UpdateSnapshots,
-            _exprResolver.Resolve);
+            _exprResolver.Resolve,
+            onDiverge: null,
+            templateMatch: _exprResolver.TryMatchTemplate,
+            templatizeForWrite: TemplatizeRosterInstanceIds);
         if (error is not null)
         {
             _errors.Add(error);
@@ -341,15 +347,29 @@ public sealed class RosterRunner
     }
 
     /// <summary>
-    /// Neutralize per-run instance ids so roster exports byte-compare deterministically. In a
-    /// BattleScribe <c>.ros</c> every bare <c>id="…"</c> attribute (roster, force, selection, category,
-    /// profile, …) is an engine-generated instance id — BattleScribe uses GUIDs, NewRecruit uses Mongo
-    /// ObjectIds — while all stable references use a capital-I attribute (<c>entryId</c>, <c>typeId</c>,
-    /// <c>catalogueId</c>, …), which this leaves untouched. The compare then reflects structure,
-    /// ordering, and value formatting rather than volatile ids.
+    /// Rewrite per-run instance ids into stable template tokens so roster snapshots are deterministic
+    /// and meaningful. Every bare <c>id="…"</c> in a <c>.ros</c> is an engine-minted instance id
+    /// (BattleScribe GUIDs, NewRecruit Mongo ObjectIds); all stable references use a capital-I attribute
+    /// (<c>entryId</c>, <c>typeId</c>, <c>catalogueId</c>, …), left untouched. Ids that a step produced
+    /// (force/selection/auto-selection) become <c>${{ steps.… }}</c> references via the resolver's
+    /// reverse index; the remainder (the roster's own id, auto-created category ids) become a
+    /// <c>${{ match("…") }}</c> regex wildcard.
     /// </summary>
-    private static string NormalizeRosterInstanceIds(string xml)
-        => System.Text.RegularExpressions.Regex.Replace(xml, "\\bid=\"[^\"]*\"", "id=\"__id__\"");
+    private string TemplatizeRosterInstanceIds(string xml)
+    {
+        var reverse = _exprResolver.BuildIdReverseIndex();
+        return System.Text.RegularExpressions.Regex.Replace(xml, "\\bid=\"([^\"]*)\"", m =>
+        {
+            var value = m.Groups[1].Value;
+            // Ids no step captured (the roster's own id, auto-created category ids) are volatile
+            // and engine-shaped in incompatible ways — BattleScribe GUIDs, NewRecruit short base36-ish
+            // ids, or a reused entryId like "(No Category)" (spaces/parens). Match any non-empty value
+            // up to the closing quote. (The nested quote is fine: the token parser strips the outer
+            // quotes of match("…").)
+            var token = reverse.TryGetValue(value, out var stepRef) ? stepRef : "${{ match(\"[^\"]+\") }}";
+            return $"id=\"{token}\"";
+        });
+    }
 
     private void AssertExpectedState(ExpectedStateDef? expected, int stepIndex)
     {

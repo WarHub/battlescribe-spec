@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<roster id="${{ match("[^"]+") }}" name="roster-fractional-cost-export" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemName="Test System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+  <costs>
+    <cost name="pts" typeId="pts" value="0.5"/>
+  </costs>
+  <forces>
+    <force id="${{ steps.add-detachment.forceId }}" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
+      <selections>
+        <selection id="${{ match("[^"]+") }}" name="Half Unit" entryId="se-1" number="1" type="unit">
+          <costs>
+            <cost name="pts" typeId="pts" value="0.5"/>
+          </costs>
+        </selection>
+      </selections>
+      <categories>
+        <category id="${{ match("[^"]+") }}" name="Uncategorised" entryId="(No Category)" primary="false"/>
+      </categories>
+    </force>
+  </forces>
+</roster>

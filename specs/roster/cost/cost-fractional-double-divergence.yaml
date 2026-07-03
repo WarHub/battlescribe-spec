@@ -1,0 +1,92 @@
+id: cost-fractional-double-divergence
+category: cost
+description: >
+  A binary-INEXACT fractional cost multiplied by a count (0.1 x 3) has no
+  agreed-correct result: both engines compute it in IEEE-754 double and legitimately
+  disagree, and this suite does not (yet) decide which value is "correct". So this spec
+  provides NO base default for that cost — each engine's RAW output is pinned as a
+  per-engine override instead. NewRecruit surfaces the full-precision double
+  0.30000000000000004 (the same value its .ros serializer writes — NR applies no
+  rounding on export), while BattleScribe's (decimal)(double) read-back collapses it to
+  0.3.
+
+  The binary-EXACT fraction 0.125 is the contrast: 0.125 x 3 = 0.375 is representable
+  exactly in double, so both engines agree (both overrides carry 0.375). This documents
+  that the divergence is specific to binary-inexact fractions, and that we deliberately
+  leave the "correct" value of such a product undefined rather than assert one.
+tags:
+  - cost
+  - edge-case
+  - undefined-behavior
+
+setup:
+  gameSystem:
+    costTypes:
+      - id: pts
+        name: pts
+      - id: oct
+        name: oct
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 0.1
+                - name: oct
+                  typeId: oct
+                  value: 0.125
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  # No base cost default: 0.1 x 3 has no agreed-correct value (undefined). Each engine
+  # pins its RAW output as an override; the binary-exact 0.125 x 3 = 0.375 agrees on both.
+  - expectedState:
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Trooper
+                  number: 3
+      engines:
+        battlescribe:
+          costs:
+            - typeId: pts
+              value: 0.3
+            - typeId: oct
+              value: 0.375
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 0.30000000000000004
+            - typeId: oct
+              value: 0.375

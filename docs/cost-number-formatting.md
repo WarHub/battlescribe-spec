@@ -89,6 +89,30 @@ the digits the `decimal` carries. Consequences:
 So any serialized divergence originates in the engines' arithmetic (which `double`
 lands in the `decimal`), **not** in the XML formatting layer.
 
+## NewRecruit's `.ros` serializer applies **no** rounding
+
+The section above is the wham/C# path (the spec side, and BattleScribe's export via
+DataUtils). NewRecruit exports its `.ros` from its **own JavaScript** serializer, which
+does **not** round at all — it writes the raw `double`. Traced from the roster app
+bundle (`exportRos → U4e → Sb → fX`):
+
+- **`fX(roster)`** emits roster costs as `R_(Object.values(roster.getTotalCosts()))` and,
+  per force, `R_(force.getCosts())` (where `getCosts()` ≡ `Object.values(getTotalCosts())`).
+- **`R_(costs)`** writes each cost's `value: n.value` **verbatim** (only dropping
+  zero-value costs).
+- **`ex(selections)`** — the per-selection writer — computes the count-multiplied value
+  *at serialization time*: `s.forEach(a => a.value = a.value * i.number)` where
+  `i.number = getSelectionCount("root")`. This is a **raw IEEE double multiply**.
+- The number reaches the attribute through `wA(n) = n.toString()` + XML-escaping — no
+  `toFixed`, no `Math.round`, no `Pn`.
+
+So NewRecruit's exported selection cost is `perModelValue × getSelectionCount("root")` in
+raw `double`. **Verified empirically:** a `0.1`-per-model model at count 3 exports as
+`<cost … value="0.30000000000000004"/>` with `number="3"`. NewRecruit's 2-decimal display
+rounding (`Pn(r) = Math.round(r*100)/100`) is a **UI-only** concern and is *not* applied to
+the `.ros`. (Our injected state reader in `JsHelpers.cs` does the same raw
+`cost × count` — so `expectedState` cost reads and NewRecruit's `.ros` export agree.)
+
 ## Comparison semantics (no tolerance)
 
 - **Roster** cost values compare with **exact `decimal` inequality** —
@@ -160,6 +184,16 @@ always invariant-format, the parse sites now use
    or a per-engine `.cat` byte snapshot for gamedata export — capturing that
    engine's real value, with a comment marking it a floating-point deviation.
 
+**Undefined-default variant.** For a case where there is genuinely **no
+agreed-correct value** — e.g. a binary-inexact `cost × count` product, where neither
+engine's raw `double` is authoritative and the suite has not decided which is "correct"
+— author the divergent field with **no base default at all** and pin *every* engine's
+raw output as an override. An engine with no override then asserts nothing for that
+field (the value is left undefined) rather than being held to a contract we cannot yet
+justify. See `specs/roster/cost/cost-fractional-double-divergence.yaml`, which records
+BattleScribe's `0.3` and NewRecruit's raw `0.30000000000000004` as overrides with no
+base value, alongside the binary-**exact** `0.125 × 3 = 0.375` that both agree on.
+
 See [engine-filtered-expected-state.md](engine-filtered-expected-state.md) for the
 override merge semantics, and [error-assertions.md](error-assertions.md) for
 `on`/`from`/`messageContains` when a fractional over-limit error's message differs.
@@ -171,7 +205,11 @@ override merge semantics, and [error-assertions.md](error-assertions.md) for
   carries the resulting `double` into `decimal`.
 - **NewRecruit** stores costs as `decimal` but multiplies `cost × count` in JS
   `double` at roster runtime, so it can drift too.
-- **XML serialization** (`XmlConvert`) is exact and scale-preserving — divergence
-  is arithmetic, not formatting.
+- **XML serialization** (`XmlConvert`, spec/BS side) is exact and scale-preserving —
+  divergence is arithmetic, not formatting. **NewRecruit's own `.ros` JS serializer
+  applies no rounding either**, writing the raw `cost × count` double (so its export and
+  our state read agree).
 - **Comparison** is exact (decimal / string) with no tolerance, so drift is
   surfaced and attributed via per-engine overrides rather than hidden.
+- For a product with **no agreed-correct value**, a spec may omit the base default
+  entirely and record each engine's raw output as an override (undefined default).

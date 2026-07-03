@@ -16,9 +16,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the real **Export → .ros** toolbar button with the download mocked (Blob hook + swallowed
   anchor click) — locking each engine's exact roster serialization incl. non-integer cost
   formatting (BattleScribe writes `value="320.0"`, NewRecruit `value="320"`). Per-run
-  instance ids normalized to `__id__`. Exercised by the dedicated `roster-fractional-cost-export`
-  spec and by a trailing `expectedFile` step added to `protocol-kitchen-sink`, so the frozen
-  NR-UI suite (which runs kitchen-sink) byte-compares the real Export-button flow.
+  instance ids are templated rather than blanket-wildcarded: ids a step produced resolve to
+  `${{ steps.<id>.forceId|selectionId }}` references, and the remainder (roster/category ids)
+  to a `${{ match("…") }}` regex — so snapshots stay deterministic **and** meaningful.
+  NewRecruit's single-line `.ros` export is re-indented to a readable, git-diffable layout as a
+  NewRecruit engine-adapter feature (attribute order/values preserved). Exercised by the dedicated
+  `roster-fractional-cost-export` spec and by a trailing `expectedFile` step added to
+  `protocol-kitchen-sink`, so the frozen NR-UI suite (which runs kitchen-sink) byte-compares the
+  real Export-button flow.
+- **Per-engine action-step overrides** — a step may carry an `engines:` map overriding its action
+  inputs (e.g. a different `value`/`count`) for a given engine, the action-side counterpart to
+  `expectedState.engines` / `skipEngines`. Covered by the `engine-action-override` spec.
+- **`${{ match("regex") }}` expression** — a template token matching a volatile value by regex,
+  used by roster `expectedFile` snapshots for ids no step captures.
+- **Engine-agnostic snapshot reads + smart writes** — `expectedFile` snapshot resolution now
+  always prefers an override matching the running engine, then falls back to the base file,
+  regardless of engine (a new engine is held to the base until it gets its own override). The
+  base-engine name (`newrecruit`) is consulted **only** when generating/updating snapshots. On
+  update, an existing override is rewritten in place; a non-base engine that newly diverges from
+  the base prompts (interactively) or defaults to writing its own override — never silently
+  clobbering the base. Base gamedata/roster snapshots are the NewRecruit form; BattleScribe carries
+  `.battlescribe` overrides where it diverges.
 - **Frozen NR replay resilience** — the HAR route now falls back to a benign empty-JSON response
   for un-recorded `/api/*` calls instead of aborting, so the SPA no longer hangs on background
   list-sync RPCs across repeated flows; the NR-UI engine also clears created lists between specs.
@@ -27,10 +45,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and byte-compare `cost-fractional-export` (gamedata); `cost-fractional-per-model`,
   `cost-fractional-aggregation`, `cost-fractional-over-limit`,
   `modifier-fractional-cost`, and `modifier-repeat-fractional-cost` (roster). Base
-  assertions encode exact decimal arithmetic; per-engine overrides document where
-  NewRecruit's floating-point roster math drifts (e.g. `0.1 × 3 =
-  0.30000000000000004`) while BattleScribe's decimal read-back stays clean.
-  New research doc `docs/cost-number-formatting.md`.
+  assertions encode exact decimal arithmetic; where an engine's floating-point math drifts, a
+  narrow per-engine override records its **raw** value — NewRecruit multiplies `cost × count` in
+  JS `double` and surfaces the full-precision result (`0.1 × 3 = 0.30000000000000004`), which is
+  exactly what NewRecruit's own `.ros` serializer writes (its JS export applies **no** rounding —
+  only its UI display rounds), while BattleScribe's `(decimal)(double)` read-back collapses the
+  same product to `0.3`. Adds `cost-fractional-double-divergence`, which documents this as an
+  **undefined-default** case: no base value is asserted for the binary-inexact product (neither raw
+  double is authoritative) — each engine's output is an override — alongside the binary-exact
+  `0.125 × 3 = 0.375` both engines agree on. New research doc `docs/cost-number-formatting.md`
+  (incl. a trace of NewRecruit's `fX`/`R_`/`ex` `.ros` serializer).
 - **ID-based protocol** — all action addressing now uses definition IDs (`forceEntryId`,
   `entryId`, `catalogueId`) and instance IDs (`forceId`, `selectionId`) instead of
   array indices. Actions return `outputs` with created element IDs. Step expressions

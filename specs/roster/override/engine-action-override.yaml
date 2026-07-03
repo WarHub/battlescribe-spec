@@ -1,0 +1,54 @@
+id: engine-action-override
+category: override
+description: >
+  Fictitious spec that exercises per-engine ACTION-step overrides end-to-end. The
+  setCostLimit step feeds a different limit value per engine (via `engines:` on the
+  action itself), and the assertion's `engines:` override expects the matching
+  divergent result. This is a synthetic test of the override machinery — proving that
+  an action-input override and an expected-state override compose — not a statement of
+  real engine behavior (both engines compute identically from the value they are fed).
+
+setup:
+  gameSystem:
+    costTypes:
+      - id: pts
+        name: pts
+        defaultCostLimit: 50
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-1
+          name: Unit
+          type: unit
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  # Feed a different cost limit per engine: base (BattleScribe) 100, NewRecruit 200.
+  - action: setCostLimit
+    costTypeId: pts
+    value: 100
+    engines:
+      newrecruit:
+        value: 200
+
+  # Each engine surfaces the limit it was fed — the expected-state override mirrors the
+  # action override, so both engines pass on their own divergent value.
+  - expectedState:
+      costLimits:
+        - typeId: pts
+          value: 100
+      engines:
+        newrecruit:
+          costLimits:
+            - typeId: pts
+              value: 200

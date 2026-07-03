@@ -6,20 +6,26 @@ namespace BattleScribeSpec.GameData;
 /// or a per-spec folder — <c>{specId}/{key}.{ext}</c> — each with an optional override that adds a
 /// <c>.{engine}</c> infix.
 ///
-/// <para>The base file (no infix) is the BattleScribe output — BattleScribe is the reference
-/// implementation against which the other editors are compared. Any other engine (including
-/// NewRecruit) gets an override only where its serialization diverges from that base, keyed by the
-/// engine <em>family</em> (the name with any <c>-ui</c> suffix stripped) so the headless and UI
-/// variants of one editor — which share a serializer and therefore emit identical files — share a
-/// single override file (e.g. <c>newrecruit</c> and <c>newrecruit-ui</c> both use
-/// <c>{specId}.{key}.newrecruit.{ext}</c>). An exact-engine override (full <c>{engine}</c> infix,
-/// including the <c>-ui</c>) is still honored first as an escape hatch should a variant ever
-/// genuinely diverge.</para>
+/// <para><b>Reading / comparison is engine-agnostic.</b> For any engine we prefer, in order: an
+/// exact-engine override (<c>.{engine}.</c>, including any <c>-ui</c> suffix), then a shared
+/// <em>family</em> override (the name with <c>-ui</c> stripped, so <c>newrecruit</c> and
+/// <c>newrecruit-ui</c> share one file), then the base file (no infix). The base engine name is
+/// <em>not</em> consulted when reading: whichever engine runs must match the base unless it owns an
+/// override. So when a new engine is introduced it is held to the base file until someone adds an
+/// override for it.</para>
+///
+/// <para><b>The base engine name matters only when generating/updating snapshots</b> (see
+/// <see cref="ExportSnapshotAssertion"/>): the base (no-infix) file holds the
+/// <see cref="BaseEngineName"/> output, and every other engine gets an override only where it
+/// diverges from that base.</para>
 /// </summary>
 public static class GameDataSnapshotResolver
 {
-    /// <summary>Engine family whose output is the base/default snapshot (written without an engine infix).</summary>
-    public const string BaseEngineName = "battlescribe";
+    /// <summary>
+    /// Engine family whose output is written to the base/default snapshot (no engine infix). Consulted
+    /// <em>only</em> when generating/updating snapshots — never when reading or comparing.
+    /// </summary>
+    public const string BaseEngineName = "newrecruit";
 
     /// <summary>
     /// The snapshot family an engine belongs to: its name with any trailing <c>-ui</c> removed. Engines
@@ -30,17 +36,18 @@ public static class GameDataSnapshotResolver
         => engine.EndsWith("-ui", StringComparison.Ordinal) ? engine[..^"-ui".Length] : engine;
 
     /// <summary>
-    /// True for the BattleScribe-family engines whose output IS the base (the headless Java engine and
-    /// the BattleScribe UI produce the same serialization). Either may write the base file; other
-    /// engines write overrides.
+    /// True for the engines whose output IS the base (the base engine family's headless and UI
+    /// surfaces). Only these engines write the base file when a snapshot is generated; every other
+    /// engine writes an override.
     /// </summary>
     public static bool IsBaseEngine(string engine) => Family(engine) == BaseEngineName;
 
     /// <summary>
     /// Resolve the existing snapshot file for an engine, preferring a per-engine override over the
-    /// base, and the flat layout over the folder layout. Returns null when none exists.
+    /// base, and the flat layout over the folder layout. Returns null when none exists. A null engine
+    /// resolves the base file only.
     /// </summary>
-    public static string? Resolve(string specDir, string specId, string key, string engine, string ext)
+    public static string? Resolve(string specDir, string specId, string key, string? engine, string ext)
     {
         foreach (var candidate in Candidates(specDir, specId, key, engine, ext))
         {
@@ -54,10 +61,44 @@ public static class GameDataSnapshotResolver
     }
 
     /// <summary>
-    /// Candidate paths in resolution order: exact-engine override (escape hatch), then the shared
-    /// family override, then the base — each tried flat before folder.
+    /// The existing override file this engine owns (exact-engine first, then the shared family), or
+    /// null if the engine currently has no override and is served by the base. Used by snapshot updates
+    /// to prefer rewriting an override that already exists over touching the base.
     /// </summary>
-    public static IEnumerable<string> Candidates(string specDir, string specId, string key, string engine, string ext)
+    public static string? ExistingOverride(string specDir, string specId, string key, string engine, string ext)
+    {
+        foreach (var candidate in OverrideCandidates(specDir, specId, key, engine, ext))
+        {
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Candidate paths in resolution order: exact-engine override (escape hatch), then the shared
+    /// family override, then the base — each tried flat before folder. A null engine yields the base
+    /// candidates only.
+    /// </summary>
+    public static IEnumerable<string> Candidates(string specDir, string specId, string key, string? engine, string ext)
+    {
+        if (engine is not null)
+        {
+            foreach (var o in OverrideCandidates(specDir, specId, key, engine, ext))
+            {
+                yield return o;
+            }
+        }
+
+        yield return Flat(specDir, specId, key, null, ext);
+        yield return Folder(specDir, specId, key, null, ext);
+    }
+
+    /// <summary>Override candidate paths (no base): exact-engine, then family — each flat before folder.</summary>
+    private static IEnumerable<string> OverrideCandidates(string specDir, string specId, string key, string engine, string ext)
     {
         yield return Flat(specDir, specId, key, engine, ext);
         yield return Folder(specDir, specId, key, engine, ext);
@@ -68,9 +109,6 @@ public static class GameDataSnapshotResolver
             yield return Flat(specDir, specId, key, family, ext);
             yield return Folder(specDir, specId, key, family, ext);
         }
-
-        yield return Flat(specDir, specId, key, null, ext);
-        yield return Folder(specDir, specId, key, null, ext);
     }
 
     /// <summary>Flat base path (no engine infix) — the preferred write location for the base snapshot.</summary>

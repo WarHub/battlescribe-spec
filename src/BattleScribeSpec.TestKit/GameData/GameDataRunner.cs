@@ -195,11 +195,11 @@ public sealed class GameDataRunner
         // Load from a side-file keyed by the step id and open.
         if (step.Id is { Length: > 0 } key && _specDir is not null)
         {
-            var engine = _engineName ?? GameDataSnapshotResolver.BaseEngineName;
-            var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, "cat")
-                ?? GameDataSnapshotResolver.Resolve(_specDir, _specId, key, engine, "gst")
+            // Engine-agnostic: an override matching the engine wins, else the base file (no matter the engine).
+            var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, _engineName, "cat")
+                ?? GameDataSnapshotResolver.Resolve(_specDir, _specId, key, _engineName, "gst")
                 ?? throw new InvalidOperationException(
-                    $"Step {stepIndex}: openFile found no side-file for key '{key}' (engine '{engine}', .cat/.gst) next to the spec");
+                    $"Step {stepIndex}: openFile found no side-file for key '{key}' (engine '{_engineName}', .cat/.gst) next to the spec");
             var xml = File.ReadAllText(path);
             xml = _exprResolver.Resolve(xml) ?? xml;
             return new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };

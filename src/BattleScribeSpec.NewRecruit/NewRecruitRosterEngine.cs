@@ -521,7 +521,8 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         if (doc.RootElement.TryGetProperty("text", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String)
         {
-            return t.GetString()!;
+            // Re-indent NR's single-line export to a readable, git-diffable layout (adapter feature).
+            return NrRosterXml.Pretty(t.GetString()!);
         }
 
         // NewRecruit supports roster export, so a capture failure is a real regression (e.g. an NR
