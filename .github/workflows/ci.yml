@@ -49,7 +49,10 @@ jobs:
           dotnet-version: '10.0.x'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
-      - run: dotnet restore --locked-mode
+      # No --locked-mode: SDK-implicit packages (e.g. Microsoft.NET.ILLink.Tasks) vary by SDK
+      # patch, so a lockfile pinned on one SDK breaks locked restore on another (NU1004). The
+      # lockfile is kept for the setup-dotnet cache key and determinism, not strict enforcement.
+      - run: dotnet restore
       - run: dotnet build --no-restore
       - name: Upload build output
         uses: actions/upload-artifact@v7
