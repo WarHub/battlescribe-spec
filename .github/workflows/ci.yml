@@ -28,8 +28,8 @@ jobs:
         run: |
           $thorough = (
             ('${{ github.event_name }}' -in @('workflow_dispatch', 'schedule')) -or
-            ('${{ contains(github.event.head_commit.message, ''[nr-test]'') }}' -eq 'true') -or
-            ('${{ contains(github.event.pull_request.labels.*.name, ''thorough-ci'') }}' -eq 'true')
+            ('${{ contains(github.event.head_commit.message, '[nr-test]') }}' -eq 'true') -or
+            ('${{ contains(github.event.pull_request.labels.*.name, 'thorough-ci') }}' -eq 'true')
           )
           "thorough=$($thorough.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           Write-Host "thorough = $thorough"
