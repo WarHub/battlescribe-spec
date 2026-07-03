@@ -353,7 +353,8 @@ public sealed class RosterRunner
     /// (<c>entryId</c>, <c>typeId</c>, <c>catalogueId</c>, …), left untouched. Ids that a step produced
     /// (force/selection/auto-selection) become <c>${{ steps.… }}</c> references via the resolver's
     /// reverse index; the remainder (the roster's own id, auto-created category ids) become a
-    /// <c>${{ match("…") }}</c> regex wildcard.
+    /// <c>${{ match('…') }}</c> regex wildcard (single-quoted and quote-free so the snapshot stays
+    /// well-formed XML).
     /// </summary>
     private string TemplatizeRosterInstanceIds(string xml)
     {
@@ -363,10 +364,13 @@ public sealed class RosterRunner
             var value = m.Groups[1].Value;
             // Ids no step captured (the roster's own id, auto-created category ids) are volatile
             // and engine-shaped in incompatible ways — BattleScribe GUIDs, NewRecruit short base36-ish
-            // ids, or a reused entryId like "(No Category)" (spaces/parens). Match any non-empty value
-            // up to the closing quote. (The nested quote is fine: the token parser strips the outer
-            // quotes of match("…").)
-            var token = reverse.TryGetValue(value, out var stepRef) ? stepRef : "${{ match(\"[^\"]+\") }}";
+            // ids, or a reused entryId like "(No Category)" (spaces/parens). The wildcard is kept
+            // QUOTE-FREE so the snapshot stays well-formed XML (a literal " would close the id="…"
+            // attribute): match()'s argument is single-quoted, and the character class is a positive
+            // set covering every id shape we mint rather than the "any non-quote" negation.
+            var token = reverse.TryGetValue(value, out var stepRef)
+                ? stepRef
+                : "${{ match('[- 0-9A-Za-z()_.:]+') }}";
             return $"id=\"{token}\"";
         });
     }

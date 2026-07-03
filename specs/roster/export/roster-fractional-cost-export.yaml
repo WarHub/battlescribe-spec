@@ -9,8 +9,9 @@ description: >
 
   Per-run instance ids are templated, not blanket-wildcarded: ids a step produced
   resolve to ${{ steps.<id>.forceId }} references, and the remainder (the roster's own
-  id, auto-created category ids) to a ${{ match("...") }} regex — since each engine
-  mints its own (BattleScribe GUIDs, NewRecruit short base36-ish ids). The compare then
+  id, auto-created category ids) to a ${{ match('...') }} regex — since each engine
+  mints its own (BattleScribe GUIDs, NewRecruit short base36-ish ids). The token is
+  single-quoted and quote-free so the snapshot stays well-formed XML. The compare then
   reflects structure, ordering, and cost formatting rather than volatile ids.
 
 setup:

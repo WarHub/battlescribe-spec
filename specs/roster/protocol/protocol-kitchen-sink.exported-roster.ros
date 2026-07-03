@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<roster id="${{ match("[^"]+") }}" name="protocol-kitchen-sink" battleScribeVersion="2.03" generatedBy="https://newrecruit.eu" gameSystemId="ks-gs" gameSystemName="Kitchen Sink GS" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+<roster id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="protocol-kitchen-sink" battleScribeVersion="2.03" generatedBy="https://newrecruit.eu" gameSystemId="ks-gs" gameSystemName="Kitchen Sink GS" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
   <costs>
     <cost name="pts" typeId="ct-pts" value="320" />
   </costs>
@@ -9,25 +9,25 @@
   <forces>
     <force id="${{ steps.add-battalion.forceId }}" name="Battalion" entryId="fe-battalion" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue" customName="Alpha Strike Force">
       <rules>
-        <rule id="${{ match("[^"]+") }}" name="Battle-forged" hidden="false" page="5">
+        <rule id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Battle-forged" hidden="false" page="5">
           <description>This army is battle-forged</description>
         </rule>
-        <rule id="${{ match("[^"]+") }}" name="Combat Doctrine" hidden="false">
+        <rule id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Combat Doctrine" hidden="false">
           <description>Re-roll hit rolls of 1</description>
         </rule>
       </rules>
       <selections>
         <selection id="${{ steps.select-commander.selectionId }}" name="Commander" entryId="se-commander" number="1" type="unit" from="entry" customName="The General">
           <rules>
-            <rule id="${{ match("[^"]+") }}" name="Fearless" hidden="false">
+            <rule id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Fearless" hidden="false">
               <description>This unit automatically passes morale tests</description>
             </rule>
-            <rule id="${{ match("[^"]+") }}" name="Inspiring Leader" hidden="false">
+            <rule id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Inspiring Leader" hidden="false">
               <description>Friendly units within 6 inches re-roll morale</description>
             </rule>
           </rules>
           <profiles>
-            <profile id="${{ match("[^"]+") }}" name="Power Armor" hidden="false" typeId="pt-unit" typeName="Unit Stats" from="entry">
+            <profile id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Power Armor" hidden="false" typeId="pt-unit" typeName="Unit Stats" from="entry">
               <characteristics>
                 <characteristic name="WS" typeId="char-ws">3+</characteristic>
                 <characteristic name="BS" typeId="char-bs">3+</characteristic>
@@ -36,7 +36,7 @@
                 <characteristic name="W" typeId="char-w">2</characteristic>
               </characteristics>
             </profile>
-            <profile id="${{ match("[^"]+") }}" name="Power Sword" hidden="false" typeId="pt-weapon" typeName="Weapon" from="entry">
+            <profile id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Power Sword" hidden="false" typeId="pt-weapon" typeName="Weapon" from="entry">
               <characteristics>
                 <characteristic name="Range" typeId="char-range">Melee</characteristic>
                 <characteristic name="Str" typeId="char-str">5</characteristic>
@@ -53,17 +53,17 @@
             <cost name="power" typeId="ct-power" value="4" />
           </costs>
           <categories>
-            <category id="${{ match("[^"]+") }}" entryId="cat-hq" name="HQ" primary="true" />
+            <category id="${{ match('[- 0-9A-Za-z()_.:]+') }}" entryId="cat-hq" name="HQ" primary="true" />
           </categories>
         </selection>
         <selection id="${{ steps.select-infantry-2.selectionId }}" name="Infantry Squad" entryId="se-infantry" number="1" type="unit" from="entry">
           <rules>
-            <rule id="${{ match("[^"]+") }}" name="Orders" hidden="false" page="43">
+            <rule id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Orders" hidden="false" page="43">
               <description>Can receive orders from officers</description>
             </rule>
           </rules>
           <profiles>
-            <profile id="${{ match("[^"]+") }}" name="Infantry" hidden="false" typeId="pt-unit" typeName="Unit Stats" from="entry">
+            <profile id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Infantry" hidden="false" typeId="pt-unit" typeName="Unit Stats" from="entry">
               <characteristics>
                 <characteristic name="WS" typeId="char-ws">4+</characteristic>
                 <characteristic name="BS" typeId="char-bs">4+</characteristic>
@@ -78,17 +78,17 @@
             <cost name="power" typeId="ct-power" value="5" />
           </costs>
           <categories>
-            <category id="${{ match("[^"]+") }}" entryId="cat-troops" name="Troops" primary="true" />
+            <category id="${{ match('[- 0-9A-Za-z()_.:]+') }}" entryId="cat-troops" name="Troops" primary="true" />
           </categories>
         </selection>
         <selection id="${{ steps.duplicate-infantry.selectionId }}" name="Infantry Squad" entryId="se-infantry" number="1" type="unit" from="entry">
           <rules>
-            <rule id="${{ match("[^"]+") }}" name="Orders" hidden="false" page="43">
+            <rule id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Orders" hidden="false" page="43">
               <description>Can receive orders from officers</description>
             </rule>
           </rules>
           <profiles>
-            <profile id="${{ match("[^"]+") }}" name="Infantry" hidden="false" typeId="pt-unit" typeName="Unit Stats" from="entry">
+            <profile id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Infantry" hidden="false" typeId="pt-unit" typeName="Unit Stats" from="entry">
               <characteristics>
                 <characteristic name="WS" typeId="char-ws">4+</characteristic>
                 <characteristic name="BS" typeId="char-bs">4+</characteristic>
@@ -99,7 +99,7 @@
             </profile>
           </profiles>
           <selections>
-            <selection id="${{ match("[^"]+") }}" name="Trooper" entryId="se-inf-trooper" number="2" type="model" from="entry">
+            <selection id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Trooper" entryId="se-inf-trooper" number="2" type="model" from="entry">
               <costs>
                 <cost name="pts" typeId="ct-pts" value="20" />
               </costs>
@@ -110,17 +110,17 @@
             <cost name="power" typeId="ct-power" value="5" />
           </costs>
           <categories>
-            <category id="${{ match("[^"]+") }}" entryId="cat-troops" name="Troops" primary="true" />
+            <category id="${{ match('[- 0-9A-Za-z()_.:]+') }}" entryId="cat-troops" name="Troops" primary="true" />
           </categories>
         </selection>
         <selection id="${{ steps.add-battalion.selections.se-required }}" name="Required Unit" entryId="se-required" number="1" type="unit" from="entry">
           <rules>
-            <rule id="${{ match("[^"]+") }}" name="Rapid Fire" hidden="false">
+            <rule id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Rapid Fire" hidden="false">
               <description>Double shots at half range</description>
             </rule>
           </rules>
           <profiles>
-            <profile id="${{ match("[^"]+") }}" name="Boltgun" hidden="false" typeId="pt-weapon" typeName="Weapon" from="entry">
+            <profile id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="Boltgun" hidden="false" typeId="pt-weapon" typeName="Weapon" from="entry">
               <characteristics>
                 <characteristic name="Range" typeId="char-range">24</characteristic>
                 <characteristic name="Str" typeId="char-str">4</characteristic>
@@ -130,15 +130,15 @@
             </profile>
           </profiles>
           <categories>
-            <category id="${{ match("[^"]+") }}" entryId="cat-elites" name="Elites" primary="true" />
+            <category id="${{ match('[- 0-9A-Za-z()_.:]+') }}" entryId="cat-elites" name="Elites" primary="true" />
           </categories>
         </selection>
       </selections>
       <categories>
-        <category name="Uncategorized" id="${{ match("[^"]+") }}" primary="false" entryId="(No Category)" />
-        <category name="HQ" id="${{ match("[^"]+") }}" primary="false" entryId="cat-hq" />
-        <category name="Troops" id="${{ match("[^"]+") }}" primary="false" entryId="cat-troops" />
-        <category name="Elites" id="${{ match("[^"]+") }}" primary="false" entryId="cat-elites" />
+        <category name="Uncategorized" id="${{ match('[- 0-9A-Za-z()_.:]+') }}" primary="false" entryId="(No Category)" />
+        <category name="HQ" id="${{ match('[- 0-9A-Za-z()_.:]+') }}" primary="false" entryId="cat-hq" />
+        <category name="Troops" id="${{ match('[- 0-9A-Za-z()_.:]+') }}" primary="false" entryId="cat-troops" />
+        <category name="Elites" id="${{ match('[- 0-9A-Za-z()_.:]+') }}" primary="false" entryId="cat-elites" />
       </categories>
     </force>
   </forces>

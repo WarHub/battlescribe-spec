@@ -18,7 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   formatting (BattleScribe writes `value="320.0"`, NewRecruit `value="320"`). Per-run
   instance ids are templated rather than blanket-wildcarded: ids a step produced resolve to
   `${{ steps.<id>.forceId|selectionId }}` references, and the remainder (roster/category ids)
-  to a `${{ match("…") }}` regex — so snapshots stay deterministic **and** meaningful.
+  to a `${{ match('…') }}` regex (single-quoted, quote-free — the snapshot stays well-formed
+  XML) — so snapshots stay deterministic **and** meaningful.
   NewRecruit's single-line `.ros` export is re-indented to a readable, git-diffable layout as a
   NewRecruit engine-adapter feature (attribute order/values preserved). Exercised by the dedicated
   `roster-fractional-cost-export` spec and by a trailing `expectedFile` step added to
@@ -27,8 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Per-engine action-step overrides** — a step may carry an `engines:` map overriding its action
   inputs (e.g. a different `value`/`count`) for a given engine, the action-side counterpart to
   `expectedState.engines` / `skipEngines`. Covered by the `engine-action-override` spec.
-- **`${{ match("regex") }}` expression** — a template token matching a volatile value by regex,
-  used by roster `expectedFile` snapshots for ids no step captures.
+- **`${{ match('regex') }}` expression** — a template token matching a volatile value by regex,
+  used by roster `expectedFile` snapshots for ids no step captures (single-quoted so the token
+  embeds in a double-quoted XML attribute without breaking well-formedness).
 - **Engine-agnostic snapshot reads + smart writes** — `expectedFile` snapshot resolution now
   always prefers an override matching the running engine, then falls back to the base file,
   regardless of engine (a new engine is held to the base until it gets its own override). The
