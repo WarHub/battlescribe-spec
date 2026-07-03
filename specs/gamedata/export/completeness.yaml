@@ -7,7 +7,7 @@ description: >
   catalogueLink — then exports the edited catalogue (setup.edit) and byte-compares it against a
   per-engine snapshot. The snapshot is the contract: any change to XML structure, child ordering,
   attribute ordering, attribute naming, or which fields serialize is caught here for every engine at
-  once (BattleScribe base + per-engine overrides).
+  once (NewRecruit base + per-engine overrides).
 
   Unlike entry/kitchen-sink (action-driven, state-asserted), this is setup-driven and byte-asserted —
   it checks the serializer, not the driver. Keep it exhaustive: when a node type or field is added to

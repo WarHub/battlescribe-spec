@@ -2,15 +2,16 @@ id: roster-fractional-cost-export
 category: export
 description: >
   Build a small roster with a fractional per-model cost, then byte-compare the
-  exported .ros XML against a per-engine snapshot (BattleScribe base + newrecruit
+  exported .ros XML against a per-engine snapshot (NewRecruit base + battlescribe
   override). Locks each engine's exact roster serialization — element/attribute
   ordering and non-integer cost formatting (#277) — the roster-side counterpart to
   the gamedata cost-fractional-export byte-compare.
 
-  Per-run instance ids (roster/force/selection/category id="...") are normalized to
-  "__id__" before comparison, since each engine mints its own (BattleScribe GUIDs,
-  NewRecruit Mongo ObjectIds); the compare then reflects structure, ordering, and
-  cost formatting rather than volatile ids.
+  Per-run instance ids are templated, not blanket-wildcarded: ids a step produced
+  resolve to ${{ steps.<id>.forceId }} references, and the remainder (the roster's own
+  id, auto-created category ids) to a ${{ match("...") }} regex — since each engine
+  mints its own (BattleScribe GUIDs, NewRecruit short base36-ish ids). The compare then
+  reflects structure, ordering, and cost formatting rather than volatile ids.
 
 setup:
   gameSystem:

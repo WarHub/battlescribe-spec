@@ -140,12 +140,12 @@ NewRecruit (frozen HAR replay):
   No override needed.
 - **XML serialization is byte-identical:** the gamedata export snapshots
   (`cost-fractional-export`) show both engines write `value="0.5"`, `value="0.1"`,
-  `value="1.33"` verbatim. The base `.cat` is the BattleScribe form; NewRecruit's
-  only override reason is the structural `type="catalogue"` attribute — **not** cost
-  formatting. The roster export snapshot (`roster-fractional-cost-export`) likewise
-  locks each engine's `.ros` cost formatting: both write `value="0.5"` identically,
-  and NewRecruit's structural differences (`generatedBy`, `from="entry"`, attribute
-  ordering) land in its `.newrecruit.ros` override.
+  `value="1.33"` verbatim. The base `.cat` is the NewRecruit form; BattleScribe's
+  only override reason is the structural `type="catalogue"` attribute NewRecruit adds —
+  **not** cost formatting. The roster export snapshot (`roster-fractional-cost-export`)
+  likewise locks each engine's `.ros` cost formatting: both write `value="0.5"`
+  identically, and BattleScribe's structural differences (no `generatedBy`/`from="entry"`,
+  attribute ordering, `Uncategorised` spelling) land in its `.battlescribe.ros` override.
 - **Multiplication / accumulation with binary-inexact fractions is where
   NewRecruit drifts:**
   - `0.1 × 3` per-model → NR `0.30000000000000004`, BS `0.3` (`cost-fractional-per-model`).
