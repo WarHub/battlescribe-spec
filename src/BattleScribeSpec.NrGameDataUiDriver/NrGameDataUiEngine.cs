@@ -32,6 +32,12 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     private string _specId = "";
     private bool _disposed;
 
+    // When the engine is created against an externally-supplied context (the pool), it does NOT own
+    // the Playwright/browser and must not dispose them — the pool owns and tears down the shared
+    // browser. Set definitively in InitializeInContextAsync based on whether this engine launched
+    // its own browser.
+    private bool _ownsBrowser = true;
+
     // Open-file tracking, so Reload can reopen whatever file was active. Maps each loaded file's
     // id to its display name (NavigateToEditableAsync matches on the name shown in the file list).
     private readonly Dictionary<string, string> _idToName = new(StringComparer.Ordinal);
@@ -90,6 +96,34 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     }
 
     /// <summary>
+    /// Create a frozen NR Editor engine that runs inside an externally-owned
+    /// <see cref="IBrowserContext"/> (supplied by <see cref="NrGameDataUiEnginePool"/>), so many
+    /// engines can share a single Chromium browser for parallel execution. The caller owns the
+    /// context and its browser; this engine will not dispose them. The context is expected to
+    /// already block service workers and have its own static-file routing set up per page here.
+    /// </summary>
+    public static async Task<NrGameDataUiEngine> CreateFrozenInContextAsync(
+        IBrowserContext context,
+        string staticDir,
+        bool headless = true)
+    {
+        if (!Directory.Exists(staticDir))
+        {
+            throw new DirectoryNotFoundException($"NR Editor static directory not found: {staticDir}");
+        }
+
+        if (!File.Exists(Path.Combine(staticDir, "index.html")))
+        {
+            throw new FileNotFoundException(
+                $"NR Editor static directory doesn't contain index.html: {staticDir}");
+        }
+
+        var engine = new NrGameDataUiEngine("https://nr-editor.local/nr-editor", headless);
+        await engine.InitializeInContextAsync(context, staticDir);
+        return engine;
+    }
+
+    /// <summary>
     /// Locates the NR Editor static files directory by walking up from startDir
     /// looking for .testdata/nr-editor/index.html.
     /// </summary>
@@ -143,6 +177,18 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         {
             ServiceWorkers = ServiceWorkerPolicy.Block,
         });
+        await InitializeInContextAsync(context, staticDir);
+    }
+
+    /// <summary>
+    /// Wires up the page (routing, navigation, app-ready wait) inside the given context. Shared by
+    /// the self-owned frozen path (<see cref="InitializeFrozenAsync"/>) and the pool path
+    /// (<see cref="CreateFrozenInContextAsync"/>). Ownership of the browser is inferred from whether
+    /// this engine launched one (<c>_browser</c> non-null) so Dispose only tears down what it owns.
+    /// </summary>
+    private async Task InitializeInContextAsync(IBrowserContext context, string staticDir)
+    {
+        _ownsBrowser = _browser is not null;
         _page = await context.NewPageAsync();
         _diagnostics = new NrGameDataUiDiagnostics(_page);
         _ui = new NrGameDataUiDriver(_page);
@@ -613,6 +659,15 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         { return; }
 
         _disposed = true;
+
+        // Only tear down the browser/Playwright when this engine owns them. When created against an
+        // externally-supplied context (the pool), the pool owns and disposes the shared browser —
+        // closing it here would break sibling engines still using it.
+        if (!_ownsBrowser)
+        {
+            return;
+        }
+
         // ValueTask from DisposeAsync: complete synchronously or wait via task
         var disposeTask = _browser?.DisposeAsync();
         if (disposeTask.HasValue && !disposeTask.Value.IsCompleted)

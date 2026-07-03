@@ -29,6 +29,10 @@
     Skip Liberica JDK download and bs-ui-java-agent.jar build.
     Set automatically when running in CI (CI=true env var).
 
+.PARAMETER SkipWh40k
+    Skip cloning the wh40k-9e real-world test data. Safe for the fast CI lane and any
+    workflow that does not run the real-world integration tests.
+
 .EXAMPLE
     ./setup.ps1
 
@@ -44,7 +48,8 @@
 param(
     [switch]$Force,
     [switch]$SkipPlaywright,
-    [switch]$SkipJavaAgent
+    [switch]$SkipJavaAgent,
+    [switch]$SkipWh40k
 )
 
 $ErrorActionPreference = 'Stop'
@@ -87,7 +92,9 @@ $wh40kTag = 'v9.8.0'
 $wh40kDir = Join-Path $testdataDir 'wh40k-9e'
 $wh40kTagMarker = Join-Path $wh40kDir '.tag'
 
-if (-not $Force -and (Test-Path $wh40kTagMarker) -and ((Get-Content $wh40kTagMarker -Raw).Trim() -eq $wh40kTag)) {
+if ($SkipWh40k) {
+    Write-Host "[SKIP] wh40k-9e clone (-SkipWh40k)" -ForegroundColor DarkGray
+} elseif (-not $Force -and (Test-Path $wh40kTagMarker) -and ((Get-Content $wh40kTagMarker -Raw).Trim() -eq $wh40kTag)) {
     Write-Host "[OK] wh40k-9e already cloned ($wh40kTag)" -ForegroundColor Green
 } else {
     if (Test-Path $wh40kDir) { Remove-Item $wh40kDir -Recurse -Force }

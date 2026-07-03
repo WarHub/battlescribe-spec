@@ -26,6 +26,17 @@ namespace BattleScribeSpec.NewRecruit;
 /// </summary>
 public static class NrEditorStore
 {
+    /// <summary>
+    /// Ceiling for editor navigation / URL / store-ready waits. These are reactive waits — they
+    /// resolve as soon as the condition is met — so the ceiling only needs to be generous enough to
+    /// absorb CPU contention when several browser contexts load the editor in parallel (see the
+    /// GameData UI engine pool). Tunable via <c>NR_NAV_TIMEOUT_MS</c>; defaults to 30s.
+    /// </summary>
+    private static readonly int NavTimeoutMs =
+        int.TryParse(Environment.GetEnvironmentVariable("NR_NAV_TIMEOUT_MS"), out var v) && v > 0
+            ? v
+            : 30_000;
+
     private static readonly Dictionary<string, string> MimeTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         [".html"] = "text/html",
@@ -171,7 +182,7 @@ public static class NrEditorStore
                 }
                 """,
                 null,
-                new PageWaitForFunctionOptions { Timeout = 15_000 });
+                new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
         }
         catch (TimeoutException ex)
         {
@@ -241,11 +252,11 @@ public static class NrEditorStore
             $"NR Editor UI: cannot resolve a name for file id '{id}' to open it.");
 
         // Return to the system list and double-click the target file.
-        await page.GoBackAsync(new PageGoBackOptions { Timeout = 15_000 });
+        await page.GoBackAsync(new PageGoBackOptions { Timeout = NavTimeoutMs });
         await page.WaitForSelectorAsync(".item.unselectable:not(.add)", new() { Timeout = 10_000 });
         var item = page.Locator(".item.unselectable:not(.add)", new PageLocatorOptions { HasText = name });
         await item.First.DblClickAsync();
-        await page.WaitForURLAsync("**/catalogue**", new() { Timeout = 15_000 });
+        await page.WaitForURLAsync("**/catalogue**", new() { Timeout = NavTimeoutMs });
         await page.WaitForFunctionAsync(
             """
             (id) => {
@@ -253,7 +264,7 @@ public static class NrEditorStore
                 const sId = new URLSearchParams(location.search).get('systemId');
                 return !!pinia?._s?.get('editor')?.gameSystems?.[sId]?.loadedCatalogues?.[id];
             }
-            """, id, new PageWaitForFunctionOptions { Timeout = 15_000 });
+            """, id, new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
     }
 
     private static async Task<string?> NavigateToEditableAsync(IPage page, string itemName)
@@ -273,7 +284,7 @@ public static class NrEditorStore
 
             // Wait for URL to change to the catalogue editor route.
             await page.WaitForURLAsync("**/catalogue**",
-                new PageWaitForURLOptions { Timeout = 15_000 });
+                new PageWaitForURLOptions { Timeout = NavTimeoutMs });
 
             // Wait for the editor store to have the catalogue fully loaded in
             // loadedCatalogues. The URL change fires before Vue finishes
@@ -291,7 +302,7 @@ public static class NrEditorStore
                 }
                 """,
                 null,
-                new PageWaitForFunctionOptions { Timeout = 15_000 });
+                new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
 
             // Persist Pinia store references for action methods to use later.
             await page.EvaluateAsync("""
@@ -386,7 +397,7 @@ public static class NrEditorStore
                 }
                 """,
                 null,
-                new PageWaitForFunctionOptions { Timeout = 15_000 });
+                new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
         }
         catch (TimeoutException ex)
         {
