@@ -48,8 +48,6 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -104,8 +102,6 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -191,8 +187,6 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -263,8 +257,6 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -318,8 +310,6 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
