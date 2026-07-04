@@ -69,8 +69,10 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
       - name: Build
         run: dotnet build
-      - name: Verify formatting
-        run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
+      # Style rules are enforced during the build (EnforceCodeStyleInBuild); this only needs
+      # to add the whitespace/formatting check, which is much faster than a full format run.
+      - name: Verify formatting (whitespace)
+        run: dotnet format whitespace BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
       - name: Run script tests
         run: node --test scripts/har-diff.test.mjs
       - name: Unit / protocol / lint (offline)
@@ -144,8 +146,10 @@ jobs:
           java-package: 'jdk+fx'
       - name: Build bs-ui-java-agent
         run: pwsh -File src/bs-ui-java-agent/build.ps1
+      # Functional build only — the checks job is the analyzer/style gate, so skip the
+      # (expensive) analyzers/doc generation here; the test binaries are identical.
       - name: Build
-        run: dotnet build
+        run: dotnet build -p:RunAnalyzers=false -p:EnforceCodeStyleInBuild=false -p:GenerateDocumentationFile=false
       - name: NR frozen roster — kitchen-sink
         run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrRoster&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
         env:
