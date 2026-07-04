@@ -34,10 +34,9 @@ jobs:
           "thorough=$($thorough.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           Write-Host "thorough = $thorough"
 
-  # ── FAST base — every push/PR. Proves every engine, adapter, submodule and
-  #    dependency works end-to-end; only the two heavy UI suites are trimmed
-  #    (BS GameData UI → kitchen-sink; NR GameData UI runs full but parallelized). ──
-  fast:
+  # ── CHECKS — every push. Offline/CPU: unit + protocol + lint + formatting +
+  #    the in-process BattleScribe reference engine (kitchen-sink). No browsers. ──
+  checks:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
@@ -59,7 +58,143 @@ jobs:
           private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
           owner: WarHub
           repositories: newrecruit-har,battlescribe-archive
-      # Content-pinned download caches (keyed by testdata.json / package versions).
+      # The BattleScribe project IKVM-compiles lib/battlescribe/lib/*.jar at build time.
+      - uses: actions/cache@v4
+        with:
+          path: lib/battlescribe
+          key: bsapp-${{ hashFiles('testdata.json') }}
+      - name: Setup dependencies
+        run: pwsh ./setup.ps1 -SkipPlaywright -SkipJavaAgent -SkipWh40k
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      - name: Build
+        run: dotnet build
+      - name: Verify formatting
+        run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
+      - name: Run script tests
+        run: node --test scripts/har-diff.test.mjs
+      - name: Unit / protocol / lint (offline)
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Category!=Conformance" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+      - name: BattleScribe reference engine — kitchen-sink
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "(Engine=BsRoster|Engine=BsGameData)&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+      - name: Reference adapter (dotnet) — roster kitchen-sink
+        run: |
+          dotnet artifacts/bin/BattleScribeSpec.Runner/debug/bs-spec-runner.dll \
+            --adapter "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
+            --specs specs/roster \
+            --filter "protocol/protocol-kitchen-sink,category/" \
+            --engine battlescribe \
+            --expected-failures battlescribe \
+            --output github-actions \
+            --workers 2
+
+  # ── SMOKE — every push. Kitchen-sink through every real engine, proving each
+  #    engine/adapter/submodule/dependency wires up end-to-end. ──
+  smoke:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.WARHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
+          owner: WarHub
+          repositories: newrecruit-har,battlescribe-archive
+      - uses: actions/cache@v4
+        with:
+          path: lib/battlescribe
+          key: bsapp-${{ hashFiles('testdata.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: .testdata/newrecruit-har
+          key: nrhar-${{ hashFiles('testdata.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: .testdata/nr-editor
+          key: nreditor-${{ hashFiles('testdata.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
+      - uses: actions/cache@v4
+        with:
+          path: src/bs-ui-java-agent/bs-ui-java-agent.jar
+          key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
+      - name: Setup dependencies
+        run: pwsh ./setup.ps1 -SkipWh40k
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      - name: Setup Liberica JDK (with JavaFX)
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'liberica'
+          java-version: '11'
+          java-package: 'jdk+fx'
+      - name: Build bs-ui-java-agent
+        run: pwsh -File src/bs-ui-java-agent/build.ps1
+      - name: Build
+        run: dotnet build
+      - name: NR frozen roster — kitchen-sink
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrRoster&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        env:
+          NR_HEADLESS: true
+      - name: NR UI roster — kitchen-sink
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrUiRoster&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        env:
+          NR_HEADLESS: true
+      - name: NR Editor GameData — kitchen-sink
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrGameData&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        env:
+          NR_HEADLESS: true
+      - name: NR Editor GameData UI — kitchen-sink
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrGameDataUi" --logger "console;verbosity=minimal"
+        env:
+          NR_HEADLESS: true
+          NR_UI_SMOKE: 1
+      - name: BS GameData UI — kitchen-sink (engine + Java agent + app)
+        run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        env:
+          BS_UI_KEEP_ALIVE: true
+      - name: BS UI roster driver — kitchen-sink
+        run: xvfb-run -a dotnet run --project src/BattleScribeSpec.Cli -- run --engine battlescribe --ui protocol-kitchen-sink
+
+  # ── THOROUGH conformance (opt-in): the full offline + frozen-NR suites that the
+  #    every-push lanes trim to kitchen-sink. ──
+  thorough-conformance:
+    needs: [gate]
+    if: needs.gate.outputs.thorough == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.WARHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
+          owner: WarHub
+          repositories: newrecruit-har,battlescribe-archive
       - uses: actions/cache@v4
         with:
           path: lib/battlescribe
@@ -77,63 +212,31 @@ jobs:
           path: ~/.cache/ms-playwright
           key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
       - name: Setup dependencies
-        run: pwsh ./setup.ps1 -SkipWh40k
+        run: pwsh ./setup.ps1 -SkipJavaAgent -SkipWh40k
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      - name: Setup Liberica JDK (with JavaFX)
-        uses: actions/setup-java@v5
-        with:
-          distribution: 'liberica'
-          java-version: '11'
-          java-package: 'jdk+fx'
-      - name: Build bs-ui-java-agent
-        run: pwsh -File src/bs-ui-java-agent/build.ps1
       - name: Build
         run: dotnet build
-
-      # Offline suite: unit + lint + protocol + BattleScribe reference engine.
-      - name: Core offline suite
+      - name: Full offline suite (core)
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=core --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
-      - name: Verify formatting
-        run: dotnet format BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
-      - name: Run script tests
-        run: node --test scripts/har-diff.test.mjs
-
-      # End-to-end proof that every engine/adapter is wired up.
-      - name: Reference adapter (dotnet) — roster kitchen-sink
-        run: |
-          dotnet artifacts/bin/BattleScribeSpec.Runner/debug/bs-spec-runner.dll \
-            --adapter "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
-            --specs specs/roster \
-            --filter "protocol/protocol-kitchen-sink,category/" \
-            --engine battlescribe \
-            --expected-failures battlescribe \
-            --output github-actions \
-            --workers 2
-      - name: Frozen NR roster conformance (full — fast, parallel)
+      - name: Full frozen NR roster
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
           NR_PARALLEL: 4
-      - name: Frozen NR Editor GameData (full — fast)
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
-        env:
-          NR_HEADLESS: true
-      - name: Frozen NR UI roster conformance (full — fast)
+      - name: Full frozen NR UI roster
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-      - name: Frozen NR Editor GameData UI (full — parallelized)
+      - name: Full frozen NR Editor GameData
+        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        env:
+          NR_HEADLESS: true
+      - name: Full frozen NR Editor GameData UI (parallelized)
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
           NR_PARALLEL: 4
-      - name: BS GameData UI — kitchen-sink (proves engine + Java agent + app)
-        run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
-        env:
-          BS_UI_KEEP_ALIVE: true
-      - name: BS UI roster driver — kitchen-sink
-        run: xvfb-run -a dotnet run --project src/BattleScribeSpec.Cli -- run --engine battlescribe --ui protocol-kitchen-sink
 
   # ── THOROUGH: full BS GameData UI (opt-in). Warm start + sharded across N jobs.
   #    The matrix MUST match GameDataConformanceTestBase.ShardCount. ──
@@ -168,6 +271,10 @@ jobs:
         with:
           path: lib/battlescribe
           key: bsapp-${{ hashFiles('testdata.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: src/bs-ui-java-agent/bs-ui-java-agent.jar
+          key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
       - name: Setup dependencies
         run: pwsh ./setup.ps1 -SkipPlaywright -SkipWh40k
         env:
@@ -223,10 +330,6 @@ jobs:
           key: bsapp-${{ hashFiles('testdata.json') }}
       - uses: actions/cache@v4
         with:
-          path: .testdata/newrecruit-har
-          key: nrhar-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
-        with:
           path: ~/.cache/ms-playwright
           key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
       - name: Setup dependencies
@@ -261,7 +364,7 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [gate, fast, thorough-ui-bs, nr-conformance]
+    needs: [gate, checks, smoke, thorough-conformance, thorough-ui-bs, nr-conformance]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -273,9 +376,11 @@ jobs:
         shell: pwsh
         run: |
           $results = @{
-            'fast'           = '${{ needs.fast.result }}'
-            'thorough-ui-bs' = '${{ needs.thorough-ui-bs.result }}'
-            'nr-conformance' = '${{ needs.nr-conformance.result }}'
+            'checks'               = '${{ needs.checks.result }}'
+            'smoke'                = '${{ needs.smoke.result }}'
+            'thorough-conformance' = '${{ needs.thorough-conformance.result }}'
+            'thorough-ui-bs'       = '${{ needs.thorough-ui-bs.result }}'
+            'nr-conformance'       = '${{ needs.nr-conformance.result }}'
           }
           $failed = $results.GetEnumerator() | Where-Object { $_.Value -notin @('success', 'skipped') }
           if ($failed) {
@@ -335,7 +440,9 @@ jobs:
         shell: pwsh
         run: |
           $failed = @()
-          if ('${{ needs.fast.result }}' -eq 'failure') { $failed += 'fast' }
+          if ('${{ needs.checks.result }}' -eq 'failure') { $failed += 'checks' }
+          if ('${{ needs.smoke.result }}' -eq 'failure') { $failed += 'smoke' }
+          if ('${{ needs.thorough-conformance.result }}' -eq 'failure') { $failed += 'thorough-conformance' }
           if ('${{ needs.thorough-ui-bs.result }}' -eq 'failure') { $failed += 'thorough-ui-bs' }
           if ('${{ needs.nr-conformance.result }}' -eq 'failure') { $failed += 'nr-conformance' }
           $failedList = ($failed | ForEach-Object { "- $_" }) -join "`n"

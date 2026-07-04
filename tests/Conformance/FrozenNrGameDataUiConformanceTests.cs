@@ -50,12 +50,18 @@ public sealed class FrozenNrGameDataUiConformanceTests
         var skipped = 0;
         var expectedFailures = 0;
 
+        // NR_UI_SMOKE=1 restricts the run to kitchen-sink spec(s) — the fast CI lane proves the
+        // engine wires up without running the full suite (which the thorough lane covers).
+        var smoke = Environment.GetEnvironmentVariable("NR_UI_SMOKE") == "1";
+
         // Load every spec upfront so parsing happens before parallel execution.
-        var loadedSpecs = SpecLoader.DiscoverGameDataSpecs(specsDir!).Select(s => (
-            s.Path,
-            Name: $"{s.Category}/{s.Id}",
-            spec: SpecLoader.LoadGameData(s.Path)
-        )).ToList();
+        var loadedSpecs = SpecLoader.DiscoverGameDataSpecs(specsDir!)
+            .Where(s => !smoke || $"{s.Category}/{s.Id}".Contains("kitchen-sink", StringComparison.Ordinal))
+            .Select(s => (
+                s.Path,
+                Name: $"{s.Category}/{s.Id}",
+                spec: SpecLoader.LoadGameData(s.Path)
+            )).ToList();
 
         await Parallel.ForEachAsync(
             loadedSpecs,
