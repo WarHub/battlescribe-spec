@@ -172,7 +172,9 @@ jobs:
         env:
           BS_UI_KEEP_ALIVE: true
       - name: BS UI roster driver — kitchen-sink
-        run: xvfb-run -a dotnet run --project src/BattleScribeSpec.Cli -- run --engine battlescribe --ui protocol-kitchen-sink
+        # --no-build: reuse the binaries from the Build step above. Without it, `dotnet run`
+        # rebuilds with default props (analyzers on), re-doing the whole solution.
+        run: xvfb-run -a dotnet run --project src/BattleScribeSpec.Cli --no-build -- run --engine battlescribe --ui protocol-kitchen-sink
 
   # ── THOROUGH conformance (opt-in): the full offline + frozen-NR suites that the
   #    every-push lanes trim to kitchen-sink. ──
