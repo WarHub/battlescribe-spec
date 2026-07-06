@@ -101,11 +101,15 @@ verify, probe). `--adapter` is retired. Three accepted forms:
 - **`--break` REPL** goes protocol-native: getState/getErrors/screenshot
   commands plus a raw-JSON passthrough prompt. Typed `eval`/introspection stays
   in #272.
-- **Gamedata over the wire**: new `JsonProtocolGameDataEngine` in TestKit maps
-  `IGameDataEngine` onto the `gamedata*Action` messages already documented in
-  `docs/adapter-protocol.md` (today only spoken between the BS UI driver and the
-  Java agent). Both domains work in every mode; a spec whose domain the engine
-  does not describe is skipped with a stated reason.
+- **Gamedata over the wire**: the NDJSON adapter protocol gains gamedata
+  commands (`gamedataSetup`, `gamedataAction`, `gamedataGetState`,
+  `gamedataGetErrors`) modeled 1:1 on the `IGameDataEngine` operation table in
+  `docs/adapter-protocol.md` (the doc's existing `gamedata*Action` wire is
+  JSON-RPC between the BS UI driver and its Java agent — a shape precedent, not
+  the adapter protocol). A new `JsonProtocolGameDataEngine` in TestKit
+  implements `IGameDataEngine` over these messages, and `AdapterHandler` +
+  the reference adapter serve them. Both domains work in every mode; a spec
+  whose domain the engine does not describe is skipped with a stated reason.
 - `docs/adapter-protocol.md` is updated to v1.1; #159's JSON Schema covers the
   new messages when it lands.
 
