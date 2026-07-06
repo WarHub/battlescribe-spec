@@ -8,11 +8,11 @@ namespace BattleScribeSpec.Protocol;
 /// </summary>
 public sealed class JsonProtocolEngine : IRosterEngine
 {
-    private readonly AdapterProcess _adapter;
+    private readonly IAdapterConnection _adapter;
     private readonly TimeSpan _requestTimeout;
     private string? _specId;
 
-    public JsonProtocolEngine(AdapterProcess adapter, TimeSpan? requestTimeout = null)
+    public JsonProtocolEngine(IAdapterConnection adapter, TimeSpan? requestTimeout = null)
     {
         _adapter = adapter;
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);

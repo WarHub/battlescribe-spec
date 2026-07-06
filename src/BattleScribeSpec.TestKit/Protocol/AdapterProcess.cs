@@ -6,7 +6,7 @@ namespace BattleScribeSpec.Protocol;
 /// <summary>
 /// Manages an adapter child process, providing JSON-line communication over stdin/stdout.
 /// </summary>
-public sealed class AdapterProcess : IDisposable
+public sealed class AdapterProcess : IAdapterConnection, IDisposable
 {
     private readonly Process _process;
     private readonly StreamWriter _stdin;
