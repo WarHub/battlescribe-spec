@@ -18,7 +18,8 @@
         { "$ref": "#/$defs/actionCommand" },
         { "$ref": "#/$defs/getStateCommand" },
         { "$ref": "#/$defs/getErrorsCommand" },
-        { "$ref": "#/$defs/teardownCommand" }
+        { "$ref": "#/$defs/teardownCommand" },
+        { "$ref": "#/$defs/describeCommand" }
       ]
     },
     "response": {
@@ -29,7 +30,8 @@
         { "$ref": "#/$defs/stateResponse" },
         { "$ref": "#/$defs/errorsResponse" },
         { "$ref": "#/$defs/teardownResult" },
-        { "$ref": "#/$defs/protocolError" }
+        { "$ref": "#/$defs/protocolError" },
+        { "$ref": "#/$defs/describeResult" }
       ]
     },
 
@@ -103,6 +105,15 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "teardown" }
+      }
+    },
+    "describeCommand": {
+      "description": "Protocol v1.1: capability handshake sent once after process start.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "describe" }
       }
     },
 
@@ -185,6 +196,24 @@
         "message": { "type": "string" }
       }
     },
+    "describeResult": {
+      "description": "Protocol v1.1: response to describeCommand.",
+      "type": "object",
+      "required": ["type", "name", "protocolVersion", "domains", "capabilities"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "describeResult" },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "protocolVersion": { "type": "string", "default": "1.1" },
+        "domains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["roster"]
+        },
+        "capabilities": { "$ref": "#/$defs/adapterCapabilities" }
+      }
+    },
 
     "actionOutputs": {
       "type": "object",
@@ -197,6 +226,18 @@
           "additionalProperties": { "type": "string" },
           "description": "Map of entryId → selectionId for auto-selected child selections."
         }
+      }
+    },
+
+    "adapterCapabilities": {
+      "description": "Protocol v1.1: optional capabilities advertised by describeResult.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "screenshot": { "type": "boolean", "default": false },
+        "record": { "type": "boolean", "default": false },
+        "rosterXml": { "type": "boolean", "default": false },
+        "maxParallel": { "type": "integer", "default": 0 }
       }
     },
 
