@@ -15,6 +15,11 @@ AssemblyLoadContext.Default.Resolving += (context, name) =>
 };
 
 await AdapterHandler.RunAsync(
-    engineFactory: () => new BattleScribeRosterEngine(),
+    new AdapterOptions
+    {
+        RosterEngineFactory = () => new BattleScribeRosterEngine(),
+        Name = "battlescribe",
+        Version = typeof(BattleScribeRosterEngine).Assembly.GetName().Version?.ToString(),
+    },
     input: Console.In,
     output: Console.Out);

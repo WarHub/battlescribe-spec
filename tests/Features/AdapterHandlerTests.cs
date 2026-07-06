@@ -9,6 +9,16 @@ public sealed class AdapterHandlerTests
         (input, output, ct) => AdapterHandler.RunAsync(
             () => new BattleScribeSpec.BattleScribeRosterEngine(), input, output, ct));
 
+    private static InMemoryAdapterConnection ConnectV11() => new(
+        (input, output, ct) => AdapterHandler.RunAsync(
+            new AdapterOptions
+            {
+                RosterEngineFactory = () => new BattleScribeSpec.BattleScribeRosterEngine(),
+                Name = "battlescribe",
+                Version = "test",
+            },
+            input, output, ct));
+
     [Fact]
     public async Task Setup_GetState_Teardown_RoundTrips()
     {
@@ -29,14 +39,42 @@ public sealed class AdapterHandlerTests
     }
 
     [Fact]
-    public async Task LegacyHandler_AnswersDescribe_WithError()
+    public async Task Describe_ReturnsIdentityAndDomains()
     {
-        await using var connection = Connect();
+        await using var connection = ConnectV11();
 
-        // Task 3 replaces this expectation with a real DescribeResult; today the
-        // legacy loop reports an unknown command — which is exactly the legacy
-        // adapter behavior the describe fallback must tolerate.
-        var response = await connection.SendCommandAsync(new DescribeCommand(), TestContext.Current.CancellationToken);
-        Assert.IsType<ProtocolError>(response);
+        var described = Assert.IsType<DescribeResult>(
+            await connection.SendCommandAsync(new DescribeCommand(), TestContext.Current.CancellationToken));
+        Assert.Equal("battlescribe", described.Name);
+        Assert.Equal("1.1", described.ProtocolVersion);
+        Assert.Equal(["roster"], described.Domains); // no gamedata factory registered
+    }
+
+    [Fact]
+    public async Task AdapterDescriber_FallsBack_OnErrorResponse()
+    {
+        // Simulate a legacy v1.0 adapter: a handler loop that answers everything with an error.
+        await using var legacy = new InMemoryAdapterConnection(async (input, output, ct) =>
+        {
+            while (await input.ReadLineAsync(ct) is { } _)
+            {
+                await output.WriteLineAsync(ProtocolSerializer.SerializeResponse(
+                    new ProtocolError { Message = "Unknown command" }).AsMemory(), ct);
+                await output.FlushAsync(ct);
+            }
+        });
+
+        var described = await AdapterDescriber.DescribeAsync(legacy);
+        Assert.Equal("1.0", described.ProtocolVersion);
+    }
+
+    [Fact]
+    public async Task AdapterDescriber_ReturnsRealDescription_OnV11Adapter()
+    {
+        await using var connection = ConnectV11();
+
+        var described = await AdapterDescriber.DescribeAsync(connection);
+        Assert.Equal("battlescribe", described.Name);
+        Assert.Equal("1.1", described.ProtocolVersion);
     }
 }

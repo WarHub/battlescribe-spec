@@ -2,6 +2,22 @@ using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Protocol;
 
+/// <summary>Configuration for <see cref="AdapterHandler.RunAsync(AdapterOptions, TextReader, TextWriter, CancellationToken)"/>.</summary>
+public sealed class AdapterOptions
+{
+    public required Func<IRosterEngine> RosterEngineFactory { get; init; }
+
+    /// <summary>Optional gamedata engine factory; when null, gamedata commands answer with an error.</summary>
+    public Func<GameData.IGameDataEngine>? GameDataEngineFactory { get; init; }
+
+    /// <summary>Engine identity reported by describe (e.g. "battlescribe").</summary>
+    public string Name { get; init; } = "unknown";
+
+    public string? Version { get; init; }
+
+    public AdapterCapabilities Capabilities { get; init; } = new();
+}
+
 /// <summary>
 /// Handles the adapter side of the JSON-line protocol.
 /// Reads commands from stdin, dispatches to an IRosterEngine, writes responses to stdout.
@@ -13,12 +29,24 @@ public static class AdapterHandler
     /// Run the adapter protocol loop, reading from input and writing to output.
     /// Handles multiple setup/teardown cycles.
     /// </summary>
-    public static async Task RunAsync(
+    public static Task RunAsync(
         Func<IRosterEngine> engineFactory,
         TextReader input,
         TextWriter output,
         CancellationToken ct = default)
+        => RunAsync(new AdapterOptions { RosterEngineFactory = engineFactory }, input, output, ct);
+
+    /// <summary>
+    /// Run the adapter protocol loop, reading from input and writing to output.
+    /// Handles multiple setup/teardown cycles.
+    /// </summary>
+    public static async Task RunAsync(
+        AdapterOptions options,
+        TextReader input,
+        TextWriter output,
+        CancellationToken ct = default)
     {
+        var engineFactory = options.RosterEngineFactory;
         IRosterEngine? engine = null;
         IReadOnlyList<string> catalogueIds = [];
 
@@ -44,6 +72,13 @@ public static class AdapterHandler
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
                         TeardownCommand => HandleTeardown(ref engine),
+                        DescribeCommand => new DescribeResult
+                        {
+                            Name = options.Name,
+                            Version = options.Version,
+                            Domains = options.GameDataEngineFactory is null ? ["roster"] : ["roster", "gamedata"],
+                            Capabilities = options.Capabilities,
+                        },
                         _ => new ProtocolError { Message = $"Unknown command: {line}" },
                     };
                 }

@@ -1,4 +1,4 @@
-# BattleScribe Spec Adapter Protocol v1.0
+# BattleScribe Spec Adapter Protocol v1.1
 
 This document defines the JSON-line protocol used for communication between the
 **bs-spec-runner** (conformance test runner) and an **engine adapter** (a thin wrapper
@@ -170,6 +170,25 @@ Sent after each spec test completes. The adapter should reset its state.
 ```json
 {"type":"teardown"}
 ```
+
+### `describe` — Capability Handshake (v1.1)
+
+Sent once after process start, before `setup`. The adapter answers with its identity, the
+protocol version it speaks, the spec domains it supports, and optional capabilities.
+
+```json
+{"type":"describe"}
+```
+
+Response:
+
+```json
+{"type":"describeResult","name":"battlescribe","version":"2.03.29","protocolVersion":"1.1","domains":["roster","gamedata"],"capabilities":{"screenshot":false,"record":false,"rosterXml":false,"maxParallel":0}}
+```
+
+Adapters predating v1.1 answer `describe` with an `error` response; runners MUST treat that
+as protocol 1.0, roster-only, no optional capabilities. Adapters SHOULD answer `describe`;
+all v1.1 messages are optional beyond it.
 
 ## Adapter → Runner Responses
 
