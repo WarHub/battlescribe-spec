@@ -20,6 +20,7 @@ namespace BattleScribeSpec.Protocol;
 [JsonDerivedType(typeof(GetStateCommand), "getState")]
 [JsonDerivedType(typeof(GetErrorsCommand), "getErrors")]
 [JsonDerivedType(typeof(TeardownCommand), "teardown")]
+[JsonDerivedType(typeof(DescribeCommand), "describe")]
 public abstract class ProtocolCommand
 {
     [JsonIgnore]
@@ -33,6 +34,7 @@ public abstract class ProtocolCommand
 [JsonDerivedType(typeof(ErrorsResponse), "errors")]
 [JsonDerivedType(typeof(TeardownResult), "teardownResult")]
 [JsonDerivedType(typeof(ProtocolError), "error")]
+[JsonDerivedType(typeof(DescribeResult), "describeResult")]
 public abstract class ProtocolResponse
 {
     [JsonIgnore]
@@ -135,6 +137,17 @@ public sealed class TeardownCommand : ProtocolCommand
     public override string Type => "teardown";
 }
 
+/// <summary>
+/// Protocol v1.1: capability handshake. Sent once after process start; the adapter answers
+/// with its identity, supported domains, and optional capabilities. Legacy v1.0 adapters
+/// answer with an error — callers treat that as roster-only with no optional capabilities.
+/// </summary>
+public sealed class DescribeCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "describe";
+}
+
 // ===== Adapter → Runner Responses =====
 
 public sealed class SetupResult : ProtocolResponse
@@ -200,6 +213,40 @@ public sealed class ProtocolError : ProtocolResponse
     public override string Type => "error";
 
     public string Message { get; set; } = "";
+}
+
+/// <summary>Protocol v1.1: response to <see cref="DescribeCommand"/>.</summary>
+public sealed class DescribeResult : ProtocolResponse
+{
+    [JsonIgnore]
+    public override string Type => "describeResult";
+
+    /// <summary>Engine identity (e.g. "battlescribe"); keys spec applicability and report labels.</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>Engine/adapter version, free-form.</summary>
+    public string? Version { get; set; }
+
+    public string ProtocolVersion { get; set; } = "1.1";
+
+    /// <summary>Supported spec domains: "roster" and/or "gamedata".</summary>
+    public List<string> Domains { get; set; } = ["roster"];
+
+    public AdapterCapabilities Capabilities { get; set; } = new();
+}
+
+/// <summary>Optional protocol v1.1 capabilities advertised by <see cref="DescribeResult"/>.</summary>
+public sealed class AdapterCapabilities
+{
+    public bool Screenshot { get; set; }
+
+    public bool Record { get; set; }
+
+    /// <summary>Supports <c>exportRosterXml</c>.</summary>
+    public bool RosterXml { get; set; }
+
+    /// <summary>Max concurrent instances the engine tolerates; 0 = unlimited.</summary>
+    public int MaxParallel { get; set; }
 }
 
 // ===== Protocol Setup Data (game system + catalogue) =====
