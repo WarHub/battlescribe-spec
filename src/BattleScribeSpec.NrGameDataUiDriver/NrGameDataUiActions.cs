@@ -68,7 +68,8 @@ public static class NrGameDataUiActions
         var parentNode = await FindTreeNodeByIdAsync(page, parentId);
         await parentNode.ScrollIntoViewIfNeededAsync();
         await parentNode.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-        await page.WaitForTimeoutAsync(300);
+        // Reactive: wait for the context menu to render rather than a fixed delay.
+        await page.WaitForSelectorAsync(".context-menu:visible", new PageWaitForSelectorOptions { Timeout = 5_000 });
 
         var label = GetAddChildMenuLabel(entryType);
         await page.Locator(".context-menu > div")
@@ -127,7 +128,8 @@ public static class NrGameDataUiActions
         var node = await FindTreeNodeByIdAsync(page, entryId);
 
         await node.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-        await page.WaitForTimeoutAsync(300);
+        // Reactive: wait for the context menu to render rather than a fixed delay.
+        await page.WaitForSelectorAsync(".context-menu:visible", new PageWaitForSelectorOptions { Timeout = 5_000 });
 
         // Click "Remove" in the context menu.
         // NR Editor context menu items are <div> elements inside .context-menu (not role=menuitem).
@@ -716,7 +718,21 @@ public static class NrGameDataUiActions
                 // This is equivalent to document.querySelector('.arrow-wrap').click() which
                 // was confirmed to expand collapsible sections in probe sessions.
                 await section.EvaluateAsync("el => el.querySelector('.arrow-wrap')?.click()");
-                await page.WaitForTimeoutAsync(400);
+                // Reactive: wait for this section to lose its `collapsed` class (children rendered)
+                // instead of a fixed delay. Best-effort — Step 3's node visibility wait is the real
+                // gate, so a section that never toggles (e.g. no arrow-wrap) doesn't fail here.
+                try
+                {
+                    var handle = await section.ElementHandleAsync();
+                    await page.WaitForFunctionAsync(
+                        "el => !el.classList.contains('collapsed')",
+                        handle,
+                        new PageWaitForFunctionOptions { Timeout = 2_000 });
+                }
+                catch
+                {
+                    // Section didn't toggle cleanly — continue; the final node wait is authoritative.
+                }
             }
         }
 
@@ -740,8 +756,23 @@ public static class NrGameDataUiActions
                     break;
                 }
 
-                await collapsed.EvaluateAsync("el => (el.querySelector('.arrow-wrap') || el).click()");
-                await page.WaitForTimeoutAsync(120);
+                // Resolve the element handle first so the click and the wait target the SAME node
+                // (re-resolving `.First` after the click could race onto a different collapsed node).
+                var handle = await collapsed.ElementHandleAsync();
+                await handle.EvaluateAsync("el => (el.querySelector('.arrow-wrap') || el).click()");
+                // Reactive: wait for this node to lose `collapsed` (its children now render) instead
+                // of a fixed delay. Best-effort — the bounded outer pass loop is the safety net.
+                try
+                {
+                    await page.WaitForFunctionAsync(
+                        "el => !el.classList.contains('collapsed')",
+                        handle,
+                        new PageWaitForFunctionOptions { Timeout = 2_000 });
+                }
+                catch
+                {
+                    // Node didn't toggle cleanly — continue; the outer loop re-checks what remains.
+                }
             }
         }
 

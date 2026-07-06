@@ -9,6 +9,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- Deterministic restores + enables NuGet caching in CI (packages.lock.json per project). -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <!-- Test profiles: dotnet test -p:TestProfile=nr-live -->

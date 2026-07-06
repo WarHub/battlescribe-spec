@@ -301,7 +301,6 @@ public class DataEditorActions {
         if (beforeList != null) before.addAll(beforeList);
 
         runOnFx(() -> selectItem(ctrl, parentItem));
-        sleep(500);
         runOnFx(() -> invokeCtrl(ctrl, addMethod));
 
         Object newObj = null;
@@ -441,14 +440,22 @@ public class DataEditorActions {
 
         // Select the ProfileType node so its edit panel (and sub-controller) is built.
         runOnFx(() -> selectItem(ctrl, parentItem));
-        sleep(500);
 
-        Object panel = runOnFxGet(() -> findPanelController(ctrl, "ProfileTypeEditPanelController"));
+        // Poll for the edit panel to be built rather than a fixed sleep — the panel is
+        // constructed asynchronously by selection listeners after selectItem returns.
+        Object panel = null;
+        long panelDeadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
+        while (System.currentTimeMillis() < panelDeadline) {
+            panel = runOnFxGet(() -> findPanelController(ctrl, "ProfileTypeEditPanelController"));
+            if (panel != null) break;
+            sleep(POLL_MS);
+        }
         if (panel == null) {
             throw new RuntimeException(
                     "ProfileTypeEditPanelController not active after selecting the profile type");
         }
-        runOnFx(() -> panel.getClass().getMethod("actAddCharacteristicType").invoke(panel));
+        final Object panelRef = panel;
+        runOnFx(() -> panelRef.getClass().getMethod("actAddCharacteristicType").invoke(panelRef));
 
         Object newObj = null;
         long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
@@ -546,7 +553,6 @@ public class DataEditorActions {
         if (item == null) throw new RuntimeException("Tree item not found: " + entryId);
 
         runOnFx(() -> selectItem(ctrl, item));
-        sleep(200);
         runOnFx(() -> invokeCtrl(ctrl, "actRemove"));
 
         long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
@@ -718,7 +724,6 @@ public class DataEditorActions {
         if (beforeList != null) before.addAll(beforeList);
 
         runOnFx(() -> selectItem(ctrl, parentItem));
-        sleep(500);
         runOnFx(() -> invokeCtrl(ctrl, addMethod));
 
         Object newObj = null;

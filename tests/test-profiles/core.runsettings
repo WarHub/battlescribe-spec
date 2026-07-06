@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Core offline suite: everything except the NR / NR-UI engines (which run in the nr-and-ui
-     and nr-conformance jobs). Covers unit, lint, protocol, and BattleScribe engine tests. -->
+<!-- Core offline suite: everything except the NR / NR-UI engines and the BattleScribe
+     desktop Data Editor UI engine (BsGameDataUi — needs the app + Java agent + a display,
+     run under xvfb via the bs-ui-gamedata profile). Covers unit, lint, protocol, and the
+     in-process BattleScribe reference engine tests. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>Engine!=FrozenNrRoster&amp;Engine!=FrozenNrGameData&amp;Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Engine!=FrozenNrUiRoster&amp;Engine!=LiveNrUiRoster&amp;Engine!=FrozenNrGameDataUi&amp;Engine!=LiveNrGameDataUi</TestCaseFilter>
+    <TestCaseFilter>Engine!=FrozenNrRoster&amp;Engine!=FrozenNrGameData&amp;Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Engine!=FrozenNrUiRoster&amp;Engine!=LiveNrUiRoster&amp;Engine!=FrozenNrGameDataUi&amp;Engine!=LiveNrGameDataUi&amp;Engine!=BsGameDataUi</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

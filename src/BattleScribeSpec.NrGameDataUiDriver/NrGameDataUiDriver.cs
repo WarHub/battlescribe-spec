@@ -236,7 +236,8 @@ public sealed class NrGameDataUiDriver
         var selected = _page.Locator("#editor-entries h3.selected");
         await selected.First.ScrollIntoViewIfNeededAsync();
         await selected.First.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-        await _page.WaitForTimeoutAsync(300);
+        // Reactive: wait for the context menu to render rather than a fixed delay.
+        await _page.WaitForSelectorAsync(".context-menu:visible", new PageWaitForSelectorOptions { Timeout = 5_000 });
     }
 
     /// <summary>Clicks the breadcrumb item <paramref name="fromEnd"/> positions before the current node (1 = parent).</summary>
@@ -298,9 +299,9 @@ public sealed class NrGameDataUiDriver
                     $"^\\s*{System.Text.RegularExpressions.Regex.Escape(parentLabel)}\\b"),
             });
         await trigger.First.HoverAsync();
-        await _page.WaitForTimeoutAsync(400);
 
-        // The submenu is the visible menu that lacks the main menu's "Remove" item.
+        // The submenu is the visible menu that lacks the main menu's "Remove" item. Waiting for it
+        // to become visible below is the reactive signal — no fixed post-hover delay needed.
         var submenu = _page.Locator(".context-menu:visible")
             .Filter(new LocatorFilterOptions { HasNotText = "Remove" });
         await submenu.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
@@ -315,7 +316,8 @@ public sealed class NrGameDataUiDriver
             });
         }
         await item.First.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
-        await _page.WaitForTimeoutAsync(400);
+        // The caller waits for the editor panel (WaitEditorReadyAsync) right after picking, which is
+        // the reactive signal that the created node's editor opened — no fixed delay needed here.
     }
 
     private async Task ClickContextItemAsync(string label)
@@ -326,7 +328,7 @@ public sealed class NrGameDataUiDriver
                 HasTextRegex = new System.Text.RegularExpressions.Regex($"^\\s*{System.Text.RegularExpressions.Regex.Escape(label)}\\s*$"),
             })
             .First.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
-        await _page.WaitForTimeoutAsync(400);
+        // The caller waits for the editor panel (WaitEditorReadyAsync) right after — reactive signal.
     }
 
     private async Task WaitEditorReadyAsync()
