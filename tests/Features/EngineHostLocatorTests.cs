@@ -21,6 +21,7 @@ public sealed class EngineHostLocatorTests
     {
         var fake = Path.Combine(Path.GetTempPath(), "fake-host.dll");
         File.WriteAllText(fake, "");
+        var priorValue = Environment.GetEnvironmentVariable("BSSPEC_ENGINE_HOST");
         try
         {
             Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", fake);
@@ -30,7 +31,7 @@ public sealed class EngineHostLocatorTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", null);
+            Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", priorValue);
             File.Delete(fake);
         }
     }
@@ -43,5 +44,13 @@ public sealed class EngineHostLocatorTests
         Assert.Contains("bs-engine-host", launch.Arguments + launch.Executable);
         Assert.StartsWith("dotnet", launch.Executable);
         Assert.Contains("serve --engine battlescribe", launch.Arguments);
+    }
+
+    [Fact]
+    public void ConfiguredEntryWithoutExec_Throws()
+    {
+        var entry = new EngineEntry("wham", null, null, ["roster"], 0, Builtin: false);
+        var ex = Assert.Throws<InvalidOperationException>(() => EngineHostLocator.Resolve(entry));
+        Assert.Contains("wham", ex.Message);
     }
 }

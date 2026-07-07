@@ -31,7 +31,7 @@ public static class EngineHostLocator
     {
         if (!entry.Builtin)
         {
-            return new EngineLaunch(entry.Executable!, entry.Arguments ?? string.Empty);
+            return new EngineLaunch(entry.Executable ?? throw new InvalidOperationException($"Engine '{entry.Name}' has no executable configured."), entry.Arguments ?? string.Empty);
         }
 
         var probed = new List<string>();
@@ -76,7 +76,23 @@ public static class EngineHostLocator
         var pivot = ExtractPivot(AppContext.BaseDirectory) ?? "debug";
         var candidate = Path.Combine(repoRoot, "artifacts", "bin", HostProject, pivot, HostDllName);
         probed.Add(candidate);
-        return File.Exists(candidate) ? candidate : null;
+        if (File.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        // If the extracted pivot doesn't exist and it's not already "debug", also probe the debug pivot
+        if (pivot != "debug")
+        {
+            var debugCandidate = Path.Combine(repoRoot, "artifacts", "bin", HostProject, "debug", HostDllName);
+            probed.Add(debugCandidate);
+            if (File.Exists(debugCandidate))
+            {
+                return debugCandidate;
+            }
+        }
+
+        return null;
     }
 
     private static string? ProbePath(List<string> probed)
