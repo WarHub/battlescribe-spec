@@ -1,4 +1,4 @@
-# BattleScribe Spec Adapter Protocol v1.0
+# BattleScribe Spec Adapter Protocol v1.1
 
 This document defines the JSON-line protocol used for communication between the
 **bs-spec-runner** (conformance test runner) and an **engine adapter** (a thin wrapper
@@ -169,6 +169,62 @@ Sent after each spec test completes. The adapter should reset its state.
 
 ```json
 {"type":"teardown"}
+```
+
+### `describe` — Capability Handshake (v1.1)
+
+Sent once after process start, before `setup`. The adapter answers with its identity, the
+protocol version it speaks, the spec domains it supports, and optional capabilities.
+
+```json
+{"type":"describe"}
+```
+
+Response:
+
+```json
+{"type":"describeResult","name":"battlescribe","version":"2.03.29","protocolVersion":"1.1","domains":["roster","gamedata"],"capabilities":{"screenshot":false,"record":false,"rosterXml":false,"maxParallel":0}}
+```
+
+Adapters predating v1.1 answer `describe` with an `error` response; runners MUST treat that
+as protocol 1.0, roster-only, no optional capabilities. Adapters SHOULD answer `describe`;
+all v1.1 messages are optional beyond it.
+
+### Optional v1.1 commands
+
+These four commands give the spec runner roster parity with the engine's own UI: capturing a
+screenshot, exporting the current roster as `.ros` XML, and recording/replaying UI actions.
+Support for each is advertised via `describeResult.capabilities` (`screenshot`, `rosterXml`,
+`record`). An adapter that does not implement a command answers with an `error` response
+(`"<type> is not supported by this adapter"`); the runner maps that to a NotSupported result
+rather than failing the spec.
+
+#### `screenshot`
+
+```json
+{"type":"screenshot"}
+{"type":"screenshotResult","pngBase64":"iVBORw0KGgo..."}
+```
+
+#### `exportRosterXml`
+
+```json
+{"type":"exportRosterXml"}
+{"type":"rosterXmlResult","xml":"<roster>...</roster>"}
+```
+
+#### `recordStart`
+
+```json
+{"type":"recordStart"}
+{"type":"actionResult","ok":true}
+```
+
+#### `recordStop`
+
+```json
+{"type":"recordStop"}
+{"type":"recordResult","actionsJson":"[{\"type\":\"click\",\"target\":\"#unit-1\"}]"}
 ```
 
 ## Adapter → Runner Responses
@@ -409,12 +465,17 @@ costs and characteristics, linking, saving and reloading. The data *is* the edit
 
 ### Contract: `IGameDataEngine`
 
-GameData conformance is defined by the **`IGameDataEngine`** interface, not the roster NDJSON wire.
-Most engines implement it **in-process with no serialization** — the in-process BattleScribe reference
-(via IKVM) and both NewRecruit Editor drivers (`newrecruit` store-direct and `newrecruit-ui`, both via
-Playwright). The only engine with a serialized wire is the BattleScribe Data Editor (`battlescribe-ui`),
-whose Java agent speaks JSON-RPC 2.0 (below). That wire is therefore the canonical contract a future
-**external** GameData adapter would implement.
+GameData conformance is defined by the **`IGameDataEngine`** interface. Most engines implement it
+**in-process with no serialization** — the in-process BattleScribe reference (via IKVM) and both
+NewRecruit Editor drivers (`newrecruit` store-direct and `newrecruit-ui`, both via Playwright). As of
+protocol **v1.1**, the interface is also fully carried over the roster NDJSON wire via four commands —
+`gamedataSetup`, `gamedataAction`, `gamedataGetState`, `gamedataGetErrors` — so an **external**
+adapter process can serve the gamedata domain alongside (or instead of) roster, advertised via
+`describeResult.domains`. Adapters that don't support gamedata simply omit it from `domains`; then
+`gamedataSetup`, `gamedataGetState`, and `gamedataGetErrors` answer with an `error` response, and
+`gamedataAction` answers `gamedataActionResult` with `ok:false` and an `error` message. The BattleScribe Data Editor (`battlescribe-ui`)
+additionally exposes a JSON-RPC 2.0 wire (below), but that is the Java agent's own internal transport —
+externally it is driven the same way as any other engine, through the four commands above.
 
 | Operation | Inputs | Output | Notes |
 |-----------|--------|--------|-------|
@@ -431,6 +492,61 @@ whose Java agent speaks JSON-RPC 2.0 (below). That wire is therefore the canonic
 | `LoadFile` | xml | `id` | Load a catalogue/game system from XML and open it; returns the loaded root id |
 | `GetState` | — | state | Structural snapshot (game system + catalogues) |
 | `GetValidationErrors` | — | errors[] | Validation errors (e.g. broken link targets) |
+
+### GameData wire (v1.1): `gamedataSetup` / `gamedataAction` / `gamedataGetState` / `gamedataGetErrors`
+
+`JsonProtocolGameDataEngine` maps `IGameDataEngine` 1:1 onto these four NDJSON commands (the
+`AdapterHandler` counterpart dispatches them to an `AdapterOptions.GameDataEngineFactory`, mirroring
+`setup`/`action`/`getState`/`getErrors` for roster). An adapter without a gamedata engine answers
+`gamedataSetup`, `gamedataGetState`, and `gamedataGetErrors` with `error`; `gamedataAction` answers
+`gamedataActionResult` with `ok:false` and an `error` message.
+
+#### `gamedataSetup`
+
+```json
+{"type":"gamedataSetup","specId":"gd-add-entry","gameSystem":{"id":"gs","name":"GS"},"catalogues":[{"id":"cat-1","name":"Cat","gameSystemId":"gs"}]}
+{"type":"setupResult","errors":[]}
+```
+
+#### `gamedataAction`
+
+One command per `IGameDataEngine` mutation, selected by `action`; unused fields are omitted. Successful
+mutations answer `gamedataActionResult` with `ok:true` and any produced id/xml; failures set `ok:false`
+with `error`.
+
+```json
+{"type":"gamedataAction","action":"openFile","id":"cat-1"}
+{"type":"gamedataActionResult","ok":true}
+```
+
+```json
+{"type":"gamedataAction","action":"addEntry","parentId":"cat-1","entryType":"selectionEntry","name":"Unit","id":"se-new"}
+{"type":"gamedataActionResult","ok":true,"entryId":"se-new"}
+```
+
+```json
+{"type":"gamedataAction","action":"setField","entryId":"se-new","field":"name","value":"Renamed Unit"}
+{"type":"gamedataActionResult","ok":true}
+```
+
+```json
+{"type":"gamedataAction","action":"exportFile"}
+{"type":"gamedataActionResult","ok":true,"xml":"<catalogue .../>"}
+```
+
+#### `gamedataGetState`
+
+```json
+{"type":"gamedataGetState"}
+{"type":"gamedataState","state":{"catalogues":[{"id":"cat-1","name":"Cat","gameSystemId":"gs","selectionEntries":[{"id":"se-new","name":"Renamed Unit","entryType":"selectionEntry","children":[]}]}]}}
+```
+
+#### `gamedataGetErrors`
+
+```json
+{"type":"gamedataGetErrors"}
+{"type":"errors","errors":[]}
+```
 
 ### Active file (`setup.edit`)
 
@@ -483,7 +599,10 @@ sent.
 
 ### BattleScribe Data Editor wire (JSON-RPC 2.0)
 
-The `battlescribe-ui` Java agent is driven over **stdio with JSON-RPC 2.0** — one JSON object per line,
+This is the `battlescribe-ui` in-process driver's **internal** transport to the Java agent, distinct
+from the NDJSON `gamedataSetup`/`gamedataAction`/`gamedataGetState`/`gamedataGetErrors` commands above
+(which is what an external adapter process implements). The `battlescribe-ui` Java agent is driven over
+**stdio with JSON-RPC 2.0** — one JSON object per line,
 `{"jsonrpc":"2.0","method":…,"id":…,"params":{…}}` → `{"jsonrpc":"2.0","id":…,"result":{…}}` or
 `{…,"error":{"code":-32603,"message":…}}` on a handler throw. XML is carried as a plain JSON string.
 

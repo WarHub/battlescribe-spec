@@ -18,7 +18,16 @@
         { "$ref": "#/$defs/actionCommand" },
         { "$ref": "#/$defs/getStateCommand" },
         { "$ref": "#/$defs/getErrorsCommand" },
-        { "$ref": "#/$defs/teardownCommand" }
+        { "$ref": "#/$defs/teardownCommand" },
+        { "$ref": "#/$defs/describeCommand" },
+        { "$ref": "#/$defs/screenshotCommand" },
+        { "$ref": "#/$defs/exportRosterXmlCommand" },
+        { "$ref": "#/$defs/recordStartCommand" },
+        { "$ref": "#/$defs/recordStopCommand" },
+        { "$ref": "#/$defs/gameDataSetupCommand" },
+        { "$ref": "#/$defs/gameDataActionCommand" },
+        { "$ref": "#/$defs/gameDataGetStateCommand" },
+        { "$ref": "#/$defs/gameDataGetErrorsCommand" }
       ]
     },
     "response": {
@@ -29,7 +38,13 @@
         { "$ref": "#/$defs/stateResponse" },
         { "$ref": "#/$defs/errorsResponse" },
         { "$ref": "#/$defs/teardownResult" },
-        { "$ref": "#/$defs/protocolError" }
+        { "$ref": "#/$defs/protocolError" },
+        { "$ref": "#/$defs/describeResult" },
+        { "$ref": "#/$defs/screenshotResult" },
+        { "$ref": "#/$defs/rosterXmlResult" },
+        { "$ref": "#/$defs/recordResult" },
+        { "$ref": "#/$defs/gameDataActionResult" },
+        { "$ref": "#/$defs/gameDataStateResponse" }
       ]
     },
 
@@ -103,6 +118,105 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "teardown" }
+      }
+    },
+    "describeCommand": {
+      "description": "Protocol v1.1: capability handshake sent once after process start.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "describe" }
+      }
+    },
+    "screenshotCommand": {
+      "description": "Protocol v1.1 (optional): capture the engine UI as a PNG.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "screenshot" }
+      }
+    },
+    "exportRosterXmlCommand": {
+      "description": "Protocol v1.1 (optional): export the current roster as .ros XML.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "exportRosterXml" }
+      }
+    },
+    "recordStartCommand": {
+      "description": "Protocol v1.1 (optional): start recording UI actions.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "recordStart" }
+      }
+    },
+    "recordStopCommand": {
+      "description": "Protocol v1.1 (optional): stop recording and return the recorded actions.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "recordStop" }
+      }
+    },
+
+    "gameDataSetupCommand": {
+      "description": "Protocol v1.1: initialize a gamedata (data-file editing) engine.",
+      "type": "object",
+      "required": ["type", "gameSystem"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "gamedataSetup" },
+        "specId": { "type": "string" },
+        "gameSystem": { "$ref": "#/$defs/gameSystem" },
+        "catalogues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/catalogue" }
+        }
+      }
+    },
+    "gameDataActionCommand": {
+      "description": "Protocol v1.1: execute a data-editing action. Modeled 1:1 on the IGameDataEngine operation table in docs/adapter-protocol.md.",
+      "type": "object",
+      "required": ["type", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "gamedataAction" },
+        "action": { "$ref": "#/$defs/gameDataActionName" },
+        "id": { "type": "string" },
+        "parentId": { "type": "string" },
+        "entryType": { "type": "string" },
+        "name": { "type": "string" },
+        "entryId": { "type": "string" },
+        "field": { "type": "string" },
+        "value": { "type": "string" },
+        "targetId": { "type": "string" },
+        "linkType": { "type": "string" },
+        "costTypeId": { "type": "string" },
+        "nameOrTypeId": { "type": "string" },
+        "xml": { "type": "string" }
+      }
+    },
+    "gameDataGetStateCommand": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "gamedataGetState" }
+      }
+    },
+    "gameDataGetErrorsCommand": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "gamedataGetErrors" }
       }
     },
 
@@ -185,6 +299,78 @@
         "message": { "type": "string" }
       }
     },
+    "describeResult": {
+      "description": "Protocol v1.1: response to describeCommand.",
+      "type": "object",
+      "required": ["type", "name", "protocolVersion", "domains", "capabilities"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "describeResult" },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "protocolVersion": { "type": "string", "default": "1.1" },
+        "domains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["roster"]
+        },
+        "capabilities": { "$ref": "#/$defs/adapterCapabilities" }
+      }
+    },
+    "screenshotResult": {
+      "description": "Protocol v1.1: response to screenshotCommand.",
+      "type": "object",
+      "required": ["type", "pngBase64"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "screenshotResult" },
+        "pngBase64": { "type": "string" }
+      }
+    },
+    "rosterXmlResult": {
+      "description": "Protocol v1.1: response to exportRosterXmlCommand.",
+      "type": "object",
+      "required": ["type", "xml"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "rosterXmlResult" },
+        "xml": { "type": "string" }
+      }
+    },
+    "recordResult": {
+      "description": "Protocol v1.1: response to recordStopCommand.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "recordResult" },
+        "actionsJson": { "type": "string" }
+      }
+    },
+    "gameDataActionResult": {
+      "description": "Protocol v1.1: response to gameDataActionCommand.",
+      "type": "object",
+      "required": ["type", "ok"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "gamedataActionResult" },
+        "ok": { "type": "boolean" },
+        "error": { "type": "string" },
+        "entryId": { "type": "string" },
+        "xml": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "gameDataStateResponse": {
+      "description": "Protocol v1.1: response to gameDataGetStateCommand.",
+      "type": "object",
+      "required": ["type", "state"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "gamedataState" },
+        "state": { "$ref": "#/$defs/gameDataState" }
+      }
+    },
 
     "actionOutputs": {
       "type": "object",
@@ -197,6 +383,18 @@
           "additionalProperties": { "type": "string" },
           "description": "Map of entryId → selectionId for auto-selected child selections."
         }
+      }
+    },
+
+    "adapterCapabilities": {
+      "description": "Protocol v1.1: optional capabilities advertised by describeResult.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "screenshot": { "type": "boolean", "default": false },
+        "record": { "type": "boolean", "default": false },
+        "rosterXml": { "type": "boolean", "default": false },
+        "maxParallel": { "type": "integer", "default": 0 }
       }
     },
 
@@ -224,6 +422,21 @@
         "duplicateForce",
         "setCostLimit",
         "setCustomization"
+      ]
+    },
+    "gameDataActionName": {
+      "type": "string",
+      "enum": [
+        "openFile",
+        "addEntry",
+        "addLink",
+        "removeEntry",
+        "setField",
+        "setCost",
+        "setCharacteristic",
+        "reload",
+        "exportFile",
+        "loadFile"
       ]
     },
     "constraintType": {
@@ -1257,6 +1470,100 @@
         "publisher": { "type": "string" },
         "publicationDate": { "type": "string" },
         "publisherUrl": { "type": "string" }
+      }
+    },
+
+    "gameDataState": {
+      "description": "Protocol v1.1: root state snapshot of all gamedata files being edited.",
+      "type": "object",
+      "required": ["catalogues"],
+      "additionalProperties": false,
+      "properties": {
+        "gameSystem": { "$ref": "#/$defs/gameSystemDataState" },
+        "catalogues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/catalogueDataState" }
+        }
+      }
+    },
+    "gameSystemDataState": {
+      "description": "Protocol v1.1: state of a game system in the data editor.",
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "null"] }
+        },
+        "forceEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "categoryEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "costTypes": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "profileTypes": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "publications": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "selectionEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "entryLinks": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedSelectionEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedSelectionEntryGroups": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedRules": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedProfiles": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedInfoGroups": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedForceEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedAssociations": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } }
+      }
+    },
+    "catalogueDataState": {
+      "description": "Protocol v1.1: state of a catalogue in the data editor.",
+      "type": "object",
+      "required": ["id", "name", "gameSystemId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "gameSystemId": { "type": "string" },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "null"] }
+        },
+        "selectionEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "entryLinks": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedSelectionEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedSelectionEntryGroups": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedRules": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedProfiles": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "forceEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "categoryEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "publications": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "costTypes": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "profileTypes": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedInfoGroups": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "catalogueLinks": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedForceEntries": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } },
+        "sharedAssociations": { "type": "array", "items": { "$ref": "#/$defs/dataEntryState" } }
+      }
+    },
+    "dataEntryState": {
+      "description": "Protocol v1.1: state of a single entry node in the gamedata tree (selectionEntry, profile, rule, constraint, etc.), with type-specific fields stored in the fields dictionary.",
+      "type": "object",
+      "required": ["id", "name", "entryType", "hidden", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "entryType": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dataEntryState" }
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "null"] }
+        }
       }
     }
   }

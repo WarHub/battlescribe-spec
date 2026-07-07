@@ -8,11 +8,11 @@ namespace BattleScribeSpec.Protocol;
 /// </summary>
 public sealed class JsonProtocolEngine : IRosterEngine
 {
-    private readonly AdapterProcess _adapter;
+    private readonly IAdapterConnection _adapter;
     private readonly TimeSpan _requestTimeout;
     private string? _specId;
 
-    public JsonProtocolEngine(AdapterProcess adapter, TimeSpan? requestTimeout = null)
+    public JsonProtocolEngine(IAdapterConnection adapter, TimeSpan? requestTimeout = null)
     {
         _adapter = adapter;
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
@@ -175,6 +175,40 @@ public sealed class JsonProtocolEngine : IRosterEngine
             _ => [new ValidationErrorState($"Unexpected response type: {response.Type}")],
         };
     }
+
+    /// <summary>Protocol v1.1: capture a UI screenshot; throws NotSupportedException if the adapter can't.</summary>
+    public byte[] CaptureScreenshot() => SendCommand(new ScreenshotCommand()) switch
+    {
+        ScreenshotResult sr => Convert.FromBase64String(sr.PngBase64),
+        ProtocolError pe => throw new NotSupportedException(pe.Message),
+        var other => throw new InvalidOperationException($"Unexpected response type: {other.Type}"),
+    };
+
+    /// <summary>Protocol v1.1: export the roster as .ros XML; throws NotSupportedException if unsupported.</summary>
+    public string ExportRosterXml() => SendCommand(new ExportRosterXmlCommand()) switch
+    {
+        RosterXmlResult r => r.Xml,
+        ProtocolError pe => throw new NotSupportedException(pe.Message),
+        var other => throw new InvalidOperationException($"Unexpected response type: {other.Type}"),
+    };
+
+    /// <summary>Protocol v1.1: start UI action recording; throws NotSupportedException if unsupported.</summary>
+    public void StartRecording()
+    {
+        var response = SendCommand(new RecordStartCommand());
+        if (response is ProtocolError pe)
+        {
+            throw new NotSupportedException(pe.Message);
+        }
+    }
+
+    /// <summary>Protocol v1.1: stop recording; returns the actions JSON (null if none). Throws NotSupportedException if unsupported.</summary>
+    public string? StopRecording() => SendCommand(new RecordStopCommand()) switch
+    {
+        RecordResult r => r.ActionsJson,
+        ProtocolError pe => throw new NotSupportedException(pe.Message),
+        var other => throw new InvalidOperationException($"Unexpected response type: {other.Type}"),
+    };
 
     public void Dispose()
     {

@@ -2,6 +2,34 @@ using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Protocol;
 
+/// <summary>Configuration for <see cref="AdapterHandler.RunAsync(AdapterOptions, TextReader, TextWriter, CancellationToken)"/>.</summary>
+public sealed class AdapterOptions
+{
+    public required Func<IRosterEngine> RosterEngineFactory { get; init; }
+
+    /// <summary>Optional gamedata engine factory; when null, gamedata commands answer with an error.</summary>
+    public Func<GameData.IGameDataEngine>? GameDataEngineFactory { get; init; }
+
+    /// <summary>Engine identity reported by describe (e.g. "battlescribe").</summary>
+    public string Name { get; init; } = "unknown";
+
+    public string? Version { get; init; }
+
+    public AdapterCapabilities Capabilities { get; init; } = new();
+
+    /// <summary>Protocol v1.1 (optional): capture the engine UI as a PNG. Null → unsupported.</summary>
+    public Func<IRosterEngine, byte[]?>? ScreenshotProvider { get; init; }
+
+    /// <summary>Protocol v1.1 (optional): export the current roster as .ros XML. Null → unsupported.</summary>
+    public Func<IRosterEngine, string?>? RosterXmlExporter { get; init; }
+
+    /// <summary>Protocol v1.1 (optional): start recording UI actions. Null → unsupported.</summary>
+    public Action<IRosterEngine>? RecordStarter { get; init; }
+
+    /// <summary>Protocol v1.1 (optional): stop recording and return the recorded actions. Null → unsupported.</summary>
+    public Func<IRosterEngine, string?>? RecordStopper { get; init; }
+}
+
 /// <summary>
 /// Handles the adapter side of the JSON-line protocol.
 /// Reads commands from stdin, dispatches to an IRosterEngine, writes responses to stdout.
@@ -13,14 +41,27 @@ public static class AdapterHandler
     /// Run the adapter protocol loop, reading from input and writing to output.
     /// Handles multiple setup/teardown cycles.
     /// </summary>
-    public static async Task RunAsync(
+    public static Task RunAsync(
         Func<IRosterEngine> engineFactory,
         TextReader input,
         TextWriter output,
         CancellationToken ct = default)
+        => RunAsync(new AdapterOptions { RosterEngineFactory = engineFactory }, input, output, ct);
+
+    /// <summary>
+    /// Run the adapter protocol loop, reading from input and writing to output.
+    /// Handles multiple setup/teardown cycles.
+    /// </summary>
+    public static async Task RunAsync(
+        AdapterOptions options,
+        TextReader input,
+        TextWriter output,
+        CancellationToken ct = default)
     {
+        var engineFactory = options.RosterEngineFactory;
         IRosterEngine? engine = null;
         IReadOnlyList<string> catalogueIds = [];
+        GameData.IGameDataEngine? gdEngine = null;
 
         try
         {
@@ -43,7 +84,32 @@ public static class AdapterHandler
                         ActionCommand action => HandleAction(action, engine, catalogueIds),
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
-                        TeardownCommand => HandleTeardown(ref engine),
+                        TeardownCommand => HandleTeardown(ref engine, ref gdEngine),
+                        DescribeCommand => new DescribeResult
+                        {
+                            Name = options.Name,
+                            Version = options.Version,
+                            Domains = options.GameDataEngineFactory is null ? ["roster"] : ["roster", "gamedata"],
+                            Capabilities = options.Capabilities,
+                        },
+                        ScreenshotCommand => engine is not null && options.ScreenshotProvider?.Invoke(engine) is { } png
+                            ? new ScreenshotResult { PngBase64 = Convert.ToBase64String(png) }
+                            : new ProtocolError { Message = "screenshot is not supported by this adapter" },
+                        ExportRosterXmlCommand => engine is not null && options.RosterXmlExporter?.Invoke(engine) is { } xml
+                            ? new RosterXmlResult { Xml = xml }
+                            : new ProtocolError { Message = "exportRosterXml is not supported by this adapter" },
+                        RecordStartCommand => HandleRecordStart(options, engine),
+                        RecordStopCommand => engine is not null && options.RecordStopper is not null
+                            ? new RecordResult { ActionsJson = options.RecordStopper(engine) }
+                            : new ProtocolError { Message = "recordStop is not supported by this adapter" },
+                        GameDataSetupCommand gdSetup => HandleGameDataSetup(gdSetup, options, ref gdEngine),
+                        GameDataActionCommand gdAction => HandleGameDataAction(gdAction, gdEngine),
+                        GameDataGetStateCommand => gdEngine is null
+                            ? new ProtocolError { Message = "gamedata engine not initialized (call gamedataSetup first)" }
+                            : new GameDataStateResponse { State = gdEngine.GetState() },
+                        GameDataGetErrorsCommand => gdEngine is null
+                            ? new ProtocolError { Message = "gamedata engine not initialized (call gamedataSetup first)" }
+                            : new ErrorsResponse { Errors = [.. gdEngine.GetValidationErrors()] },
                         _ => new ProtocolError { Message = $"Unknown command: {line}" },
                     };
                 }
@@ -59,6 +125,7 @@ public static class AdapterHandler
         finally
         {
             engine?.Dispose();
+            gdEngine?.Dispose();
         }
     }
 
@@ -210,10 +277,113 @@ public static class AdapterHandler
         };
     }
 
-    private static ProtocolResponse HandleTeardown(ref IRosterEngine? engine)
+    private static ProtocolResponse HandleTeardown(ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
     {
         engine?.Dispose();
         engine = null;
+        gdEngine?.Dispose();
+        gdEngine = null;
         return new TeardownResult();
+    }
+
+    private static ProtocolResponse HandleRecordStart(AdapterOptions options, IRosterEngine? engine)
+    {
+        if (engine is null || options.RecordStarter is null)
+        {
+            return new ProtocolError { Message = "recordStart is not supported by this adapter" };
+        }
+
+        options.RecordStarter(engine);
+        return new ActionResult { Ok = true };
+    }
+
+    private static ProtocolResponse HandleGameDataSetup(
+        GameDataSetupCommand cmd, AdapterOptions options, ref GameData.IGameDataEngine? engine)
+    {
+        if (options.GameDataEngineFactory is null)
+        {
+            return new ProtocolError { Message = "gamedata domain is not supported by this adapter" };
+        }
+
+        engine?.Dispose();
+        engine = options.GameDataEngineFactory();
+        if (cmd.SpecId is { Length: > 0 })
+        {
+            engine.SetTestContext(cmd.SpecId);
+        }
+
+        var errors = engine.Setup(cmd.GameSystem, [.. cmd.Catalogues]);
+        return new SetupResult { Errors = [.. errors] };
+    }
+
+    private static ProtocolResponse HandleGameDataAction(GameDataActionCommand cmd, GameData.IGameDataEngine? engine)
+    {
+        if (engine is null)
+        {
+            return new GameDataActionResult { Ok = false, Error = "gamedata engine not initialized (call gamedataSetup first)" };
+        }
+
+        try
+        {
+            var result = new GameDataActionResult { Ok = true };
+            switch (cmd.Action)
+            {
+                case "openFile":
+                    engine.OpenFile(cmd.Id ?? throw new InvalidOperationException("openFile requires id"));
+                    break;
+                case "addEntry":
+                    result.EntryId = engine.AddEntry(
+                        cmd.ParentId ?? throw new InvalidOperationException("addEntry requires parentId"),
+                        cmd.EntryType ?? throw new InvalidOperationException("addEntry requires entryType"),
+                        cmd.Name,
+                        cmd.Id).EntryId;
+                    break;
+                case "addLink":
+                    result.EntryId = engine.AddLink(
+                        cmd.ParentId ?? throw new InvalidOperationException("addLink requires parentId"),
+                        cmd.LinkType ?? throw new InvalidOperationException("addLink requires linkType"),
+                        cmd.TargetId ?? throw new InvalidOperationException("addLink requires targetId"),
+                        cmd.Id).EntryId;
+                    break;
+                case "removeEntry":
+                    engine.RemoveEntry(cmd.EntryId ?? throw new InvalidOperationException("removeEntry requires entryId"));
+                    break;
+                case "setField":
+                    engine.SetField(
+                        cmd.EntryId ?? throw new InvalidOperationException("setField requires entryId"),
+                        cmd.Field ?? throw new InvalidOperationException("setField requires field"),
+                        cmd.Value);
+                    break;
+                case "setCost":
+                    engine.SetCost(
+                        cmd.EntryId ?? throw new InvalidOperationException("setCost requires entryId"),
+                        cmd.CostTypeId ?? throw new InvalidOperationException("setCost requires costTypeId"),
+                        cmd.Value);
+                    break;
+                case "setCharacteristic":
+                    engine.SetCharacteristic(
+                        cmd.EntryId ?? throw new InvalidOperationException("setCharacteristic requires entryId"),
+                        cmd.NameOrTypeId ?? throw new InvalidOperationException("setCharacteristic requires nameOrTypeId"),
+                        cmd.Value);
+                    break;
+                case "reload":
+                    engine.Reload();
+                    break;
+                case "exportFile":
+                    result.Xml = engine.ExportActiveFile();
+                    break;
+                case "loadFile":
+                    result.Id = engine.LoadFile(cmd.Xml ?? throw new InvalidOperationException("loadFile requires xml"));
+                    break;
+                default:
+                    return new GameDataActionResult { Ok = false, Error = $"Unknown gamedata action: {cmd.Action}" };
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return new GameDataActionResult { Ok = false, Error = ex.Message };
+        }
     }
 }

@@ -1,19 +1,19 @@
 using System.Text.Json.Serialization;
 
-namespace BattleScribeSpec.Runner;
+namespace BattleScribeSpec.Batch;
 
 /// <summary>
-/// Source-generated JSON context for Runner report output.
+/// Source-generated JSON context for spec-suite report output.
 /// </summary>
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(JsonRunReport))]
 [JsonSerializable(typeof(ConformanceReport))]
-internal partial class RunnerJsonContext : JsonSerializerContext;
+public partial class SuiteJsonContext : JsonSerializerContext;
 
 /// <summary>
 /// Typed model for the JSON output format (replaces anonymous type for AOT compatibility).
 /// </summary>
-internal sealed class JsonRunReport
+public sealed class JsonRunReport
 {
     [JsonPropertyName("engine")]
     public string? Engine { get; init; }
@@ -34,7 +34,7 @@ internal sealed class JsonRunReport
     public List<JsonSpecEntry> Specs { get; init; } = [];
 }
 
-internal sealed class JsonSpecEntry
+public sealed class JsonSpecEntry
 {
     [JsonPropertyName("id")]
     public string Id { get; init; } = "";
