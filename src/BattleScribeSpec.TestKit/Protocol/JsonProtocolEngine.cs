@@ -20,6 +20,12 @@ public sealed class JsonProtocolEngine : IRosterEngine
 
     public void SetTestContext(string specId) => _specId = specId;
 
+    /// <summary>
+    /// Configure the engine with game system and catalogue data. Sent with an explicit
+    /// 2-minute timeout (longer than the default 30s): engine construction happens
+    /// server-side during setup, and UI engines hosted by bs-engine-host do a Playwright
+    /// cold-start there, which can exceed the default window.
+    /// </summary>
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         var cmd = new SetupCommand
@@ -28,7 +34,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
             GameSystem = gameSystem,
             Catalogues = [.. catalogues],
         };
-        var response = SendCommand(cmd);
+        var response = SendCommand(cmd, TimeSpan.FromMinutes(2));
         return response switch
         {
             SetupResult sr => sr.Errors,

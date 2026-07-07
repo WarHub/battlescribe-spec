@@ -18,7 +18,16 @@ internal static class ProtocolBreakRepl
     /// a raw <c>{...}</c> JSON line (sent verbatim), <c>continue</c>/empty to resume,
     /// <c>quit</c> to abort.
     /// </summary>
-    public static bool Run(AdapterProcess connection, int stepIndex, string stepDescription)
+    /// <param name="connection">The adapter connection to speak the protocol over.</param>
+    /// <param name="stepIndex">Index of the step the run is paused before.</param>
+    /// <param name="stepDescription">Human-readable description of that step, for the prompt banner.</param>
+    /// <param name="requestTimeout">
+    /// Request timeout for the REPL's own <see cref="JsonProtocolEngine"/>. Pass the same
+    /// longer window used for setup (e.g. 5 minutes for dataSource specs) so REPL commands
+    /// against a slow-to-respond engine don't spuriously time out; defaults to the engine's
+    /// standard 30s timeout when null.
+    /// </param>
+    public static bool Run(AdapterProcess connection, int stepIndex, string stepDescription, TimeSpan? requestTimeout = null)
     {
         Ui.Blank();
         Ui.Rule($"Stopped before step {stepIndex}: {stepDescription}");
@@ -27,7 +36,7 @@ internal static class ProtocolBreakRepl
         // One adapter connection, used sequentially. This engine is deliberately never
         // disposed here: JsonProtocolEngine.Dispose sends a teardown that would kill the
         // adapter mid-run — the owning process controls the connection's lifetime.
-        var engine = new JsonProtocolEngine(connection);
+        var engine = new JsonProtocolEngine(connection, requestTimeout);
 
         Console.Error.Write("> ");
         while (Console.In.ReadLine() is { } line)

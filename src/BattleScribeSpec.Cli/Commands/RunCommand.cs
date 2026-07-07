@@ -237,14 +237,24 @@ internal static class RunCommand
                 }
             };
 
+            var aborted = false;
             if (options.BreakAt is { } breakStep)
             {
+                // Give the REPL's own engine the same longer timeout as setup when the spec
+                // has a dataSource (mirrors JsonProtocolEngine's ctor above), else the default.
+                var replTimeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
                 runner.OnBeforeStep = (stepIndex, step) =>
                 {
                     if (stepIndex == breakStep)
                     {
                         // Returns false when the user types `quit`, which aborts the run.
-                        return ProtocolBreakRepl.Run(process, stepIndex, StepFormatter.DescribeStep(step));
+                        var resume = ProtocolBreakRepl.Run(process, stepIndex, StepFormatter.DescribeStep(step), replTimeout);
+                        if (!resume)
+                        {
+                            aborted = true;
+                        }
+
+                        return resume;
                     }
 
                     return true;
@@ -287,7 +297,23 @@ internal static class RunCommand
                 }
             }
 
+            // Artifact finalization (timeline write, like the recording stop above) happens
+            // regardless of abort: it reflects whatever steps actually ran before `quit`, and
+            // the engine process is still alive (never disposed on the REPL's abort path), so
+            // there's nothing stopping us from writing out what was captured so far.
+            if (timeline is not null && options.TimelinePath is not null)
+            {
+                timeline.Write(options.TimelinePath, result.Failures.Count == 0, result.Failures);
+                Ui.Info($"Timeline report: {options.TimelinePath}");
+            }
+
             Ui.Blank();
+            if (aborted)
+            {
+                Ui.Warn($"Run aborted at step {options.BreakAt} (quit).");
+                return 130;
+            }
+
             if (result.Failures.Count == 0)
             {
                 Ui.Pass("PASS — all assertions passed");
@@ -301,12 +327,6 @@ internal static class RunCommand
                 }
 
                 ReportDiagnosticDumps();
-            }
-
-            if (timeline is not null && options.TimelinePath is not null)
-            {
-                timeline.Write(options.TimelinePath, result.Failures.Count == 0, result.Failures);
-                Ui.Info($"Timeline report: {options.TimelinePath}");
             }
 
             if (options.Headed && options.Engine.EngineName == "newrecruit-ui")
