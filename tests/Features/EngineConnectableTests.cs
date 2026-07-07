@@ -56,6 +56,8 @@ public sealed class EngineConnectableTests
     [InlineData("wham=")]
     [InlineData("wham=notascheme")]
     [InlineData("not a name")]
+    [InlineData("wham=exec:")]
+    [InlineData("wham=dotnet:")]
     public void Invalid_Throws(string input)
         => Assert.Throws<FormatException>(() => EngineConnectable.Parse(input));
 
@@ -65,5 +67,25 @@ public sealed class EngineConnectableTests
         var connectable = EngineConnectable.Parse("exec:node app.js --mode=fast");
         Assert.Equal("node", connectable.Executable);
         Assert.Equal("app.js --mode=fast", connectable.Arguments);
+    }
+
+    [Fact]
+    public void EmptyExec_MessageContainsFullInput()
+    {
+        var ex = Assert.Throws<FormatException>(() => EngineConnectable.Parse("wham=exec:"));
+        Assert.Contains("wham=exec:", ex.Message);
+    }
+
+    [Fact]
+    public void EmptyDotnet_MessageContainsFullInput()
+    {
+        var ex = Assert.Throws<FormatException>(() => EngineConnectable.Parse("wham=dotnet:"));
+        Assert.Contains("wham=dotnet:", ex.Message);
+    }
+
+    [Fact]
+    public void NameWithNewline_Throws()
+    {
+        Assert.Throws<FormatException>(() => EngineConnectable.Parse("wham\n"));
     }
 }

@@ -13,7 +13,7 @@ public sealed partial record EngineConnectable(string? Name, string? Executable,
     /// <summary>True when this connectable carries its own launch command.</summary>
     public bool IsLaunchable => Executable is not null;
 
-    [GeneratedRegex("^[a-zA-Z0-9][a-zA-Z0-9._-]*$")]
+    [GeneratedRegex(@"\A[a-zA-Z0-9][a-zA-Z0-9._-]*\z")]
     private static partial Regex NamePattern();
 
     public static EngineConnectable Parse(string input)
@@ -27,7 +27,7 @@ public sealed partial record EngineConnectable(string? Name, string? Executable,
         var eq = input.IndexOf('=');
         if (eq > 0 && NamePattern().IsMatch(input[..eq]))
         {
-            if (ParseLaunch(input[(eq + 1)..]) is not { } launch)
+            if (ParseLaunch(input[(eq + 1)..], input) is not { } launch)
             {
                 throw new FormatException(
                     $"Invalid engine connectable '{input}': expected <name>=exec:<command> or <name>=dotnet:<dll>.");
@@ -36,7 +36,7 @@ public sealed partial record EngineConnectable(string? Name, string? Executable,
             return launch with { Name = input[..eq] };
         }
 
-        if (ParseLaunch(input) is { } anonymous)
+        if (ParseLaunch(input, input) is { } anonymous)
         {
             return anonymous;
         }
@@ -50,14 +50,14 @@ public sealed partial record EngineConnectable(string? Name, string? Executable,
             $"Invalid engine connectable '{input}': expected an engine name, exec:<command>, dotnet:<dll>, or <name>=<connectable>.");
     }
 
-    private static EngineConnectable? ParseLaunch(string input)
+    private static EngineConnectable? ParseLaunch(string input, string original)
     {
         if (input.StartsWith("exec:", StringComparison.Ordinal))
         {
             var command = input[5..].Trim();
             if (command.Length == 0)
             {
-                throw new FormatException("exec: connectable requires a command.");
+                throw new FormatException($"Invalid engine connectable '{original}': exec: requires a command.");
             }
 
             var space = command.IndexOf(' ');
@@ -71,7 +71,7 @@ public sealed partial record EngineConnectable(string? Name, string? Executable,
             var dll = input[7..].Trim();
             if (dll.Length == 0)
             {
-                throw new FormatException("dotnet: connectable requires a dll path.");
+                throw new FormatException($"Invalid engine connectable '{original}': dotnet: requires a dll path.");
             }
 
             return new EngineConnectable(null, "dotnet", dll);
