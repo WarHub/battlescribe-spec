@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.XmlGen\BattleScribeSpec.XmlGen.csproj" />
   </ItemGroup>
 
 </Project>

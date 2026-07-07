@@ -2,26 +2,11 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
-      "battlescribespec.bsrosteruidriver": {
-        "type": "Project",
-        "dependencies": {
-          "BattleScribeSpec.TestKit": "[1.0.0, )",
-          "BattleScribeSpec.XmlGen": "[1.0.0, )"
-        }
-      },
       "battlescribespec.testkit": {
         "type": "Project",
         "dependencies": {
           "Vecc.YamlDotNet.Analyzers.StaticGenerator": "[18.1.0, )",
           "YamlDotNet": "[18.1.0, )"
-        }
-      },
-      "battlescribespec.xmlgen": {
-        "type": "Project",
-        "dependencies": {
-          "BattleScribeSpec.TestKit": "[1.0.0, )",
-          "WarHub.ArmouryModel.Source": "[1.0.0, )",
-          "WarHub.ArmouryModel.Source.BattleScribe": "[1.0.0, )"
         }
       },
       "warhub.armourymodel.source": {

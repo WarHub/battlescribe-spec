@@ -5,7 +5,7 @@ using WarHub.ArmouryModel.Source;
 using WarHub.ArmouryModel.Source.BattleScribe;
 using static WarHub.ArmouryModel.Source.NodeFactory;
 
-namespace BattleScribeSpec.NewRecruit;
+namespace BattleScribeSpec.XmlGen;
 
 public static class CatXmlGenerator
 {

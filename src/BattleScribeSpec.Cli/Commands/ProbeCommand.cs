@@ -5,6 +5,7 @@ using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.NrGameDataUiDriver;
 using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.XmlGen;
 
 namespace BattleScribeSpec.Cli;
 

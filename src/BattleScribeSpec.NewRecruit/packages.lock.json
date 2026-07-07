@@ -29,6 +29,14 @@
           "YamlDotNet": "[18.1.0, )"
         }
       },
+      "battlescribespec.xmlgen": {
+        "type": "Project",
+        "dependencies": {
+          "BattleScribeSpec.TestKit": "[1.0.0, )",
+          "WarHub.ArmouryModel.Source": "[1.0.0, )",
+          "WarHub.ArmouryModel.Source.BattleScribe": "[1.0.0, )"
+        }
+      },
       "warhub.armourymodel.source": {
         "type": "Project"
       },

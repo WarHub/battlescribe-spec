@@ -1,6 +1,6 @@
-using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.XmlGen;
 
 namespace BattleScribeSpec.Tests;
 

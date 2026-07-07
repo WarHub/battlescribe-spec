@@ -99,8 +99,8 @@ internal static class DiscoverCommand
         // Also emit the raw CatXmlGenerator input (what we feed NR) so it can be diffed against NR's
         // re-serialized output below — the diff reveals NR's load-time normalizations.
         await File.WriteAllTextAsync(Path.Combine(dir, $"generated-{gs.Id}.gst"),
-            BattleScribeSpec.NewRecruit.CatXmlGenerator.GenerateGameSystemXml(gs));
-        foreach (var (fileName, xml) in BattleScribeSpec.NewRecruit.CatXmlGenerator.GenerateAllCatalogueXml(gs, cats))
+            BattleScribeSpec.XmlGen.CatXmlGenerator.GenerateGameSystemXml(gs));
+        foreach (var (fileName, xml) in BattleScribeSpec.XmlGen.CatXmlGenerator.GenerateAllCatalogueXml(gs, cats))
         {
             await File.WriteAllTextAsync(Path.Combine(dir, $"generated-{fileName}"), xml);
         }

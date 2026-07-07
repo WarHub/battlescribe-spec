@@ -1,6 +1,6 @@
 using BattleScribeSpec.BsRosterUiDriver;
-using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.XmlGen;
 
 namespace BattleScribeSpec.BsGameDataUiDriver;
 
