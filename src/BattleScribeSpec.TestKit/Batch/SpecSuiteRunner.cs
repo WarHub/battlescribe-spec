@@ -60,7 +60,6 @@ public static class SpecSuiteRunner
         var results = new List<SpecResult>();
         var reportResults = new List<SpecResultSummary>();
         var specsByResult = new Dictionary<SpecResult, SpecFile>();
-        var skipped = 0;
         var sw = Stopwatch.StartNew();
 
         IEnumerable<(string IdForLoad, string Id, string Category, Func<SpecFile> Loader)> specSources;
@@ -82,7 +81,6 @@ public static class SpecSuiteRunner
 
             if (filterPatterns is not null && !filterPatterns.Any(p => specName.Contains(p, StringComparison.OrdinalIgnoreCase)))
             {
-                skipped++;
                 reportResults.Add(new SpecResultSummary(id, category, "", "skipped", [$"Skipped by filter '{filterLabel}'"]));
                 continue;
             }
@@ -102,7 +100,6 @@ public static class SpecSuiteRunner
 
             if (tagFilter is not null && !tagFilter.Matches(spec.Tags))
             {
-                skipped++;
                 reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
                     [$"Skipped by tag filter '{tagFilter}'"], spec.Tags));
                 continue;
@@ -110,7 +107,6 @@ public static class SpecSuiteRunner
 
             if (engineFilter is not null && !spec.IsApplicableTo(engineFilter))
             {
-                skipped++;
                 reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
                     [$"Skipped by engine filter '{engineFilter}'"], spec.Tags));
                 continue;

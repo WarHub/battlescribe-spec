@@ -471,8 +471,9 @@ NewRecruit Editor drivers (`newrecruit` store-direct and `newrecruit-ui`, both v
 protocol **v1.1**, the interface is also fully carried over the roster NDJSON wire via four commands —
 `gamedataSetup`, `gamedataAction`, `gamedataGetState`, `gamedataGetErrors` — so an **external**
 adapter process can serve the gamedata domain alongside (or instead of) roster, advertised via
-`describeResult.domains`. Adapters that don't support gamedata simply omit it from `domains`; every
-gamedata command then answers with an `error` response. The BattleScribe Data Editor (`battlescribe-ui`)
+`describeResult.domains`. Adapters that don't support gamedata simply omit it from `domains`; then
+`gamedataSetup`, `gamedataGetState`, and `gamedataGetErrors` answer with an `error` response, and
+`gamedataAction` answers `gamedataActionResult` with `ok:false` and an `error` message. The BattleScribe Data Editor (`battlescribe-ui`)
 additionally exposes a JSON-RPC 2.0 wire (below), but that is the Java agent's own internal transport —
 externally it is driven the same way as any other engine, through the four commands above.
 
@@ -496,8 +497,9 @@ externally it is driven the same way as any other engine, through the four comma
 
 `JsonProtocolGameDataEngine` maps `IGameDataEngine` 1:1 onto these four NDJSON commands (the
 `AdapterHandler` counterpart dispatches them to an `AdapterOptions.GameDataEngineFactory`, mirroring
-`setup`/`action`/`getState`/`getErrors` for roster). An adapter without a gamedata engine answers all
-four with `error`.
+`setup`/`action`/`getState`/`getErrors` for roster). An adapter without a gamedata engine answers
+`gamedataSetup`, `gamedataGetState`, and `gamedataGetErrors` with `error`; `gamedataAction` answers
+`gamedataActionResult` with `ok:false` and an `error` message.
 
 #### `gamedataSetup`
 
@@ -536,7 +538,7 @@ with `error`.
 
 ```json
 {"type":"gamedataGetState"}
-{"type":"gamedataState","state":{"gameSystem":null,"catalogues":[{"id":"cat-1","name":"Cat","gameSystemId":"gs","selectionEntries":[{"id":"se-new","name":"Renamed Unit","entryType":"selectionEntry","children":[]}]}]}}
+{"type":"gamedataState","state":{"catalogues":[{"id":"cat-1","name":"Cat","gameSystemId":"gs","selectionEntries":[{"id":"se-new","name":"Renamed Unit","entryType":"selectionEntry","children":[]}]}]}}
 ```
 
 #### `gamedataGetErrors`
