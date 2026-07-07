@@ -61,6 +61,7 @@ public static class AdapterHandler
         var engineFactory = options.RosterEngineFactory;
         IRosterEngine? engine = null;
         IReadOnlyList<string> catalogueIds = [];
+        GameData.IGameDataEngine? gdEngine = null;
 
         try
         {
@@ -83,7 +84,7 @@ public static class AdapterHandler
                         ActionCommand action => HandleAction(action, engine, catalogueIds),
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
-                        TeardownCommand => HandleTeardown(ref engine),
+                        TeardownCommand => HandleTeardown(ref engine, ref gdEngine),
                         DescribeCommand => new DescribeResult
                         {
                             Name = options.Name,
@@ -101,6 +102,14 @@ public static class AdapterHandler
                         RecordStopCommand => engine is not null && options.RecordStopper is not null
                             ? new RecordResult { ActionsJson = options.RecordStopper(engine) }
                             : new ProtocolError { Message = "recordStop is not supported by this adapter" },
+                        GameDataSetupCommand gdSetup => HandleGameDataSetup(gdSetup, options, ref gdEngine),
+                        GameDataActionCommand gdAction => HandleGameDataAction(gdAction, gdEngine),
+                        GameDataGetStateCommand => gdEngine is null
+                            ? new ProtocolError { Message = "gamedata engine not initialized (call gamedataSetup first)" }
+                            : new GameDataStateResponse { State = gdEngine.GetState() },
+                        GameDataGetErrorsCommand => gdEngine is null
+                            ? new ProtocolError { Message = "gamedata engine not initialized (call gamedataSetup first)" }
+                            : new ErrorsResponse { Errors = [.. gdEngine.GetValidationErrors()] },
                         _ => new ProtocolError { Message = $"Unknown command: {line}" },
                     };
                 }
@@ -116,6 +125,7 @@ public static class AdapterHandler
         finally
         {
             engine?.Dispose();
+            gdEngine?.Dispose();
         }
     }
 
@@ -267,10 +277,12 @@ public static class AdapterHandler
         };
     }
 
-    private static ProtocolResponse HandleTeardown(ref IRosterEngine? engine)
+    private static ProtocolResponse HandleTeardown(ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
     {
         engine?.Dispose();
         engine = null;
+        gdEngine?.Dispose();
+        gdEngine = null;
         return new TeardownResult();
     }
 
@@ -283,5 +295,95 @@ public static class AdapterHandler
 
         options.RecordStarter(engine);
         return new ActionResult { Ok = true };
+    }
+
+    private static ProtocolResponse HandleGameDataSetup(
+        GameDataSetupCommand cmd, AdapterOptions options, ref GameData.IGameDataEngine? engine)
+    {
+        if (options.GameDataEngineFactory is null)
+        {
+            return new ProtocolError { Message = "gamedata domain is not supported by this adapter" };
+        }
+
+        engine?.Dispose();
+        engine = options.GameDataEngineFactory();
+        if (cmd.SpecId is { Length: > 0 })
+        {
+            engine.SetTestContext(cmd.SpecId);
+        }
+
+        var errors = engine.Setup(cmd.GameSystem, [.. cmd.Catalogues]);
+        return new SetupResult { Errors = [.. errors] };
+    }
+
+    private static ProtocolResponse HandleGameDataAction(GameDataActionCommand cmd, GameData.IGameDataEngine? engine)
+    {
+        if (engine is null)
+        {
+            return new GameDataActionResult { Ok = false, Error = "gamedata engine not initialized (call gamedataSetup first)" };
+        }
+
+        try
+        {
+            var result = new GameDataActionResult { Ok = true };
+            switch (cmd.Action)
+            {
+                case "openFile":
+                    engine.OpenFile(cmd.Id ?? throw new InvalidOperationException("openFile requires id"));
+                    break;
+                case "addEntry":
+                    result.EntryId = engine.AddEntry(
+                        cmd.ParentId ?? throw new InvalidOperationException("addEntry requires parentId"),
+                        cmd.EntryType ?? throw new InvalidOperationException("addEntry requires entryType"),
+                        cmd.Name,
+                        cmd.Id).EntryId;
+                    break;
+                case "addLink":
+                    result.EntryId = engine.AddLink(
+                        cmd.ParentId ?? throw new InvalidOperationException("addLink requires parentId"),
+                        cmd.LinkType ?? throw new InvalidOperationException("addLink requires linkType"),
+                        cmd.TargetId ?? throw new InvalidOperationException("addLink requires targetId"),
+                        cmd.Id).EntryId;
+                    break;
+                case "removeEntry":
+                    engine.RemoveEntry(cmd.EntryId ?? throw new InvalidOperationException("removeEntry requires entryId"));
+                    break;
+                case "setField":
+                    engine.SetField(
+                        cmd.EntryId ?? throw new InvalidOperationException("setField requires entryId"),
+                        cmd.Field ?? throw new InvalidOperationException("setField requires field"),
+                        cmd.Value);
+                    break;
+                case "setCost":
+                    engine.SetCost(
+                        cmd.EntryId ?? throw new InvalidOperationException("setCost requires entryId"),
+                        cmd.CostTypeId ?? throw new InvalidOperationException("setCost requires costTypeId"),
+                        cmd.Value);
+                    break;
+                case "setCharacteristic":
+                    engine.SetCharacteristic(
+                        cmd.EntryId ?? throw new InvalidOperationException("setCharacteristic requires entryId"),
+                        cmd.NameOrTypeId ?? throw new InvalidOperationException("setCharacteristic requires nameOrTypeId"),
+                        cmd.Value);
+                    break;
+                case "reload":
+                    engine.Reload();
+                    break;
+                case "exportFile":
+                    result.Xml = engine.ExportActiveFile();
+                    break;
+                case "loadFile":
+                    result.Id = engine.LoadFile(cmd.Xml ?? throw new InvalidOperationException("loadFile requires xml"));
+                    break;
+                default:
+                    return new GameDataActionResult { Ok = false, Error = $"Unknown gamedata action: {cmd.Action}" };
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return new GameDataActionResult { Ok = false, Error = ex.Message };
+        }
     }
 }

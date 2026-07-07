@@ -18,6 +18,7 @@ await AdapterHandler.RunAsync(
     new AdapterOptions
     {
         RosterEngineFactory = () => new BattleScribeRosterEngine(),
+        GameDataEngineFactory = () => new BattleScribeGameDataEngine(),
         Name = "battlescribe",
         Version = typeof(BattleScribeRosterEngine).Assembly.GetName().Version?.ToString(),
     },
