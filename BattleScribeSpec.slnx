@@ -12,6 +12,7 @@
     <Project Path="src/BattleScribeSpec.NrRosterUiDriver/BattleScribeSpec.NrRosterUiDriver.csproj" />
     <Project Path="src/BattleScribeSpec.NrGameDataUiDriver/BattleScribeSpec.NrGameDataUiDriver.csproj" />
     <Project Path="src/BattleScribeSpec.BsGameDataUiDriver/BattleScribeSpec.BsGameDataUiDriver.csproj" />
+    <Project Path="src/BattleScribeSpec.EngineHost/BattleScribeSpec.EngineHost.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BattleScribeSpec.Tests.csproj" />

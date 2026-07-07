@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BattleScribeSpec.EngineHost</RootNamespace>
+    <AssemblyName>bs-engine-host</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BattleScribeSpec.BattleScribe\BattleScribeSpec.BattleScribe.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.BsGameDataUiDriver\BattleScribeSpec.BsGameDataUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.BsRosterUiDriver\BattleScribeSpec.BsRosterUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.NrGameDataUiDriver\BattleScribeSpec.NrGameDataUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.NrRosterUiDriver\BattleScribeSpec.NrRosterUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.XmlGen\BattleScribeSpec.XmlGen.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
+    <PropertyGroup>
+      <_BattleScribeBinPath>$(ArtifactsPath)\bin\BattleScribeSpec.BattleScribe\$(ArtifactsPivots)\</_BattleScribeBinPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <IkvmDlls Include="$(_BattleScribeBinPath)DataUtils.dll;$(_BattleScribeBinPath)CommonsIo.dll;$(_BattleScribeBinPath)KotlinStdlib.dll;$(_BattleScribeBinPath)KotlinStdlibCommon.dll;$(_BattleScribeBinPath)Stax.dll;$(_BattleScribeBinPath)StaxApi.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

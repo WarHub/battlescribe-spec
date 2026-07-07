@@ -1,0 +1,77 @@
+using System.CommandLine;
+using System.Text.Json;
+using BattleScribeSpec.BsRosterUiDriver;
+using BattleScribeSpec.NrRosterUiDriver;
+using BattleScribeSpec.Protocol;
+
+namespace BattleScribeSpec.EngineHost;
+
+/// <summary>
+/// <c>bs-engine-host serve --engine X</c> — expose a built-in engine over the NDJSON
+/// adapter protocol on stdio. One engine identity per process; the runner side pools
+/// processes for parallelism.
+/// </summary>
+internal static class ServeCommand
+{
+    public static Command Create()
+    {
+        var engine = new Option<string>("--engine")
+        {
+            Description = "Built-in engine: battlescribe, battlescribe-ui, newrecruit, newrecruit-ui.",
+            Required = true,
+        };
+        var headed = new Option<bool>("--headed") { Description = "Show the browser/app window." };
+        var keepAlive = new Option<bool>("--keep-alive") { Description = "Keep the BattleScribe app alive between runs (battlescribe-ui)." };
+
+        var command = new Command("serve", "Serve a built-in engine over the NDJSON adapter protocol on stdio.");
+        command.Options.Add(engine);
+        command.Options.Add(headed);
+        command.Options.Add(keepAlive);
+
+        command.SetAction(async (parseResult, ct) =>
+        {
+            var name = parseResult.GetValue(engine)!;
+            var headless = !parseResult.GetValue(headed);
+            var keep = parseResult.GetValue(keepAlive);
+
+            await AdapterHandler.RunAsync(BuildOptions(name, headless, keep), Console.In, Console.Out, ct);
+            return 0;
+        });
+
+        return command;
+    }
+
+    internal static AdapterOptions BuildOptions(string name, bool headless, bool keepAlive) => new()
+    {
+        Name = name,
+        Version = typeof(ServeCommand).Assembly.GetName().Version?.ToString(),
+        RosterEngineFactory = () =>
+            HostEngineFactory.CreateRosterEngineAsync(name, headless, keepAlive).GetAwaiter().GetResult(),
+        GameDataEngineFactory = () =>
+            HostEngineFactory.CreateGameDataEngineAsync(name, headless).GetAwaiter().GetResult(),
+        Capabilities = new AdapterCapabilities
+        {
+            Screenshot = name is "battlescribe-ui" or "newrecruit-ui",
+            Record = name is "battlescribe-ui",
+            RosterXml = name is "battlescribe-ui",
+            MaxParallel = name is "battlescribe-ui" ? 1 : 0,
+        },
+        ScreenshotProvider = e => e switch
+        {
+            BsUiRosterEngine bs => bs.CaptureScreenshotAsync().GetAwaiter().GetResult(),
+            NrRosterUiEngine nr => nr.CaptureScreenshotAsync().GetAwaiter().GetResult(),
+            _ => null,
+        },
+        RosterXmlExporter = e => e is BsUiRosterEngine bs ? bs.ExportRosterXmlAsync().GetAwaiter().GetResult() : null,
+        RecordStarter = e =>
+        {
+            if (e is BsUiRosterEngine bs)
+            {
+                bs.StartRecordingAsync().GetAwaiter().GetResult();
+            }
+        },
+        RecordStopper = e => e is BsUiRosterEngine bs
+            ? bs.StopRecordingAsync().GetAwaiter().GetResult()?.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
+            : null,
+    };
+}
