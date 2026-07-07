@@ -33,18 +33,19 @@ internal static class ProbeCommand
             try
             {
                 var engine = engineOptions.Resolve(parseResult, specInput);
-                if (!engine.Ui)
+                if (engine.EngineName is not { } engineName || !engineName.EndsWith("-ui", StringComparison.Ordinal))
                 {
                     Ui.Error("probe requires --ui (it inspects the real desktop/browser app).");
                     return Task.FromResult(1);
                 }
 
-                return (engine.Product, engine.Domain) switch
+                return (engineName, engine.Domain) switch
                 {
-                    (EngineProduct.Battlescribe, EngineDomain.Roster) => ProbeBsRosterAsync(specInput),
-                    (EngineProduct.Newrecruit, EngineDomain.Roster) => ProbeNrRosterAsync(specInput),
-                    (EngineProduct.Battlescribe, EngineDomain.Gamedata) => ProbeBsGameDataAsync(specInput),
-                    _ => ProbeNrGameDataAsync(specInput),
+                    ("battlescribe-ui", EngineDomain.Roster) => ProbeBsRosterAsync(specInput),
+                    ("newrecruit-ui", EngineDomain.Roster) => ProbeNrRosterAsync(specInput),
+                    ("battlescribe-ui", EngineDomain.Gamedata) => ProbeBsGameDataAsync(specInput),
+                    ("newrecruit-ui", EngineDomain.Gamedata) => ProbeNrGameDataAsync(specInput),
+                    _ => ProbeUnsupportedEngine(engineName),
                 };
             }
             catch (CliInputException ex)
@@ -55,6 +56,12 @@ internal static class ProbeCommand
         });
 
         return command;
+    }
+
+    private static Task<int> ProbeUnsupportedEngine(string engineName)
+    {
+        Ui.Error($"probe does not support engine '{engineName}' yet.");
+        return Task.FromResult(1);
     }
 
     private static async Task<int> ProbeBsRosterAsync(string specInput)

@@ -16,7 +16,7 @@ internal static class RunCommand
 {
     private sealed record RunOptions(
         string Spec,
-        EngineSpec Engine,
+        EngineSelection Engine,
         OutputFormat Format,
         bool Headed,
         bool AllSteps,
@@ -83,9 +83,10 @@ internal static class RunCommand
         command.SetAction((parseResult, _) =>
         {
             var specInput = parseResult.GetValue(spec)!;
+            var keepAliveValue = parseResult.GetValue(keepAlive);
             var options = new RunOptions(
                 Spec: specInput,
-                Engine: engineOptions.Resolve(parseResult, specInput),
+                Engine: engineOptions.Resolve(parseResult, specInput) with { KeepAlive = keepAliveValue },
                 Format: parseResult.GetValue(json) ? OutputFormat.Json : parseResult.GetValue(output),
                 Headed: parseResult.GetValue(engineOptions.Headed),
                 AllSteps: parseResult.GetValue(allSteps),
@@ -134,7 +135,7 @@ internal static class RunCommand
         IRosterEngine engine;
         try
         {
-            engine = await EngineFactory.CreateRosterEngineAsync(options.Engine.EngineName, options.Headless, options.KeepAlive);
+            engine = await EngineFactory.CreateRosterEngineAsync(options.Engine.EngineName!, options.Headless, options.KeepAlive);
         }
         catch (Exception ex)
         {
@@ -306,7 +307,7 @@ internal static class RunCommand
             return 1;
         }
 
-        var engineName = options.Engine.EngineName;
+        var engineName = options.Engine.EngineName!;
         if (!spec.IsApplicableTo(engineName))
         {
             Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{engineName}' (skipped).");
@@ -368,7 +369,7 @@ internal static class RunCommand
     }
 
     /// <summary>Disable an artifact option the engine can't support, warning once.</summary>
-    private static string? Gate(string? value, bool supported, EngineSpec engine, string flag)
+    private static string? Gate(string? value, bool supported, EngineSelection engine, string flag)
     {
         if (value is null || supported)
         {

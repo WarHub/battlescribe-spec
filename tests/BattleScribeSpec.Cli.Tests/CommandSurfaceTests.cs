@@ -77,9 +77,18 @@ public sealed class CommandSurfaceTests
     }
 
     [Fact]
-    public void Run_RejectsInvalidEngineProduct()
+    public void Run_AcceptsAnyEngineStringAtParseTime()
     {
-        Assert.NotEmpty(Parse("run", "spec", "--engine", "warscroll").Errors);
+        // --engine is a free-form string (name/connectable/engines.json entry); unknown
+        // names are a runtime CliInputException from EngineOptions.Resolve, not a parse error.
+        Assert.Empty(Parse("run", "spec", "--engine", "warscroll").Errors);
+    }
+
+    [Fact]
+    public async Task Run_RejectsUnknownEngineNameAtRuntime()
+    {
+        var exitCode = await Program.RunAsync("run", "spec", "--engine", "warscroll");
+        Assert.NotEqual(0, exitCode);
     }
 
     [Theory]
