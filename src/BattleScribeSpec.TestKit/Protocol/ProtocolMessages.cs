@@ -25,6 +25,10 @@ namespace BattleScribeSpec.Protocol;
 [JsonDerivedType(typeof(ExportRosterXmlCommand), "exportRosterXml")]
 [JsonDerivedType(typeof(RecordStartCommand), "recordStart")]
 [JsonDerivedType(typeof(RecordStopCommand), "recordStop")]
+[JsonDerivedType(typeof(GameDataSetupCommand), "gamedataSetup")]
+[JsonDerivedType(typeof(GameDataActionCommand), "gamedataAction")]
+[JsonDerivedType(typeof(GameDataGetStateCommand), "gamedataGetState")]
+[JsonDerivedType(typeof(GameDataGetErrorsCommand), "gamedataGetErrors")]
 public abstract class ProtocolCommand
 {
     [JsonIgnore]
@@ -42,6 +46,8 @@ public abstract class ProtocolCommand
 [JsonDerivedType(typeof(ScreenshotResult), "screenshotResult")]
 [JsonDerivedType(typeof(RosterXmlResult), "rosterXmlResult")]
 [JsonDerivedType(typeof(RecordResult), "recordResult")]
+[JsonDerivedType(typeof(GameDataActionResult), "gamedataActionResult")]
+[JsonDerivedType(typeof(GameDataStateResponse), "gamedataState")]
 public abstract class ProtocolResponse
 {
     [JsonIgnore]
@@ -955,6 +961,102 @@ public sealed class ProtocolPublication
     public string? PublicationDate { get; set; }
 
     public string? PublisherUrl { get; set; }
+}
+
+// ===== GameData protocol (v1.1) =====
+
+/// <summary>
+/// Protocol v1.1: initialize a gamedata (data-file editing) engine. The payload shapes
+/// match roster <see cref="SetupCommand"/>, but the data IS the editable artifact.
+/// </summary>
+public sealed class GameDataSetupCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "gamedataSetup";
+
+    public string? SpecId { get; set; }
+
+    public ProtocolGameSystem GameSystem { get; set; } = new();
+
+    public List<ProtocolCatalogue> Catalogues { get; set; } = [];
+}
+
+/// <summary>
+/// Protocol v1.1: execute a data-editing action. Modeled 1:1 on the IGameDataEngine
+/// operation table in docs/adapter-protocol.md.
+/// </summary>
+public sealed class GameDataActionCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "gamedataAction";
+
+    /// <summary>openFile|addEntry|addLink|removeEntry|setField|setCost|setCharacteristic|reload|exportFile|loadFile.</summary>
+    public string Action { get; set; } = "";
+
+    /// <summary>openFile target id, or the declared id for addEntry/addLink.</summary>
+    public string? Id { get; set; }
+
+    public string? ParentId { get; set; }
+
+    public string? EntryType { get; set; }
+
+    public string? Name { get; set; }
+
+    public string? EntryId { get; set; }
+
+    public string? Field { get; set; }
+
+    public string? Value { get; set; }
+
+    public string? TargetId { get; set; }
+
+    public string? LinkType { get; set; }
+
+    public string? CostTypeId { get; set; }
+
+    public string? NameOrTypeId { get; set; }
+
+    /// <summary>loadFile: the BattleScribe XML payload.</summary>
+    public string? Xml { get; set; }
+}
+
+public sealed class GameDataGetStateCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "gamedataGetState";
+}
+
+public sealed class GameDataGetErrorsCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "gamedataGetErrors";
+}
+
+public sealed class GameDataActionResult : ProtocolResponse
+{
+    [JsonIgnore]
+    public override string Type => "gamedataActionResult";
+
+    public bool Ok { get; set; }
+
+    public string? Error { get; set; }
+
+    /// <summary>Created entry/link id (addEntry, addLink).</summary>
+    public string? EntryId { get; set; }
+
+    /// <summary>Exported XML (exportFile).</summary>
+    public string? Xml { get; set; }
+
+    /// <summary>Loaded file root id (loadFile).</summary>
+    public string? Id { get; set; }
+}
+
+public sealed class GameDataStateResponse : ProtocolResponse
+{
+    [JsonIgnore]
+    public override string Type => "gamedataState";
+
+    public GameData.GameDataState State { get; set; } = new();
 }
 
 // ===== Serialization helpers =====

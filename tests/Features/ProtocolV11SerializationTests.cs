@@ -70,4 +70,52 @@ public sealed class ProtocolV11SerializationTests
         Assert.IsType<RecordResult>(ProtocolSerializer.DeserializeResponse(
             """{"type":"recordResult","actionsJson":"[]"}"""));
     }
+
+    [Fact]
+    public void GameDataSetup_RoundTrips()
+    {
+        var json = ProtocolSerializer.SerializeCommand(new GameDataSetupCommand
+        {
+            SpecId = "spec-1",
+            GameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" },
+            Catalogues = [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "gs" }],
+        });
+        Assert.Contains("\"type\":\"gamedataSetup\"", json);
+
+        var parsed = Assert.IsType<GameDataSetupCommand>(ProtocolSerializer.DeserializeCommand(json));
+        Assert.Equal("cat-1", Assert.Single(parsed.Catalogues).Id);
+    }
+
+    [Fact]
+    public void GameDataAction_RoundTrips()
+    {
+        var json = ProtocolSerializer.SerializeCommand(new GameDataActionCommand
+        {
+            Action = "addEntry",
+            ParentId = "cat-1",
+            EntryType = "selectionEntry",
+            Name = "Unit",
+            Id = "declared-id",
+        });
+        var parsed = Assert.IsType<GameDataActionCommand>(ProtocolSerializer.DeserializeCommand(json));
+        Assert.Equal("addEntry", parsed.Action);
+        Assert.Equal("declared-id", parsed.Id);
+    }
+
+    [Fact]
+    public void GameDataState_RoundTrips()
+    {
+        var response = new GameDataStateResponse
+        {
+            State = new BattleScribeSpec.GameData.GameDataState
+            {
+                GameSystem = new BattleScribeSpec.GameData.GameSystemDataState { Id = "gs", Name = "GS" },
+            },
+        };
+        var json = ProtocolSerializer.SerializeResponse(response);
+        Assert.Contains("\"type\":\"gamedataState\"", json);
+
+        var parsed = Assert.IsType<GameDataStateResponse>(ProtocolSerializer.DeserializeResponse(json));
+        Assert.Equal("gs", parsed.State.GameSystem!.Id);
+    }
 }

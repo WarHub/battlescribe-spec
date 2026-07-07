@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using BattleScribeSpec.GameData;
 using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Protocol;
@@ -24,6 +25,10 @@ namespace BattleScribeSpec.Protocol;
 [JsonSerializable(typeof(RecordStartCommand))]
 [JsonSerializable(typeof(RecordStopCommand))]
 [JsonSerializable(typeof(DescribeCommand))]
+[JsonSerializable(typeof(GameDataSetupCommand))]
+[JsonSerializable(typeof(GameDataActionCommand))]
+[JsonSerializable(typeof(GameDataGetStateCommand))]
+[JsonSerializable(typeof(GameDataGetErrorsCommand))]
 // Responses (polymorphic base + concrete types)
 [JsonSerializable(typeof(ProtocolResponse))]
 [JsonSerializable(typeof(SetupResult))]
@@ -37,6 +42,8 @@ namespace BattleScribeSpec.Protocol;
 [JsonSerializable(typeof(RecordResult))]
 [JsonSerializable(typeof(DescribeResult))]
 [JsonSerializable(typeof(AdapterCapabilities))]
+[JsonSerializable(typeof(GameDataActionResult))]
+[JsonSerializable(typeof(GameDataStateResponse))]
 // Setup data types
 [JsonSerializable(typeof(ProtocolGameSystem))]
 [JsonSerializable(typeof(ProtocolCatalogue))]
@@ -76,4 +83,9 @@ namespace BattleScribeSpec.Protocol;
 [JsonSerializable(typeof(PublicationState))]
 [JsonSerializable(typeof(ValidationErrorState))]
 [JsonSerializable(typeof(ActionOutputs))]
+// GameData state types (from GameDataTypes.cs)
+[JsonSerializable(typeof(GameDataState))]
+[JsonSerializable(typeof(GameSystemDataState))]
+[JsonSerializable(typeof(CatalogueDataState))]
+[JsonSerializable(typeof(DataEntryState))]
 public partial class ProtocolJsonContext : JsonSerializerContext;
