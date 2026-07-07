@@ -57,7 +57,7 @@ jobs:
           owner: WarHub
           repositories: newrecruit-har,battlescribe-archive
       # The BattleScribe project IKVM-compiles lib/battlescribe/lib/*.jar at build time.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: lib/battlescribe
           key: bsapp-${{ hashFiles('testdata.json') }}
@@ -110,23 +110,23 @@ jobs:
           private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
           owner: WarHub
           repositories: newrecruit-har,battlescribe-archive
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: lib/battlescribe
           key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .testdata/newrecruit-har
           key: nrhar-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .testdata/nr-editor
           key: nreditor-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: src/bs-ui-java-agent/bs-ui-java-agent.jar
           key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
@@ -195,19 +195,19 @@ jobs:
           private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
           owner: WarHub
           repositories: newrecruit-har,battlescribe-archive
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: lib/battlescribe
           key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .testdata/newrecruit-har
           key: nrhar-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .testdata/nr-editor
           key: nreditor-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
@@ -265,11 +265,11 @@ jobs:
           private-key: ${{ secrets.WARHUB_BOT_PRIVATE_KEY }}
           owner: WarHub
           repositories: newrecruit-har,battlescribe-archive
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: lib/battlescribe
           key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: src/bs-ui-java-agent/bs-ui-java-agent.jar
           key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
@@ -320,11 +320,11 @@ jobs:
           repositories: newrecruit-har,battlescribe-archive
       # nr-conformance still needs the BS app: the BattleScribe project IKVM-compiles
       # lib/battlescribe/lib/*.jar at build time.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: lib/battlescribe
           key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
