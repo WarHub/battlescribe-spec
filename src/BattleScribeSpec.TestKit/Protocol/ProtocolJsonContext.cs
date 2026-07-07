@@ -23,6 +23,7 @@ namespace BattleScribeSpec.Protocol;
 [JsonSerializable(typeof(ExportRosterXmlCommand))]
 [JsonSerializable(typeof(RecordStartCommand))]
 [JsonSerializable(typeof(RecordStopCommand))]
+[JsonSerializable(typeof(DescribeCommand))]
 // Responses (polymorphic base + concrete types)
 [JsonSerializable(typeof(ProtocolResponse))]
 [JsonSerializable(typeof(SetupResult))]
@@ -34,6 +35,8 @@ namespace BattleScribeSpec.Protocol;
 [JsonSerializable(typeof(ScreenshotResult))]
 [JsonSerializable(typeof(RosterXmlResult))]
 [JsonSerializable(typeof(RecordResult))]
+[JsonSerializable(typeof(DescribeResult))]
+[JsonSerializable(typeof(AdapterCapabilities))]
 // Setup data types
 [JsonSerializable(typeof(ProtocolGameSystem))]
 [JsonSerializable(typeof(ProtocolCatalogue))]
