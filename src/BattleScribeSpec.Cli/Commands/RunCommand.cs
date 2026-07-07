@@ -84,19 +84,27 @@ internal static class RunCommand
         {
             var specInput = parseResult.GetValue(spec)!;
             var keepAliveValue = parseResult.GetValue(keepAlive);
-            var options = new RunOptions(
-                Spec: specInput,
-                Engine: engineOptions.Resolve(parseResult, specInput) with { KeepAlive = keepAliveValue },
-                Format: parseResult.GetValue(json) ? OutputFormat.Json : parseResult.GetValue(output),
-                Headed: parseResult.GetValue(engineOptions.Headed),
-                AllSteps: parseResult.GetValue(allSteps),
-                ScreenshotsDir: parseResult.GetValue(screenshots),
-                TimelinePath: parseResult.GetValue(timeline),
-                RecordPath: parseResult.GetValue(record),
-                SaveRosterDir: parseResult.GetValue(saveRoster),
-                KeepAlive: parseResult.GetValue(keepAlive),
-                BreakAt: parseResult.GetValue(breakAt));
-            return ExecuteAsync(options);
+            try
+            {
+                var options = new RunOptions(
+                    Spec: specInput,
+                    Engine: engineOptions.Resolve(parseResult, specInput) with { KeepAlive = keepAliveValue },
+                    Format: parseResult.GetValue(json) ? OutputFormat.Json : parseResult.GetValue(output),
+                    Headed: parseResult.GetValue(engineOptions.Headed),
+                    AllSteps: parseResult.GetValue(allSteps),
+                    ScreenshotsDir: parseResult.GetValue(screenshots),
+                    TimelinePath: parseResult.GetValue(timeline),
+                    RecordPath: parseResult.GetValue(record),
+                    SaveRosterDir: parseResult.GetValue(saveRoster),
+                    KeepAlive: parseResult.GetValue(keepAlive),
+                    BreakAt: parseResult.GetValue(breakAt));
+                return ExecuteAsync(options);
+            }
+            catch (CliInputException ex)
+            {
+                Ui.Error(ex.Message);
+                return Task.FromResult(1);
+            }
         });
 
         return command;
@@ -131,11 +139,15 @@ internal static class RunCommand
             return 1;
         }
 
-        Ui.Info($"Engine: {options.Engine.EngineName}");
+        Ui.Info($"Engine: {options.Engine.EngineName ?? options.Engine.Display}");
         IRosterEngine engine;
         try
         {
-            engine = await EngineFactory.CreateRosterEngineAsync(options.Engine.EngineName!, options.Headless, options.KeepAlive);
+            // CreateRosterEngineAsync requires a non-null name but already tolerates unknown
+            // names cleanly (throws ArgumentException, caught below); "" surfaces that same
+            // clean error for anonymous (null-identity) exec:/dotnet: connectables instead of
+            // risking a null-reference deeper in the switch.
+            engine = await EngineFactory.CreateRosterEngineAsync(options.Engine.EngineName ?? "", options.Headless, options.KeepAlive);
         }
         catch (Exception ex)
         {
@@ -307,20 +319,26 @@ internal static class RunCommand
             return 1;
         }
 
-        var engineName = options.Engine.EngineName!;
-        if (!spec.IsApplicableTo(engineName))
+        // Only named registry entries carry an identity for spec applicability; anonymous
+        // exec:/dotnet: connectables (no `name=` prefix) have no identity to check against
+        // the spec's `engines:` map, so skip the check rather than NRE/throw looking one up.
+        if (options.Engine.EngineName is { } identityName && !spec.IsApplicableTo(identityName))
         {
-            Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{engineName}' (skipped).");
+            Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{identityName}' (skipped).");
             return 0;
         }
 
         WarnUnsupportedForGameData(options);
 
-        Ui.Info($"Engine: {engineName}");
+        var engineLabel = options.Engine.EngineName ?? options.Engine.Display;
+        Ui.Info($"Engine: {engineLabel}");
         IGameDataEngine engine;
         try
         {
-            engine = await EngineFactory.CreateGameDataEngineAsync(engineName, options.Headless);
+            // CreateGameDataEngineAsync requires a non-null name but already tolerates unknown
+            // names cleanly (throws ArgumentException, caught below); "" surfaces that same
+            // clean error for anonymous (null-identity) connectables instead of NREing.
+            engine = await EngineFactory.CreateGameDataEngineAsync(options.Engine.EngineName ?? "", options.Headless);
         }
         catch (Exception ex)
         {
@@ -332,7 +350,10 @@ internal static class RunCommand
         {
             var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
             var lastStepIndex = spec.Steps.Count - 1;
-            var runner = new GameDataRunner(engine, engineName)
+            // GameDataRunner's engineName parameter is nullable and used only for tiered
+            // snapshot lookup (falls back to the base tier when unset), so pass the identity
+            // through as-is rather than coercing to "".
+            var runner = new GameDataRunner(engine, options.Engine.EngineName)
             {
                 OnStepCompleted = (index, step, state) =>
                 {
@@ -354,11 +375,11 @@ internal static class RunCommand
             Ui.Blank();
             if (result.Passed)
             {
-                Ui.Pass($"PASS — {spec.Id} on {engineName} ({spec.Steps.Count} step(s))");
+                Ui.Pass($"PASS — {spec.Id} on {engineLabel} ({spec.Steps.Count} step(s))");
                 return 0;
             }
 
-            Ui.Fail($"FAIL — {spec.Id} on {engineName}: {result.Failures.Count} error(s):");
+            Ui.Fail($"FAIL — {spec.Id} on {engineLabel}: {result.Failures.Count} error(s):");
             foreach (var (failure, i) in result.Failures.Select((f, i) => (f, i)))
             {
                 Ui.FailItem($"[{i + 1}] {failure}");

@@ -32,7 +32,7 @@ internal sealed record EngineSelection(EngineEntry Entry, EngineDomain Domain, b
     /// <summary>Start the adapter process for this selection.</summary>
     public Protocol.AdapterProcess StartProcess()
     {
-        var launch = Engines.EngineHostLocator.Resolve(Entry, Headed, KeepAlive);
+        var launch = EngineHostLocator.Resolve(Entry, Headed, KeepAlive);
         return Protocol.AdapterProcess.Start(launch.Executable, launch.Arguments);
     }
 }

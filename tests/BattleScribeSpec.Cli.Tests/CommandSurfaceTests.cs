@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics;
 
 namespace BattleScribeSpec.Cli.Tests;
 
@@ -87,8 +88,86 @@ public sealed class CommandSurfaceTests
     [Fact]
     public async Task Run_RejectsUnknownEngineNameAtRuntime()
     {
-        var exitCode = await Program.RunAsync("run", "spec", "--engine", "warscroll");
-        Assert.NotEqual(0, exitCode);
+        // In-process Program.RunAsync() returning a non-zero exit code is NOT proof this was
+        // rendered cleanly: System.CommandLine's own invocation pipeline catches ANY unhandled
+        // exception from a command action, prints "Unhandled exception: <type>: <message>" plus
+        // a full stack trace to stderr, and still completes the Task with exit code 1 — so a
+        // genuine crash and a clean `Ui.Error` + `return 1` look identical from exit code alone.
+        // Spawn the real CLI out-of-process and inspect stderr to tell the two apart (this is
+        // the CliInputException path from EngineOptions.Resolve, thrown while constructing
+        // RunCommand's RunOptions — see RunCommand.cs's SetAction try/catch).
+        var (exitCode, _, stdErr) = await RunCliAsync("run", "spec", "--engine", "warscroll");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("error:", stdErr);
+        Assert.Contains("Unknown engine 'warscroll'", stdErr);
+        Assert.DoesNotContain("Unhandled exception", stdErr);
+        Assert.DoesNotContain("CliInputException", stdErr);
+    }
+
+    [Fact]
+    public async Task Run_GameDataAnonymousConnectable_RendersCleanly_NotAnUnhandledCrash()
+    {
+        // Regression test: an anonymous exec:/dotnet: connectable has no registry identity
+        // (EngineSelection.EngineName is null), so a gamedata spec with an `engines:` map used
+        // to NRE deep in SpecFileBase.ShouldSkip (Dictionary<string,string>.TryGetValue(null))
+        // when RunCommand.RunGameDataAsync called spec.IsApplicableTo(engineName!). The fix
+        // only checks applicability when an identity exists; here the downstream "unknown
+        // gamedata engine" failure is expected and fine — the NRE/ArgumentNullException crash
+        // is not.
+        var repoRoot = FindRepoRoot();
+        var spec = Path.Combine(repoRoot, "specs", "gamedata", "nr", "nr-type-def-additions.yaml");
+        Assert.True(File.Exists(spec), $"Spec not found: {spec}");
+
+        var (exitCode, _, stdErr) = await RunCliAsync(
+            "run", spec, "--engine", "exec:doesnotexist", "--gamedata");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("error:", stdErr);
+        Assert.DoesNotContain("Unhandled exception", stdErr);
+        Assert.DoesNotContain("NullReferenceException", stdErr);
+        Assert.DoesNotContain("ArgumentNullException", stdErr);
+    }
+
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "BattleScribeSpec.slnx")))
+        {
+            dir = dir.Parent!;
+        }
+
+        Assert.NotNull(dir);
+        return dir.FullName;
+    }
+
+    private static string FindCliDll()
+    {
+        var dll = Path.Combine(FindRepoRoot(), "artifacts", "bin", "BattleScribeSpec.Cli", "debug", "bs-spec.dll");
+        Assert.True(File.Exists(dll), $"CLI not built: {dll}");
+        return dll;
+    }
+
+    /// <summary>Spawn the real <c>bs-spec</c> CLI out-of-process and capture its output/exit code.</summary>
+    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(params string[] args)
+    {
+        var psi = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add(FindCliDll());
+        foreach (var arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start bs-spec.dll.");
+        var stdOutTask = process.StandardOutput.ReadToEndAsync();
+        var stdErrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        return (process.ExitCode, await stdOutTask, await stdErrTask);
     }
 
     [Theory]
