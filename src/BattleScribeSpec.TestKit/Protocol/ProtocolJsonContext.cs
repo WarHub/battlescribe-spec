@@ -19,6 +19,10 @@ namespace BattleScribeSpec.Protocol;
 [JsonSerializable(typeof(GetStateCommand))]
 [JsonSerializable(typeof(GetErrorsCommand))]
 [JsonSerializable(typeof(TeardownCommand))]
+[JsonSerializable(typeof(ScreenshotCommand))]
+[JsonSerializable(typeof(ExportRosterXmlCommand))]
+[JsonSerializable(typeof(RecordStartCommand))]
+[JsonSerializable(typeof(RecordStopCommand))]
 // Responses (polymorphic base + concrete types)
 [JsonSerializable(typeof(ProtocolResponse))]
 [JsonSerializable(typeof(SetupResult))]
@@ -27,6 +31,9 @@ namespace BattleScribeSpec.Protocol;
 [JsonSerializable(typeof(ErrorsResponse))]
 [JsonSerializable(typeof(TeardownResult))]
 [JsonSerializable(typeof(ProtocolError))]
+[JsonSerializable(typeof(ScreenshotResult))]
+[JsonSerializable(typeof(RosterXmlResult))]
+[JsonSerializable(typeof(RecordResult))]
 // Setup data types
 [JsonSerializable(typeof(ProtocolGameSystem))]
 [JsonSerializable(typeof(ProtocolCatalogue))]

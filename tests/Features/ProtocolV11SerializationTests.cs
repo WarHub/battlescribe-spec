@@ -46,4 +46,28 @@ public sealed class ProtocolV11SerializationTests
         Assert.False(parsed.Capabilities.Screenshot);
         Assert.Equal(0, parsed.Capabilities.MaxParallel);
     }
+
+    [Theory]
+    [InlineData("""{"type":"screenshot"}""", typeof(ScreenshotCommand))]
+    [InlineData("""{"type":"exportRosterXml"}""", typeof(ExportRosterXmlCommand))]
+    [InlineData("""{"type":"recordStart"}""", typeof(RecordStartCommand))]
+    [InlineData("""{"type":"recordStop"}""", typeof(RecordStopCommand))]
+    public void ParityCommands_Deserialize(string json, Type expected)
+        => Assert.IsType(expected, ProtocolSerializer.DeserializeCommand(json), exactMatch: true);
+
+    [Fact]
+    public void ParityResponses_RoundTrip()
+    {
+        Assert.Contains("\"pngBase64\":\"QUJD\"", ProtocolSerializer.SerializeResponse(
+            new ScreenshotResult { PngBase64 = "QUJD" }));
+
+        // STJ's default encoder escapes '<'/'>' as </> for HTML safety, so the wire
+        // form isn't the literal string — assert round-trip fidelity instead of a raw substring.
+        var xmlJson = ProtocolSerializer.SerializeResponse(new RosterXmlResult { Xml = "<roster/>" });
+        var xmlResult = Assert.IsType<RosterXmlResult>(ProtocolSerializer.DeserializeResponse(xmlJson));
+        Assert.Equal("<roster/>", xmlResult.Xml);
+
+        Assert.IsType<RecordResult>(ProtocolSerializer.DeserializeResponse(
+            """{"type":"recordResult","actionsJson":"[]"}"""));
+    }
 }

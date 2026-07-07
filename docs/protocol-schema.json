@@ -19,7 +19,11 @@
         { "$ref": "#/$defs/getStateCommand" },
         { "$ref": "#/$defs/getErrorsCommand" },
         { "$ref": "#/$defs/teardownCommand" },
-        { "$ref": "#/$defs/describeCommand" }
+        { "$ref": "#/$defs/describeCommand" },
+        { "$ref": "#/$defs/screenshotCommand" },
+        { "$ref": "#/$defs/exportRosterXmlCommand" },
+        { "$ref": "#/$defs/recordStartCommand" },
+        { "$ref": "#/$defs/recordStopCommand" }
       ]
     },
     "response": {
@@ -31,7 +35,10 @@
         { "$ref": "#/$defs/errorsResponse" },
         { "$ref": "#/$defs/teardownResult" },
         { "$ref": "#/$defs/protocolError" },
-        { "$ref": "#/$defs/describeResult" }
+        { "$ref": "#/$defs/describeResult" },
+        { "$ref": "#/$defs/screenshotResult" },
+        { "$ref": "#/$defs/rosterXmlResult" },
+        { "$ref": "#/$defs/recordResult" }
       ]
     },
 
@@ -114,6 +121,42 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "describe" }
+      }
+    },
+    "screenshotCommand": {
+      "description": "Protocol v1.1 (optional): capture the engine UI as a PNG.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "screenshot" }
+      }
+    },
+    "exportRosterXmlCommand": {
+      "description": "Protocol v1.1 (optional): export the current roster as .ros XML.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "exportRosterXml" }
+      }
+    },
+    "recordStartCommand": {
+      "description": "Protocol v1.1 (optional): start recording UI actions.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "recordStart" }
+      }
+    },
+    "recordStopCommand": {
+      "description": "Protocol v1.1 (optional): stop recording and return the recorded actions.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "recordStop" }
       }
     },
 
@@ -212,6 +255,36 @@
           "default": ["roster"]
         },
         "capabilities": { "$ref": "#/$defs/adapterCapabilities" }
+      }
+    },
+    "screenshotResult": {
+      "description": "Protocol v1.1: response to screenshotCommand.",
+      "type": "object",
+      "required": ["type", "pngBase64"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "screenshotResult" },
+        "pngBase64": { "type": "string" }
+      }
+    },
+    "rosterXmlResult": {
+      "description": "Protocol v1.1: response to exportRosterXmlCommand.",
+      "type": "object",
+      "required": ["type", "xml"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "rosterXmlResult" },
+        "xml": { "type": "string" }
+      }
+    },
+    "recordResult": {
+      "description": "Protocol v1.1: response to recordStopCommand.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "recordResult" },
+        "actionsJson": { "type": "string" }
       }
     },
 

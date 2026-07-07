@@ -77,4 +77,40 @@ public sealed class AdapterHandlerTests
         Assert.Equal("battlescribe", described.Name);
         Assert.Equal("1.1", described.ProtocolVersion);
     }
+
+    [Fact]
+    public async Task ParityCommands_WithoutProviders_AnswerNotSupported()
+    {
+        await using var connection = ConnectV11();
+        await connection.SendCommandAsync(new SetupCommand
+        {
+            GameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" },
+        }, TestContext.Current.CancellationToken);
+
+        var error = Assert.IsType<ProtocolError>(
+            await connection.SendCommandAsync(new ScreenshotCommand(), TestContext.Current.CancellationToken));
+        Assert.Contains("not supported", error.Message);
+    }
+
+    [Fact]
+    public async Task Screenshot_WithProvider_ReturnsPng()
+    {
+        await using var connection = new InMemoryAdapterConnection(
+            (input, output, ct) => AdapterHandler.RunAsync(
+                new AdapterOptions
+                {
+                    RosterEngineFactory = () => new BattleScribeSpec.BattleScribeRosterEngine(),
+                    Name = "battlescribe",
+                    Capabilities = new AdapterCapabilities { Screenshot = true },
+                    ScreenshotProvider = _ => [1, 2, 3],
+                },
+                input, output, ct));
+
+        await connection.SendCommandAsync(new SetupCommand
+        {
+            GameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" },
+        }, TestContext.Current.CancellationToken);
+        var engine = new JsonProtocolEngine(connection);
+        Assert.Equal([1, 2, 3], engine.CaptureScreenshot());
+    }
 }

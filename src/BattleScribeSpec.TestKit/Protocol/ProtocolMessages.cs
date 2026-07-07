@@ -21,6 +21,10 @@ namespace BattleScribeSpec.Protocol;
 [JsonDerivedType(typeof(GetErrorsCommand), "getErrors")]
 [JsonDerivedType(typeof(TeardownCommand), "teardown")]
 [JsonDerivedType(typeof(DescribeCommand), "describe")]
+[JsonDerivedType(typeof(ScreenshotCommand), "screenshot")]
+[JsonDerivedType(typeof(ExportRosterXmlCommand), "exportRosterXml")]
+[JsonDerivedType(typeof(RecordStartCommand), "recordStart")]
+[JsonDerivedType(typeof(RecordStopCommand), "recordStop")]
 public abstract class ProtocolCommand
 {
     [JsonIgnore]
@@ -35,6 +39,9 @@ public abstract class ProtocolCommand
 [JsonDerivedType(typeof(TeardownResult), "teardownResult")]
 [JsonDerivedType(typeof(ProtocolError), "error")]
 [JsonDerivedType(typeof(DescribeResult), "describeResult")]
+[JsonDerivedType(typeof(ScreenshotResult), "screenshotResult")]
+[JsonDerivedType(typeof(RosterXmlResult), "rosterXmlResult")]
+[JsonDerivedType(typeof(RecordResult), "recordResult")]
 public abstract class ProtocolResponse
 {
     [JsonIgnore]
@@ -148,6 +155,34 @@ public sealed class DescribeCommand : ProtocolCommand
     public override string Type => "describe";
 }
 
+/// <summary>Protocol v1.1 (optional): capture the engine UI as a PNG.</summary>
+public sealed class ScreenshotCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "screenshot";
+}
+
+/// <summary>Protocol v1.1 (optional): export the current roster as .ros XML.</summary>
+public sealed class ExportRosterXmlCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "exportRosterXml";
+}
+
+/// <summary>Protocol v1.1 (optional): start recording UI actions.</summary>
+public sealed class RecordStartCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "recordStart";
+}
+
+/// <summary>Protocol v1.1 (optional): stop recording and return the recorded actions.</summary>
+public sealed class RecordStopCommand : ProtocolCommand
+{
+    [JsonIgnore]
+    public override string Type => "recordStop";
+}
+
 // ===== Adapter → Runner Responses =====
 
 public sealed class SetupResult : ProtocolResponse
@@ -247,6 +282,31 @@ public sealed class AdapterCapabilities
 
     /// <summary>Max concurrent instances the engine tolerates; 0 = unlimited.</summary>
     public int MaxParallel { get; set; }
+}
+
+public sealed class ScreenshotResult : ProtocolResponse
+{
+    [JsonIgnore]
+    public override string Type => "screenshotResult";
+
+    public string PngBase64 { get; set; } = "";
+}
+
+public sealed class RosterXmlResult : ProtocolResponse
+{
+    [JsonIgnore]
+    public override string Type => "rosterXmlResult";
+
+    public string Xml { get; set; } = "";
+}
+
+public sealed class RecordResult : ProtocolResponse
+{
+    [JsonIgnore]
+    public override string Type => "recordResult";
+
+    /// <summary>Recorded actions as a JSON array string; null when nothing was recorded.</summary>
+    public string? ActionsJson { get; set; }
 }
 
 // ===== Protocol Setup Data (game system + catalogue) =====

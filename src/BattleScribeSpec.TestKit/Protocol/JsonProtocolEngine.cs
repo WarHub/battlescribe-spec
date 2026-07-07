@@ -176,6 +176,40 @@ public sealed class JsonProtocolEngine : IRosterEngine
         };
     }
 
+    /// <summary>Protocol v1.1: capture a UI screenshot; throws NotSupportedException if the adapter can't.</summary>
+    public byte[] CaptureScreenshot() => SendCommand(new ScreenshotCommand()) switch
+    {
+        ScreenshotResult sr => Convert.FromBase64String(sr.PngBase64),
+        ProtocolError pe => throw new NotSupportedException(pe.Message),
+        var other => throw new InvalidOperationException($"Unexpected response type: {other.Type}"),
+    };
+
+    /// <summary>Protocol v1.1: export the roster as .ros XML; throws NotSupportedException if unsupported.</summary>
+    public string ExportRosterXml() => SendCommand(new ExportRosterXmlCommand()) switch
+    {
+        RosterXmlResult r => r.Xml,
+        ProtocolError pe => throw new NotSupportedException(pe.Message),
+        var other => throw new InvalidOperationException($"Unexpected response type: {other.Type}"),
+    };
+
+    /// <summary>Protocol v1.1: start UI action recording; throws NotSupportedException if unsupported.</summary>
+    public void StartRecording()
+    {
+        var response = SendCommand(new RecordStartCommand());
+        if (response is ProtocolError pe)
+        {
+            throw new NotSupportedException(pe.Message);
+        }
+    }
+
+    /// <summary>Protocol v1.1: stop recording; returns the actions JSON (null if none). Throws NotSupportedException if unsupported.</summary>
+    public string? StopRecording() => SendCommand(new RecordStopCommand()) switch
+    {
+        RecordResult r => r.ActionsJson,
+        ProtocolError pe => throw new NotSupportedException(pe.Message),
+        var other => throw new InvalidOperationException($"Unexpected response type: {other.Type}"),
+    };
+
     public void Dispose()
     {
         try

@@ -16,6 +16,18 @@ public sealed class AdapterOptions
     public string? Version { get; init; }
 
     public AdapterCapabilities Capabilities { get; init; } = new();
+
+    /// <summary>Protocol v1.1 (optional): capture the engine UI as a PNG. Null → unsupported.</summary>
+    public Func<IRosterEngine, byte[]?>? ScreenshotProvider { get; init; }
+
+    /// <summary>Protocol v1.1 (optional): export the current roster as .ros XML. Null → unsupported.</summary>
+    public Func<IRosterEngine, string?>? RosterXmlExporter { get; init; }
+
+    /// <summary>Protocol v1.1 (optional): start recording UI actions. Null → unsupported.</summary>
+    public Action<IRosterEngine>? RecordStarter { get; init; }
+
+    /// <summary>Protocol v1.1 (optional): stop recording and return the recorded actions. Null → unsupported.</summary>
+    public Func<IRosterEngine, string?>? RecordStopper { get; init; }
 }
 
 /// <summary>
@@ -79,6 +91,16 @@ public static class AdapterHandler
                             Domains = options.GameDataEngineFactory is null ? ["roster"] : ["roster", "gamedata"],
                             Capabilities = options.Capabilities,
                         },
+                        ScreenshotCommand => engine is not null && options.ScreenshotProvider?.Invoke(engine) is { } png
+                            ? new ScreenshotResult { PngBase64 = Convert.ToBase64String(png) }
+                            : new ProtocolError { Message = "screenshot is not supported by this adapter" },
+                        ExportRosterXmlCommand => engine is not null && options.RosterXmlExporter?.Invoke(engine) is { } xml
+                            ? new RosterXmlResult { Xml = xml }
+                            : new ProtocolError { Message = "exportRosterXml is not supported by this adapter" },
+                        RecordStartCommand => HandleRecordStart(options, engine),
+                        RecordStopCommand => engine is not null && options.RecordStopper is not null
+                            ? new RecordResult { ActionsJson = options.RecordStopper(engine) }
+                            : new ProtocolError { Message = "recordStop is not supported by this adapter" },
                         _ => new ProtocolError { Message = $"Unknown command: {line}" },
                     };
                 }
@@ -250,5 +272,16 @@ public static class AdapterHandler
         engine?.Dispose();
         engine = null;
         return new TeardownResult();
+    }
+
+    private static ProtocolResponse HandleRecordStart(AdapterOptions options, IRosterEngine? engine)
+    {
+        if (engine is null || options.RecordStarter is null)
+        {
+            return new ProtocolError { Message = "recordStart is not supported by this adapter" };
+        }
+
+        options.RecordStarter(engine);
+        return new ActionResult { Ok = true };
     }
 }

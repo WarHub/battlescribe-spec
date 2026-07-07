@@ -190,6 +190,43 @@ Adapters predating v1.1 answer `describe` with an `error` response; runners MUST
 as protocol 1.0, roster-only, no optional capabilities. Adapters SHOULD answer `describe`;
 all v1.1 messages are optional beyond it.
 
+### Optional v1.1 commands
+
+These four commands give the spec runner roster parity with the engine's own UI: capturing a
+screenshot, exporting the current roster as `.ros` XML, and recording/replaying UI actions.
+Support for each is advertised via `describeResult.capabilities` (`screenshot`, `rosterXml`,
+`record`). An adapter that does not implement a command answers with an `error` response
+(`"<type> is not supported by this adapter"`); the runner maps that to a NotSupported result
+rather than failing the spec.
+
+#### `screenshot`
+
+```json
+{"type":"screenshot"}
+{"type":"screenshotResult","pngBase64":"iVBORw0KGgo..."}
+```
+
+#### `exportRosterXml`
+
+```json
+{"type":"exportRosterXml"}
+{"type":"rosterXmlResult","xml":"<roster>...</roster>"}
+```
+
+#### `recordStart`
+
+```json
+{"type":"recordStart"}
+{"type":"actionResult","ok":true}
+```
+
+#### `recordStop`
+
+```json
+{"type":"recordStop"}
+{"type":"recordResult","actionsJson":"[{\"type\":\"click\",\"target\":\"#unit-1\"}]"}
+```
+
 ## Adapter → Runner Responses
 
 ### `setupResult`
