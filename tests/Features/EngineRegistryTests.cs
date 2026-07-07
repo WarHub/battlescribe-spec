@@ -84,4 +84,13 @@ public sealed class EngineRegistryTests : IDisposable
         var registry = EngineRegistry.LoadDefault(nested);
         Assert.Equal("node", registry.Resolve(EngineConnectable.Parse("wham")).Executable);
     }
+
+    [Fact]
+    public void MalformedExec_NamesConfigFileAndEntry()
+    {
+        var path = WriteConfig("""{"engines":{"wham":{"exec":"   "}}}""");
+        var ex = Assert.Throws<InvalidDataException>(() => EngineRegistry.Load(path));
+        Assert.Contains("wham", ex.Message);
+        Assert.Contains(path, ex.Message);
+    }
 }

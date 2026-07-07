@@ -55,9 +55,19 @@ public sealed class EngineRegistry
         var configured = new Dictionary<string, EngineEntry>();
         foreach (var (name, entry) in config.Engines)
         {
-            var launch = entry.Exec is { Length: > 0 }
-                ? EngineConnectable.Parse($"exec:{entry.Exec}")
-                : null;
+            EngineConnectable? launch = null;
+            if (entry.Exec is { Length: > 0 })
+            {
+                try
+                {
+                    launch = EngineConnectable.Parse($"exec:{entry.Exec}");
+                }
+                catch (FormatException ex)
+                {
+                    throw new InvalidDataException(
+                        $"Invalid engines config '{configPath}', entry '{name}': {ex.Message}", ex);
+                }
+            }
             configured[name] = new EngineEntry(
                 name,
                 launch?.Executable,
