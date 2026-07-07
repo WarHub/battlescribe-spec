@@ -1,7 +1,7 @@
 using System.CommandLine;
 using System.Text.Json;
-using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.GameData;
+using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Cli;
@@ -140,28 +140,33 @@ internal static class RunCommand
         }
 
         Ui.Info($"Engine: {options.Engine.EngineName ?? options.Engine.Display}");
-        IRosterEngine engine;
+
+        // Spawn the engine as a child adapter process (bs-engine-host for built-ins, or any
+        // exec:/dotnet: connectable) and drive it entirely over the JSON-line protocol. The
+        // describe handshake tells us which optional capabilities the adapter honors.
+        AdapterProcess process;
+        DescribeResult described;
         try
         {
-            // CreateRosterEngineAsync requires a non-null name but already tolerates unknown
-            // names cleanly (throws ArgumentException, caught below); "" surfaces that same
-            // clean error for anonymous (null-identity) exec:/dotnet: connectables instead of
-            // risking a null-reference deeper in the switch.
-            engine = await EngineFactory.CreateRosterEngineAsync(options.Engine.EngineName ?? "", options.Headless, options.KeepAlive);
+            process = options.Engine.StartProcess();
+            described = await AdapterDescriber.DescribeAsync(process);
         }
         catch (Exception ex)
         {
-            Ui.Error($"Error creating engine: {ex.Message}");
+            Ui.Error($"Error starting engine: {ex.Message}");
             return 1;
         }
 
-        using (engine)
+        using (process)
         {
+            var engine = new JsonProtocolEngine(process,
+                spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : null);
+
             // Accept every artifact option for every engine; warn once and disable the ones
-            // the chosen engine can't honor (uniform handling, no silent no-ops).
-            var screenshotsDir = Gate(options.ScreenshotsDir, EngineCapabilities.SupportsScreenshots(engine), options.Engine, "--screenshots");
-            var recordPath = Gate(options.RecordPath, EngineCapabilities.SupportsRecording(engine), options.Engine, "--record");
-            var saveRosterDir = Gate(options.SaveRosterDir, EngineCapabilities.SupportsRosterXmlExport(engine), options.Engine, "--save-roster");
+            // the described adapter can't honor (uniform handling, no silent no-ops).
+            var screenshotsDir = Gate(options.ScreenshotsDir, described.Capabilities.Screenshot, options.Engine, "--screenshots");
+            var recordPath = Gate(options.RecordPath, described.Capabilities.Record, options.Engine, "--record");
+            var saveRosterDir = Gate(options.SaveRosterDir, described.Capabilities.RosterXml, options.Engine, "--save-roster");
             var timeline = options.TimelinePath is not null ? new TimelineReport(spec.Id) : null;
 
             var dumpOptions = new DumpOptions(Json: options.Format == OutputFormat.Json);
@@ -175,7 +180,10 @@ internal static class RunCommand
                 {
                     try
                     {
-                        screenshot = EngineCapabilities.CaptureScreenshotAsync(engine).GetAwaiter().GetResult();
+                        // Returns the PNG bytes, or throws NotSupportedException when the
+                        // adapter can't screenshot — caught below and treated like the old
+                        // null path (this step simply gets no image).
+                        screenshot = engine.CaptureScreenshot();
                         if (screenshot is not null && screenshotsDir is not null)
                         {
                             Directory.CreateDirectory(screenshotsDir);
@@ -203,12 +211,14 @@ internal static class RunCommand
                 StateDumper.Dump(state, errors, Console.Out, dumpOptions);
                 Console.Out.Flush();
 
-                if (stepIndex == lastStepIndex && saveRosterDir is not null && engine is BsUiRosterEngine bsUi)
+                if (stepIndex == lastStepIndex && saveRosterDir is not null)
                 {
                     try
                     {
                         Directory.CreateDirectory(saveRosterDir);
-                        var xml = bsUi.ExportRosterXmlAsync().GetAwaiter().GetResult();
+                        // saveRosterDir is already capability-gated, so ExportRosterXml can't
+                        // hit NotSupported here; the try/catch stays for adapter/IO faults.
+                        var xml = engine.ExportRosterXml();
                         if (xml is not null)
                         {
                             var rosterFile = Path.Combine(saveRosterDir, $"{spec.Id}.ros");
@@ -233,7 +243,8 @@ internal static class RunCommand
                 {
                     if (stepIndex == breakStep)
                     {
-                        BreakRepl.Run(engine, stepIndex, StepFormatter.DescribeStep(step));
+                        // Returns false when the user types `quit`, which aborts the run.
+                        return ProtocolBreakRepl.Run(process, stepIndex, StepFormatter.DescribeStep(step));
                     }
 
                     return true;
@@ -243,22 +254,26 @@ internal static class RunCommand
             Ui.Info($"Running {spec.Steps.Count} steps...");
             Ui.Blank();
 
-            if (recordPath is not null && engine is BsUiRosterEngine recordingEngine)
+            if (recordPath is not null)
             {
-                await recordingEngine.StartRecordingAsync();
+                // recordPath is capability-gated (Record), so this can't hit NotSupported.
+                engine.StartRecording();
                 Ui.Info("Recording UI actions...");
             }
 
             var result = runner.Run(spec);
 
-            if (recordPath is not null && engine is BsUiRosterEngine recordStopEngine)
+            if (recordPath is not null)
             {
                 try
                 {
-                    var actions = await recordStopEngine.StopRecordingAsync();
+                    var actions = engine.StopRecording();
                     if (actions is not null)
                     {
-                        File.WriteAllText(recordPath, actions.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+                        // actions is already a JSON string; the CLI cannot pretty-print it
+                        // reflection-free (AOT), so it is written verbatim — the on-disk form
+                        // is the adapter's own (typically compact) JSON, not indented.
+                        File.WriteAllText(recordPath, actions);
                         Ui.Info($"Recorded actions saved to: {recordPath}");
                     }
                     else
@@ -294,7 +309,7 @@ internal static class RunCommand
                 Ui.Info($"Timeline report: {options.TimelinePath}");
             }
 
-            if (options.Headed && engine is NrRosterUiDriver.NrRosterUiEngine)
+            if (options.Headed && options.Engine.EngineName == "newrecruit-ui")
             {
                 Ui.Blank();
                 Ui.Info("NR UI: Browser will remain open. Press Enter to close...");
@@ -424,7 +439,10 @@ internal static class RunCommand
 
     private static void ReportDiagnosticDumps()
     {
-        var diagDir = BsUiDiagnostics.DiagnosticsDirectory;
+        // Path convention mirrors BsRosterUiDriver.BsUiDiagnostics.DiagnosticsDirectory
+        // (the driver writes dumps here). Inlined so the CLI never references the driver type.
+        var diagDir = Environment.GetEnvironmentVariable("BS_UI_DIAGNOSTICS_DIR")
+            ?? Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "bs-ui-diagnostics");
         if (!Directory.Exists(diagDir))
         {
             return;
