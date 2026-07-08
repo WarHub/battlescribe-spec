@@ -141,91 +141,97 @@ public static class SpecSuiteRunner
             progressWriter?.WriteLine($"Running {filteredSpecs.Count + filteredGameDataSpecs.Count} specs with {workers} workers...");
 
             var adapterProcesses = new List<AdapterProcess>();
-            for (var w = 0; w < workers; w++)
+            try
             {
-                adapterProcesses.Add(options.AdapterFactory());
-            }
-
-            var gameDataSupported = filteredGameDataSpecs.Count == 0
-                || (await AdapterDescriber.DescribeAsync(adapterProcesses[0])).Domains.Contains("gamedata");
-            if (filteredGameDataSpecs.Count > 0 && !gameDataSupported)
-            {
-                SkipGameDataDomain(filteredGameDataSpecs, reportResults);
-                filteredGameDataSpecs = [];
-            }
-
-            // Channel-based process pool
-            var processPool = System.Threading.Channels.Channel.CreateBounded<AdapterProcess>(workers);
-            foreach (var proc in adapterProcesses)
-            {
-                processPool.Writer.TryWrite(proc);
-            }
-
-            var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFileBase Spec, bool IsGameData, string Status)>();
-
-            await Parallel.ForEachAsync(
-                filteredSpecs,
-                new ParallelOptions { MaxDegreeOfParallelism = workers },
-                async (item, ct) =>
+                for (var w = 0; w < workers; w++)
                 {
-                    var (id, category, spec) = item;
-                    var proc = await processPool.Reader.ReadAsync(ct);
-                    try
-                    {
-                        var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
-                        using var engine = new JsonProtocolEngine(proc, timeout);
-                        var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
-                        var result = runner.Run(spec);
-                        var status = ComputeStatus(result, spec, expectedFailuresEngine);
-                        concurrentResults.Add((result, spec, false, status));
-                    }
-                    finally
-                    {
-                        processPool.Writer.TryWrite(proc);
-                    }
-                });
-
-            await Parallel.ForEachAsync(
-                filteredGameDataSpecs,
-                new ParallelOptions { MaxDegreeOfParallelism = workers },
-                async (item, ct) =>
-                {
-                    var (id, category, spec) = item;
-                    var proc = await processPool.Reader.ReadAsync(ct);
-                    try
-                    {
-                        using var engine = new JsonProtocolGameDataEngine(proc, null);
-                        var runner = new GameDataRunner(engine, assertionEngine ?? engineFilter);
-                        var result = runner.Run(spec);
-                        var status = ComputeStatus(result, spec, expectedFailuresEngine);
-                        concurrentResults.Add((result, spec, true, status));
-                    }
-                    finally
-                    {
-                        processPool.Writer.TryWrite(proc);
-                    }
-                });
-
-            // Collect results in order
-            foreach (var (result, spec, isGameData, status) in concurrentResults)
-            {
-                results.Add(result);
-                if (isGameData)
-                {
-                    gameDataSpecsByResult[result] = (GameDataSpecFile)spec;
-                }
-                else
-                {
-                    specsByResult[result] = (SpecFile)spec;
+                    adapterProcesses.Add(options.AdapterFactory());
                 }
 
-                reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags));
-            }
+                var gameDataSupported = filteredGameDataSpecs.Count == 0
+                    || (await AdapterDescriber.DescribeAsync(adapterProcesses[0])).Domains.Contains("gamedata");
+                if (filteredGameDataSpecs.Count > 0 && !gameDataSupported)
+                {
+                    SkipGameDataDomain(filteredGameDataSpecs, reportResults);
+                    filteredGameDataSpecs = [];
+                }
 
-            // Dispose adapter processes
-            foreach (var proc in adapterProcesses)
+                // Channel-based process pool
+                var processPool = System.Threading.Channels.Channel.CreateBounded<AdapterProcess>(workers);
+                foreach (var proc in adapterProcesses)
+                {
+                    processPool.Writer.TryWrite(proc);
+                }
+
+                var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFileBase Spec, bool IsGameData, string Status)>();
+
+                await Parallel.ForEachAsync(
+                    filteredSpecs,
+                    new ParallelOptions { MaxDegreeOfParallelism = workers },
+                    async (item, ct) =>
+                    {
+                        var (id, category, spec) = item;
+                        var proc = await processPool.Reader.ReadAsync(ct);
+                        try
+                        {
+                            var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
+                            using var engine = new JsonProtocolEngine(proc, timeout);
+                            var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
+                            var result = runner.Run(spec);
+                            var status = ComputeStatus(result, spec, expectedFailuresEngine);
+                            concurrentResults.Add((result, spec, false, status));
+                        }
+                        finally
+                        {
+                            processPool.Writer.TryWrite(proc);
+                        }
+                    });
+
+                await Parallel.ForEachAsync(
+                    filteredGameDataSpecs,
+                    new ParallelOptions { MaxDegreeOfParallelism = workers },
+                    async (item, ct) =>
+                    {
+                        var (id, category, spec) = item;
+                        var proc = await processPool.Reader.ReadAsync(ct);
+                        try
+                        {
+                            using var engine = new JsonProtocolGameDataEngine(proc, null);
+                            var runner = new GameDataRunner(engine, assertionEngine ?? engineFilter);
+                            var result = runner.Run(spec);
+                            var status = ComputeStatus(result, spec, expectedFailuresEngine);
+                            concurrentResults.Add((result, spec, true, status));
+                        }
+                        finally
+                        {
+                            processPool.Writer.TryWrite(proc);
+                        }
+                    });
+
+                // Collect results in order
+                foreach (var (result, spec, isGameData, status) in concurrentResults)
+                {
+                    results.Add(result);
+                    if (isGameData)
+                    {
+                        gameDataSpecsByResult[result] = (GameDataSpecFile)spec;
+                    }
+                    else
+                    {
+                        specsByResult[result] = (SpecFile)spec;
+                    }
+
+                    reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags));
+                }
+            }
+            finally
             {
-                proc.Dispose();
+                // Dispose adapter processes regardless of success, describe-gate failure,
+                // or a Parallel.ForEachAsync exception — otherwise the N child processes leak.
+                foreach (var proc in adapterProcesses)
+                {
+                    proc.Dispose();
+                }
             }
         }
         else
