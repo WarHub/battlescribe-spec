@@ -123,7 +123,7 @@ use BattleScribe data model IDs from the setup data. Instance references (e.g., 
 
 #### Action outputs
 
-Mutating actions return an `outputs` object with IDs of created elements. The spec runner
+Mutating actions return an `outputs` object with IDs of created elements. The client
 flattens `outputs` onto the `steps.<stepId>` namespace, so if an adapter returns
 `{"type":"actionResult","outputs":{"forceId":"f1"}}` for a step with `id: add-patrol`,
 later steps reference that value as `${{ steps.add-patrol.forceId }}` (not
@@ -191,17 +191,17 @@ Response:
 {"type":"describeResult","name":"battlescribe","version":"2.03.29","protocolVersion":"1.1","domains":["roster","gamedata"],"capabilities":{"screenshot":false,"record":false,"rosterXml":false,"maxParallel":0}}
 ```
 
-Adapters predating v1.1 answer `describe` with an `error` response; runners MUST treat that
+Adapters predating v1.1 answer `describe` with an `error` response; clients MUST treat that
 as protocol 1.0, roster-only, no optional capabilities. Adapters SHOULD answer `describe`;
 all v1.1 messages are optional beyond it.
 
 ### Optional v1.1 commands
 
-These four commands give the spec runner roster parity with the engine's own UI: capturing a
+These four commands give the client roster parity with the engine's own UI: capturing a
 screenshot, exporting the current roster as `.ros` XML, and recording/replaying UI actions.
 Support for each is advertised via `describeResult.capabilities` (`screenshot`, `rosterXml`,
 `record`). An adapter that does not implement a command answers with an `error` response
-(`"<type> is not supported by this adapter"`); the runner maps that to a NotSupported result
+(`"<type> is not supported by this adapter"`); the client maps that to a NotSupported result
 rather than failing the spec.
 
 #### `screenshot`
@@ -250,7 +250,7 @@ rather than failing the spec.
 ```
 
 The `outputs` field is present on success for mutating actions that create elements.
-It contains the IDs described in [Action outputs](#action-outputs) above. The spec runner
+It contains the IDs described in [Action outputs](#action-outputs) above. The client
 flattens each `outputs` property onto the step's expression namespace — e.g.,
 `outputs.forceId` becomes `${{ steps.<stepId>.forceId }}`.
 
@@ -459,8 +459,8 @@ while line = readline(stdin):
 ### Notes
 
 - The adapter should handle multiple setup/teardown cycles (one per spec test).
-- stderr is free for diagnostics — the runner ignores it.
-- The runner may terminate the adapter process if it doesn't respond within a timeout.
+- stderr is free for diagnostics — the client ignores it.
+- The client may terminate the adapter process if it doesn't respond within a timeout.
 
 ## GameData Protocol (data-file editing)
 
@@ -557,7 +557,7 @@ with `error`.
 
 Engines disagree on which loaded file is "active" by default (the reference and the Data Editor open
 the **first** catalogue; NewRecruit the **last**). So every spec declares the file it edits with a
-required **`setup.edit`** — a catalogue id or the game system id. After `Setup`, the runner calls
+required **`setup.edit`** — a catalogue id or the game system id. After `Setup`, the client calls
 `OpenFile(setup.edit)` so the active file (what mutations, `Reload`, and `expectedFile` export apply to)
 is deterministic across engines; an `openFile` step may switch it later. `OpenFile` is idempotent, so
 re-opening the already-active single file is a no-op.
