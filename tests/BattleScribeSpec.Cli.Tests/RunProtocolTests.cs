@@ -56,6 +56,31 @@ public sealed class RunProtocolTests
         Assert.DoesNotContain("PASS — all assertions passed", stdOut + stdErr);
     }
 
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task RunAll_OverReferenceAdapter_FilteredToKitchenSink_Passes()
+    {
+        // Batch mode over the reference adapter, narrowed to a single roster spec. Domains default
+        // to both, but the --filter excludes every gamedata spec, so only the roster kitchen-sink
+        // runs — exit 0 and a "Results:" summary line on stdout.
+        var repoRoot = FindRepoRoot();
+        var adapterDll = FindReferenceAdapterDll(repoRoot);
+        var cliDll = FindCliDll(repoRoot);
+
+        var (exitCode, stdOut, stdErr) = await RunCliWithStdinAsync(
+            cliDll,
+            [
+                "run", "--all",
+                "--engine", $"battlescribe=dotnet:{adapterDll}",
+                "--filter", "protocol/protocol-kitchen-sink",
+                "--output", "summary",
+            ],
+            stdin: "");
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Results:", stdOut + stdErr);
+    }
+
     /// <summary>Spawn the built bs-spec CLI out-of-process, feed it <paramref name="stdin"/>, and capture output/exit code.</summary>
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliWithStdinAsync(
         string cliDll, string[] args, string stdin)

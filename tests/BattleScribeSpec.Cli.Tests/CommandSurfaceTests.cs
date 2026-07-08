@@ -37,9 +37,12 @@ public sealed class CommandSurfaceTests
     }
 
     [Fact]
-    public void Run_RequiresASpecArgument()
+    public void Run_WithoutModeSelector_ParsesButIsARuntimeError()
     {
-        Assert.NotEmpty(Parse("run").Errors);
+        // The spec argument is now optional (Arity ZeroOrOne) so that --all/--matrix can stand
+        // in for it; a bare `run` is therefore NOT a parse error — the "exactly one of
+        // <spec>|--all|--matrix" rule is a runtime CliInputException (see RunBatchSurfaceTests).
+        Assert.Empty(Parse("run").Errors);
     }
 
     [Fact]

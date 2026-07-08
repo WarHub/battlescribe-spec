@@ -32,17 +32,64 @@ internal static class RunCommand
 
     public static Command Create()
     {
-        var spec = new Argument<string>("spec")
+        var spec = new Argument<string?>("spec")
         {
-            Description = "Spec file path, spec ID (e.g. \"selection/selection-page\"), or \"-\" for stdin.",
+            Description = "Spec file path, spec ID (e.g. \"selection/selection-page\"), or \"-\" for stdin. Omit with --all or --matrix.",
+            Arity = ArgumentArity.ZeroOrOne,
         };
         var engineOptions = new EngineOptions();
-        var output = new Option<OutputFormat>("--output", "-o")
+        var output = new Option<string?>("--output", "-o")
         {
-            Description = "State dump format.",
-            DefaultValueFactory = _ => OutputFormat.Tree,
+            Description = "Output format. Single-spec: tree|json (default tree). --all: summary|json|github-actions (default summary).",
         };
-        var json = new Option<bool>("--json") { Description = "Shortcut for --output json." };
+        output.Validators.Add(result =>
+        {
+            // Reject genuinely-unknown values at parse time; the per-mode narrowing
+            // (tree|json vs summary|json|github-actions) is enforced at runtime below.
+            var value = result.GetValueOrDefault<string>();
+            if (value is not null && value is not ("tree" or "json" or "summary" or "github-actions"))
+            {
+                result.AddError($"'{value}' is not a valid value for --output. Expected one of: tree, json, summary, github-actions.");
+            }
+        });
+        var json = new Option<bool>("--json") { Description = "Shortcut for --output json (single-spec only)." };
+        var all = new Option<bool>("--all")
+        {
+            Description = "Run the whole spec suite over the engine (batch mode) instead of a single spec.",
+        };
+        var matrix = new Option<string?>("--matrix")
+        {
+            Description = "Read *-conformance.json reports from <dir> and print a markdown compatibility matrix.",
+        };
+        var specs = new Option<string?>("--specs")
+        {
+            Description = "Specs directory for --all (default: discovered repo specs, else embedded).",
+        };
+        var filter = new Option<string?>("--filter")
+        {
+            Description = "Only run specs whose category/id matches (comma-separated, OR logic) (--all).",
+        };
+        var tags = new Option<string?>("--tags")
+        {
+            Description = "Tag filter expression for --all (comma-separated, +/- prefix).",
+        };
+        var report = new Option<string?>("--report")
+        {
+            Description = "Write a conformance report JSON to <path> (--all).",
+        };
+        var expectedFailures = new Option<string?>("--expected-failures")
+        {
+            Description = "Engine name for spec-level expected failures (--all).",
+        };
+        var assertionEngine = new Option<string?>("--assertion-engine")
+        {
+            Description = "Engine name for step-level assertion overrides (--all; defaults to the engine identity).",
+        };
+        var workers = new Option<int>("--workers")
+        {
+            Description = "Run --all specs in parallel with N adapter processes (default: 1).",
+            DefaultValueFactory = _ => 1,
+        };
         var allSteps = new Option<bool>("--all-steps")
         {
             Description = "Dump state after every step (default: after the last step only).",
@@ -75,28 +122,124 @@ internal static class RunCommand
         var command = new Command("run", "Execute a spec end-to-end against an engine and report pass/fail.");
         command.Arguments.Add(spec);
         engineOptions.AddTo(command);
-        foreach (var option in new Option[] { output, json, allSteps, screenshots, timeline, record, saveRoster, keepAlive, breakAt })
+        foreach (var option in new Option[]
+        {
+            output, json, all, matrix, specs, filter, tags, report, expectedFailures, assertionEngine, workers,
+            allSteps, screenshots, timeline, record, saveRoster, keepAlive, breakAt,
+        })
         {
             command.Options.Add(option);
         }
 
         command.SetAction((parseResult, _) =>
         {
-            var specInput = parseResult.GetValue(spec)!;
-            var keepAliveValue = parseResult.GetValue(keepAlive);
             try
             {
+                var specInput = parseResult.GetValue(spec);
+                var runAll = parseResult.GetValue(all);
+                var matrixDir = parseResult.GetValue(matrix);
+
+                // Exactly one mode selector: <spec>, --all, or --matrix.
+                var modeCount = (specInput is not null ? 1 : 0) + (runAll ? 1 : 0) + (matrixDir is not null ? 1 : 0);
+                if (modeCount == 0)
+                {
+                    throw new CliInputException("Specify exactly one of: <spec>, --all, or --matrix <dir>.");
+                }
+
+                if (modeCount > 1)
+                {
+                    throw new CliInputException("<spec>, --all, and --matrix are mutually exclusive; choose exactly one.");
+                }
+
+                if (matrixDir is not null)
+                {
+                    return Task.FromResult(RunBatch.ExecuteMatrix(matrixDir));
+                }
+
+                if (runAll)
+                {
+                    // --json is a single-spec shortcut; batch runs pick the format via --output.
+                    if (parseResult.GetValue(json))
+                    {
+                        throw new CliInputException("--json is only valid for a single-spec run; use --output json under --all.");
+                    }
+
+                    var batchOutput = parseResult.GetValue(output);
+                    if (batchOutput is not null && batchOutput is not ("summary" or "json" or "github-actions"))
+                    {
+                        throw new CliInputException($"--output '{batchOutput}' is not valid for --all; use summary, json, or github-actions.");
+                    }
+
+                    var workerCount = parseResult.GetValue(workers);
+                    if (workerCount < 1)
+                    {
+                        throw new CliInputException("--workers must be at least 1.");
+                    }
+
+                    // Resolve validates --gamedata/--roster exclusivity, --ui, and the engine identity.
+                    var selection = engineOptions.Resolve(parseResult, specInput: null);
+
+                    // Batch runs both domains by default; --gamedata/--roster narrow. Resolve already
+                    // rejected the both-set case, so the remaining cases are single-domain or neither→both.
+                    IReadOnlyList<string> domains =
+                        (parseResult.GetValue(engineOptions.Gamedata), parseResult.GetValue(engineOptions.Roster)) switch
+                        {
+                            (true, false) => ["gamedata"],
+                            (false, true) => ["roster"],
+                            _ => ["roster", "gamedata"],
+                        };
+
+                    foreach (var (set, flag) in new (bool Set, string Flag)[]
+                    {
+                        (parseResult.GetValue(screenshots) is not null, "--screenshots"),
+                        (parseResult.GetValue(timeline) is not null, "--timeline"),
+                        (parseResult.GetValue(record) is not null, "--record"),
+                        (parseResult.GetValue(saveRoster) is not null, "--save-roster"),
+                        (parseResult.GetValue(keepAlive), "--keep-alive"),
+                        (parseResult.GetValue(breakAt) is not null, "--break"),
+                        (parseResult.GetValue(allSteps), "--all-steps"),
+                    })
+                    {
+                        if (set)
+                        {
+                            Ui.Warn($"{flag} is ignored in --all batch mode.");
+                        }
+                    }
+
+                    var batch = new RunBatch.BatchOptions(
+                        selection,
+                        domains,
+                        batchOutput ?? "summary",
+                        parseResult.GetValue(specs),
+                        parseResult.GetValue(filter),
+                        parseResult.GetValue(tags),
+                        parseResult.GetValue(report),
+                        parseResult.GetValue(expectedFailures),
+                        parseResult.GetValue(assertionEngine),
+                        workerCount);
+                    return RunBatch.ExecuteAsync(batch);
+                }
+
+                // Single-spec mode (unchanged behavior).
+                var keepAliveValue = parseResult.GetValue(keepAlive);
+                var outputStr = parseResult.GetValue(output);
+                if (outputStr is not null && outputStr is not ("tree" or "json"))
+                {
+                    throw new CliInputException($"--output '{outputStr}' is not valid for a single-spec run; use tree or json.");
+                }
+
+                var format = parseResult.GetValue(json) || outputStr == "json" ? OutputFormat.Json : OutputFormat.Tree;
                 var options = new RunOptions(
-                    Spec: specInput,
+                    Spec: specInput!,
                     Engine: engineOptions.Resolve(parseResult, specInput) with { KeepAlive = keepAliveValue },
-                    Format: parseResult.GetValue(json) ? OutputFormat.Json : parseResult.GetValue(output),
+                    Format: format,
                     Headed: parseResult.GetValue(engineOptions.Headed),
                     AllSteps: parseResult.GetValue(allSteps),
                     ScreenshotsDir: parseResult.GetValue(screenshots),
                     TimelinePath: parseResult.GetValue(timeline),
                     RecordPath: parseResult.GetValue(record),
                     SaveRosterDir: parseResult.GetValue(saveRoster),
-                    KeepAlive: parseResult.GetValue(keepAlive),
+                    KeepAlive: keepAliveValue,
                     BreakAt: parseResult.GetValue(breakAt));
                 return ExecuteAsync(options);
             }
