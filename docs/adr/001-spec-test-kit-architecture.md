@@ -1,5 +1,12 @@
 # ADR 001: Spec Test Kit Architecture — stdin/stdout JSON-line Protocol + NuGet Package
 
+> **Status update (2026-07, #271):** Layers 3–4 were unified. The standalone
+> `BattleScribeSpec.Runner` (`bs-spec-runner`) described below has been deleted;
+> its batch pipeline moved into the TestKit and is now driven by the engine-free
+> `bs-spec` CLI over the adapter protocol, with built-in engines served by
+> `bs-engine-host`. The layer model and protocol rationale below remain accurate;
+> the runner-specific mechanics are historical.
+
 - **Status:** Accepted
 - **Date:** 2026-03-01
 - **Deciders:** amis92

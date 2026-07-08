@@ -203,12 +203,6 @@ If your adapter is a .NET assembly, use the `dotnet:` prefix:
 dotnet bs-spec.dll run --all --engine "dotnet:your-adapter.dll" --specs specs
 ```
 
-### Legacy Runner
-
-`bs-spec-runner` (the original standalone runner) still exists as a legacy entry
-point with the same `--adapter` flag shown in earlier BattleScribe Spec releases;
-it is scheduled for removal, so prefer `bs-spec run` above for new integrations.
-
 ## Reference Implementation
 
 See `src/BattleScribeSpec.ReferenceAdapter/` for a complete .NET adapter implementation

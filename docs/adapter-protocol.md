@@ -1,12 +1,12 @@
 # BattleScribe Spec Adapter Protocol v1.1
 
 This document defines the JSON-line protocol used for communication between the
-**bs-spec-runner** (conformance test runner) and an **engine adapter** (a thin wrapper
+**`bs-spec` CLI** (via `bs-engine-host` or any adapter) and an **engine adapter** (a thin wrapper
 around a BattleScribe-compatible roster editing engine).
 
 ## Overview
 
-The runner launches the adapter as a child process and communicates via **stdin/stdout**
+The client (`bs-spec`, through `bs-engine-host` or an external adapter) launches the adapter as a child process and communicates via **stdin/stdout**
 using NDJSON (newline-delimited JSON) — one JSON object per line.
 
 The `bs-spec` CLI is itself engine-free — it speaks only this protocol. For the built-in
@@ -16,21 +16,21 @@ protocol, exactly like any external adapter would.
 
 ```mermaid
 sequenceDiagram
-    participant Runner as bs-spec-runner
+    participant Client as bs-spec
     participant Adapter as Engine Adapter
 
-    Runner->>Adapter: {"type":"setup", ...}
-    Adapter-->>Runner: {"type":"setupResult", ...}
+    Client->>Adapter: {"type":"setup", ...}
+    Adapter-->>Client: {"type":"setupResult", ...}
 
     loop For each spec step
-        Runner->>Adapter: {"type":"action", ...}
-        Adapter-->>Runner: {"type":"actionResult", ...}
-        Runner->>Adapter: {"type":"getState"}
-        Adapter-->>Runner: {"type":"state", ...}
+        Client->>Adapter: {"type":"action", ...}
+        Adapter-->>Client: {"type":"actionResult", ...}
+        Client->>Adapter: {"type":"getState"}
+        Adapter-->>Client: {"type":"state", ...}
     end
 
-    Runner->>Adapter: {"type":"teardown"}
-    Adapter-->>Runner: {"type":"teardownResult"}
+    Client->>Adapter: {"type":"teardown"}
+    Adapter-->>Client: {"type":"teardownResult"}
 ```
 
 ## Protocol Rules
@@ -38,11 +38,11 @@ sequenceDiagram
 1. Each message is a single JSON object on exactly one line (no embedded newlines).
 2. The adapter MUST NOT write anything to stdout except protocol response messages.
 3. The adapter MAY write diagnostic information to stderr.
-4. The runner sends exactly one command, then waits for exactly one response.
+4. The client sends exactly one command, then waits for exactly one response.
 5. The `type` field discriminates message kinds.
 6. Unknown fields should be ignored (forward compatibility).
 
-## Runner → Adapter Commands
+## Client → Adapter Commands
 
 ### `setup` — Initialize Engine
 
@@ -232,7 +232,7 @@ rather than failing the spec.
 {"type":"recordResult","actionsJson":"[{\"type\":\"click\",\"target\":\"#unit-1\"}]"}
 ```
 
-## Adapter → Runner Responses
+## Adapter → Client Responses
 
 ### `setupResult`
 
