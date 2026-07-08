@@ -367,22 +367,32 @@ internal static class RunCommand
 
         var engineLabel = options.Engine.EngineName ?? options.Engine.Display;
         Ui.Info($"Engine: {engineLabel}");
-        IGameDataEngine engine;
+
+        // Spawn the engine as a child adapter process and drive it entirely over the JSON-line
+        // protocol (mirrors RunRosterAsync's handshake). The describe result's Domains tells us
+        // whether this adapter can serve gamedata at all.
+        AdapterProcess process;
+        DescribeResult described;
         try
         {
-            // CreateGameDataEngineAsync requires a non-null name but already tolerates unknown
-            // names cleanly (throws ArgumentException, caught below); "" surfaces that same
-            // clean error for anonymous (null-identity) connectables instead of NREing.
-            engine = await EngineFactory.CreateGameDataEngineAsync(options.Engine.EngineName ?? "", options.Headless);
+            process = options.Engine.StartProcess();
+            described = await AdapterDescriber.DescribeAsync(process);
         }
         catch (Exception ex)
         {
-            Ui.Error($"Error creating engine: {ex.Message}");
+            Ui.Error($"Error starting engine: {ex.Message}");
             return 1;
         }
 
-        using (engine)
+        if (!described.Domains.Contains("gamedata"))
         {
+            Ui.Warn($"engine '{options.Engine.Display}' does not support the gamedata domain (skipped).");
+            return 0;
+        }
+
+        using (process)
+        {
+            IGameDataEngine engine = new JsonProtocolGameDataEngine(process);
             var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
             var lastStepIndex = spec.Steps.Count - 1;
             // GameDataRunner's engineName parameter is nullable and used only for tiered

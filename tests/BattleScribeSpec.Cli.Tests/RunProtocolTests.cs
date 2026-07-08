@@ -83,6 +83,22 @@ public sealed class RunProtocolTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Run_GameDataSpec_OverReferenceAdapter_Passes()
+    {
+        var repoRoot = FindRepoRoot();
+        var spec = Path.Combine(repoRoot, "specs", "gamedata", "entry", "add-entry-basic.yaml");
+        Assert.True(File.Exists(spec), $"Spec not found: {spec}");
+
+        var adapterDll = FindReferenceAdapterDll(repoRoot);
+
+        var exitCode = await Program.RunAsync(
+            "run", spec, "--engine", $"battlescribe=dotnet:{adapterDll}", "--gamedata");
+
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
     [Trait("Category", "Unit")]
     public void Run_BreakOnGamedataSpec_ParsesWithoutErrors()
     {
