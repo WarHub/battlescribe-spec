@@ -144,7 +144,7 @@ internal static class RunCommand
         // Spawn the engine as a child adapter process (bs-engine-host for built-ins, or any
         // exec:/dotnet: connectable) and drive it entirely over the JSON-line protocol. The
         // describe handshake tells us which optional capabilities the adapter honors.
-        AdapterProcess process;
+        AdapterProcess? process = null;
         DescribeResult described;
         try
         {
@@ -154,6 +154,7 @@ internal static class RunCommand
         catch (Exception ex)
         {
             Ui.Error($"Error starting engine: {ex.Message}");
+            process?.Dispose();
             return 1;
         }
 
@@ -371,7 +372,7 @@ internal static class RunCommand
         // Spawn the engine as a child adapter process and drive it entirely over the JSON-line
         // protocol (mirrors RunRosterAsync's handshake). The describe result's Domains tells us
         // whether this adapter can serve gamedata at all.
-        AdapterProcess process;
+        AdapterProcess? process = null;
         DescribeResult described;
         try
         {
@@ -381,17 +382,18 @@ internal static class RunCommand
         catch (Exception ex)
         {
             Ui.Error($"Error starting engine: {ex.Message}");
+            process?.Dispose();
             return 1;
-        }
-
-        if (!described.Domains.Contains("gamedata"))
-        {
-            Ui.Warn($"engine '{options.Engine.Display}' does not support the gamedata domain (skipped).");
-            return 0;
         }
 
         using (process)
         {
+            if (!described.Domains.Contains("gamedata"))
+            {
+                Ui.Warn($"engine '{options.Engine.Display}' does not support the gamedata domain (skipped).");
+                return 0;
+            }
+
             IGameDataEngine engine = new JsonProtocolGameDataEngine(process);
             var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
             var lastStepIndex = spec.Steps.Count - 1;
