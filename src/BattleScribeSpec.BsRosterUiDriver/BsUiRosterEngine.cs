@@ -467,16 +467,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
             GameSystemName: _gameSystem.Name);
     }
 
-    /// <summary>
-    /// Synchronous bridge over <see cref="ExportRosterXmlAsync"/> so the in-process
-    /// <c>RosterRunner</c> file-assertion path (which calls the synchronous
-    /// <see cref="IRosterEngine.ExportRosterXml"/>) exercises the real BattleScribe Export flow
-    /// instead of silently skipping via the interface's NotSupported default. Mirrors the host's
-    /// <c>ServeCommand.RosterXmlExporter</c> bridge and <c>NrRosterUiEngine.ExportRosterXml</c>.
-    /// </summary>
-    public string ExportRosterXml() => ExportRosterXmlAsync().GetAwaiter().GetResult()
-        ?? throw new InvalidOperationException("BattleScribe UI returned no roster XML on export.");
-
     /// <summary>Exports the current roster as BattleScribe XML (.ros format).</summary>
     public async Task<string?> ExportRosterXmlAsync()
     {

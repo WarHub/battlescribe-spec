@@ -27,20 +27,20 @@ internal static class HostEngineFactory
                     var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
                     if (url is { Length: > 0 })
                     {
-                        Console.Error.WriteLine($"[bs-engine-host] NR live mode: {url}");
+                        Ui.Info($"NR live mode: {url}");
                         return await NewRecruitRosterEngine.CreateAsync(url, headless);
                     }
 
                     var har = HarRecorder.FindFrozenHarFile() ?? throw new InvalidOperationException(
                         "NR engine requires NR_ENGINE_URL env var (live mode) or .testdata/newrecruit-har/newrecruit.har (frozen mode).");
-                    Console.Error.WriteLine($"[bs-engine-host] NR frozen mode: {har}");
+                    Ui.Info($"NR frozen mode: {har}");
                     return await NewRecruitRosterEngine.CreateFrozenAsync(har, headless: headless);
                 }
 
             case "battlescribe-ui":
                 {
                     var options = ResolveBsUiOptions();
-                    Console.Error.WriteLine($"[bs-engine-host] BS UI mode: {options.RosterEditorJarPath}");
+                    Ui.Info($"BS UI mode: {options.RosterEditorJarPath}");
                     return new BsUiRosterEngine(options) { KeepAlive = keepAlive };
                 }
 
@@ -49,13 +49,13 @@ internal static class HostEngineFactory
                     var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL");
                     if (url is { Length: > 0 })
                     {
-                        Console.Error.WriteLine($"[bs-engine-host] NR UI live mode: {url}");
+                        Ui.Info($"NR UI live mode: {url}");
                         return await NrRosterUiEngine.CreateAsync(url, headless);
                     }
 
                     var har = HarRecorder.FindFrozenHarFile() ?? throw new InvalidOperationException(
                         "NR UI engine requires NR_ENGINE_URL env var (live mode) or .testdata/newrecruit-har/newrecruit.har (frozen mode).");
-                    Console.Error.WriteLine($"[bs-engine-host] NR UI frozen mode: {har}");
+                    Ui.Info($"NR UI frozen mode: {har}");
                     return await NrRosterUiEngine.CreateFrozenAsync(har, headless: headless);
                 }
 
@@ -72,7 +72,7 @@ internal static class HostEngineFactory
                 {
                     var staticDir = NrGameDataUiEngine.FindFrozenStaticDir() ?? throw new InvalidOperationException(
                         "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
-                    Console.Error.WriteLine($"[bs-engine-host] NR Editor GameData UI (frozen): {staticDir}");
+                    Ui.Info($"NR Editor GameData UI (frozen): {staticDir}");
                     return await NrGameDataUiEngine.CreateFrozenAsync(staticDir, headless);
                 }
 
@@ -81,7 +81,7 @@ internal static class HostEngineFactory
                     var options = BsGameDataUiEngine.FindOptions() ?? throw new InvalidOperationException(
                         "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the agent jar), " +
                         "or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
-                    Console.Error.WriteLine($"[bs-engine-host] BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
+                    Ui.Info($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
                     return new BsGameDataUiEngine(options);
                 }
 
@@ -89,12 +89,12 @@ internal static class HostEngineFactory
                 {
                     var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir() ?? throw new InvalidOperationException(
                         "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
-                    Console.Error.WriteLine($"[bs-engine-host] NewRecruit GameData (frozen): {staticDir}");
+                    Ui.Info($"NewRecruit GameData (frozen): {staticDir}");
                     return await NewRecruitGameDataEngine.CreateFrozenAsync(staticDir, headless);
                 }
 
             case "battlescribe":
-                Console.Error.WriteLine("[bs-engine-host] BattleScribe GameData (in-process)");
+                Ui.Info("BattleScribe GameData (in-process)");
                 return new BattleScribeGameDataEngine();
 
             default:
@@ -159,9 +159,9 @@ internal static class HostEngineFactory
                 "Agent JAR not found. Set BS_UI_AGENT_JAR env var or build with: pwsh -File src/bs-ui-java-agent/build.ps1");
         }
 
-        Console.Error.WriteLine($"[bs-engine-host]   Java: {javaPath}");
-        Console.Error.WriteLine($"[bs-engine-host]   App: {rosterEditorJar}");
-        Console.Error.WriteLine($"[bs-engine-host]   Agent: {agentJar}");
+        Ui.Info($"  Java: {javaPath}");
+        Ui.Info($"  App: {rosterEditorJar}");
+        Ui.Info($"  Agent: {agentJar}");
 
         return new BsUiOptions
         {

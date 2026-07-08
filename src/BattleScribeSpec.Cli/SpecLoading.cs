@@ -15,16 +15,7 @@ internal static class SpecLoading
         if (input == "-")
         {
             var yaml = Console.In.ReadToEnd();
-            var tempFile = Path.GetTempFileName();
-            File.WriteAllText(tempFile, yaml);
-            try
-            {
-                return SpecLoader.Load(tempFile);
-            }
-            finally
-            {
-                File.Delete(tempFile);
-            }
+            return SpecLoader.LoadFromYaml(yaml, defaultId: "stdin");
         }
 
         if (File.Exists(input))
