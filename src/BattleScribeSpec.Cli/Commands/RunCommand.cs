@@ -1,10 +1,20 @@
 using System.CommandLine;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Cli;
+
+/// <summary>
+/// Source-generated (AOT-safe) JSON context for the gamedata single-spec state dump.
+/// Default (Pascal-case) naming + indentation, matching the historical reflection-based
+/// <c>JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true })</c>.
+/// </summary>
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(GameDataState))]
+internal partial class GameDataDumpJsonContext : JsonSerializerContext;
 
 /// <summary>
 /// <c>bs-spec run &lt;spec&gt;</c> — execute a spec end-to-end against an engine and report
@@ -538,7 +548,6 @@ internal static class RunCommand
             }
 
             IGameDataEngine engine = new JsonProtocolGameDataEngine(process);
-            var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
             var lastStepIndex = spec.Steps.Count - 1;
             // GameDataRunner's engineName parameter is nullable and used only for tiered
             // snapshot lookup (falls back to the base tier when unset), so pass the identity
@@ -555,7 +564,7 @@ internal static class RunCommand
 
                     Ui.Blank();
                     Ui.Rule($"Step {index}: {step.Action ?? "assert"}");
-                    Console.Out.WriteLine(JsonSerializer.Serialize(state, jsonOptions));
+                    Console.Out.WriteLine(JsonSerializer.Serialize(state, GameDataDumpJsonContext.Default.GameDataState));
                     Console.Out.Flush();
                 },
             };

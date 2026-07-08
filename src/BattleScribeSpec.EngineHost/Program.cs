@@ -12,6 +12,7 @@ AssemblyLoadContext.Default.Resolving += (context, name) =>
 
 var root = new RootCommand("bs-engine-host — built-in BattleScribe/NewRecruit engines behind the NDJSON adapter protocol.");
 root.Subcommands.Add(ServeCommand.Create());
+root.Subcommands.Add(ProbeCommand.Create());
+root.Subcommands.Add(DiscoverCommand.Create());
 
-// probe/discover verbs are added in a later task.
 return await root.Parse(args).InvokeAsync();

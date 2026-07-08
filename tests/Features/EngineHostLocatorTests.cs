@@ -37,6 +37,31 @@ public sealed class EngineHostLocatorTests
     }
 
     [Fact]
+    public void Builtin_InteractiveVerb_ComposesVerbArgsAndQuotesSpaces()
+    {
+        // probe/discover carry their whole verb tail via verbArgs; the locator prefixes the
+        // verb and quotes any element containing whitespace (e.g. a spec path with a space).
+        var fake = Path.Combine(Path.GetTempPath(), "fake-host.dll");
+        File.WriteAllText(fake, "");
+        var priorValue = Environment.GetEnvironmentVariable("BSSPEC_ENGINE_HOST");
+        try
+        {
+            Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", fake);
+            var launch = EngineHostLocator.Resolve(
+                Builtin,
+                verb: "probe",
+                verbArgs: ["--engine", "battlescribe-ui", "my spec.yaml", "--roster"]);
+            Assert.Equal("dotnet", launch.Executable);
+            Assert.Equal($"{fake} probe --engine battlescribe-ui \"my spec.yaml\" --roster", launch.Arguments);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", priorValue);
+            File.Delete(fake);
+        }
+    }
+
+    [Fact]
     public void Builtin_FindsHostInArtifacts()
     {
         // Running from the repo, probe 3 (artifacts walk) must find the built host.

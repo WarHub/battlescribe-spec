@@ -26,8 +26,21 @@ public static class EngineHostLocator
     /// Headed/keep-alive for non-builtin (launchable) entries are NOT conveyed here — the
     /// CLI sets BSSPEC_HEADED=1 / BSSPEC_KEEP_ALIVE=1 on the child process env when spawning
     /// launchable adapters instead.
+    ///
+    /// The default <paramref name="verb"/> is <c>serve</c> (the NDJSON adapter protocol on
+    /// stdio). The interactive verbs (<c>probe</c>, <c>discover</c>) pass their full argument
+    /// tail via <paramref name="verbArgs"/> — the host command owns those options — and this
+    /// method just prefixes the verb and quotes any element containing whitespace. For those
+    /// verbs the <paramref name="headed"/>/<paramref name="keepAlive"/> flags are not composed
+    /// here; the caller places them in <paramref name="verbArgs"/> at the position the host
+    /// command expects (e.g. after a discover subcommand token).
     /// </summary>
-    public static EngineLaunch Resolve(EngineEntry entry, bool headed = false, bool keepAlive = false)
+    public static EngineLaunch Resolve(
+        EngineEntry entry,
+        bool headed = false,
+        bool keepAlive = false,
+        string verb = "serve",
+        IReadOnlyList<string>? verbArgs = null)
     {
         if (!entry.Builtin)
         {
@@ -42,13 +55,30 @@ public static class EngineHostLocator
             ?? throw new InvalidOperationException(
                 $"Could not locate bs-engine-host for engine '{entry.Name}'. Probed: {string.Join("; ", probed)}");
 
-        var flags = (headed ? " --headed" : "") + (keepAlive ? " --keep-alive" : "");
-        var serveArgs = $"serve --engine {entry.Name}{flags}";
+        string hostArgs;
+        if (verb == "serve")
+        {
+            var flags = (headed ? " --headed" : "") + (keepAlive ? " --keep-alive" : "");
+            hostArgs = $"serve --engine {entry.Name}{flags}";
+        }
+        else
+        {
+            var parts = new List<string> { verb };
+            if (verbArgs is not null)
+            {
+                parts.AddRange(verbArgs.Select(QuoteIfNeeded));
+            }
+
+            hostArgs = string.Join(' ', parts);
+        }
 
         return hostPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-            ? new EngineLaunch("dotnet", $"{hostPath} {serveArgs}")
-            : new EngineLaunch(hostPath, serveArgs);
+            ? new EngineLaunch("dotnet", $"{hostPath} {hostArgs}")
+            : new EngineLaunch(hostPath, hostArgs);
     }
+
+    private static string QuoteIfNeeded(string arg) =>
+        arg.Length == 0 || arg.Any(char.IsWhiteSpace) ? $"\"{arg}\"" : arg;
 
     private static string? ProbeEnvOverride(List<string> probed)
     {

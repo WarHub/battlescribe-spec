@@ -109,6 +109,19 @@ public sealed class CommandSurfaceTests
     }
 
     [Fact]
+    public async Task Probe_WithoutUi_RejectsBeforeSpawningHost()
+    {
+        // probe forwards to bs-engine-host, but the "-ui required" guard fires in the CLI
+        // forwarder (before any host is spawned) so a non-UI engine gets the historical UX.
+        var (exitCode, _, stdErr) = await RunCliAsync("probe", "some/spec");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("probe requires --ui", stdErr);
+        Assert.DoesNotContain("Unhandled exception", stdErr);
+        Assert.DoesNotContain("CliInputException", stdErr);
+    }
+
+    [Fact]
     public void Verify_EnginesWithConnectableEntry_ParsesWithoutErrors()
     {
         // --engines is a free-form CSV (built-in names, exec:/dotnet: connectables, and

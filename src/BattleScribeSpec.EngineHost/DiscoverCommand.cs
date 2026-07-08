@@ -3,11 +3,11 @@ using System.Text.Json;
 using BattleScribeSpec.NrGameDataUiDriver;
 using BattleScribeSpec.Protocol;
 
-namespace BattleScribeSpec.Cli;
+namespace BattleScribeSpec.EngineHost;
 
 /// <summary>
-/// <c>bs-spec discover</c> — automated discovery of the NewRecruit editor's schema surface,
-/// used to catalogue NR's additions over the original BattleScribe data format.
+/// <c>bs-engine-host discover</c> — automated discovery of the NewRecruit editor's schema
+/// surface, used to catalogue NR's additions over the original BattleScribe data format.
 ///
 /// Subcommands:
 ///   <c>xml &lt;spec&gt;</c>   — capture the real <c>.cat</c>/<c>.gst</c> XML NR emits for a spec's data
@@ -60,24 +60,24 @@ internal static class DiscoverCommand
     private static async Task<(NrGameDataUiEngine? Engine, ProtocolGameSystem Gs, ProtocolCatalogue[] Cats, string Dir)>
         SetUpAsync(string specInput, bool headless, string? outputDir)
     {
-        var spec = SpecLoading.LoadGameDataSpec(specInput);
-        Ui.Info($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
+        var spec = HostSpecLoading.LoadGameDataSpec(specInput);
+        Console.Error.WriteLine($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
         var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(spec.Setup);
 
-        var repoRoot = SpecLoading.FindRepoRoot() ?? Directory.GetCurrentDirectory();
+        var repoRoot = HostSpecLoading.FindRepoRoot() ?? Directory.GetCurrentDirectory();
         var dir = outputDir ?? Path.Combine(repoRoot, "artifacts", "discover", spec.Id);
         Directory.CreateDirectory(dir);
 
         var staticDir = NrGameDataUiEngine.FindFrozenStaticDir() ?? throw new InvalidOperationException(
             "NR Editor frozen static dir not found (.testdata/nr-editor) — run setup.ps1.");
-        Ui.Info($"NR Editor GameData UI (frozen): {staticDir}");
+        Console.Error.WriteLine($"NR Editor GameData UI (frozen): {staticDir}");
 
         var engine = await NrGameDataUiEngine.CreateFrozenAsync(staticDir, headless);
         engine.SetTestContext(spec.Id);
         var setupErrors = engine.Setup(gameSystem, catalogues);
         foreach (var err in setupErrors)
         {
-            Ui.Error($"  Setup: {err}");
+            Console.Error.WriteLine($"error:   Setup: {err}");
         }
         if (setupErrors.Count > 0)
         {
@@ -109,7 +109,7 @@ internal static class DiscoverCommand
         using var doc = JsonDocument.Parse(json);
         foreach (var line in doc.RootElement.GetProperty("debug").EnumerateArray())
         {
-            Ui.Info($"  [debug] {line.GetString()}");
+            Console.Error.WriteLine($"  [debug] {line.GetString()}");
         }
 
         var files = doc.RootElement.GetProperty("files");
@@ -119,15 +119,15 @@ internal static class DiscoverCommand
             var name = Path.GetFileName(file.Name.Replace('\\', '/'));
             var content = file.Value.GetString() ?? "";
             await File.WriteAllTextAsync(Path.Combine(dir, name), content);
-            Ui.Info($"  wrote {name} ({content.Length} chars)");
+            Console.Error.WriteLine($"  wrote {name} ({content.Length} chars)");
             written++;
         }
         if (written == 0)
         {
-            Ui.Error("No XML captured.");
+            Console.Error.WriteLine("error: No XML captured.");
             return 1;
         }
-        Ui.Info($"Captured {written} file(s) → {dir}");
+        Console.Error.WriteLine($"Captured {written} file(s) → {dir}");
         return 0;
     }
 
@@ -152,12 +152,12 @@ internal static class DiscoverCommand
                 var selects = JsonSerializer.Deserialize<object>(await engine.DumpSelectsJsonAsync());
                 var widgets = JsonSerializer.Deserialize<object>(await engine.DumpOpenableWidgetsJsonAsync());
                 results[label] = new { selects, widgets };
-                Ui.Info($"  probed {label}");
+                Console.Error.WriteLine($"  probed {label}");
             }
             catch (Exception ex)
             {
                 results[label] = new { error = ex.Message };
-                Ui.Error($"  {label}: {ex.Message}");
+                Console.Error.WriteLine($"error:   {label}: {ex.Message}");
             }
         }
 
@@ -194,7 +194,7 @@ internal static class DiscoverCommand
                     }
                 }
                 results["modifier.typeByField"] = byField;
-                Ui.Info("  probed modifier.typeByField");
+                Console.Error.WriteLine("  probed modifier.typeByField");
 
                 await ProbeAsync("condition", () => Task.FromResult(engine.AddEntry(modifierId!, "condition", null)));
                 await ProbeAsync("conditionGroup", () => Task.FromResult(engine.AddEntry(modifierId!, "conditionGroup", null)));
@@ -248,7 +248,7 @@ internal static class DiscoverCommand
             }
             catch (Exception ex)
             {
-                Ui.Error($"  association: {ex.Message}");
+                Console.Error.WriteLine($"error:   association: {ex.Message}");
             }
         }
         try
@@ -259,18 +259,18 @@ internal static class DiscoverCommand
             {
                 var name = "scaffold-" + Path.GetFileName(file.Name.Replace('\\', '/'));
                 await File.WriteAllTextAsync(Path.Combine(dir, name), file.Value.GetString() ?? "");
-                Ui.Info($"  wrote {name}");
+                Console.Error.WriteLine($"  wrote {name}");
             }
         }
         catch (Exception ex)
         {
-            Ui.Error($"  xml export: {ex.Message}");
+            Console.Error.WriteLine($"error:   xml export: {ex.Message}");
         }
 
         var path = Path.Combine(dir, "enums.json");
         await File.WriteAllTextAsync(path,
             JsonSerializer.Serialize(results, IndentedJson));
-        Ui.Info($"Wrote enum dump ({results.Count} node editors) → {path}");
+        Console.Error.WriteLine($"Wrote enum dump ({results.Count} node editors) → {path}");
         return 0;
     }
 
@@ -298,7 +298,7 @@ internal static class DiscoverCommand
         catch (Exception ex)
         {
             results["selectionEntry (child menu)"] = new { error = ex.Message };
-            Ui.Error($"  entry menu: {ex.Message}");
+            Console.Error.WriteLine($"error:   entry menu: {ex.Message}");
         }
 
         // Right-click selected created nodes to discover where NR-new children are added
@@ -310,12 +310,12 @@ internal static class DiscoverCommand
                 create();
                 var menu = await engine.RightClickAndDumpMenuJsonAsync("#editor-entries h3.selected");
                 results[$"{label} (child menu)"] = JsonSerializer.Deserialize<object>(menu)!;
-                Ui.Info($"  {label} child menu");
+                Console.Error.WriteLine($"  {label} child menu");
             }
             catch (Exception ex)
             {
                 results[$"{label} (child menu)"] = new { error = ex.Message };
-                Ui.Error($"  {label}: {ex.Message}");
+                Console.Error.WriteLine($"error:   {label}: {ex.Message}");
             }
         }
 
@@ -329,7 +329,7 @@ internal static class DiscoverCommand
         // Right-click each root section header to capture its "add" menu.
         var headerCount = await engine.EvaluateAsync<int>(
             "() => document.querySelectorAll('.collapsible-box.depth-0 > h3').length");
-        Ui.Info($"  {headerCount} root section header(s)");
+        Console.Error.WriteLine($"  {headerCount} root section header(s)");
         for (var i = 0; i < headerCount; i++)
         {
             try
@@ -339,7 +339,7 @@ internal static class DiscoverCommand
                     $"() => document.querySelectorAll('.collapsible-box.depth-0 > h3')[{i}]?.innerText?.trim() || ''");
                 var menu = await engine.RightClickAndDumpMenuJsonAsync(header);
                 results[$"section[{i}]: {headerText}"] = JsonSerializer.Deserialize<object>(menu)!;
-                Ui.Info($"  section[{i}]: {headerText}");
+                Console.Error.WriteLine($"  section[{i}]: {headerText}");
             }
             catch (Exception ex)
             {
@@ -350,7 +350,7 @@ internal static class DiscoverCommand
         var path = Path.Combine(dir, "nodes.json");
         await File.WriteAllTextAsync(path,
             JsonSerializer.Serialize(results, IndentedJson));
-        Ui.Info($"Wrote creatable-node dump ({results.Count} menus) → {path}");
+        Console.Error.WriteLine($"Wrote creatable-node dump ({results.Count} menus) → {path}");
         return 0;
     }
 }

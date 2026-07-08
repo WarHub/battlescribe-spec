@@ -7,11 +7,13 @@ using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
 using BattleScribeSpec.XmlGen;
 
-namespace BattleScribeSpec.Cli;
+namespace BattleScribeSpec.EngineHost;
 
 /// <summary>
-/// <c>bs-spec probe &lt;spec&gt; --ui</c> — open the real desktop/browser app with a spec
-/// loaded for interactive inspection (no assertions). One verb for all four UI engines.
+/// <c>bs-engine-host probe &lt;spec&gt; --engine X</c> — open the real desktop/browser app
+/// with a spec loaded for interactive inspection (no assertions). One verb for all four UI
+/// engines. Status lines go to stderr; state dumps and the REPL use stdout/stdin, which the
+/// CLI forwarder inherits so the interactive session reaches the user's console.
 /// </summary>
 internal static class ProbeCommand
 {
@@ -21,38 +23,36 @@ internal static class ProbeCommand
         {
             Description = "Spec file path or ID to load into the inspected app.",
         };
-        var engineOptions = new EngineOptions();
+        var engine = new Option<string>("--engine")
+        {
+            Description = "UI engine: battlescribe-ui or newrecruit-ui.",
+            Required = true,
+        };
+        var headed = new Option<bool>("--headed") { Description = "Show the app/browser window (probe is inherently headed)." };
+        var gamedata = new Option<bool>("--gamedata") { Description = "Probe the gamedata (editor) surface." };
+        var roster = new Option<bool>("--roster") { Description = "Probe the roster surface (default)." };
 
         var command = new Command("probe", "Open a UI engine with a spec loaded for interactive inspection.");
         command.Arguments.Add(spec);
-        engineOptions.AddTo(command);
+        command.Options.Add(engine);
+        command.Options.Add(headed);
+        command.Options.Add(gamedata);
+        command.Options.Add(roster);
 
         command.SetAction((parseResult, _) =>
         {
             var specInput = parseResult.GetValue(spec)!;
-            try
-            {
-                var engine = engineOptions.Resolve(parseResult, specInput);
-                if (engine.EngineName is not { } engineName || !engineName.EndsWith("-ui", StringComparison.Ordinal))
-                {
-                    Ui.Error("probe requires --ui (it inspects the real desktop/browser app).");
-                    return Task.FromResult(1);
-                }
+            var engineName = parseResult.GetValue(engine)!;
+            var isGamedata = parseResult.GetValue(gamedata);
 
-                return (engineName, engine.Domain) switch
-                {
-                    ("battlescribe-ui", EngineDomain.Roster) => ProbeBsRosterAsync(specInput),
-                    ("newrecruit-ui", EngineDomain.Roster) => ProbeNrRosterAsync(specInput),
-                    ("battlescribe-ui", EngineDomain.Gamedata) => ProbeBsGameDataAsync(specInput),
-                    ("newrecruit-ui", EngineDomain.Gamedata) => ProbeNrGameDataAsync(specInput),
-                    _ => ProbeUnsupportedEngine(engineName),
-                };
-            }
-            catch (CliInputException ex)
+            return (engineName, isGamedata) switch
             {
-                Ui.Error(ex.Message);
-                return Task.FromResult(1);
-            }
+                ("battlescribe-ui", false) => ProbeBsRosterAsync(specInput),
+                ("newrecruit-ui", false) => ProbeNrRosterAsync(specInput),
+                ("battlescribe-ui", true) => ProbeBsGameDataAsync(specInput),
+                ("newrecruit-ui", true) => ProbeNrGameDataAsync(specInput),
+                _ => ProbeUnsupportedEngine(engineName),
+            };
         });
 
         return command;
@@ -60,7 +60,7 @@ internal static class ProbeCommand
 
     private static Task<int> ProbeUnsupportedEngine(string engineName)
     {
-        Ui.Error($"probe does not support engine '{engineName}' yet.");
+        Console.Error.WriteLine($"error: probe does not support engine '{engineName}' yet.");
         return Task.FromResult(1);
     }
 
@@ -69,21 +69,21 @@ internal static class ProbeCommand
         SpecFile spec;
         try
         {
-            spec = SpecLoading.LoadSpec(specInput);
+            spec = HostSpecLoading.LoadSpec(specInput);
         }
         catch (Exception ex)
         {
-            Ui.Error($"Error loading spec: {ex.Message}");
+            Console.Error.WriteLine($"error: Error loading spec: {ex.Message}");
             return 1;
         }
 
         if (spec.Setup.DataSource is { Length: > 0 })
         {
-            Ui.Error("battlescribe-ui probe does not support dataSource specs yet.");
+            Console.Error.WriteLine("error: battlescribe-ui probe does not support dataSource specs yet.");
             return 1;
         }
 
-        var options = EngineFactory.ResolveBsUiOptions();
+        var options = HostEngineFactory.ResolveBsUiOptions();
         var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
 
         var xmlFiles = new List<(string FileName, string Content)>
@@ -95,21 +95,21 @@ internal static class ProbeCommand
             xmlFiles.Add((fileName, xml));
         }
 
-        Ui.Info($"BS UI Probe — launching with {xmlFiles.Count} data file(s)");
+        Console.Error.WriteLine($"BS UI Probe — launching with {xmlFiles.Count} data file(s)");
 
         await using var probe = new BsUiProbe(options);
         await probe.LaunchAsync(gameSystem, catalogues, xmlFiles, Console.Error);
 
-        Ui.Blank();
-        Ui.Rule("Scene Graph Dump");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("── Scene Graph Dump ──");
         await probe.DumpTreeAsync(Console.Out);
 
-        Ui.Blank();
-        Ui.Rule("Windows");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("── Windows ──");
         await probe.DumpWindowsAsync(Console.Out);
 
-        Ui.Blank();
-        Ui.Info("BS UI probe complete. BattleScribe is running. Press Enter to shut down...");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("BS UI probe complete. BattleScribe is running. Press Enter to shut down...");
         Console.In.ReadLine();
         return 0;
     }
@@ -119,30 +119,30 @@ internal static class ProbeCommand
         SpecFile spec;
         try
         {
-            spec = SpecLoading.LoadSpec(specInput);
+            spec = HostSpecLoading.LoadSpec(specInput);
         }
         catch (Exception ex)
         {
-            Ui.Error($"Error loading spec: {ex.Message}");
+            Console.Error.WriteLine($"error: Error loading spec: {ex.Message}");
             return 1;
         }
 
         if (spec.Setup.DataSource is { Length: > 0 })
         {
-            Ui.Error("newrecruit-ui probe does not support dataSource specs yet.");
+            Console.Error.WriteLine("error: newrecruit-ui probe does not support dataSource specs yet.");
             return 1;
         }
 
         var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
 
-        Ui.Info($"NR UI Probe — launching with {catalogues.Length + 1} data file(s)");
+        Console.Error.WriteLine($"NR UI Probe — launching with {catalogues.Length + 1} data file(s)");
 
         await using var probe = new NrUiProbe();
         var url = Environment.GetEnvironmentVariable("NR_ENGINE_URL") ?? "https://www.newrecruit.eu";
         await probe.LaunchAsync(gameSystem, catalogues, url, Console.Error);
 
-        Ui.Blank();
-        Ui.Info("NR UI probe ready. Browser is open. Enter JS expressions to evaluate, 'exit' to quit:");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("NR UI probe ready. Browser is open. Enter JS expressions to evaluate, 'exit' to quit:");
         await probe.RunReplAsync(Console.In, Console.Out);
         return 0;
     }
@@ -152,12 +152,12 @@ internal static class ProbeCommand
         GameData.GameDataSpecFile spec;
         try
         {
-            spec = SpecLoading.LoadGameDataSpec(specInput);
-            Ui.Info($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
+            spec = HostSpecLoading.LoadGameDataSpec(specInput);
+            Console.Error.WriteLine($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
         }
         catch (Exception ex)
         {
-            Ui.Error($"Error loading GameData spec: {ex.Message}");
+            Console.Error.WriteLine($"error: Error loading GameData spec: {ex.Message}");
             return 1;
         }
 
@@ -167,14 +167,14 @@ internal static class ProbeCommand
         var options = BsGameDataUiEngine.FindOptions() ?? throw new InvalidOperationException(
             "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the agent jar), " +
             "or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
-        Ui.Info($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
-        Ui.Info($"BS GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
+        Console.Error.WriteLine($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
+        Console.Error.WriteLine($"BS GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
 
         await using var probe = new BsGameDataUiProbe(options);
         await probe.LaunchAsync(gameSystem, catalogues, Console.Error);
 
-        Ui.Blank();
-        Ui.Info("BS GameData UI probe complete. BattleScribe is running. Press Enter to shut down...");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("BS GameData UI probe complete. BattleScribe is running. Press Enter to shut down...");
         Console.In.ReadLine();
         return 0;
     }
@@ -184,36 +184,36 @@ internal static class ProbeCommand
         GameData.GameDataSpecFile spec;
         try
         {
-            spec = SpecLoading.LoadGameDataSpec(specInput);
-            Ui.Info($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
+            spec = HostSpecLoading.LoadGameDataSpec(specInput);
+            Console.Error.WriteLine($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
         }
         catch (Exception ex)
         {
-            Ui.Error($"Error loading GameData spec: {ex.Message}");
+            Console.Error.WriteLine($"error: Error loading GameData spec: {ex.Message}");
             return 1;
         }
 
         var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(spec.Setup);
 
-        Ui.Info($"NR Editor GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
+        Console.Error.WriteLine($"NR Editor GameData UI Probe — launching with {catalogues.Length + 1} data file(s)");
 
         await using var probe = new NrGameDataUiProbe();
 
         var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir();
         if (staticDir is not null)
         {
-            Ui.Info($"  Using frozen NR Editor static files: {staticDir}");
+            Console.Error.WriteLine($"  Using frozen NR Editor static files: {staticDir}");
             await probe.LaunchFrozenAsync(staticDir, gameSystem, catalogues, Console.Error);
         }
         else
         {
             var baseUrl = Environment.GetEnvironmentVariable("NR_EDITOR_URL") ?? "https://giloushaker.github.io/nr-editor";
-            Ui.Info($"  Using live NR Editor: {baseUrl}");
+            Console.Error.WriteLine($"  Using live NR Editor: {baseUrl}");
             await probe.LaunchAsync(gameSystem, catalogues, baseUrl, Console.Error);
         }
 
-        Ui.Blank();
-        Ui.Info("NR Editor GameData UI probe ready. Browser is open. Enter JS expressions to evaluate, 'exit' to quit:");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("NR Editor GameData UI probe ready. Browser is open. Enter JS expressions to evaluate, 'exit' to quit:");
         await probe.RunReplAsync(Console.In, Console.Out);
         return 0;
     }
