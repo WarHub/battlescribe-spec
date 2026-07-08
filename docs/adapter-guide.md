@@ -13,11 +13,11 @@ your adapter responds with the corresponding results.
 ## Architecture
 
 ```
-bs-spec-runner  ──stdin──▸  your-adapter  ──▸  your engine
-                ◂─stdout──                 ◂──
+bs-spec  ──stdin──▸  your-adapter  ──▸  your engine
+         ◂─stdout──                 ◂──
 ```
 
-The runner manages the adapter as a child process. Each line on stdin is a
+The CLI manages the adapter as a child process. Each line on stdin is a
 JSON command; each line on stdout is a JSON response. Stderr is ignored
 (use it for logging/debugging).
 
@@ -171,20 +171,28 @@ If your adapter encounters an error, return a `ProtocolError`:
 
 ## Running the Spec Suite
 
-### With .NET CLI Runner
+### With the `bs-spec` CLI
 
 ```bash
 # Build your adapter
 # Then run:
-dotnet bs-spec-runner.dll --adapter "/path/to/your-adapter" --specs specs --output summary
+dotnet bs-spec.dll run --all --engine "exec:/path/to/your-adapter" --specs specs --output summary
+```
+
+Give the engine a name if you want it to participate in `--expected-failures`
+matrices or multi-engine comparisons:
+
+```bash
+dotnet bs-spec.dll run --all --engine "myengine=exec:/path/to/your-adapter" \
+  --specs specs --workers 4 --output github-actions --report artifacts/myengine-conformance.json
 ```
 
 ### With Docker
 
 ```bash
 docker run --rm -v /path/to/your-adapter:/adapter \
-  bs-spec-runner:local \
-  --adapter "/adapter/your-adapter" --specs /specs --output summary
+  bs-spec:local \
+  run --all --engine "exec:/adapter/your-adapter" --specs /specs --output summary
 ```
 
 ### .NET Adapter Shortcut
@@ -192,8 +200,14 @@ docker run --rm -v /path/to/your-adapter:/adapter \
 If your adapter is a .NET assembly, use the `dotnet:` prefix:
 
 ```bash
-dotnet bs-spec-runner.dll --adapter "dotnet:your-adapter.dll" --specs specs
+dotnet bs-spec.dll run --all --engine "dotnet:your-adapter.dll" --specs specs
 ```
+
+### Legacy Runner
+
+`bs-spec-runner` (the original standalone runner) still exists as a legacy entry
+point with the same `--adapter` flag shown in earlier BattleScribe Spec releases;
+it is scheduled for removal, so prefer `bs-spec run` above for new integrations.
 
 ## Reference Implementation
 
