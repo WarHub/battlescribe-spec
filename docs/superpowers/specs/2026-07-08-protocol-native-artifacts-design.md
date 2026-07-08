@@ -95,11 +95,15 @@ Only three things are genuinely file-absent:
 3. **`availableEntryCount`** (root-force level) — an engine/UI count, never
    serialized.
 
-Plus one non-field concern: **ordering.** The `.ros` serializes in engine/data
-order; `RosterState` is re-sorted by a UI comparator in the adapter
-(`RosterNameNodeComparator`, name case-insensitive) for BattleScribe, while
-NewRecruit already returns display order. That sort is engine-specific and not
-encoded in the file.
+**Ordering is not a file-absent concern — it is a deliberate non-goal.** The
+`.ros` serializes forces/selections in engine/data order; today the BattleScribe
+adapter fabricates a *display* order via `RosterNameNodeComparator` (name
+case-insensitive) that is not in the file. A serialization-conformance suite must
+test **the order the app writes to disk**, not its display sort (which is a
+presentation concern and may be a user-configurable in-app setting). So the
+adapter's UI-sort is **deleted**, and force/selection assertions conform to
+document order in the export. This is why the annotations sidecar (below) carries
+only runtime-derived *semantics*, never presentation ordering.
 
 ## Design
 
@@ -140,7 +144,7 @@ A single `snapshot` command replaces `getState` + `getErrors` +
 ```
 SnapshotResult {
   files:       { fileName, content }[]                  // native roster export (.ros today)
-  annotations: { uid, hidden?, availableEntryCount? }[] // in DISPLAY order
+  annotations: { uid, hidden?, availableEntryCount? }[] // runtime-derived semantics; NO ordering
   errors:      ValidationErrorState[]                   // unchanged shape
 }
 ```
@@ -148,39 +152,50 @@ SnapshotResult {
 - **`files`** — the native roster export, exactly what `exportRosterXml` produces
   today (BattleScribe's `DataUtils` serializer for the BS engines; NewRecruit's
   `exportRos` for the NR engines). `expectedFile` byte-compares this verbatim;
-  the existing `.ros` snapshots are unchanged.
-- **`annotations`** — only the file-absent derived values: `hidden` on
-  forces/selections and `availableEntryCount` on root forces, keyed by the
-  instance **uid** (which the export stamps as the `id` attribute on every
-  `<force>`/`<selection>` — the same uids actions return). The **list is emitted
-  in display order**; the runner reorders siblings by that sequence, so no
-  engine-specific comparator lives on the runner. (Optimization for the plan:
-  omit `hidden` when false to keep the payload small.)
+  the existing `.ros` snapshots are unchanged. This is the sole source of
+  structure and ordering — see [export fixups](#7-adapter-export-fixups-governed).
+- **`annotations`** — only the **runtime-derived semantics** absent from
+  serialization: `hidden` on forces/selections and `availableEntryCount` on root
+  forces, keyed by the instance **uid** (which the export stamps as the `id`
+  attribute on every `<force>`/`<selection>` — the same uids actions return).
+  Deliberately carries **no ordering** — presentation order is not conformed
+  (see the surface analysis). Unordered set; the runner overlays each entry onto
+  the parsed node with the matching uid. (Optimization for the plan: omit
+  `hidden` when false to keep the payload small.)
 - **`errors`** — the same `ValidationErrorState[]` adapters compute today. This
   channel is essentially unchanged.
 
-### 3. Runner-side reconstruction
+### 3. Runner-side evaluation (parse once, no re-materialization)
 
-A shared `RosterStateReconstructor` used by **both** the in-process path
-(`RosterRunner` calling `IRosterEngine` directly) and the out-of-process path
+Assertions evaluate **directly against the parsed export** — the runner does not
+rebuild a normalized `RosterState` object graph per snapshot just to read a
+handful of asserted fields. A shared `SnapshotView`, used by **both** the
+in-process path (`RosterRunner`) and the out-of-process path
 (`JsonProtocolEngine` over NDJSON):
 
-1. Parse `files` into a structural `RosterState` using the vendored
+1. Parse `files` **once** into a queryable typed model using the vendored
    **WHAM `WarHub.ArmouryModel`** roster reader. One parser serves both engines
-   because both export the roster schema (`.ros`).
-2. Merge annotations by uid: set `hidden` / `availableEntryCount` on the matching
-   parsed nodes.
-3. Order siblings (forces under roster/force, selections under force/selection)
-   by the annotations' display-order sequence; fall back to file order for any
-   uid absent from annotations.
-4. Attach `errors` as `RosterState.ValidationErrors`.
+   because both export the roster schema (`.ros`). Force/selection order is the
+   document order — no sort.
+2. Overlay annotations by uid: `hidden` / `availableEntryCount` are read from the
+   sidecar for the node with the matching uid; every other field is read from the
+   parsed node.
+3. Expose `errors` as-is.
+
+The `expectedState` evaluator (`AssertState`/`AssertForce`/…) is retargeted from
+`RosterState` to `SnapshotView`. Positional force/selection comparison
+(`RosterRunner.cs:519,784`) now runs against serialization order; keyed
+collections (costs/profiles/rules/categories) are unaffected. `RosterState`
+survives only as an **optional projection** built on demand for tooling that
+needs a serializable normalized snapshot (the differential runner #274, CLI
+display) — never on the assertion path, so nothing is remapped twice.
 
 ### 4. Errors — association by uid
 
 The errors channel carries `ValidationErrorState (Message, OwnerType, OwnerId,
 OwnerEntryId, EntryId, ConstraintId)` unchanged. Assertions
 (`ErrorAssertionDef` "on"/"from") match on `OwnerType`/`OwnerEntryId`/`EntryId`/
-`ConstraintId` as today. Association to reconstructed nodes:
+`ConstraintId` as today. Association to parsed nodes in the `SnapshotView`:
 
 - **force / selection owner** → `OwnerId` = instance uid → direct join to the
   parsed node's `id`. Precise even with duplicate entries (uid is unique).
@@ -220,12 +235,43 @@ All adapters are in-repo, so there is no mixed-version interop to preserve. v1.1
 setup/state/errors/export commands and their DTOs are **deleted**, not
 deprecated. `describe` advertises `1.2`; a `1.1` handshake is a hard error.
 
-## Assertion semantics (unchanged for spec authors)
+### 7. Adapter export fixups (governed)
 
-- `expectedFile` = byte-compare the raw `files` (`.ros` snapshots as-is, still
-  run through `TemplatizeRosterInstanceIds`).
-- `expectedState` = compare the reconstructed + merged `RosterState`.
-- No change to any spec YAML.
+The default is that the adapter puts its engine's **verbatim** native export on
+the wire — that is the whole fidelity point. But some engines emit
+spec-runner-incompatible artifacts (BattleScribe is deeply legacy): genuine
+run-to-run nondeterminism, or a custom addition an engine injects that isn't part
+of the data contract. For those, the adapter may apply an **export fixup** before
+serializing to the wire — under strict governance:
+
+- **Named + enumerated.** Each fixup is a discrete, named transform in a per-engine
+  registry (e.g. `bs-strip-<x>`, `bs-normalize-<y>`), with a written justification.
+- **Explicit manual approval per fixup.** Adding one is a deliberate, reviewed
+  decision — never an ambient normalization pass. New fixups surface in review.
+- **Recorded per run.** The snapshot result reports which fixups were applied, so
+  the delta between raw engine output and the tested artifact is **never silent**;
+  it is auditable in the run output and in review.
+- **Narrow.** Fixups exist only for nondeterminism or legacy warts that make
+  conformance impossible. They are **not** a general normalization layer and
+  **not** an ordering mechanism — ordering is conformed as-serialized (§ surface
+  analysis). If something can be asserted as-is, it must be.
+
+Open question for the plan: whether `expectedFile` byte-compares pre-fixup (raw
+engine output) or post-fixup (what the runner reasons over). Leaning post-fixup
+(compare what we actually test), with the applied-fixup list recorded alongside.
+
+## Assertion semantics
+
+- `expectedFile` = byte-compare the `files` on the wire (post-fixup; still run
+  through `TemplatizeRosterInstanceIds`). Existing `.ros` snapshots unchanged
+  except where a newly-approved fixup applies.
+- `expectedState` = evaluate against the `SnapshotView` (parsed export +
+  annotations overlay + errors). Force/selection order is **serialization order**.
+- **Migration (one-time):** `expectedState` snapshots and hand-authored
+  force/selection sequences that currently assume the fabricated UI (name) order
+  are regenerated/re-authored to serialization order. Keyed collections
+  (costs/profiles/rules/categories) are unaffected. No YAML *schema* change — only
+  the ordering of positional list assertions where it differed from wire order.
 
 ## Testing strategy
 
@@ -234,10 +280,10 @@ deprecated. `describe` advertises `1.2`; a `1.1` handshake is a hard error.
   before and after, across all four engines.
 - `protocol-kitchen-sink` + the protocol serialization tests (renamed to 1.2)
   exercise the new wire types round-trip.
-- New focused tests: serializer-registry format selection; `RosterStateReconstructor`
-  (WHAM parse → annotation merge → ordering → error attach) against fixed export
+- New focused tests: serializer-registry format selection; `SnapshotView`
+  (WHAM parse → annotation overlay → error association) against fixed export
   fixtures; uid/pseudo-address error association including duplicates and category
-  owners.
+  owners; export-fixup application + run-recording.
 
 ## Implementation order (single branch)
 
@@ -249,22 +295,33 @@ deprecated. `describe` advertises `1.2`; a `1.1` handshake is a hard error.
      asserts, against the current snapshots?
 2. Protocol types: new `SetupCommand`/`SnapshotCommand`/`SnapshotResult`; remove
    legacy (per `changing-protocol-types`).
-3. Runner: serializer registry + `RosterStateReconstructor`; `RosterRunner` and
+3. Runner: serializer registry + `SnapshotView`; retarget the `expectedState`
+   evaluator from `RosterState` to `SnapshotView`; `RosterRunner` and
    `JsonProtocolEngine` switch to `SetupFromFiles`/`GetSnapshot`.
 4. Adapters: rewrite the four engines to the new interface; delete DTO builders,
-   `SetupFromProtocol`, `JavaModelFactory`, adapter-side `CatXmlGenerator`.
-5. Host: `ServeCommand`/`HostEngineFactory` wiring; drop export gating.
-6. Delete dead code; run full conformance parity.
+   the UI-sort comparator, `SetupFromProtocol`, `JavaModelFactory`, adapter-side
+   `CatXmlGenerator`. Stand up the per-engine fixup registry (empty until a fixup
+   is explicitly approved).
+5. Migrate `expectedState` snapshots/assertions from UI order to serialization
+   order.
+6. Host: `ServeCommand`/`HostEngineFactory` wiring; drop export gating.
+7. Delete dead code; run full conformance parity.
 
 ## Risks
 
 - **`CatXmlGenerator` becomes load-bearing for the reference engine.** If it can't
   express something a spec's setup uses, BS setup breaks. Mitigation: audit is
   step 1; keep `JavaModelFactory` until the audit and full conformance pass.
-- **WHAM roster-parse fidelity.** Must round-trip everything `expectedState`
-  asserts. Mitigation: fixture tests before removing the adapter DTO builders.
-- **Payload size** of full annotations on large rosters. Mitigation: omit
-  default-false `hidden`; annotations are small scalars keyed by uid.
+- **WHAM roster-parse fidelity.** Must recover everything `expectedState` asserts
+  (structural fields). Mitigation: fixture tests before removing the adapter DTO
+  builders.
+- **Ordering migration.** Switching force/selection assertions from fabricated UI
+  order to serialization order changes existing snapshots/assertions. Mitigation:
+  it is a mechanical, reviewable sweep (step 5) and the diff makes any surprising
+  serialization order visible — which is itself worth knowing.
+- **Fixup creep.** The escape hatch could erode fidelity if fixups proliferate.
+  Mitigation: per-fixup manual approval, run-recording, and the "assert as-is if
+  possible" bar (§7); the registry starts empty.
 - **UI-driver export cost.** `snapshot` now always exports (drives NR's export UI
   / the BS Java agent) on every `expectedState` step, not only `expectedFile`
   steps. Measure; if hot, cache the export per unchanged roster revision.
