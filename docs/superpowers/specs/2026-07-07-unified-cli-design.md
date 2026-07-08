@@ -27,15 +27,26 @@ bs-spec  (AOT-publishable; references TestKit only)
 ### `bs-spec` (BattleScribeSpec.Cli)
 
 - Keeps all verbs: `run`, `verify`, `probe`, `export-xml`, `format`, `discover`.
-- `format`, `discover`, `export-xml` are engine-free and unchanged.
-- `run`, `verify`, `probe` interact with engines **only** via the adapter
-  protocol. All engine/driver project references are dropped from the csproj.
-- `probe` maps cleanly onto the protocol: launch the connectable with
-  `--headed` forwarded, send `setup`/`setupFromFiles`, then keep the child
-  process alive (no teardown) until the user exits. The engine-specific
-  bootstrap it does today (jar resolution, frozen static dirs) moves into
-  `bs-engine-host` with `EngineFactory`.
-- `IsAotCompatible=true` and AOT publish enabled.
+- `format` is engine-free and unchanged. `export-xml` is pure serialization
+  but depends on `CatXmlGenerator` (XmlSerializer/reflection-based, today in
+  the NewRecruit project); that type moves to a new small shared
+  **`BattleScribeSpec.XmlGen`** project (not AOT-flagged) referenced by the
+  CLI, the engine host, and the drivers.
+- `run`, `verify` interact with engines **only** via the adapter protocol.
+  All engine/driver project references are dropped from the csproj.
+- `probe` and `discover` drive engine-specific surfaces (scene dumps, raw JS
+  eval, widget probing) the protocol does not carry — they become
+  **host verbs**: their implementations move wholesale into `bs-engine-host`
+  (`bs-engine-host probe|discover …`), and the `bs-spec` verbs resolve the
+  engine via the registry and forward (spawn the host with passthrough
+  stdio, so interactive REPLs keep working). Protocol-native probing stays
+  #272 territory. The engine-specific bootstrap (jar resolution, frozen
+  static dirs) moves into `bs-engine-host` with `EngineFactory`.
+- `IsAotCompatible=true` (analyzer-enforced on the CLI's own code); actual
+  `PublishAot` is **best-effort** — attempted and smoke-tested, but the
+  XmlSerializer-based `BattleScribeSpec.XmlGen` dependency may keep the
+  published binary framework-dependent initially (matching the docker hedge
+  below). Document the outcome either way.
 - Known risk: Spectre.Console under AOT. `Ui.cs` is the single console wrapper;
   if the AOT analyzer flags Spectre, replace the implementation with plain ANSI
   output without changing call sites.
@@ -46,7 +57,10 @@ bs-spec  (AOT-publishable; references TestKit only)
   `BattleScribeSpec.BattleScribe`, `BattleScribeSpec.NewRecruit`, and the four
   UI driver projects.
 - Speaks adapter protocol v1.1 on stdin/stdout: roster and gamedata domains,
-  plus the parity extensions below.
+  plus the parity extensions below (default `serve` verb).
+- Also carries the interactive `probe` and `discover` verbs (moved wholesale
+  from the CLI), since their engine-specific surfaces have no protocol
+  representation yet.
 - Engine-shaping CLI options forward as host argv for built-ins
   (`--headed`, `--keep-alive`, worker count); ad-hoc/config-registered adapters
   receive them as documented `BSSPEC_*` environment variables.

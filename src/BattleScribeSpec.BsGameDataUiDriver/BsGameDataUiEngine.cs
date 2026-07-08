@@ -2,9 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.GameData;
-using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.XmlGen;
 
 namespace BattleScribeSpec.BsGameDataUiDriver;
 

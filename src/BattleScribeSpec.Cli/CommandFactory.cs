@@ -12,10 +12,10 @@ internal static class CommandFactory
 
         root.Subcommands.Add(RunCommand.Create());
         root.Subcommands.Add(VerifyCommand.Create());
-        root.Subcommands.Add(ProbeCommand.Create());
+        root.Subcommands.Add(ProbeForwardCommand.Create());
         root.Subcommands.Add(ExportXmlCommand.Create());
         root.Subcommands.Add(FormatCommand.Create());
-        root.Subcommands.Add(DiscoverCommand.Create());
+        root.Subcommands.Add(DiscoverForwardCommand.Create());
 
         return root;
     }

@@ -9,6 +9,11 @@ around a BattleScribe-compatible roster editing engine).
 The runner launches the adapter as a child process and communicates via **stdin/stdout**
 using NDJSON (newline-delimited JSON) — one JSON object per line.
 
+The `bs-spec` CLI is itself engine-free — it speaks only this protocol. For the built-in
+engines (`battlescribe`, `battlescribe-ui`, `newrecruit`, `newrecruit-ui`) it spawns
+**bs-engine-host**, an in-box adapter process that serves all four over this same
+protocol, exactly like any external adapter would.
+
 ```mermaid
 sequenceDiagram
     participant Runner as bs-spec-runner

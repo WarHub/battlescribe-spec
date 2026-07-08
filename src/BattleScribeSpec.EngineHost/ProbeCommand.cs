@@ -5,12 +5,15 @@ using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.NrGameDataUiDriver;
 using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.XmlGen;
 
-namespace BattleScribeSpec.Cli;
+namespace BattleScribeSpec.EngineHost;
 
 /// <summary>
-/// <c>bs-spec probe &lt;spec&gt; --ui</c> — open the real desktop/browser app with a spec
-/// loaded for interactive inspection (no assertions). One verb for all four UI engines.
+/// <c>bs-engine-host probe &lt;spec&gt; --engine X</c> — open the real desktop/browser app
+/// with a spec loaded for interactive inspection (no assertions). One verb for all four UI
+/// engines. Status lines go to stderr; state dumps and the REPL use stdout/stdin, which the
+/// CLI forwarder inherits so the interactive session reaches the user's console.
 /// </summary>
 internal static class ProbeCommand
 {
@@ -20,40 +23,45 @@ internal static class ProbeCommand
         {
             Description = "Spec file path or ID to load into the inspected app.",
         };
-        var engineOptions = new EngineOptions();
+        var engine = new Option<string>("--engine")
+        {
+            Description = "UI engine: battlescribe-ui or newrecruit-ui.",
+            Required = true,
+        };
+        var headed = new Option<bool>("--headed") { Description = "Show the app/browser window (probe is inherently headed)." };
+        var gamedata = new Option<bool>("--gamedata") { Description = "Probe the gamedata (editor) surface." };
+        var roster = new Option<bool>("--roster") { Description = "Probe the roster surface (default)." };
 
         var command = new Command("probe", "Open a UI engine with a spec loaded for interactive inspection.");
         command.Arguments.Add(spec);
-        engineOptions.AddTo(command);
+        command.Options.Add(engine);
+        command.Options.Add(headed);
+        command.Options.Add(gamedata);
+        command.Options.Add(roster);
 
         command.SetAction((parseResult, _) =>
         {
             var specInput = parseResult.GetValue(spec)!;
-            try
-            {
-                var engine = engineOptions.Resolve(parseResult, specInput);
-                if (!engine.Ui)
-                {
-                    Ui.Error("probe requires --ui (it inspects the real desktop/browser app).");
-                    return Task.FromResult(1);
-                }
+            var engineName = parseResult.GetValue(engine)!;
+            var isGamedata = parseResult.GetValue(gamedata);
 
-                return (engine.Product, engine.Domain) switch
-                {
-                    (EngineProduct.Battlescribe, EngineDomain.Roster) => ProbeBsRosterAsync(specInput),
-                    (EngineProduct.Newrecruit, EngineDomain.Roster) => ProbeNrRosterAsync(specInput),
-                    (EngineProduct.Battlescribe, EngineDomain.Gamedata) => ProbeBsGameDataAsync(specInput),
-                    _ => ProbeNrGameDataAsync(specInput),
-                };
-            }
-            catch (CliInputException ex)
+            return (engineName, isGamedata) switch
             {
-                Ui.Error(ex.Message);
-                return Task.FromResult(1);
-            }
+                ("battlescribe-ui", false) => ProbeBsRosterAsync(specInput),
+                ("newrecruit-ui", false) => ProbeNrRosterAsync(specInput),
+                ("battlescribe-ui", true) => ProbeBsGameDataAsync(specInput),
+                ("newrecruit-ui", true) => ProbeNrGameDataAsync(specInput),
+                _ => ProbeUnsupportedEngine(engineName),
+            };
         });
 
         return command;
+    }
+
+    private static Task<int> ProbeUnsupportedEngine(string engineName)
+    {
+        Ui.Error($"probe does not support engine '{engineName}' yet.");
+        return Task.FromResult(1);
     }
 
     private static async Task<int> ProbeBsRosterAsync(string specInput)
@@ -61,7 +69,7 @@ internal static class ProbeCommand
         SpecFile spec;
         try
         {
-            spec = SpecLoading.LoadSpec(specInput);
+            spec = HostSpecLoading.LoadSpec(specInput);
         }
         catch (Exception ex)
         {
@@ -75,7 +83,7 @@ internal static class ProbeCommand
             return 1;
         }
 
-        var options = EngineFactory.ResolveBsUiOptions();
+        var options = HostEngineFactory.ResolveBsUiOptions();
         var (gameSystem, catalogues) = SpecLoader.GetSetupData(spec.Setup, spec.Id);
 
         var xmlFiles = new List<(string FileName, string Content)>
@@ -93,11 +101,11 @@ internal static class ProbeCommand
         await probe.LaunchAsync(gameSystem, catalogues, xmlFiles, Console.Error);
 
         Ui.Blank();
-        Ui.Rule("Scene Graph Dump");
+        Ui.Info("── Scene Graph Dump ──");
         await probe.DumpTreeAsync(Console.Out);
 
         Ui.Blank();
-        Ui.Rule("Windows");
+        Ui.Info("── Windows ──");
         await probe.DumpWindowsAsync(Console.Out);
 
         Ui.Blank();
@@ -111,7 +119,7 @@ internal static class ProbeCommand
         SpecFile spec;
         try
         {
-            spec = SpecLoading.LoadSpec(specInput);
+            spec = HostSpecLoading.LoadSpec(specInput);
         }
         catch (Exception ex)
         {
@@ -144,7 +152,7 @@ internal static class ProbeCommand
         GameData.GameDataSpecFile spec;
         try
         {
-            spec = SpecLoading.LoadGameDataSpec(specInput);
+            spec = HostSpecLoading.LoadGameDataSpec(specInput);
             Ui.Info($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
         }
         catch (Exception ex)
@@ -176,7 +184,7 @@ internal static class ProbeCommand
         GameData.GameDataSpecFile spec;
         try
         {
-            spec = SpecLoading.LoadGameDataSpec(specInput);
+            spec = HostSpecLoading.LoadGameDataSpec(specInput);
             Ui.Info($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
         }
         catch (Exception ex)

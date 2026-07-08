@@ -7,6 +7,7 @@
   <ItemGroup>
     <!-- Reuse BsRosterUiDriver for shared infrastructure: AgentClient, BsRosterApp, BsUiDataStaging, BsUiDiagnostics, BsUiProbe, BsUiOptions -->
     <ProjectReference Include="..\BattleScribeSpec.BsRosterUiDriver\BattleScribeSpec.BsRosterUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.XmlGen\BattleScribeSpec.XmlGen.csproj" />
   </ItemGroup>
 
 </Project>

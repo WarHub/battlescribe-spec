@@ -31,16 +31,49 @@ public class ConformanceTests
 ### For Any Language
 
 Write a thin [adapter](docs/adapter-protocol.md) that wraps your engine with the
-JSON-line protocol, then run the CLI:
+JSON-line protocol, then run it through the `bs-spec` CLI with an `exec:`/`dotnet:`
+connectable:
 
 ```bash
-dotnet bs-spec-runner.dll \
-  --adapter "/path/to/your-adapter" \
+dotnet bs-spec.dll run --all \
+  --engine "exec:/path/to/your-adapter" \
   --specs specs/ \
   --output summary
 ```
 
 See the [Adapter Implementation Guide](docs/adapter-guide.md) for step-by-step instructions.
+
+### The `bs-spec` CLI
+
+`bs-spec` is engine-free: it speaks only the adapter protocol. The `--engine` option
+selects what it talks to — a built-in name, a `name=connectable` alias from
+`engines.json`, or an ad-hoc `exec:`/`dotnet:` connectable:
+
+```bash
+# Built-in in-process/API engines
+bs-spec run selection/selection-page --engine battlescribe
+bs-spec run selection/selection-page --engine newrecruit
+
+# Built-in UI engines (drive the real desktop app / browser)
+bs-spec run selection/selection-page --engine battlescribe-ui --headed
+bs-spec run selection/selection-page --engine newrecruit-ui
+
+# --ui is sugar for appending "-ui" to a plain built-in name
+bs-spec run selection/selection-page --engine battlescribe --ui
+
+# Any external adapter (dotnet DLL or arbitrary executable)
+bs-spec run selection/selection-page --engine "dotnet:path/to/adapter.dll"
+bs-spec run selection/selection-page --engine "myengine=exec:/path/to/adapter"
+
+# Full suite, matrix report
+bs-spec run --all --engine battlescribe --report artifacts/battlescribe-conformance.json
+```
+
+Built-in engines (`battlescribe`, `battlescribe-ui`, `newrecruit`, `newrecruit-ui`) don't
+run in the CLI process itself — the CLI resolves them and spawns **bs-engine-host**, an
+in-box adapter process that hosts all four, over the same protocol used for external
+adapters. `bs-spec probe` and `bs-spec discover` (interactive inspection / NR schema
+discovery) always run this way, forwarding to `bs-engine-host` with inherited stdio.
 
 ## Architecture
 
@@ -48,9 +81,11 @@ See the [Adapter Implementation Guide](docs/adapter-guide.md) for step-by-step i
 graph TD
     A[YAML Spec Files] --> B[TestKit Library]
     B --> C1[In-process xUnit Tests]
-    B --> C2[CLI Runner bs-spec-runner]
-    C2 -->|stdin/stdout JSON| D[Your Adapter]
-    D --> E[Your Engine]
+    B --> C2[bs-spec CLI]
+    C2 -->|stdin/stdout JSON| D1[bs-engine-host]
+    C2 -->|stdin/stdout JSON| D2[External Adapter]
+    D1 --> E1[BattleScribe / NewRecruit engines + UI drivers]
+    D2 --> E2[Your Engine]
     C1 --> F[Your .NET Engine]
 ```
 
@@ -60,8 +95,10 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 |-------|-------------|
 | **YAML Specs** | 312 declarative spec files covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
-| **CLI Runner** | Standalone console app that drives any adapter via JSON-line protocol |
-| **Adapters** | Thin wrappers translating protocol commands to engine API calls |
+| **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
+| **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
+| **XmlGen** | `.cat`/`.gst`/`.ros` XML generation shared by the CLI's `export-xml` and bs-engine-host's `probe`/`discover` |
+| **Adapters** | Thin wrappers (built-in or external) translating protocol commands to engine API calls |
 
 ## Spec Coverage
 
@@ -95,8 +132,14 @@ battlescribe-spec/
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)
-│   ├── BattleScribeSpec.Cli/      # Spec CLI (bs-spec: run/probe/export-xml/format)
-│   ├── BattleScribeSpec.Runner/   # CLI runner (bs-spec-runner)
+│   ├── BattleScribeSpec.Cli/      # Engine-free spec CLI (bs-spec: run/probe/verify/export-xml/format/discover)
+│   ├── BattleScribeSpec.EngineHost/      # In-box adapter host (bs-engine-host) serving the built-in engines
+│   ├── BattleScribeSpec.XmlGen/           # .cat/.gst/.ros XML generation (used by the CLI and bs-engine-host)
+│   ├── BattleScribeSpec.BsRosterUiDriver/    # BattleScribe desktop UI driver (roster domain)
+│   ├── BattleScribeSpec.BsGameDataUiDriver/  # BattleScribe desktop UI driver (gamedata domain)
+│   ├── BattleScribeSpec.NrRosterUiDriver/    # New Recruit browser UI driver (roster domain, Playwright)
+│   ├── BattleScribeSpec.NrGameDataUiDriver/  # New Recruit browser UI driver (gamedata domain, Playwright)
+│   ├── BattleScribeSpec.Runner/   # Legacy CLI runner (bs-spec-runner)
 │   ├── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps BattleScribe)
 │   ├── BattleScribeSpec.NewRecruit/        # New Recruit adapter (Playwright)
 │   └── BattleScribeSpec.NewRecruit.HarTool/  # HAR recording console tool
@@ -143,6 +186,16 @@ battlescribe-spec/
 dotnet build
 dotnet test
 ```
+
+**AOT status:** `BattleScribeSpec.Cli` is analyzer-clean (`IsAotCompatible=true`, no
+trim/AOT warnings), but a real `PublishAot=true` publish is blocked further upstream:
+`dotnet publish src/BattleScribeSpec.Cli -c Release -p:PublishAot=true -r win-x64` fails
+during restore with `NETSDK1207` on the vendored `.deps/wham` submodule's
+`WarHub.ArmouryModel.Source.CodeGeneration` project (a `netstandard2.0` Roslyn source
+generator pulled in transitively via XmlGen), since `-p:PublishAot=true` on the command
+line is a global MSBuild property that cascades to every project in the graph, including
+non-publishable source generators. `PublishAot` stays off by default; this is a smoke-test
+finding, not a regression.
 
 ### Running Specific Test Suites
 
@@ -198,10 +251,16 @@ dotnet test -p:TestProfile=nr-live-visible
 
 ```bash
 dotnet build
-dotnet src/BattleScribeSpec.Runner/bin/Debug/net10.0/bs-spec-runner.dll \
-  --adapter "dotnet:src/BattleScribeSpec.ReferenceAdapter/bin/Debug/net10.0/bs-reference-adapter.dll" \
+dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
+  --engine "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
   --specs specs \
   --output summary
+```
+
+Or against a built-in engine (spawns `bs-engine-host` under the hood):
+
+```bash
+dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all --engine battlescribe --output summary
 ```
 
 ## New Recruit Testing

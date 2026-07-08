@@ -6,13 +6,14 @@ using BattleScribeSpec.NrGameDataUiDriver;
 using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
 
-namespace BattleScribeSpec.Cli;
+namespace BattleScribeSpec.EngineHost;
 
 /// <summary>
 /// Creates concrete roster/gamedata engines from a resolved engine name, and resolves the
-/// BattleScribe UI artifact paths. Status lines go to stderr via <see cref="Ui"/>.
+/// BattleScribe UI artifact paths. Status lines go to stderr (protocol rule: stdout is
+/// protocol-only).
 /// </summary>
-internal static class EngineFactory
+internal static class HostEngineFactory
 {
     public static async Task<IRosterEngine> CreateRosterEngineAsync(string name, bool headless, bool keepAlive)
     {
@@ -110,7 +111,7 @@ internal static class EngineFactory
         var appDir = Environment.GetEnvironmentVariable("BS_UI_APP_DIR");
         var agentJar = Environment.GetEnvironmentVariable("BS_UI_AGENT_JAR");
 
-        var repoRoot = SpecLoading.FindRepoRoot();
+        var repoRoot = FindRepoRoot();
 
         // BS_UI_JAVA_PATH → repo-local Liberica JDK → bundled platform JRE. See BsUiPaths.
         var javaPath = repoRoot is not null
@@ -168,5 +169,19 @@ internal static class EngineFactory
             RosterEditorJarPath = rosterEditorJar,
             AgentJarPath = agentJar,
         };
+    }
+
+    private static string? FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        for (; dir is not null; dir = dir.Parent)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+            {
+                return dir.FullName;
+            }
+        }
+
+        return null;
     }
 }

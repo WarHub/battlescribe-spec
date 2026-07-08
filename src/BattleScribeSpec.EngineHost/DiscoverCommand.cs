@@ -3,11 +3,11 @@ using System.Text.Json;
 using BattleScribeSpec.NrGameDataUiDriver;
 using BattleScribeSpec.Protocol;
 
-namespace BattleScribeSpec.Cli;
+namespace BattleScribeSpec.EngineHost;
 
 /// <summary>
-/// <c>bs-spec discover</c> — automated discovery of the NewRecruit editor's schema surface,
-/// used to catalogue NR's additions over the original BattleScribe data format.
+/// <c>bs-engine-host discover</c> — automated discovery of the NewRecruit editor's schema
+/// surface, used to catalogue NR's additions over the original BattleScribe data format.
 ///
 /// Subcommands:
 ///   <c>xml &lt;spec&gt;</c>   — capture the real <c>.cat</c>/<c>.gst</c> XML NR emits for a spec's data
@@ -60,11 +60,11 @@ internal static class DiscoverCommand
     private static async Task<(NrGameDataUiEngine? Engine, ProtocolGameSystem Gs, ProtocolCatalogue[] Cats, string Dir)>
         SetUpAsync(string specInput, bool headless, string? outputDir)
     {
-        var spec = SpecLoading.LoadGameDataSpec(specInput);
+        var spec = HostSpecLoading.LoadGameDataSpec(specInput);
         Ui.Info($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
         var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(spec.Setup);
 
-        var repoRoot = SpecLoading.FindRepoRoot() ?? Directory.GetCurrentDirectory();
+        var repoRoot = HostSpecLoading.FindRepoRoot() ?? Directory.GetCurrentDirectory();
         var dir = outputDir ?? Path.Combine(repoRoot, "artifacts", "discover", spec.Id);
         Directory.CreateDirectory(dir);
 
@@ -99,8 +99,8 @@ internal static class DiscoverCommand
         // Also emit the raw CatXmlGenerator input (what we feed NR) so it can be diffed against NR's
         // re-serialized output below — the diff reveals NR's load-time normalizations.
         await File.WriteAllTextAsync(Path.Combine(dir, $"generated-{gs.Id}.gst"),
-            BattleScribeSpec.NewRecruit.CatXmlGenerator.GenerateGameSystemXml(gs));
-        foreach (var (fileName, xml) in BattleScribeSpec.NewRecruit.CatXmlGenerator.GenerateAllCatalogueXml(gs, cats))
+            BattleScribeSpec.XmlGen.CatXmlGenerator.GenerateGameSystemXml(gs));
+        foreach (var (fileName, xml) in BattleScribeSpec.XmlGen.CatXmlGenerator.GenerateAllCatalogueXml(gs, cats))
         {
             await File.WriteAllTextAsync(Path.Combine(dir, $"generated-{fileName}"), xml);
         }

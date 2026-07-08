@@ -1,13 +1,7 @@
 using System.CommandLine;
+using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Cli;
-
-/// <summary>Which product implements the engine.</summary>
-internal enum EngineProduct
-{
-    Battlescribe,
-    Newrecruit,
-}
 
 /// <summary>Which kind of spec the engine is editing.</summary>
 internal enum EngineDomain
@@ -23,45 +17,40 @@ internal enum OutputFormat
     Json,
 }
 
-/// <summary>
-/// The three orthogonal engine axes resolved into a concrete engine selection:
-/// product (battlescribe/newrecruit), surface (API vs <c>--ui</c>), and domain
-/// (roster/gamedata, inferred from the spec unless overridden).
-/// </summary>
-internal sealed record EngineSpec(EngineProduct Product, bool Ui, EngineDomain Domain)
+/// <summary>A resolved engine selection: registry entry + domain + launch shaping.</summary>
+internal sealed record EngineSelection(EngineEntry Entry, EngineDomain Domain, bool Headed, bool KeepAlive)
 {
-    /// <summary>The concrete engine name used by the factories and runners.</summary>
-    public string EngineName => (Product, Ui) switch
+    /// <summary>Identity for applicability/assertions/labels; null for anonymous ad-hoc adapters.</summary>
+    public string? EngineName => Entry.Name;
+
+    /// <summary>Assertion engine: strip a trailing "-ui" from the identity.</summary>
+    public string? AssertionEngineName =>
+        EngineName is { } n ? (n.EndsWith("-ui", StringComparison.Ordinal) ? n[..^3] : n) : null;
+
+    public string Display => $"{(Domain == EngineDomain.Gamedata ? "gamedata" : "roster")}/{EngineName ?? "adapter"}";
+
+    /// <summary>Start the adapter process for this selection.</summary>
+    public Protocol.AdapterProcess StartProcess()
     {
-        (EngineProduct.Battlescribe, false) => "battlescribe",
-        (EngineProduct.Battlescribe, true) => "battlescribe-ui",
-        (EngineProduct.Newrecruit, false) => "newrecruit",
-        (EngineProduct.Newrecruit, true) => "newrecruit-ui",
-        _ => throw new ArgumentOutOfRangeException(nameof(Product)),
-    };
-
-    /// <summary>
-    /// Assertion-override engine: UI engines assert as their non-UI counterpart, since a
-    /// UI engine drives the same underlying product (battlescribe-ui IS battlescribe).
-    /// </summary>
-    public string AssertionEngineName =>
-        Product == EngineProduct.Battlescribe ? "battlescribe" : "newrecruit";
-
-    public string Display => $"{(Domain == EngineDomain.Gamedata ? "gamedata" : "roster")}/{EngineName}";
+        var launch = EngineHostLocator.Resolve(Entry, Headed, KeepAlive);
+        return Protocol.AdapterProcess.Start(launch.Executable, launch.Arguments);
+    }
 }
 
 /// <summary>
 /// The shared engine-selection options (<c>--engine</c>, <c>--ui</c>,
 /// <c>--gamedata</c>/<c>--roster</c>, <c>--headed</c>). One instance per command;
 /// <see cref="Resolve"/> turns the parsed values plus the spec input into an
-/// <see cref="EngineSpec"/>.
+/// <see cref="EngineSelection"/>.
 /// </summary>
 internal sealed class EngineOptions
 {
-    public Option<EngineProduct> Engine { get; } = new("--engine")
+    public Option<string> Engine { get; } = new("--engine")
     {
-        Description = "Engine product: battlescribe or newrecruit.",
-        DefaultValueFactory = _ => EngineProduct.Battlescribe,
+        Description = "Engine to use: a built-in name (battlescribe, battlescribe-ui, newrecruit, " +
+            "newrecruit-ui), a connectable (exec:<command>, dotnet:<dll-path>, <name>=<connectable>), " +
+            "or a name from engines.json.",
+        DefaultValueFactory = _ => "battlescribe",
     };
 
     public Option<bool> Ui { get; } = new("--ui")
@@ -93,8 +82,8 @@ internal sealed class EngineOptions
         command.Options.Add(Headed);
     }
 
-    /// <summary>Resolve the parsed axes into a concrete <see cref="EngineSpec"/>.</summary>
-    public EngineSpec Resolve(ParseResult parseResult, string specInput)
+    /// <summary>Resolve the parsed axes into a concrete <see cref="EngineSelection"/>.</summary>
+    public EngineSelection Resolve(ParseResult parseResult, string? specInput)
     {
         var gamedata = parseResult.GetValue(Gamedata);
         var roster = parseResult.GetValue(Roster);
@@ -107,12 +96,44 @@ internal sealed class EngineOptions
         {
             (true, _) => EngineDomain.Gamedata,
             (_, true) => EngineDomain.Roster,
-            _ => SpecLoading.InferEngineType(specInput) == "gamedata"
-                ? EngineDomain.Gamedata
-                : EngineDomain.Roster,
+            _ => SpecLoading.InferEngineType(specInput) == "gamedata" ? EngineDomain.Gamedata : EngineDomain.Roster,
         };
 
-        return new EngineSpec(parseResult.GetValue(Engine), parseResult.GetValue(Ui), domain);
+        EngineConnectable connectable;
+        try
+        {
+            connectable = EngineConnectable.Parse(parseResult.GetValue(Engine)!);
+        }
+        catch (FormatException ex)
+        {
+            throw new CliInputException(ex.Message);
+        }
+
+        var ui = parseResult.GetValue(Ui);
+        if (ui && connectable.IsLaunchable)
+        {
+            throw new CliInputException(
+                "--ui cannot be combined with an exec:/dotnet: connectable; name the engine variant directly.");
+        }
+
+        // --ui sugar: append -ui to a plain registry name (idempotent).
+        if (ui && connectable is { IsLaunchable: false, Name: { } plain }
+            && !plain.EndsWith("-ui", StringComparison.Ordinal))
+        {
+            connectable = connectable with { Name = plain + "-ui" };
+        }
+
+        EngineEntry entry;
+        try
+        {
+            entry = EngineRegistry.LoadDefault().Resolve(connectable);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            throw new CliInputException(ex.Message);
+        }
+
+        return new EngineSelection(entry, domain, parseResult.GetValue(Headed), KeepAlive: false);
     }
 }
 

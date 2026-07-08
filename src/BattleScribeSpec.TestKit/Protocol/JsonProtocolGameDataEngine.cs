@@ -21,6 +21,12 @@ public sealed class JsonProtocolGameDataEngine : IGameDataEngine
 
     public void SetTestContext(string specId) => _specId = specId;
 
+    /// <summary>
+    /// Configure the engine with game system and catalogue data. Sent with an explicit
+    /// 2-minute timeout (longer than the default 30s): engine construction happens
+    /// server-side during setup, and UI engines hosted by bs-engine-host do a Playwright
+    /// cold-start there, which can exceed the default window.
+    /// </summary>
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
         var response = SendCommand(new GameDataSetupCommand
@@ -28,7 +34,7 @@ public sealed class JsonProtocolGameDataEngine : IGameDataEngine
             SpecId = _specId,
             GameSystem = gameSystem,
             Catalogues = [.. catalogues],
-        });
+        }, TimeSpan.FromMinutes(2));
         return response switch
         {
             SetupResult sr => sr.Errors,
@@ -123,9 +129,10 @@ public sealed class JsonProtocolGameDataEngine : IGameDataEngine
         var other => throw new InvalidOperationException($"Unexpected response type: {other.Type}"),
     };
 
-    private ProtocolResponse SendCommand(ProtocolCommand command)
+    private ProtocolResponse SendCommand(ProtocolCommand command, TimeSpan? timeout = null)
     {
-        using var cts = new CancellationTokenSource(_requestTimeout);
+        var effectiveTimeout = timeout ?? _requestTimeout;
+        using var cts = new CancellationTokenSource(effectiveTimeout);
         try
         {
             return _adapter.SendCommandAsync(command, cts.Token).GetAwaiter().GetResult();
@@ -133,7 +140,7 @@ public sealed class JsonProtocolGameDataEngine : IGameDataEngine
         catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
         {
             throw new TimeoutException(
-                $"Adapter timed out after {_requestTimeout.TotalSeconds:0}s while handling '{command.Type}'.", ex);
+                $"Adapter timed out after {effectiveTimeout.TotalSeconds:0}s while handling '{command.Type}'.", ex);
         }
     }
 }

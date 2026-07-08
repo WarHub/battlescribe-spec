@@ -1,6 +1,7 @@
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.XmlGen;
 
 #pragma warning disable IDE0060 // Remove unused parameter — interface implementations and UI stubs
 

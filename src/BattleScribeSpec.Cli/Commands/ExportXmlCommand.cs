@@ -1,6 +1,6 @@
 using System.CommandLine;
-using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.XmlGen;
 
 namespace BattleScribeSpec.Cli;
 

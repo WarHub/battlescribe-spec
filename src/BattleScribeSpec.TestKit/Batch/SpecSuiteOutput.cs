@@ -44,7 +44,9 @@ public static class SpecSuiteOutput
             ElapsedSeconds = result.Elapsed.TotalSeconds,
             Specs = [.. result.Results.Select(r =>
             {
-                var spec = result.SpecsByResult.TryGetValue(r, out var s) ? s : null;
+                SpecFileBase? spec = result.SpecsByResult.TryGetValue(r, out var s) ? s
+                    : result.GameDataSpecsByResult.TryGetValue(r, out var gs) ? gs
+                    : null;
                 return new JsonSpecEntry
                 {
                     Id = r.SpecId,
@@ -78,7 +80,9 @@ public static class SpecSuiteOutput
             output.WriteLine("|------|----------|");
             foreach (var r in result.Results)
             {
-                var spec = result.SpecsByResult.TryGetValue(r, out var s) ? s : null;
+                SpecFileBase? spec = result.SpecsByResult.TryGetValue(r, out var s) ? s
+                    : result.GameDataSpecsByResult.TryGetValue(r, out var gs) ? gs
+                    : null;
                 var isExpectedFail = result.ExpectedFailuresEngine is not null && (spec?.IsExpectedToFail(result.ExpectedFailuresEngine) ?? false);
                 var isRealFailure = !r.Passed && !isExpectedFail;
                 var isUnexpectedPass = r.Passed && isExpectedFail;

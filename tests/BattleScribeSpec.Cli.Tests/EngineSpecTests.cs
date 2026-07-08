@@ -1,34 +1,74 @@
 using System.CommandLine;
+using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Cli.Tests;
 
 /// <summary>
-/// Tests the orthogonal engine model: product × ui × domain resolve to the right concrete
-/// engine name, the UI→non-UI assertion mapping, and how <see cref="EngineOptions.Resolve"/>
-/// derives the domain (explicit override vs. spec-path inference).
+/// Tests the string-based engine surface: <see cref="EngineOptions.Resolve"/> parses
+/// <c>--engine</c> as a name/connectable/engines.json entry via <see cref="EngineConnectable"/>
+/// and <see cref="EngineRegistry"/>, the <c>--ui</c> sugar, the UI→non-UI assertion mapping,
+/// and how the domain is derived (explicit override vs. spec-path inference).
 /// </summary>
 [Trait("Category", "Unit")]
 public sealed class EngineSpecTests
 {
-    // [Theory] methods must be public, so they take bools (not the internal enums) and map.
     [Theory]
-    [InlineData(false, false, "battlescribe")]
-    [InlineData(false, true, "battlescribe-ui")]
-    [InlineData(true, false, "newrecruit")]
-    [InlineData(true, true, "newrecruit-ui")]
-    public void EngineName_MapsProductAndSurface(bool newrecruit, bool ui, string expected)
+    [InlineData("battlescribe")]
+    [InlineData("battlescribe-ui")]
+    [InlineData("newrecruit")]
+    [InlineData("newrecruit-ui")]
+    public void Resolve_ResolvesEachBuiltinName(string name)
     {
-        var spec = new EngineSpec(Product(newrecruit), ui, EngineDomain.Roster);
-        Assert.Equal(expected, spec.EngineName);
+        var selection = Resolve("plain-spec-id", "--engine", name);
+        Assert.Equal(name, selection.EngineName);
+    }
+
+    [Fact]
+    public void Resolve_UiSugar_AppendsUiToAPlainName()
+    {
+        var selection = Resolve("plain-spec-id", "--engine", "newrecruit", "--ui");
+        Assert.Equal("newrecruit-ui", selection.EngineName);
+    }
+
+    [Fact]
+    public void Resolve_UiSugar_IsIdempotentOnAnAlreadyUiName()
+    {
+        var selection = Resolve("plain-spec-id", "--engine", "newrecruit-ui", "--ui");
+        Assert.Equal("newrecruit-ui", selection.EngineName);
+    }
+
+    [Fact]
+    public void Resolve_NameEqualsDotnetLaunch_CarriesIdentityAndLaunch()
+    {
+        var selection = Resolve("plain-spec-id", "--engine", "wham=dotnet:adapter.dll");
+
+        Assert.Equal("wham", selection.EngineName);
+        Assert.Equal("dotnet", selection.Entry.Executable);
+        Assert.Equal("adapter.dll", selection.Entry.Arguments);
+        Assert.False(selection.Entry.Builtin);
+    }
+
+    [Fact]
+    public void Resolve_UnknownEngineName_ThrowsCliInputException()
+    {
+        Assert.Throws<CliInputException>(() => Resolve("plain-spec-id", "--engine", "warscroll"));
+    }
+
+    [Fact]
+    public void Resolve_UiCombinedWithExecConnectable_ThrowsCliInputException()
+    {
+        Assert.Throws<CliInputException>(() => Resolve("plain-spec-id", "--engine", "exec:node adapter.js", "--ui"));
     }
 
     [Theory]
-    [InlineData(false, "battlescribe")]
-    [InlineData(true, "newrecruit")]
-    public void AssertionEngineName_DropsTheUiSurface(bool newrecruit, string expected)
+    [InlineData("battlescribe", "battlescribe")]
+    [InlineData("battlescribe-ui", "battlescribe")]
+    [InlineData("newrecruit", "newrecruit")]
+    [InlineData("newrecruit-ui", "newrecruit")]
+    public void AssertionEngineName_DropsTheUiSuffix(string engineName, string expected)
     {
-        var spec = new EngineSpec(Product(newrecruit), Ui: true, EngineDomain.Roster);
-        Assert.Equal(expected, spec.AssertionEngineName);
+        var selection = Resolve("plain-spec-id", "--engine", engineName);
+        Assert.Equal(expected, selection.AssertionEngineName);
     }
 
     [Theory]
@@ -36,52 +76,42 @@ public sealed class EngineSpecTests
     [InlineData(true, true, "gamedata/battlescribe-ui")]
     public void Display_CombinesDomainAndEngineName(bool gamedata, bool ui, string expected)
     {
-        var domain = gamedata ? EngineDomain.Gamedata : EngineDomain.Roster;
-        var spec = new EngineSpec(EngineProduct.Battlescribe, ui, domain);
-        Assert.Equal(expected, spec.Display);
-    }
+        string[] domainArgs = gamedata ? ["--gamedata"] : [];
+        string[] uiArgs = ui ? ["--ui"] : [];
+        string[] args = ["--engine", "battlescribe", .. domainArgs, .. uiArgs];
 
-    private static EngineProduct Product(bool newrecruit) =>
-        newrecruit ? EngineProduct.Newrecruit : EngineProduct.Battlescribe;
+        var selection = Resolve("plain-spec-id", args);
+        Assert.Equal(expected, selection.Display);
+    }
 
     [Fact]
     public void Resolve_DefaultsToBattlescribeRoster()
     {
-        var spec = Resolve("plain-spec-id");
+        var selection = Resolve("plain-spec-id");
 
-        Assert.Equal(EngineProduct.Battlescribe, spec.Product);
-        Assert.False(spec.Ui);
-        Assert.Equal(EngineDomain.Roster, spec.Domain);
-    }
-
-    [Fact]
-    public void Resolve_ReadsProductAndUi()
-    {
-        var spec = Resolve("plain-spec-id", "--engine", "newrecruit", "--ui");
-
-        Assert.Equal(EngineProduct.Newrecruit, spec.Product);
-        Assert.True(spec.Ui);
+        Assert.Equal("battlescribe", selection.EngineName);
+        Assert.Equal(EngineDomain.Roster, selection.Domain);
     }
 
     [Fact]
     public void Resolve_InfersGamedataFromSpecPath()
     {
-        var spec = Resolve("specs/gamedata/entry/add-entry-basic");
-        Assert.Equal(EngineDomain.Gamedata, spec.Domain);
+        var selection = Resolve("specs/gamedata/entry/add-entry-basic");
+        Assert.Equal(EngineDomain.Gamedata, selection.Domain);
     }
 
     [Fact]
     public void Resolve_RosterFlagOverridesGamedataPath()
     {
-        var spec = Resolve("specs/gamedata/entry/add-entry-basic", "--roster");
-        Assert.Equal(EngineDomain.Roster, spec.Domain);
+        var selection = Resolve("specs/gamedata/entry/add-entry-basic", "--roster");
+        Assert.Equal(EngineDomain.Roster, selection.Domain);
     }
 
     [Fact]
     public void Resolve_GamedataFlagForcesGamedata()
     {
-        var spec = Resolve("plain-roster-spec", "--gamedata");
-        Assert.Equal(EngineDomain.Gamedata, spec.Domain);
+        var selection = Resolve("plain-roster-spec", "--gamedata");
+        Assert.Equal(EngineDomain.Gamedata, selection.Domain);
     }
 
     [Fact]
@@ -93,7 +123,7 @@ public sealed class EngineSpecTests
         Assert.Throws<CliInputException>(() => options.Resolve(result, "spec"));
     }
 
-    private static EngineSpec Resolve(string specInput, params string[] extraArgs)
+    private static EngineSelection Resolve(string specInput, params string[] extraArgs)
     {
         var options = new EngineOptions();
         string[] args = [specInput, .. extraArgs];

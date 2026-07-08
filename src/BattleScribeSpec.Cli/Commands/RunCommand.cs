@@ -1,10 +1,20 @@
 using System.CommandLine;
 using System.Text.Json;
-using BattleScribeSpec.BsRosterUiDriver;
+using System.Text.Json.Serialization;
 using BattleScribeSpec.GameData;
+using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Cli;
+
+/// <summary>
+/// Source-generated (AOT-safe) JSON context for the gamedata single-spec state dump.
+/// Default (Pascal-case) naming + indentation, matching the historical reflection-based
+/// <c>JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true })</c>.
+/// </summary>
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(GameDataState))]
+internal partial class GameDataDumpJsonContext : JsonSerializerContext;
 
 /// <summary>
 /// <c>bs-spec run &lt;spec&gt;</c> — execute a spec end-to-end against an engine and report
@@ -16,7 +26,7 @@ internal static class RunCommand
 {
     private sealed record RunOptions(
         string Spec,
-        EngineSpec Engine,
+        EngineSelection Engine,
         OutputFormat Format,
         bool Headed,
         bool AllSteps,
@@ -32,17 +42,64 @@ internal static class RunCommand
 
     public static Command Create()
     {
-        var spec = new Argument<string>("spec")
+        var spec = new Argument<string?>("spec")
         {
-            Description = "Spec file path, spec ID (e.g. \"selection/selection-page\"), or \"-\" for stdin.",
+            Description = "Spec file path, spec ID (e.g. \"selection/selection-page\"), or \"-\" for stdin. Omit with --all or --matrix.",
+            Arity = ArgumentArity.ZeroOrOne,
         };
         var engineOptions = new EngineOptions();
-        var output = new Option<OutputFormat>("--output", "-o")
+        var output = new Option<string?>("--output", "-o")
         {
-            Description = "State dump format.",
-            DefaultValueFactory = _ => OutputFormat.Tree,
+            Description = "Output format. Single-spec: tree|json (default tree). --all: summary|json|github-actions (default summary).",
         };
-        var json = new Option<bool>("--json") { Description = "Shortcut for --output json." };
+        output.Validators.Add(result =>
+        {
+            // Reject genuinely-unknown values at parse time; the per-mode narrowing
+            // (tree|json vs summary|json|github-actions) is enforced at runtime below.
+            var value = result.GetValueOrDefault<string>();
+            if (value is not null && value is not ("tree" or "json" or "summary" or "github-actions"))
+            {
+                result.AddError($"'{value}' is not a valid value for --output. Expected one of: tree, json, summary, github-actions.");
+            }
+        });
+        var json = new Option<bool>("--json") { Description = "Shortcut for --output json (single-spec only)." };
+        var all = new Option<bool>("--all")
+        {
+            Description = "Run the whole spec suite over the engine (batch mode) instead of a single spec.",
+        };
+        var matrix = new Option<string?>("--matrix")
+        {
+            Description = "Read *-conformance.json reports from <dir> and print a markdown compatibility matrix.",
+        };
+        var specs = new Option<string?>("--specs")
+        {
+            Description = "Specs directory for --all (default: discovered repo specs, else embedded).",
+        };
+        var filter = new Option<string?>("--filter")
+        {
+            Description = "Only run specs whose category/id matches (comma-separated, OR logic) (--all).",
+        };
+        var tags = new Option<string?>("--tags")
+        {
+            Description = "Tag filter expression for --all (comma-separated, +/- prefix).",
+        };
+        var report = new Option<string?>("--report")
+        {
+            Description = "Write a conformance report JSON to <path> (--all).",
+        };
+        var expectedFailures = new Option<string?>("--expected-failures")
+        {
+            Description = "Engine name for spec-level expected failures (--all).",
+        };
+        var assertionEngine = new Option<string?>("--assertion-engine")
+        {
+            Description = "Engine name for step-level assertion overrides (--all; defaults to the engine identity).",
+        };
+        var workers = new Option<int>("--workers")
+        {
+            Description = "Run --all specs in parallel with N adapter processes (default: 1).",
+            DefaultValueFactory = _ => 1,
+        };
         var allSteps = new Option<bool>("--all-steps")
         {
             Description = "Dump state after every step (default: after the last step only).",
@@ -75,27 +132,132 @@ internal static class RunCommand
         var command = new Command("run", "Execute a spec end-to-end against an engine and report pass/fail.");
         command.Arguments.Add(spec);
         engineOptions.AddTo(command);
-        foreach (var option in new Option[] { output, json, allSteps, screenshots, timeline, record, saveRoster, keepAlive, breakAt })
+        foreach (var option in new Option[]
+        {
+            output, json, all, matrix, specs, filter, tags, report, expectedFailures, assertionEngine, workers,
+            allSteps, screenshots, timeline, record, saveRoster, keepAlive, breakAt,
+        })
         {
             command.Options.Add(option);
         }
 
         command.SetAction((parseResult, _) =>
         {
-            var specInput = parseResult.GetValue(spec)!;
-            var options = new RunOptions(
-                Spec: specInput,
-                Engine: engineOptions.Resolve(parseResult, specInput),
-                Format: parseResult.GetValue(json) ? OutputFormat.Json : parseResult.GetValue(output),
-                Headed: parseResult.GetValue(engineOptions.Headed),
-                AllSteps: parseResult.GetValue(allSteps),
-                ScreenshotsDir: parseResult.GetValue(screenshots),
-                TimelinePath: parseResult.GetValue(timeline),
-                RecordPath: parseResult.GetValue(record),
-                SaveRosterDir: parseResult.GetValue(saveRoster),
-                KeepAlive: parseResult.GetValue(keepAlive),
-                BreakAt: parseResult.GetValue(breakAt));
-            return ExecuteAsync(options);
+            try
+            {
+                var specInput = parseResult.GetValue(spec);
+                var runAll = parseResult.GetValue(all);
+                var matrixDir = parseResult.GetValue(matrix);
+
+                // Exactly one mode selector: <spec>, --all, or --matrix.
+                var modeCount = (specInput is not null ? 1 : 0) + (runAll ? 1 : 0) + (matrixDir is not null ? 1 : 0);
+                if (modeCount == 0)
+                {
+                    throw new CliInputException("Specify exactly one of: <spec>, --all, or --matrix <dir>.");
+                }
+
+                if (modeCount > 1)
+                {
+                    throw new CliInputException("<spec>, --all, and --matrix are mutually exclusive; choose exactly one.");
+                }
+
+                if (matrixDir is not null)
+                {
+                    return Task.FromResult(RunBatch.ExecuteMatrix(matrixDir));
+                }
+
+                if (runAll)
+                {
+                    // --json is a single-spec shortcut; batch runs pick the format via --output.
+                    if (parseResult.GetValue(json))
+                    {
+                        throw new CliInputException("--json is only valid for a single-spec run; use --output json under --all.");
+                    }
+
+                    var batchOutput = parseResult.GetValue(output);
+                    if (batchOutput is not null && batchOutput is not ("summary" or "json" or "github-actions"))
+                    {
+                        throw new CliInputException($"--output '{batchOutput}' is not valid for --all; use summary, json, or github-actions.");
+                    }
+
+                    var workerCount = parseResult.GetValue(workers);
+                    if (workerCount < 1)
+                    {
+                        throw new CliInputException("--workers must be at least 1.");
+                    }
+
+                    // Resolve validates --gamedata/--roster exclusivity, --ui, and the engine identity.
+                    var selection = engineOptions.Resolve(parseResult, specInput: null);
+
+                    // Batch runs both domains by default; --gamedata/--roster narrow. Resolve already
+                    // rejected the both-set case, so the remaining cases are single-domain or neither→both.
+                    IReadOnlyList<string> domains =
+                        (parseResult.GetValue(engineOptions.Gamedata), parseResult.GetValue(engineOptions.Roster)) switch
+                        {
+                            (true, false) => ["gamedata"],
+                            (false, true) => ["roster"],
+                            _ => ["roster", "gamedata"],
+                        };
+
+                    foreach (var (set, flag) in new (bool Set, string Flag)[]
+                    {
+                        (parseResult.GetValue(screenshots) is not null, "--screenshots"),
+                        (parseResult.GetValue(timeline) is not null, "--timeline"),
+                        (parseResult.GetValue(record) is not null, "--record"),
+                        (parseResult.GetValue(saveRoster) is not null, "--save-roster"),
+                        (parseResult.GetValue(keepAlive), "--keep-alive"),
+                        (parseResult.GetValue(breakAt) is not null, "--break"),
+                        (parseResult.GetValue(allSteps), "--all-steps"),
+                    })
+                    {
+                        if (set)
+                        {
+                            Ui.Warn($"{flag} is ignored in --all batch mode.");
+                        }
+                    }
+
+                    var batch = new RunBatch.BatchOptions(
+                        selection,
+                        domains,
+                        batchOutput ?? "summary",
+                        parseResult.GetValue(specs),
+                        parseResult.GetValue(filter),
+                        parseResult.GetValue(tags),
+                        parseResult.GetValue(report),
+                        parseResult.GetValue(expectedFailures),
+                        parseResult.GetValue(assertionEngine),
+                        workerCount);
+                    return RunBatch.ExecuteAsync(batch);
+                }
+
+                // Single-spec mode (unchanged behavior).
+                var keepAliveValue = parseResult.GetValue(keepAlive);
+                var outputStr = parseResult.GetValue(output);
+                if (outputStr is not null && outputStr is not ("tree" or "json"))
+                {
+                    throw new CliInputException($"--output '{outputStr}' is not valid for a single-spec run; use tree or json.");
+                }
+
+                var format = parseResult.GetValue(json) || outputStr == "json" ? OutputFormat.Json : OutputFormat.Tree;
+                var options = new RunOptions(
+                    Spec: specInput!,
+                    Engine: engineOptions.Resolve(parseResult, specInput) with { KeepAlive = keepAliveValue },
+                    Format: format,
+                    Headed: parseResult.GetValue(engineOptions.Headed),
+                    AllSteps: parseResult.GetValue(allSteps),
+                    ScreenshotsDir: parseResult.GetValue(screenshots),
+                    TimelinePath: parseResult.GetValue(timeline),
+                    RecordPath: parseResult.GetValue(record),
+                    SaveRosterDir: parseResult.GetValue(saveRoster),
+                    KeepAlive: keepAliveValue,
+                    BreakAt: parseResult.GetValue(breakAt));
+                return ExecuteAsync(options);
+            }
+            catch (CliInputException ex)
+            {
+                Ui.Error(ex.Message);
+                return Task.FromResult(1);
+            }
         });
 
         return command;
@@ -130,25 +292,35 @@ internal static class RunCommand
             return 1;
         }
 
-        Ui.Info($"Engine: {options.Engine.EngineName}");
-        IRosterEngine engine;
+        Ui.Info($"Engine: {options.Engine.EngineName ?? options.Engine.Display}");
+
+        // Spawn the engine as a child adapter process (bs-engine-host for built-ins, or any
+        // exec:/dotnet: connectable) and drive it entirely over the JSON-line protocol. The
+        // describe handshake tells us which optional capabilities the adapter honors.
+        AdapterProcess? process = null;
+        DescribeResult described;
         try
         {
-            engine = await EngineFactory.CreateRosterEngineAsync(options.Engine.EngineName, options.Headless, options.KeepAlive);
+            process = options.Engine.StartProcess();
+            described = await AdapterDescriber.DescribeAsync(process);
         }
         catch (Exception ex)
         {
-            Ui.Error($"Error creating engine: {ex.Message}");
+            Ui.Error($"Error starting engine: {ex.Message}");
+            process?.Dispose();
             return 1;
         }
 
-        using (engine)
+        using (process)
         {
+            var engine = new JsonProtocolEngine(process,
+                spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : null);
+
             // Accept every artifact option for every engine; warn once and disable the ones
-            // the chosen engine can't honor (uniform handling, no silent no-ops).
-            var screenshotsDir = Gate(options.ScreenshotsDir, EngineCapabilities.SupportsScreenshots(engine), options.Engine, "--screenshots");
-            var recordPath = Gate(options.RecordPath, EngineCapabilities.SupportsRecording(engine), options.Engine, "--record");
-            var saveRosterDir = Gate(options.SaveRosterDir, EngineCapabilities.SupportsRosterXmlExport(engine), options.Engine, "--save-roster");
+            // the described adapter can't honor (uniform handling, no silent no-ops).
+            var screenshotsDir = Gate(options.ScreenshotsDir, described.Capabilities.Screenshot, options.Engine, "--screenshots");
+            var recordPath = Gate(options.RecordPath, described.Capabilities.Record, options.Engine, "--record");
+            var saveRosterDir = Gate(options.SaveRosterDir, described.Capabilities.RosterXml, options.Engine, "--save-roster");
             var timeline = options.TimelinePath is not null ? new TimelineReport(spec.Id) : null;
 
             var dumpOptions = new DumpOptions(Json: options.Format == OutputFormat.Json);
@@ -162,7 +334,10 @@ internal static class RunCommand
                 {
                     try
                     {
-                        screenshot = EngineCapabilities.CaptureScreenshotAsync(engine).GetAwaiter().GetResult();
+                        // Returns the PNG bytes, or throws NotSupportedException when the
+                        // adapter can't screenshot — caught below and treated like the old
+                        // null path (this step simply gets no image).
+                        screenshot = engine.CaptureScreenshot();
                         if (screenshot is not null && screenshotsDir is not null)
                         {
                             Directory.CreateDirectory(screenshotsDir);
@@ -190,12 +365,14 @@ internal static class RunCommand
                 StateDumper.Dump(state, errors, Console.Out, dumpOptions);
                 Console.Out.Flush();
 
-                if (stepIndex == lastStepIndex && saveRosterDir is not null && engine is BsUiRosterEngine bsUi)
+                if (stepIndex == lastStepIndex && saveRosterDir is not null)
                 {
                     try
                     {
                         Directory.CreateDirectory(saveRosterDir);
-                        var xml = bsUi.ExportRosterXmlAsync().GetAwaiter().GetResult();
+                        // saveRosterDir is already capability-gated, so ExportRosterXml can't
+                        // hit NotSupported here; the try/catch stays for adapter/IO faults.
+                        var xml = engine.ExportRosterXml();
                         if (xml is not null)
                         {
                             var rosterFile = Path.Combine(saveRosterDir, $"{spec.Id}.ros");
@@ -214,13 +391,24 @@ internal static class RunCommand
                 }
             };
 
+            var aborted = false;
             if (options.BreakAt is { } breakStep)
             {
+                // Give the REPL's own engine the same longer timeout as setup when the spec
+                // has a dataSource (mirrors JsonProtocolEngine's ctor above), else the default.
+                var replTimeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
                 runner.OnBeforeStep = (stepIndex, step) =>
                 {
                     if (stepIndex == breakStep)
                     {
-                        BreakRepl.Run(engine, stepIndex, StepFormatter.DescribeStep(step));
+                        // Returns false when the user types `quit`, which aborts the run.
+                        var resume = ProtocolBreakRepl.Run(process, stepIndex, StepFormatter.DescribeStep(step), replTimeout);
+                        if (!resume)
+                        {
+                            aborted = true;
+                        }
+
+                        return resume;
                     }
 
                     return true;
@@ -230,22 +418,26 @@ internal static class RunCommand
             Ui.Info($"Running {spec.Steps.Count} steps...");
             Ui.Blank();
 
-            if (recordPath is not null && engine is BsUiRosterEngine recordingEngine)
+            if (recordPath is not null)
             {
-                await recordingEngine.StartRecordingAsync();
+                // recordPath is capability-gated (Record), so this can't hit NotSupported.
+                engine.StartRecording();
                 Ui.Info("Recording UI actions...");
             }
 
             var result = runner.Run(spec);
 
-            if (recordPath is not null && engine is BsUiRosterEngine recordStopEngine)
+            if (recordPath is not null)
             {
                 try
                 {
-                    var actions = await recordStopEngine.StopRecordingAsync();
+                    var actions = engine.StopRecording();
                     if (actions is not null)
                     {
-                        File.WriteAllText(recordPath, actions.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+                        // actions is already a JSON string; the CLI cannot pretty-print it
+                        // reflection-free (AOT), so it is written verbatim — the on-disk form
+                        // is the adapter's own (typically compact) JSON, not indented.
+                        File.WriteAllText(recordPath, actions);
                         Ui.Info($"Recorded actions saved to: {recordPath}");
                     }
                     else
@@ -259,7 +451,23 @@ internal static class RunCommand
                 }
             }
 
+            // Artifact finalization (timeline write, like the recording stop above) happens
+            // regardless of abort: it reflects whatever steps actually ran before `quit`, and
+            // the engine process is still alive (never disposed on the REPL's abort path), so
+            // there's nothing stopping us from writing out what was captured so far.
+            if (timeline is not null && options.TimelinePath is not null)
+            {
+                timeline.Write(options.TimelinePath, result.Failures.Count == 0, result.Failures);
+                Ui.Info($"Timeline report: {options.TimelinePath}");
+            }
+
             Ui.Blank();
+            if (aborted)
+            {
+                Ui.Warn($"Run aborted at step {options.BreakAt} (quit).");
+                return 130;
+            }
+
             if (result.Failures.Count == 0)
             {
                 Ui.Pass("PASS — all assertions passed");
@@ -275,13 +483,7 @@ internal static class RunCommand
                 ReportDiagnosticDumps();
             }
 
-            if (timeline is not null && options.TimelinePath is not null)
-            {
-                timeline.Write(options.TimelinePath, result.Failures.Count == 0, result.Failures);
-                Ui.Info($"Timeline report: {options.TimelinePath}");
-            }
-
-            if (options.Headed && engine is NrRosterUiDriver.NrRosterUiEngine)
+            if (options.Headed && options.Engine.EngineName == "newrecruit-ui")
             {
                 Ui.Blank();
                 Ui.Info("NR UI: Browser will remain open. Press Enter to close...");
@@ -306,32 +508,51 @@ internal static class RunCommand
             return 1;
         }
 
-        var engineName = options.Engine.EngineName;
-        if (!spec.IsApplicableTo(engineName))
+        // Only named registry entries carry an identity for spec applicability; anonymous
+        // exec:/dotnet: connectables (no `name=` prefix) have no identity to check against
+        // the spec's `engines:` map, so skip the check rather than NRE/throw looking one up.
+        if (options.Engine.EngineName is { } identityName && !spec.IsApplicableTo(identityName))
         {
-            Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{engineName}' (skipped).");
+            Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{identityName}' (skipped).");
             return 0;
         }
 
         WarnUnsupportedForGameData(options);
 
-        Ui.Info($"Engine: {engineName}");
-        IGameDataEngine engine;
+        var engineLabel = options.Engine.EngineName ?? options.Engine.Display;
+        Ui.Info($"Engine: {engineLabel}");
+
+        // Spawn the engine as a child adapter process and drive it entirely over the JSON-line
+        // protocol (mirrors RunRosterAsync's handshake). The describe result's Domains tells us
+        // whether this adapter can serve gamedata at all.
+        AdapterProcess? process = null;
+        DescribeResult described;
         try
         {
-            engine = await EngineFactory.CreateGameDataEngineAsync(engineName, options.Headless);
+            process = options.Engine.StartProcess();
+            described = await AdapterDescriber.DescribeAsync(process);
         }
         catch (Exception ex)
         {
-            Ui.Error($"Error creating engine: {ex.Message}");
+            Ui.Error($"Error starting engine: {ex.Message}");
+            process?.Dispose();
             return 1;
         }
 
-        using (engine)
+        using (process)
         {
-            var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+            if (!described.Domains.Contains("gamedata"))
+            {
+                Ui.Warn($"engine '{options.Engine.Display}' does not support the gamedata domain (skipped).");
+                return 0;
+            }
+
+            IGameDataEngine engine = new JsonProtocolGameDataEngine(process);
             var lastStepIndex = spec.Steps.Count - 1;
-            var runner = new GameDataRunner(engine, engineName)
+            // GameDataRunner's engineName parameter is nullable and used only for tiered
+            // snapshot lookup (falls back to the base tier when unset), so pass the identity
+            // through as-is rather than coercing to "".
+            var runner = new GameDataRunner(engine, options.Engine.EngineName)
             {
                 OnStepCompleted = (index, step, state) =>
                 {
@@ -343,7 +564,7 @@ internal static class RunCommand
 
                     Ui.Blank();
                     Ui.Rule($"Step {index}: {step.Action ?? "assert"}");
-                    Console.Out.WriteLine(JsonSerializer.Serialize(state, jsonOptions));
+                    Console.Out.WriteLine(JsonSerializer.Serialize(state, GameDataDumpJsonContext.Default.GameDataState));
                     Console.Out.Flush();
                 },
             };
@@ -353,11 +574,11 @@ internal static class RunCommand
             Ui.Blank();
             if (result.Passed)
             {
-                Ui.Pass($"PASS — {spec.Id} on {engineName} ({spec.Steps.Count} step(s))");
+                Ui.Pass($"PASS — {spec.Id} on {engineLabel} ({spec.Steps.Count} step(s))");
                 return 0;
             }
 
-            Ui.Fail($"FAIL — {spec.Id} on {engineName}: {result.Failures.Count} error(s):");
+            Ui.Fail($"FAIL — {spec.Id} on {engineLabel}: {result.Failures.Count} error(s):");
             foreach (var (failure, i) in result.Failures.Select((f, i) => (f, i)))
             {
                 Ui.FailItem($"[{i + 1}] {failure}");
@@ -368,7 +589,7 @@ internal static class RunCommand
     }
 
     /// <summary>Disable an artifact option the engine can't support, warning once.</summary>
-    private static string? Gate(string? value, bool supported, EngineSpec engine, string flag)
+    private static string? Gate(string? value, bool supported, EngineSelection engine, string flag)
     {
         if (value is null || supported)
         {
@@ -402,7 +623,10 @@ internal static class RunCommand
 
     private static void ReportDiagnosticDumps()
     {
-        var diagDir = BsUiDiagnostics.DiagnosticsDirectory;
+        // Path convention mirrors BsRosterUiDriver.BsUiDiagnostics.DiagnosticsDirectory
+        // (the driver writes dumps here). Inlined so the CLI never references the driver type.
+        var diagDir = Environment.GetEnvironmentVariable("BS_UI_DIAGNOSTICS_DIR")
+            ?? Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "bs-ui-diagnostics");
         if (!Directory.Exists(diagDir))
         {
             return;

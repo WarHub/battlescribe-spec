@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BattleScribeSpec.EngineHost</RootNamespace>
+    <AssemblyName>bs-engine-host</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BattleScribeSpec.BattleScribe\BattleScribeSpec.BattleScribe.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.BsGameDataUiDriver\BattleScribeSpec.BsGameDataUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.BsRosterUiDriver\BattleScribeSpec.BsRosterUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.NrGameDataUiDriver\BattleScribeSpec.NrGameDataUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.NrRosterUiDriver\BattleScribeSpec.NrRosterUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.XmlGen\BattleScribeSpec.XmlGen.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\BattleScribeSpec.BattleScribe\BattleScribeIkvmConsumer.targets" />
+
+</Project>

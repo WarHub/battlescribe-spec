@@ -1,0 +1,57 @@
+<Project>
+
+  <!--
+    BattleScribeSpec.BattleScribe compiles Java jars to managed assemblies via <IkvmReference>.
+    The assemblies whose types appear in BattleScribeSpec.BattleScribe.dll's metadata
+    (BattleScribeEngine, SimpleXml, Xpp3) flow to consumers transitively via ResolveAssemblyReferences.
+    The remaining assemblies are loaded only reflectively by the IKVM runtime, so they are absent
+    from BattleScribeSpec.BattleScribe.dll's metadata and are therefore NOT flowed to a consumer's
+    output directory or (crucially) its deps.json.
+
+    Declaring them here as copy-local <Reference> items makes ResolveAssemblyReferences copy them to
+    the consumer output AND — because CopyLocal=true yields IncludeRuntimeDependency=true — list them
+    as runtime assemblies in the consumer's deps.json. The default runtime host then resolves
+    Assembly.Load("DataUtils") etc. from the app directory with no AssemblyLoadContext.Resolving hook.
+
+    Any executable that ProjectReferences BattleScribeSpec.BattleScribe and runs the IKVM engine
+    imports this file.
+
+    The list below is the hand-maintained set of reflection-only IKVM assemblies. JetBrainsAnnotations
+    is deliberately NOT listed: it holds compile-time-only annotations and is never runtime-loaded (it
+    is absent from the output and deps.json in both the old copy-target and this world). If a future
+    BattleScribe engine version reflectively loads a new assembly, add it here.
+  -->
+  <Target Name="_AddBattleScribeIkvmRuntimeReferences" BeforeTargets="ResolveAssemblyReferences">
+    <PropertyGroup>
+      <!-- NormalizePath keeps the separators portable so RAR resolves the HintPaths on Linux CI too. -->
+      <_BattleScribeBinPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'bin', 'BattleScribeSpec.BattleScribe', '$(ArtifactsPivots)'))</_BattleScribeBinPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <Reference Include="DataUtils">
+        <HintPath>$(_BattleScribeBinPath)DataUtils.dll</HintPath>
+        <Private>true</Private>
+      </Reference>
+      <Reference Include="CommonsIo">
+        <HintPath>$(_BattleScribeBinPath)CommonsIo.dll</HintPath>
+        <Private>true</Private>
+      </Reference>
+      <Reference Include="KotlinStdlib">
+        <HintPath>$(_BattleScribeBinPath)KotlinStdlib.dll</HintPath>
+        <Private>true</Private>
+      </Reference>
+      <Reference Include="KotlinStdlibCommon">
+        <HintPath>$(_BattleScribeBinPath)KotlinStdlibCommon.dll</HintPath>
+        <Private>true</Private>
+      </Reference>
+      <Reference Include="Stax">
+        <HintPath>$(_BattleScribeBinPath)Stax.dll</HintPath>
+        <Private>true</Private>
+      </Reference>
+      <Reference Include="StaxApi">
+        <HintPath>$(_BattleScribeBinPath)StaxApi.dll</HintPath>
+        <Private>true</Private>
+      </Reference>
+    </ItemGroup>
+  </Target>
+
+</Project>

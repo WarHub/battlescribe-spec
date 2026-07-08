@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BattleScribeSpec.XmlGen</RootNamespace>
+    <Description>Shared XmlSerializer-based BattleScribe .gst/.cat XML generator (non-AOT: wraps reflection/XmlSerializer).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BattleScribeSpec.TestKit\BattleScribeSpec.TestKit.csproj" />
+    <ProjectReference Include="..\..\.deps\wham\src\WarHub.ArmouryModel.Source\WarHub.ArmouryModel.Source.csproj" />
+    <ProjectReference Include="..\..\.deps\wham\src\WarHub.ArmouryModel.Source.BattleScribe\WarHub.ArmouryModel.Source.BattleScribe.csproj" />
+  </ItemGroup>
+
+</Project>

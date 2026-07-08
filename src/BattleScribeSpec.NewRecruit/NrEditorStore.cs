@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.XmlGen;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;

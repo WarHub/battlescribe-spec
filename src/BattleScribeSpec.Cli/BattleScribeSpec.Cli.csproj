@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>BattleScribeSpec.Cli</RootNamespace>
     <AssemblyName>bs-spec</AssemblyName>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,12 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BattleScribeSpec.BattleScribe\BattleScribeSpec.BattleScribe.csproj" />
-    <ProjectReference Include="..\BattleScribeSpec.BsGameDataUiDriver\BattleScribeSpec.BsGameDataUiDriver.csproj" />
-    <ProjectReference Include="..\BattleScribeSpec.BsRosterUiDriver\BattleScribeSpec.BsRosterUiDriver.csproj" />
-    <ProjectReference Include="..\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
-    <ProjectReference Include="..\BattleScribeSpec.NrGameDataUiDriver\BattleScribeSpec.NrGameDataUiDriver.csproj" />
-    <ProjectReference Include="..\BattleScribeSpec.NrRosterUiDriver\BattleScribeSpec.NrRosterUiDriver.csproj" />
+    <!-- The CLI is engine-free: it speaks the adapter protocol and forwards probe/discover to
+         bs-engine-host. It needs only the test kit (core model/protocol/runners) and XmlGen
+         (probe/export XML generation). TestKit was previously transitive via XmlGen — now explicit. -->
+    <ProjectReference Include="..\BattleScribeSpec.TestKit\BattleScribeSpec.TestKit.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.XmlGen\BattleScribeSpec.XmlGen.csproj" />
   </ItemGroup>
 
 </Project>
