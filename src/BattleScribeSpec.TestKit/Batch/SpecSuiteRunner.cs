@@ -13,15 +13,16 @@ namespace BattleScribeSpec.Batch;
 /// <remarks>
 /// Domain discovery rule (see <see cref="SpecSuiteOptions.Domains"/>): when
 /// <see cref="SpecSuiteOptions.SpecsDirectory"/> is set explicitly, roster specs are discovered
-/// directly under it (unchanged from before domains existed). For the gamedata domain, a
-/// "gamedata" subtree under the explicit directory is preferred — mirroring the repo's own
-/// convention of <c>specs/roster</c> and <c>specs/gamedata</c> as sibling trees — and
-/// <see cref="SpecLoader.FindGameDataSpecsDirectory"/> is used as a fallback when the explicit
-/// directory has no such subtree (e.g. <c>--specs</c> points directly at a roster-only tree).
-/// When <see cref="SpecSuiteOptions.SpecsDirectory"/> is null, each domain is discovered
-/// independently: roster via <see cref="SpecLoader.FindRosterSpecsDirectory"/> then the embedded
-/// fallback, gamedata via <see cref="SpecLoader.FindGameDataSpecsDirectory"/> (no embedded
-/// fallback exists for gamedata specs).
+/// directly under it (unchanged from before domains existed). For the gamedata domain, only a
+/// "gamedata" subtree under the explicit directory is used — mirroring the repo's own convention
+/// of <c>specs/roster</c> and <c>specs/gamedata</c> as sibling trees. There is no fallback: if the
+/// explicit directory has no such subtree (e.g. <c>--specs</c> points directly at a roster-only
+/// tree), zero gamedata specs are discovered — <see cref="SpecLoader.FindGameDataSpecsDirectory"/>
+/// is never consulted in this case. When <see cref="SpecSuiteOptions.SpecsDirectory"/> is null,
+/// each domain is discovered independently: roster via
+/// <see cref="SpecLoader.FindRosterSpecsDirectory"/> then the embedded fallback, gamedata via
+/// <see cref="SpecLoader.FindGameDataSpecsDirectory"/> (no embedded fallback exists for gamedata
+/// specs).
 ///
 /// The adapter process pool is shared across domains — the same process(es) that serve roster
 /// specs also serve gamedata specs. Before any gamedata spec runs, the first pooled process is
@@ -57,10 +58,9 @@ public static class SpecSuiteRunner
             if (runGameData)
             {
                 var gameDataSubdir = Path.Combine(specsDir, "gamedata");
-                var gameDataDir = Directory.Exists(gameDataSubdir) ? gameDataSubdir : SpecLoader.FindGameDataSpecsDirectory();
-                if (gameDataDir is not null)
+                if (Directory.Exists(gameDataSubdir))
                 {
-                    gameDataFileSpecs = [.. SpecLoader.DiscoverGameDataSpecs(gameDataDir)];
+                    gameDataFileSpecs = [.. SpecLoader.DiscoverGameDataSpecs(gameDataSubdir)];
                 }
             }
         }

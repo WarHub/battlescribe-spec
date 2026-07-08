@@ -71,6 +71,28 @@ public sealed class SpecSuiteRunnerTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task MixedDomains_ParallelWorkers_RunBothDomains()
+    {
+        var dll = FindAdapterDll();
+
+        var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+        {
+            Domains = ["roster", "gamedata"],
+            Workers = 2,
+            FilterPatterns = ["protocol/protocol-kitchen-sink", "entry/add-entry-basic"],
+            EngineFilter = "battlescribe",
+            ExpectedFailuresEngine = "battlescribe",
+            AssertionEngine = "battlescribe",
+            AdapterFactory = () => AdapterProcess.Start("dotnet", dll),
+        });
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(result.ReportResults, r => r.Category == "protocol" && r.SpecId == "protocol-kitchen-sink" && r.Status == "passed");
+        Assert.Contains(result.ReportResults, r => r.Category == "entry" && r.SpecId == "add-entry-basic" && r.Status == "passed");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task LegacyDefaultDomains_ExcludeGameData()
     {
         var dll = FindAdapterDll();
