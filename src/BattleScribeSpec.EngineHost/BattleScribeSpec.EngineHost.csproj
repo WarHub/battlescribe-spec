@@ -21,14 +21,6 @@
     <ProjectReference Include="..\BattleScribeSpec.XmlGen\BattleScribeSpec.XmlGen.csproj" />
   </ItemGroup>
 
-  <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
-    <PropertyGroup>
-      <_BattleScribeBinPath>$(ArtifactsPath)\bin\BattleScribeSpec.BattleScribe\$(ArtifactsPivots)\</_BattleScribeBinPath>
-    </PropertyGroup>
-    <ItemGroup>
-      <IkvmDlls Include="$(_BattleScribeBinPath)DataUtils.dll;$(_BattleScribeBinPath)CommonsIo.dll;$(_BattleScribeBinPath)KotlinStdlib.dll;$(_BattleScribeBinPath)KotlinStdlibCommon.dll;$(_BattleScribeBinPath)Stax.dll;$(_BattleScribeBinPath)StaxApi.dll" />
-    </ItemGroup>
-    <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
-  </Target>
+  <Import Project="..\BattleScribeSpec.BattleScribe\BattleScribeIkvmConsumer.targets" />
 
 </Project>
