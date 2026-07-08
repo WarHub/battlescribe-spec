@@ -1,3 +1,4 @@
+using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 
@@ -15,6 +16,15 @@ public sealed class SpecSuiteOptions
     public int Workers { get; init; } = 1;
     /// <summary>Creates one adapter process per worker. Disposed by the runner.</summary>
     public required Func<AdapterProcess> AdapterFactory { get; init; }
+
+    /// <summary>
+    /// Spec domains to discover and run. Defaults to roster-only so existing callers (the
+    /// bs-spec-runner shell) keep their exact current behavior without passing this at all.
+    /// Include <c>"gamedata"</c> to additionally discover and run GameData specs over the same
+    /// adapter pool. Domain discovery rule when <see cref="SpecsDirectory"/> is set explicitly:
+    /// see <see cref="SpecSuiteRunner"/>'s remarks.
+    /// </summary>
+    public IReadOnlyList<string> Domains { get; init; } = ["roster"];
 }
 
 public sealed class SpecSuiteResult
@@ -22,6 +32,16 @@ public sealed class SpecSuiteResult
     public required IReadOnlyList<SpecResult> Results { get; init; }
     public required IReadOnlyList<SpecResultSummary> ReportResults { get; init; }
     public required IReadOnlyDictionary<SpecResult, SpecFile> SpecsByResult { get; init; }
+
+    /// <summary>
+    /// GameData spec results, parallel to <see cref="SpecsByResult"/>. Kept as a separate map
+    /// (rather than widening <see cref="SpecsByResult"/>'s value type) so the existing public
+    /// shape stays backward compatible — <see cref="GameDataSpecFile"/> and <see cref="SpecFile"/>
+    /// are different types with no shared non-abstract base exposing the roster-specific shape.
+    /// Empty when the suite's <see cref="SpecSuiteOptions.Domains"/> didn't include "gamedata".
+    /// </summary>
+    public required IReadOnlyDictionary<SpecResult, GameDataSpecFile> GameDataSpecsByResult { get; init; }
+
     public required int TotalSpecs { get; init; }
     public required TimeSpan Elapsed { get; init; }
     public int Passed { get; private init; }
@@ -41,6 +61,7 @@ public sealed class SpecSuiteResult
         IReadOnlyList<SpecResult> results,
         IReadOnlyList<SpecResultSummary> reportResults,
         IReadOnlyDictionary<SpecResult, SpecFile> specsByResult,
+        IReadOnlyDictionary<SpecResult, GameDataSpecFile> gameDataSpecsByResult,
         int totalSpecs,
         TimeSpan elapsed,
         string? expectedFailuresEngine)
@@ -54,7 +75,9 @@ public sealed class SpecSuiteResult
             failed = 0;
             foreach (var r in results)
             {
-                var spec = specsByResult.TryGetValue(r, out var s) ? s : null;
+                SpecFileBase? spec = specsByResult.TryGetValue(r, out var s) ? s
+                    : gameDataSpecsByResult.TryGetValue(r, out var gs) ? gs
+                    : null;
                 var isExpectedFail = spec?.IsExpectedToFail(expectedFailuresEngine) ?? false;
                 if (!r.Passed && !isExpectedFail)
                 {
@@ -84,6 +107,7 @@ public sealed class SpecSuiteResult
             Results = results,
             ReportResults = reportResults,
             SpecsByResult = specsByResult,
+            GameDataSpecsByResult = gameDataSpecsByResult,
             TotalSpecs = totalSpecs,
             Elapsed = elapsed,
             Passed = passed,
