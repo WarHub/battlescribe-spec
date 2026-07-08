@@ -79,11 +79,11 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "(Engine=BsRoster|Engine=BsGameData)&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
       - name: Reference adapter (dotnet) — roster kitchen-sink
         run: |
-          dotnet artifacts/bin/BattleScribeSpec.Runner/debug/bs-spec-runner.dll \
-            --adapter "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
+          dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
+            --engine "battlescribe=dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
             --specs specs/roster \
+            --roster \
             --filter "protocol/protocol-kitchen-sink,category/" \
-            --engine battlescribe \
             --expected-failures battlescribe \
             --output github-actions \
             --workers 2
@@ -345,10 +345,10 @@ jobs:
           NR_PARALLEL: 2
       - name: Generate BattleScribe conformance report
         run: |
-          dotnet artifacts/bin/BattleScribeSpec.Runner/debug/bs-spec-runner.dll \
-            --adapter "dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
+          dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
+            --engine "battlescribe=dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
             --specs specs/roster \
-            --engine battlescribe \
+            --roster \
             --expected-failures battlescribe \
             --output github-actions \
             --report artifacts/battlescribe-conformance-report.json
