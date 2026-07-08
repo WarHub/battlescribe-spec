@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <roster id="${{ match('[- 0-9A-Za-z()_.:]+') }}" name="protocol-kitchen-sink" battleScribeVersion="2.03" gameSystemId="ks-gs" gameSystemName="Kitchen Sink GS" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
   <costs>
-    <cost name="power" typeId="ct-power" value="14.0"/>
     <cost name="pts" typeId="ct-pts" value="320.0"/>
+    <cost name="power" typeId="ct-power" value="14.0"/>
   </costs>
   <costLimits>
     <costLimit name="pts" typeId="ct-pts" value="200.0"/>

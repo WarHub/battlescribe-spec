@@ -1331,6 +1331,18 @@ public sealed class BattleScribeEngine : IDisposable
     public string ExportRosterXml()
     {
         var roster = GetRoster();
+
+        // The BattleScribe cost-recalc stores the roster's aggregated <costs>/<costLimits>
+        // sorted alphabetically by cost name (e.g. "power" before "pts"). The real desktop
+        // app, however, serializes these roster-level totals in cost-type DECLARATION order
+        // (the order costTypes appear in the game system). Reorder the roster's own top-level
+        // cost lists to declaration order before serialization so the reference engine's
+        // exported .ros matches the app byte-for-byte. Scoped strictly to the roster's own
+        // cost/costLimit children — selection-level costs are already emitted in declaration
+        // order by the engine and are left untouched.
+        ReorderCostsByDeclaration(roster.getCosts());
+        ReorderCostsByDeclaration(roster.getCostLimits());
+
         var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
             ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
         var write = dataUtils.GetMethod("a",
@@ -1349,6 +1361,51 @@ public sealed class BattleScribeEngine : IDisposable
         }
 
         return System.Text.Encoding.UTF8.GetString(baos.toByteArray());
+    }
+
+    /// <summary>
+    /// Reorder a roster-level cost list (costs or costLimits) in place to match the cost-type
+    /// DECLARATION order captured in <see cref="_setupCostTypes"/>. Stable: cost types not found
+    /// in the declaration order (e.g. file-based setups where <see cref="_setupCostTypes"/> is
+    /// empty) retain their original relative order, so this degrades to a no-op when the order
+    /// is unknown. Only reorders — never adds, drops, or mutates cost values.
+    /// </summary>
+    private void ReorderCostsByDeclaration(JavaList? costs)
+    {
+        if (costs is null || costs.size() < 2 || _setupCostTypes.Count == 0)
+        {
+            return;
+        }
+
+        var order = new Dictionary<string, int>();
+        for (var i = 0; i < _setupCostTypes.Count; i++)
+        {
+            var id = _setupCostTypes[i].getId();
+            if (id is not null && !order.ContainsKey(id))
+            {
+                order[id] = i;
+            }
+        }
+
+        var items = JavaListToList<Cost>(costs);
+        var reordered = items
+            .Select((c, idx) => (Cost: c, Index: idx))
+            .OrderBy(t => order.TryGetValue(t.Cost.getTypeId() ?? "", out var pos) ? pos : int.MaxValue)
+            .ThenBy(t => t.Index)
+            .Select(t => t.Cost)
+            .ToList();
+
+        // No-op if already in the desired order (avoids needless list churn).
+        if (reordered.SequenceEqual(items))
+        {
+            return;
+        }
+
+        costs.clear();
+        foreach (var c in reordered)
+        {
+            costs.add(c);
+        }
     }
 
     /// <summary>
