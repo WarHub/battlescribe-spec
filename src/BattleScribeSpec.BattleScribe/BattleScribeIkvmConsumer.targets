@@ -15,10 +15,16 @@
 
     Any executable that ProjectReferences BattleScribeSpec.BattleScribe and runs the IKVM engine
     imports this file.
+
+    The list below is the hand-maintained set of reflection-only IKVM assemblies. JetBrainsAnnotations
+    is deliberately NOT listed: it holds compile-time-only annotations and is never runtime-loaded (it
+    is absent from the output and deps.json in both the old copy-target and this world). If a future
+    BattleScribe engine version reflectively loads a new assembly, add it here.
   -->
   <Target Name="_AddBattleScribeIkvmRuntimeReferences" BeforeTargets="ResolveAssemblyReferences">
     <PropertyGroup>
-      <_BattleScribeBinPath>$(ArtifactsPath)\bin\BattleScribeSpec.BattleScribe\$(ArtifactsPivots)\</_BattleScribeBinPath>
+      <!-- NormalizePath keeps the separators portable so RAR resolves the HintPaths on Linux CI too. -->
+      <_BattleScribeBinPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'bin', 'BattleScribeSpec.BattleScribe', '$(ArtifactsPivots)'))</_BattleScribeBinPath>
     </PropertyGroup>
     <ItemGroup>
       <Reference Include="DataUtils">
