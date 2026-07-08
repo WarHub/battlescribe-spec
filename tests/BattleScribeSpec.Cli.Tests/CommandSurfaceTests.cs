@@ -106,6 +106,23 @@ public sealed class CommandSurfaceTests
     }
 
     [Fact]
+    public void Verify_EnginesWithConnectableEntry_ParsesWithoutErrors()
+    {
+        // --engines is a free-form CSV (built-in names, exec:/dotnet: connectables, and
+        // <name>=<connectable> forms all parse at the System.CommandLine layer); resolution
+        // against the registry happens at runtime in ExecuteGameDataAsync, one column at a
+        // time, so an unresolvable entry is a runtime Unavailable cell, not a parse error.
+        string[] args =
+        [
+            "verify", "gamedata/entry/add-entry-basic",
+            "--engines", "battlescribe,wham=dotnet:adapter.dll",
+        ];
+        var parse = CommandFactory.CreateRootCommand().Parse(args);
+
+        Assert.Empty(parse.Errors);
+    }
+
+    [Fact]
     public async Task Run_GameDataAnonymousConnectable_RendersCleanly_NotAnUnhandledCrash()
     {
         // Regression test: an anonymous exec:/dotnet: connectable has no registry identity

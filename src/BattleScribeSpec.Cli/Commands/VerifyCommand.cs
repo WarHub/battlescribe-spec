@@ -1,5 +1,7 @@
 using System.CommandLine;
+using BattleScribeSpec.Engines;
 using BattleScribeSpec.GameData;
+using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Cli;
 
@@ -9,10 +11,15 @@ namespace BattleScribeSpec.Cli;
 /// loop: after restructuring a spec, confirm it still holds on every engine it touches with one
 /// command instead of four <c>dotnet test</c> invocations.
 ///
-/// Each engine is created once and reused across all specs (the runner does the full
-/// setup/steps/cleanup lifecycle per spec). Per-engine <c>skip</c>/<c>fail</c> markers are honored:
-/// a spec marked <c>newrecruit-ui: skip</c> reports SKIP, and one marked <c>fail</c> reports XFAIL
-/// when it fails (or UPASS — a hard error — when it unexpectedly passes).
+/// Each <c>--engines</c> entry is resolved via <see cref="EngineConnectable.Parse"/> +
+/// <see cref="EngineRegistry.Resolve"/> (so <c>battlescribe,wham=dotnet:adapter.dll</c> works),
+/// spawned as a child adapter process, and driven entirely over the JSON-line protocol — one
+/// process + one <see cref="JsonProtocolGameDataEngine"/> per engine, reused across all specs
+/// (the runner does the full setup/steps/cleanup lifecycle per spec). A describe handshake
+/// failure or a domain that doesn't advertise "gamedata" renders as Unavailable/Skip for that
+/// column rather than aborting the matrix. Per-engine <c>skip</c>/<c>fail</c> markers are
+/// honored: a spec marked <c>newrecruit-ui: skip</c> reports SKIP, and one marked <c>fail</c>
+/// reports XFAIL when it fails (or UPASS — a hard error — when it unexpectedly passes).
 /// </summary>
 internal static class VerifyCommand
 {
@@ -89,8 +96,12 @@ internal static class VerifyCommand
             ? null
             : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+    /// <summary>A resolved <c>--engines</c> CSV entry: either a usable registry entry, or a
+    /// parse/resolve failure message (rendered as an Unavailable column, never a crash).</summary>
+    private sealed record EngineColumn(string Label, EngineEntry? Entry, string? Error);
+
     private static async Task<int> ExecuteGameDataAsync(
-        string[] specInputs, string[] engineNames, bool headless)
+        string[] specInputs, string[] engineTokens, bool headless)
     {
         var specs = new List<GameDataSpecFile>();
         foreach (var input in specInputs)
@@ -106,38 +117,97 @@ internal static class VerifyCommand
             }
         }
 
+        // Resolve each CSV token through the same connectable + registry pipeline as `run`'s
+        // --engine option (loaded once, not per entry). A parse/resolve failure becomes an
+        // Unavailable column for that entry alone rather than aborting the whole matrix.
+        var registry = EngineRegistry.LoadDefault();
+        var columns = new List<EngineColumn>();
+        foreach (var token in engineTokens)
+        {
+            try
+            {
+                var connectable = EngineConnectable.Parse(token);
+                var entry = registry.Resolve(connectable);
+                // Column identity: the registry entry's Name, or (for an anonymous
+                // exec:/dotnet: connectable with no `name=` prefix) the token as typed.
+                columns.Add(new EngineColumn(entry.Name ?? token, entry, null));
+            }
+            catch (Exception ex) when (ex is FormatException or KeyNotFoundException)
+            {
+                columns.Add(new EngineColumn(token, null, ex.Message));
+            }
+        }
+
+        var engineNames = columns.Select(c => c.Label).ToArray();
+
         // results[engineName][specId] = Cell
         var results = new Dictionary<string, Dictionary<string, Cell>>(StringComparer.Ordinal);
 
-        foreach (var engineName in engineNames)
+        foreach (var column in columns)
         {
-            var column = new Dictionary<string, Cell>(StringComparer.Ordinal);
-            results[engineName] = column;
+            var engineName = column.Label;
+            var cells = new Dictionary<string, Cell>(StringComparer.Ordinal);
+            results[engineName] = cells;
 
             Ui.Info($"── engine: {engineName} ──");
-            IGameDataEngine engine;
+
+            if (column.Error is { } parseError)
+            {
+                Ui.Warn($"engine '{engineName}' unavailable: {parseError}");
+                foreach (var spec in specs)
+                {
+                    cells[spec.Id] = new Cell(Outcome.Unavailable, []);
+                }
+
+                continue;
+            }
+
+            // Spawn the engine as a child adapter process and drive it entirely over the JSON-
+            // line protocol (mirrors RunCommand's roster/gamedata handshake). One process + one
+            // JsonProtocolGameDataEngine per engine for the whole matrix: GameDataRunner.Run
+            // does the setup/steps/cleanup lifecycle per spec over that same connection, so
+            // engine instances are reused across specs exactly as the in-process engines were.
+            var selection = new EngineSelection(column.Entry!, EngineDomain.Gamedata, Headed: !headless, KeepAlive: false);
+
+            AdapterProcess? process = null;
+            DescribeResult described;
             try
             {
-                engine = await EngineFactory.CreateGameDataEngineAsync(engineName, headless);
+                process = selection.StartProcess();
+                described = await AdapterDescriber.DescribeAsync(process);
             }
             catch (Exception ex)
             {
                 Ui.Warn($"engine '{engineName}' unavailable: {ex.Message}");
                 foreach (var spec in specs)
                 {
-                    column[spec.Id] = new Cell(Outcome.Unavailable, []);
+                    cells[spec.Id] = new Cell(Outcome.Unavailable, []);
                 }
 
+                process?.Dispose();
                 continue;
             }
 
-            using (engine)
+            if (!described.Domains.Contains("gamedata"))
+            {
+                Ui.Warn($"engine '{engineName}' does not support the gamedata domain (skipped).");
+                foreach (var spec in specs)
+                {
+                    cells[spec.Id] = new Cell(Outcome.Skip, []);
+                }
+
+                process.Dispose();
+                continue;
+            }
+
+            IGameDataEngine engine = new JsonProtocolGameDataEngine(process);
+            try
             {
                 foreach (var spec in specs)
                 {
                     if (!spec.IsApplicableTo(engineName))
                     {
-                        column[spec.Id] = new Cell(Outcome.Skip, []);
+                        cells[spec.Id] = new Cell(Outcome.Skip, []);
                         Ui.Info($"  {spec.Id}: skip (not applicable)");
                         continue;
                     }
@@ -150,7 +220,7 @@ internal static class VerifyCommand
                     }
                     catch (Exception ex)
                     {
-                        column[spec.Id] = new Cell(Outcome.Fail, [$"runner threw: {ex.GetType().Name}: {ex.Message}"]);
+                        cells[spec.Id] = new Cell(Outcome.Fail, [$"runner threw: {ex.GetType().Name}: {ex.Message}"]);
                         Ui.Fail($"  {spec.Id}: FAIL (runner threw)");
                         continue;
                     }
@@ -162,7 +232,7 @@ internal static class VerifyCommand
                         (false, true) => Outcome.XFail,
                         (false, false) => Outcome.Fail,
                     };
-                    column[spec.Id] = new Cell(outcome, result.Failures);
+                    cells[spec.Id] = new Cell(outcome, result.Failures);
 
                     if (outcome is Outcome.Pass or Outcome.XFail)
                     {
@@ -173,6 +243,14 @@ internal static class VerifyCommand
                         Ui.Fail($"  {spec.Id}: {Token(outcome)}");
                     }
                 }
+            }
+            finally
+            {
+                // engine.Dispose() sends a best-effort teardown command over the still-live
+                // connection; the process is torn down after (mirrors the old `using (engine)`
+                // once-per-column disposal, split into its process/protocol-engine halves).
+                engine.Dispose();
+                process.Dispose();
             }
         }
 
