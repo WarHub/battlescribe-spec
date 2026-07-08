@@ -1,9 +1,12 @@
 # Adapter protocol v1.2 — native artifacts in, native artifacts + annotations out
 
 Status: approved design, pre-implementation.
-Related: builds on the unified-CLI adapter protocol (v1.1) in
-[2026-07-07-unified-cli-design.md](./2026-07-07-unified-cli-design.md) and the
-`changing-protocol-types` skill (governs all wire-type edits).
+Issue: [#298](https://github.com/WarHub/battlescribe-spec/issues/298) (part of epic #73).
+Related: reframes the output-side of #270 (adapter de-duplication) and its
+subtasks #282/#283/#284; shares surface with #279 (roster file lifecycle);
+builds on the unified-CLI adapter protocol (v1.1) in #271 /
+[2026-07-07-unified-cli-design.md](./2026-07-07-unified-cli-design.md). Wire-type
+edits are governed by the `changing-protocol-types` skill.
 
 ## Goal
 
