@@ -29,4 +29,4 @@ COPY --from=build /app .
 COPY --from=build /src/specs /specs
 
 ENTRYPOINT ["dotnet", "bs-spec.dll"]
-CMD ["run", "--all", "--specs", "/specs", "--output", "summary"]
+CMD ["run", "--all", "--roster", "--specs", "/specs", "--output", "summary"]

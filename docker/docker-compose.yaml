@@ -15,7 +15,7 @@ services:
       dockerfile: docker/bs-spec.Dockerfile
     image: bs-spec:local
     # Default: run all specs against the reference adapter (anonymous dotnet: connectable)
-    command: ["run", "--all", "--engine", "dotnet:/adapter/bs-reference-adapter.dll", "--specs", "/specs", "--output", "summary"]
+    command: ["run", "--all", "--roster", "--engine", "dotnet:/adapter/bs-reference-adapter.dll", "--specs", "/specs", "--output", "summary"]
     volumes:
       - adapter-bin:/adapter:ro
     depends_on:

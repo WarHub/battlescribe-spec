@@ -22,7 +22,7 @@ jobs:
 
       # Clone the spec repo and build the CLI
       - run: |
-          git clone https://github.com/WarHub/battlescribe-spec.git /tmp/spec
+          git clone --recurse-submodules https://github.com/WarHub/battlescribe-spec.git /tmp/spec
           dotnet build /tmp/spec/src/BattleScribeSpec.Cli/ -c Release
 
       # Build your adapter
