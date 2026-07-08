@@ -297,6 +297,13 @@ public static class AdapterHandler
         return new ActionResult { Ok = true };
     }
 
+    /// <summary>
+    /// Each gamedataSetup disposes and recreates the server-side engine. For browser-backed
+    /// engines (newrecruit-ui), this means a full Playwright cold start per spec when one
+    /// connection runs many specs (verify matrices, batch runs) — the old in-process flow
+    /// reused the live browser across setups. Follow-up (#271): warm-reuse inside the host
+    /// (e.g. wrap Dispose as Cleanup for poolable engines) instead of recreate.
+    /// </summary>
     private static ProtocolResponse HandleGameDataSetup(
         GameDataSetupCommand cmd, AdapterOptions options, ref GameData.IGameDataEngine? engine)
     {

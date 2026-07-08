@@ -32,6 +32,8 @@ public sealed class VerifyProtocolTests
         Assert.True(exitCode == 0, $"exit code {exitCode}; stdout: {stdOut}; stderr: {stdErr}");
         Assert.Contains("battlescribe", stdOut);
         Assert.Contains("spec", stdOut);
+        // Verify the matrix row shows a PASS cell for the spec, not just that N/A appears.
+        Assert.Matches(@"add-entry-basic\s+PASS", stdOut);
     }
 
     /// <summary>Spawn the built bs-spec CLI out-of-process and capture output/exit code.</summary>
