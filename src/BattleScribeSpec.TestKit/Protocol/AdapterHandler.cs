@@ -28,6 +28,17 @@ public sealed class AdapterOptions
 
     /// <summary>Protocol v1.1 (optional): stop recording and return the recorded actions. Null → unsupported.</summary>
     public Func<IRosterEngine, string?>? RecordStopper { get; init; }
+
+    /// <summary>
+    /// When true, keep ONE engine alive across setup/teardown cycles, resetting it with
+    /// <see cref="IRosterEngine.Cleanup"/> / <see cref="GameData.IGameDataEngine.Cleanup"/> between
+    /// specs instead of disposing and recreating. For browser-backed engines (newrecruit,
+    /// newrecruit-ui) this avoids a Chromium cold start per spec when one host process serves a whole
+    /// batch. Mirrors the in-process engine pool, which reuses one browser/context across specs with
+    /// Cleanup between. Default false: dispose+recreate — correct for cheap in-process engines and any
+    /// engine whose Setup is not re-entrant.
+    /// </summary>
+    public bool ReuseEngineAcrossSetups { get; init; }
 }
 
 /// <summary>
@@ -79,12 +90,12 @@ public static class AdapterHandler
                     var command = ProtocolSerializer.DeserializeCommand(line);
                     response = command switch
                     {
-                        SetupCommand setup => HandleSetup(setup, engineFactory, ref engine, out catalogueIds),
-                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, ref engine, out catalogueIds),
+                        SetupCommand setup => HandleSetup(setup, engineFactory, options.ReuseEngineAcrossSetups, ref engine, out catalogueIds),
+                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, options.ReuseEngineAcrossSetups, ref engine, out catalogueIds),
                         ActionCommand action => HandleAction(action, engine, catalogueIds),
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
-                        TeardownCommand => HandleTeardown(ref engine, ref gdEngine),
+                        TeardownCommand => HandleTeardown(options.ReuseEngineAcrossSetups, ref engine, ref gdEngine),
                         DescribeCommand => new DescribeResult
                         {
                             Name = options.Name,
@@ -130,17 +141,20 @@ public static class AdapterHandler
     }
 
     /// <summary>
-    /// Each setup disposes and recreates the server-side engine. For browser-backed engines
-    /// (newrecruit-ui), this means a full Playwright cold start per spec when one connection
-    /// runs many specs (verify matrices, batch runs) — the old in-process flow reused the live
-    /// browser across setups. Follow-up (#271): warm-reuse inside the host (e.g. wrap Dispose as
-    /// Cleanup for poolable engines) instead of recreate.
+    /// Configures the engine for a spec. When reuse is enabled (browser-backed engines) an
+    /// already-live engine is kept and reconfigured in place — avoiding a per-spec cold start;
+    /// otherwise the engine is disposed and recreated. Reset between specs happens in
+    /// <see cref="HandleTeardown"/> via the engine's Cleanup.
     /// </summary>
     private static ProtocolResponse HandleSetup(
-        SetupCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
+        SetupCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
     {
-        engine?.Dispose();
-        engine = factory();
+        if (!reuse || engine is null)
+        {
+            engine?.Dispose();
+            engine = factory();
+        }
+
         catalogueIds = [.. cmd.Catalogues.Select(c => c.Id)];
         if (cmd.SpecId is { Length: > 0 })
         {
@@ -152,10 +166,14 @@ public static class AdapterHandler
     }
 
     private static ProtocolResponse HandleSetupFromFiles(
-        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
+        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
     {
-        engine?.Dispose();
-        engine = factory();
+        if (!reuse || engine is null)
+        {
+            engine?.Dispose();
+            engine = factory();
+        }
+
         // File-based setup: catalogue IDs unknown — actions must provide catalogueId explicitly
         catalogueIds = [];
         if (cmd.SpecId is { Length: > 0 })
@@ -284,13 +302,49 @@ public static class AdapterHandler
         };
     }
 
-    private static ProtocolResponse HandleTeardown(ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
+    private static ProtocolResponse HandleTeardown(bool reuse, ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
     {
-        engine?.Dispose();
-        engine = null;
-        gdEngine?.Dispose();
-        gdEngine = null;
+        engine = ResetOrDispose(engine, reuse, e => e.Cleanup());
+        gdEngine = ResetOrDispose(gdEngine, reuse, e => e.Cleanup());
         return new TeardownResult();
+    }
+
+    /// <summary>
+    /// End-of-spec engine handling. With <paramref name="reuse"/> true, resets the engine in place and
+    /// keeps it warm for the next setup; if the reset throws, disposes it so the next setup recreates a
+    /// fresh one (self-heal against a crashed browser). With reuse false, disposes and clears it.
+    /// </summary>
+    private static T? ResetOrDispose<T>(T? engine, bool reuse, Action<T> cleanup) where T : class, IDisposable
+    {
+        if (engine is null)
+        {
+            return null;
+        }
+
+        if (!reuse)
+        {
+            engine.Dispose();
+            return null;
+        }
+
+        try
+        {
+            cleanup(engine);
+            return engine;
+        }
+        catch
+        {
+            try
+            {
+                engine.Dispose();
+            }
+            catch
+            {
+                /* best-effort */
+            }
+
+            return null;
+        }
     }
 
     private static ProtocolResponse HandleRecordStart(AdapterOptions options, IRosterEngine? engine)
@@ -305,11 +359,10 @@ public static class AdapterHandler
     }
 
     /// <summary>
-    /// Each gamedataSetup disposes and recreates the server-side engine. For browser-backed
-    /// engines (newrecruit-ui), this means a full Playwright cold start per spec when one
-    /// connection runs many specs (verify matrices, batch runs) — the old in-process flow
-    /// reused the live browser across setups. Follow-up (#271): warm-reuse inside the host
-    /// (e.g. wrap Dispose as Cleanup for poolable engines) instead of recreate.
+    /// Configures the gamedata engine for a spec. When reuse is enabled (browser-backed engines) an
+    /// already-live engine is kept and reconfigured in place — avoiding a per-spec cold start;
+    /// otherwise the engine is disposed and recreated. Reset between specs happens in
+    /// <see cref="HandleTeardown"/> via the engine's Cleanup.
     /// </summary>
     private static ProtocolResponse HandleGameDataSetup(
         GameDataSetupCommand cmd, AdapterOptions options, ref GameData.IGameDataEngine? engine)
@@ -319,8 +372,12 @@ public static class AdapterHandler
             return new ProtocolError { Message = "gamedata domain is not supported by this adapter" };
         }
 
-        engine?.Dispose();
-        engine = options.GameDataEngineFactory();
+        if (!options.ReuseEngineAcrossSetups || engine is null)
+        {
+            engine?.Dispose();
+            engine = options.GameDataEngineFactory();
+        }
+
         if (cmd.SpecId is { Length: > 0 })
         {
             engine.SetTestContext(cmd.SpecId);
