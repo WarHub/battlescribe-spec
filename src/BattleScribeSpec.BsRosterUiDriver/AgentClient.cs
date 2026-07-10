@@ -13,7 +13,12 @@ public sealed class AgentClient : IDisposable
     private readonly TcpClient _client;
     private readonly StreamReader _reader;
     private readonly StreamWriter _writer;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, TaskCompletionSource<JsonNode>> _pending = new();
+    private readonly CancellationTokenSource _readLoopCts = new();
+    private readonly Task _readLoop;
     private int _nextId;
+    private volatile Exception? _fault;
 
     /// <summary>
     /// Default timeout for a single JSON-RPC call. Set to <see cref="Timeout.InfiniteTimeSpan"/>
@@ -27,66 +32,146 @@ public sealed class AgentClient : IDisposable
         var stream = client.GetStream();
         _reader = new StreamReader(stream, Encoding.UTF8);
         _writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = false };
+        _readLoop = Task.Run(ReadLoopAsync);
+    }
+
+    private async Task ReadLoopAsync()
+    {
+        try
+        {
+            while (!_readLoopCts.IsCancellationRequested)
+            {
+                var line = await _reader.ReadLineAsync(_readLoopCts.Token);
+                if (line is null)
+                {
+                    break; // stream closed
+                }
+
+                JsonNode? response;
+                try
+                {
+                    response = JsonNode.Parse(line);
+                }
+                catch
+                {
+                    continue; // ignore unparseable line
+                }
+
+                if (response?["id"] is not JsonNode idNode)
+                {
+                    continue; // e.g. parse-error response (id null) — discard
+                }
+
+                int id;
+                try
+                {
+                    id = idNode.GetValue<int>();
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (_pending.TryRemove(id, out var tcs))
+                {
+                    tcs.TrySetResult(response);
+                }
+                // else: late/abandoned response for a timed-out call — discard. THIS is the desync fix.
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // disposing
+        }
+        catch (Exception ex)
+        {
+            _fault = ex;
+        }
+        finally
+        {
+            FaultAllPending(_fault ?? new InvalidOperationException("Agent connection closed."));
+        }
+    }
+
+    private void FaultAllPending(Exception ex)
+    {
+        foreach (var key in _pending.Keys)
+        {
+            if (_pending.TryRemove(key, out var tcs))
+            {
+                tcs.TrySetException(ex);
+            }
+        }
     }
 
     /// <summary>Sends a JSON-RPC request and returns the result.</summary>
     public async Task<JsonNode?> CallAsync(string method, JsonObject? parameters = null, CancellationToken cancellationToken = default)
     {
-        var id = Interlocked.Increment(ref _nextId);
-
-        var request = new JsonObject
+        if (_fault is { } fault)
         {
-            ["jsonrpc"] = "2.0",
-            ["method"] = method,
-            ["id"] = id,
-        };
-
-        if (parameters is not null)
-        {
-            request["params"] = parameters;
+            throw new InvalidOperationException("Agent connection is faulted.", fault);
         }
 
-        var json = request.ToJsonString();
-        await _writer.WriteLineAsync(json);
-        await _writer.FlushAsync(cancellationToken);
-
-        // Apply per-call timeout unless caller supplies their own cancellation
-        using var timeoutCts = CallTimeout != Timeout.InfiniteTimeSpan
-            ? new CancellationTokenSource(CallTimeout)
-            : new CancellationTokenSource();
-        using var linked = cancellationToken.CanBeCanceled
-            ? CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken)
-            : null;
-        var effectiveToken = linked?.Token ?? timeoutCts.Token;
-
-        string? responseLine;
+        var id = Interlocked.Increment(ref _nextId);
+        var tcs = new TaskCompletionSource<JsonNode>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pending[id] = tcs;
         try
         {
-            responseLine = await _reader.ReadLineAsync(effectiveToken);
+            var request = new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["method"] = method,
+                ["id"] = id,
+            };
+
+            if (parameters is not null)
+            {
+                request["params"] = parameters;
+            }
+
+            var json = request.ToJsonString();
+
+            await _writeLock.WaitAsync(cancellationToken);
+            try
+            {
+                await _writer.WriteLineAsync(json.AsMemory(), cancellationToken);
+                await _writer.FlushAsync(cancellationToken);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+
+            using var timeoutCts = CallTimeout != Timeout.InfiniteTimeSpan
+                ? new CancellationTokenSource(CallTimeout)
+                : new CancellationTokenSource();
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
+
+            JsonNode response;
+            try
+            {
+                response = await tcs.Task.WaitAsync(linked.Token);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"Agent did not respond to '{method}' within {CallTimeout.TotalSeconds:F0}s. " +
+                    "The JavaFX thread may be blocked (deadlock).");
+            }
+
+            if (response["error"] is JsonNode error)
+            {
+                var code = error["code"]?.GetValue<int>() ?? -1;
+                var message = error["message"]?.GetValue<string>() ?? "Unknown error";
+                throw new AgentException(code, message);
+            }
+
+            return response["result"];
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        finally
         {
-            throw new TimeoutException(
-                $"Agent did not respond to '{method}' within {CallTimeout.TotalSeconds:F0}s. " +
-                "The JavaFX thread may be blocked (deadlock).");
+            _pending.TryRemove(id, out _); // no waiter leak on timeout/cancel/error
         }
-
-        if (responseLine is null)
-        {
-            throw new InvalidOperationException("Agent connection closed.");
-        }
-
-        var response = JsonNode.Parse(responseLine)
-            ?? throw new InvalidOperationException("Invalid JSON response from agent.");
-
-        if (response["error"] is JsonNode error)
-        {
-            var code = error["code"]?.GetValue<int>() ?? -1;
-            var message = error["message"]?.GetValue<string>() ?? "Unknown error";
-            throw new AgentException(code, message);
-        }
-
-        return response["result"];
     }
 
     /// <summary>Sends a ping and verifies the agent is responsive.</summary>
@@ -229,9 +314,25 @@ public sealed class AgentClient : IDisposable
 
     public void Dispose()
     {
-        _writer.Dispose();
-        _reader.Dispose();
+        _readLoopCts.Cancel();
+        try
+        {
+            _writer.Dispose();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            _reader.Dispose();
+        }
+        catch
+        {
+        }
+
         _client.Dispose();
+        FaultAllPending(new ObjectDisposedException(nameof(AgentClient)));
     }
 
     // --- Engine access commands ---
