@@ -4,7 +4,7 @@ Run BattleScribe spec conformance checks in your CI pipeline.
 
 ## GitHub Actions
 
-### Using the .NET Runner Directly
+### Using the `bs-spec` CLI Directly
 
 ```yaml
 name: BattleScribe Conformance
@@ -20,21 +20,18 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # Option 1: Install runner as a tool (future — not yet published)
-      # - run: dotnet tool install -g BattleScribeSpec.Runner
-
-      # Option 2: Clone the spec repo and build
+      # Clone the spec repo and build the CLI
       - run: |
-          git clone https://github.com/WarHub/battlescribe-spec.git /tmp/spec
-          dotnet build /tmp/spec/src/BattleScribeSpec.Runner/ -c Release
+          git clone --recurse-submodules https://github.com/WarHub/battlescribe-spec.git /tmp/spec
+          dotnet build /tmp/spec/src/BattleScribeSpec.Cli/ -c Release
 
       # Build your adapter
       - run: dotnet build src/MyAdapter/ -c Release
 
-      # Run conformance tests
+      # Run conformance tests (adapter as an anonymous dotnet: connectable)
       - run: |
-          dotnet /tmp/spec/src/BattleScribeSpec.Runner/bin/Release/net10.0/bs-spec-runner.dll \
-            --adapter "dotnet:src/MyAdapter/bin/Release/net10.0/my-adapter.dll" \
+          dotnet /tmp/spec/artifacts/bin/BattleScribeSpec.Cli/release/bs-spec.dll run --all \
+            --engine "dotnet:src/MyAdapter/bin/Release/net10.0/my-adapter.dll" \
             --specs /tmp/spec/specs \
             --output github-actions
 ```
@@ -58,8 +55,8 @@ jobs:
       # - run: |
       #     docker run --rm \
       #       -v $(pwd)/my-adapter:/adapter \
-      #       ghcr.io/warhub/bs-spec-runner:latest \
-      #       --adapter "/adapter/my-adapter" --output github-actions
+      #       ghcr.io/warhub/bs-spec:latest \
+      #       run --all --engine "dotnet:/adapter/my-adapter.dll" --output github-actions
 ```
 
 ### Using the TestKit NuGet Package (Recommended for .NET engines)
@@ -95,7 +92,7 @@ public class ConformanceTests
 
 ## Output Formats
 
-The runner supports three output formats via `--output`:
+`bs-spec` supports three output formats via `--output`:
 
 | Format | Use Case |
 |--------|----------|
@@ -153,4 +150,4 @@ dotnet test --filter "Tag=cost&Category=Conformance"
 |------|---------|
 | 0 | All specs passed |
 | 1 | One or more specs failed |
-| 2 | Runner error (bad args, adapter crash, etc.) |
+| 2 | `bs-spec` error (bad args, adapter crash, etc.) |

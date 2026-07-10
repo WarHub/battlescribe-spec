@@ -19,7 +19,7 @@ public sealed class SpecSuiteOptions
 
     /// <summary>
     /// Spec domains to discover and run. Defaults to roster-only so existing callers (the
-    /// bs-spec-runner shell) keep their exact current behavior without passing this at all.
+    /// `bs-spec run` CLI command) keep their exact current behavior without passing this at all.
     /// Include <c>"gamedata"</c> to additionally discover and run GameData specs over the same
     /// adapter pool. Domain discovery rule when <see cref="SpecsDirectory"/> is set explicitly:
     /// see <see cref="SpecSuiteRunner"/>'s remarks.

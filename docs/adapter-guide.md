@@ -6,7 +6,7 @@ to verify your roster engine implementation.
 ## Overview
 
 An adapter is a thin wrapper around your roster engine that speaks the
-[JSON-line protocol](adapter-protocol.md) over stdin/stdout. The spec runner
+[JSON-line protocol](adapter-protocol.md) over stdin/stdout. `bs-spec`
 sends commands (setup, setupFromFiles, action, getState, getErrors, teardown) and
 your adapter responds with the corresponding results.
 
@@ -203,12 +203,6 @@ If your adapter is a .NET assembly, use the `dotnet:` prefix:
 dotnet bs-spec.dll run --all --engine "dotnet:your-adapter.dll" --specs specs
 ```
 
-### Legacy Runner
-
-`bs-spec-runner` (the original standalone runner) still exists as a legacy entry
-point with the same `--adapter` flag shown in earlier BattleScribe Spec releases;
-it is scheduled for removal, so prefer `bs-spec run` above for new integrations.
-
 ## Reference Implementation
 
 See `src/BattleScribeSpec.ReferenceAdapter/` for a complete .NET adapter implementation
@@ -217,7 +211,7 @@ that wraps the BattleScribe engine. It's a small amount of code thanks to the
 
 ## Tips
 
-- **Flush stdout** after every response line — the runner waits for a complete line
+- **Flush stdout** after every response line — the client waits for a complete line
 - **One JSON object per line** — no pretty-printing in the protocol
 - **Stderr is yours** — use it for debug logging without interfering with the protocol
 - **State is per-session** — a new adapter process is started for each spec
@@ -230,9 +224,9 @@ of inline game system/catalogue XML. These specs load real-world BattleScribe da
 Actions in dataSource specs use the same **ID-based** parameters (`forceEntryId`, `entryId`,
 `catalogueId`, etc.) as inline specs — the IDs come from the BattleScribe XML data files.
 
-DataSource specs are resolved by the test runner using `DataSourceResolver` and require the
+DataSource specs are resolved by the client using `DataSourceResolver` and require the
 engine to implement `SetupFromFiles(files)` from `IRosterEngine` — this loads raw
 `.gst`/`.cat` XML files and is sent as a `setupFromFiles` protocol command.
 
 The protocol adapter does not need special handling for DataSource specs beyond implementing
-the `setupFromFiles` command — all data resolution is done by the runner before sending.
+the `setupFromFiles` command — all data resolution is done by the client before sending.

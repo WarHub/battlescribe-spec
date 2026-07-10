@@ -139,7 +139,6 @@ battlescribe-spec/
 │   ├── BattleScribeSpec.BsGameDataUiDriver/  # BattleScribe desktop UI driver (gamedata domain)
 │   ├── BattleScribeSpec.NrRosterUiDriver/    # New Recruit browser UI driver (roster domain, Playwright)
 │   ├── BattleScribeSpec.NrGameDataUiDriver/  # New Recruit browser UI driver (gamedata domain, Playwright)
-│   ├── BattleScribeSpec.Runner/   # Legacy CLI runner (bs-spec-runner)
 │   ├── BattleScribeSpec.ReferenceAdapter/  # Reference adapter (wraps BattleScribe)
 │   ├── BattleScribeSpec.NewRecruit/        # New Recruit adapter (Playwright)
 │   └── BattleScribeSpec.NewRecruit.HarTool/  # HAR recording console tool
@@ -280,8 +279,8 @@ and running frozen tests.
 ## Future Steps
 
 - [ ] Publish TestKit as NuGet package
-- [ ] Publish runner as Docker image to GHCR
-- [ ] Publish runner as dotnet global tool
+- [ ] Publish `bs-spec` as a Docker image to GHCR
+- [ ] Publish `bs-spec` as a dotnet global tool
 
 ## License
 

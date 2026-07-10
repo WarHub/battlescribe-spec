@@ -1,12 +1,12 @@
 # BattleScribe Spec Adapter Protocol v1.1
 
 This document defines the JSON-line protocol used for communication between the
-**bs-spec-runner** (conformance test runner) and an **engine adapter** (a thin wrapper
+**`bs-spec` CLI** (via `bs-engine-host` or any adapter) and an **engine adapter** (a thin wrapper
 around a BattleScribe-compatible roster editing engine).
 
 ## Overview
 
-The runner launches the adapter as a child process and communicates via **stdin/stdout**
+The client (`bs-spec`, through `bs-engine-host` or an external adapter) launches the adapter as a child process and communicates via **stdin/stdout**
 using NDJSON (newline-delimited JSON) — one JSON object per line.
 
 The `bs-spec` CLI is itself engine-free — it speaks only this protocol. For the built-in
@@ -16,21 +16,21 @@ protocol, exactly like any external adapter would.
 
 ```mermaid
 sequenceDiagram
-    participant Runner as bs-spec-runner
+    participant Client as bs-spec
     participant Adapter as Engine Adapter
 
-    Runner->>Adapter: {"type":"setup", ...}
-    Adapter-->>Runner: {"type":"setupResult", ...}
+    Client->>Adapter: {"type":"setup", ...}
+    Adapter-->>Client: {"type":"setupResult", ...}
 
     loop For each spec step
-        Runner->>Adapter: {"type":"action", ...}
-        Adapter-->>Runner: {"type":"actionResult", ...}
-        Runner->>Adapter: {"type":"getState"}
-        Adapter-->>Runner: {"type":"state", ...}
+        Client->>Adapter: {"type":"action", ...}
+        Adapter-->>Client: {"type":"actionResult", ...}
+        Client->>Adapter: {"type":"getState"}
+        Adapter-->>Client: {"type":"state", ...}
     end
 
-    Runner->>Adapter: {"type":"teardown"}
-    Adapter-->>Runner: {"type":"teardownResult"}
+    Client->>Adapter: {"type":"teardown"}
+    Adapter-->>Client: {"type":"teardownResult"}
 ```
 
 ## Protocol Rules
@@ -38,11 +38,11 @@ sequenceDiagram
 1. Each message is a single JSON object on exactly one line (no embedded newlines).
 2. The adapter MUST NOT write anything to stdout except protocol response messages.
 3. The adapter MAY write diagnostic information to stderr.
-4. The runner sends exactly one command, then waits for exactly one response.
+4. The client sends exactly one command, then waits for exactly one response.
 5. The `type` field discriminates message kinds.
 6. Unknown fields should be ignored (forward compatibility).
 
-## Runner → Adapter Commands
+## Client → Adapter Commands
 
 ### `setup` — Initialize Engine
 
@@ -123,7 +123,7 @@ use BattleScribe data model IDs from the setup data. Instance references (e.g., 
 
 #### Action outputs
 
-Mutating actions return an `outputs` object with IDs of created elements. The spec runner
+Mutating actions return an `outputs` object with IDs of created elements. The client
 flattens `outputs` onto the `steps.<stepId>` namespace, so if an adapter returns
 `{"type":"actionResult","outputs":{"forceId":"f1"}}` for a step with `id: add-patrol`,
 later steps reference that value as `${{ steps.add-patrol.forceId }}` (not
@@ -191,17 +191,17 @@ Response:
 {"type":"describeResult","name":"battlescribe","version":"2.03.29","protocolVersion":"1.1","domains":["roster","gamedata"],"capabilities":{"screenshot":false,"record":false,"rosterXml":false,"maxParallel":0}}
 ```
 
-Adapters predating v1.1 answer `describe` with an `error` response; runners MUST treat that
+Adapters predating v1.1 answer `describe` with an `error` response; clients MUST treat that
 as protocol 1.0, roster-only, no optional capabilities. Adapters SHOULD answer `describe`;
 all v1.1 messages are optional beyond it.
 
 ### Optional v1.1 commands
 
-These four commands give the spec runner roster parity with the engine's own UI: capturing a
+These four commands give the client roster parity with the engine's own UI: capturing a
 screenshot, exporting the current roster as `.ros` XML, and recording/replaying UI actions.
 Support for each is advertised via `describeResult.capabilities` (`screenshot`, `rosterXml`,
 `record`). An adapter that does not implement a command answers with an `error` response
-(`"<type> is not supported by this adapter"`); the runner maps that to a NotSupported result
+(`"<type> is not supported by this adapter"`); the client maps that to a NotSupported result
 rather than failing the spec.
 
 #### `screenshot`
@@ -232,7 +232,7 @@ rather than failing the spec.
 {"type":"recordResult","actionsJson":"[{\"type\":\"click\",\"target\":\"#unit-1\"}]"}
 ```
 
-## Adapter → Runner Responses
+## Adapter → Client Responses
 
 ### `setupResult`
 
@@ -250,7 +250,7 @@ rather than failing the spec.
 ```
 
 The `outputs` field is present on success for mutating actions that create elements.
-It contains the IDs described in [Action outputs](#action-outputs) above. The spec runner
+It contains the IDs described in [Action outputs](#action-outputs) above. The client
 flattens each `outputs` property onto the step's expression namespace — e.g.,
 `outputs.forceId` becomes `${{ steps.<stepId>.forceId }}`.
 
@@ -459,8 +459,8 @@ while line = readline(stdin):
 ### Notes
 
 - The adapter should handle multiple setup/teardown cycles (one per spec test).
-- stderr is free for diagnostics — the runner ignores it.
-- The runner may terminate the adapter process if it doesn't respond within a timeout.
+- stderr is free for diagnostics — the client ignores it.
+- The client may terminate the adapter process if it doesn't respond within a timeout.
 
 ## GameData Protocol (data-file editing)
 
@@ -557,7 +557,7 @@ with `error`.
 
 Engines disagree on which loaded file is "active" by default (the reference and the Data Editor open
 the **first** catalogue; NewRecruit the **last**). So every spec declares the file it edits with a
-required **`setup.edit`** — a catalogue id or the game system id. After `Setup`, the runner calls
+required **`setup.edit`** — a catalogue id or the game system id. After `Setup`, the client calls
 `OpenFile(setup.edit)` so the active file (what mutations, `Reload`, and `expectedFile` export apply to)
 is deterministic across engines; an `openFile` step may switch it later. `OpenFile` is idempotent, so
 re-opening the already-active single file is a no-op.
