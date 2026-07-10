@@ -47,10 +47,13 @@ public sealed class AgentClient : IDisposable
                     break; // stream closed
                 }
 
-                JsonNode? response;
+                JsonObject? response;
                 try
                 {
-                    response = JsonNode.Parse(line);
+                    // Only JSON objects are protocol responses. A non-object line (array, bare
+                    // value) yields null here and is discarded below rather than throwing from the
+                    // ["id"] indexer and killing the read loop.
+                    response = JsonNode.Parse(line) as JsonObject;
                 }
                 catch
                 {
@@ -59,7 +62,7 @@ public sealed class AgentClient : IDisposable
 
                 if (response?["id"] is not JsonNode idNode)
                 {
-                    continue; // e.g. parse-error response (id null) — discard
+                    continue; // non-object line, or a response with no id (e.g. parse-error) — discard
                 }
 
                 int id;

@@ -61,6 +61,25 @@ public sealed class AgentClientTests
     }
 
     [Fact]
+    public async Task NonObjectLine_IsDiscarded_AndLoopSurvives()
+    {
+        // A stray non-object line (JSON array) precedes the real response. The reader loop must
+        // discard it — not throw from the ["id"] indexer and tear down the transport.
+        await using var server = FakeAgentServer.Start(async (req, respond, _) =>
+        {
+            var id = req["id"]!.GetValue<int>();
+            await respond("[1,2,3]");                                              // stray non-object line
+            await respond($$"""{"jsonrpc":"2.0","id":{{id}},"result":"survived"}""");
+        });
+
+        using var client = new AgentClient(server.Connect()) { CallTimeout = TimeSpan.FromSeconds(5) };
+        var ct = TestContext.Current.CancellationToken;
+
+        var result = await client.CallAsync("ping", cancellationToken: ct);
+        Assert.Equal("survived", result!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task ErrorResponse_ThrowsAgentException()
     {
         await using var server = FakeAgentServer.Start(async (req, respond, _) =>
