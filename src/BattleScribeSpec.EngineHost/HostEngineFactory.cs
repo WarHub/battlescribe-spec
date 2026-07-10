@@ -82,7 +82,7 @@ internal static class HostEngineFactory
                         "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the agent jar), " +
                         "or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
                     Ui.Info($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
-                    return new BsGameDataUiEngine(options);
+                    return new BsGameDataUiEngine(options) { KeepAlive = true };
                 }
 
             case "newrecruit":

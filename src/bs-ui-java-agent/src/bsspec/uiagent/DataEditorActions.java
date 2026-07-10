@@ -94,17 +94,22 @@ public class DataEditorActions {
     // ─── Actions ─────────────────────────────────────────────────────────────
 
     /**
-     * Setup-time load: stage is done by the C# side; here we open the primary file (the first
-     * catalogue, or the game system if there are none) through the editor's real open path so a
-     * default document is loaded for specs that don't issue an explicit {@code openFile}.
+     * Setup-time load: stage is done by the C# side; here we open the game system first, then the
+     * primary catalogue (the first one, if any), through the editor's real open path so a default
+     * document is loaded for specs that don't issue an explicit {@code openFile}. Opening the game
+     * system first matters for a warm-reused editor instance switching to a brand-new game system:
+     * the catalogue references its game system by id, so the game system must already be resolved
+     * (loaded) before a catalogue that depends on it is opened.
      */
     private String loadFiles(JsonObject params) {
         cachedController = null; // reset cache on new load
         idLessEntries.clear();
         String gstPath = requireString(params, "gstPath");
         JsonArray catPathsArr = params.has("catPaths") ? params.get("catPaths").getAsJsonArray() : new JsonArray();
-        String primary = catPathsArr.size() > 0 ? catPathsArr.get(0).getAsString() : gstPath;
-        openCataloguePath(primary);
+        openCataloguePath(gstPath);
+        if (catPathsArr.size() > 0) {
+            openCataloguePath(catPathsArr.get(0).getAsString());
+        }
         return "{}";
     }
 

@@ -279,6 +279,8 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                     var warmFiles = BuildXmlFiles(gameSystem, catalogues);
                     await BsUiDataStaging.StageDataFilesAsync(
                         _app.DataDirectoryPath, gameSystem, catalogues, warmFiles);
+                    await LoadStagedFilesAsync(gameSystem, warmFiles);
+                    Console.Error.WriteLine("[bs-gamedata-ui] Warm start: loaded new game data into existing instance.");
                     return [];
                 }
                 catch
@@ -318,16 +320,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             await HandleStartupDialogsAsync();
 
             // Load the staged game data files into the editor.
-            var gsDir = Path.Combine(_app.DataDirectoryPath, gameSystem.Id);
-            var gstPath = Path.Combine(gsDir, "system.gst");
-            var catPaths = files.Where(f => f.FileName.EndsWith(".cat", StringComparison.Ordinal))
-                .Select(f => Path.Combine(gsDir, f.FileName)).ToArray();
-            var loadParams = new JsonObject
-            {
-                ["gstPath"] = gstPath,
-                ["catPaths"] = new JsonArray([.. catPaths.Select(p => JsonValue.Create(p))])
-            };
-            await CallActionAsync("gamedataLoadFilesAction", loadParams);
+            await LoadStagedFilesAsync(gameSystem, files);
 
             return [];
         }
@@ -336,6 +329,21 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             await CleanupAsync();
             return [ex.Message];
         }
+    }
+
+    private async Task LoadStagedFilesAsync(
+        ProtocolGameSystem gameSystem, IReadOnlyList<(string FileName, string Content)> files)
+    {
+        var gsDir = Path.Combine(_app!.DataDirectoryPath, gameSystem.Id);
+        var gstPath = Path.Combine(gsDir, "system.gst");
+        var catPaths = files.Where(f => f.FileName.EndsWith(".cat", StringComparison.Ordinal))
+            .Select(f => Path.Combine(gsDir, f.FileName)).ToArray();
+        var loadParams = new JsonObject
+        {
+            ["gstPath"] = gstPath,
+            ["catPaths"] = new JsonArray([.. catPaths.Select(p => JsonValue.Create(p))]),
+        };
+        await CallActionAsync("gamedataLoadFilesAction", loadParams);
     }
 
     private async Task HandleStartupDialogsAsync()
