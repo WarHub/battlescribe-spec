@@ -126,7 +126,7 @@ public sealed class AdapterHandlerTests
                 {
                     RosterEngineFactory = () => { factoryCalls++; return created = new CountingRosterEngine(); },
                     Name = "newrecruit-ui",
-                    ReuseEngineAcrossSetups = true,
+                    ReuseRosterEngineAcrossSetups = true,
                 },
                 input, output, ct));
 
@@ -157,7 +157,7 @@ public sealed class AdapterHandlerTests
                 {
                     RosterEngineFactory = () => { var e = new CountingRosterEngine(); engines.Add(e); return e; },
                     Name = "battlescribe",
-                    // ReuseEngineAcrossSetups defaults false
+                    // ReuseRosterEngineAcrossSetups / ReuseGameDataEngineAcrossSetups default false
                 },
                 input, output, ct));
 
@@ -186,7 +186,7 @@ public sealed class AdapterHandlerTests
                 {
                     RosterEngineFactory = () => { var e = new CountingRosterEngine { ThrowOnCleanup = true }; engines.Add(e); return e; },
                     Name = "newrecruit-ui",
-                    ReuseEngineAcrossSetups = true,
+                    ReuseRosterEngineAcrossSetups = true,
                 },
                 input, output, ct));
 
@@ -202,6 +202,34 @@ public sealed class AdapterHandlerTests
         Assert.Equal(2, engines.Count);                 // reset failure forced a fresh engine
         Assert.Equal(1, engines[0].CleanupCalls);       // attempted reset
         Assert.Equal(1, engines[0].DisposeCalls);       // then disposed (self-heal)
+    }
+
+    [Fact]
+    public async Task PerDomainFlags_AreIndependent()
+    {
+        var rosterEngines = new List<CountingRosterEngine>();
+        var connection = new InMemoryAdapterConnection(
+            (input, output, ct) => AdapterHandler.RunAsync(
+                new AdapterOptions
+                {
+                    RosterEngineFactory = () => { var e = new CountingRosterEngine(); rosterEngines.Add(e); return e; },
+                    Name = "battlescribe-ui",
+                    ReuseRosterEngineAcrossSetups = false,      // roster stays cold
+                    ReuseGameDataEngineAcrossSetups = true,     // gamedata warm (no gd factory here → roster-only proof)
+                },
+                input, output, ct));
+
+        var ct = TestContext.Current.CancellationToken;
+        var gs = new ProtocolGameSystem { Id = "gs", Name = "GS" };
+        await connection.SendCommandAsync(new SetupCommand { GameSystem = gs }, ct);
+        await connection.SendCommandAsync(new TeardownCommand(), ct);
+        await connection.SendCommandAsync(new SetupCommand { GameSystem = gs }, ct);
+        await connection.SendCommandAsync(new TeardownCommand(), ct);
+        await connection.DisposeAsync();
+
+        Assert.Equal(2, rosterEngines.Count);                      // roster recreated (reuse flag false for its domain)
+        Assert.All(rosterEngines, e => Assert.Equal(1, e.DisposeCalls));
+        Assert.All(rosterEngines, e => Assert.Equal(0, e.CleanupCalls));
     }
 
     private sealed class CountingRosterEngine : IRosterEngine

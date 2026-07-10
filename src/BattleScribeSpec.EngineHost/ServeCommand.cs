@@ -56,10 +56,12 @@ internal static class ServeCommand
             RosterXml = name is "battlescribe-ui",
             MaxParallel = name is "battlescribe-ui" ? 1 : 0,
         },
-        // Browser-backed NR engines: keep one warm engine per host process, resetting via Cleanup
-        // between specs (see AdapterOptions.ReuseEngineAcrossSetups). The in-process (battlescribe) and
-        // Java-app (battlescribe-ui) engines keep dispose+recreate.
-        ReuseEngineAcrossSetups = name is "newrecruit" or "newrecruit-ui",
+        // Warm-reuse is per domain: NR reloads data per spec in both domains; battlescribe-ui can
+        // warm-reuse only its Data Editor (gamedata) — the Roster Editor loads game data at JVM
+        // startup with no runtime reload, so its roster domain stays cold. battlescribe (in-process)
+        // gains nothing. See docs/warm-reuse.md.
+        ReuseRosterEngineAcrossSetups = name is "newrecruit" or "newrecruit-ui",
+        ReuseGameDataEngineAcrossSetups = name is "newrecruit" or "newrecruit-ui" or "battlescribe-ui",
         ScreenshotProvider = e => e switch
         {
             BsUiRosterEngine bs => bs.CaptureScreenshotAsync().GetAwaiter().GetResult(),

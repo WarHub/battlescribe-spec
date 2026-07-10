@@ -30,15 +30,18 @@ public sealed class AdapterOptions
     public Func<IRosterEngine, string?>? RecordStopper { get; init; }
 
     /// <summary>
-    /// When true, keep ONE engine alive across setup/teardown cycles, resetting it with
-    /// <see cref="IRosterEngine.Cleanup"/> / <see cref="GameData.IGameDataEngine.Cleanup"/> between
-    /// specs instead of disposing and recreating. For browser-backed engines (newrecruit,
-    /// newrecruit-ui) this avoids a Chromium cold start per spec when one host process serves a whole
-    /// batch. Mirrors the in-process engine pool, which reuses one browser/context across specs with
-    /// Cleanup between. Default false: dispose+recreate — correct for cheap in-process engines and any
-    /// engine whose Setup is not re-entrant.
+    /// When true, keep the roster engine alive across setup/teardown cycles, resetting it via
+    /// <see cref="IRosterEngine.Cleanup"/> between specs (self-heal to dispose+recreate on failure)
+    /// instead of disposing and recreating. See <see cref="ReuseGameDataEngineAcrossSetups"/>.
     /// </summary>
-    public bool ReuseEngineAcrossSetups { get; init; }
+    public bool ReuseRosterEngineAcrossSetups { get; init; }
+
+    /// <summary>
+    /// Gamedata counterpart of <see cref="ReuseRosterEngineAcrossSetups"/>. Independent because a
+    /// single host process serves both domains with separate engines and their warm-reuse feasibility
+    /// differs (e.g. battlescribe-ui: gamedata reusable, roster not). Default false.
+    /// </summary>
+    public bool ReuseGameDataEngineAcrossSetups { get; init; }
 }
 
 /// <summary>
@@ -90,12 +93,12 @@ public static class AdapterHandler
                     var command = ProtocolSerializer.DeserializeCommand(line);
                     response = command switch
                     {
-                        SetupCommand setup => HandleSetup(setup, engineFactory, options.ReuseEngineAcrossSetups, ref engine, out catalogueIds),
-                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, options.ReuseEngineAcrossSetups, ref engine, out catalogueIds),
+                        SetupCommand setup => HandleSetup(setup, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, out catalogueIds),
+                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, out catalogueIds),
                         ActionCommand action => HandleAction(action, engine, catalogueIds),
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
-                        TeardownCommand => HandleTeardown(options.ReuseEngineAcrossSetups, ref engine, ref gdEngine),
+                        TeardownCommand => HandleTeardown(options.ReuseRosterEngineAcrossSetups, options.ReuseGameDataEngineAcrossSetups, ref engine, ref gdEngine),
                         DescribeCommand => new DescribeResult
                         {
                             Name = options.Name,
@@ -302,10 +305,11 @@ public static class AdapterHandler
         };
     }
 
-    private static ProtocolResponse HandleTeardown(bool reuse, ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
+    private static ProtocolResponse HandleTeardown(
+        bool reuseRoster, bool reuseGameData, ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
     {
-        engine = ResetOrDispose(engine, reuse, e => e.Cleanup());
-        gdEngine = ResetOrDispose(gdEngine, reuse, e => e.Cleanup());
+        engine = ResetOrDispose(engine, reuseRoster, e => e.Cleanup());
+        gdEngine = ResetOrDispose(gdEngine, reuseGameData, e => e.Cleanup());
         return new TeardownResult();
     }
 
@@ -372,7 +376,7 @@ public static class AdapterHandler
             return new ProtocolError { Message = "gamedata domain is not supported by this adapter" };
         }
 
-        if (!options.ReuseEngineAcrossSetups || engine is null)
+        if (!options.ReuseGameDataEngineAcrossSetups || engine is null)
         {
             engine?.Dispose();
             engine = options.GameDataEngineFactory();
