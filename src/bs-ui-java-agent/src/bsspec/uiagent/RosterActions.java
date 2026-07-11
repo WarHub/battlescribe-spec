@@ -46,6 +46,15 @@ public class RosterActions {
     private static final String NEW_ROSTER_WINDOW = "New Roster";
     private static final String ADD_FORCE_WINDOW = "Add Force";
     private static final String CONFIRM_WINDOW = "Confirm";
+    /**
+     * BattleScribe's native "Continue? Roster has not been saved. Do you want to save the Roster
+     * now?" (YES/NO/CANCEL) prompt. It appears when {@code #btnNewRoster} is fired while a roster
+     * from a PREVIOUS spec is still open and unsaved — the expected, benign shape of roster
+     * warm-reuse. {@code createRosterAction} declares this dialog expected during its own flow and
+     * dismisses it with NO (discard — each spec is independent); it never appears on a cold start
+     * (no roster open) so this adds no behavior there.
+     */
+    private static final String CONTINUE_WINDOW = "Continue?";
 
     private static final int POLL_INTERVAL_MS = 200;
     private static final int STATE_POLL_TIMEOUT_MS = 10_000;
@@ -225,7 +234,7 @@ public class RosterActions {
 
         // Fire "New Roster" button (async because it opens a modal dialog)
         runOnFx(() -> fireButtonAsync("#btnNewRoster", MAIN_WINDOW));
-        waitForWindow(NEW_ROSTER_WINDOW);
+        waitForNewRosterWindowDismissingContinuePrompt();
 
         // Select game system in the combo
         runOnFx(() -> {
@@ -584,9 +593,10 @@ public class RosterActions {
                 }
             });
             if (found.get() != null) return found.get();
-            // The target dialog doesn't exist yet on this iteration (we'd have returned above),
-            // so nothing besides the main window should be showing.
-            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            // The target dialog didn't exist on this iteration's enumeration (we'd have returned
+            // above), but it can open in the gap before this check — so allow the titles we're
+            // waiting for (same lost-update race as waitForWindow). Nothing ELSE should be showing.
+            DialogInspector.assertNoUnexpectedModals(titlePatterns);
             sleep(POLL_INTERVAL_MS);
         }
         return null;
@@ -1225,7 +1235,14 @@ public class RosterActions {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * Waits for a window titled {@code titleFragment} to appear.
+     * Waits for a window titled {@code titleFragment} to appear. {@code titleFragment} itself is
+     * always allowed by the unexpected-modal check: it is BY DEFINITION expected here — that's
+     * what we're waiting for. Without that, there is a lost-update race across the two FX-thread
+     * round-trips below: {@code hasWindow} can observe "not open yet", the awaited window opens in
+     * the gap, and {@code assertNoUnexpectedModals} then flags the very window this call wants as
+     * "unexpected" (observed on a loaded machine as spurious
+     * {@code Unexpected modal dialog [Edit Roster]} failures in {@code createRosterAction}).
+     * {@link #waitForWindowClose} already self-allows its own title for the mirror-image reason.
      *
      * @param alsoAllowed titles of any OTHER dialog(s) already legitimately open at this point in
      *                    the calling action's flow (e.g. a parent dialog); anything else showing
@@ -1233,13 +1250,45 @@ public class RosterActions {
      */
     private void waitForWindow(String titleFragment, String... alsoAllowed) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
+        String[] allowed = withTitle(titleFragment, alsoAllowed);
         while (System.currentTimeMillis() < deadline) {
             Boolean found = runOnFxGet(() -> hasWindow(titleFragment));
             if (found) return;
-            DialogInspector.assertNoUnexpectedModals(alsoAllowed);
+            DialogInspector.assertNoUnexpectedModals(allowed);
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException("Window '" + titleFragment + "' did not appear within " + WINDOW_TIMEOUT_MS + "ms");
+    }
+
+    /**
+     * Waits for the "New Roster" window to appear after firing {@code #btnNewRoster}. Under
+     * roster warm-reuse, the previous spec's roster can still be open and unsaved: BattleScribe
+     * pops its native {@value #CONTINUE_WINDOW} confirmation (YES/NO/CANCEL) before it will let a
+     * new roster replace it. That's benign and expected here — dismiss it with NO (discard; each
+     * spec is independent — never save a previous spec's leftovers) via {@code #btnNegative} and
+     * keep waiting for "New Roster" to appear. On a cold start (no roster open), the prompt never
+     * appears and this behaves exactly like a plain {@link #waitForWindow}.
+     */
+    private void waitForNewRosterWindowDismissingContinuePrompt() {
+        long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
+        boolean dismissing = false;
+        while (System.currentTimeMillis() < deadline) {
+            if (runOnFxGet(() -> hasWindow(NEW_ROSTER_WINDOW))) return;
+            if (runOnFxGet(() -> hasWindow(CONTINUE_WINDOW))) {
+                if (!dismissing) {
+                    dismissing = true;
+                    runOnFx(() -> fireButtonAsync("#btnNegative", CONTINUE_WINDOW));
+                }
+                sleep(POLL_INTERVAL_MS);
+                continue;
+            }
+            // Both NEW_ROSTER_WINDOW (what we're waiting for — it can open in the gap between the
+            // hasWindow check above and this assert) and CONTINUE_WINDOW (declared expected by this
+            // action; may still be closing after we fired NO) are legitimate here.
+            DialogInspector.assertNoUnexpectedModals(NEW_ROSTER_WINDOW, CONTINUE_WINDOW);
+            sleep(POLL_INTERVAL_MS);
+        }
+        throw new RuntimeException("Window '" + NEW_ROSTER_WINDOW + "' did not appear within " + WINDOW_TIMEOUT_MS + "ms");
     }
 
     /**

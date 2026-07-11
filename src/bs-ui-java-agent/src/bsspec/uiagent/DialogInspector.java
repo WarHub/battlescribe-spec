@@ -8,6 +8,7 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Labeled;
 import javafx.scene.control.TextInputControl;
+import javafx.scene.text.Text;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
@@ -205,8 +206,15 @@ public final class DialogInspector {
     /**
      * Scrapes a dialog's visible text. BattleScribe's Error dialog puts the summary message in
      * one control and the stack/details in another, so this joins ALL non-empty
-     * Labeled/TextInputControl/TextArea text in document order, treating the first as the
+     * Labeled/TextInputControl/TextArea/Text text in document order, treating the first as the
      * summary and truncating the rest (details) to a sane length.
+     *
+     * <p>Its generic {@code BattleScribeAlertDialog} (used for both the "Confirm" and "Continue?"
+     * YES/NO/CANCEL prompts) puts the actual message in a {@code TextFlow} of {@code Text} nodes
+     * ABOVE its {@code btnPositive}/{@code btnNegative}/{@code btnNeutral} buttons in the scene
+     * graph — so once {@code Text} is included here, document order alone means the real message
+     * naturally becomes the summary (parts[0]) and the button labels fall into the truncated
+     * "details" suffix, without needing to special-case buttons vs. message.
      */
     private static String scrapeText(Stage stage) {
         if (stage.getScene() == null || stage.getScene().getRoot() == null) return null;
@@ -237,9 +245,13 @@ public final class DialogInspector {
 
     private static String extractText(Node node) {
         // Labeled covers Label/Button/etc.; TextInputControl covers TextField AND TextArea
-        // (the BS Error dialog's stack trace/details control is a TextArea).
+        // (the BS Error dialog's stack trace/details control is a TextArea). Text covers the
+        // TextFlow-based message content of BattleScribeAlertDialog ("Confirm"/"Continue?"
+        // prompts) — without this, only the button labels were ever scraped for that dialog
+        // family (e.g. "YES — NO | CANCEL" with no actual message text).
         if (node instanceof Labeled) return ((Labeled) node).getText();
         if (node instanceof TextInputControl) return ((TextInputControl) node).getText();
+        if (node instanceof Text) return ((Text) node).getText();
         return null;
     }
 
