@@ -16,16 +16,15 @@ public sealed class JsonProtocolGameDataEngine : IGameDataEngine
     public JsonProtocolGameDataEngine(IAdapterConnection adapter, TimeSpan? requestTimeout = null)
     {
         _adapter = adapter;
-        _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
+        _requestTimeout = requestTimeout ?? JsonProtocolEngine.DefaultRequestTimeout;
     }
 
     public void SetTestContext(string specId) => _specId = specId;
 
     /// <summary>
-    /// Configure the engine with game system and catalogue data. Sent with an explicit
-    /// 2-minute timeout (longer than the default 30s): engine construction happens
-    /// server-side during setup, and UI engines hosted by bs-engine-host do a Playwright
-    /// cold-start there, which can exceed the default window.
+    /// Configure the engine with game system and catalogue data. Sent with an explicit 5-minute
+    /// window — the longest in the hierarchy: engine construction happens server-side during setup,
+    /// and UI engines hosted by bs-engine-host do a browser/JVM cold-start there.
     /// </summary>
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
@@ -34,7 +33,7 @@ public sealed class JsonProtocolGameDataEngine : IGameDataEngine
             SpecId = _specId,
             GameSystem = gameSystem,
             Catalogues = [.. catalogues],
-        }, TimeSpan.FromMinutes(2));
+        }, TimeSpan.FromMinutes(5));
         return response switch
         {
             SetupResult sr => sr.Errors,

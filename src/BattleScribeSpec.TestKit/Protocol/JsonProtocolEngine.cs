@@ -12,19 +12,35 @@ public sealed class JsonProtocolEngine : IRosterEngine
     private readonly TimeSpan _requestTimeout;
     private string? _specId;
 
+    /// <summary>
+    /// Default per-request timeout. This is the OUTERMOST layer of the timeout hierarchy and must
+    /// exceed any host-side operation, so that a timeout here always means "the adapter is genuinely
+    /// unresponsive" — never "the adapter is still working":
+    /// <list type="bullet">
+    ///   <item>CLI per-request (this, 3 min)</item>
+    ///   <item>&gt; BS-UI action worst case (~122s: 60s ActionTimeout × (1 + MaxRetries) + retry delay)</item>
+    ///   <item>&gt; AgentClient.CallTimeout (90s for actions)</item>
+    ///   <item>&gt; Java agent FX-thread dispatch (60s)</item>
+    /// </list>
+    /// It was previously 30s — SHORTER than a legitimate BS-UI roster action — so the CLI abandoned
+    /// in-flight requests, whose late responses then desynced the stream (see the corrId correlation
+    /// in <see cref="AdapterProcess"/>). Correlation makes that harmless; this makes it not happen.
+    /// Slower detection of a truly hung adapter is an acceptable trade for never aborting live work.
+    /// </summary>
+    public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromMinutes(3);
+
     public JsonProtocolEngine(IAdapterConnection adapter, TimeSpan? requestTimeout = null)
     {
         _adapter = adapter;
-        _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
+        _requestTimeout = requestTimeout ?? DefaultRequestTimeout;
     }
 
     public void SetTestContext(string specId) => _specId = specId;
 
     /// <summary>
-    /// Configure the engine with game system and catalogue data. Sent with an explicit
-    /// 2-minute timeout (longer than the default 30s): engine construction happens
-    /// server-side during setup, and UI engines hosted by bs-engine-host do a Playwright
-    /// cold-start there, which can exceed the default window.
+    /// Configure the engine with game system and catalogue data. Sent with an explicit 5-minute
+    /// window — the longest in the hierarchy: engine construction happens server-side during setup,
+    /// and UI engines hosted by bs-engine-host do a browser/JVM cold-start there.
     /// </summary>
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
@@ -34,7 +50,7 @@ public sealed class JsonProtocolEngine : IRosterEngine
             GameSystem = gameSystem,
             Catalogues = [.. catalogues],
         };
-        var response = SendCommand(cmd, TimeSpan.FromMinutes(2));
+        var response = SendCommand(cmd, TimeSpan.FromMinutes(5));
         return response switch
         {
             SetupResult sr => sr.Errors,
