@@ -54,6 +54,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "setup" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "version": { "type": "string" },
         "specId": { "type": "string" },
         "gameSystem": { "$ref": "#/$defs/gameSystem" },
@@ -69,6 +70,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "setupFromFiles" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "specId": { "type": "string" },
         "files": {
           "type": "array",
@@ -82,6 +84,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "action" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "action": { "$ref": "#/$defs/actionName" },
         "forceEntryId": { "type": "string" },
         "entryId": { "type": "string" },
@@ -101,7 +104,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "getState" }
+        "type": { "const": "getState" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "getErrorsCommand": {
@@ -109,7 +113,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "getErrors" }
+        "type": { "const": "getErrors" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "teardownCommand": {
@@ -117,7 +122,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "teardown" }
+        "type": { "const": "teardown" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "describeCommand": {
@@ -126,7 +132,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "describe" }
+        "type": { "const": "describe" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "screenshotCommand": {
@@ -135,7 +142,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "screenshot" }
+        "type": { "const": "screenshot" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "exportRosterXmlCommand": {
@@ -144,7 +152,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "exportRosterXml" }
+        "type": { "const": "exportRosterXml" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "recordStartCommand": {
@@ -153,7 +162,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "recordStart" }
+        "type": { "const": "recordStart" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "recordStopCommand": {
@@ -162,7 +172,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "recordStop" }
+        "type": { "const": "recordStop" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
 
@@ -173,6 +184,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "gamedataSetup" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "specId": { "type": "string" },
         "gameSystem": { "$ref": "#/$defs/gameSystem" },
         "catalogues": {
@@ -188,6 +200,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "gamedataAction" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "action": { "$ref": "#/$defs/gameDataActionName" },
         "id": { "type": "string" },
         "parentId": { "type": "string" },
@@ -208,7 +221,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "gamedataGetState" }
+        "type": { "const": "gamedataGetState" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "gameDataGetErrorsCommand": {
@@ -216,7 +230,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "gamedataGetErrors" }
+        "type": { "const": "gamedataGetErrors" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
 
@@ -226,6 +241,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "setupResult" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "errors": {
           "type": "array",
           "items": { "type": "string" }
@@ -238,6 +254,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "actionResult" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "ok": { "type": "boolean" },
         "error": { "type": "string" },
         "outputs": { "$ref": "#/$defs/actionOutputs" }
@@ -249,6 +266,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "state" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "name": { "type": "string" },
         "gameSystemId": { "type": "string" },
         "gameSystemName": { "type": "string" },
@@ -276,6 +294,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "errors" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "errors": {
           "type": "array",
           "items": { "$ref": "#/$defs/validationErrorState" }
@@ -287,7 +306,8 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "teardownResult" }
+        "type": { "const": "teardownResult" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
       }
     },
     "protocolError": {
@@ -296,6 +316,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "error" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "message": { "type": "string" }
       }
     },
@@ -306,6 +327,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "describeResult" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "name": { "type": "string" },
         "version": { "type": "string" },
         "protocolVersion": { "type": "string", "default": "1.1" },
@@ -324,6 +346,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "screenshotResult" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "pngBase64": { "type": "string" }
       }
     },
@@ -334,6 +357,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "rosterXmlResult" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "xml": { "type": "string" }
       }
     },
@@ -344,6 +368,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "recordResult" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "actionsJson": { "type": "string" }
       }
     },
@@ -354,6 +379,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "gamedataActionResult" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "ok": { "type": "boolean" },
         "error": { "type": "string" },
         "entryId": { "type": "string" },
@@ -368,6 +394,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "gamedataState" },
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "state": { "$ref": "#/$defs/gameDataState" }
       }
     },

@@ -33,6 +33,19 @@ public abstract class ProtocolCommand
 {
     [JsonIgnore]
     public abstract string Type { get; }
+
+    /// <summary>
+    /// Optional correlation id (protocol v1.1+), wire name <c>corrId</c>. Clients SHOULD send it;
+    /// adapters (via <see cref="AdapterHandler"/>) echo it verbatim on the response so a
+    /// client-side timeout can discard a late response instead of desyncing the stream. Omitted
+    /// from the wire when null — a response with no corrId falls back to strict positional
+    /// ordering (legacy adapters). Named <c>corrId</c> rather than <c>id</c> because
+    /// <see cref="GameDataActionCommand.Id"/> already uses the bare "id" wire field for a
+    /// domain concept (declared entry id / openFile target).
+    /// </summary>
+    [JsonPropertyName("corrId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? CorrId { get; set; }
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -52,6 +65,17 @@ public abstract class ProtocolResponse
 {
     [JsonIgnore]
     public abstract string Type { get; }
+
+    /// <summary>
+    /// Echo of the originating command's <see cref="ProtocolCommand.CorrId"/> (protocol v1.1+),
+    /// wire name <c>corrId</c>, omitted when the command had none. Named <c>corrId</c> rather
+    /// than <c>id</c> because <see cref="GameDataActionResult.Id"/> already uses the bare "id"
+    /// wire field for a domain concept (loaded file root id). See
+    /// <see cref="ProtocolCommand.CorrId"/>.
+    /// </summary>
+    [JsonPropertyName("corrId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? CorrId { get; set; }
 }
 
 // ===== Runner → Adapter Commands =====

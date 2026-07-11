@@ -88,9 +88,11 @@ public static class AdapterHandler
                 }
 
                 ProtocolResponse response;
+                int? commandCorrId = null;
                 try
                 {
                     var command = ProtocolSerializer.DeserializeCommand(line);
+                    commandCorrId = command?.CorrId;
                     response = command switch
                     {
                         SetupCommand setup => HandleSetup(setup, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, out catalogueIds),
@@ -131,6 +133,10 @@ public static class AdapterHandler
                 {
                     response = new ProtocolError { Message = ex.Message };
                 }
+
+                // Echo the command's corrId (if any) on every response path, including the error
+                // fallback above. A command with no corrId leaves the response corrId null (legacy client).
+                response.CorrId = commandCorrId;
 
                 await output.WriteLineAsync(ProtocolSerializer.SerializeResponse(response).AsMemory(), ct);
                 await output.FlushAsync(ct);

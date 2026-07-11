@@ -85,8 +85,10 @@ internal static class ProtocolBreakRepl
                     {
                         TryRun(() =>
                         {
-                            var response = connection.SendAsync(trimmed).GetAwaiter().GetResult();
-                            Console.Out.WriteLine(response);
+                            var command = ProtocolSerializer.DeserializeCommand(trimmed)
+                                ?? throw new InvalidOperationException($"Could not parse command JSON: {trimmed}");
+                            var response = connection.SendCommandAsync(command).GetAwaiter().GetResult();
+                            Console.Out.WriteLine(ProtocolSerializer.SerializeResponse(response));
                             Console.Out.Flush();
                         });
                     }

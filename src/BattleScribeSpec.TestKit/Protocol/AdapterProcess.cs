@@ -4,23 +4,206 @@ using System.Diagnostics;
 namespace BattleScribeSpec.Protocol;
 
 /// <summary>
+/// Correlates NDJSON command/response pairs by an optional <see cref="ProtocolCommand.CorrId"/>
+/// over any <see cref="TextReader"/>/<see cref="TextWriter"/> pair. A single background read
+/// loop owns the reader and reads lines to completion (never cancelled mid-line); a caller's
+/// timeout/cancellation only abandons its own wait on a <see cref="TaskCompletionSource{TResult}"/>
+/// — it never touches the stream. This is what makes a late/abandoned response harmless: the
+/// read loop discards it by id instead of it being misread as the answer to the next command
+/// (the desync that used to cascade through an entire run once one call timed out).
+/// </summary>
+/// <remarks>
+/// Legacy fallback: a response with no id completes the single oldest outstanding request
+/// (today's positional behavior), so adapters that don't echo ids keep working.
+/// </remarks>
+public sealed class NdjsonLineConnection : IAdapterConnection, IDisposable
+{
+    private readonly TextReader _input;
+    private readonly TextWriter _output;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly ConcurrentDictionary<int, TaskCompletionSource<ProtocolResponse>> _pending = new();
+    private readonly CancellationTokenSource _readLoopCts = new();
+    private readonly Task _readLoop;
+    private int _nextId;
+    private volatile Exception? _fault;
+    private bool _disposed;
+
+    public NdjsonLineConnection(TextReader input, TextWriter output)
+    {
+        _input = input;
+        _output = output;
+        _readLoop = Task.Run(ReadLoopAsync);
+    }
+
+    /// <summary>
+    /// Set once the read loop has exited because the stream closed or a read/parse failed.
+    /// New sends fail fast referencing this instead of hanging on a response that will never arrive.
+    /// </summary>
+    public Exception? Fault => _fault;
+
+    private async Task ReadLoopAsync()
+    {
+        try
+        {
+            while (!_readLoopCts.IsCancellationRequested)
+            {
+                var line = await _input.ReadLineAsync(_readLoopCts.Token);
+                if (line is null)
+                {
+                    break; // stream closed
+                }
+
+                ProtocolResponse? response;
+                try
+                {
+                    response = ProtocolSerializer.DeserializeResponse(line);
+                }
+                catch
+                {
+                    continue; // ignore unparseable line rather than killing the read loop
+                }
+
+                if (response is null)
+                {
+                    continue;
+                }
+
+                if (response.CorrId is { } corrId)
+                {
+                    if (_pending.TryRemove(corrId, out var tcs))
+                    {
+                        tcs.TrySetResult(response);
+                    }
+                    // else: late/abandoned response for a timed-out call — discard. THIS is the desync fix.
+                }
+                else
+                {
+                    // Legacy fallback: no corrId on the wire — complete the single oldest outstanding
+                    // request (today's positional behavior), for adapters that don't echo it.
+                    CompleteOldestPending(response);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // disposing
+        }
+        catch (Exception ex)
+        {
+            _fault = ex;
+        }
+        finally
+        {
+            FaultAllPending(_fault ?? new IOException("NDJSON stream closed."));
+        }
+    }
+
+    /// <summary>
+    /// Completes the pending request with the smallest corrId. Ids are assigned via a
+    /// monotonically increasing counter, so the smallest still-outstanding id is always the
+    /// oldest request.
+    /// </summary>
+    private void CompleteOldestPending(ProtocolResponse response)
+    {
+        int? oldest = null;
+        foreach (var key in _pending.Keys)
+        {
+            if (oldest is null || key < oldest)
+            {
+                oldest = key;
+            }
+        }
+
+        if (oldest is { } corrId && _pending.TryRemove(corrId, out var tcs))
+        {
+            tcs.TrySetResult(response);
+        }
+    }
+
+    private void FaultAllPending(Exception ex)
+    {
+        foreach (var key in _pending.Keys)
+        {
+            if (_pending.TryRemove(key, out var tcs))
+            {
+                tcs.TrySetException(ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Send a protocol command and await its correlated response. Assigns the next id, registers
+    /// a waiter, writes the command (writes are serialized by a semaphore), then awaits the
+    /// waiter with the caller's token. On cancellation/timeout the waiter is removed and the
+    /// exception propagates — the stream itself is never touched, so a late response is later
+    /// discarded by id rather than desyncing the next call.
+    /// </summary>
+    public async Task<ProtocolResponse> SendCommandAsync(ProtocolCommand command, CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (_fault is { } fault)
+        {
+            throw new InvalidOperationException("NDJSON connection is faulted.", fault);
+        }
+
+        var corrId = Interlocked.Increment(ref _nextId);
+        command.CorrId = corrId;
+        var tcs = new TaskCompletionSource<ProtocolResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pending[corrId] = tcs;
+        try
+        {
+            var json = ProtocolSerializer.SerializeCommand(command);
+
+            await _writeLock.WaitAsync(ct);
+            try
+            {
+                await _output.WriteLineAsync(json.AsMemory(), ct);
+                await _output.FlushAsync(ct);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+
+            return await tcs.Task.WaitAsync(ct);
+        }
+        finally
+        {
+            _pending.TryRemove(corrId, out _); // no waiter leak on timeout/cancel/error
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _readLoopCts.Cancel();
+        FaultAllPending(new ObjectDisposedException(nameof(NdjsonLineConnection)));
+    }
+}
+
+/// <summary>
 /// Manages an adapter child process, providing JSON-line communication over stdin/stdout.
+/// Delegates the wire protocol (id correlation, read loop) to <see cref="NdjsonLineConnection"/>;
+/// this type owns process lifecycle and stderr diagnostics.
 /// </summary>
 public sealed class AdapterProcess : IAdapterConnection, IDisposable
 {
     private readonly Process _process;
-    private readonly StreamWriter _stdin;
-    private readonly StreamReader _stdout;
+    private readonly NdjsonLineConnection _connection;
     private readonly ConcurrentQueue<string> _stderrLines;
     private bool _disposed;
 
     private AdapterProcess(Process process, ConcurrentQueue<string> stderrLines)
     {
         _process = process;
-        _stdin = process.StandardInput;
-        _stdout = process.StandardOutput;
         _stderrLines = stderrLines;
-        _stdin.AutoFlush = true;
+        _connection = new NdjsonLineConnection(process.StandardOutput, process.StandardInput);
     }
 
     /// <summary>
@@ -60,9 +243,11 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
     }
 
     /// <summary>
-    /// Send a JSON command line and read the JSON response line.
+    /// Send a protocol command and deserialize the correlated response. On timeout/cancellation
+    /// the caller's waiter is abandoned without touching the stream — the adapter's eventual late
+    /// response is discarded by id (see <see cref="NdjsonLineConnection"/>).
     /// </summary>
-    public async Task<string> SendAsync(string jsonLine, CancellationToken ct = default)
+    public async Task<ProtocolResponse> SendCommandAsync(ProtocolCommand command, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -72,23 +257,19 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
                 $"Adapter process has exited with code {_process.ExitCode}. Stderr tail: {GetStderrTail()}");
         }
 
-        await _stdin.WriteLineAsync(jsonLine.AsMemory(), ct);
-
-        var response = await _stdout.ReadLineAsync(ct)
-            ?? throw new InvalidOperationException("Adapter process closed stdout unexpectedly.");
-
-        return response;
-    }
-
-    /// <summary>
-    /// Send a protocol command and deserialize the response.
-    /// </summary>
-    public async Task<ProtocolResponse> SendCommandAsync(ProtocolCommand command, CancellationToken ct = default)
-    {
-        var json = ProtocolSerializer.SerializeCommand(command);
-        var responseJson = await SendAsync(json, ct);
-        return ProtocolSerializer.DeserializeResponse(responseJson)
-            ?? throw new InvalidOperationException($"Failed to deserialize adapter response: {responseJson}");
+        try
+        {
+            return await _connection.SendCommandAsync(command, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // caller-requested timeout/cancellation — propagate unchanged (JsonProtocolEngine maps this to TimeoutException)
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Adapter process communication failed. Stderr tail: {GetStderrTail()}", ex);
+        }
     }
 
     public void Dispose()
@@ -99,12 +280,13 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
         }
 
         _disposed = true;
+        _connection.Dispose();
 
         try
         {
             if (!_process.HasExited)
             {
-                _stdin.Close();
+                _process.StandardInput.Close();
                 if (!_process.WaitForExit(5000))
                 {
                     _process.Kill();
