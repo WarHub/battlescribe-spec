@@ -16,9 +16,13 @@ been measured to be both correct and faster.**
 |---|---|---|---|
 | `battlescribe-ui` | **gamedata** | ✅ **enabled** | Verdicts identical to cold, **2.20× faster**. |
 | `battlescribe-ui` | **roster** | ✅ **enabled** | Verdicts identical to cold, **1.79× faster**. |
-| `newrecruit-ui` | gamedata | ❌ cold | Correct (53/53 verdicts identical) but **0.92× — no benefit**. Headless Chromium relaunches in ~1.6s, about what NR's per-spec reset costs. |
-| `newrecruit-ui` | roster | ❌ cold | **Broken.** 6/8 warm-only failures and 1.8× *slower*. See "NR-UI roster" below. |
-| `newrecruit` | both | ❌ cold | Not measured to benefit; same browser-relaunch economics as `newrecruit-ui`. |
+| `newrecruit-ui` | gamedata | ❌ cold | Verdicts identical, but **0.92× — no benefit**. |
+| `newrecruit-ui` | roster | ❌ cold | Warm-reuse was **0.56× and produced wrong verdicts**. |
+| `newrecruit` | both | ❌ cold | Same economics as `newrecruit-ui`. |
+
+For NewRecruit the answer is **not** warm-reuse — it is **`--workers N`** (3.8× at 4 workers, verdicts
+identical). Each spec already gets an isolated `BrowserContext` on a shared browser, so parallelism
+is safe. See "NewRecruit: browser reuse is the wrong lever" below.
 | `battlescribe` | both | ⚪ n/a | In-process; engine construction is cheap. Nothing to save. |
 
 Both BattleScribe UI domains pay off for the same reason: their cold cost is a **JVM + JavaFX launch
@@ -127,16 +131,15 @@ that a **host-process** death still fails the rest of that worker's batch — se
 the app's phone-home from the Java agent (we hold `Instrumentation` and run before its `main`) is the
 obvious next step if the crash proves recurrent.
 
-### NR-UI roster — the shared browser isn't reset
+### NR-UI roster warm-reuse (historical)
 
-Only the first roster-creating spec of a warm batch passes; every later one times out in `addForce`
-waiting on NR's Create List dropdown. `NrRosterUiEngine.Cleanup` doesn't fully clear the previous
-list, so the leftover row makes the dialog's controls ambiguous — the exact hazard its own code
-comment warns about. Cleanup was changed to delete lists through NR's own `listsStore.deleteList`
-API (rather than splicing the array, which never told NR to delete anything), but that alone did not
-fix it; diagnosis is hampered by the host's stderr being swallowed (issue #303).
+Warm-reuse of the NR roster engine used to corrupt results: only the first roster-creating spec
+of a batch passed, because `Cleanup` never fully cleared the previous list and the leftover row
+made NR's Create List dropdown ambiguous. **This class of bug is now structurally impossible** —
+each spec gets its own `BrowserContext` (see above), so there is no shared state to leak. NR
+warm-reuse remains disabled anyway, because it buys nothing: use `--workers N` instead.
 
-CI never caught this because the NR-UI roster lane runs a **single** spec.
+CI never caught the original bug because the NR-UI roster lane runs a **single** spec.
 
 ## Reproducing
 
