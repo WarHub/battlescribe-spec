@@ -18,11 +18,11 @@ been measured to be both correct and faster.**
 | `battlescribe-ui` | **roster** | ✅ **enabled** | Verdicts identical to cold, **1.79× faster**. |
 | `newrecruit-ui` | gamedata | ❌ cold | Correct (53/53 verdicts identical) but **0.92× — no benefit**. Headless Chromium relaunches in ~1.6s, about what NR's per-spec reset costs. |
 | `newrecruit-ui` | roster | ❌ cold | **Broken.** 6/8 warm-only failures and 1.8× *slower*. See "NR-UI roster" below. |
-
-Both BattleScribe UI domains pay off for the same reason: their cold cost is a **JVM + JavaFX
-launch per spec**. Neither NewRecruit domain does, because a headless Chromium relaunch is cheap.
 | `newrecruit` | both | ❌ cold | Not measured to benefit; same browser-relaunch economics as `newrecruit-ui`. |
 | `battlescribe` | both | ⚪ n/a | In-process; engine construction is cheap. Nothing to save. |
+
+Both BattleScribe UI domains pay off for the same reason: their cold cost is a **JVM + JavaFX launch
+per spec**. Neither NewRecruit domain does, because a headless Chromium relaunch is cheap (~1.6s).
 
 ## Measurements
 
@@ -44,12 +44,18 @@ because the per-spec JVM cold start is what's being amortized away.
 ### The premise that didn't survive contact with data
 
 This work began on the assumption that NewRecruit warm-reuse would be the big win — "~80 NR specs
-each cold-starting Chromium." **That turned out to be false.** A headless Chromium relaunch is
-cheap (~1.6s), and NR's own per-spec reset (store teardown + navigation) costs about the same, so
-warm-reuse buys NR nothing. The real win was the engine nobody expected: the BattleScribe **Data
-Editor**, where the cold cost is a JVM + JavaFX startup.
+each cold-starting Chromium." **That turned out to be exactly backwards.** A headless Chromium
+relaunch is cheap (~1.6s) and NR's own per-spec reset costs about the same, so warm-reuse buys NR
+nothing — and on NR roster it actively corrupts results. The real win was the pair nobody was
+looking at: **both BattleScribe UI domains**, where the cold cost is a JVM + JavaFX startup.
 
-Measure before you optimize — and measure *correctness*, not just wall time.
+Two lessons, both learned the hard way here:
+
+1. **Measure before you optimize.** The engine we built this for gains nothing.
+2. **Measure *correctness*, not just wall time.** NR-UI roster warm-reuse was shipped "verified"
+   because the browser launched once instead of N times — the mechanism worked. Nobody checked
+   whether the *results* were still right. They weren't. That is why this harness asserts
+   verdict-equality, and why it is the harness, not the stopwatch, that decides what ships.
 
 ## Why long warm sessions are safe now
 
