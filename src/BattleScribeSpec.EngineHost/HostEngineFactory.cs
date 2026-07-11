@@ -41,7 +41,12 @@ internal static class HostEngineFactory
                 {
                     var options = ResolveBsUiOptions();
                     Ui.Info($"BS UI mode: {options.RosterEditorJarPath}");
-                    return new BsUiRosterEngine(options) { KeepAlive = keepAlive };
+
+                    // Warm-reuse keeps the app alive between specs. `--keep-alive` forces it on even
+                    // when reuse is off (its original iterative-debugging use); BSSPEC_DISABLE_WARM_REUSE
+                    // forces it off, mirroring ServeCommand's ablation toggle.
+                    var rosterReuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
+                    return new BsUiRosterEngine(options) { KeepAlive = keepAlive || !rosterReuseDisabled };
                 }
 
             case "newrecruit-ui":

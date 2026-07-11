@@ -14,14 +14,15 @@ been measured to be both correct and faster.**
 
 | Engine | Domain | Warm-reuse | Why |
 |---|---|---|---|
-| `battlescribe-ui` | **gamedata** | ✅ **enabled** | Verdicts identical to cold, **2.20× faster**. The cold cost is a JVM + JavaFX launch per spec, so reuse pays for itself. |
+| `battlescribe-ui` | **gamedata** | ✅ **enabled** | Verdicts identical to cold, **2.20× faster**. |
+| `battlescribe-ui` | **roster** | ✅ **enabled** | Verdicts identical to cold, **1.79× faster**. |
 | `newrecruit-ui` | gamedata | ❌ cold | Correct (53/53 verdicts identical) but **0.92× — no benefit**. Headless Chromium relaunches in ~1.6s, about what NR's per-spec reset costs. |
 | `newrecruit-ui` | roster | ❌ cold | **Broken.** 6/8 warm-only failures and 1.8× *slower*. See "NR-UI roster" below. |
-| `battlescribe-ui` | roster | ❌ cold | The BattleScribe app **terminates itself** when kept alive. See "BS-UI roster" below. |
+
+Both BattleScribe UI domains pay off for the same reason: their cold cost is a **JVM + JavaFX
+launch per spec**. Neither NewRecruit domain does, because a headless Chromium relaunch is cheap.
 | `newrecruit` | both | ❌ cold | Not measured to benefit; same browser-relaunch economics as `newrecruit-ui`. |
 | `battlescribe` | both | ⚪ n/a | In-process; engine construction is cheap. Nothing to save. |
-
-**No engine warm-reuses the roster domain today.**
 
 ## Measurements
 
@@ -32,6 +33,7 @@ speedup that changes conformance results is not a speedup, it's a bug.
 | Engine / domain | Specs | Warm | Cold | Speedup | Verdicts |
 |---|---:|---:|---:|---:|---|
 | `battlescribe-ui` gamedata | 54 | **159.7s** | 350.7s | **2.20×** | ✅ all identical |
+| `battlescribe-ui` roster | 42 | **189.8s** | 340.5s | **1.79×** | ✅ all identical |
 | `battlescribe-ui` gamedata | 8 | 44.9s | 69.8s | 1.56× | ✅ all identical |
 | `newrecruit-ui` gamedata | 53 | 95.2s | 87.6s | 0.92× | ✅ all identical |
 | `newrecruit-ui` roster | 8 | 258.8s | 145.0s | 0.56× | ❌ **6 mismatches** |
@@ -75,13 +77,20 @@ failure, by definition.
 
 ## Known limitations
 
-### BS-UI roster — the app kills itself
+### BS-UI — the app can intermittently self-terminate
 
-Kept alive, the BattleScribe Roster Editor dies (exit -1, with native `hs_err` crash dumps). Its
-stderr shows a background `TimerThread` polling `https://battlescribe.net/rest/sponsormessage/getMessages`.
-Cold never trips this because each JVM only lives ~6s. Measured: warm **4/102** specs pass with the
-host process dying, vs cold **17/18**. The crash cause has not yet been confirmed from the dump
-itself — the phone-home is the leading suspect but is not yet proven.
+Kept alive long enough, the BattleScribe app has been observed to die (exit -1, with native `hs_err`
+crash dumps); its stderr showed a background `TimerThread` polling
+`https://battlescribe.net/rest/sponsormessage/getMessages`. This is **intermittent** — a clean 42-spec
+warm roster benchmark reproduced no crash at all, and the crash cause has never been confirmed from
+a dump.
+
+Warm-reuse is still enabled because it is measured correct and ~1.8–2.2× faster. Mitigations:
+`BsUiRosterEngine` self-heals (poisons itself and cold-restarts the app) on an unexpected modal or a
+timeout, so an engine-level failure costs one restart rather than corrupting later specs. The gap is
+that a **host-process** death still fails the rest of that worker's batch — see **#304**. Suppressing
+the app's phone-home from the Java agent (we hold `Instrumentation` and run before its `main`) is the
+obvious next step if the crash proves recurrent.
 
 ### NR-UI roster — the shared browser isn't reset
 

@@ -63,22 +63,24 @@ internal static class ServeCommand
                 RosterXml = name is "battlescribe-ui",
                 MaxParallel = name is "battlescribe-ui" ? 1 : 0,
             },
-            // Warm-reuse is enabled ONLY where it is measured both CORRECT and FASTER
-            // (scripts/bench-warm-reuse.ps1 — see docs/warm-reuse.md):
+            // Warm-reuse is enabled ONLY where it is measured both CORRECT (per-spec verdicts
+            // identical to cold) and FASTER (scripts/bench-warm-reuse.ps1 — see docs/warm-reuse.md):
             //
-            //   battlescribe-ui gamedata : verdicts identical to cold, 1.56x faster. The cold cost
-            //                              is a JVM + JavaFX launch per spec, so reuse pays. ENABLED.
+            //   battlescribe-ui gamedata : 2.20x faster (54 specs), verdicts identical.  ENABLED.
+            //   battlescribe-ui roster   : 1.79x faster (42 specs), verdicts identical.  ENABLED.
+            //       Both pay off because the cold cost is a JVM + JavaFX launch per spec.
             //   newrecruit-ui   gamedata : verdicts identical, but 0.92x — NO benefit. Headless
             //                              Chromium relaunches in ~1.6s, about what NR's per-spec
             //                              reset costs. Left cold.
             //   newrecruit-ui   roster   : BROKEN — 6/8 warm-only failures (the shared browser's
             //                              leftover list makes NR's Create List dropdown ambiguous)
             //                              and 1.8x slower. Left cold.
-            //   battlescribe-ui roster   : the app kills itself when kept alive. Left cold.
             //   battlescribe (in-process): engine construction is cheap; nothing to save.
             //
-            // No engine warm-reuses the roster domain today.
-            ReuseRosterEngineAcrossSetups = false,
+            // Known risk on battlescribe-ui: the app can intermittently self-terminate when kept
+            // alive. BsUiRosterEngine self-heals (poison -> cold restart) for engine-level failures,
+            // but a host-process death still fails the rest of the batch until #304 lands.
+            ReuseRosterEngineAcrossSetups = !reuseDisabled && name is "battlescribe-ui",
             ReuseGameDataEngineAcrossSetups = !reuseDisabled && name is "battlescribe-ui",
             ScreenshotProvider = e => e switch
             {
