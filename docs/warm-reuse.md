@@ -1,170 +1,115 @@
-# Host Warm-Reuse
+# Host-side warm engine reuse
 
-`bs-engine-host` runs a built-in engine over the [adapter protocol](adapter-protocol.md) as a
-child process spawned by the runner. By default it recreates the underlying engine for every
-spec: dispose the old instance, construct a fresh one. For UI-driven engines (a Playwright
-browser, or a JavaFX app driven through a Java agent) that means a full cold start — browser or
-JVM launch — **per spec**, which dominates wall time for a large batch.
+`bs-engine-host` can keep **one engine alive across specs** instead of disposing and recreating it
+for every spec. The engine is reset between specs with its existing `Cleanup()` (the same primitive
+the in-process engine pool uses), and disposed once at process shutdown.
 
-**Warm-reuse** keeps ONE engine instance alive across the batch instead. Between specs the host
-calls the engine's `Cleanup()` to reset its state (close the current roster/document, clear cached
-lookups, return the app to a neutral screen) rather than disposing it, and the next spec's
-`Setup()` reuses the still-running browser/JVM. This mirrors the in-process engine pool the
-`battlescribe` engine already gets for free.
+Without it, a host process that serves a whole batch pays a full engine cold start **per spec** —
+for UI engines that means launching a browser or a JVM every time.
 
-Warm-reuse is opt-in per **engine identity** and per **domain** (roster vs gamedata), wired in
-`src/BattleScribeSpec.EngineHost/ServeCommand.cs` (`ReuseRosterEngineAcrossSetups` /
-`ReuseGameDataEngineAcrossSetups`). For `battlescribe-ui` gamedata it is gated a second time by
-`BsGameDataUiEngine.KeepAlive` in `HostEngineFactory.cs` — both must be on for the app to survive
-between specs.
+It is **opt-in per domain**, and — this is the important part — **it is only enabled where it has
+been measured to be both correct and faster.**
 
-It also **self-heals**. An action that leaves the app in an unknown state — an unexpected modal
-dialog, or any operation timeout — marks the engine instance *poisoned*. The next `Cleanup` tears
-a poisoned instance down unconditionally (even under `KeepAlive`), so the following spec gets a
-fresh cold-started instance rather than inheriting corrupted state. One bad spec costs one extra
-cold restart; it cannot cascade through the rest of the batch.
+## What is actually enabled
 
-## Per-engine applicability
-
-| Engine | Domain | Warm-reuse | Status / reason |
+| Engine | Domain | Warm-reuse | Why |
 |---|---|---|---|
-| `newrecruit` | roster | ✅ enabled | The NR web app loads game data at runtime per spec — no restart needed. Not benchmarked at batch scale here. |
-| `newrecruit` | gamedata | ✅ enabled | Same: the NR Editor loads catalogue data at runtime. Not benchmarked here. |
-| `newrecruit-ui` | roster | ⚠️ **enabled, but measured BROKEN** | Warm-reuse is on in `ServeCommand`, but the benchmark shows a correctness regression: after any spec that **successfully creates a roster**, every following spec fails at step 0 with `addForce` timing out (`waiting for Locator(".box").First.Locator("select").First`). `NrRosterUiEngine.Cleanup` → `ResetBrowserStateAsync` does not actually clear the previous list, so NR's Create-List dialog no longer exposes the force `select`. Warm is therefore both **slower and wrong** vs cold. Numbers and evidence below. |
-| `newrecruit-ui` | gamedata | ✅ enabled | The NR Editor UI reloads data at runtime. Not benchmarked here. |
-| `battlescribe-ui` | gamedata (Data Editor) | ✅ enabled, **verified** | The Data Editor loads catalogue/gst files **by path at runtime**: `gamedataLoadFilesAction` (C#) → the Java agent's `openCataloguePath` (`DataEditorActions.java`), a genuine runtime file loader used on every spec. Reusing the JVM and reloading new files between specs is safe — measured identical verdicts warm vs cold, with a real speedup. |
-| `battlescribe-ui` | roster (Roster Editor) | ❌ disabled (cold) | **The BattleScribe app terminates itself when kept alive.** A background `TimerThread` in the app polls `https://battlescribe.net/rest/sponsormessage/getMessages`; when that call fails the JVM exits (code -1) and takes the host with it. Cold never trips it — each JVM lives only ~6s, well under the poll interval — but a warm-reused instance survives long enough for the timer to fire. Measured: warm 4/102 specs passed before the host died, vs cold 17/18 passed. Tracked for a proper fix (suppress the app's phone-home from the Java agent). |
-| `battlescribe` (in-process) | both | ⚪ N/A | Engine construction is cheap (no external process); there is nothing to save. |
+| `battlescribe-ui` | **gamedata** | ✅ **enabled** | Verdicts identical to cold, **2.20× faster**. The cold cost is a JVM + JavaFX launch per spec, so reuse pays for itself. |
+| `newrecruit-ui` | gamedata | ❌ cold | Correct (53/53 verdicts identical) but **0.92× — no benefit**. Headless Chromium relaunches in ~1.6s, about what NR's per-spec reset costs. |
+| `newrecruit-ui` | roster | ❌ cold | **Broken.** 6/8 warm-only failures and 1.8× *slower*. See "NR-UI roster" below. |
+| `battlescribe-ui` | roster | ❌ cold | The BattleScribe app **terminates itself** when kept alive. See "BS-UI roster" below. |
+| `newrecruit` | both | ❌ cold | Not measured to benefit; same browser-relaunch economics as `newrecruit-ui`. |
+| `battlescribe` | both | ⚪ n/a | In-process; engine construction is cheap. Nothing to save. |
 
-## The protocol correlation fixes (why long warm sessions are safe)
+**No engine warm-reuses the roster domain today.**
 
-Warm-reuse means one engine process — and for `battlescribe-ui`, one JVM plus one long-lived agent
-socket — now serves an entire batch instead of one spec per fresh connection. That exposed a
-latent bug at **both** protocol layers this host uses: responses were matched to requests
-*positionally* (read a line, assume it answers the most recent command), which is only safe if
-every command gets exactly one timely response.
+## Measurements
 
-- **NDJSON adapter protocol** (`AdapterProcess`, CLI ↔ host): commands now carry an optional
-  `corrId`, which `AdapterHandler` echoes on every response. `AdapterProcess` matches each response
-  to its pending request by `corrId` and **discards** a late response whose id no longer has a
-  waiter (i.e. one the client already timed out on), instead of handing it to the next command in
-  line and permanently desyncing the stream. See [`corrId`](adapter-protocol.md#correlation-id-corrid).
-- **JSON-RPC agent protocol** (`AgentClient`, host ↔ Java agent inside the BattleScribe JVM):
-  `AgentClient` always assigned a unique `id` per request and the Java server echoed it — the bug
-  was purely client-side (read one line, assume positional order). It now runs a dedicated
-  background read loop that correlates responses to requests by `id` and discards late/abandoned
-  ones, exactly like the NDJSON fix.
-- **Timeout hierarchy**: the CLI's per-request timeout was raised from 30s to 3 minutes (`setup`
-  gets 5 minutes) so it always *exceeds* every host-side operation: BS-UI's worst-case action retry
-  window (~122s), `AgentClient.CallTimeout` (90s), and the Java agent's FX-thread dispatch (60s). A
-  CLI timeout now means "the adapter is genuinely unresponsive," never "the adapter is still
-  working." Correlation makes a late response harmless; the hierarchy makes it rare.
+All runs `--workers 1`, warm vs cold on the identical spec set, via `scripts/bench-warm-reuse.ps1`.
+The harness **asserts that per-spec PASS/FAIL verdicts are identical** between warm and cold — a
+speedup that changes conformance results is not a speedup, it's a bug.
 
-Together these let a long warm session absorb an occasional slow request without desyncing every
-spec that follows — the failure mode that previously made a 107-spec warm batch cascade.
+| Engine / domain | Specs | Warm | Cold | Speedup | Verdicts |
+|---|---:|---:|---:|---:|---|
+| `battlescribe-ui` gamedata | 54 | **159.7s** | 350.7s | **2.20×** | ✅ all identical |
+| `battlescribe-ui` gamedata | 8 | 44.9s | 69.8s | 1.56× | ✅ all identical |
+| `newrecruit-ui` gamedata | 53 | 95.2s | 87.6s | 0.92× | ✅ all identical |
+| `newrecruit-ui` roster | 8 | 258.8s | 145.0s | 0.56× | ❌ **6 mismatches** |
 
-## Measured numbers
+The speedup grows with batch size for `battlescribe-ui` gamedata (1.56× at 8 specs → 2.20× at 54),
+because the per-spec JVM cold start is what's being amortized away.
 
-Captured on this branch (`feat/271-nr-warm-reuse`), Windows 11, `--workers 1`, via
-`scripts/bench-warm-reuse.ps1`. Each row is the **same batch run twice**: warm (default) and cold
-(`BSSPEC_DISABLE_WARM_REUSE=1`).
+### The premise that didn't survive contact with data
 
-### `battlescribe-ui` gamedata (Data Editor) — ✅ warm wins
+This work began on the assumption that NewRecruit warm-reuse would be the big win — "~80 NR specs
+each cold-starting Chromium." **That turned out to be false.** A headless Chromium relaunch is
+cheap (~1.6s), and NR's own per-spec reset (store teardown + navigation) costs about the same, so
+warm-reuse buys NR nothing. The real win was the engine nobody expected: the BattleScribe **Data
+Editor**, where the cold cost is a JVM + JavaFX startup.
 
-`-Filter "condition/,constraint/,cost/"`, 8 specs:
+Measure before you optimize — and measure *correctness*, not just wall time.
 
-| Metric | Value |
-|---|---|
-| Spec count | 8 |
-| Warm wall | 44.9s |
-| Cold wall | 69.8s |
-| Absolute saving | 24.9s |
-| Per-spec saving | 3.11s |
-| Speedup | **1.56×** |
-| Verdicts warm == cold | ✅ all 8 identical |
+## Why long warm sessions are safe now
 
-Warm launches the Data Editor JVM **once**; cold launches it 8 times. An earlier measurement on a
-different 8-spec filter gave 34.5s warm vs 58.8s cold (1 launch vs 8) — the same ~1.6–1.7× shape.
+Warm-reuse keeps a single connection alive across hundreds of specs, which exposed a latent bug in
+**both** protocol layers: responses were correlated **positionally** (write a request, read the next
+line). When a client-side timeout fired, the in-flight response arrived late and was consumed as the
+answer to the *next* request — permanently shifting the stream and cascading failures through the
+rest of the batch.
 
-### `newrecruit-ui` roster — ❌ warm is slower AND wrong
+Both layers now correlate responses **by id**, via a dedicated reader loop that discards late or
+abandoned responses:
 
-`-Filter "gamesystem/,entry-group/"`, 8 specs:
+- **NDJSON adapter protocol** (`AdapterProcess`) — optional `corrId` on commands, echoed by
+  `AdapterHandler`. Adapters that don't echo it fall back to strict positional ordering.
+- **JSON-RPC agent protocol** (`AgentClient`) — the JSON-RPC `id` was already sent and echoed; it
+  simply wasn't checked.
 
-| Metric | Value |
-|---|---|
-| Spec count | 8 |
-| Warm wall | 258.8s |
-| Cold wall | 145.0s |
-| Absolute "saving" | **−113.8s** (warm is 113.8s *slower*) |
-| Speedup | **0.56×** (a 1.8× slowdown) |
-| Verdicts warm == cold | ❌ **6 mismatches, every one warm=FAIL / cold=PASS** |
+The **timeout hierarchy** was also inverted and is now fixed: the CLI's per-request timeout (3 min)
+must exceed any host-side operation (BS-UI actions can legitimately run ~122s), so a timeout means
+"the adapter is genuinely dead," never "the adapter is still working."
 
-Warm: **1 passed, 7 failed**. Cold: 7 passed, 1 failed. The single warm pass is
-`entry-group/entry-group-collective` — the *first* spec in the batch. All seven warm failures are
-identical and occur at **step 0**:
+The BS-UI Java agent additionally **reports unexpected modal dialogs** (with the dialog's text and a
+full-display screenshot) instead of blocking until timeout — a modal that no action expects is a
+failure, by definition.
 
-```
-Step 0: InvalidOperationException: Action 'addForce' failed: Timeout 30000ms exceeded.
-Call log:
-  - waiting for Locator(".box").First.Locator("select").First
-```
+## Known limitations
 
-That locator is the force-selection dropdown in NR's Create-List dialog. A separate 3-spec run
-isolates the trigger: in a batch whose first two specs failed *before* creating a roster (NR's
-"cannot create rosters from library catalogues" limitation), the third spec still **passed** warm.
-So warm-reuse survives a spec that never made a roster, and breaks only once a spec has
-**successfully created** one. `NrRosterUiEngine.Cleanup` → `ResetBrowserStateAsync` (clears the
-Pinia `lists` store, strips `list`-matching `localStorage` keys, re-navigates to `/app`) is
-evidently not removing the previous list — precisely the "leftover list rows make the Create List
-dialog's controls ambiguous" hazard its own code comment warns about. The 30s Playwright timeout
-on each of the 7 failing specs is also what makes the warm run slower than cold.
+### BS-UI roster — the app kills itself
 
-The in-tree NR-UI roster conformance lane never caught this because it deliberately runs **one
-spec** (`protocol/protocol-kitchen-sink`) — see the comment in
-`tests/Conformance/FrozenNrUiRosterConformanceTests.cs`. Multi-spec warm reuse through the host is
-first exercised by this benchmark.
+Kept alive, the BattleScribe Roster Editor dies (exit -1, with native `hs_err` crash dumps). Its
+stderr shows a background `TimerThread` polling `https://battlescribe.net/rest/sponsormessage/getMessages`.
+Cold never trips this because each JVM only lives ~6s. Measured: warm **4/102** specs pass with the
+host process dying, vs cold **17/18**. The crash cause has not yet been confirmed from the dump
+itself — the phone-home is the leading suspect but is not yet proven.
 
-**This is an open defect, not a shipped win.** The flag is left as-is by this change (the
-enablement decision is out of scope for the docs/benchmark pass); it needs either a fix to the
-warm reset path so NR's roster-creation UI is genuinely restored between specs, or `newrecruit-ui`
-must be dropped from `ReuseRosterEngineAcrossSetups`.
+### NR-UI roster — the shared browser isn't reset
 
-### `newrecruit-ui` gamedata, `newrecruit` (both domains)
+Only the first roster-creating spec of a warm batch passes; every later one times out in `addForce`
+waiting on NR's Create List dropdown. `NrRosterUiEngine.Cleanup` doesn't fully clear the previous
+list, so the leftover row makes the dialog's controls ambiguous — the exact hazard its own code
+comment warns about. Cleanup was changed to delete lists through NR's own `listsStore.deleteList`
+API (rather than splicing the array, which never told NR to delete anything), but that alone did not
+fix it; diagnosis is hampered by the host's stderr being swallowed (issue #303).
 
-Not captured in this pass. Warm-reuse is enabled for them; treat them as unverified at batch scale
-until benchmarked with the script below.
-
-### `battlescribe-ui` roster — cold only
-
-Warm is disabled (app self-crash, see the table). Cold baseline: ≈6.6s/spec on a 102-spec batch.
+CI never caught this because the NR-UI roster lane runs a **single** spec.
 
 ## Reproducing
 
 ```powershell
-pwsh -File scripts/bench-warm-reuse.ps1 -Engine battlescribe-ui -Domain gamedata -Filter "condition/,constraint/,cost/"
-pwsh -File scripts/bench-warm-reuse.ps1 -Engine newrecruit-ui   -Domain roster   -Filter "gamesystem/,entry-group/"
+# Warm vs cold, with a verdict-equality assertion
+pwsh -File scripts/bench-warm-reuse.ps1 -Engine battlescribe-ui -Domain gamedata -Filter "entry/,export/"
 ```
 
-The script builds, runs the same `bs-spec run --all` batch twice (warm, then cold via
-`BSSPEC_DISABLE_WARM_REUSE=1`), times each with `Measure-Command`, prints spec count / warm wall /
-cold wall / absolute saving / per-spec saving / speedup, and **asserts the per-spec PASS/FAIL
-verdicts are identical** between the two — exiting non-zero with a loud banner if warm-reuse ever
-changes a conformance result. That assertion is how the NR-UI roster defect above was found.
+Force cold for any engine (ablation / diagnosis):
 
-To force cold behavior for any engine/domain without the script (e.g. to confirm a failure is
-warm-only), set:
-
-```
-BSSPEC_DISABLE_WARM_REUSE=1
+```bash
+BSSPEC_DISABLE_WARM_REUSE=1 bs-spec run --all --engine battlescribe-ui --gamedata
 ```
 
-before invoking `bs-engine-host serve`, or before a `bs-spec run` that spawns it. It overrides both
-`ServeCommand`'s per-domain reuse flags and `BsGameDataUiEngine.KeepAlive`.
+## Related
 
-## Related issues
-
-- [#303](https://github.com/WarHub/battlescribe-spec/issues/303) — adapter stderr is not forwarded
-  to the CLI, which makes diagnosing a warm-session failure harder than it should be.
-- [#304](https://github.com/WarHub/battlescribe-spec/issues/304) — no recovery from a dead adapter
-  process: a crashed host (e.g. the `battlescribe-ui` roster self-crash) aborts the rest of the
-  batch instead of restarting the engine.
+- **#303** — `AdapterProcess` buffers the engine host's stderr instead of forwarding it, so host-side
+  diagnostics are invisible during a run. This actively obstructed the NR-UI roster diagnosis above.
+- **#304** — `SpecSuiteRunner` has no recovery when a pooled adapter process dies; one crash fails
+  every remaining spec on that worker.

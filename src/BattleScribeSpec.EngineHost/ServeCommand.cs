@@ -63,12 +63,23 @@ internal static class ServeCommand
                 RosterXml = name is "battlescribe-ui",
                 MaxParallel = name is "battlescribe-ui" ? 1 : 0,
             },
-            // Warm-reuse is per domain: NR reloads data per spec in both domains; battlescribe-ui can
-            // warm-reuse only its Data Editor (gamedata) — the Roster Editor loads game data at JVM
-            // startup with no runtime reload, so its roster domain stays cold. battlescribe (in-process)
-            // gains nothing. See docs/warm-reuse.md.
-            ReuseRosterEngineAcrossSetups = !reuseDisabled && name is "newrecruit" or "newrecruit-ui",
-            ReuseGameDataEngineAcrossSetups = !reuseDisabled && name is "newrecruit" or "newrecruit-ui" or "battlescribe-ui",
+            // Warm-reuse is enabled ONLY where it is measured both CORRECT and FASTER
+            // (scripts/bench-warm-reuse.ps1 — see docs/warm-reuse.md):
+            //
+            //   battlescribe-ui gamedata : verdicts identical to cold, 1.56x faster. The cold cost
+            //                              is a JVM + JavaFX launch per spec, so reuse pays. ENABLED.
+            //   newrecruit-ui   gamedata : verdicts identical, but 0.92x — NO benefit. Headless
+            //                              Chromium relaunches in ~1.6s, about what NR's per-spec
+            //                              reset costs. Left cold.
+            //   newrecruit-ui   roster   : BROKEN — 6/8 warm-only failures (the shared browser's
+            //                              leftover list makes NR's Create List dropdown ambiguous)
+            //                              and 1.8x slower. Left cold.
+            //   battlescribe-ui roster   : the app kills itself when kept alive. Left cold.
+            //   battlescribe (in-process): engine construction is cheap; nothing to save.
+            //
+            // No engine warm-reuses the roster domain today.
+            ReuseRosterEngineAcrossSetups = false,
+            ReuseGameDataEngineAcrossSetups = !reuseDisabled && name is "battlescribe-ui",
             ScreenshotProvider = e => e switch
             {
                 BsUiRosterEngine bs => bs.CaptureScreenshotAsync().GetAwaiter().GetResult(),
