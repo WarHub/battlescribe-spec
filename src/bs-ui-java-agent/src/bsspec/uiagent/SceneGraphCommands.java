@@ -114,6 +114,8 @@ public class SceneGraphCommands {
                 return dumpTree(params);
             case "getWindows":
                 return getWindows();
+            case "getOpenDialogs":
+                return getOpenDialogs();
             case "findNode":
                 return findNode(params);
             case "clickNode":
@@ -203,6 +205,16 @@ public class SceneGraphCommands {
             windows.add(item);
         }
         return windows.toString();
+    }
+
+    /**
+     * Diagnostic RPC: enumerates all open JavaFX windows/dialogs and their scraped visible
+     * text, so an operator (or the C# caller) can see what the app is actually showing on
+     * screen — e.g. an unexpected "Error" modal — instead of only observing an opaque
+     * timeout. See {@link DialogInspector} for details.
+     */
+    private String getOpenDialogs() {
+        return DialogInspector.toJson(DialogInspector.listOpenDialogs()).toString();
     }
 
     private String captureScreenshot(String params) {

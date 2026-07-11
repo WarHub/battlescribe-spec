@@ -70,6 +70,18 @@ public static class BsGameDataUiDiagnostics
                     }
 
                     sb.AppendLine();
+                    sb.AppendLine("─── OPEN DIALOGS (title/modal/scraped text) ───────────");
+                    try
+                    {
+                        var dialogs = await client.CallAsync("getOpenDialogs", null);
+                        sb.AppendLine(FormatJson(dialogs));
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine($"  [Failed to get open dialogs: {ex.GetType().Name}: {ex.Message}]");
+                    }
+
+                    sb.AppendLine();
                     sb.AppendLine("─── ALL WINDOWS SCENE DUMP (depth=4) ────────────────────");
                     try
                     {

@@ -51,6 +51,8 @@ public class RosterActions {
     private static final int STATE_POLL_TIMEOUT_MS = 10_000;
     private static final int WINDOW_TIMEOUT_MS = 15_000;
     private static final int FX_TIMEOUT_MS = 30_000;
+    /** No dialog is allowed to be open when a high-level action returns — the default (empty) post-condition. */
+    private static final String[] NO_DIALOGS_ALLOWED = {};
 
     private final EngineAccessor engineAccessor;
 
@@ -59,9 +61,20 @@ public class RosterActions {
     }
 
     /**
-     * Dispatches a high-level action method by name.
+     * Dispatches a high-level action method by name, then enforces the post-condition that no
+     * unexpected modal dialog is left open (see {@link DialogInspector#assertNoUnexpectedModals}).
+     * Every action here is expected to leave the app back in a stable, dialog-free state; if one
+     * is still up (e.g. an "Error" dialog the action's own flow didn't anticipate), that's a bug
+     * surfaced as a clear failure here rather than silently returning a result while a dialog sits
+     * on screen.
      */
     public String dispatch(String method, String params) {
+        String result = dispatchAction(method, params);
+        DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+        return result;
+    }
+
+    private String dispatchAction(String method, String params) {
         switch (method) {
             case "rosterDuplicateSelectionAction":
                 return duplicateSelectionAction(params);
@@ -229,7 +242,7 @@ public class RosterActions {
 
         // Open Add Force dialog
         runOnFx(() -> fireButtonAsync("#btnAddForce", NEW_ROSTER_WINDOW));
-        waitForWindow(ADD_FORCE_WINDOW);
+        waitForWindow(ADD_FORCE_WINDOW, NEW_ROSTER_WINDOW);
 
         // Select catalogue and force entry in Add Force dialog
         runOnFx(() -> {
@@ -240,7 +253,7 @@ public class RosterActions {
             selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
         });
-        waitForWindowClose(ADD_FORCE_WINDOW);
+        waitForWindowClose(ADD_FORCE_WINDOW, NEW_ROSTER_WINDOW);
 
         // Close New Roster dialog
         runOnFx(() -> fireButtonAsync("#btnDone", NEW_ROSTER_WINDOW));
@@ -286,7 +299,7 @@ public class RosterActions {
 
         // Open Add Force sub-dialog
         runOnFx(() -> fireButtonAsync("#btnAddForce", EDIT_ROSTER_WINDOW));
-        waitForWindow(ADD_FORCE_WINDOW);
+        waitForWindow(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
 
         // Select catalogue and force entry
         runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW));
@@ -295,7 +308,7 @@ public class RosterActions {
             selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
         });
-        waitForWindowClose(ADD_FORCE_WINDOW);
+        waitForWindowClose(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
 
         // Close Edit Roster
         runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
@@ -328,7 +341,7 @@ public class RosterActions {
 
         // Add Force
         runOnFx(() -> fireButtonAsync("#btnAddForce", EDIT_ROSTER_WINDOW));
-        waitForWindow(ADD_FORCE_WINDOW);
+        waitForWindow(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
 
         runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW));
         sleep(300);
@@ -336,7 +349,7 @@ public class RosterActions {
             selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
         });
-        waitForWindowClose(ADD_FORCE_WINDOW);
+        waitForWindowClose(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
 
         // Close Edit Roster
         runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
@@ -571,6 +584,9 @@ public class RosterActions {
                 }
             });
             if (found.get() != null) return found.get();
+            // The target dialog doesn't exist yet on this iteration (we'd have returned above),
+            // so nothing besides the main window should be showing.
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_INTERVAL_MS);
         }
         return null;
@@ -1193,6 +1209,10 @@ public class RosterActions {
             } catch (RuntimeException e) {
                 lastError = e;
             }
+            // No dialog is expected while merely polling roster state — fail fast on any (e.g. an
+            // "Error" dialog the triggering action's flow didn't anticipate) instead of spinning
+            // out this loop's own timeout.
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_INTERVAL_MS);
         }
 
@@ -1204,24 +1224,48 @@ public class RosterActions {
     // Window Waits
     // ═══════════════════════════════════════════════════════════════════
 
-    private void waitForWindow(String titleFragment) {
+    /**
+     * Waits for a window titled {@code titleFragment} to appear.
+     *
+     * @param alsoAllowed titles of any OTHER dialog(s) already legitimately open at this point in
+     *                    the calling action's flow (e.g. a parent dialog); anything else showing
+     *                    fails the wait immediately instead of running out its timeout.
+     */
+    private void waitForWindow(String titleFragment, String... alsoAllowed) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
             Boolean found = runOnFxGet(() -> hasWindow(titleFragment));
             if (found) return;
+            DialogInspector.assertNoUnexpectedModals(alsoAllowed);
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException("Window '" + titleFragment + "' did not appear within " + WINDOW_TIMEOUT_MS + "ms");
     }
 
-    private void waitForWindowClose(String titleFragment) {
+    /**
+     * Waits for a window titled {@code titleFragment} to close. {@code titleFragment} itself is
+     * always allowed (it's expected to still be open on every iteration until it isn't).
+     *
+     * @param alsoAllowed titles of any OTHER dialog(s) already legitimately open (e.g. an ancestor
+     *                    dialog one level up); anything else showing fails the wait immediately.
+     */
+    private void waitForWindowClose(String titleFragment, String... alsoAllowed) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
+        String[] allowed = withTitle(titleFragment, alsoAllowed);
         while (System.currentTimeMillis() < deadline) {
             Boolean found = runOnFxGet(() -> hasWindow(titleFragment));
             if (!found) return;
+            DialogInspector.assertNoUnexpectedModals(allowed);
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException("Window '" + titleFragment + "' did not close within " + WINDOW_TIMEOUT_MS + "ms");
+    }
+
+    private static String[] withTitle(String title, String[] extra) {
+        String[] result = new String[extra.length + 1];
+        result[0] = title;
+        System.arraycopy(extra, 0, result, 1, extra.length);
+        return result;
     }
 
     private boolean hasWindow(String titleFragment) {
@@ -1688,6 +1732,11 @@ public class RosterActions {
             } catch (Exception e) {
                 // Parse failure — engine not ready yet
             }
+            // This is exactly the incident's failure mode: BattleScribe can pop a modal "Error"
+            // dialog while constructing the new roster's engine state, which otherwise leaves
+            // this loop spinning until its own timeout with no clue why. No dialog is legitimately
+            // expected here — fail fast on anything showing.
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException("Engine did not become available within " + WINDOW_TIMEOUT_MS + "ms");

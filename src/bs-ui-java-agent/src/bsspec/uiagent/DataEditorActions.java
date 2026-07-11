@@ -49,6 +49,8 @@ public class DataEditorActions {
     private static final int FX_TIMEOUT_MS = 60_000;
     /** Grace period for an edit-panel control to appear after selecting an entry. */
     private static final int FIELD_GRACE_MS = 2_000;
+    /** No dialog is allowed to be open when a high-level gamedata action returns — the default (empty) post-condition. */
+    private static final String[] NO_DIALOGS_ALLOWED = {};
 
     @SuppressWarnings("unused")
     private final EngineAccessor engineAccessor;
@@ -71,7 +73,21 @@ public class DataEditorActions {
 
     // ─── Dispatch ────────────────────────────────────────────────────────────
 
+    /**
+     * Dispatches a high-level gamedata action, then enforces the post-condition that no
+     * unexpected modal dialog is left open (see {@link DialogInspector#assertNoUnexpectedModals}).
+     * The load/reopen path (openCataloguePath) already detects and, for the known external-change
+     * "Confirm" prompt, answers any modal it provokes internally — this is a defense-in-depth
+     * check that every gamedata action, not just loads, returns the app to a stable, dialog-free
+     * state.
+     */
     public String dispatch(String method, String params) {
+        String result = dispatchAction(method, params);
+        DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+        return result;
+    }
+
+    private String dispatchAction(String method, String params) {
         JsonObject p = params != null && !params.isEmpty() && !params.equals("{}")
                 ? new JsonParser().parse(params).getAsJsonObject()
                 : new JsonObject();
@@ -319,6 +335,7 @@ public class DataEditorActions {
                 if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
                 if (newObj != null) break;
             }
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         if (newObj == null) {
@@ -453,6 +470,7 @@ public class DataEditorActions {
         while (System.currentTimeMillis() < panelDeadline) {
             panel = runOnFxGet(() -> findPanelController(ctrl, "ProfileTypeEditPanelController"));
             if (panel != null) break;
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         if (panel == null) {
@@ -473,6 +491,7 @@ public class DataEditorActions {
                 if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
                 if (newObj != null) break;
             }
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         if (newObj == null) {
@@ -563,6 +582,7 @@ public class DataEditorActions {
         long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
             if (!runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot())).contains(entryId)) return "{}";
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         throw new RuntimeException("Entry " + entryId + " not removed within " + POLL_TIMEOUT_MS + "ms");
@@ -742,6 +762,7 @@ public class DataEditorActions {
                 if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
                 if (newObj != null) break;
             }
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         if (newObj == null) {
@@ -998,6 +1019,7 @@ public class DataEditorActions {
             for (String id : current) {
                 if (!before.contains(id)) return id;
             }
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         throw new RuntimeException("No new entry appeared in tree within " + POLL_TIMEOUT_MS + "ms");
@@ -1158,6 +1180,7 @@ public class DataEditorActions {
         while (System.currentTimeMillis() < deadline) {
             Node node = runOnFxGet(() -> pnl.lookup("#" + cssId));
             if (node != null) return node;
+            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         return null;
