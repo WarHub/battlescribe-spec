@@ -164,6 +164,7 @@ battlescribe-spec/
 - [Frozen NR Testing](docs/frozen-nr-testing.md) — Offline New Recruit testing via HAR replay
 - [ADR 001: Spec Test Kit Architecture](docs/adr/001-spec-test-kit-architecture.md) — Architecture decisions
 - [Coverage Report](docs/comprehensive-engine-coverage-report.md) — Detailed coverage analysis
+- [Host Warm-Reuse](docs/warm-reuse.md) — Keeping a UI engine instance alive across specs, per-engine applicability, and measured speedups
 
 ## Development
 

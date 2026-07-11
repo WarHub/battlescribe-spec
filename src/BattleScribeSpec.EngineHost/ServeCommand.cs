@@ -41,43 +41,51 @@ internal static class ServeCommand
         return command;
     }
 
-    internal static AdapterOptions BuildOptions(string name, bool headless, bool keepAlive) => new()
+    internal static AdapterOptions BuildOptions(string name, bool headless, bool keepAlive)
     {
-        Name = name,
-        Version = typeof(ServeCommand).Assembly.GetName().Version?.ToString(),
-        RosterEngineFactory = () =>
-            HostEngineFactory.CreateRosterEngineAsync(name, headless, keepAlive).GetAwaiter().GetResult(),
-        GameDataEngineFactory = () =>
-            HostEngineFactory.CreateGameDataEngineAsync(name, headless).GetAwaiter().GetResult(),
-        Capabilities = new AdapterCapabilities
+        // Ablation toggle for the warm-reuse benchmark (scripts/bench-warm-reuse.ps1) and for
+        // diagnosing warm-vs-cold behavior differences: forces every domain cold, regardless of
+        // engine identity. See docs/warm-reuse.md.
+        var reuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
+
+        return new()
         {
-            Screenshot = name is "battlescribe-ui" or "newrecruit-ui",
-            Record = name is "battlescribe-ui",
-            RosterXml = name is "battlescribe-ui",
-            MaxParallel = name is "battlescribe-ui" ? 1 : 0,
-        },
-        // Warm-reuse is per domain: NR reloads data per spec in both domains; battlescribe-ui can
-        // warm-reuse only its Data Editor (gamedata) — the Roster Editor loads game data at JVM
-        // startup with no runtime reload, so its roster domain stays cold. battlescribe (in-process)
-        // gains nothing. See docs/warm-reuse.md.
-        ReuseRosterEngineAcrossSetups = name is "newrecruit" or "newrecruit-ui",
-        ReuseGameDataEngineAcrossSetups = name is "newrecruit" or "newrecruit-ui" or "battlescribe-ui",
-        ScreenshotProvider = e => e switch
-        {
-            BsUiRosterEngine bs => bs.CaptureScreenshotAsync().GetAwaiter().GetResult(),
-            NrRosterUiEngine nr => nr.CaptureScreenshotAsync().GetAwaiter().GetResult(),
-            _ => null,
-        },
-        RosterXmlExporter = e => e is BsUiRosterEngine bs ? bs.ExportRosterXmlAsync().GetAwaiter().GetResult() : null,
-        RecordStarter = e =>
-        {
-            if (e is BsUiRosterEngine bs)
+            Name = name,
+            Version = typeof(ServeCommand).Assembly.GetName().Version?.ToString(),
+            RosterEngineFactory = () =>
+                HostEngineFactory.CreateRosterEngineAsync(name, headless, keepAlive).GetAwaiter().GetResult(),
+            GameDataEngineFactory = () =>
+                HostEngineFactory.CreateGameDataEngineAsync(name, headless).GetAwaiter().GetResult(),
+            Capabilities = new AdapterCapabilities
             {
-                bs.StartRecordingAsync().GetAwaiter().GetResult();
-            }
-        },
-        RecordStopper = e => e is BsUiRosterEngine bs
-            ? bs.StopRecordingAsync().GetAwaiter().GetResult()?.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
-            : null,
-    };
+                Screenshot = name is "battlescribe-ui" or "newrecruit-ui",
+                Record = name is "battlescribe-ui",
+                RosterXml = name is "battlescribe-ui",
+                MaxParallel = name is "battlescribe-ui" ? 1 : 0,
+            },
+            // Warm-reuse is per domain: NR reloads data per spec in both domains; battlescribe-ui can
+            // warm-reuse only its Data Editor (gamedata) — the Roster Editor loads game data at JVM
+            // startup with no runtime reload, so its roster domain stays cold. battlescribe (in-process)
+            // gains nothing. See docs/warm-reuse.md.
+            ReuseRosterEngineAcrossSetups = !reuseDisabled && name is "newrecruit" or "newrecruit-ui",
+            ReuseGameDataEngineAcrossSetups = !reuseDisabled && name is "newrecruit" or "newrecruit-ui" or "battlescribe-ui",
+            ScreenshotProvider = e => e switch
+            {
+                BsUiRosterEngine bs => bs.CaptureScreenshotAsync().GetAwaiter().GetResult(),
+                NrRosterUiEngine nr => nr.CaptureScreenshotAsync().GetAwaiter().GetResult(),
+                _ => null,
+            },
+            RosterXmlExporter = e => e is BsUiRosterEngine bs ? bs.ExportRosterXmlAsync().GetAwaiter().GetResult() : null,
+            RecordStarter = e =>
+            {
+                if (e is BsUiRosterEngine bs)
+                {
+                    bs.StartRecordingAsync().GetAwaiter().GetResult();
+                }
+            },
+            RecordStopper = e => e is BsUiRosterEngine bs
+                ? bs.StopRecordingAsync().GetAwaiter().GetResult()?.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
+                : null,
+        };
+    }
 }

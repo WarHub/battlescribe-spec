@@ -82,7 +82,11 @@ internal static class HostEngineFactory
                         "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the agent jar), " +
                         "or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
                     Ui.Info($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
-                    return new BsGameDataUiEngine(options) { KeepAlive = true };
+                    // BSSPEC_DISABLE_WARM_REUSE forces this cold too, mirroring ServeCommand's
+                    // ablation toggle — otherwise the host would keep the app alive between
+                    // specs regardless of ServeCommand.BuildOptions' ReuseGameDataEngineAcrossSetups.
+                    var reuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
+                    return new BsGameDataUiEngine(options) { KeepAlive = !reuseDisabled };
                 }
 
             case "newrecruit":
