@@ -9,8 +9,13 @@ namespace BattleScribeSpec.NewRecruit;
 /// </summary>
 public sealed class NewRecruitBrowser : IAsyncDisposable
 {
-    private IPlaywright? _playwright;
-    private IBrowser? _browser;
+    /// <summary>
+    /// This session's browser context — its private storage partition. The Chromium process itself
+    /// is process-scoped and shared (see <see cref="NrBrowserHost"/>); a session owns ONLY its
+    /// context, so disposing a session leaves the browser warm for the next spec while discarding
+    /// every trace of this one's state.
+    /// </summary>
+    private IBrowserContext? _context;
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
@@ -84,13 +89,15 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     private async Task InitializeAsync(bool headless, string? harFilePath, float? slowMo = null)
     {
         IsFrozen = harFilePath is not null;
-        _playwright = await Playwright.CreateAsync();
-        _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = headless,
-            SlowMo = slowMo,
-        });
-        Page = await _browser.NewPageAsync();
+
+        // Chromium is launched once per process and shared; this session gets its own CONTEXT.
+        // A fresh context = fresh cookies/localStorage/IndexedDB/cache/service-workers and a fresh
+        // page (fresh JS heap, fresh Pinia stores), so specs cannot leak state into one another —
+        // no scrubbing code required. Only the cheap part is per-spec; the expensive browser
+        // launch is amortized across the whole batch. See NrBrowserHost.
+        var browser = await NrBrowserHost.GetAsync(headless, slowMo);
+        _context = await browser.NewContextAsync();
+        Page = await _context.NewPageAsync();
         // Register JS helpers as an init script — automatically re-injected
         // on every full page navigation (GotoAsync). No manual tracking needed.
         await RegisterHelpersOnPageAsync(Page);
@@ -308,19 +315,24 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (Page is not null)
+        Page = null!;
+
+        // Closing the context closes its pages and discards the whole storage partition. The shared
+        // browser (NrBrowserHost) is deliberately NOT closed — it stays warm for the next spec and
+        // is torn down at process exit. Sessions created via CreateFromContext have no _context:
+        // the pool owns their lifetime, so this correctly does nothing for them.
+        if (_context is not null)
         {
             try
-            { await Page.CloseAsync(); }
-            catch { /* best effort */ }
-            Page = null!;
+            {
+                await _context.CloseAsync();
+            }
+            catch
+            {
+                // Best effort.
+            }
+
+            _context = null;
         }
-        if (_browser is not null)
-        {
-            await _browser.CloseAsync();
-            _browser = null;
-        }
-        _playwright?.Dispose();
-        _playwright = null;
     }
 }

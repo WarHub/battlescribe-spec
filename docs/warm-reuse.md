@@ -57,6 +57,35 @@ Two lessons, both learned the hard way here:
    whether the *results* were still right. They weren't. That is why this harness asserts
    verdict-equality, and why it is the harness, not the stopwatch, that decides what ships.
 
+## NewRecruit: browser reuse is the wrong lever — parallelism is the right one
+
+NR sessions no longer launch their own Chromium. A single browser is launched **per process**
+(`NrBrowserHost`) and every session gets its own **`BrowserContext`** — a private storage partition
+(cookies, localStorage, IndexedDB, cache, service workers) with a fresh page, hence a fresh JS heap
+and fresh Pinia stores. Specs therefore **cannot** leak state into one another, and there is no
+scrubbing code to get wrong. This mirrors `NewRecruitEnginePool`, which already ran N engines as N
+contexts of one browser in-process.
+
+Two measurements settle how NR should actually be sped up (8 roster specs):
+
+| Approach | Wall | vs sequential | Verdicts |
+|---|---:|---:|---|
+| Sequential (`--workers 1`) | 143.7s | — | 7 pass / 1 fail |
+| **Parallel (`--workers 4`)** | **37.8s** | **3.8× faster** | ✅ identical |
+| Engine/page warm-reuse | 258.8s | 0.56× (*slower*) | ❌ 6 wrong |
+
+**Sharing the browser saved nothing** (143.7s vs a 145.0s per-spec-browser baseline) — launching
+Chromium was never the cost; an NR spec spends its ~18s on SPA boot, HAR routing, game-data load and
+UI actions. It is kept anyway because it makes isolation *structural*, which is what makes parallel
+contexts safe and what killed the leftover-list corruption for good.
+
+So the engines split cleanly by where their cost lives:
+
+- **BattleScribe UI** — expensive cold start (JVM + JavaFX), cannot parallelize (`MaxParallel = 1`)
+  → **warm-reuse** wins (1.79–2.20×).
+- **NewRecruit** — cheap cold start, parallelizes freely → **`--workers N`** wins (3.8× at 4), and
+  warm-reuse is worthless.
+
 ## Why long warm sessions are safe now
 
 Warm-reuse keeps a single connection alive across hundreds of specs, which exposed a latent bug in
