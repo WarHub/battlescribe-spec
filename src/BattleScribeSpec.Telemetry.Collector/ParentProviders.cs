@@ -1,4 +1,5 @@
 using OpenTelemetry;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -37,13 +38,25 @@ internal sealed class ParentProviders : IDisposable
             .AddSource(HarnessTelemetry.SourceName)
             .SetResourceBuilder(resource)
             .SetSampler(new AlwaysOnSampler())
-            .AddOtlpExporter(o => o.Endpoint = new Uri($"{endpoint}/v1/traces"))
+            .AddOtlpExporter(o =>
+            {
+                o.Endpoint = new Uri($"{endpoint}/v1/traces");
+                // The default protocol on net10.0 is gRPC (HttpProtobuf is the default only on
+                // NETFRAMEWORK/NETSTANDARD2_0). Our receiver is HTTP-only — no gRPC service is
+                // mapped — so a gRPC export would 404 silently (OTLP export is fail-open) and the
+                // parent's own spans would never reach the artifact.
+                o.Protocol = OtlpExportProtocol.HttpProtobuf;
+            })
             .Build();
 
         var meter = Sdk.CreateMeterProviderBuilder()
             .AddMeter(HarnessTelemetry.MeterName)
             .SetResourceBuilder(resource)
-            .AddOtlpExporter(o => o.Endpoint = new Uri($"{endpoint}/v1/metrics"))
+            .AddOtlpExporter(o =>
+            {
+                o.Endpoint = new Uri($"{endpoint}/v1/metrics");
+                o.Protocol = OtlpExportProtocol.HttpProtobuf;
+            })
             .Build();
 
         return new ParentProviders(tracer, meter);

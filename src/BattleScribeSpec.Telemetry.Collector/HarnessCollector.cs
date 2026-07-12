@@ -84,8 +84,8 @@ public sealed class HarnessCollector : IAsyncDisposable
     /// <param name="ct">Cancellation token for starting the receiver.</param>
     public static async Task<HarnessCollector> StartAsync(string artifactPath, CancellationToken ct = default)
     {
-        OtlpArtifactWriter writer;
-        WebApplication app;
+        OtlpArtifactWriter? writer = null;
+        WebApplication? app = null;
         try
         {
             writer = new OtlpArtifactWriter(artifactPath);
@@ -104,8 +104,22 @@ public sealed class HarnessCollector : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            // Fail-open. A run must never die because telemetry could not start.
+            // Fail-open. A run must never die because telemetry could not start. But by this
+            // point the writer may already have opened three exclusive FileStreams (and app may
+            // already be built) — if we return here without disposing them, those handles leak
+            // for the process lifetime and, on Windows, keep the artifact files locked so a retry
+            // at the same path fails too.
             Console.Error.WriteLine($"[telemetry] collector disabled: {ex.Message}");
+            if (app is not null)
+            {
+                await app.DisposeAsync().ConfigureAwait(false);
+            }
+
+            if (writer is not null)
+            {
+                await writer.DisposeAsync().ConfigureAwait(false);
+            }
+
             return new HarnessCollector(app: null, writer: null, providers: null, endpoint: "");
         }
 
