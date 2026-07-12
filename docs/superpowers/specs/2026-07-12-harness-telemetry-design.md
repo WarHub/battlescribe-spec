@@ -77,10 +77,10 @@ Questions 1, 3, 4 are **traces**. Question 2 is a **metric** (an up-down counter
 ```
   bs-spec (CLI)                                    dotnet test (xUnit)
   ├── HarnessCollector                             ├── HarnessCollector
-  │   ├── OTLP/HTTP receiver on 127.0.0.1:<eph>    │   (in-process sink only,
-  │   ├── in-process sink                          │    no port needed — but may
-  │   └── OTLP-JSON artifact writer                │    bind one for the JVM agent)
-  │                                                └── fixtures / pools feed it directly
+  │   ├── OTLP receiver on 127.0.0.1:<eph>         │   (in-process sink only,
+  │   │   (gRPC + HTTP/protobuf)                   │    no port needed — but may
+  │   ├── in-process sink                          │    bind one for the JVM agent)
+  │   └── .otlp.pb artifact writer                 └── fixtures / pools feed it directly
   ├── ActivitySource + Meter (own spans)
   └── spawns N children:
       OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:<eph>   ← env
@@ -96,13 +96,42 @@ The rejected alternative was "each process writes its own NDJSON; merge at the e
 
 ### What we must build, and the .NET constraint
 
-There is **no stock OTLP receiver in .NET** — the SDK exports only. And OpenTelemetry .NET's exporter implements **gRPC and HTTP/protobuf only; it does not implement `http/json`.** So the parent cannot simply forward a JSON body verbatim to the artifact; it must decode OTLP protobuf.
+There is **no stock OTLP receiver in .NET** — the SDK exports only. And OpenTelemetry .NET's exporter implements **gRPC and HTTP/protobuf only**; its `OtlpExportProtocol` enum has exactly two members (`Grpc = 0`, `HttpProtobuf = 1`). **`HttpJson` does not exist.** (Verified against `opentelemetry-dotnet` source, not from memory.)
 
-Consequences:
+**Protobuf-only receiver — this covers every language we care about.** Chase the constraint through: .NET and Java *cannot* send `http/json`; Python and JS *default to* `http/protobuf`. So a receiver speaking gRPC + HTTP/protobuf accepts 100% of stock SDK exporters out of the box. JSON *ingest* is therefore **deferred**, not designed in — it is a bounded add (~1,000 LOC, see below) the day an adapter author actually needs it.
 
-- Take a `Google.Protobuf` dependency plus the OpenTelemetry `.proto` types (vendored + generated at build).
-- The receiver **content-type sniffs** and accepts `application/x-protobuf` *and* `application/json`. .NET children send protobuf; Python/JS adapters may send `http/json`, and accepting both is what keeps third-party adapters trivial.
-- The artifact is canonical **OTLP-JSON**, produced by `Google.Protobuf`'s `JsonFormatter` — a serializer we do not write or maintain.
+There is also **no official OTel proto NuGet for .NET.** `OpenTelemetry.Exporter.OpenTelemetryProtocol` generates the types but marks them `internal`. Every .NET project needing server-side OTLP types vendors the `.proto` files and runs `Grpc.Tools` — this is the sanctioned pattern, and it is what Aspire does.
+
+So:
+
+- **Vendor** the OpenTelemetry `.proto` files (Apache-2.0, ~1,700 lines, never edited) and generate at build via `Grpc.Tools`.
+- **One dependency:** `Grpc.AspNetCore` (transitively brings `Google.Protobuf`).
+- Two Kestrel listeners on `127.0.0.1:0` — gRPC needs `HttpProtocols.Http2`, HTTP/protobuf takes `Http1AndHttp2` — with the real port read back and injected into children.
+
+Estimated ~170 LOC of endpoints + wiring.
+
+### Artifact format
+
+The parent writes received OTLP as a **length-delimited protobuf stream** (`Google.Protobuf`'s `WriteDelimitedTo`) to `run-<id>.otlp.pb`. Lossless, exact, ~10 LOC, and our summary and `compare` tooling reads it back using the same generated types.
+
+**Rejected: writing OTLP-JSON directly.** An earlier draft of this spec claimed `Google.Protobuf`'s `JsonFormatter` yields canonical OTLP-JSON for free. **That claim is false**, and it is worth recording why, because it inverted a cost estimate. OTLP-JSON deliberately deviates from the proto3 JSON mapping:
+
+1. `traceId` / `spanId` are **hex** strings — `JsonFormatter` emits base64.
+2. Enum values must be **integers** — `JsonFormatter` emits names by default.
+
+This is precisely why Aspire hand-wrote ~940 lines of JSON⇄protobuf conversion plus ~1,400 lines of source-generated DTOs rather than calling `JsonFormatter`. A spec-exact OTLP-JSON writer is a **~500 LOC component**, not a two-liner.
+
+We do not need it, because **what makes off-the-shelf backends render our runs is the semantic conventions, not our file format.** Anyone wanting Jaeger/Tempo points `OTEL_EXPORTER_OTLP_ENDPOINT` at it and gets live ingest with no file in the loop. The artifact exists for CI archival and for `compare` — both of which are our own readers.
+
+A `bs-spec trace export --json` converter is therefore **deferred until someone needs the file itself**, at which point Aspire's MIT-licensed OTLP-JSON DTOs are available to copy.
+
+### Prior art: why not reuse Aspire
+
+The .NET Aspire dashboard *is* an OTLP receiver (gRPC + HTTP/protobuf + HTTP/JSON), and was evaluated directly.
+
+- **Not consumable as a package.** `Aspire.Dashboard` is an app (`Microsoft.NET.Sdk.Web`), not a library; the published `Aspire.Dashboard.Sdk.*` packages ship an executable, not types. Microsoft themselves reuse this code by *linking source*. Vendoring is the only reuse path.
+- **The standalone dashboard cannot do the job.** Its telemetry is **in-memory only and never persisted** — it physically cannot produce our artifact — and using it would drag Docker, Blazor, FluentUI and an AI assistant into CI.
+- **What we take from it:** the `.proto` file set and layout, and the pattern for binding `127.0.0.1:0` and resolving the real port. Licensing is clean — MIT (Aspire C#) and Apache-2.0 (protos), attribution only; record both in `THIRD-PARTY-NOTICES.txt`.
 
 ### Semantic conventions
 
@@ -177,7 +206,8 @@ Telemetry must never be able to fail a run or slow it materially.
 
 ## Testing
 
-- **Receiver:** unit tests posting canned OTLP protobuf *and* JSON payloads; assert both decode and land in the artifact.
+- **Receiver:** unit tests posting canned OTLP protobuf payloads over both gRPC and HTTP/protobuf; assert both decode and land in the artifact. A JSON body must be rejected with a clear 415 rather than silently dropped — an unsupported encoding should be loud.
+- **Round-trip:** write the `.otlp.pb` artifact and read it back with the generated types; assert span identity and attributes survive. This is the property `compare` depends on.
 - **Propagation:** an end-to-end test asserting that a child-emitted span's `parent_span_id` matches the `traceparent` the parent sent over the protocol — the property that makes third-party nesting work, so it is tested directly rather than assumed.
 - **Fail-open:** run with the receiver deliberately unbound; assert the run completes and verdicts are unchanged.
 - **`compare`:** a red test — two configurations with a deliberately divergent verdict must exit non-zero.
