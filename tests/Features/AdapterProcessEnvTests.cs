@@ -19,11 +19,48 @@ public sealed class AdapterProcessEnvTests
     }
 
     [Fact]
-    public void BuildStartInfo_WithNullEnvironment_LeavesInheritedEnvironmentUntouched()
+    public void BuildStartInfo_WithNullEnvironment_InheritsParentEnvironment()
     {
-        var psi = AdapterProcess.BuildStartInfo("dotnet", "some.dll", environment: null);
+        const string sentinelKey = "BSSPEC_INHERITED_SENTINEL";
+        const string sentinelValue = "inherited";
 
-        Assert.False(psi.Environment.ContainsKey("BSSPEC_TEST_ENV"));
+        Environment.SetEnvironmentVariable(sentinelKey, sentinelValue);
+        try
+        {
+            var psi = AdapterProcess.BuildStartInfo("dotnet", "some.dll", environment: null);
+
+            Assert.Equal(sentinelValue, psi.Environment[sentinelKey]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(sentinelKey, null);
+        }
+    }
+
+    [Fact]
+    public void BuildStartInfo_LayersExtraEnvironmentOnTopOfInherited()
+    {
+        const string sentinelKey = "BSSPEC_INHERITED_SENTINEL";
+        const string sentinelValue = "inherited";
+
+        Environment.SetEnvironmentVariable(sentinelKey, sentinelValue);
+        try
+        {
+            var psi = AdapterProcess.BuildStartInfo("dotnet", "some.dll", new Dictionary<string, string>
+            {
+                ["BSSPEC_EXTRA_VAR"] = "extra",
+            });
+
+            // Inherited environment variable is still present
+            Assert.Equal(sentinelValue, psi.Environment[sentinelKey]);
+
+            // Extra environment variables are also present
+            Assert.Equal("extra", psi.Environment["BSSPEC_EXTRA_VAR"]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(sentinelKey, null);
+        }
     }
 
     [Fact]
