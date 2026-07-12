@@ -12,12 +12,22 @@ public sealed class NrGameDataUiDiagnostics
     private readonly List<string> _consoleMessages = [];
 
     /// <summary>
-    /// Default directory for saving diagnostic artifacts.
+    /// Default directory for saving diagnostic artifacts, suffixed per worker (e.g. <c>-w2</c>)
+    /// when <c>BSSPEC_WORKER_INDEX</c> is set — otherwise N parallel adapter processes resolve the
+    /// same directory. The per-report subdirectory built in <see cref="SaveReportAsync"/> is
+    /// suffixed again as a defense in depth: it collides at whole-second precision with fixed
+    /// filenames, which is where clobbering actually happens even when a caller overrides this
+    /// directory (via NR_GAMEDATA_UI_DIAGNOSTICS_DIR) to the same unsuffixed path for every worker.
     /// Override with NR_GAMEDATA_UI_DIAGNOSTICS_DIR environment variable.
     /// </summary>
     public static string DefaultArtifactsDir =>
         Environment.GetEnvironmentVariable("NR_GAMEDATA_UI_DIAGNOSTICS_DIR")
-        ?? Path.Combine("artifacts", "nr-gamedata-ui-diagnostics");
+        ?? Path.Combine("artifacts", $"nr-gamedata-ui-diagnostics{WorkerSuffix}");
+
+    private static string WorkerSuffix =>
+        Environment.GetEnvironmentVariable("BSSPEC_WORKER_INDEX") is { Length: > 0 } index
+            ? $"-w{index}"
+            : "";
 
     public NrGameDataUiDiagnostics(IPage page)
     {
@@ -175,7 +185,7 @@ public sealed class NrGameDataUiDiagnostics
     {
         var dir = Path.Combine(
             DefaultArtifactsDir,
-            $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{specId ?? "unknown"}");
+            $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{specId ?? "unknown"}{WorkerSuffix}");
         Directory.CreateDirectory(dir);
 
         if (report.Screenshot is not null)

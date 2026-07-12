@@ -241,11 +241,25 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
             ?? throw new InvalidOperationException($"Failed to start adapter process: {executable}");
         ResourceMetrics.Acquired("adapter-process");
         var stderrLines = new ConcurrentQueue<string>();
+
+        // BSSPEC_WORKER_INDEX is set on the CHILD's environment (by RunBatch's AdapterFactory), not
+        // the parent's — Environment.GetEnvironmentVariable here would read the parent's own env and
+        // find nothing. Read it out of the environment dictionary the caller handed us instead, so
+        // the tag reflects the worker this child actually belongs to.
+        var workerTag = environment is not null
+            && environment.TryGetValue("BSSPEC_WORKER_INDEX", out var workerIndex)
+            && workerIndex.Length > 0
+            ? $"[host:{workerIndex}] "
+            : "[host] ";
         process.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
                 stderrLines.Enqueue(e.Data);
+                // Host-side diagnostics were previously invisible during a run: nothing ever drained
+                // this queue except GetStderrTail(10), and only on failure. Forward every line live
+                // (#303) so N parallel workers' host processes stay legible via the tag prefix.
+                Console.Error.WriteLine(workerTag + e.Data);
             }
         };
         process.BeginErrorReadLine();
