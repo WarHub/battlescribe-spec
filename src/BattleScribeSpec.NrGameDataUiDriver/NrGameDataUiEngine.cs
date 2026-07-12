@@ -2,6 +2,7 @@ using BattleScribeSpec.GameData;
 using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Telemetry;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NrGameDataUiDriver;
@@ -37,6 +38,12 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     // browser. Set definitively in InitializeInContextAsync based on whether this engine launched
     // its own browser.
     private bool _ownsBrowser = true;
+
+    // Set only on the self-owned paths (InitializeAsync / InitializeFrozenAsync), never on the
+    // pool path (CreateFrozenInContextAsync), so Dispose releases exactly what this engine itself
+    // acquired — the pool instruments its own Chromium launch/context creation independently.
+    private bool _browserAcquired;
+    private bool _contextAcquired;
 
     // Open-file tracking, so Reload can reopen whatever file was active. Maps each loaded file's
     // id to its display name (NavigateToEditableAsync matches on the name shown in the file list).
@@ -154,6 +161,8 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
             Headless = Headless,
             SlowMo = slowMo,
         });
+        ResourceMetrics.Acquired("browser");
+        _browserAcquired = true;
         _page = await _browser.NewPageAsync();
         _diagnostics = new NrGameDataUiDiagnostics(_page);
         _ui = new NrGameDataUiDriver(_page);
@@ -173,10 +182,14 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
             Headless = Headless,
             SlowMo = slowMo,
         });
+        ResourceMetrics.Acquired("browser");
+        _browserAcquired = true;
         var context = await _browser.NewContextAsync(new BrowserNewContextOptions
         {
             ServiceWorkers = ServiceWorkerPolicy.Block,
         });
+        ResourceMetrics.Acquired("browser-context");
+        _contextAcquired = true;
         await InitializeInContextAsync(context, staticDir);
     }
 
@@ -668,12 +681,30 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
             return;
         }
 
-        // ValueTask from DisposeAsync: complete synchronously or wait via task
-        var disposeTask = _browser?.DisposeAsync();
-        if (disposeTask.HasValue && !disposeTask.Value.IsCompleted)
+        try
         {
-            disposeTask.Value.AsTask().GetAwaiter().GetResult();
+            // ValueTask from DisposeAsync: complete synchronously or wait via task
+            var disposeTask = _browser?.DisposeAsync();
+            if (disposeTask.HasValue && !disposeTask.Value.IsCompleted)
+            {
+                disposeTask.Value.AsTask().GetAwaiter().GetResult();
+            }
         }
-        _playwright?.Dispose();
+        finally
+        {
+            // In a finally so a throwing close can't leak the counter — a counter that drifts
+            // upward is worse than no counter, because it silently invents resources that don't exist.
+            if (_contextAcquired)
+            {
+                _contextAcquired = false;
+                ResourceMetrics.Released("browser-context");
+            }
+            if (_browserAcquired)
+            {
+                _browserAcquired = false;
+                ResourceMetrics.Released("browser");
+            }
+            _playwright?.Dispose();
+        }
     }
 }
