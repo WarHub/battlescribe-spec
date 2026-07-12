@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Telemetry;
 
 namespace BattleScribeSpec.Protocol;
 
@@ -93,6 +95,17 @@ public static class AdapterHandler
                 {
                     var command = ProtocolSerializer.DeserializeCommand(line);
                     commandCorrId = command?.CorrId;
+
+                    // SERVER: the handling side of a remote call. Pairs with the parent's CLIENT span
+                    // to form the one edge a service graph can actually draw.
+                    using var activity = command is null
+                        ? null
+                        : HarnessTelemetry.StartOp(
+                            command.Type,
+                            command.Traceparent,
+                            ActivityKind.Server,
+                            command.Tracestate);
+
                     response = command switch
                     {
                         SetupCommand setup => HandleSetup(setup, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, out catalogueIds),

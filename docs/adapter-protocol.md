@@ -72,6 +72,43 @@ for `loadFile`) — the two do not collide and may both appear on the same messa
 {"type":"state","corrId":7, ...}
 ```
 
+### Distributed tracing (`traceparent` / `tracestate`)
+
+Every command (not responses — the trace flows one way) accepts two optional string fields,
+`traceparent` and `tracestate`, carrying a [W3C Trace Context](https://www.w3.org/TR/trace-context/)
+header pair. They exist so that a single `bs-engine-host` (or any other adapter) process, which
+serves **many** specs over its lifetime, can nest its own spans under the *correct* per-request
+parent instead of a static per-process one — a process-level traceparent would collapse hundreds
+of specs into a single trace.
+
+Like `corrId`, both fields are optional and omitted from the wire entirely when there is nothing
+to send (no listening tracer on the client side). An adapter that has never heard of them is
+fully protocol-conformant: it just ignores two extra JSON properties.
+
+An adapter that *does* want its own spans to appear correctly nested in the harness's trace gets
+this for free, with **zero harness-specific code**, by:
+
+1. Reading `OTEL_EXPORTER_OTLP_ENDPOINT` (and friends) from its process environment and
+   configuring its own language's stock OpenTelemetry SDK against it — the harness sets this
+   environment variable on the child process it spawns.
+2. Feeding the incoming command's `traceparent`/`tracestate` to that SDK's standard W3C
+   propagator as the parent context before starting its own span for handling the command.
+
+Because both sides speak the same W3C standard, an adapter written in Python, Node, Java, Go,
+or anything else with an off-the-shelf OTel SDK joins the harness's distributed trace correctly
+— this is the property that makes the tracing investment pay off for third-party adapters, not
+just the in-box `.NET` ones.
+
+The built-in `AdapterHandler`/`NdjsonLineConnection` pair uses `ActivityKind.Client` on the
+sending side and `ActivityKind.Server` on the handling side (not `Internal`) specifically so
+that Jaeger's dependency graph and Tempo's servicegraph processor — which derive edges
+**exclusively** from CLIENT→SERVER span pairs — can draw the `bs-spec → bs-engine-host` edge.
+Third-party adapters that want to appear in those graphs should follow the same convention.
+
+```json
+{"type":"getState","corrId":7,"traceparent":"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}
+```
+
 ## Client → Adapter Commands
 
 ### `setup` — Initialize Engine

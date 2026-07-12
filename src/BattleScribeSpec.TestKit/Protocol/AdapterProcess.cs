@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using BattleScribeSpec.Telemetry;
 
 namespace BattleScribeSpec.Protocol;
 
@@ -149,6 +150,15 @@ public sealed class NdjsonLineConnection : IAdapterConnection, IDisposable
 
         var corrId = Interlocked.Increment(ref _nextId);
         command.CorrId = corrId;
+
+        // The sending side of a remote call is a CLIENT span. Jaeger's dependency graph and Tempo's
+        // servicegraph processor derive edges EXCLUSIVELY from CLIENT->SERVER pairs — with Internal
+        // on both sides there is no bs-spec -> bs-engine-host edge at all.
+        using var activity = HarnessTelemetry.StartOp(command.Type, kind: ActivityKind.Client);
+
+        command.Traceparent ??= HarnessTelemetry.CurrentTraceparent();
+        command.Tracestate ??= Activity.Current?.TraceStateString;
+
         var tcs = new TaskCompletionSource<ProtocolResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[corrId] = tcs;
         try

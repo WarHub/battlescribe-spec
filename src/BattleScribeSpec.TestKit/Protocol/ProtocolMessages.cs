@@ -46,6 +46,34 @@ public abstract class ProtocolCommand
     [JsonPropertyName("corrId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? CorrId { get; set; }
+
+    /// <summary>
+    /// Optional W3C trace-context header (protocol v1.1+), wire name <c>traceparent</c>.
+    /// Clients SHOULD send it so the adapter can parent its spans under the client's spec span,
+    /// producing one distributed trace across the runner and the engine process.
+    /// </summary>
+    /// <remarks>
+    /// Per-request rather than per-process on purpose: one adapter process serves many specs, so
+    /// a process-level parent would collapse every spec into a single trace. Adapters that ignore
+    /// this field remain fully conformant — same optional contract as <see cref="CorrId"/>.
+    /// </remarks>
+    [JsonPropertyName("traceparent")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Traceparent { get; set; }
+
+    /// <summary>
+    /// Optional W3C <c>tracestate</c>, the companion of <see cref="Traceparent"/>.
+    /// </summary>
+    /// <remarks>
+    /// W3C requires a vendor that receives <c>tracestate</c> to forward it on outgoing requests.
+    /// Without it, a third-party adapter sitting behind a vendor backend loses its vendor context —
+    /// which is precisely the cross-language case this field exists to serve. Together the two
+    /// fields form a W3C trace-context carrier, so an adapter in any language can feed them
+    /// straight into its stock propagator.
+    /// </remarks>
+    [JsonPropertyName("tracestate")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Tracestate { get; set; }
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]

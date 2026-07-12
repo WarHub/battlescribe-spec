@@ -55,6 +55,8 @@
       "properties": {
         "type": { "const": "setup" },
         "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." },
         "version": { "type": "string" },
         "specId": { "type": "string" },
         "gameSystem": { "$ref": "#/$defs/gameSystem" },
@@ -71,6 +73,8 @@
       "properties": {
         "type": { "const": "setupFromFiles" },
         "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." },
         "specId": { "type": "string" },
         "files": {
           "type": "array",
@@ -85,6 +89,8 @@
       "properties": {
         "type": { "const": "action" },
         "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." },
         "action": { "$ref": "#/$defs/actionName" },
         "forceEntryId": { "type": "string" },
         "entryId": { "type": "string" },
@@ -105,7 +111,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "getState" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
     "getErrorsCommand": {
@@ -114,7 +122,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "getErrors" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
     "teardownCommand": {
@@ -123,7 +133,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "teardown" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
     "describeCommand": {
@@ -133,7 +145,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "describe" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
     "screenshotCommand": {
@@ -143,7 +157,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "screenshot" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
     "exportRosterXmlCommand": {
@@ -153,7 +169,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "exportRosterXml" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
     "recordStartCommand": {
@@ -163,7 +181,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "recordStart" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
     "recordStopCommand": {
@@ -173,7 +193,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "recordStop" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
 
@@ -185,6 +207,8 @@
       "properties": {
         "type": { "const": "gamedataSetup" },
         "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." },
         "specId": { "type": "string" },
         "gameSystem": { "$ref": "#/$defs/gameSystem" },
         "catalogues": {
@@ -201,6 +225,8 @@
       "properties": {
         "type": { "const": "gamedataAction" },
         "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." },
         "action": { "$ref": "#/$defs/gameDataActionName" },
         "id": { "type": "string" },
         "parentId": { "type": "string" },
@@ -222,7 +248,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "gamedataGetState" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
     "gameDataGetErrorsCommand": {
@@ -231,7 +259,9 @@
       "additionalProperties": false,
       "properties": {
         "type": { "const": "gamedataGetErrors" },
-        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." }
+        "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
+        "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+        "tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." }
       }
     },
 
