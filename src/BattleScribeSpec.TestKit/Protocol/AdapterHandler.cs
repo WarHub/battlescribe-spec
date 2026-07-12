@@ -195,11 +195,16 @@ public static class AdapterHandler
     private static ProtocolResponse HandleSetupFromFiles(
         SetupFromFilesCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
     {
+        var sw = Stopwatch.StartNew();
+        var reused = engine is not null && reuse;
         if (!reuse || engine is null)
         {
             engine?.Dispose();
             engine = factory();
         }
+        sw.Stop();
+        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
+        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalSeconds);
 
         // File-based setup: catalogue IDs unknown — actions must provide catalogueId explicitly
         catalogueIds = [];

@@ -269,7 +269,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
         catch (Exception ex)
         {
-            await CleanupAsync();
+            // force: true — a setup-phase failure leaves no usable app (it may have died mid-start,
+            // or never reached a stable window), so KeepAlive/warm-reuse is meaningless here. Without
+            // force, CleanupAsync would no-op (KeepAlive defaults to true and _poisoned is only set by
+            // action-phase failures), _app would be silently overwritten by the next cold-start attempt,
+            // and the orphaned JVM process would leak.
+            await CleanupAsync(force: true);
             return [ex.Message];
         }
     }

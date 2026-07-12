@@ -171,29 +171,37 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
 
         _disposed = true;
 
-        await Pool.DisposeAsync();
-
-        foreach (var ctx in _contexts)
+        // The whole teardown body is guarded by this outer try/finally — mirroring
+        // AdapterProcess.Dispose — so a throw from Pool.DisposeAsync() can't skip the
+        // context/browser release below and leak their counters.
+        try
         {
+            await Pool.DisposeAsync();
+        }
+        finally
+        {
+            foreach (var ctx in _contexts)
+            {
+                try
+                { await ctx.CloseAsync(); }
+                catch { /* best effort */ }
+                finally
+                {
+                    // In a finally so a throwing close can't leak the counter — a counter that drifts
+                    // upward is worse than no counter, because it silently invents resources that don't exist.
+                    ResourceMetrics.Released("browser-context");
+                }
+            }
+
             try
-            { await ctx.CloseAsync(); }
+            { await _browser.CloseAsync(); }
             catch { /* best effort */ }
             finally
             {
-                // In a finally so a throwing close can't leak the counter — a counter that drifts
-                // upward is worse than no counter, because it silently invents resources that don't exist.
-                ResourceMetrics.Released("browser-context");
+                ResourceMetrics.Released("browser");
             }
-        }
 
-        try
-        { await _browser.CloseAsync(); }
-        catch { /* best effort */ }
-        finally
-        {
-            ResourceMetrics.Released("browser");
+            _playwright.Dispose();
         }
-
-        _playwright.Dispose();
     }
 }
