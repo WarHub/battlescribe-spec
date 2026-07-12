@@ -34,7 +34,7 @@ public sealed class SpecSuiteRunnerTests
             EngineFilter = "battlescribe",
             ExpectedFailuresEngine = "battlescribe",
             AssertionEngine = "battlescribe",
-            AdapterFactory = () => AdapterProcess.Start("dotnet", dll),
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
         Assert.True(result.TotalSpecs > 0);
@@ -48,7 +48,7 @@ public sealed class SpecSuiteRunnerTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
             SpecsDirectory = Path.Combine(Path.GetTempPath(), "does-not-exist-bsspec"),
-            AdapterFactory = () => throw new UnreachableException(),
+            AdapterFactory = _ => throw new UnreachableException(),
         }));
     }
 
@@ -62,7 +62,7 @@ public sealed class SpecSuiteRunnerTests
         {
             Domains = ["roster", "gamedata"],
             FilterPatterns = ["entry/add-entry-basic"],
-            AdapterFactory = () => AdapterProcess.Start("dotnet", dll),
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
         Assert.Equal(0, result.ExitCode);
@@ -83,7 +83,7 @@ public sealed class SpecSuiteRunnerTests
             EngineFilter = "battlescribe",
             ExpectedFailuresEngine = "battlescribe",
             AssertionEngine = "battlescribe",
-            AdapterFactory = () => AdapterProcess.Start("dotnet", dll),
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
         Assert.Equal(0, result.ExitCode);
@@ -101,7 +101,7 @@ public sealed class SpecSuiteRunnerTests
         {
             // Domains left at its default (roster-only) — the Runner shell's exact current behavior.
             FilterPatterns = ["entry/add-entry-basic"],
-            AdapterFactory = () => AdapterProcess.Start("dotnet", dll),
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
         Assert.DoesNotContain(result.ReportResults, r => r.Category == "entry" && r.SpecId == "add-entry-basic");

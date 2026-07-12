@@ -104,7 +104,7 @@ public static class SpecSuiteRunner
         var assertionEngine = options.AssertionEngine;
         var workers = options.Workers;
 
-        using var adapterProcess = workers <= 1 ? options.AdapterFactory() : null;
+        using var adapterProcess = workers <= 1 ? options.AdapterFactory(0) : null;
 
         // ===== Run specs =====
         var results = new List<SpecResult>();
@@ -147,7 +147,7 @@ public static class SpecSuiteRunner
             {
                 for (var w = 0; w < workers; w++)
                 {
-                    adapterProcesses.Add(options.AdapterFactory());
+                    adapterProcesses.Add(options.AdapterFactory(w));
                 }
 
                 var gameDataSupported = filteredGameDataSpecs.Count == 0

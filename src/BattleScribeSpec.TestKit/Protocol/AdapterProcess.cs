@@ -209,23 +209,23 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
     /// <summary>
     /// Start an adapter process from the given executable path and optional arguments.
     /// </summary>
+    /// <param name="executable">Executable or "dotnet" when launching a .dll.</param>
+    /// <param name="arguments">Command-line arguments, verbatim.</param>
+    /// <param name="environment">
+    /// Extra environment variables for the child, layered on top of the inherited environment.
+    /// This is how the OTLP collector endpoint and the worker index reach the child.
+    /// </param>
     /// <remarks>
     /// Stderr is collected asynchronously via BeginErrorReadLine. When the process exits
     /// quickly, not all stderr lines may be captured before GetStderrTail() is called.
     /// The Dispose method calls WaitForExit to ensure stderr is fully drained.
     /// </remarks>
-    public static AdapterProcess Start(string executable, string? arguments = null)
+    public static AdapterProcess Start(
+        string executable,
+        string? arguments = null,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = executable,
-            Arguments = arguments ?? "",
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
+        var psi = BuildStartInfo(executable, arguments, environment);
 
         var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start adapter process: {executable}");
@@ -240,6 +240,39 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
         process.BeginErrorReadLine();
 
         return new AdapterProcess(process, stderrLines);
+    }
+
+    /// <summary>
+    /// Builds the <see cref="ProcessStartInfo"/> for an adapter child, layering
+    /// <paramref name="environment"/> on top of the inherited environment. Extracted from
+    /// <see cref="Start"/> so the environment-wiring logic is directly testable without spawning
+    /// a real process.
+    /// </summary>
+    internal static ProcessStartInfo BuildStartInfo(
+        string executable,
+        string? arguments,
+        IReadOnlyDictionary<string, string>? environment)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = arguments ?? "",
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+
+        if (environment is not null)
+        {
+            foreach (var (key, value) in environment)
+            {
+                psi.Environment[key] = value;
+            }
+        }
+
+        return psi;
     }
 
     /// <summary>

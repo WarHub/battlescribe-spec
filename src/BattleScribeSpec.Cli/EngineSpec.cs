@@ -29,11 +29,11 @@ internal sealed record EngineSelection(EngineEntry Entry, EngineDomain Domain, b
 
     public string Display => $"{(Domain == EngineDomain.Gamedata ? "gamedata" : "roster")}/{EngineName ?? "adapter"}";
 
-    /// <summary>Start the adapter process for this selection.</summary>
-    public Protocol.AdapterProcess StartProcess()
+    /// <summary>Start the adapter process for this selection, with optional extra child environment.</summary>
+    public Protocol.AdapterProcess StartProcess(IReadOnlyDictionary<string, string>? environment = null)
     {
         var launch = EngineHostLocator.Resolve(Entry, Headed, KeepAlive);
-        return Protocol.AdapterProcess.Start(launch.Executable, launch.Arguments);
+        return Protocol.AdapterProcess.Start(launch.Executable, launch.Arguments, environment);
     }
 }
 

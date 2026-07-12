@@ -31,7 +31,7 @@ public sealed class SpecSuiteRunnerTelemetryTests
         // NOTE: RunAsync's second parameter is a TextWriter progress sink, NOT a CancellationToken.
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
-            AdapterFactory = AdapterTestHost.StartReferenceAdapter,
+            AdapterFactory = _ => AdapterTestHost.StartReferenceAdapter(),
             Domains = ["roster"],
             FilterPatterns = ["protocol/protocol-kitchen-sink"],
             Workers = 1,

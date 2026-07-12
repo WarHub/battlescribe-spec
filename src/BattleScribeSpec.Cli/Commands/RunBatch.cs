@@ -73,7 +73,10 @@ internal static class RunBatch
                     AssertionEngine = assertionEngine,
                     Workers = workers,
                     Domains = options.Domains,
-                    AdapterFactory = selection.StartProcess,
+                    AdapterFactory = workerIndex => selection.StartProcess(new Dictionary<string, string>
+                    {
+                        ["BSSPEC_WORKER_INDEX"] = workerIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    }),
                 },
                 progressWriter: Console.Error);
         }

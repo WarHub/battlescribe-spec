@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="BattleScribeSpec.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="specs\**\*.yaml" />
     <EmbeddedResource Include="..\..\specs\**\*.yaml" LinkBase="specs" />
   </ItemGroup>

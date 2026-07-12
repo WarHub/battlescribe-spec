@@ -14,8 +14,12 @@ public sealed class SpecSuiteOptions
     public string? ExpectedFailuresEngine { get; init; }
     public string? AssertionEngine { get; init; }
     public int Workers { get; init; } = 1;
-    /// <summary>Creates one adapter process per worker. Disposed by the runner.</summary>
-    public required Func<AdapterProcess> AdapterFactory { get; init; }
+    /// <summary>
+    /// Creates one adapter process per worker; the argument is the zero-based worker index.
+    /// Disposed by the runner. The index lets callers give each child a distinct identity —
+    /// a per-worker diagnostics directory, a worker tag on its telemetry.
+    /// </summary>
+    public required Func<int, AdapterProcess> AdapterFactory { get; init; }
 
     /// <summary>
     /// Spec domains to discover and run. Defaults to roster-only so existing callers (the
