@@ -31,9 +31,29 @@ public sealed class OtlpArtifactWriter : IAsyncDisposable
             Directory.CreateDirectory(directory);
         }
 
-        _traces = File.Create(basePath + ".traces.pb");
-        _metrics = File.Create(basePath + ".metrics.pb");
-        _logs = File.Create(basePath + ".logs.pb");
+        // Exception-safe: if the 2nd or 3rd File.Create throws, the already-open stream(s) must
+        // not leak. The constructor never completes in that case, so the caller never gets an
+        // object reference to dispose through — this is the only chance to clean up.
+        FileStream? traces = null;
+        FileStream? metrics = null;
+        FileStream? logs = null;
+        try
+        {
+            traces = File.Create(basePath + ".traces.pb");
+            metrics = File.Create(basePath + ".metrics.pb");
+            logs = File.Create(basePath + ".logs.pb");
+        }
+        catch
+        {
+            traces?.Dispose();
+            metrics?.Dispose();
+            logs?.Dispose();
+            throw;
+        }
+
+        _traces = traces;
+        _metrics = metrics;
+        _logs = logs;
     }
 
     /// <summary>Append a trace export request.</summary>

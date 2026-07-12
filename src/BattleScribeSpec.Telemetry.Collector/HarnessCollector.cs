@@ -110,14 +110,33 @@ public sealed class HarnessCollector : IAsyncDisposable
             // for the process lifetime and, on Windows, keep the artifact files locked so a retry
             // at the same path fails too.
             Console.Error.WriteLine($"[telemetry] collector disabled: {ex.Message}");
+
+            // Both disposals must be attempted even if one throws (e.g. a bad Kestrel transport
+            // shutdown), and neither exception may escape StartAsync — telemetry cleanup must
+            // never itself fail a run. This is deliberately NOT a silent swallow: each failure
+            // gets its own diagnostic line, in the same "[telemetry] ..." shape as the message above.
             if (app is not null)
             {
-                await app.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    await app.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception disposeEx)
+                {
+                    Console.Error.WriteLine($"[telemetry] collector cleanup failed (app): {disposeEx.Message}");
+                }
             }
 
             if (writer is not null)
             {
-                await writer.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    await writer.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception disposeEx)
+                {
+                    Console.Error.WriteLine($"[telemetry] collector cleanup failed (writer): {disposeEx.Message}");
+                }
             }
 
             return new HarnessCollector(app: null, writer: null, providers: null, endpoint: "");

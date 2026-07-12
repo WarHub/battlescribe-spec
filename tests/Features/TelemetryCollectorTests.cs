@@ -86,14 +86,21 @@ public sealed class TelemetryCollectorTests
         // (verdicts, test.case.name, etc.) would never reach the artifact. Unlike the other
         // tests here, this one goes through the real path — HarnessTelemetry -> ParentProviders
         // -> AddOtlpExporter -> the receiver — rather than POSTing raw protobuf directly.
+        //
+        // This also covers the METRICS half of the same bug: ParentProviders.Attach sets
+        // o.Protocol on both the trace AND the metric exporter's AddOtlpExporter call. Reverting
+        // only the metrics one would still 404-and-vanish silently, and nothing else here would
+        // notice — harness.resource.count is the up-down counter the whole telemetry design calls
+        // the single most important signal, so it gets its own artifact assertion below.
         var artifact = Path.Combine(Path.GetTempPath(), $"bsspec-otlp-{Guid.NewGuid():N}.pb");
-        // HarnessTelemetry's ActivitySource is a process-wide static, and the xUnit run has other
-        // tests emitting spans on it concurrently (e.g. adapter-command spans from unrelated
-        // collections). ParentProviders.Attach subscribes to the source BY NAME, so this test's
-        // artifact can legitimately contain spans from those other tests too — a unique span name
-        // is what lets us pick "ours" out of that noise deterministically, rather than assuming
-        // the artifact holds exactly one span.
+        // HarnessTelemetry's ActivitySource / ResourceMetrics's Meter are process-wide statics, and
+        // the xUnit run has other tests emitting spans/metrics on them concurrently (e.g.
+        // adapter-command spans from unrelated collections). ParentProviders.Attach subscribes to
+        // both BY NAME, so this test's artifact can legitimately contain spans and metric points
+        // from those other tests too — a unique id is what lets us pick "ours" out of that noise
+        // deterministically, rather than assuming the artifact holds exactly one of anything.
         var specId = $"parent-spec-under-test-{Guid.NewGuid():N}";
+        var resourceKind = $"test-resource-{Guid.NewGuid():N}";
         try
         {
             await using (var collector = await HarnessCollector.StartAsync(artifact, TestContext.Current.CancellationToken))
@@ -102,8 +109,8 @@ public sealed class TelemetryCollectorTests
 
                 using var activity = HarnessTelemetry.StartSpec(specId, "category", "domain");
                 HarnessTelemetry.SetVerdict(activity, "passed");
-                ResourceMetrics.Acquired("test-resource");
-                ResourceMetrics.Released("test-resource");
+                ResourceMetrics.Acquired(resourceKind);
+                ResourceMetrics.Released(resourceKind);
 
                 // Disposing the collector below force-flushes the parent's TracerProvider (and
                 // MeterProvider), which is what actually drives the OTLP export over HTTP into
@@ -120,6 +127,18 @@ public sealed class TelemetryCollectorTests
             Assert.Contains(
                 span.Attributes,
                 a => a.Key == "bsspec.verdict" && a.Value.StringValue == "passed");
+
+            var receivedMetrics = OtlpArtifactReader.ReadMetrics(artifact).ToList();
+            var dataPoints = receivedMetrics
+                .SelectMany(r => r.ResourceMetrics)
+                .SelectMany(rm => rm.ScopeMetrics)
+                .SelectMany(sm => sm.Metrics)
+                .Where(m => m.Name == "harness.resource.count")
+                .SelectMany(m => m.Sum.DataPoints)
+                .Where(dp => dp.Attributes.Any(
+                    a => a.Key == "harness.resource.kind" && a.Value.StringValue == resourceKind))
+                .ToList();
+            Assert.NotEmpty(dataPoints);
         }
         finally
         {
