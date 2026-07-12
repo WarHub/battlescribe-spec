@@ -51,15 +51,21 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
             concurrency = envConcurrency;
         }
 
+        using var span = FixtureTelemetry.StartInit(nameof(FrozenNrGameDataUiFixture));
         try
         {
             EnginePool = await NrGameDataUiEnginePool.CreateFrozenAsync(staticDir, concurrency, headless, slowMo);
+            FixtureTelemetry.SetPoolSize(span, EnginePool.Size);
         }
         catch (Microsoft.Playwright.PlaywrightException)
         {
             // Playwright browsers not installed — skip gracefully
         }
     }
+
+    /// <summary>Acquire an engine from the pool, wrapped in a short acquire-wait span.</summary>
+    public ValueTask<PooledGameDataUiEngine> AcquireAsync(CancellationToken ct = default) =>
+        FixtureTelemetry.AcquireAsync(nameof(FrozenNrGameDataUiFixture), EnginePool!.AcquireAsync, ct);
 
     public async ValueTask DisposeAsync()
     {

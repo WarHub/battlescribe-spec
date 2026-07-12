@@ -49,6 +49,8 @@ public sealed class BsGameDataUiFixture : IAsyncLifetime
         }
 
         var keepAlive = Environment.GetEnvironmentVariable("BS_UI_KEEP_ALIVE") == "true";
+
+        using var span = FixtureTelemetry.StartInit(nameof(BsGameDataUiFixture));
         var engine = new BsGameDataUiEngine(options) { KeepAlive = keepAlive };
 
         // Verify agent is connectable with an empty setup — fail gracefully if not.

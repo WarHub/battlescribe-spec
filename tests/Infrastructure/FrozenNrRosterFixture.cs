@@ -35,8 +35,14 @@ public sealed class FrozenNrRosterFixture : IAsyncLifetime
             concurrency = envConcurrency;
         }
 
+        using var span = FixtureTelemetry.StartInit(nameof(FrozenNrRosterFixture));
         EnginePool = await NewRecruitEnginePool.CreateFrozenAsync(harFile, concurrency, headless: headless, visual: visual, slowMo: slowMo);
+        FixtureTelemetry.SetPoolSize(span, EnginePool.Size);
     }
+
+    /// <summary>Acquire an engine from the pool, wrapped in a short acquire-wait span.</summary>
+    public ValueTask<PooledEngine<NewRecruitRosterEngine>> AcquireAsync(CancellationToken ct = default) =>
+        FixtureTelemetry.AcquireAsync(nameof(FrozenNrRosterFixture), EnginePool!.AcquireAsync, ct);
 
     public async ValueTask DisposeAsync()
     {

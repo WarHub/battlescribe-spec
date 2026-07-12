@@ -24,6 +24,7 @@ public sealed class SequentialLiveNrRosterFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
+        using var span = FixtureTelemetry.StartInit(nameof(SequentialLiveNrRosterFixture));
         Engine = await NewRecruitRosterEngine.CreateAsync(baseUrl, headless, slowMo);
         Engine.Visual = visual;
     }

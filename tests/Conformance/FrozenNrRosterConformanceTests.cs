@@ -61,7 +61,7 @@ public sealed class FrozenNrRosterConformanceTests
 
                 var expectedToFail = spec.IsExpectedToFail(EngineName);
 
-                using var pooled = await pool.AcquireAsync(ct);
+                using var pooled = await _fixture.AcquireAsync(ct);
                 var engine = pooled.Engine;
 
                 var runner = new RosterRunner(engine, resolver, EngineName);

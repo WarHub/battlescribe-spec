@@ -29,6 +29,7 @@ public sealed class FrozenNrUiRosterFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
+        using var span = FixtureTelemetry.StartInit(nameof(FrozenNrUiRosterFixture));
         try
         {
             Engine = await NrRosterUiEngine.CreateFrozenAsync(harFile, headless: headless, slowMo: slowMo);

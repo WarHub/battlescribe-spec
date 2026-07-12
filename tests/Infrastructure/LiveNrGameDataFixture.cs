@@ -27,6 +27,7 @@ public sealed class LiveNrGameDataFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
+        using var span = FixtureTelemetry.StartInit(nameof(LiveNrGameDataFixture));
         Engine = await NewRecruitGameDataEngine.CreateAsync(baseUrl, headless, slowMo);
     }
 
