@@ -51,15 +51,29 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
             concurrency = envConcurrency;
         }
 
-        using var span = FixtureTelemetry.StartInit(nameof(FrozenNrGameDataUiFixture));
+        // Held for the pool's entire alive window (released in DisposeAsync, after teardown) so
+        // NrGameDataUiEnginePoolResourceMetricsTests/NrGameDataUiEngineResourceMetricsTests's own
+        // independent CreateFrozenAsync calls can never be alive at the same time as this pool's
+        // browser — see BrowserResourceRaceGate's remarks for why plain [Collection] membership
+        // isn't enough.
+        await BrowserResourceRaceGate.FrozenNrGameDataUi.WaitAsync();
         try
         {
+            using var span = FixtureTelemetry.StartInit(nameof(FrozenNrGameDataUiFixture));
             EnginePool = await NrGameDataUiEnginePool.CreateFrozenAsync(staticDir, concurrency, headless, slowMo);
             FixtureTelemetry.SetPoolSize(span, EnginePool.Size);
         }
         catch (Microsoft.Playwright.PlaywrightException)
         {
-            // Playwright browsers not installed — skip gracefully
+            // Playwright browsers not installed — skip gracefully; the gate is released below
+            // since EnginePool stays null, mirroring the "not held" state DisposeAsync checks for.
+        }
+        finally
+        {
+            if (EnginePool is null)
+            {
+                BrowserResourceRaceGate.FrozenNrGameDataUi.Release();
+            }
         }
     }
 
@@ -72,6 +86,7 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
         if (EnginePool is not null)
         {
             await EnginePool.DisposeAsync();
+            BrowserResourceRaceGate.FrozenNrGameDataUi.Release();
         }
 
         EnginePool = null;

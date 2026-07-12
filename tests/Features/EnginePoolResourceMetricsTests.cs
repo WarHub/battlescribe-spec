@@ -28,6 +28,15 @@ namespace BattleScribeSpec.Tests.Features;
 /// test's own emissions from a concurrently running, unrelated test's on the same process-wide
 /// static <see cref="Meter"/>).
 /// </remarks>
+/// <remarks>
+/// This test's own <c>CreateFrozenAsync</c> call launches a Chromium independent of
+/// <c>FrozenNrRosterFixture</c>'s pool — both are the "browser" kind, so both would be alive at
+/// once (a real, but test-induced, second concurrent <c>browser</c> in
+/// <c>harness.resource.count</c>) unless serialized. It's guarded by
+/// <see cref="BrowserResourceRaceGate.FrozenNrRoster"/> rather than shared <c>[Collection]</c>
+/// membership with <c>FrozenNrRosterFixture</c> — see that gate's remarks for why collection
+/// membership alone does not reliably prevent the overlap.
+/// </remarks>
 public sealed class NewRecruitEnginePoolResourceMetricsTests
 {
     private static readonly AsyncLocal<bool> IsThisTest = new();
@@ -77,39 +86,55 @@ public sealed class NewRecruitEnginePoolResourceMetricsTests
         });
         listener.Start();
 
-        IsThisTest.Value = true;
-        NewRecruitEnginePool? pool = null;
+        // See BrowserResourceRaceGate's remarks: held for this test's entire own browser/pool
+        // lifetime so it can never be alive at the same time as FrozenNrRosterFixture's pool.
+        await BrowserResourceRaceGate.FrozenNrRoster.WaitAsync(TestContext.Current.CancellationToken);
         try
         {
-            pool = await NewRecruitEnginePool.CreateFrozenAsync(harFile!, concurrency: 1, headless: true);
-        }
-        catch (PlaywrightException)
-        {
-            // Playwright browsers not installed — handled below via SkipWhen.
+            IsThisTest.Value = true;
+            NewRecruitEnginePool? pool = null;
+            try
+            {
+                pool = await NewRecruitEnginePool.CreateFrozenAsync(harFile!, concurrency: 1, headless: true);
+            }
+            catch (PlaywrightException)
+            {
+                // Playwright browsers not installed — handled below via SkipWhen.
+            }
+            finally
+            {
+                IsThisTest.Value = false;
+            }
+
+            Assert.SkipWhen(pool is null,
+                "Playwright browsers not installed — skipping frozen NR pool resource-metrics test");
+
+            IsThisTest.Value = true;
+            await pool!.DisposeAsync();
+            IsThisTest.Value = false;
+
+            // concurrency: 1 makes the sequence deterministic: one browser launch, one context created
+            // for it, then (in DisposeAsync) the context released before the browser.
+            Assert.Equal(
+                [("browser", 1), ("browser-context", 1), ("browser-context", -1), ("browser", -1)],
+                events);
+            Assert.Equal(0, events.Where(e => e.Kind == "browser").Sum(e => e.Delta));
+            Assert.Equal(0, events.Where(e => e.Kind == "browser-context").Sum(e => e.Delta));
         }
         finally
         {
-            IsThisTest.Value = false;
+            BrowserResourceRaceGate.FrozenNrRoster.Release();
         }
-
-        Assert.SkipWhen(pool is null,
-            "Playwright browsers not installed — skipping frozen NR pool resource-metrics test");
-
-        IsThisTest.Value = true;
-        await pool!.DisposeAsync();
-        IsThisTest.Value = false;
-
-        // concurrency: 1 makes the sequence deterministic: one browser launch, one context created
-        // for it, then (in DisposeAsync) the context released before the browser.
-        Assert.Equal(
-            [("browser", 1), ("browser-context", 1), ("browser-context", -1), ("browser", -1)],
-            events);
-        Assert.Equal(0, events.Where(e => e.Kind == "browser").Sum(e => e.Delta));
-        Assert.Equal(0, events.Where(e => e.Kind == "browser-context").Sum(e => e.Delta));
     }
 }
 
 /// <summary>See <see cref="NewRecruitEnginePoolResourceMetricsTests"/> — same gap, the NR Editor GameData UI pool.</summary>
+/// <remarks>
+/// Guarded by <see cref="BrowserResourceRaceGate.FrozenNrGameDataUi"/> — see
+/// <see cref="NewRecruitEnginePoolResourceMetricsTests"/>'s remarks for why. That gate is shared
+/// with <c>NrGameDataUiEngineResourceMetricsTests</c> too, since both launch an independent NR
+/// Editor UI browser of the same kind.
+/// </remarks>
 public sealed class NrGameDataUiEnginePoolResourceMetricsTests
 {
     private static readonly AsyncLocal<bool> IsThisTest = new();
@@ -159,34 +184,45 @@ public sealed class NrGameDataUiEnginePoolResourceMetricsTests
         });
         listener.Start();
 
-        IsThisTest.Value = true;
-        NrGameDataUiEnginePool? pool = null;
+        // See BrowserResourceRaceGate's remarks: held for this test's entire own browser/pool
+        // lifetime so it can never be alive at the same time as FrozenNrGameDataUiFixture's pool
+        // (or NrGameDataUiEngineResourceMetricsTests's own browser).
+        await BrowserResourceRaceGate.FrozenNrGameDataUi.WaitAsync(TestContext.Current.CancellationToken);
         try
         {
-            pool = await NrGameDataUiEnginePool.CreateFrozenAsync(staticDir!, concurrency: 1, headless: true);
-        }
-        catch (PlaywrightException)
-        {
-            // Playwright browsers not installed — handled below via SkipWhen.
+            IsThisTest.Value = true;
+            NrGameDataUiEnginePool? pool = null;
+            try
+            {
+                pool = await NrGameDataUiEnginePool.CreateFrozenAsync(staticDir!, concurrency: 1, headless: true);
+            }
+            catch (PlaywrightException)
+            {
+                // Playwright browsers not installed — handled below via SkipWhen.
+            }
+            finally
+            {
+                IsThisTest.Value = false;
+            }
+
+            Assert.SkipWhen(pool is null,
+                "Playwright browsers not installed — skipping frozen NR Editor UI pool resource-metrics test");
+
+            IsThisTest.Value = true;
+            await pool!.DisposeAsync();
+            IsThisTest.Value = false;
+
+            // concurrency: 1 makes the sequence deterministic: one browser launch, one context created
+            // for it, then (in DisposeAsync) the context released before the browser.
+            Assert.Equal(
+                [("browser", 1), ("browser-context", 1), ("browser-context", -1), ("browser", -1)],
+                events);
+            Assert.Equal(0, events.Where(e => e.Kind == "browser").Sum(e => e.Delta));
+            Assert.Equal(0, events.Where(e => e.Kind == "browser-context").Sum(e => e.Delta));
         }
         finally
         {
-            IsThisTest.Value = false;
+            BrowserResourceRaceGate.FrozenNrGameDataUi.Release();
         }
-
-        Assert.SkipWhen(pool is null,
-            "Playwright browsers not installed — skipping frozen NR Editor UI pool resource-metrics test");
-
-        IsThisTest.Value = true;
-        await pool!.DisposeAsync();
-        IsThisTest.Value = false;
-
-        // concurrency: 1 makes the sequence deterministic: one browser launch, one context created
-        // for it, then (in DisposeAsync) the context released before the browser.
-        Assert.Equal(
-            [("browser", 1), ("browser-context", 1), ("browser-context", -1), ("browser", -1)],
-            events);
-        Assert.Equal(0, events.Where(e => e.Kind == "browser").Sum(e => e.Delta));
-        Assert.Equal(0, events.Where(e => e.Kind == "browser-context").Sum(e => e.Delta));
     }
 }

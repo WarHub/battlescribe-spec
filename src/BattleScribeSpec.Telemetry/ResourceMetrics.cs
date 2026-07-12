@@ -13,6 +13,15 @@ namespace BattleScribeSpec.Telemetry;
 /// nothing in the system reports it. A span cannot express "how many are alive right now" —
 /// only an up-down counter can.
 /// </para>
+/// <para>
+/// <b>Every peak read off this counter is a lower bound, not an exact maximum.</b> The value only
+/// exists in the exported artifact at each periodic export tick (2 seconds in this repo's test/CLI
+/// telemetry setup) — a concurrency spike that both rises and falls entirely between two export
+/// ticks never appears in the artifact at all. Reading a peak of N off a time series therefore
+/// only proves "at least N were alive at once, at some point" — the true peak may have been
+/// higher and simply fell in a gap between samples. Anyone using a peak read from this counter
+/// (e.g. to bound harness parallelism) should treat it as a floor, not a ceiling.
+/// </para>
 /// </remarks>
 public static class ResourceMetrics
 {
