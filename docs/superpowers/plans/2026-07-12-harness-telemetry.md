@@ -1689,8 +1689,8 @@ The parent's `Activity` and `Meter` data never travels over HTTP — it is in-pr
 The SDK gets all five right. Add to `Directory.Packages.props` and reference from **`.Collector` only**:
 
 ```xml
-    <PackageVersion Include="OpenTelemetry" Version="1.13.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.13.1" />
+    <PackageVersion Include="OpenTelemetry" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
 ```
 
 Create `src/BattleScribeSpec.Telemetry.Collector/ParentProviders.cs`:
@@ -1802,7 +1802,7 @@ git commit -m "feat(telemetry): OTLP/HTTP receiver on loopback + protobuf run ar
     <ProjectReference Include="..\BattleScribeSpec.Telemetry\BattleScribeSpec.Telemetry.csproj" />
 ```
 
-with `<PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.13.0" />` in `Directory.Packages.props`.
+with `<PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.16.0" />` in `Directory.Packages.props`.
 
 **Never add any of these to `Cli` or `TestKit`** — both are `IsAotCompatible=true` and the SDK's reflection becomes a build error there. `.Collector` and `EngineHost` are the only homes.
 
