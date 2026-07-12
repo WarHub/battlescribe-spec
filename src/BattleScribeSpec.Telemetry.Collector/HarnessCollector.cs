@@ -47,11 +47,25 @@ public sealed class HarnessCollector : IAsyncDisposable
     /// <summary>The receiver's base URL, e.g. <c>http://127.0.0.1:53411</c>. Empty when disabled.</summary>
     public string Endpoint { get; }
 
-    /// <summary>True when the receiver is listening and telemetry is being recorded.</summary>
-    public bool Enabled => _app is not null;
+    /// <summary>
+    /// True when telemetry is flowing — either to our own self-hosted receiver (<see cref="Endpoint"/>
+    /// is our loopback URL and a local <c>.otlp.pb</c> artifact is being written) or to an externally
+    /// set <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> (the user's own Jaeger/Tempo; no local artifact). False
+    /// only when the collector is fully disabled (e.g. the loopback port failed to bind).
+    /// </summary>
+    public bool Enabled => Endpoint.Length > 0;
 
     /// <summary>
-    /// Environment to layer onto child adapter processes so their stock OTLP exporter reaches us.
+    /// True when <see cref="Enabled"/> telemetry is also being written to a local <c>.otlp.pb</c>
+    /// artifact — i.e. the receiver is self-hosted rather than an externally-set collector. Distinct
+    /// from <see cref="Enabled"/> so callers (e.g. the CLI's "Telemetry: ..." status line) can tell
+    /// whether an artifact path is meaningful to report.
+    /// </summary>
+    public bool HasLocalArtifact => _writer is not null;
+
+    /// <summary>
+    /// Environment to layer onto child adapter processes so their stock OTLP exporter reaches us —
+    /// our own self-hosted receiver, or the externally-set collector the user pointed us at.
     /// Empty when the collector is disabled — children then simply do not export.
     /// </summary>
     public IReadOnlyDictionary<string, string> ChildEnvironment =>
@@ -84,6 +98,19 @@ public sealed class HarnessCollector : IAsyncDisposable
     /// <param name="ct">Cancellation token for starting the receiver.</param>
     public static async Task<HarnessCollector> StartAsync(string artifactPath, CancellationToken ct = default)
     {
+        // An externally-set endpoint means the user is pointing us at their own collector. This is
+        // the ONE environment variable the harness honors rather than owns, because it is an
+        // industry standard rather than a bespoke dial of ours.
+        if (Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") is { Length: > 0 } external)
+        {
+            // The parent MUST still export. Its spans are the ones carrying test.* and cicd.* —
+            // drop them and the user sees engine-host protocol spans with no test context at all,
+            // which would make the design's headline claim ("point it at Jaeger and it just works")
+            // simply false. No local artifact in this mode: their collector owns the data.
+            var externalProviders = ParentProviders.Attach(external, serviceName: "bs-spec");
+            return new HarnessCollector(app: null, writer: null, externalProviders, endpoint: external);
+        }
+
         OtlpArtifactWriter? writer = null;
         WebApplication? app = null;
         try

@@ -1,5 +1,8 @@
+using System.Globalization;
 using BattleScribeSpec.Batch;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Telemetry;
+using BattleScribeSpec.Telemetry.Collector;
 
 namespace BattleScribeSpec.Cli;
 
@@ -59,6 +62,39 @@ internal static class RunBatch
         Ui.Info($"Engine: {engineLabel}");
         Ui.Info($"Domains: {string.Join(", ", options.Domains)}");
 
+        var runId = Guid.NewGuid().ToString("N")[..8];
+        var artifactPath = Path.Combine("artifacts", "telemetry", $"run-{runId}");
+        await using var collector = await HarnessCollector.StartAsync(artifactPath);
+        if (collector.Enabled)
+        {
+            Ui.Info(collector.HasLocalArtifact
+                ? $"Telemetry: {artifactPath}.traces.pb"
+                : $"Telemetry: exporting to {collector.Endpoint} (externally-set collector)");
+        }
+
+        // Wraps the whole suite so every spec (and every child span nested under it via
+        // traceparent) has a single run-level ancestor.
+        using var runSpan = HarnessTelemetry.StartOp("run");
+        runSpan?.SetTag("bsspec.engine", engineLabel);
+        runSpan?.SetTag("bsspec.workers", workers);
+
+        // CI/CD + VCS semantic conventions, only when the standard GitHub Actions env vars are
+        // present. cicd.* and vcs.* are Release Candidate stability; test.* below is Development.
+        if (Environment.GetEnvironmentVariable("GITHUB_WORKFLOW") is { Length: > 0 } workflow)
+        {
+            var server = Environment.GetEnvironmentVariable("GITHUB_SERVER_URL");
+            var repo = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY");
+            var githubRunId = Environment.GetEnvironmentVariable("GITHUB_RUN_ID");
+
+            runSpan?.SetTag("cicd.pipeline.name", workflow);
+            runSpan?.SetTag("cicd.pipeline.run.id", githubRunId);
+            runSpan?.SetTag("cicd.pipeline.run.url.full", $"{server}/{repo}/actions/runs/{githubRunId}");
+            runSpan?.SetTag("cicd.pipeline.task.type", "test");
+            runSpan?.SetTag("vcs.repository.url.full", $"{server}/{repo}");
+            runSpan?.SetTag("vcs.ref.head.name", Environment.GetEnvironmentVariable("GITHUB_REF_NAME"));
+            runSpan?.SetTag("vcs.ref.head.revision", Environment.GetEnvironmentVariable("GITHUB_SHA"));
+        }
+
         SpecSuiteResult result;
         try
         {
@@ -73,18 +109,30 @@ internal static class RunBatch
                     AssertionEngine = assertionEngine,
                     Workers = workers,
                     Domains = options.Domains,
-                    AdapterFactory = workerIndex => selection.StartProcess(new Dictionary<string, string>
+                    AdapterFactory = workerIndex =>
                     {
-                        ["BSSPEC_WORKER_INDEX"] = workerIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    }),
+                        var index = workerIndex.ToString(CultureInfo.InvariantCulture);
+                        var env = new Dictionary<string, string>(collector.ChildEnvironment)
+                        {
+                            ["BSSPEC_WORKER_INDEX"] = index,
+                            // Without a per-worker service.instance.id, all N workers collapse into
+                            // one resource in any backend and "which worker ran this spec?" stays
+                            // unanswerable — which is the whole point of attribution.
+                            ["OTEL_RESOURCE_ATTRIBUTES"] = $"service.instance.id={index}",
+                        };
+                        return selection.StartProcess(env);
+                    },
                 },
                 progressWriter: Console.Error);
         }
         catch (Exception ex)
         {
+            runSpan?.SetTag("test.suite.run.status", "failure");
             Ui.Error(ex.Message);
             return 1;
         }
+
+        runSpan?.SetTag("test.suite.run.status", result.Failed > 0 ? "failure" : "success");
 
         switch (options.Output)
         {

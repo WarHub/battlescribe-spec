@@ -9,6 +9,9 @@
   <ItemGroup>
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,6 +21,7 @@
     <ProjectReference Include="..\BattleScribeSpec.NewRecruit\BattleScribeSpec.NewRecruit.csproj" />
     <ProjectReference Include="..\BattleScribeSpec.NrGameDataUiDriver\BattleScribeSpec.NrGameDataUiDriver.csproj" />
     <ProjectReference Include="..\BattleScribeSpec.NrRosterUiDriver\BattleScribeSpec.NrRosterUiDriver.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.Telemetry\BattleScribeSpec.Telemetry.csproj" />
     <ProjectReference Include="..\BattleScribeSpec.XmlGen\BattleScribeSpec.XmlGen.csproj" />
   </ItemGroup>
 

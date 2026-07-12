@@ -7,6 +7,13 @@ using BattleScribeSpec.Telemetry.Collector;
 
 namespace BattleScribeSpec.Tests.Features;
 
+// Shares a collection with EndToEndTraceTests: both mutate/depend on the process-wide
+// OTEL_EXPORTER_OTLP_ENDPOINT environment variable that HarnessCollector.StartAsync reads to
+// decide self-hosted vs. externally-set-collector mode. xUnit runs different test collections in
+// parallel but serializes tests WITHIN one collection, so grouping them here is what stops
+// ExternallySetEndpoint_IsHonored (which sets that env var) from racing a concurrent StartAsync
+// call in EndToEndTraceTests and flipping it into external mode unexpectedly.
+[Collection("HarnessCollectorEnv")]
 [Trait("Category", "Unit")]
 public sealed class TelemetryCollectorTests
 {
@@ -14,6 +21,15 @@ public sealed class TelemetryCollectorTests
     public async Task PostedProtobufSpans_LandInTheArtifact()
     {
         var artifact = Path.Combine(Path.GetTempPath(), $"bsspec-otlp-{Guid.NewGuid():N}.pb");
+
+        // HarnessCollector.StartAsync's ParentProviders subscribes to HarnessTelemetry.SourceName
+        // BY NAME, process-wide — so while this collector is alive, any OTHER concurrently-running
+        // test in this xUnit run that dispatches an adapter command in-process (e.g. AdapterHandler
+        // tests) also gets captured into THIS artifact. A unique span name is what lets "ours" be
+        // picked out of that legitimate noise deterministically (see the sibling test below,
+        // ParentTelemetry_ReachesTheArtifact_ThroughTheStockOtlpExporter, for the same pattern) —
+        // asserting the artifact holds exactly one span of any name is not a safe assumption here.
+        var specId = $"spec-under-test-{Guid.NewGuid():N}";
         try
         {
             await using (var collector = await HarnessCollector.StartAsync(artifact, TestContext.Current.CancellationToken))
@@ -21,7 +37,7 @@ public sealed class TelemetryCollectorTests
                 Assert.StartsWith("http://127.0.0.1:", collector.Endpoint, StringComparison.Ordinal);
 
                 using var client = new HttpClient();
-                var request = MakeRequest("spec-under-test");
+                var request = MakeRequest(specId);
                 using var content = new ByteArrayContent(request.ToByteArray());
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/x-protobuf");
 
@@ -44,8 +60,8 @@ public sealed class TelemetryCollectorTests
             // Artifact is flushed on dispose; read it back with the same generated types.
             var received = OtlpArtifactReader.ReadTraces(artifact).ToList();
             var span = Assert.Single(received.SelectMany(r =>
-                r.ResourceSpans.SelectMany(rs => rs.ScopeSpans.SelectMany(ss => ss.Spans))));
-            Assert.Equal("spec-under-test", span.Name);
+                r.ResourceSpans.SelectMany(rs => rs.ScopeSpans.SelectMany(ss => ss.Spans))), s => s.Name == specId);
+            Assert.Equal(specId, span.Name);
         }
         finally
         {
@@ -181,6 +197,67 @@ public sealed class TelemetryCollectorTests
         }
         finally
         {
+            File.Delete(artifact + ".traces.pb");
+            File.Delete(artifact + ".metrics.pb");
+            File.Delete(artifact + ".logs.pb");
+        }
+    }
+
+    [Fact]
+    public async Task ExternallySetEndpoint_IsHonored_WithNoLocalArtifact_AndParentSpansStillExport()
+    {
+        // A second real HarnessCollector plays the role of "the user's own Jaeger/Tempo": a real
+        // OTLP/HTTP receiver, independent of the one under test, so this exercises the exact wire
+        // path (stock SDK -> HTTP -> receiver) rather than asserting against a bespoke double.
+        var fakeJaegerArtifact = Path.Combine(Path.GetTempPath(), $"bsspec-otlp-fakejaeger-{Guid.NewGuid():N}.pb");
+        var artifact = Path.Combine(Path.GetTempPath(), $"bsspec-otlp-external-{Guid.NewGuid():N}.pb");
+        var specId = $"external-spec-{Guid.NewGuid():N}";
+        var ct = TestContext.Current.CancellationToken;
+        try
+        {
+            await using (var fakeJaeger = await HarnessCollector.StartAsync(fakeJaegerArtifact, ct))
+            {
+                Assert.True(fakeJaeger.Enabled);
+
+                Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", fakeJaeger.Endpoint);
+                try
+                {
+                    await using var collector = await HarnessCollector.StartAsync(artifact, ct);
+
+                    // Honored: same endpoint, still "flowing", but no local receiver/artifact —
+                    // "their collector owns the data" in this mode.
+                    Assert.True(collector.Enabled);
+                    Assert.False(collector.HasLocalArtifact);
+                    Assert.Equal(fakeJaeger.Endpoint, collector.Endpoint);
+                    Assert.Equal(fakeJaeger.Endpoint, collector.ChildEnvironment["OTEL_EXPORTER_OTLP_ENDPOINT"]);
+
+                    // The parent must still export its own spans (test.*/cicd.* live here) rather
+                    // than going dark just because the receiver is someone else's.
+                    using var activity = HarnessTelemetry.StartSpec(specId, "category", "domain");
+                    HarnessTelemetry.SetVerdict(activity, "passed");
+
+                    // Disposing `collector` below force-flushes its ParentProviders, POSTing the
+                    // span to fakeJaeger.Endpoint over the stock OTLP exporter.
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", null);
+                }
+            } // fakeJaeger disposed: its writer's FileStreams close, so its artifact is now readable.
+
+            Assert.False(File.Exists(artifact + ".traces.pb"));
+
+            var received = OtlpArtifactReader.ReadTraces(fakeJaegerArtifact)
+                .SelectMany(r => r.ResourceSpans.SelectMany(rs => rs.ScopeSpans.SelectMany(ss => ss.Spans)))
+                .ToList();
+            Assert.Contains(received, s => s.Name == specId);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", null);
+            File.Delete(fakeJaegerArtifact + ".traces.pb");
+            File.Delete(fakeJaegerArtifact + ".metrics.pb");
+            File.Delete(fakeJaegerArtifact + ".logs.pb");
             File.Delete(artifact + ".traces.pb");
             File.Delete(artifact + ".metrics.pb");
             File.Delete(artifact + ".logs.pb");
