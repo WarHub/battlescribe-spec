@@ -3,6 +3,7 @@ using OpenTelemetry.Proto.Collector.Metrics.V1;
 using OpenTelemetry.Proto.Collector.Trace.V1;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Metrics.V1;
+using OpenTelemetry.Proto.Resource.V1;
 using OpenTelemetry.Proto.Trace.V1;
 using BattleScribeSpec.Telemetry.Collector;
 
@@ -185,6 +186,7 @@ public sealed class TraceSummaryTests
             Reuses: 0,
             PeakLiveResources: 2,
             PeakLiveResourcesByKind: new Dictionary<string, long> { ["browser"] = 2 },
+            PeakLiveResourcesSampled: true,
             SlowestSpecs: [new TraceSummary.SlowSpec("only", "cat", 10)]);
 
         using var writer = new StringWriter();
@@ -195,6 +197,145 @@ public sealed class TraceSummaryTests
         // exact, is how people make bad tuning decisions — the table text must say so.
         Assert.Contains(">=", table, StringComparison.Ordinal);
         Assert.Contains("lower bound", table, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The bug this guards against: <c>--workers N</c> children are distinguished ONLY by their
+    /// OTel <c>Resource</c> (<c>service.instance.id</c>, set per-worker in <c>RunBatch</c>) — the
+    /// point attributes on a cold-start data point (<c>harness.resource.kind</c>,
+    /// <c>harness.engine.reused</c>) look IDENTICAL across workers doing the same kind of cold
+    /// start. A dedup key built from point attributes alone therefore collapses N workers' series
+    /// into one, and "latest wins" then keeps only whichever single data point happens to have the
+    /// globally-latest timestamp, discarding every other worker's count entirely. This is exactly
+    /// the observed live bug: a <c>--workers 2</c> run reporting "1 cold" instead of "2".
+    /// </summary>
+    [Fact]
+    public async Task FromArtifact_ColdStartsSumAcrossWorkerResources_AndLatestWinsPerResourceAcrossTicks()
+    {
+        var artifact = Path.Combine(Path.GetTempPath(), $"bsspec-tracesummary-multiresource-cold-{Guid.NewGuid():N}");
+        try
+        {
+            await using (var writer = new OtlpArtifactWriter(artifact))
+            {
+                await writer.WriteAsync(MakeTraceRequest(("only", "cat", BaseNanos, 10)));
+
+                // Worker 0: two export ticks for the SAME series (cumulative growth 2 -> 5). Latest
+                // (5) must win for THIS resource, not naively summed with the first tick (which
+                // would give 7) and not collapsed with worker 1 (which would lose one of them).
+                await writer.WriteAsync(MakeEngineStartMetricsRequestForResource(
+                    serviceInstanceId: "0", timeNano: BaseNanos, kind: "jvm", reused: false, count: 2));
+                await writer.WriteAsync(MakeEngineStartMetricsRequestForResource(
+                    serviceInstanceId: "0", timeNano: BaseNanos + 3_000_000_000, kind: "jvm", reused: false, count: 5));
+
+                // Worker 1: a single tick, same point attributes as worker 0's series
+                // (harness.resource.kind=jvm|harness.engine.reused=false) — distinguished from
+                // worker 0 ONLY by its Resource's service.instance.id.
+                await writer.WriteAsync(MakeEngineStartMetricsRequestForResource(
+                    serviceInstanceId: "1", timeNano: BaseNanos + 1_000_000_000, kind: "jvm", reused: false, count: 3));
+            }
+
+            var summary = TraceSummary.FromArtifact(artifact);
+
+            // Correct: latest-per-resource (worker 0 -> 5) summed ACROSS resources (5 + 3 = 8).
+            // A resource-blind dedup key would instead keep only the single data point with the
+            // globally-latest timestamp (worker 0's second tick, at BaseNanos+3s) and report 5 —
+            // or, with ties/ordering differences, silently drop whichever worker sorts earlier.
+            // Neither wrong answer is 8, so this assertion falsifies both failure modes.
+            Assert.Equal(8, summary.ColdStarts);
+        }
+        finally
+        {
+            File.Delete(artifact + ".traces.pb");
+            File.Delete(artifact + ".metrics.pb");
+            File.Delete(artifact + ".logs.pb");
+        }
+    }
+
+    /// <summary>
+    /// The bug this guards against: <see cref="TraceSummary"/> used to bucket
+    /// <c>harness.resource.count</c> data points by exact <c>TimeUnixNano</c> equality. Two
+    /// independent <c>--workers</c> processes have independent clocks and export schedules, so
+    /// their data points essentially never share a bit-identical nanosecond timestamp — even when
+    /// the two workers' resources are genuinely alive at the same wall-clock moment. Exact-equality
+    /// bucketing then never sums them, so the reported "peak" degenerates into "the largest single
+    /// worker's own export tick" rather than true cross-worker concurrency.
+    /// </summary>
+    [Fact]
+    public async Task FromArtifact_PeakLiveResources_SumsGenuinelyOverlappingWorkerResources()
+    {
+        var artifact = Path.Combine(Path.GetTempPath(), $"bsspec-tracesummary-multiresource-peak-{Guid.NewGuid():N}");
+        try
+        {
+            await using (var writer = new OtlpArtifactWriter(artifact))
+            {
+                await writer.WriteAsync(MakeTraceRequest(("only", "cat", BaseNanos, 10)));
+
+                // Two workers, each with one jvm alive at genuinely the same moment, exported at
+                // slightly different nanosecond timestamps (independent clocks) — both well within
+                // one export-interval-wide (1s) bucket.
+                await writer.WriteAsync(MakeResourceCountMetricsRequestForResource(
+                    serviceInstanceId: "0", timeNano: BaseNanos + 100_000_000, kind: "jvm", value: 1));
+                await writer.WriteAsync(MakeResourceCountMetricsRequestForResource(
+                    serviceInstanceId: "1", timeNano: BaseNanos + 150_000_000, kind: "jvm", value: 1));
+
+                // A later, non-overlapping instant where only worker 0 still has a jvm alive —
+                // must NOT be added to the earlier overlap.
+                await writer.WriteAsync(MakeResourceCountMetricsRequestForResource(
+                    serviceInstanceId: "0", timeNano: BaseNanos + 5_000_000_000, kind: "jvm", value: 1));
+            }
+
+            var summary = TraceSummary.FromArtifact(artifact);
+
+            Assert.True(summary.PeakLiveResourcesSampled);
+            // Exact-timestamp bucketing (the pre-fix behaviour) puts 100_000_000 and 150_000_000
+            // in separate singleton buckets and reports a peak of 1 — never summing the two
+            // workers' genuinely-concurrent jvms.
+            Assert.Equal(2, summary.PeakLiveResources);
+            Assert.Equal(2, summary.PeakLiveResourcesByKind["jvm"]);
+        }
+        finally
+        {
+            File.Delete(artifact + ".traces.pb");
+            File.Delete(artifact + ".metrics.pb");
+            File.Delete(artifact + ".logs.pb");
+        }
+    }
+
+    /// <summary>
+    /// A run that finishes faster than the metrics export interval never gets a single
+    /// <c>harness.resource.count</c> data point exported, even though a resource undeniably
+    /// existed. That must render as "not sampled", not as an indistinguishable "0 total" — a human
+    /// reading "0" would wrongly conclude no resources were ever live.
+    /// </summary>
+    [Fact]
+    public async Task FromArtifact_NoResourceCountDataPoints_ReportsPeakAsNotSampled()
+    {
+        var artifact = Path.Combine(Path.GetTempPath(), $"bsspec-tracesummary-notsampled-{Guid.NewGuid():N}");
+        try
+        {
+            await using (var writer = new OtlpArtifactWriter(artifact))
+            {
+                // A spec span exists (so FromArtifact does not short-circuit to Empty) but no
+                // harness.resource.count metric was ever written.
+                await writer.WriteAsync(MakeTraceRequest(("only", "cat", BaseNanos, 10)));
+            }
+
+            var summary = TraceSummary.FromArtifact(artifact);
+
+            Assert.False(summary.PeakLiveResourcesSampled);
+            Assert.Equal(0, summary.PeakLiveResources);
+
+            using var tableWriter = new StringWriter();
+            summary.WriteTable(tableWriter);
+            var table = tableWriter.ToString();
+            Assert.Contains("not sampled", table, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(artifact + ".traces.pb");
+            File.Delete(artifact + ".metrics.pb");
+            File.Delete(artifact + ".logs.pb");
+        }
     }
 
     private static ExportTraceServiceRequest MakeTraceRequest(
@@ -267,12 +408,52 @@ public sealed class TraceSummaryTests
         return dataPoint;
     }
 
-    private static ExportMetricsServiceRequest WrapMetric(Metric metric)
+    /// <summary>
+    /// A single-data-point <c>harness.engine.start.duration</c> request tagged with a specific
+    /// <c>service.instance.id</c> — i.e. carrying the OTel <c>Resource</c> a <c>--workers</c> child
+    /// process attaches to everything it exports (see <c>OTEL_RESOURCE_ATTRIBUTES</c> in
+    /// <c>RunBatch</c>). Two calls with different <paramref name="serviceInstanceId"/> values but
+    /// otherwise-identical point attributes simulate two workers whose cold-start series are
+    /// indistinguishable except by Resource — the exact shape that used to collapse into one.
+    /// </summary>
+    private static ExportMetricsServiceRequest MakeEngineStartMetricsRequestForResource(
+        string serviceInstanceId, ulong timeNano, string kind, bool reused, long count)
+    {
+        var histogram = new Histogram { AggregationTemporality = AggregationTemporality.Cumulative };
+        histogram.DataPoints.Add(EngineStartDataPoint(timeNano, kind, reused, count));
+        var metric = new Metric { Name = "harness.engine.start.duration", Unit = "s", Histogram = histogram };
+        return WrapMetric(metric, serviceInstanceId);
+    }
+
+    /// <summary>
+    /// A single-data-point <c>harness.resource.count</c> request tagged with a specific
+    /// <c>service.instance.id</c> — see <see cref="MakeEngineStartMetricsRequestForResource"/> for
+    /// why this is the shape that models two independent <c>--workers</c> child processes.
+    /// </summary>
+    private static ExportMetricsServiceRequest MakeResourceCountMetricsRequestForResource(
+        string serviceInstanceId, ulong timeNano, string kind, long value)
+    {
+        var sum = new Sum { AggregationTemporality = AggregationTemporality.Cumulative, IsMonotonic = false };
+        sum.DataPoints.Add(ResourceCountDataPoint(timeNano, kind, value));
+        var metric = new Metric { Name = "harness.resource.count", Unit = "{resource}", Sum = sum };
+        return WrapMetric(metric, serviceInstanceId);
+    }
+
+    private static ExportMetricsServiceRequest WrapMetric(Metric metric) => WrapMetric(metric, serviceInstanceId: null);
+
+    private static ExportMetricsServiceRequest WrapMetric(Metric metric, string? serviceInstanceId)
     {
         var scopeMetrics = new ScopeMetrics();
         scopeMetrics.Metrics.Add(metric);
         var resourceMetrics = new ResourceMetrics();
         resourceMetrics.ScopeMetrics.Add(scopeMetrics);
+        if (serviceInstanceId is not null)
+        {
+            var resource = new Resource();
+            resource.Attributes.Add(StringAttribute("service.instance.id", serviceInstanceId));
+            resourceMetrics.Resource = resource;
+        }
+
         var request = new ExportMetricsServiceRequest();
         request.ResourceMetrics.Add(resourceMetrics);
         return request;

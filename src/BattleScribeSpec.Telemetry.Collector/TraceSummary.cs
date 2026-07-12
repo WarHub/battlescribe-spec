@@ -25,15 +25,26 @@ namespace BattleScribeSpec.Telemetry.Collector;
 /// Number of engine acquisitions recorded as a warm reuse (<c>harness.engine.reused</c> = true).
 /// </param>
 /// <param name="PeakLiveResources">
-/// The highest total live-resource count observed at any single export timestamp, summed across
-/// every <c>harness.resource.kind</c> alive at that instant. This is a LOWER BOUND, not an exact
-/// maximum: a spike that both rises and falls between two periodic metric exports never appears
-/// in the artifact at all (see the remarks on <c>ResourceMetrics</c>).
+/// The highest total live-resource count observed at any single export time window, summed
+/// across every <c>harness.resource.kind</c> AND every OTel <c>Resource</c> (i.e. every
+/// <c>--workers</c> child process, each of which exports under its own <c>service.instance.id</c>)
+/// alive in that window. This is a LOWER BOUND, not an exact maximum: a spike that both rises and
+/// falls between two periodic metric exports never appears in the artifact at all (see the
+/// remarks on <c>ResourceMetrics</c>). Meaningful only when <see cref="PeakLiveResourcesSampled"/>
+/// is true — see that member.
 /// </param>
 /// <param name="PeakLiveResourcesByKind">
-/// The peak live count for each <c>harness.resource.kind</c> individually (each kind's own
-/// maximum over time — not necessarily all reached at the same instant as each other, or as
-/// <see cref="PeakLiveResources"/>). Also a lower bound, for the same reason.
+/// The peak live count for each <c>harness.resource.kind</c> individually, summed across every
+/// OTel <c>Resource</c> alive in the window (each kind's own maximum over time — not necessarily
+/// all reached at the same instant as each other, or as <see cref="PeakLiveResources"/>). Also a
+/// lower bound, for the same reason.
+/// </param>
+/// <param name="PeakLiveResourcesSampled">
+/// False when no <c>harness.resource.count</c> data point was ever exported — e.g. a batch that
+/// finished faster than the export interval. In that case <see cref="PeakLiveResources"/> and
+/// <see cref="PeakLiveResourcesByKind"/> are meaningless zeros: "not sampled" is not the same
+/// claim as "genuinely zero resources were ever live," and <see cref="WriteTable"/> renders the
+/// two differently for exactly that reason.
 /// </param>
 /// <param name="SlowestSpecs">The 10 slowest specs by duration, descending.</param>
 public sealed record TraceSummary(
@@ -45,6 +56,7 @@ public sealed record TraceSummary(
     int Reuses,
     long PeakLiveResources,
     IReadOnlyDictionary<string, long> PeakLiveResourcesByKind,
+    bool PeakLiveResourcesSampled,
     IReadOnlyList<TraceSummary.SlowSpec> SlowestSpecs)
 {
     /// <summary>One spec's identity and duration, as ranked in <see cref="SlowestSpecs"/>.</summary>
@@ -66,6 +78,7 @@ public sealed record TraceSummary(
         Reuses: 0,
         PeakLiveResources: 0,
         PeakLiveResourcesByKind: new Dictionary<string, long>(),
+        PeakLiveResourcesSampled: false,
         SlowestSpecs: []);
 
     /// <summary>
@@ -89,7 +102,7 @@ public sealed record TraceSummary(
             : NanosToTimeSpan((scan.MaxEndNano ?? 0) - (scan.MinStartNano ?? 0));
 
         var (coldStarts, reuses) = CollectEngineStarts(basePath);
-        var (peakTotal, peakByKind) = CollectPeakLiveResources(basePath);
+        var (peakTotal, peakByKind, peakSampled) = CollectPeakLiveResources(basePath);
 
         var slowest = scan.Specs
             .OrderByDescending(s => s.DurationMs)
@@ -106,6 +119,7 @@ public sealed record TraceSummary(
             Reuses: reuses,
             PeakLiveResources: peakTotal,
             PeakLiveResourcesByKind: peakByKind,
+            PeakLiveResourcesSampled: peakSampled,
             SlowestSpecs: slowest);
     }
 
@@ -122,12 +136,20 @@ public sealed record TraceSummary(
             $"  spec duration:       p50={P50SpecMs:F1}ms  p95={P95SpecMs:F1}ms"));
         writer.WriteLine(FormattableString.Invariant(
             $"  engine starts:       {ColdStarts} cold, {Reuses} reused"));
-        writer.WriteLine(FormattableString.Invariant(
-            $"  peak live resources (>= lower bound): {PeakLiveResources} total"));
 
-        foreach (var (kind, peak) in PeakLiveResourcesByKind.OrderByDescending(kv => kv.Value))
+        if (PeakLiveResourcesSampled)
         {
-            writer.WriteLine(FormattableString.Invariant($"    - {kind}: {peak}"));
+            writer.WriteLine(FormattableString.Invariant(
+                $"  peak live resources (>= lower bound): {PeakLiveResources} total"));
+
+            foreach (var (kind, peak) in PeakLiveResourcesByKind.OrderByDescending(kv => kv.Value))
+            {
+                writer.WriteLine(FormattableString.Invariant($"    - {kind}: {peak}"));
+            }
+        }
+        else
+        {
+            writer.WriteLine("  peak live resources: not sampled (run shorter than the export interval)");
         }
 
         if (SlowestSpecs.Count > 0)
@@ -225,18 +247,38 @@ public sealed record TraceSummary(
     /// exports this metric with CUMULATIVE temporality (the default), so summing every exported
     /// data point's <c>count</c> across the whole run would massively over-count — each export
     /// re-reports the running total since the process started. Instead, group data points by
-    /// their full attribute set (so distinct resource kinds are never conflated) and take only the
-    /// LATEST (highest <c>time_unix_nano</c>) data point per group — its <c>count</c> already is
-    /// the cumulative total for that series.
+    /// (resource, full attribute set) — so distinct resource kinds are never conflated, AND
+    /// distinct <c>--workers</c> child processes are never conflated with each other — and take
+    /// only the LATEST (highest <c>time_unix_nano</c>) data point per group; its <c>count</c>
+    /// already is the cumulative total for that series.
     /// </summary>
+    /// <remarks>
+    /// Under <c>--workers N</c>, every child exports the SAME attribute set for the same kind of
+    /// cold start (e.g. <c>harness.resource.kind=adapter-process|harness.engine.reused=false</c>)
+    /// — only the enclosing OTel <c>Resource</c> (via <c>service.instance.id</c>, set per-worker in
+    /// <c>RunBatch</c>) tells two workers' identical-looking series apart. A key built from point
+    /// attributes alone collapses N workers' cold starts into one series, and "latest wins" then
+    /// keeps only one worker's count. The fix keys "latest wins" by resource+attributes (so the
+    /// cumulative-temporality dedup above still holds per series) and then SUMS the latest value
+    /// across every resource that shares the same point attributes, so N workers' independent
+    /// series each contribute their own count.
+    /// </remarks>
     private static (int ColdStarts, int Reuses) CollectEngineStarts(string basePath)
     {
-        var latestByAttributeSet = new Dictionary<string, (ulong TimeNano, ulong Count, bool Reused)>(StringComparer.Ordinal);
+        var latestBySeries = new Dictionary<(string ResourceKey, string AttributeKey), (ulong TimeNano, ulong Count, bool Reused)>();
 
         foreach (var request in OtlpArtifactReader.ReadMetrics(basePath))
         {
             foreach (var resourceMetrics in request.ResourceMetrics)
             {
+                // Resource identity = its full attribute set (service.instance.id among them, for
+                // a --workers run). This is more general than keying on service.instance.id alone:
+                // it also correctly treats a single, non-batch run (no service.instance.id at all)
+                // as one shared resource, without a special case. Resource is an unset (null)
+                // singular protobuf message field when the exporter never attached one — treat
+                // that as the empty attribute set rather than throwing.
+                var resourceKey = AttributeSetKey(resourceMetrics.Resource?.Attributes ?? []);
+
                 foreach (var scopeMetrics in resourceMetrics.ScopeMetrics)
                 {
                     foreach (var metric in scopeMetrics.Metrics)
@@ -254,11 +296,11 @@ public sealed record TraceSummary(
                                 continue;
                             }
 
-                            var key = AttributeSetKey(point.Attributes);
-                            if (!latestByAttributeSet.TryGetValue(key, out var existing) ||
+                            var seriesKey = (resourceKey, AttributeSetKey(point.Attributes));
+                            if (!latestBySeries.TryGetValue(seriesKey, out var existing) ||
                                 point.TimeUnixNano > existing.TimeNano)
                             {
-                                latestByAttributeSet[key] = (point.TimeUnixNano, point.Count, reused);
+                                latestBySeries[seriesKey] = (point.TimeUnixNano, point.Count, reused);
                             }
                         }
                     }
@@ -266,29 +308,66 @@ public sealed record TraceSummary(
             }
         }
 
-        var coldStarts = latestByAttributeSet.Values.Where(v => !v.Reused).Sum(v => (long)v.Count);
-        var reuses = latestByAttributeSet.Values.Where(v => v.Reused).Sum(v => (long)v.Count);
+        var coldStarts = latestBySeries.Values.Where(v => !v.Reused).Sum(v => (long)v.Count);
+        var reuses = latestBySeries.Values.Where(v => v.Reused).Sum(v => (long)v.Count);
         return (checked((int)coldStarts), checked((int)reuses));
     }
+
+    /// <summary>
+    /// The metrics SDK's default periodic export interval for <c>--workers</c> children (see
+    /// <c>OTEL_METRIC_EXPORT_INTERVAL</c> in <see cref="HarnessCollector.ChildEnvironment"/>). Used
+    /// as the bucket width in <see cref="CollectPeakLiveResources"/>: independent worker processes
+    /// have independent clocks and export schedules, so this is the natural granularity at which
+    /// two workers' concurrent exports should be considered "the same instant".
+    /// </summary>
+    private const ulong PeakBucketWidthNanos = 1_000_000_000UL;
 
     /// <summary>
     /// Peak live-resource counts from the <c>harness.resource.count</c> up-down counter. Unlike a
     /// monotonic counter, a cumulative data point on an up-down counter already IS the live value
     /// at that instant, so — unlike <see cref="CollectEngineStarts"/> above — the maximum across
-    /// data points is the correct read, not a "latest wins" one. The per-kind peak is each kind's
-    /// own maximum over time; the total peak sums every kind alive at the SAME export timestamp,
-    /// then takes the maximum of those per-timestamp sums (kinds peaking at different instants
-    /// must not be added together as if simultaneous).
+    /// data points is the correct read, not a "latest wins" one.
     /// </summary>
-    private static (long Total, IReadOnlyDictionary<string, long> ByKind) CollectPeakLiveResources(string basePath)
+    /// <remarks>
+    /// <para>
+    /// Bucketing by exact <c>TimeUnixNano</c> equality (as this used to do) only ever merges data
+    /// points from the SAME resource: under <c>--workers N</c>, each child has its own clock and
+    /// export schedule, so two different workers' data points essentially never share a
+    /// bit-identical nanosecond timestamp — even when the two workers' resources are genuinely
+    /// alive at the same time. Every point then lands in its own singleton bucket, and the
+    /// reported "peak" degenerates into "the largest single worker's own export tick," silently
+    /// dropping true cross-worker concurrency.
+    /// </para>
+    /// <para>
+    /// The fix buckets by a time WINDOW (<see cref="PeakBucketWidthNanos"/>, one export interval)
+    /// instead of exact equality, so genuinely-concurrent points from different workers land in
+    /// the same bucket and get summed. Within a bucket, points are first grouped by (resource,
+    /// kind) — the same resource can legitimately report itself only once per bucket, so a second
+    /// point for the same (resource, kind) in the same bucket is treated as a later reading of the
+    /// same series (latest wins), not an additional live resource. The total for a bucket is the
+    /// sum of every (resource, kind) series' latest value in that bucket; the per-kind total for a
+    /// bucket sums across every resource reporting that kind. The reported peak is then the
+    /// maximum bucket total across the whole run — for the total, and independently for each kind
+    /// (kinds are not required to have peaked in the same bucket as each other or as the total).
+    /// </para>
+    /// <para>
+    /// This is still a fixed grid: two points a few nanoseconds apart but straddling a bucket
+    /// boundary can be split into adjacent buckets and so never summed. That is an accepted,
+    /// documented residual of the existing "peak is a LOWER BOUND" caveat, not a new one — a
+    /// bucket on the order of the export interval keeps this rare in practice.
+    /// </para>
+    /// </remarks>
+    private static (long Total, IReadOnlyDictionary<string, long> ByKind, bool Sampled) CollectPeakLiveResources(string basePath)
     {
-        var byTimestamp = new Dictionary<ulong, Dictionary<string, long>>();
-        var peakByKind = new Dictionary<string, long>(StringComparer.Ordinal);
+        // bucket index -> (resource, kind) -> that series' latest value seen in this bucket.
+        var byBucket = new Dictionary<ulong, Dictionary<(string ResourceKey, string Kind), long>>();
 
         foreach (var request in OtlpArtifactReader.ReadMetrics(basePath))
         {
             foreach (var resourceMetrics in request.ResourceMetrics)
             {
+                var resourceKey = AttributeSetKey(resourceMetrics.Resource?.Attributes ?? []);
+
                 foreach (var scopeMetrics in resourceMetrics.ScopeMetrics)
                 {
                     foreach (var metric in scopeMetrics.Metrics)
@@ -305,26 +384,52 @@ public sealed record TraceSummary(
                                 ? point.AsInt
                                 : (long)point.AsDouble;
 
-                            if (!byTimestamp.TryGetValue(point.TimeUnixNano, out var atTimestamp))
+                            var bucket = point.TimeUnixNano / PeakBucketWidthNanos;
+                            if (!byBucket.TryGetValue(bucket, out var atBucket))
                             {
-                                atTimestamp = new Dictionary<string, long>(StringComparer.Ordinal);
-                                byTimestamp[point.TimeUnixNano] = atTimestamp;
+                                atBucket = [];
+                                byBucket[bucket] = atBucket;
                             }
 
-                            atTimestamp[kind] = value;
-
-                            if (!peakByKind.TryGetValue(kind, out var existingPeak) || value > existingPeak)
-                            {
-                                peakByKind[kind] = value;
-                            }
+                            atBucket[(resourceKey, kind)] = value;
                         }
                     }
                 }
             }
         }
 
-        var peakTotal = byTimestamp.Count == 0 ? 0 : byTimestamp.Values.Max(atTimestamp => atTimestamp.Values.Sum());
-        return (peakTotal, peakByKind);
+        if (byBucket.Count == 0)
+        {
+            return (0, new Dictionary<string, long>(StringComparer.Ordinal), false);
+        }
+
+        long peakTotal = 0;
+        var peakByKind = new Dictionary<string, long>(StringComparer.Ordinal);
+
+        foreach (var atBucket in byBucket.Values)
+        {
+            var kindTotalsThisBucket = new Dictionary<string, long>(StringComparer.Ordinal);
+            foreach (var ((_, kind), value) in atBucket)
+            {
+                kindTotalsThisBucket[kind] = kindTotalsThisBucket.GetValueOrDefault(kind) + value;
+            }
+
+            var bucketTotal = kindTotalsThisBucket.Values.Sum();
+            if (bucketTotal > peakTotal)
+            {
+                peakTotal = bucketTotal;
+            }
+
+            foreach (var (kind, kindTotal) in kindTotalsThisBucket)
+            {
+                if (!peakByKind.TryGetValue(kind, out var existingPeak) || kindTotal > existingPeak)
+                {
+                    peakByKind[kind] = kindTotal;
+                }
+            }
+        }
+
+        return (peakTotal, peakByKind, true);
     }
 
     private static string? FindStringAttribute(IEnumerable<KeyValue> attributes, string key)
