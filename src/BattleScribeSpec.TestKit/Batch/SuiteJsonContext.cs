@@ -54,4 +54,8 @@ public sealed class JsonSpecEntry
     [JsonPropertyName("tags")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? Tags { get; init; }
+
+    /// <summary>Wall-clock time spent running this spec, in milliseconds.</summary>
+    [JsonPropertyName("durationMs")]
+    public double DurationMs { get; init; }
 }

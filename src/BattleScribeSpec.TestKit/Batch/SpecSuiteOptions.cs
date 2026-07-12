@@ -42,6 +42,15 @@ public sealed class SpecSuiteResult
     /// </summary>
     public required IReadOnlyDictionary<SpecResult, GameDataSpecFile> GameDataSpecsByResult { get; init; }
 
+    /// <summary>
+    /// Wall-clock duration (milliseconds) of each executed spec, keyed the same way as
+    /// <see cref="SpecsByResult"/> and <see cref="GameDataSpecsByResult"/>. Kept as a side map
+    /// (rather than widening <see cref="SpecResult"/> itself) for the same reason those two are
+    /// separate: <see cref="SpecResult"/> is a public record shape callers already depend on.
+    /// Absent (no entry) for specs never executed — skipped or failed to load.
+    /// </summary>
+    public required IReadOnlyDictionary<SpecResult, double> DurationsByResult { get; init; }
+
     public required int TotalSpecs { get; init; }
     public required TimeSpan Elapsed { get; init; }
     public int Passed { get; private init; }
@@ -62,6 +71,7 @@ public sealed class SpecSuiteResult
         IReadOnlyList<SpecResultSummary> reportResults,
         IReadOnlyDictionary<SpecResult, SpecFile> specsByResult,
         IReadOnlyDictionary<SpecResult, GameDataSpecFile> gameDataSpecsByResult,
+        IReadOnlyDictionary<SpecResult, double> durationsByResult,
         int totalSpecs,
         TimeSpan elapsed,
         string? expectedFailuresEngine)
@@ -108,6 +118,7 @@ public sealed class SpecSuiteResult
             ReportResults = reportResults,
             SpecsByResult = specsByResult,
             GameDataSpecsByResult = gameDataSpecsByResult,
+            DurationsByResult = durationsByResult,
             TotalSpecs = totalSpecs,
             Elapsed = elapsed,
             Passed = passed,

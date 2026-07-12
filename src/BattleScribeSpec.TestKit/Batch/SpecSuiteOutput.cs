@@ -47,6 +47,7 @@ public static class SpecSuiteOutput
                 SpecFileBase? spec = result.SpecsByResult.TryGetValue(r, out var s) ? s
                     : result.GameDataSpecsByResult.TryGetValue(r, out var gs) ? gs
                     : null;
+                result.DurationsByResult.TryGetValue(r, out var durationMs);
                 return new JsonSpecEntry
                 {
                     Id = r.SpecId,
@@ -55,6 +56,7 @@ public static class SpecSuiteOutput
                     Passed = r.Passed,
                     Failures = r.Failures,
                     Tags = spec?.Tags,
+                    DurationMs = durationMs,
                 };
             })],
         };

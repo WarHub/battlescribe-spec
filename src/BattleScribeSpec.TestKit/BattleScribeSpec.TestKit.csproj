@@ -12,6 +12,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\BattleScribeSpec.Telemetry\BattleScribeSpec.Telemetry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="specs\**\*.yaml" />
     <EmbeddedResource Include="..\..\specs\**\*.yaml" LinkBase="specs" />
   </ItemGroup>

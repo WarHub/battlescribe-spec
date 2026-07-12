@@ -22,9 +22,13 @@
         "resolved": "5.0.0",
         "contentHash": "dMkqfy2el8A8/I76n2Hi1oBFEbG1SfxD2l5nhwXV3XjlnOmwxJlQbYpJH4W51odnU9sARCSAgv7S3CyAFMkpYg=="
       },
+      "battlescribespec.telemetry": {
+        "type": "Project"
+      },
       "battlescribespec.testkit": {
         "type": "Project",
         "dependencies": {
+          "BattleScribeSpec.Telemetry": "[1.0.0, )",
           "Vecc.YamlDotNet.Analyzers.StaticGenerator": "[18.1.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
