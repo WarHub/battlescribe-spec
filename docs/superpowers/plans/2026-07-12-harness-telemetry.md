@@ -321,11 +321,11 @@ git commit -m "feat(telemetry): scaffold Telemetry + Telemetry.Collector project
   - `HarnessTelemetry.SourceName` = `"BattleScribeSpec.Harness"` (const string)
   - `HarnessTelemetry.MeterName` = `"BattleScribeSpec.Harness"` (const string)
   - `Activity? HarnessTelemetry.StartSpec(string specId, string category, string domain)`
-  - `Activity? HarnessTelemetry.StartOp(string name, string? traceparent = null)`
-  - `void HarnessTelemetry.SetVerdict(Activity? activity, string status)` — writes `test.case.result.status`
+  - `Activity? HarnessTelemetry.StartOp(string name, string? traceparent = null, ActivityKind kind = ActivityKind.Internal, string? tracestate = null)`
+  - `void HarnessTelemetry.SetVerdict(Activity? activity, string status)` — writes `bsspec.verdict` (four-way) AND `test.case.result.status` (`pass`/`fail` only)
   - `string? HarnessTelemetry.CurrentTraceparent()` — W3C format of `Activity.Current`
   - `ResourceMetrics.Acquired(string kind)` / `ResourceMetrics.Released(string kind)` — up-down counter `harness.resource.count`
-  - `ResourceMetrics.RecordEngineStart(string kind, bool reused, double ms)` — histogram `harness.engine.start.duration`
+  - `ResourceMetrics.RecordEngineStart(string kind, bool reused, double seconds)` — histogram `harness.engine.start.duration`, unit `s`
 
 - [ ] **Step 1: Write the failing test**
 
