@@ -223,7 +223,7 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-          NR_PARALLEL: 4
+          NR_PARALLEL: 6
       - name: Full frozen NR UI roster
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
@@ -236,7 +236,7 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-          NR_PARALLEL: 4
+          NR_PARALLEL: 6
 
   # ── THOROUGH: full BS GameData UI (opt-in). Warm start + sharded across N jobs.
   #    The matrix MUST match GameDataConformanceTestBase.ShardCount. ──
