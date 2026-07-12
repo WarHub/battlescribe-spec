@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using BattleScribeSpec.Telemetry;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NrGameDataUiDriver;
@@ -83,6 +84,7 @@ public sealed class NrGameDataUiEnginePool : IAsyncDisposable
             Headless = headless,
             SlowMo = slowMo,
         });
+        ResourceMetrics.Acquired("browser");
 
         var contexts = new List<IBrowserContext>();
         var engines = new List<NrGameDataUiEngine>();
@@ -94,6 +96,7 @@ public sealed class NrGameDataUiEnginePool : IAsyncDisposable
                 ServiceWorkers = ServiceWorkerPolicy.Block,
             });
             contexts.Add(context);
+            ResourceMetrics.Acquired("browser-context");
 
             var engine = await NrGameDataUiEngine.CreateFrozenInContextAsync(context, staticDir, headless);
             engines.Add(engine);
@@ -141,9 +144,22 @@ public sealed class NrGameDataUiEnginePool : IAsyncDisposable
             try
             { await ctx.CloseAsync(); }
             catch { /* best effort */ }
+            finally
+            {
+                // In a finally so a throwing close can't leak the counter — a counter that drifts
+                // upward is worse than no counter, because it silently invents resources that don't exist.
+                ResourceMetrics.Released("browser-context");
+            }
         }
 
-        await _browser.CloseAsync();
+        try
+        { await _browser.CloseAsync(); }
+        catch { /* best effort */ }
+        finally
+        {
+            ResourceMetrics.Released("browser");
+        }
+
         _playwright.Dispose();
     }
 }

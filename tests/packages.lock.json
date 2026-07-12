@@ -517,7 +517,8 @@
       "battlescribespec.nrgamedatauidriver": {
         "type": "Project",
         "dependencies": {
-          "BattleScribeSpec.NewRecruit": "[1.0.0, )"
+          "BattleScribeSpec.NewRecruit": "[1.0.0, )",
+          "BattleScribeSpec.Telemetry": "[1.0.0, )"
         }
       },
       "battlescribespec.nrrosteruidriver": {
