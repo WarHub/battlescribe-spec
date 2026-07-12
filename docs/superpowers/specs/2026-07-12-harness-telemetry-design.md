@@ -110,6 +110,12 @@ So:
 
 Estimated ~170 LOC of endpoints + wiring.
 
+**The receiver must be spec-compliant, not merely functional.** On success OTLP requires a protobuf-encoded `Export<signal>ServiceResponse` body with the same `Content-Type` as the request — an empty `200 OK` violates a MUST.
+
+This is worth stating explicitly because the failure is invisible from where we stand: **OpenTelemetry .NET never deserializes the response body**, so an empty 200 works perfectly for .NET children and every test we would write. Python and JS SDKs *do* parse it and log deserialization errors. A receiver that is compliant only for the language we happen to use is the one thing this design cannot afford, since its entire justification is third-party adapters in *other* languages. It is a three-line fix.
+
+**Metric units follow the convention, not our convenience.** Durations are recorded in **seconds** (OTel: "when instruments are measuring durations, seconds SHOULD be used"), with explicit bucket boundaries supplied — the SDK's default buckets are millisecond-tuned, so a seconds-valued histogram would collapse every engine start into one bucket and make p50/p95 meaningless. Instrument and attribute names are namespaced (`harness.engine.reused`, not `reused`), and UpDownCounter names are not pluralized (`harness.resource.count`).
+
 ### Artifact format
 
 The parent writes received OTLP as a **length-delimited protobuf stream** (`Google.Protobuf`'s `WriteDelimitedTo`) to `run-<id>.otlp.pb`. Lossless, exact, ~10 LOC, and our summary and `compare` tooling reads it back using the same generated types.
@@ -133,25 +139,47 @@ The .NET Aspire dashboard *is* an OTLP receiver (gRPC + HTTP/protobuf + HTTP/JSO
 - **The standalone dashboard cannot do the job.** Its telemetry is **in-memory only and never persisted** — it physically cannot produce our artifact — and using it would drag Docker, Blazor, FluentUI and an AI assistant into CI.
 - **What we take from it:** the `.proto` file set and layout, and the pattern for binding `127.0.0.1:0` and resolving the real port. Licensing is clean — MIT (Aspire C#) and Apache-2.0 (protos), attribution only; record both in `THIRD-PARTY-NOTICES.txt`.
 
+### Use the stock SDK in the collector — do not hand-roll an exporter
+
+`BattleScribeSpec.Telemetry.Collector` hosts a real OpenTelemetry `TracerProvider` and `MeterProvider`. It is **not** AOT-marked, so the SDK's reflection is harmless there, and `Cli` reaches it through a facade.
+
+An earlier draft hand-rolled an `Activity` → protobuf converter here, on the grounds that "the OTel SDK is not AOT-safe." That reasoning is correct for `Cli` and `TestKit` and **was wrongly extended to the collector**. The bespoke exporter silently dropped every non-string tag (`Activity.Tags` yields only `string` values), dropped span kind, dropped span **status** (so a failed spec would have rendered green), dropped events, and emitted an empty `Resource` (no `service.name` — Jaeger keys on it). Using the SDK deletes that code and fixes all of it, because the SDK already gets it right.
+
+The rule stands where it belongs: **the OTel SDK must never be referenced from `Cli` or `TestKit`.** Those two use only the BCL `ActivitySource`/`Meter`.
+
 ### Semantic conventions
 
-Emit OTel's experimental test and CI/CD conventions so off-the-shelf backends render conformance runs with no adapter on their side:
+Emit OTel's test, CI/CD and VCS conventions so off-the-shelf backends render conformance runs with no adapter on their side:
 
-- `test.case.name` (spec id), `test.suite.name` (category), `test.case.result.status` (`pass` / `fail`)
-- `cicd.pipeline.name`, `cicd.pipeline.run.id` when running in CI
+- **Test** (stability: *Development* — expect churn): `test.case.name` (spec id), `test.suite.name` (category), `test.case.result.status`, `test.suite.run.status`.
+- **CI/CD + VCS** (stability: *Release Candidate* — near-stable): `cicd.pipeline.name`, `cicd.pipeline.run.id`, `cicd.pipeline.run.url.full`, `cicd.pipeline.task.type`, `vcs.repository.url.full`, `vcs.ref.head.name`, `vcs.ref.head.revision`.
 
-These conventions are **experimental and will churn**. They are pinned to a stated version in one place and are additive — nothing in the harness reads them back, so churn cannot break a run. Our resource-lifecycle vocabulary (below) is ours; OTel has no convention for "engine cold start."
+**`test.case.result.status` admits only `pass` and `fail`.** The harness has a four-way verdict (`passed`, `failed`, `expected-failure`, `unexpected-pass`), so it carries its own value on `bsspec.verdict` and maps down to the two the convention allows. Emitting our richer vocabulary into the standard attribute would make us unreadable by the very backends we adopted OTel to satisfy.
+
+Conventions are pinned to a stated version in one place and are additive — nothing in the harness reads them back, so churn cannot break a run. Our resource-lifecycle vocabulary is ours; OTel has no convention for "engine cold start."
+
+### Span kind: CLIENT and SERVER, not INTERNAL
+
+An adapter command is a remote call: the parent writes it over the NDJSON wire and awaits a response; the child handles it. So the parent's `setup`/`action`/`getState`/`teardown` spans are **`CLIENT`** and the child's handler span is **`SERVER`**.
+
+This is not pedantry. Jaeger's dependency graph and Tempo's `servicegraph` processor derive edges **exclusively** from CLIENT→SERVER pairs. With `INTERNAL` on both sides there is **no edge at all** between `bs-spec` and `bs-engine-host` — precisely the picture this design exists to produce.
+
+For the same reason parent and child carry **different** `service.name` values (`bs-spec` and `bs-engine-host`): that is what makes them two nodes with an edge rather than one anonymous blob. Each worker additionally sets `service.instance.id`, without which per-worker attribution is unachievable in any backend.
 
 ### Trace context: env vs. protocol
 
 These carry different things, and conflating them collapses the trace:
 
-- **Child env** → `OTEL_EXPORTER_OTLP_ENDPOINT` (where to send). Optionally a `traceparent` for the host process's **own lifetime** span.
-- **Adapter protocol** → a **per-request `traceparent`**, alongside the existing `corrId`.
+- **Child env** → `OTEL_EXPORTER_OTLP_ENDPOINT` (where to send), `OTEL_RESOURCE_ATTRIBUTES` (worker identity).
+- **Adapter protocol** → a **per-request `traceparent`** (and `tracestate`), alongside the existing `corrId`.
 
 A single `bs-engine-host` serves *many* specs. An env-level `traceparent` would pin every one of them under one static parent, flattening hundreds of specs into a single trace. Per-spec correlation must ride the protocol.
 
-This makes the protocol change load-bearing, so it passes through `docs/protocol-schema.json` and `ProtocolSchemaDriftTests`. The field is **optional**: adapters that ignore it still work, exactly as with `corrId`.
+`tracestate` travels with `traceparent` because W3C requires a vendor that receives it to forward it — without it, a third-party adapter behind a vendor backend loses its vendor context, which is exactly the cross-language case this design is built for.
+
+This makes the protocol change load-bearing, so it passes through `docs/protocol-schema.json` and `ProtocolSchemaDriftTests`. Both fields are **optional**: adapters that ignore them still work, exactly as with `corrId`.
+
+> `OTEL_EXPORTER_OTLP_ENDPOINT` is a **base URL** — the SDK appends `v1/traces` / `v1/metrics` / `v1/logs`, which is why the receiver maps exactly those paths. This holds only when the endpoint arrives via the environment variable: OpenTelemetry .NET sets `AppendSignalPathToEndpoint = false` whenever `OtlpExporterOptions.Endpoint` is assigned programmatically.
 
 ## Instrumentation points
 

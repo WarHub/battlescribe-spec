@@ -15,7 +15,7 @@
 These bind **every** task. Violating any one of them fails the build or the review.
 
 - **TFM `net10.0`**, `Nullable=enable`, `ImplicitUsings=enable`, `TreatWarningsAsErrors=true`, `EnforceCodeStyleInBuild=true`, `AnalysisLevel=latest-recommended`, `GenerateDocumentationFile=true`. **An analyzer warning is a build error.** Public types need XML doc comments (CS1591 is suppressed, but style analyzers are not).
-- **`IsAotCompatible=true` is set on `src/BattleScribeSpec.Cli` and `src/BattleScribeSpec.TestKit`.** These two projects run the trim/AOT analyzers. **Any reflection-based code they call that is annotated `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` produces IL2026/IL3050 = build error.** `ActivitySource` and `Meter` are AOT-safe and may be used freely. The OpenTelemetry **SDK** is not — it must never be referenced from `Cli` or `TestKit`.
+- **`IsAotCompatible=true` is set on `src/BattleScribeSpec.Cli` and `src/BattleScribeSpec.TestKit`.** These two projects run the trim/AOT analyzers. **Any reflection-based code they call that is annotated `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` produces IL2026/IL3050 = build error.** `ActivitySource` and `Meter` are AOT-safe and may be used freely. The OpenTelemetry **SDK** is not — it must never be referenced from `Cli` or `TestKit`. It belongs in `BattleScribeSpec.Telemetry.Collector` (not AOT-marked) and in `bs-engine-host`, and is reached from `Cli` only through the non-annotated `HarnessCollector` facade.
 - **`bs-engine-host` (`src/BattleScribeSpec.EngineHost`) is NOT AOT-marked.** The OTel SDK + OTLP exporter go there.
 - **Central package management.** New packages require a `<PackageVersion>` entry in `Directory.Packages.props`, never a `Version=` on the `PackageReference`.
 - **`RestorePackagesWithLockFile=true`.** Any package change requires `dotnet restore --force-evaluate` to regenerate `packages.lock.json`, or CI restore fails.
@@ -46,7 +46,7 @@ This split is the whole point: the hot instrumentation path is AOT-safe and can 
 - `src/BattleScribeSpec.Telemetry.Collector/HarnessCollector.cs` — receiver + lifecycle
 - `src/BattleScribeSpec.Telemetry.Collector/OtlpArtifactWriter.cs` — length-delimited protobuf writer
 - `src/BattleScribeSpec.Telemetry.Collector/OtlpArtifactReader.cs` — reader for `compare`/summary
-- `src/BattleScribeSpec.Telemetry.Collector/LocalActivityExporter.cs` — bridges in-process `Activity` → the artifact (parent's own spans)
+- `src/BattleScribeSpec.Telemetry.Collector/ParentProviders.cs` — the parent's own OTel SDK TracerProvider/MeterProvider
 - `src/BattleScribeSpec.Cli/Commands/CompareCommand.cs` — `bs-spec compare`
 - `THIRD-PARTY-NOTICES.txt`
 - `docs/telemetry.md`
@@ -324,7 +324,7 @@ git commit -m "feat(telemetry): scaffold Telemetry + Telemetry.Collector project
   - `Activity? HarnessTelemetry.StartOp(string name, string? traceparent = null)`
   - `void HarnessTelemetry.SetVerdict(Activity? activity, string status)` — writes `test.case.result.status`
   - `string? HarnessTelemetry.CurrentTraceparent()` — W3C format of `Activity.Current`
-  - `ResourceMetrics.Acquired(string kind)` / `ResourceMetrics.Released(string kind)` — up-down counter `harness.resources.live`
+  - `ResourceMetrics.Acquired(string kind)` / `ResourceMetrics.Released(string kind)` — up-down counter `harness.resource.count`
   - `ResourceMetrics.RecordEngineStart(string kind, bool reused, double ms)` — histogram `harness.engine.start.duration`
 
 - [ ] **Step 1: Write the failing test**
@@ -354,13 +354,18 @@ public sealed class HarnessTelemetryTests
 
         using (var activity = HarnessTelemetry.StartSpec("entry/entry-basic", "entry", "roster"))
         {
-            HarnessTelemetry.SetVerdict(activity, "passed");
+            HarnessTelemetry.SetVerdict(activity, "expected-failure");
         }
 
         var span = Assert.Single(captured);
         Assert.Equal("entry/entry-basic", span.GetTagItem("test.case.name"));
         Assert.Equal("entry", span.GetTagItem("test.suite.name"));
-        Assert.Equal("passed", span.GetTagItem("test.case.result.status"));
+
+        // OTel's test.case.result.status admits ONLY "pass" and "fail". Our four-way verdict
+        // rides bsspec.verdict; emitting "expected-failure" into the standard attribute would
+        // make us unreadable by the backends we adopted OTel to satisfy.
+        Assert.Equal("pass", span.GetTagItem("test.case.result.status"));
+        Assert.Equal("expected-failure", span.GetTagItem("bsspec.verdict"));
     }
 
     [Fact]
@@ -436,15 +441,19 @@ public static class HarnessTelemetry
     /// <summary>Name of the harness meter.</summary>
     public const string MeterName = "BattleScribeSpec.Harness";
 
-    private static readonly ActivitySource Source = new(SourceName);
+    private static readonly ActivitySource Source = new(
+        SourceName,
+        typeof(HarnessTelemetry).Assembly.GetName().Version?.ToString());
 
     /// <summary>
-    /// Start the span for one spec execution, tagged with OpenTelemetry's (experimental) test
-    /// semantic conventions so off-the-shelf backends render conformance runs without an adapter.
+    /// Start the span for one spec execution, tagged with OpenTelemetry's test semantic
+    /// conventions (stability: Development) so off-the-shelf backends render conformance runs
+    /// without an adapter. The span is named for the spec so a trace list is readable — OTel
+    /// publishes no span-name convention for tests, so this is our choice, not a standard.
     /// </summary>
     public static Activity? StartSpec(string specId, string category, string domain)
     {
-        var activity = Source.StartActivity("spec", ActivityKind.Internal);
+        var activity = Source.StartActivity(specId, ActivityKind.Internal);
         activity?.SetTag("test.case.name", specId);
         activity?.SetTag("test.suite.name", category);
         activity?.SetTag("bsspec.domain", domain);
@@ -456,20 +465,40 @@ public static class HarnessTelemetry
     /// header the span is parented to it — this is how a child process nests its work under the
     /// parent's spec span.
     /// </summary>
-    public static Activity? StartOp(string name, string? traceparent = null)
+    /// <param name="kind">
+    /// An adapter command is a remote call, so the sending side passes <see cref="ActivityKind.Client"/>
+    /// and the handling side passes <see cref="ActivityKind.Server"/>. Jaeger's dependency graph and
+    /// Tempo's servicegraph processor derive edges EXCLUSIVELY from CLIENT→SERVER pairs; with
+    /// Internal on both sides there is no edge between bs-spec and bs-engine-host at all.
+    /// </param>
+    public static Activity? StartOp(
+        string name,
+        string? traceparent = null,
+        ActivityKind kind = ActivityKind.Internal,
+        string? tracestate = null)
     {
-        if (traceparent is not null && ActivityContext.TryParse(traceparent, null, out var parent))
+        if (traceparent is not null && ActivityContext.TryParse(traceparent, tracestate, out var parent))
         {
-            return Source.StartActivity(name, ActivityKind.Internal, parent);
+            return Source.StartActivity(name, kind, parent);
         }
 
-        return Source.StartActivity(name, ActivityKind.Internal);
+        return Source.StartActivity(name, kind);
     }
 
-    /// <summary>Record a spec's verdict ("passed", "failed", "expected-failure", "unexpected-pass").</summary>
+    /// <summary>
+    /// Record a spec's verdict: one of "passed", "failed", "expected-failure", "unexpected-pass".
+    /// </summary>
+    /// <remarks>
+    /// OTel's <c>test.case.result.status</c> admits ONLY the values <c>pass</c> and <c>fail</c>, so the
+    /// harness's four-way verdict lives on <c>bsspec.verdict</c> and is mapped down for the standard
+    /// attribute. Emitting our richer vocabulary into the convention would make conformance runs
+    /// unreadable to the backends we adopted OpenTelemetry in order to satisfy.
+    /// </remarks>
     public static void SetVerdict(Activity? activity, string status)
     {
-        activity?.SetTag("test.case.result.status", status);
+        activity?.SetTag("bsspec.verdict", status);
+        activity?.SetTag("test.case.result.status", status is "passed" or "expected-failure" ? "pass" : "fail");
+
         if (status is "failed" or "unexpected-pass")
         {
             activity?.SetStatus(ActivityStatusCode.Error);
@@ -500,7 +529,7 @@ namespace BattleScribeSpec.Telemetry;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <c>harness.resources.live</c> is the signal that makes the harness's unbounded parallelism
+/// <c>harness.resource.count</c> is the signal that makes the harness's unbounded parallelism
 /// visible. Three in-process browser-context pools and a JVM can currently be alive at once
 /// (xUnit's <c>maxParallelThreads</c> is unset, so collections run up to CPU-count wide) and
 /// nothing in the system reports it. A span cannot express "how many are alive right now" —
@@ -511,29 +540,44 @@ public static class ResourceMetrics
 {
     private static readonly Meter Meter = new(HarnessTelemetry.MeterName);
 
+    // OTel naming: UpDownCounter names SHOULD NOT be pluralized -> "resource.count", not
+    // "resources.live". The "{resource}" unit annotation is correct as a singular.
     private static readonly UpDownCounter<int> Live =
-        Meter.CreateUpDownCounter<int>("harness.resources.live", unit: "{resource}",
+        Meter.CreateUpDownCounter<int>("harness.resource.count", unit: "{resource}",
             description: "Expensive resources currently alive, by kind.");
 
+    // OTel: "When instruments are measuring durations, seconds (i.e. `s`) SHOULD be used."
+    // The SDK's default explicit buckets ([0,5,10,25,...,10000]) are millisecond-tuned, so a
+    // seconds-valued histogram would land EVERY engine start in a single bucket and make p50/p95
+    // meaningless. Supply boundaries fitted to what we actually observe: ~1.6s for a Chromium
+    // relaunch, considerably more for a JVM + JavaFX cold start.
     private static readonly Histogram<double> EngineStart =
-        Meter.CreateHistogram<double>("harness.engine.start.duration", unit: "ms",
-            description: "Engine acquisition cost, split by whether it was a cold start or a warm reuse.");
+        Meter.CreateHistogram<double>(
+            "harness.engine.start.duration",
+            unit: "s",
+            description: "Engine acquisition cost, split by whether it was a cold start or a warm reuse.",
+            advice: new InstrumentAdvice<double>
+            {
+                HistogramBucketBoundaries = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+            });
 
     /// <summary>Record that a resource of <paramref name="kind"/> became alive (e.g. "jvm", "browser", "browser-context", "adapter-process").</summary>
-    public static void Acquired(string kind) => Live.Add(1, new KeyValuePair<string, object?>("kind", kind));
+    public static void Acquired(string kind) =>
+        Live.Add(1, new KeyValuePair<string, object?>("harness.resource.kind", kind));
 
     /// <summary>Record that a resource of <paramref name="kind"/> was released.</summary>
-    public static void Released(string kind) => Live.Add(-1, new KeyValuePair<string, object?>("kind", kind));
+    public static void Released(string kind) =>
+        Live.Add(-1, new KeyValuePair<string, object?>("harness.resource.kind", kind));
 
     /// <summary>
-    /// Record what an engine cost to obtain. <paramref name="reused"/> distinguishes a warm reuse
-    /// from a cold start — this is the warm-reuse question, asked continuously rather than by a
-    /// one-off benchmark script.
+    /// Record what an engine cost to obtain, in <b>seconds</b>. <paramref name="reused"/> distinguishes
+    /// a warm reuse from a cold start — this is the warm-reuse question, asked continuously rather
+    /// than by a one-off benchmark script.
     /// </summary>
-    public static void RecordEngineStart(string kind, bool reused, double ms) =>
-        EngineStart.Record(ms,
-            new KeyValuePair<string, object?>("kind", kind),
-            new KeyValuePair<string, object?>("reused", reused));
+    public static void RecordEngineStart(string kind, bool reused, double seconds) =>
+        EngineStart.Record(seconds,
+            new KeyValuePair<string, object?>("harness.resource.kind", kind),
+            new KeyValuePair<string, object?>("harness.engine.reused", reused));
 }
 ```
 
@@ -1102,9 +1146,23 @@ In `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs`, on `ProtocolComm
     [JsonPropertyName("traceparent")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Traceparent { get; set; }
+
+    /// <summary>
+    /// Optional W3C <c>tracestate</c>, the companion of <see cref="Traceparent"/>.
+    /// </summary>
+    /// <remarks>
+    /// W3C requires a vendor that receives <c>tracestate</c> to forward it on outgoing requests.
+    /// Without it, a third-party adapter sitting behind a vendor backend loses its vendor context —
+    /// which is precisely the cross-language case this field exists to serve. Together the two
+    /// fields form a W3C trace-context carrier, so an adapter in any language can feed them
+    /// straight into its stock propagator.
+    /// </remarks>
+    [JsonPropertyName("tracestate")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Tracestate { get; set; }
 ```
 
-Do **not** add it to `ProtocolResponse` — the trace flows one way.
+Do **not** add either to `ProtocolResponse` — the trace flows one way.
 
 - [ ] **Step 4: Stamp it on outgoing commands**
 
@@ -1113,12 +1171,21 @@ In `NdjsonLineConnection.SendCommandAsync` (`AdapterProcess.cs:141`), next to th
 ```csharp
         var corrId = Interlocked.Increment(ref _nextId);
         command.CorrId = corrId;
+
+        // The sending side of a remote call is a CLIENT span. Jaeger's dependency graph and Tempo's
+        // servicegraph processor derive edges EXCLUSIVELY from CLIENT->SERVER pairs — with Internal
+        // on both sides there is no bs-spec -> bs-engine-host edge at all.
+        using var activity = HarnessTelemetry.StartOp(command.Type, kind: ActivityKind.Client);
+
         command.Traceparent ??= HarnessTelemetry.CurrentTraceparent();
+        command.Tracestate ??= Activity.Current?.TraceStateString;
 ```
 
 `??=` so an explicit caller-supplied value always wins. When nothing is listening, `CurrentTraceparent()` is null and the field is omitted — zero wire cost for untraced runs.
 
-Add `using BattleScribeSpec.Telemetry;` to the file.
+Add `using System.Diagnostics;` and `using BattleScribeSpec.Telemetry;` to the file.
+
+> **Watch this trap.** `StartActivity` returns **null when no listener is attached**, so `Activity.Current?.Id` is null and **the traceparent is silently never sent** — the child's spans then become orphan roots instead of nesting. The `ActivityListener` must therefore be attached *unconditionally* (sampling-only), independent of whether the collector managed to bind a port. Otherwise the fail-open path produces a trace that looks fine in the propagation test and is broken in production.
 
 - [ ] **Step 5: Consume it in the adapter**
 
@@ -1127,33 +1194,34 @@ In `src/BattleScribeSpec.TestKit/Protocol/AdapterHandler.cs`, wrap the dispatch.
 ```csharp
                     var command = ProtocolSerializer.DeserializeCommand(line);
                     commandCorrId = command?.CorrId;
+
+                    // SERVER: the handling side of a remote call. Pairs with the parent's CLIENT span
+                    // to form the one edge a service graph can actually draw.
                     using var activity = command is null
                         ? null
-                        : HarnessTelemetry.StartOp(CommandSpanName(command), command.Traceparent);
+                        : HarnessTelemetry.StartOp(
+                            command.Type,
+                            command.Traceparent,
+                            ActivityKind.Server,
+                            command.Tracestate);
                     response = command switch
                     {
 ```
 
-and add the helper next to `ComputeStatus`'s neighbours in the same file:
-
-```csharp
-    /// <summary>Span name for a command — the wire discriminator, so traces read like the protocol.</summary>
-    private static string CommandSpanName(ProtocolCommand command) => command.Type;
-```
-
-Add `using BattleScribeSpec.Telemetry;`.
+Add `using System.Diagnostics;` and `using BattleScribeSpec.Telemetry;`.
 
 > `ProtocolCommand.Type` is the `[JsonIgnore]` discriminator (`"setup"`, `"action"`, `"getState"`, `"teardown"`, …), so span names match the protocol vocabulary exactly.
 
 - [ ] **Step 6: Update `docs/protocol-schema.json`**
 
-Add this property to **each of the 15 command `$defs`** (they all have `"additionalProperties": false`, so a missing entry fails validation), right after the existing `corrId` line:
+Add **both** properties to **each of the 15 command `$defs`** (they all have `"additionalProperties": false`, so a missing entry fails validation), right after the existing `corrId` line:
 
 ```json
 "traceparent": { "type": "string", "description": "Optional W3C trace-context header (protocol v1.1+). Lets the adapter parent its spans under the client's span. Per-request, not per-process: one adapter process serves many specs." },
+"tracestate": { "type": "string", "description": "Optional W3C tracestate, companion to traceparent. Together they form a trace-context carrier an adapter can feed to its stock propagator." },
 ```
 
-The command `$defs` are the 15 entries listed under `$defs/command/oneOf`. Do **not** add it to the 12 response `$defs`.
+The command `$defs` are the 15 entries listed under `$defs/command/oneOf`. Do **not** add them to the 12 response `$defs`.
 
 - [ ] **Step 7: Run the drift test — it gates this change**
 
@@ -1190,7 +1258,7 @@ git commit -m "feat(protocol): per-request traceparent for cross-process span ne
 **Files:**
 - Create: `src/BattleScribeSpec.Telemetry.Collector/HarnessCollector.cs`
 - Create: `src/BattleScribeSpec.Telemetry.Collector/OtlpArtifactWriter.cs`
-- Create: `src/BattleScribeSpec.Telemetry.Collector/LocalActivityExporter.cs`
+- Create: `src/BattleScribeSpec.Telemetry.Collector/ParentProviders.cs`
 - Test: `tests/Features/TelemetryCollectorTests.cs`
 
 **Interfaces:**
@@ -1482,12 +1550,20 @@ public sealed class HarnessCollector : IAsyncDisposable
         Enabled
             ? new Dictionary<string, string>
             {
+                // A BASE url — the SDK appends v1/traces, v1/metrics, v1/logs, which is exactly what
+                // the receiver maps. (This append only happens for the env var; assigning
+                // OtlpExporterOptions.Endpoint in code disables it.)
                 ["OTEL_EXPORTER_OTLP_ENDPOINT"] = Endpoint,
                 ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf",
+                // Different service.name from the parent's "bs-spec" ON PURPOSE: that is what makes
+                // them two nodes with an edge in a service graph rather than one anonymous blob.
                 ["OTEL_SERVICE_NAME"] = "bs-engine-host",
                 // Short batch delay: a hard-killed child (the BattleScribe JVM can take its process
                 // down) loses whatever is still buffered, so keep the window small.
                 ["OTEL_BSP_SCHEDULE_DELAY"] = "500",
+                // Metrics default to a 60s export interval — a short-lived host would emit nothing
+                // at all, and a killed one certainly wouldn't.
+                ["OTEL_METRIC_EXPORT_INTERVAL"] = "1000",
                 ["OTEL_TRACES_SAMPLER"] = "always_on",
             }
             : new Dictionary<string, string>();
@@ -1525,25 +1601,32 @@ public sealed class HarnessCollector : IAsyncDisposable
 
         var endpoint = app.Urls.First(u => u.StartsWith("http://", StringComparison.Ordinal));
 
-        // The parent's OWN spans never leave the process, so bridge them straight into the artifact.
-        var listener = LocalActivityExporter.Attach(writer);
+        // The parent's own spans and metrics must reach the artifact too. Use the STOCK SDK,
+        // pointed at our own loopback receiver — see Step 5 for why hand-rolling this was a mistake.
+        var providers = ParentProviders.Attach(endpoint, serviceName: "bs-spec");
 
-        return new HarnessCollector(app, writer, listener, endpoint);
+        return new HarnessCollector(app, writer, providers, endpoint);
     }
 
     private static void MapOtlp(WebApplication app, OtlpArtifactWriter writer)
     {
-        app.MapPost("/v1/traces", (HttpContext ctx) =>
-            ReceiveAsync(ctx, body => writer.WriteAsync(ExportTraceServiceRequest.Parser.ParseFrom(body))));
+        app.MapPost("/v1/traces", (HttpContext ctx) => ReceiveAsync(
+            ctx,
+            body => writer.WriteAsync(ExportTraceServiceRequest.Parser.ParseFrom(body)),
+            new ExportTraceServiceResponse()));
 
-        app.MapPost("/v1/metrics", (HttpContext ctx) =>
-            ReceiveAsync(ctx, body => writer.WriteAsync(ExportMetricsServiceRequest.Parser.ParseFrom(body))));
+        app.MapPost("/v1/metrics", (HttpContext ctx) => ReceiveAsync(
+            ctx,
+            body => writer.WriteAsync(ExportMetricsServiceRequest.Parser.ParseFrom(body)),
+            new ExportMetricsServiceResponse()));
 
-        app.MapPost("/v1/logs", (HttpContext ctx) =>
-            ReceiveAsync(ctx, body => writer.WriteAsync(ExportLogsServiceRequest.Parser.ParseFrom(body))));
+        app.MapPost("/v1/logs", (HttpContext ctx) => ReceiveAsync(
+            ctx,
+            body => writer.WriteAsync(ExportLogsServiceRequest.Parser.ParseFrom(body)),
+            new ExportLogsServiceResponse()));
     }
 
-    private static async Task<IResult> ReceiveAsync(HttpContext ctx, Func<Stream, Task> parse)
+    private static async Task<IResult> ReceiveAsync(HttpContext ctx, Func<Stream, Task> parse, IMessage success)
     {
         var contentType = ctx.Request.ContentType ?? "";
         if (!contentType.StartsWith("application/x-protobuf", StringComparison.OrdinalIgnoreCase))
@@ -1561,7 +1644,15 @@ public sealed class HarnessCollector : IAsyncDisposable
             return Results.BadRequest(ex.Message);
         }
 
-        return Results.Ok();
+        // OTLP: "On success ... the response body MUST be a Protobuf-encoded
+        // Export<signal>ServiceResponse message" and "the server MUST use the same 'Content-Type'
+        // in the response as it received". partial_success stays unset on success.
+        //
+        // An empty 200 would appear to work: OpenTelemetry .NET never deserializes the response
+        // body, so every test here and every .NET child would be perfectly happy — while Python
+        // and JS SDKs log deserialization errors. A receiver that is compliant only for the one
+        // language we happen to use defeats the entire reason we chose OTLP.
+        return Results.Bytes(success.ToByteArray(), "application/x-protobuf");
     }
 
     /// <inheritdoc />
@@ -1583,77 +1674,92 @@ public sealed class HarnessCollector : IAsyncDisposable
 }
 ```
 
-- [ ] **Step 5: Bridge the parent's own spans**
+- [ ] **Step 5: Export the parent's own spans and metrics with the STOCK SDK**
 
-The parent's `Activity` objects never travel over HTTP — they are in-process. Create `src/BattleScribeSpec.Telemetry.Collector/LocalActivityExporter.cs` with an `ActivityListener` that subscribes to `HarnessTelemetry.SourceName`, converts each stopped `Activity` into an OTLP `Span`, and hands it to the writer:
+The parent's `Activity` and `Meter` data never travels over HTTP — it is in-process. It still has to reach the artifact.
+
+**Do not hand-roll an `Activity` → protobuf converter.** An earlier draft of this plan did, reasoning that the OTel SDK is AOT-hostile. That is true of `Cli` and `TestKit` — and **false of this project**, which is deliberately not AOT-marked and is already referenced by `Cli`. The bespoke exporter was quietly broken in five ways:
+
+- `Activity.Tags` yields **only `string`-valued tags**, so `SetTag("bsspec.workers", 4)` (an `int`) would never have reached the artifact.
+- Span **status** was dropped — `SetVerdict` calls `SetStatus(Error)`, so **failed specs would have rendered green**.
+- Span **kind** was dropped, silently undoing the CLIENT/SERVER work that makes service graphs render.
+- Span **events** were dropped.
+- The `Resource` was left empty — no `service.name`, which Jaeger keys everything on.
+
+The SDK gets all five right. Add to `Directory.Packages.props` and reference from **`.Collector` only**:
+
+```xml
+    <PackageVersion Include="OpenTelemetry" Version="1.13.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.13.1" />
+```
+
+Create `src/BattleScribeSpec.Telemetry.Collector/ParentProviders.cs`:
 
 ```csharp
-using System.Diagnostics;
-using Google.Protobuf;
-using OpenTelemetry.Proto.Collector.Trace.V1;
-using OpenTelemetry.Proto.Common.V1;
-using OpenTelemetry.Proto.Trace.V1;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 namespace BattleScribeSpec.Telemetry.Collector;
 
 /// <summary>
-/// Bridges the parent process's own <see cref="Activity"/> spans into the run artifact. Child
-/// processes reach the artifact over OTLP/HTTP; the parent's spans never leave the process, so
-/// they need this direct path.
+/// The parent process's own OpenTelemetry providers, exporting over OTLP to <paramref name="endpoint"/>
+/// — normally our own loopback receiver, or the user's collector when they set
+/// <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> themselves.
 /// </summary>
-internal static class LocalActivityExporter
+/// <remarks>
+/// The parent's <c>service.name</c> is <c>bs-spec</c> and the child's is <c>bs-engine-host</c>.
+/// Different names on purpose: that is what makes them two nodes with an edge between them in a
+/// service graph, rather than one anonymous blob.
+/// </remarks>
+internal sealed class ParentProviders : IDisposable
 {
-    public static ActivityListener Attach(OtlpArtifactWriter writer)
-    {
-        var listener = new ActivityListener
-        {
-            ShouldListenTo = source => source.Name == HarnessTelemetry.SourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = activity => writer.WriteAsync(ToRequest(activity)).GetAwaiter().GetResult(),
-        };
+    private readonly TracerProvider _tracer;
+    private readonly MeterProvider _meter;
 
-        ActivitySource.AddActivityListener(listener);
-        return listener;
+    private ParentProviders(TracerProvider tracer, MeterProvider meter)
+    {
+        _tracer = tracer;
+        _meter = meter;
     }
 
-    private static ExportTraceServiceRequest ToRequest(Activity activity)
+    public static ParentProviders Attach(string endpoint, string serviceName)
     {
-        var span = new Span
-        {
-            Name = activity.OperationName,
-            TraceId = ByteString.CopyFrom(activity.TraceId.ToByteArray()),
-            SpanId = ByteString.CopyFrom(activity.SpanId.ToByteArray()),
-            StartTimeUnixNano = ToUnixNano(activity.StartTimeUtc),
-            EndTimeUnixNano = ToUnixNano(activity.StartTimeUtc + activity.Duration),
-        };
+        var resource = ResourceBuilder.CreateDefault().AddService(serviceName);
 
-        if (activity.ParentSpanId != default)
-        {
-            span.ParentSpanId = ByteString.CopyFrom(activity.ParentSpanId.ToByteArray());
-        }
+        var tracer = Sdk.CreateTracerProviderBuilder()
+            .AddSource(HarnessTelemetry.SourceName)
+            .SetResourceBuilder(resource)
+            .SetSampler(new AlwaysOnSampler())
+            .AddOtlpExporter(o => o.Endpoint = new Uri($"{endpoint}/v1/traces"))
+            .Build();
 
-        foreach (var (key, value) in activity.Tags)
-        {
-            span.Attributes.Add(new KeyValue
-            {
-                Key = key,
-                Value = new AnyValue { StringValue = value ?? "" },
-            });
-        }
+        var meter = Sdk.CreateMeterProviderBuilder()
+            .AddMeter(HarnessTelemetry.MeterName)
+            .SetResourceBuilder(resource)
+            .AddOtlpExporter(o => o.Endpoint = new Uri($"{endpoint}/v1/metrics"))
+            .Build();
 
-        var scopeSpans = new ScopeSpans();
-        scopeSpans.Spans.Add(span);
-        var resourceSpans = new ResourceSpans();
-        resourceSpans.ScopeSpans.Add(scopeSpans);
-        var request = new ExportTraceServiceRequest();
-        request.ResourceSpans.Add(resourceSpans);
-        return request;
+        return new ParentProviders(tracer, meter);
     }
 
-    private static ulong ToUnixNano(DateTime utc) =>
-        (ulong)(utc - DateTime.UnixEpoch).Ticks * 100UL;
+    /// <summary>Flush and shut down. Disposal order matters: providers first, then the receiver.</summary>
+    public void Dispose()
+    {
+        _tracer.ForceFlush();
+        _meter.ForceFlush();
+        _tracer.Dispose();
+        _meter.Dispose();
+    }
 }
 ```
+
+> **Note the explicit `/v1/traces` path.** OpenTelemetry .NET only appends the signal path when the endpoint arrives via the *environment variable*; assigning `OtlpExporterOptions.Endpoint` programmatically sets `AppendSignalPathToEndpoint = false`, so the full path must be given. Getting this wrong sends everything to `/` and the receiver 404s — silently, because export is fail-open.
+
+Update `HarnessCollector`'s field and `DisposeAsync` accordingly: hold a `ParentProviders?` instead of an `ActivityListener?`, and dispose it **before** stopping the web app, so the final flush has somewhere to land.
+
+This step also resolves the parent-metrics gap: without a `MeterProvider`, `harness.resource.count` — which the spec calls the single most important thing the telemetry must make visible — would have been emitted into the void, and Tasks 9 and 11 could not have been completed at all.
 
 - [ ] **Step 6: Run the tests — they must pass**
 
@@ -1685,29 +1791,24 @@ git commit -m "feat(telemetry): OTLP/HTTP receiver on loopback + protobuf run ar
 **Interfaces:**
 - Consumes: `HarnessCollector.StartAsync`, `.ChildEnvironment` (Task 6); `AdapterProcess` env (Task 4); `traceparent` (Task 5).
 
-- [ ] **Step 1: Add the OTel SDK packages (child side only)**
+- [ ] **Step 1: Reference the OTel SDK from the engine host**
 
-In `Directory.Packages.props`:
-
-```xml
-    <PackageVersion Include="OpenTelemetry" Version="1.13.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.13.1" />
-```
-
-In `src/BattleScribeSpec.EngineHost/BattleScribeSpec.EngineHost.csproj`:
+`OpenTelemetry` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` already have `PackageVersion` entries (added in Task 6 Step 5). Reference them from `src/BattleScribeSpec.EngineHost/BattleScribeSpec.EngineHost.csproj`, and add the runtime instrumentation that Spec 2 needs:
 
 ```xml
     <PackageReference Include="OpenTelemetry" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+    <ProjectReference Include="..\BattleScribeSpec.Telemetry\BattleScribeSpec.Telemetry.csproj" />
 ```
 
-**Never add these to `Cli` or `TestKit`** — both are `IsAotCompatible=true` and the SDK's reflection would become a build error there.
+with `<PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.13.0" />` in `Directory.Packages.props`.
 
-Then:
+**Never add any of these to `Cli` or `TestKit`** — both are `IsAotCompatible=true` and the SDK's reflection becomes a build error there. `.Collector` and `EngineHost` are the only homes.
 
-```bash
-dotnet restore --force-evaluate
-```
+> Runtime instrumentation (CPU, GC, thread pool) is not decoration: *"are we actually CPU-saturated at N workers, or merely I/O-blocked?"* is the question **Spec 2's auto-tuner** must answer, and it is a free OTel metric. `OpenTelemetry.Instrumentation.Process` would add more, but it is pre-release — skip it; the runtime package answers the saturation question on its own.
+
+Then `dotnet restore --force-evaluate`.
 
 - [ ] **Step 2: Initialize the SDK in the host, but only when the parent asked for it**
 
@@ -1715,30 +1816,36 @@ In `src/BattleScribeSpec.EngineHost/Program.cs`, before the command dispatch:
 
 ```csharp
 using OpenTelemetry;
-using OpenTelemetry.Resources;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using BattleScribeSpec.Telemetry;
 
-// The parent injects OTEL_EXPORTER_OTLP_ENDPOINT when it is collecting. Absent → no exporter, no
-// cost. The SDK reads the endpoint, protocol and batch settings from the standard OTEL_* env vars
-// the parent set, so there is no bespoke configuration here — which is exactly what lets a
-// third-party adapter in any language do the same thing with its own stock SDK.
-using var tracerProvider = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") is { Length: > 0 }
+// The parent injects OTEL_EXPORTER_OTLP_ENDPOINT when it is collecting. Absent -> no exporter, no
+// cost. Everything else (protocol, service name, resource attributes, batch delay, sampler) is read
+// by the SDK from the standard OTEL_* env vars the parent set. There is deliberately NO bespoke
+// configuration here: a third-party adapter in any language must be able to do exactly this with
+// its own stock SDK, so our own host is held to the same contract.
+var collecting = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") is { Length: > 0 };
+
+using var tracerProvider = collecting
     ? Sdk.CreateTracerProviderBuilder()
         .AddSource(HarnessTelemetry.SourceName)
-        .ConfigureResource(r => r.AddService("bs-engine-host"))
+        .AddOtlpExporter()
+        .Build()
+    : null;
+
+using var meterProvider = collecting
+    ? Sdk.CreateMeterProviderBuilder()
+        .AddMeter(HarnessTelemetry.MeterName)
+        .AddRuntimeInstrumentation()
         .AddOtlpExporter()
         .Build()
     : null;
 ```
 
-`using var` guarantees a flush on normal exit. A hard kill still loses the in-flight batch — that is the accepted limitation in the spec, and it is tolerable because the spans that *prove* a death (`setup`/`action`/`teardown`, process exit) are emitted parent-side.
+Note there is **no `ConfigureResource(...AddService(...))`** call: `AddService` would *override* the `OTEL_SERVICE_NAME` the parent set, and relying on the env var is exactly what a third-party adapter would do. Keeping our own host on the same path keeps us honest about the contract we advertise.
 
-Add the project reference to `src/BattleScribeSpec.EngineHost/BattleScribeSpec.EngineHost.csproj`:
-
-```xml
-    <ProjectReference Include="..\BattleScribeSpec.Telemetry\BattleScribeSpec.Telemetry.csproj" />
-```
+`using var` guarantees a flush on normal exit. A hard kill still loses the in-flight batch — the accepted limitation in the spec, tolerable because the spans that *prove* a death (`setup`/`action`/`teardown`, process exit) are emitted parent-side.
 
 - [ ] **Step 3: Start the collector in the batch runner**
 
@@ -1759,9 +1866,14 @@ and merge the collector env into the adapter factory from Task 4:
 ```csharp
                     AdapterFactory = workerIndex =>
                     {
+                        var index = workerIndex.ToString(CultureInfo.InvariantCulture);
                         var env = new Dictionary<string, string>(collector.ChildEnvironment)
                         {
-                            ["BSSPEC_WORKER_INDEX"] = workerIndex.ToString(CultureInfo.InvariantCulture),
+                            ["BSSPEC_WORKER_INDEX"] = index,
+                            // Without a per-worker service.instance.id, all N workers collapse into one
+                            // resource in any backend and question 4 ("which worker ran this spec?")
+                            // stays unanswerable — which is the whole point of attribution.
+                            ["OTEL_RESOURCE_ATTRIBUTES"] = $"service.instance.id={index}",
                         };
                         return selection.StartProcess(env);
                     },
@@ -1785,62 +1897,55 @@ Add the project reference in `src/BattleScribeSpec.Cli/BattleScribeSpec.Cli.cspr
 
 Two additions to `HarnessCollector`.
 
-**(a) Never hijack a user's own collector.** If `OTEL_EXPORTER_OTLP_ENDPOINT` is *already* set in the parent's environment, the user is pointing the harness at their own Jaeger/Tempo/collector. Honor it: pass that endpoint through to children unchanged instead of overwriting it with our loopback receiver, and skip binding a port. Add to `HarnessCollector.StartAsync`, before binding:
+**(a) Never hijack a user's own collector — and never stop exporting the parent's spans.** If `OTEL_EXPORTER_OTLP_ENDPOINT` is already set in the parent's environment, the user is pointing the harness at their own Jaeger/Tempo. Honor it: skip binding a port, pass that endpoint to children unchanged — **and still stand up the parent's own `ParentProviders` against it.**
 
 ```csharp
-        // An externally-set endpoint means the user is pointing us at their own collector.
-        // This is the ONE environment variable the harness honors rather than owns, precisely
-        // because it is an industry standard rather than a bespoke dial of ours.
+        // An externally-set endpoint means the user is pointing us at their own collector. This is
+        // the ONE environment variable the harness honors rather than owns, because it is an
+        // industry standard rather than a bespoke dial of ours.
         if (Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") is { Length: > 0 } external)
         {
-            return new HarnessCollector(app: null, writer: null, listener: null, endpoint: external);
+            // The parent MUST still export. Its spans are the ones carrying test.* and cicd.* —
+            // drop them and the user sees engine-host protocol spans with no test context at all,
+            // which would make the design's headline claim ("point it at Jaeger and it just works")
+            // simply false. No local artifact in this mode: their collector owns the data.
+            var external Providers = ParentProviders.Attach(external, serviceName: "bs-spec");
+            return new HarnessCollector(app: null, writer: null, externalProviders, endpoint: external);
         }
 ```
 
-and make `ChildEnvironment` return the endpoint dictionary whenever `Endpoint` is non-empty (not only when `_app is not null`). Adjust `Enabled` accordingly: it means "telemetry is flowing", which is true in both the self-hosted and external cases. State clearly in your report how you distinguished "self-hosted" from "external" internally.
+(Fix the typo when you write it — `externalProviders`, one identifier.)
 
-**(b) CI semantic conventions.** On the `run` span, add OTel's (experimental) CI/CD attributes when the standard GitHub Actions env vars are present, so a CI run is identifiable in any OTLP backend without a custom adapter:
+Make `ChildEnvironment` return the endpoint dictionary whenever `Endpoint` is non-empty, not only when the receiver is self-hosted, and let `Enabled` mean "telemetry is flowing" — true in both the self-hosted and external cases. State in your report how you distinguished the two internally.
+
+**(b) CI/CD and VCS semantic conventions.** On the `run` span, when the standard GitHub Actions env vars are present:
 
 ```csharp
         if (Environment.GetEnvironmentVariable("GITHUB_WORKFLOW") is { Length: > 0 } workflow)
         {
+            var server = Environment.GetEnvironmentVariable("GITHUB_SERVER_URL");
+            var repo = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY");
+            var runId = Environment.GetEnvironmentVariable("GITHUB_RUN_ID");
+
             runSpan?.SetTag("cicd.pipeline.name", workflow);
-            runSpan?.SetTag("cicd.pipeline.run.id", Environment.GetEnvironmentVariable("GITHUB_RUN_ID"));
+            runSpan?.SetTag("cicd.pipeline.run.id", runId);
+            runSpan?.SetTag("cicd.pipeline.run.url.full", $"{server}/{repo}/actions/runs/{runId}");
+            runSpan?.SetTag("cicd.pipeline.task.type", "test");
+            runSpan?.SetTag("vcs.repository.url.full", $"{server}/{repo}");
+            runSpan?.SetTag("vcs.ref.head.name", Environment.GetEnvironmentVariable("GITHUB_REF_NAME"));
+            runSpan?.SetTag("vcs.ref.head.revision", Environment.GetEnvironmentVariable("GITHUB_SHA"));
         }
 ```
 
-> These conventions are experimental and will churn. They are additive and nothing reads them back, so churn cannot break a run — but keep them in this one place so a convention bump is a single edit.
-
-- [ ] **Step 5: Take the stock runtime and process metrics**
-
-These are the saturation signal Spec 2's auto-tuning depends on: *"are we actually CPU-bound at N workers, or merely I/O-blocked?"* is unanswerable today, and it is a free OTel metric.
-
-Add to `Directory.Packages.props`:
-
-```xml
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.13.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Process" Version="1.13.0-beta.1" />
-```
-
-Reference them from `src/BattleScribeSpec.EngineHost` **only** (never `Cli`/`TestKit` — AOT), and add to the child's meter provider in `Program.cs`:
+and after the suite completes, the run-level status:
 
 ```csharp
-using var meterProvider = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") is { Length: > 0 }
-    ? Sdk.CreateMeterProviderBuilder()
-        .AddMeter(HarnessTelemetry.MeterName)
-        .AddRuntimeInstrumentation()
-        .AddProcessInstrumentation()
-        .ConfigureResource(r => r.AddService("bs-engine-host"))
-        .AddOtlpExporter()
-        .Build()
-    : null;
+        runSpan?.SetTag("test.suite.run.status", result.Failed > 0 ? "failure" : "success");
 ```
 
-Then `dotnet restore --force-evaluate`.
+> Stability differs and it is worth knowing which: `cicd.*` and `vcs.*` are **Release Candidate** (near-stable); `test.*` is **Development** (expect churn). All are additive and nothing reads them back, so churn cannot break a run — but keep them in this one place so a convention bump is a single edit.
 
-> If `OpenTelemetry.Instrumentation.Process` is still pre-release and the repo forbids pre-release packages, **drop it and keep `Runtime`** — CPU/GC/thread-pool from the runtime package is enough to answer the saturation question. Say which you did in your report; do not silently ship a pre-release dependency.
-
-- [ ] **Step 6: Verify the AOT analyzer is still quiet**
+- [ ] **Step 5: Verify the AOT analyzer is still quiet**
 
 ```bash
 dotnet build src/BattleScribeSpec.Cli/BattleScribeSpec.Cli.csproj
@@ -1848,11 +1953,11 @@ dotnet build src/BattleScribeSpec.Cli/BattleScribeSpec.Cli.csproj
 
 Expected: **0 warnings.** `Cli` now references `.Collector` (which is not AOT-clean), so this is the moment the boundary is actually tested. If `IL2026`/`IL3050` appear, the offending call must be moved behind a non-annotated facade method on `HarnessCollector` — **do not add a suppression**.
 
-- [ ] **Step 7: Write the end-to-end test**
+- [ ] **Step 6: Write the end-to-end test**
 
 Create `tests/Features/EndToEndTraceTests.cs` asserting the full chain: run a batch against the reference adapter with the collector on, then read the artifact and assert (a) `spec` spans exist, (b) at least one span was produced **by the child process** (its resource has `service.name = bs-engine-host`), and (c) that child span's `parent_span_id` is non-zero and matches a parent-side span id. **(c) is the property the whole design rests on** — it is the proof that `traceparent` really nests a foreign process's spans under ours.
 
-- [ ] **Step 8: Run it**
+- [ ] **Step 7: Run it**
 
 ```bash
 dotnet build && dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FullyQualifiedName~EndToEndTraceTests"
@@ -1860,7 +1965,7 @@ dotnet build && dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FullyQ
 
 Expected: **passing.** If child spans are missing, check that `bs-engine-host` actually saw `OTEL_EXPORTER_OTLP_ENDPOINT` — `AdapterProcess.BuildStartInfo` must be applying the dictionary.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add -A
@@ -1884,7 +1989,7 @@ Make cold-start-vs-reuse and live-resource counts real, in the four places expen
 
 - [ ] **Step 1: Write the failing test**
 
-Use `MeterListener` to assert that running two specs on a warm-reuse engine produces exactly **one** `reused: false` and one `reused: true` observation on `harness.engine.start.duration`, and that `harness.resources.live` returns to zero after teardown. Prefer the in-process reference adapter so the test is fast and hermetic.
+Use `MeterListener` to assert that running two specs on a warm-reuse engine produces exactly **one** `reused: false` and one `reused: true` observation on `harness.engine.start.duration`, and that `harness.resource.count` returns to zero after teardown. Prefer the in-process reference adapter so the test is fast and hermetic.
 
 - [ ] **Step 2: Run it to confirm it fails**
 
@@ -1903,7 +2008,8 @@ In `HandleSetup` (`AdapterHandler.cs:158`), the reuse decision already exists (`
         var reused = engine is not null && reuseEngine;
         // ... existing acquisition logic, unchanged ...
         sw.Stop();
-        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalMilliseconds);
+        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
+        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalSeconds);
 ```
 
 Mirror it in `HandleGameDataSetup` with kind `"gamedata-engine"`.
@@ -1936,7 +2042,7 @@ git commit -m "feat(telemetry): engine cold-start/reuse + live-resource metrics 
 
 ### Task 9: The xUnit path — telemetry where the unbounded parallelism actually lives
 
-The CLI path is now instrumented. The **xUnit path is not**, and that is where the real problem is: `parallelizeTestCollections: true` with `maxParallelThreads` unset means the 11 collection fixtures can bring up multiple browser-context pools *and* the JVM concurrently, with nothing bounding the product. Task 8's `harness.resources.live` counter can prove it — but only if something hosts a collector inside `dotnet test`.
+The CLI path is now instrumented. The **xUnit path is not**, and that is where the real problem is: `parallelizeTestCollections: true` with `maxParallelThreads` unset means the 11 collection fixtures can bring up multiple browser-context pools *and* the JVM concurrently, with nothing bounding the product. Task 8's `harness.resource.count` counter can prove it — but only if something hosts a collector inside `dotnet test`.
 
 **Files:**
 - Create: `tests/Infrastructure/TelemetryAssemblyFixture.cs`
@@ -1946,7 +2052,7 @@ The CLI path is now instrumented. The **xUnit path is not**, and that is where t
 
 - [ ] **Step 1: Write the failing test**
 
-Assert that a `dotnet test` run emits a `harness.resources.live` series, and that the peak value is recorded. The test's real job is to make the number *exist*; asserting a specific bound is Spec 2's business, not this one's.
+Assert that a `dotnet test` run emits a `harness.resource.count` series, and that the peak value is recorded. The test's real job is to make the number *exist*; asserting a specific bound is Spec 2's business, not this one's.
 
 - [ ] **Step 2: Add an assembly-level collector**
 
@@ -1964,7 +2070,7 @@ Each of the 11 fixtures owns exactly one expensive resource. In `InitializeAsync
 dotnet test -p:TestProfile=core
 ```
 
-Then read the artifact and report the **peak `harness.resources.live`**. Put the number in your task report — it is the first direct measurement of the concurrency this repo has been running blind.
+Then read the artifact and report the **peak `harness.resource.count`**. Put the number in your task report — it is the first direct measurement of the concurrency this repo has been running blind.
 
 - [ ] **Step 5: Commit**
 
@@ -2250,5 +2356,5 @@ The plan is done when all of the following hold:
 3. Reading that artifact shows `spec` spans from the **parent** and protocol spans from the **child**, with the child's spans correctly parented — the property that makes the harness open to third-party adapters.
 4. `bs-spec compare --engine battlescribe-ui --gamedata --config-a "" --config-b "BSSPEC_DISABLE_WARM_REUSE=1"` reports identical verdicts and reproduces the ~2.20× from `docs/warm-reuse.md`.
 5. `bs-spec compare` exits non-zero when verdicts diverge.
-6. `harness.resources.live` has a real peak value from a `dotnet test` run — the first direct measurement of the concurrency the repo has been running blind.
+6. `harness.resource.count` has a real peak value from a `dotnet test` run — the first direct measurement of the concurrency the repo has been running blind.
 7. `dotnet build src/BattleScribeSpec.Cli` emits **zero** IL2026/IL3050 warnings.
