@@ -34,6 +34,46 @@ public sealed class HarnessTelemetryTests
         Assert.Equal("expected-failure", span.GetTagItem("bsspec.verdict"));
     }
 
+    [Theory]
+    [InlineData("passed", "pass", false)]
+    [InlineData("expected-failure", "pass", false)]
+    [InlineData("failed", "fail", true)]
+    [InlineData("unexpected-pass", "fail", true)]
+    public void SetVerdict_MapsAllFourVerdicts(string verdict, string expectedStatus, bool shouldHaveError)
+    {
+        var captured = new List<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == HarnessTelemetry.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = captured.Add,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using (var activity = HarnessTelemetry.StartSpec("test/case", "category", "domain"))
+        {
+            HarnessTelemetry.SetVerdict(activity, verdict);
+        }
+
+        var span = Assert.Single(captured);
+
+        // Verify the standard OTel attribute is mapped correctly (only "pass" or "fail").
+        Assert.Equal(expectedStatus, span.GetTagItem("test.case.result.status"));
+
+        // Verify the original four-way verdict is preserved on the custom attribute.
+        Assert.Equal(verdict, span.GetTagItem("bsspec.verdict"));
+
+        // Verify Activity.Status is set to Error only for failing verdicts.
+        if (shouldHaveError)
+        {
+            Assert.Equal(ActivityStatusCode.Error, span.Status);
+        }
+        else
+        {
+            Assert.Equal(ActivityStatusCode.Unset, span.Status);
+        }
+    }
+
     [Fact]
     public void StartOp_WithTraceparent_NestsUnderTheGivenParent()
     {
