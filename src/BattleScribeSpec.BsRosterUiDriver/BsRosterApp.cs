@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Sockets;
+using BattleScribeSpec.Telemetry;
 
 namespace BattleScribeSpec.BsRosterUiDriver;
 
@@ -18,6 +19,8 @@ public sealed class BsRosterApp : IAsyncDisposable
     private Process? _process;
     /// <summary>Cancels the long-lived agent-stderr pump on disposal.</summary>
     private readonly CancellationTokenSource _stderrCts = new();
+    /// <summary>Set once <c>ResourceMetrics.Acquired("jvm")</c> has fired, so <see cref="DisposeAsync"/> releases exactly once.</summary>
+    private bool _jvmAcquired;
 
     /// <summary>The TCP port the agent is listening on, or null if not started.</summary>
     public int? AgentPort { get; private set; }
@@ -53,6 +56,10 @@ public sealed class BsRosterApp : IAsyncDisposable
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start BattleScribe process.");
         _process = process;
+        // The OS process is alive from here regardless of whether the agent handshake below
+        // succeeds — DisposeAsync always tears down _process, so it must always release too.
+        ResourceMetrics.Acquired("jvm");
+        _jvmAcquired = true;
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
 
@@ -177,31 +184,44 @@ public sealed class BsRosterApp : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _stderrCts.Cancel();
-        _stderrCts.Dispose();
-        if (_process is not null && !_process.HasExited)
+        try
         {
-            try
+            _stderrCts.Cancel();
+            _stderrCts.Dispose();
+            if (_process is not null && !_process.HasExited)
             {
-                _process.Kill(entireProcessTree: true);
-                await _process.WaitForExitAsync();
+                try
+                {
+                    _process.Kill(entireProcessTree: true);
+                    await _process.WaitForExitAsync();
+                }
+                catch
+                {
+                    // Best effort
+                }
             }
-            catch
+            _process?.Dispose();
+
+            if (_ownsHome)
             {
-                // Best effort
+                try
+                {
+                    Directory.Delete(_homePath, recursive: true);
+                }
+                catch
+                {
+                    // Best effort
+                }
             }
         }
-        _process?.Dispose();
-
-        if (_ownsHome)
+        finally
         {
-            try
+            // In a finally so a throwing teardown can't leak the counter — a counter that drifts
+            // upward is worse than no counter, because it silently invents resources that don't exist.
+            if (_jvmAcquired)
             {
-                Directory.Delete(_homePath, recursive: true);
-            }
-            catch
-            {
-                // Best effort
+                _jvmAcquired = false;
+                ResourceMetrics.Released("jvm");
             }
         }
     }

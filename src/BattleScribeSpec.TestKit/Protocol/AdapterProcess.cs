@@ -239,6 +239,7 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
 
         var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start adapter process: {executable}");
+        ResourceMetrics.Acquired("adapter-process");
         var stderrLines = new ConcurrentQueue<string>();
         process.ErrorDataReceived += (_, e) =>
         {
@@ -323,27 +324,36 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
         }
 
         _disposed = true;
-        _connection.Dispose();
-
         try
         {
-            if (!_process.HasExited)
+            _connection.Dispose();
+
+            try
             {
-                _process.StandardInput.Close();
-                if (!_process.WaitForExit(5000))
+                if (!_process.HasExited)
                 {
-                    _process.Kill();
+                    _process.StandardInput.Close();
+                    if (!_process.WaitForExit(5000))
+                    {
+                        _process.Kill();
+                    }
                 }
+                _process.CancelErrorRead();
             }
-            _process.CancelErrorRead();
-        }
-        catch
-        {
-            // Best-effort cleanup
+            catch
+            {
+                // Best-effort cleanup
+            }
+            finally
+            {
+                _process.Dispose();
+            }
         }
         finally
         {
-            _process.Dispose();
+            // In a finally so a throwing teardown can't leak the counter — a counter that drifts
+            // upward is worse than no counter, because it silently invents resources that don't exist.
+            ResourceMetrics.Released("adapter-process");
         }
     }
 

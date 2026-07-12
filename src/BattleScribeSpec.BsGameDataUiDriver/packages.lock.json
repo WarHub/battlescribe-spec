@@ -5,6 +5,7 @@
       "battlescribespec.bsrosteruidriver": {
         "type": "Project",
         "dependencies": {
+          "BattleScribeSpec.Telemetry": "[1.0.0, )",
           "BattleScribeSpec.TestKit": "[1.0.0, )",
           "BattleScribeSpec.XmlGen": "[1.0.0, )"
         }

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using BattleScribeSpec.Telemetry;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
@@ -16,6 +17,8 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// every trace of this one's state.
     /// </summary>
     private IBrowserContext? _context;
+    /// <summary>Set once <c>ResourceMetrics.Acquired("browser-context")</c> has fired, so <see cref="DisposeAsync"/> releases exactly once.</summary>
+    private bool _contextAcquired;
 
     public IPage Page { get; private set; } = null!;
     public string BaseUrl { get; }
@@ -97,6 +100,8 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
         // launch is amortized across the whole batch. See NrBrowserHost.
         var browser = await NrBrowserHost.GetAsync(headless, slowMo);
         _context = await browser.NewContextAsync();
+        ResourceMetrics.Acquired("browser-context");
+        _contextAcquired = true;
         Page = await _context.NewPageAsync();
         // Register JS helpers as an init script — automatically re-injected
         // on every full page navigation (GotoAsync). No manual tracking needed.
@@ -331,8 +336,17 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             {
                 // Best effort.
             }
-
-            _context = null;
+            finally
+            {
+                // In a finally so a throwing close can't leak the counter — a counter that drifts
+                // upward is worse than no counter, because it silently invents resources that don't exist.
+                _context = null;
+                if (_contextAcquired)
+                {
+                    _contextAcquired = false;
+                    ResourceMetrics.Released("browser-context");
+                }
+            }
         }
     }
 }

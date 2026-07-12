@@ -1,3 +1,4 @@
+using BattleScribeSpec.Telemetry;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
@@ -29,6 +30,8 @@ internal static class NrBrowserHost
     private static IBrowser? _browser;
     private static (bool Headless, float? SlowMo) _launchKey;
     private static bool _exitHookInstalled;
+    /// <summary>Set once <c>ResourceMetrics.Acquired("browser")</c> has fired, so <see cref="CloseCoreAsync"/> releases exactly once.</summary>
+    private static bool _acquired;
 
     /// <summary>
     /// Returns the shared browser, launching it on first use. Relaunches if a caller asks for
@@ -53,6 +56,8 @@ internal static class NrBrowserHost
                 SlowMo = slowMo,
             });
             _launchKey = (headless, slowMo);
+            ResourceMetrics.Acquired("browser");
+            _acquired = true;
             InstallExitHook();
             return _browser;
         }
@@ -112,8 +117,17 @@ internal static class NrBrowserHost
             {
                 // Best effort.
             }
-
-            _browser = null;
+            finally
+            {
+                // In a finally so a throwing close can't leak the counter — a counter that drifts
+                // upward is worse than no counter, because it silently invents resources that don't exist.
+                _browser = null;
+                if (_acquired)
+                {
+                    _acquired = false;
+                    ResourceMetrics.Released("browser");
+                }
+            }
         }
 
         _playwright?.Dispose();

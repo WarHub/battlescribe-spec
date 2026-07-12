@@ -171,11 +171,16 @@ public static class AdapterHandler
     private static ProtocolResponse HandleSetup(
         SetupCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
     {
+        var sw = Stopwatch.StartNew();
+        var reused = engine is not null && reuse;
         if (!reuse || engine is null)
         {
             engine?.Dispose();
             engine = factory();
         }
+        sw.Stop();
+        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
+        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalSeconds);
 
         catalogueIds = [.. cmd.Catalogues.Select(c => c.Id)];
         if (cmd.SpecId is { Length: > 0 })
@@ -395,11 +400,16 @@ public static class AdapterHandler
             return new ProtocolError { Message = "gamedata domain is not supported by this adapter" };
         }
 
+        var sw = Stopwatch.StartNew();
+        var reused = engine is not null && options.ReuseGameDataEngineAcrossSetups;
         if (!options.ReuseGameDataEngineAcrossSetups || engine is null)
         {
             engine?.Dispose();
             engine = options.GameDataEngineFactory();
         }
+        sw.Stop();
+        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
+        ResourceMetrics.RecordEngineStart("gamedata-engine", reused, sw.Elapsed.TotalSeconds);
 
         if (cmd.SpecId is { Length: > 0 })
         {

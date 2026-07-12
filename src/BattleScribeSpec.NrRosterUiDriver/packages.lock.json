@@ -15,6 +15,7 @@
       "battlescribespec.newrecruit": {
         "type": "Project",
         "dependencies": {
+          "BattleScribeSpec.Telemetry": "[1.0.0, )",
           "BattleScribeSpec.TestKit": "[1.0.0, )",
           "BattleScribeSpec.XmlGen": "[1.0.0, )",
           "Microsoft.Playwright": "[1.61.0, )",
