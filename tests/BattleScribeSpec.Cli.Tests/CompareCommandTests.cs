@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace BattleScribeSpec.Cli.Tests;
 
@@ -56,8 +58,122 @@ public sealed class CompareCommandTests
         var combined = stdOut + stdErr;
         Assert.Equal(0, exitCode);
         Assert.Contains("Verdicts identical", combined, StringComparison.Ordinal);
-        Assert.Contains("speedup", combined, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DIVERGENCE", combined, StringComparison.Ordinal);
+
+        // Identical configs run the identical arm twice, so the reported speedup (B/A wall time)
+        // is genuinely expected to be near 1.0 — this is what the test's name promises, so assert
+        // the actual value rather than just the literal word "speedup" appearing somewhere.
+        var speedupMatch = Regex.Match(
+            combined, @"speedup \(B/A\):\s*([0-9]+\.[0-9]+)x", RegexOptions.IgnoreCase);
+        Assert.True(speedupMatch.Success, $"Expected a 'speedup (B/A): N.NNx' line in output:\n{combined}");
+        var speedup = double.Parse(speedupMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+        Assert.InRange(speedup, 0.5, 2.0);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Compare_ExpectedFailures_ThreadsIntoBothArms_ReportsExpectedFailureNotFailed()
+    {
+        // #271 review IMPORTANT 1: compare never set SpecSuiteOptions.ExpectedFailuresEngine, so a
+        // spec annotated `engines: { <name>: fail }` was always labeled "failed"/"passed" rather
+        // than "expected-failure"/"unexpected-pass". This fixture spec is annotated fail for a
+        // synthetic engine identity; --config-b force-fails it via the reference adapter's test-only
+        // hook while --config-a leaves it passing, so the two arms deliberately diverge on status —
+        // proving --expected-failures reached BOTH arms: arm A must read "unexpected-pass" (it
+        // actually passed but was annotated to fail) and arm B must read "expected-failure" (it
+        // actually failed and was annotated to fail), never the plain "passed"/"failed" that
+        // omitting the flag would produce.
+        var repoRoot = FindRepoRoot();
+        var adapterDll = FindReferenceAdapterDll(repoRoot);
+        var cliDll = FindCliDll(repoRoot);
+        var fixturesDir = WriteExpectedFailureFixture();
+
+        try
+        {
+            var (exitCode, stdOut, stdErr) = await RunCliAsync(
+                cliDll,
+                "compare",
+                "--engine", $"cmp-xfail-engine=dotnet:{adapterDll}",
+                "--specs", fixturesDir,
+                "--expected-failures", "cmp-xfail-engine",
+                "--config-a", "",
+                "--config-b", "BSSPEC_TEST_FORCE_FAIL=1");
+
+            var combined = stdOut + stdErr;
+            Assert.NotEqual(0, exitCode);
+            Assert.Contains("DIVERGENCE", combined, StringComparison.Ordinal);
+            Assert.Contains("A=unexpected-pass", combined, StringComparison.Ordinal);
+            Assert.Contains("B=expected-failure", combined, StringComparison.Ordinal);
+            Assert.DoesNotContain("B=failed", combined, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(fixturesDir, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Writes a single-spec fixture directory (category "xfail") annotated
+    /// <c>engines: { cmp-xfail-engine: fail }</c>: normal setup/steps that pass on the reference
+    /// adapter unless <c>BSSPEC_TEST_FORCE_FAIL</c> is set. No repo spec carries a top-level "fail"
+    /// annotation (grepped for one), so a private fixture is needed to exercise the
+    /// expected-failure/unexpected-pass classification without touching the shared specs tree.
+    /// </summary>
+    private static string WriteExpectedFailureFixture()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "bsspec-compare-xfail-" + Guid.NewGuid().ToString("N")[..8], "xfail");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "xfail-demo.yaml"), """
+            id: xfail-demo
+            category: xfail
+            description: Fixture for bs-spec compare's --expected-failures threading test.
+            engines:
+              cmp-xfail-engine: fail
+
+            setup:
+              gameSystem:
+                id: gs-1
+                name: GS
+                costTypes:
+                  - id: ct-pts
+                    name: pts
+                forceEntries:
+                  - id: fe-1
+                    name: Force
+                    categoryLinks:
+                      - id: cl-1
+                        targetId: cat-1
+                        name: Cat
+                categoryEntries:
+                  - id: cat-1
+                    name: Cat
+
+              catalogues:
+                - id: cat-file-1
+                  gameSystemId: gs-1
+                  selectionEntries:
+                    - id: se-1
+                      name: Unit
+                      type: unit
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 10
+                      categoryLinks:
+                        - id: cl-se-1
+                          targetId: cat-1
+                          name: Cat
+                          primary: true
+
+            steps:
+              - action: addForce
+                id: add-1
+                forceEntryId: fe-1
+
+              - expectedState:
+                  forceCount: 1
+            """);
+        return Path.GetDirectoryName(dir)!;
     }
 
     [Fact]

@@ -32,28 +32,7 @@ internal static class RunBatch
         var selection = options.Selection;
         var engineLabel = selection.EngineName ?? selection.Display;
 
-        // Effective worker count: the registry's MaxParallel ceiling first, then a one-shot
-        // describe probe (spawn one process, describe, dispose) refines it when the live adapter
-        // advertises a lower ceiling. Both maxima use 0 = unlimited.
-        var registryMax = selection.Entry.MaxParallel;
-        var registryClamped = registryMax > 0 && options.Workers > registryMax ? registryMax : options.Workers;
-
-        var describedMax = 0;
-        if (registryClamped > 1)
-        {
-            try
-            {
-                using var probe = selection.StartProcess();
-                var described = await AdapterDescriber.DescribeAsync(probe);
-                describedMax = described.Capabilities.MaxParallel;
-            }
-            catch (Exception ex)
-            {
-                Ui.Warn($"describe probe failed ({ex.Message}); proceeding without a describe-based worker clamp.");
-            }
-        }
-
-        var workers = ClampWorkers(options.Workers, registryMax, describedMax, Ui.Warn);
+        var workers = await ResolveWorkersAsync(selection, options.Workers, Ui.Warn);
 
         var filterPatterns = options.Filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             is { Length: > 0 } patterns ? patterns : null;
@@ -179,6 +158,38 @@ internal static class RunBatch
         }
 
         return exitCode;
+    }
+
+    /// <summary>
+    /// Resolve the effective worker count for a batch/compare run: the registry's
+    /// <c>MaxParallel</c> ceiling first, then (when that leaves more than one worker) a one-shot
+    /// live describe probe — spawn one adapter process, describe it, dispose it — refines the
+    /// count further when the adapter advertises a lower ceiling than the registry knows about.
+    /// Both maxima use 0 = unlimited. Shared by <see cref="ExecuteAsync"/> and
+    /// <c>CompareCommand</c> so the describe-probe clamp exists exactly once — <c>compare</c>
+    /// stresses parallelism at least as hard as <c>run --all</c> and must not skip it.
+    /// </summary>
+    internal static async Task<int> ResolveWorkersAsync(EngineSelection selection, int requested, Action<string> warn)
+    {
+        var registryMax = selection.Entry.MaxParallel;
+        var registryClamped = registryMax > 0 && requested > registryMax ? registryMax : requested;
+
+        var describedMax = 0;
+        if (registryClamped > 1)
+        {
+            try
+            {
+                using var probe = selection.StartProcess();
+                var described = await AdapterDescriber.DescribeAsync(probe);
+                describedMax = described.Capabilities.MaxParallel;
+            }
+            catch (Exception ex)
+            {
+                warn($"describe probe failed ({ex.Message}); proceeding without a describe-based worker clamp.");
+            }
+        }
+
+        return ClampWorkers(requested, registryMax, describedMax, warn);
     }
 
     /// <summary>

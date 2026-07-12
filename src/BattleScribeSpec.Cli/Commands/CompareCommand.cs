@@ -25,6 +25,9 @@ internal static class CompareCommand
         EngineSelection Selection,
         IReadOnlyList<string> Domains,
         string? Filter,
+        string? SpecsDir,
+        string? ExpectedFailures,
+        string? AssertionEngine,
         int Workers,
         IReadOnlyDictionary<string, string> ConfigA,
         IReadOnlyDictionary<string, string> ConfigB);
@@ -38,6 +41,21 @@ internal static class CompareCommand
         var filter = new Option<string?>("--filter")
         {
             Description = "Only run specs whose category/id matches (comma-separated, OR logic).",
+        };
+        var specs = new Option<string?>("--specs")
+        {
+            Description = "Specs directory (default: discovered repo specs, else embedded).",
+        };
+        var expectedFailures = new Option<string?>("--expected-failures")
+        {
+            Description = "Engine name for spec-level expected failures, applied to both arms " +
+                "(mirrors 'run --all'; a spec annotated as expected-to-fail reports expected-failure/" +
+                "unexpected-pass here instead of failed/passed).",
+        };
+        var assertionEngine = new Option<string?>("--assertion-engine")
+        {
+            Description = "Engine name for step-level assertion overrides, applied to both arms " +
+                "(mirrors 'run --all'; defaults to the engine identity).",
         };
         var workers = new Option<int>("--workers")
         {
@@ -59,7 +77,7 @@ internal static class CompareCommand
             "compare",
             "Run the same spec set under two configurations and assert the verdicts are identical before reporting the timing delta.");
         engineOptions.AddTo(command);
-        foreach (var option in new Option[] { filter, workers, configA, configB })
+        foreach (var option in new Option[] { filter, specs, expectedFailures, assertionEngine, workers, configA, configB })
         {
             command.Options.Add(option);
         }
@@ -88,6 +106,9 @@ internal static class CompareCommand
                     selection,
                     domains,
                     parseResult.GetValue(filter),
+                    parseResult.GetValue(specs),
+                    parseResult.GetValue(expectedFailures),
+                    parseResult.GetValue(assertionEngine),
                     workerCount,
                     ParseConfig(parseResult.GetValue(configA), "--config-a"),
                     ParseConfig(parseResult.GetValue(configB), "--config-b"));
@@ -108,8 +129,7 @@ internal static class CompareCommand
         var selection = options.Selection;
         var engineLabel = selection.EngineName ?? selection.Display;
 
-        var registryMax = selection.Entry.MaxParallel;
-        var workers = RunBatch.ClampWorkers(options.Workers, registryMax, describedMax: 0, Ui.Warn);
+        var workers = await RunBatch.ResolveWorkersAsync(selection, options.Workers, Ui.Warn).ConfigureAwait(false);
 
         Ui.Info($"Engine: {engineLabel}");
         Ui.Info($"Domains: {string.Join(", ", options.Domains)}");
@@ -164,7 +184,7 @@ internal static class CompareCommand
         // that flips a pass to a fail. The per-spec timing denominator, however, must be the specs
         // that actually EXECUTED — dividing a saving by the skipped ones too would understate it by
         // however many specs the --filter excluded (here: 54 executed out of 113 reported).
-        var executed = allIds.Count(id => statusA.GetValueOrDefault(id) is not ("skipped" or null));
+        var executed = allIds.Count(id => statusA.GetValueOrDefault(id, "(not run)") is not ("skipped" or "(not run)"));
         var skipped = allIds.Count - executed;
 
         Ui.Pass(skipped > 0
@@ -236,9 +256,11 @@ internal static class CompareCommand
             result = await SpecSuiteRunner.RunAsync(
                 new SpecSuiteOptions
                 {
+                    SpecsDirectory = options.SpecsDir,
                     FilterPatterns = filterPatterns,
                     EngineFilter = options.Selection.EngineName,
-                    AssertionEngine = options.Selection.AssertionEngineName,
+                    ExpectedFailuresEngine = options.ExpectedFailures,
+                    AssertionEngine = options.AssertionEngine ?? options.Selection.AssertionEngineName,
                     Workers = workers,
                     Domains = options.Domains,
                     AdapterFactory = workerIndex =>
