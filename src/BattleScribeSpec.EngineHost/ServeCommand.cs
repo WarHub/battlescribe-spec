@@ -43,9 +43,9 @@ internal static class ServeCommand
 
     internal static AdapterOptions BuildOptions(string name, bool headless, bool keepAlive)
     {
-        // Ablation toggle for the warm-reuse benchmark (scripts/bench-warm-reuse.ps1) and for
-        // diagnosing warm-vs-cold behavior differences: forces every domain cold, regardless of
-        // engine identity. See docs/warm-reuse.md.
+        // Ablation toggle for the warm-reuse benchmark (bs-spec compare --config-b
+        // BSSPEC_DISABLE_WARM_REUSE=1) and for diagnosing warm-vs-cold behavior differences:
+        // forces every domain cold, regardless of engine identity. See docs/warm-reuse.md.
         var reuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
 
         return new()
@@ -64,7 +64,7 @@ internal static class ServeCommand
                 MaxParallel = name is "battlescribe-ui" ? 1 : 0,
             },
             // Warm-reuse is enabled ONLY where it is measured both CORRECT (per-spec verdicts
-            // identical to cold) and FASTER (scripts/bench-warm-reuse.ps1 — see docs/warm-reuse.md):
+            // identical to cold) and FASTER (bs-spec compare — see docs/warm-reuse.md):
             //
             //   battlescribe-ui gamedata : 2.20x faster (54 specs), verdicts identical.  ENABLED.
             //   battlescribe-ui roster   : 1.79x faster (42 specs), verdicts identical.  ENABLED.

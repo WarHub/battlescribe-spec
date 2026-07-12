@@ -30,7 +30,8 @@ per spec**. Neither NewRecruit domain does, because a headless Chromium relaunch
 
 ## Measurements
 
-All runs `--workers 1`, warm vs cold on the identical spec set, via `scripts/bench-warm-reuse.ps1`.
+All runs `--workers 1`, warm vs cold on the identical spec set, via `bs-spec compare` (see
+"Reproducing" below).
 The harness **asserts that per-spec PASS/FAIL verdicts are identical** between warm and cold — a
 speedup that changes conformance results is not a speedup, it's a bug.
 
@@ -143,9 +144,12 @@ CI never caught the original bug because the NR-UI roster lane runs a **single**
 
 ## Reproducing
 
-```powershell
-# Warm vs cold, with a verdict-equality assertion
-pwsh -File scripts/bench-warm-reuse.ps1 -Engine battlescribe-ui -Domain gamedata -Filter "entry/,export/"
+```bash
+# Warm vs cold, with a verdict-equality assertion — bs-spec compare asserts the two arms'
+# per-spec verdicts are identical before it reports the timing delta; a divergence exits non-zero.
+dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll compare \
+  --engine battlescribe-ui --gamedata --filter "entry/,export/" \
+  --config-a "" --config-b "BSSPEC_DISABLE_WARM_REUSE=1"
 ```
 
 Force cold for any engine (ablation / diagnosis):
@@ -153,6 +157,10 @@ Force cold for any engine (ablation / diagnosis):
 ```bash
 BSSPEC_DISABLE_WARM_REUSE=1 bs-spec run --all --engine battlescribe-ui --gamedata
 ```
+
+`bs-spec compare` is the general form of this: `--config-a`/`--config-b` are each a comma-separated
+`KEY=VALUE` list of environment settings applied to that arm's child processes, so any configuration
+pair can be checked for verdict-neutrality this way — not just warm vs cold.
 
 ## Related
 
