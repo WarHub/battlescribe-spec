@@ -1,0 +1,15 @@
+This product includes software developed by third parties.
+
+--------------------------------------------------------------------------------
+OpenTelemetry Protocol (OTLP) .proto definitions
+Source: https://github.com/open-telemetry/opentelemetry-proto
+License: Apache License 2.0
+Location: src/BattleScribeSpec.Telemetry.Collector/opentelemetry/proto/
+
+Vendored verbatim. There is no official NuGet package exposing the OTLP protobuf
+types for .NET (OpenTelemetry.Exporter.OpenTelemetryProtocol generates them as
+`internal`), so server-side OTLP consumers must vendor the .proto files and run
+Grpc.Tools. This is the pattern used by .NET Aspire's dashboard.
+
+Full license text: https://www.apache.org/licenses/LICENSE-2.0
+--------------------------------------------------------------------------------

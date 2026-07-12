@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/BattleScribeSpec.Telemetry.Collector/BattleScribeSpec.Telemetry.Collector.csproj" />
+    <Project Path="src/BattleScribeSpec.Telemetry/BattleScribeSpec.Telemetry.csproj" />
     <Project Path="src/BattleScribeSpec.TestKit/BattleScribeSpec.TestKit.csproj" />
     <Project Path="src/BattleScribeSpec.BattleScribe/BattleScribeSpec.BattleScribe.csproj" />
     <Project Path="src/BattleScribeSpec.ReferenceAdapter/BattleScribeSpec.ReferenceAdapter.csproj" />

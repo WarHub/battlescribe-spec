@@ -6,6 +6,8 @@
   <ItemGroup>
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="GitHubActionsTestLogger" Version="3.0.4" />
+    <PackageVersion Include="Google.Protobuf" Version="3.34.1" />
+    <PackageVersion Include="Grpc.Tools" Version="2.80.0" />
     <PackageVersion Include="IKVM" Version="8.15.0" />
     <PackageVersion Include="JsonSchema.Net" Version="9.2.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />

@@ -404,6 +404,16 @@
           "BattleScribeSpec.XmlGen": "[1.0.0, )"
         }
       },
+      "battlescribespec.telemetry": {
+        "type": "Project"
+      },
+      "battlescribespec.telemetry.collector": {
+        "type": "Project",
+        "dependencies": {
+          "BattleScribeSpec.Telemetry": "[1.0.0, )",
+          "Google.Protobuf": "[3.34.1, )"
+        }
+      },
       "battlescribespec.testkit": {
         "type": "Project",
         "dependencies": {
@@ -441,6 +451,12 @@
           "WarHub.ArmouryModel.Source": "[1.0.0, )",
           "WarHub.ArmouryModel.Source.BattleScribe": "[1.0.0, )"
         }
+      },
+      "Google.Protobuf": {
+        "type": "CentralTransitive",
+        "requested": "[3.34.1, )",
+        "resolved": "3.34.1",
+        "contentHash": "212vdYxRuVopGE5bess6Jg5oXWyizA6hcLPTI7G+qA4PthQEvfeof3njT+7VSY5v/+O0P22xTydiP5fSJJpGEA=="
       },
       "IKVM": {
         "type": "CentralTransitive",

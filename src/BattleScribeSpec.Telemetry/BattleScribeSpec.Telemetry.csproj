@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- Referenced by TestKit and Cli, which are AOT-analyzed. This project must stay
+         AOT-clean: BCL only (ActivitySource/Meter), no OpenTelemetry SDK, no reflection. -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+</Project>
