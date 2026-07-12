@@ -5,10 +5,13 @@ name: NR parallelism sweep (temporary)
 # ~32 cores, ubuntu-latest has ~4 vCPU — and NR's browser work is IO-bound, so the optimum is not
 # simply "core count". Delete this workflow once ci.yml has been tuned.
 #
-# Run: gh workflow run nr-parallel-sweep.yml
+# Triggered by pushing a change to THIS file on the measurement branch (workflow_dispatch only works
+# from the default branch, and this workflow is intentionally never merged there).
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [feat/271-nr-warm-reuse]
+    paths: ['.github/workflows/nr-parallel-sweep.yml']
 
 jobs:
   sweep:
