@@ -137,7 +137,9 @@ public sealed record MachineProfile(int CpuCount, long AvailableMemoryBytes)
 }
 ```
 
-> **Implementer note:** `Environment.ProcessorCount` on .NET **honours container CPU limits** (cgroup quotas), which is what we want — a 4-vCPU CI container must report 4, not the host's core count. Verify this in the Linux container run; if it does not hold, say so, because the whole policy rests on it.
+> **Implementer note:** `Environment.ProcessorCount` on .NET honours container CPU limits (cgroup quotas) — **verified**: a podman container limited to 2/4/8 vCPU reports 2/4/8 on a 32-core host.
+>
+> **Correction to an earlier framing of this plan:** that verification is *useful* but was **not** the load-bearing risk it was billed as. This repo's CI runs every job on bare `runs-on: ubuntu-latest` — plain VMs, no `container:`, no `--cpus`, no cgroup quota to leak through. On a bare VM `ProcessorCount` reports the VM's own cores correctly and trivially. The cgroup behaviour matters only for the repo's `bs-spec.Dockerfile`, for developers sandboxing locally, and if CI ever moves to containerised runners. Recorded because a confident-sounding risk that turns out not to exist is worth deleting explicitly, not quietly.
 
 - [ ] **Step 4: Run — both tests pass**
 
