@@ -154,12 +154,32 @@ So the campaign must, for each `(engine, domain)` and each hardware class:
 
 Hardware classes to measure: the 4-vCPU GitHub runner (what CI actually runs) and the development machine. If those two fit the same `k`, the formula is portable; if they do not, that itself is a finding and the policy needs a CPU-count-dependent `k`, which must be stated rather than smoothed over.
 
+## The parent decides; the child is told
+
+The reuse decision is currently made **in the child** (`ServeCommand.BuildOptions`, by string-matching the engine's name), and `compare` ablates it by setting `BSSPEC_DISABLE_WARM_REUSE=1` in the child's environment. That is how warm-reuse was proven verdict-neutral at 2.20×.
+
+Deleting that variable without replacing the channel would therefore **break the rail that gates every change this spec makes** — a circular dependency, and a real one.
+
+So:
+
+- **The parent computes the policy.** It already knows the machine and the engine; it is the only place that can see the whole run.
+- **The child is told the decision** via explicit `serve` arguments. `EngineHostLocator` already composes the child's command line (`serve --engine X [--headed] [--keep-alive]`); the policy's decisions join it there. The child stops guessing.
+- **`compare` gets `--policy-a` / `--policy-b`** to override the policy per arm. These flow through `EngineSelection` into the serve arguments. `--config-a` / `--config-b` remain for genuine *environment* experiments — they are not the policy channel.
+
+No environment variable is in the loop, and there is exactly one authoritative decision-maker.
+
+### Two defects this exposes, fixed as part of it
+
+**`MaxParallel` is declared twice and can silently disagree** — once in `EngineRegistry.Builtins` and again in `ServeCommand`'s `AdapterCapabilities` (by string-match). One declaration, consumed by both.
+
+**`KeepAlive` and `ReuseRosterEngineAcrossSetups` already contradict each other.** `HostEngineFactory` sets `KeepAlive = keepAlive || !rosterReuseDisabled`, so for `battlescribe-ui` roster the app is kept alive **regardless of what `ServeCommand`'s reuse flag decided**. Two mechanisms, one intent, currently disagreeing — which is this spec's thesis in miniature.
+
 ## Retiring the knobs
 
 **Deleted, not defaulted:**
 
-- `NR_PARALLEL`
-- `BSSPEC_DISABLE_WARM_REUSE`
+- `NR_PARALLEL` — the pools' size comes from the policy.
+- `BSSPEC_DISABLE_WARM_REUSE` — replaced by `compare --policy-a/--policy-b`, which is a *better* ablation channel: it can vary any policy decision, not just reuse.
 
 **Demoted to an explicit override** (for diagnosis, not for ordinary use):
 
