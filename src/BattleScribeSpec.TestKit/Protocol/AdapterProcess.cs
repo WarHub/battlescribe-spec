@@ -318,6 +318,18 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
     }
 
     /// <summary>
+    /// Bounded wait (see <see cref="SendCommandAsync"/>'s catch clause) for a just-failed process to
+    /// report its exit before it is classified as still alive. On Windows <c>Process.HasExited</c>
+    /// flips essentially immediately when a child dies, so this never actually waits the full
+    /// duration in practice there. On Linux, a just-exited child is not reaped synchronously — the
+    /// stdio pipe can close (which is what makes <see cref="NdjsonLineConnection.SendCommandAsync"/>
+    /// throw in the first place) slightly BEFORE <c>Process.HasExited</c> flips true. 2 seconds is
+    /// generous headroom over that reaping race without materially slowing down the one path that
+    /// pays it (a transport failure — rare outside an actual crash).
+    /// </summary>
+    private const int DeathConfirmationWaitMs = 2000;
+
+    /// <summary>
     /// True once the underlying process has exited (a crash, or the adapter's own self-termination —
     /// the motivating case: the BattleScribe app kept alive across hundreds of warm-reused specs
     /// intermittently self-terminates). <see cref="BattleScribeSpec.Batch.SpecSuiteRunner"/> checks
@@ -325,7 +337,30 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
     /// adapter death (this is true) from a transport error that leaves the process itself alive
     /// (a bad response, a hung call): only the former warrants retry-with-replacement.
     /// </summary>
+    /// <remarks>
+    /// This must NOT be the only place death is detected: see the bounded wait in
+    /// <see cref="SendCommandAsync"/>'s catch clause, which is what makes THIS property correct by
+    /// the time a caller reads it right after a transport failure (rather than depending on how fast
+    /// the OS happens to have reaped the child).
+    /// </remarks>
     public bool HasExited => _disposed || _process.HasExited;
+
+    /// <summary>
+    /// Classifies a process as dead after its transport has just failed: already-reaped-exited, OR
+    /// exits within a short bounded wait. Extracted as a pure function of two already-known-shape
+    /// inputs (a snapshot bool and a wait delegate) so the Linux reaping race that motivates it —
+    /// <c>hasExitedNow == false</c> at the moment of failure, with the process actually dead and
+    /// about to be reaped — is deterministically testable without spawning a real process or
+    /// depending on OS timing (see <c>AdapterProcessDeathDetectionTests</c>).
+    /// </summary>
+    /// <param name="hasExitedNow">The process's exited state at the instant the transport failed.</param>
+    /// <param name="waitForExitShort">
+    /// Blocks for a short bounded duration and returns whether the process exited within it. In
+    /// production this is <c>_process.WaitForExit(DeathConfirmationWaitMs)</c>; a test supplies a
+    /// fake to simulate either outcome without a real process.
+    /// </param>
+    internal static bool IsDeadAfterTransportFailure(bool hasExitedNow, Func<bool> waitForExitShort) =>
+        hasExitedNow || waitForExitShort();
 
     /// <summary>
     /// Send a protocol command and deserialize the correlated response. On timeout/cancellation
@@ -352,6 +387,23 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
         }
         catch (Exception ex)
         {
+            // The transport just failed — almost always because the process died and its stdio
+            // closed (see NdjsonLineConnection's read loop). Give the OS a bounded chance to reap
+            // the child and flip Process.HasExited BEFORE returning, so SpecSuiteRunner's HasExited
+            // check right after this call is correct regardless of Linux's reaping timing (#308 CI
+            // failure: without this wait, HasExited could still read false at that point, and the
+            // death recovery path never engaged). A process that is genuinely still alive despite
+            // the transport error is unaffected: WaitForExit simply returns false once the bounded
+            // wait elapses, and HasExited correctly stays false.
+            try
+            {
+                _ = IsDeadAfterTransportFailure(_process.HasExited, () => _process.WaitForExit(DeathConfirmationWaitMs));
+            }
+            catch
+            {
+                // Best-effort: never let this confirmation step mask the real transport exception below.
+            }
+
             throw new InvalidOperationException(
                 $"Adapter process communication failed. Stderr tail: {GetStderrTail()}", ex);
         }
