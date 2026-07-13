@@ -68,4 +68,33 @@ public sealed class ConcurrencyPolicyTests
         Assert.Equal(ColdStartCost.Cheap, nrUi.ColdStartCost);
         Assert.False(nrUi.ReuseSafeRoster);
     }
+
+    [Theory]
+    [InlineData("battlescribe", 0, ColdStartCost.Cheap, false, false)]
+    [InlineData("battlescribe-ui", 1, ColdStartCost.Expensive, true, true)]
+    [InlineData("newrecruit", 0, ColdStartCost.Cheap, false, false)]
+    [InlineData("newrecruit-ui", 0, ColdStartCost.Cheap, false, false)]
+    public void EngineProfiles_AllBuiltins_PinAllFields(
+        string engineName,
+        int expectedMaxParallel,
+        ColdStartCost expectedColdStartCost,
+        bool expectedReuseSafeRoster,
+        bool expectedReuseSafeGameData)
+    {
+        var registry = EngineRegistry.LoadDefault();
+        var profile = registry.Resolve(EngineConnectable.Parse(engineName)).Profile;
+
+        // Pin the four measured/declared fields that affect policy decisions.
+        Assert.Equal(expectedMaxParallel, profile.MaxParallel);
+        Assert.Equal(expectedColdStartCost, profile.ColdStartCost);
+        Assert.Equal(expectedReuseSafeRoster, profile.ReuseSafeRoster);
+        Assert.Equal(expectedReuseSafeGameData, profile.ReuseSafeGameData);
+
+        // Pin the unmeasured placeholders. These are deliberately 0 and 1.0 (no measured limit,
+        // no oversubscription strategy yet) — they get refined when measurements become available.
+        // A test pinning them at defaults means nobody can slip in a guessed number without
+        // forcing a conversation: the test turns red and demands an evidence-based decision.
+        Assert.Equal(0L, profile.MemPerInstanceBytes);
+        Assert.Equal(1.0, profile.OversubscriptionFactor);
+    }
 }
