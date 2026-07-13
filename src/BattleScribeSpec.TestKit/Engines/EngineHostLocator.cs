@@ -1,3 +1,5 @@
+using BattleScribeSpec.Concurrency;
+
 namespace BattleScribeSpec.Engines;
 
 /// <summary>Launch descriptor: what to Start() for an engine.</summary>
@@ -26,25 +28,61 @@ public static class EngineHostLocator
     /// Headed/keep-alive for non-builtin (launchable) entries are NOT conveyed at all — neither
     /// as launch arguments nor via any environment variable. <c>--headed</c>/<c>--keep-alive</c>
     /// are silently dropped for an <c>exec:</c>/<c>dotnet:</c> adapter. Tracked as
-    /// <see href="https://github.com/WarHub/battlescribe-spec/issues/305">#305</see>.
+    /// <see href="https://github.com/WarHub/battlescribe-spec/issues/305">#305</see>. A
+    /// <paramref name="plan"/>, by contrast, is never silently dropped: a launchable entry that
+    /// receives one throws, because there is no channel to convey it (see below).
     ///
     /// The default <paramref name="verb"/> is <c>serve</c> (the NDJSON adapter protocol on
     /// stdio). The interactive verbs (<c>probe</c>, <c>discover</c>) pass their full argument
     /// tail via <paramref name="verbArgs"/> — the host command owns those options — and this
     /// method just prefixes the verb and quotes any element containing whitespace. For those
-    /// verbs the <paramref name="headed"/>/<paramref name="keepAlive"/> flags are not composed
-    /// here; the caller places them in <paramref name="verbArgs"/> at the position the host
-    /// command expects (e.g. after a discover subcommand token).
+    /// verbs the <paramref name="headed"/>/<paramref name="keepAlive"/>/<paramref name="plan"/>
+    /// are not composed here; the caller places them in <paramref name="verbArgs"/> at the
+    /// position the host command expects (e.g. after a discover subcommand token).
     /// </summary>
+    /// <param name="entry">The resolved engine entry (built-in or launchable).</param>
+    /// <param name="headed">Show the browser/app window (serve verb only; presentation, not policy).</param>
+    /// <param name="keepAlive">
+    /// Legacy sugar for "force reuse on" (e.g. interactive debugging via <c>run --keep-alive</c>).
+    /// Composed as <c>--policy reuse=on</c> (serve no longer has its own <c>--keep-alive</c> flag —
+    /// two names for the same concept would be the disease this converged vocabulary cures).
+    /// Ignored when <paramref name="plan"/> is given (the plan is the authoritative decision).
+    /// </param>
+    /// <param name="verb">The host subcommand to invoke (default <c>serve</c>).</param>
+    /// <param name="verbArgs">Full argument tail for non-<c>serve</c> verbs (see remarks).</param>
+    /// <param name="plan">
+    /// The concurrency/reuse decision to hand the child, composed as <c>--policy
+    /// workers=N,reuse-roster=on|off,reuse-gamedata=on|off</c> (serve verb only). The harness always
+    /// supplies this for a built-in engine (see <c>EngineSelection.EffectivePlan</c>) — <b>the parent
+    /// decides and the child is told</b>; the child never recomputes a policy, because as a separate
+    /// process it may see a different machine and silently disagree. Null composes no <c>--policy</c>
+    /// flag, which drives the host to its conservative no-reuse default; that is a hand-run
+    /// convenience, not a second decision-maker.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="plan"/> is non-null and <paramref name="entry"/> is not a built-in — there
+    /// is no channel to convey a policy override to a launchable (<c>exec:</c>/<c>dotnet:</c>)
+    /// adapter, and unlike #305's headed/keep-alive gap, a policy override is never silently
+    /// dropped.
+    /// </exception>
     public static EngineLaunch Resolve(
         EngineEntry entry,
         bool headed = false,
         bool keepAlive = false,
         string verb = "serve",
-        IReadOnlyList<string>? verbArgs = null)
+        IReadOnlyList<string>? verbArgs = null,
+        ConcurrencyPlan? plan = null)
     {
         if (!entry.Builtin)
         {
+            if (plan is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Engine '{entry.Name}' is a launchable adapter (exec:/dotnet:) and cannot receive a " +
+                    "ConcurrencyPlan override — there is no channel to convey --policy to it. " +
+                    "Do not pass a plan for a non-builtin engine.");
+            }
+
             return new EngineLaunch(entry.Executable ?? throw new InvalidOperationException($"Engine '{entry.Name}' has no executable configured."), entry.Arguments ?? string.Empty);
         }
 
@@ -59,7 +97,20 @@ public static class EngineHostLocator
         string hostArgs;
         if (verb == "serve")
         {
-            var flags = (headed ? " --headed" : "") + (keepAlive ? " --keep-alive" : "");
+            var policyParts = new List<string>();
+            if (plan is { } p)
+            {
+                policyParts.Add($"workers={p.Workers}");
+                policyParts.Add($"reuse-roster={(p.ReuseRoster ? "on" : "off")}");
+                policyParts.Add($"reuse-gamedata={(p.ReuseGameData ? "on" : "off")}");
+            }
+            else if (keepAlive)
+            {
+                policyParts.Add("reuse=on");
+            }
+
+            var policyFlag = policyParts.Count > 0 ? $" --policy {string.Join(',', policyParts)}" : "";
+            var flags = (headed ? " --headed" : "") + policyFlag;
             hostArgs = $"serve --engine {entry.Name}{flags}";
         }
         else

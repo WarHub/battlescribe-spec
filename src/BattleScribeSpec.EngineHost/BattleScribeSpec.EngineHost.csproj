@@ -15,6 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="BattleScribeSpec.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BattleScribeSpec.BattleScribe\BattleScribeSpec.BattleScribe.csproj" />
     <ProjectReference Include="..\BattleScribeSpec.BsGameDataUiDriver\BattleScribeSpec.BsGameDataUiDriver.csproj" />
     <ProjectReference Include="..\BattleScribeSpec.BsRosterUiDriver\BattleScribeSpec.BsRosterUiDriver.csproj" />

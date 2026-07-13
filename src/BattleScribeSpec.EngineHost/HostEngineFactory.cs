@@ -15,7 +15,15 @@ namespace BattleScribeSpec.EngineHost;
 /// </summary>
 internal static class HostEngineFactory
 {
-    public static async Task<IRosterEngine> CreateRosterEngineAsync(string name, bool headless, bool keepAlive)
+    /// <summary>Create the roster engine named by <paramref name="name"/>.</summary>
+    /// <param name="name">Built-in roster engine identity.</param>
+    /// <param name="headless">Whether to run without showing the browser/app window.</param>
+    /// <param name="reuseRoster">
+    /// Whether this engine should stay alive across setups (battlescribe-ui only; ignored by
+    /// engines that don't support reuse). Comes straight from the caller's <c>ConcurrencyPlan</c> —
+    /// this factory does not decide it, and reads no environment variable to override it.
+    /// </param>
+    public static async Task<IRosterEngine> CreateRosterEngineAsync(string name, bool headless, bool reuseRoster)
     {
         switch (name)
         {
@@ -42,11 +50,11 @@ internal static class HostEngineFactory
                     var options = ResolveBsUiOptions();
                     Ui.Info($"BS UI mode: {options.RosterEditorJarPath}");
 
-                    // Warm-reuse keeps the app alive between specs. `--keep-alive` forces it on even
-                    // when reuse is off (its original iterative-debugging use); BSSPEC_DISABLE_WARM_REUSE
-                    // forces it off, mirroring ServeCommand's ablation toggle.
-                    var rosterReuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
-                    return new BsUiRosterEngine(options) { KeepAlive = keepAlive || !rosterReuseDisabled };
+                    // KeepAlive means exactly "the plan says reuse this engine" — no OR with a
+                    // separate --keep-alive flag, no environment-variable override. Reuse is one
+                    // decision made once by the caller (ConcurrencyPlan), not two mechanisms that
+                    // can disagree.
+                    return new BsUiRosterEngine(options) { KeepAlive = reuseRoster };
                 }
 
             case "newrecruit-ui":
@@ -69,7 +77,15 @@ internal static class HostEngineFactory
         }
     }
 
-    public static async Task<IGameDataEngine> CreateGameDataEngineAsync(string name, bool headless)
+    /// <summary>Create the gamedata engine named by <paramref name="name"/>.</summary>
+    /// <param name="name">Built-in gamedata engine identity.</param>
+    /// <param name="headless">Whether to run without showing the browser/app window.</param>
+    /// <param name="reuseGameData">
+    /// Whether this engine should stay alive across setups (battlescribe-ui only; ignored by
+    /// engines that don't support reuse). Comes straight from the caller's <c>ConcurrencyPlan</c> —
+    /// this factory does not decide it, and reads no environment variable to override it.
+    /// </param>
+    public static async Task<IGameDataEngine> CreateGameDataEngineAsync(string name, bool headless, bool reuseGameData)
     {
         switch (name)
         {
@@ -87,11 +103,9 @@ internal static class HostEngineFactory
                         "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the agent jar), " +
                         "or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
                     Ui.Info($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
-                    // BSSPEC_DISABLE_WARM_REUSE forces this cold too, mirroring ServeCommand's
-                    // ablation toggle — otherwise the host would keep the app alive between
-                    // specs regardless of ServeCommand.BuildOptions' ReuseGameDataEngineAcrossSetups.
-                    var reuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
-                    return new BsGameDataUiEngine(options) { KeepAlive = !reuseDisabled };
+                    // KeepAlive means exactly "the plan says reuse this engine" — see the roster
+                    // case above for why there's no OR and no environment-variable override here.
+                    return new BsGameDataUiEngine(options) { KeepAlive = reuseGameData };
                 }
 
             case "newrecruit":

@@ -1,4 +1,5 @@
 using System.CommandLine;
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Cli;
@@ -18,7 +19,17 @@ internal enum OutputFormat
 }
 
 /// <summary>A resolved engine selection: registry entry + domain + launch shaping.</summary>
-internal sealed record EngineSelection(EngineEntry Entry, EngineDomain Domain, bool Headed, bool KeepAlive)
+/// <param name="Entry">The resolved registry entry (built-in or launchable).</param>
+/// <param name="Domain">Which kind of spec this selection edits.</param>
+/// <param name="Headed">Show the browser/app window instead of running headless.</param>
+/// <param name="KeepAlive">Force the child to stay alive between specs (interactive debugging sugar for reuse=on).</param>
+/// <param name="PlanOverride">
+/// A user-supplied override of the policy's own answer (Tasks 5-6 wire <c>run</c>/<c>compare</c>'s
+/// <c>--policy</c> to it). Null does <b>not</b> mean "let the child decide" — the parent still
+/// computes and sends a plan; null merely means "no override, use what
+/// <see cref="ConcurrencyPolicy"/> says". See <see cref="EffectivePlan"/>.
+/// </param>
+internal sealed record EngineSelection(EngineEntry Entry, EngineDomain Domain, bool Headed, bool KeepAlive, ConcurrencyPlan? PlanOverride = null)
 {
     /// <summary>Identity for applicability/assertions/labels; null for anonymous ad-hoc adapters.</summary>
     public string? EngineName => Entry.Name;
@@ -29,10 +40,43 @@ internal sealed record EngineSelection(EngineEntry Entry, EngineDomain Domain, b
 
     public string Display => $"{(Domain == EngineDomain.Gamedata ? "gamedata" : "roster")}/{EngineName ?? "adapter"}";
 
+    /// <summary>
+    /// The plan this selection sends to the child, on <b>every</b> spawn: what
+    /// <see cref="ConcurrencyPolicy"/> decides for this machine and this engine, with any
+    /// <see cref="PlanOverride"/> replacing it and <see cref="KeepAlive"/> layered on top as
+    /// "force reuse on".
+    /// </summary>
+    /// <remarks>
+    /// <b>The parent decides; the child is told.</b> The plan is computed HERE and passed down —
+    /// never recomputed by the child, which is a separate process that may see a different machine
+    /// (container CPU limits, cgroup quotas) and could therefore silently disagree. Two
+    /// decision-makers for one decision is the defect this design exists to remove.
+    /// </remarks>
+    public ConcurrencyPlan EffectivePlan
+    {
+        get
+        {
+            var plan = PlanOverride ?? ConcurrencyPolicy.For(MachineProfile.Current(), Entry.Profile);
+
+            // --keep-alive is interactive-debugging sugar for "force reuse on"; it is folded into
+            // the plan HERE so the child sees one decision, not a flag it must reconcile.
+            return KeepAlive ? plan with { ReuseRoster = true, ReuseGameData = true } : plan;
+        }
+    }
+
+    /// <summary>
+    /// Compose the child's command line. Built-in engines are told the plan via <c>--policy</c>;
+    /// launchable (<c>exec:</c>/<c>dotnet:</c>) adapters have no channel to receive one, so they get
+    /// none — and an explicit <see cref="PlanOverride"/> against one is an error rather than a
+    /// silent drop (see <see cref="EngineHostLocator.Resolve"/> and #305).
+    /// </summary>
+    public EngineLaunch ResolveLaunch() =>
+        EngineHostLocator.Resolve(Entry, Headed, KeepAlive, plan: Entry.Builtin ? EffectivePlan : PlanOverride);
+
     /// <summary>Start the adapter process for this selection, with optional extra child environment.</summary>
     public Protocol.AdapterProcess StartProcess(IReadOnlyDictionary<string, string>? environment = null)
     {
-        var launch = EngineHostLocator.Resolve(Entry, Headed, KeepAlive);
+        var launch = ResolveLaunch();
         return Protocol.AdapterProcess.Start(launch.Executable, launch.Arguments, environment);
     }
 }

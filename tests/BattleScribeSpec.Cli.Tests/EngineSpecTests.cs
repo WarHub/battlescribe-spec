@@ -1,4 +1,5 @@
 using System.CommandLine;
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Cli.Tests;
@@ -121,6 +122,85 @@ public sealed class EngineSpecTests
         var result = ParseWith(options, "spec", "--gamedata", "--roster");
 
         Assert.Throws<CliInputException>(() => options.Resolve(result, "spec"));
+    }
+
+    // ---- The parent decides; the child is told. ----
+    // These pin the property that distinguishes "parent decides" from "both guess and hopefully
+    // agree": the composed child command line must CARRY the decision. A child that computed its
+    // own plan would still work on this machine and would still be wrong — it is a separate process
+    // that may see a different machine (container CPU limits, cgroup quotas) and drift silently.
+
+    [Theory]
+    [InlineData("battlescribe-ui")]
+    [InlineData("battlescribe")]
+    [InlineData("newrecruit")]
+    [InlineData("newrecruit-ui")]
+    public void ResolveLaunch_AlwaysTellsTheChildThePolicy_EvenWithNoUserOverride(string engineName)
+    {
+        var selection = Resolve("plain-spec-id", "--engine", engineName);
+
+        var launch = selection.ResolveLaunch();
+
+        // Not "only when the user asked for an override" — EVERY spawn carries the plan.
+        Assert.Contains("--policy ", launch.Arguments, StringComparison.Ordinal);
+
+        // And it carries THIS plan's values, not a re-derivation the child could disagree with.
+        var plan = selection.EffectivePlan;
+        Assert.Contains($"workers={plan.Workers}", launch.Arguments, StringComparison.Ordinal);
+        Assert.Contains($"reuse-roster={(plan.ReuseRoster ? "on" : "off")}", launch.Arguments, StringComparison.Ordinal);
+        Assert.Contains($"reuse-gamedata={(plan.ReuseGameData ? "on" : "off")}", launch.Arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EffectivePlan_ComesFromTheConcurrencyPolicy_ForThisMachineAndEngine()
+    {
+        var selection = Resolve("plain-spec-id", "--engine", "battlescribe-ui");
+
+        var expected = ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile);
+
+        Assert.Equal(expected, selection.EffectivePlan);
+
+        // battlescribe-ui is the engine whose reuse was measured verdict-neutral AND faster in both
+        // domains; the plan the child is told must actually say so, or the refactor turned reuse off.
+        Assert.True(selection.EffectivePlan.ReuseRoster);
+        Assert.True(selection.EffectivePlan.ReuseGameData);
+    }
+
+    [Fact]
+    public void EffectivePlan_KeepAlive_ForcesReuseOn_AndIsFoldedIntoThePolicySentToTheChild()
+    {
+        // --keep-alive is sugar for "force reuse on". It must be folded into the ONE decision the
+        // child receives, not survive as a separate flag the child has to reconcile.
+        var selection = Resolve("plain-spec-id", "--engine", "newrecruit-ui") with { KeepAlive = true };
+
+        Assert.True(selection.EffectivePlan.ReuseRoster);
+        Assert.True(selection.EffectivePlan.ReuseGameData);
+        Assert.Contains("reuse-roster=on,reuse-gamedata=on", selection.ResolveLaunch().Arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveLaunch_LaunchableAdapter_GetsNoPolicy_AndIsNotGivenAFabricatedOne()
+    {
+        // exec:/dotnet: adapters have no --policy channel (#305 is the sibling gap for
+        // --headed/--keep-alive). They must not be handed a policy flag they'd choke on...
+        var selection = Resolve("plain-spec-id", "--engine", "wham=dotnet:adapter.dll");
+
+        var launch = selection.ResolveLaunch();
+
+        Assert.DoesNotContain("--policy", launch.Arguments, StringComparison.Ordinal);
+        Assert.Equal("adapter.dll", launch.Arguments);
+    }
+
+    [Fact]
+    public void ResolveLaunch_LaunchableAdapter_WithAnExplicitOverride_ThrowsRatherThanSilentlyDropIt()
+    {
+        // ...but an override the USER explicitly asked for must never be silently ignored.
+        var selection = Resolve("plain-spec-id", "--engine", "wham=dotnet:adapter.dll") with
+        {
+            PlanOverride = new ConcurrencyPlan(2, 2, 2, ReuseRoster: true, ReuseGameData: true),
+        };
+
+        Assert.Throws<InvalidOperationException>(selection.ResolveLaunch);
     }
 
     private static EngineSelection Resolve(string specInput, params string[] extraArgs)
