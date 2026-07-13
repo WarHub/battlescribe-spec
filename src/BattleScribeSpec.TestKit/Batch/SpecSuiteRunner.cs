@@ -386,6 +386,17 @@ public static class SpecSuiteRunner
     /// passed by ref so a replacement transparently becomes the caller's process going forward
     /// (returned to the pool in the parallel path, or kept as the sequential loop's sole process).
     /// </summary>
+    /// <remarks>
+    /// <b>Death counting (code review follow-up, see MINOR 3 in the #304 hygiene review):</b>
+    /// <paramref name="proc"/>'s <c>HasExited</c> is snapshotted into <c>wasAlreadyDead</c> BEFORE
+    /// this attempt runs. That is what lets every branch below tell "this specific process instance
+    /// just crashed for the first time" (always a real, distinct death — always recorded) apart from
+    /// "the caller handed us a corpse we (or a sibling spec) already recorded" (a repeat — never
+    /// recorded again). The previous version gated recording on the run's aggregate
+    /// <c>deathBudget.IsExceeded</c> instead, which conflated the two: once the cap had tripped
+    /// anywhere, a genuinely new crash on a completely different pooled process (a live scenario
+    /// under parallel workers) silently stopped being counted.
+    /// </remarks>
     private static (SpecResult Result, string Status, double DurationMs, int AdapterDeaths) RunOneSpec(
         ref AdapterProcess proc,
         int workerIndex,
@@ -398,6 +409,8 @@ public static class SpecSuiteRunner
         AdapterDeathBudget deathBudget,
         TextWriter? progressWriter)
     {
+        var wasAlreadyDead = proc.HasExited;
+
         var (result, status, durationMs) = RunOneSpecAttempt(
             proc, spec, isGameData, assertionEngine, engineFilter, expectedFailuresEngine);
         if (!proc.HasExited)
@@ -405,20 +418,23 @@ public static class SpecSuiteRunner
             return (result, status, durationMs, 0);
         }
 
-        // The adapter process died during this attempt (setup, a step, or best-effort teardown).
+        // The adapter process died during this attempt (setup, a step, or best-effort teardown) —
+        // or was already dead when we were handed it (a repeat use of a corpse the cap has already
+        // stopped replacing).
         if (result.Passed)
         {
             // Nothing to rescue — the spec's own verdict already succeeded (e.g. the process died
             // during best-effort teardown, after every assertion had already passed). The crash is
             // still real and must stay visible, and the process must be replaced before the next
             // spec uses it, but a death must never flip an already-genuine pass into a failure.
-            if (!deathBudget.IsExceeded)
+            if (!wasAlreadyDead)
             {
                 RecordDeath(deathBudget, progressWriter);
-                if (!deathBudget.IsExceeded)
-                {
-                    proc = ReplaceProcess(proc, workerIndex, adapterFactory);
-                }
+            }
+
+            if (!deathBudget.IsExceeded)
+            {
+                proc = TryReplaceProcess(proc, workerIndex, adapterFactory, deathBudget, progressWriter).Process;
             }
 
             return (result, status, durationMs, 1);
@@ -428,19 +444,39 @@ public static class SpecSuiteRunner
         // unless the run's death cap is already spent, in which case stop replacing and fail
         // outright without spending a retry on an engine that's already shown it's dying
         // deterministically.
-        if (deathBudget.IsExceeded)
+        if (wasAlreadyDead && deathBudget.IsExceeded)
         {
+            // Pure repeat: this exact corpse was already dead (and its death already recorded)
+            // before this attempt even started, and the cap was already tripped. Fail fast without
+            // touching the counter or calling the factory again.
             return (CapExceededResult(spec, deathBudget.MaxDeaths), "failed", durationMs, 1);
         }
 
-        RecordDeath(deathBudget, progressWriter);
+        if (!wasAlreadyDead)
+        {
+            // A genuinely new, distinct crash — always counted, regardless of whether some OTHER
+            // process (this worker's earlier one, or a sibling worker's) already tripped the cap.
+            RecordDeath(deathBudget, progressWriter);
+        }
+
         if (deathBudget.IsExceeded)
         {
-            // This very death tipped the budget over — stop replacing, fail outright, no retry spent.
+            // Either this very death tipped the budget over, or a sibling worker's already had —
+            // either way, stop replacing/retrying for this spec.
             return (CapExceededResult(spec, deathBudget.MaxDeaths), "failed", durationMs, 1);
         }
 
-        proc = ReplaceProcess(proc, workerIndex, adapterFactory);
+        var replacement = TryReplaceProcess(proc, workerIndex, adapterFactory, deathBudget, progressWriter);
+        proc = replacement.Process;
+        if (!replacement.Succeeded)
+        {
+            // adapterFactory itself threw while spawning the replacement — see TryReplaceProcess.
+            // Fail this spec now with a clear reason instead of attempting to run on the inert
+            // sentinel it handed back; `proc` still carries that sentinel forward so the caller (and,
+            // in the parallel path, the pool) always has a non-null process to keep going with.
+            return (ReplacementFailedResult(spec, replacement.Error!), "failed", durationMs, 2);
+        }
+
         var (retryResult, retryStatus, retryDurationMs) = RunOneSpecAttempt(
             proc, spec, isGameData, assertionEngine, engineFilter, expectedFailuresEngine);
         if (!proc.HasExited)
@@ -450,8 +486,8 @@ public static class SpecSuiteRunner
             return (retryResult, retryStatus, retryDurationMs, 1);
         }
 
-        // The retry ALSO died: fail this spec with the adapter-death reason, replace (unless the
-        // cap now stops us), and let the caller continue with the remaining specs.
+        // The retry ALSO died. The replacement was alive when the retry began, so this is always a
+        // NEW, distinct crash — always counted.
         if (!deathBudget.IsExceeded)
         {
             RecordDeath(deathBudget, progressWriter);
@@ -460,7 +496,7 @@ public static class SpecSuiteRunner
         var failed = AdapterDeathResult(spec);
         if (!deathBudget.IsExceeded)
         {
-            proc = ReplaceProcess(proc, workerIndex, adapterFactory);
+            proc = TryReplaceProcess(proc, workerIndex, adapterFactory, deathBudget, progressWriter).Process;
         }
 
         return (failed, "failed", retryDurationMs, 2);
@@ -525,12 +561,44 @@ public static class SpecSuiteRunner
         }
     }
 
-    /// <summary>Disposes a dead process and creates its replacement via the caller's factory (same worker index — same diagnostics/telemetry identity).</summary>
-    private static AdapterProcess ReplaceProcess(AdapterProcess dead, int workerIndex, Func<int, AdapterProcess> adapterFactory)
+    /// <summary>
+    /// Disposes a dead process and tries to create its replacement via the caller's factory (same
+    /// worker index — same diagnostics/telemetry identity). Never throws: <paramref name="adapterFactory"/>
+    /// is plausibly unreliable right after a crash (the engine binary is gone, the JVM won't start,
+    /// the machine is out of memory), and this is reachable MID-RUN (#304's replacement path), not
+    /// just at startup — an uncaught exception here would fault <c>Parallel.ForEachAsync</c> and
+    /// crash the entire batch. A factory failure is itself treated as an adapter-death-class event
+    /// (recorded and counted against <paramref name="deathBudget"/>, same as a process that starts
+    /// and then crashes) so a permanently broken factory still degrades to "the cap trips and the
+    /// remainder fails fast" instead of being retried forever or propagating out uncaught.
+    /// </summary>
+    /// <returns>
+    /// On success, the new live process. On failure, <paramref name="dead"/> itself (already
+    /// disposed) is returned as an inert sentinel — <c>proc</c> must never become null, because the
+    /// parallel path's pool write-back (<c>processPool.Writer.TryWrite</c> in the caller's
+    /// <c>finally</c>) must always have a non-null <see cref="AdapterProcess"/> to hand back, or a
+    /// worker blocks forever on <c>Channel&lt;T&gt;.Reader.ReadAsync</c>. Any subsequent attempt
+    /// against the sentinel reports <see cref="AdapterProcess.HasExited"/> immediately without
+    /// calling this same broken factory again.
+    /// </returns>
+    private static AdapterReplacement TryReplaceProcess(
+        AdapterProcess dead, int workerIndex, Func<int, AdapterProcess> adapterFactory,
+        AdapterDeathBudget deathBudget, TextWriter? progressWriter)
     {
         dead.Dispose();
-        return adapterFactory(workerIndex);
+        try
+        {
+            return new AdapterReplacement(adapterFactory(workerIndex), true, null);
+        }
+        catch (Exception ex)
+        {
+            RecordDeath(deathBudget, progressWriter);
+            return new AdapterReplacement(dead, false, ex);
+        }
     }
+
+    /// <summary>Result of <see cref="TryReplaceProcess"/>: either a live replacement (<see cref="Succeeded"/>) or the disposed original process kept as a non-null sentinel, with the factory's exception.</summary>
+    private readonly record struct AdapterReplacement(AdapterProcess Process, bool Succeeded, Exception? Error);
 
     private const string AdapterDeathTag = "ADAPTER DEATH";
 
@@ -542,6 +610,26 @@ public static class SpecSuiteRunner
         new(spec.Id, spec.Category, spec.Description,
             [$"{AdapterDeathTag}: the adapter process died while running this spec, and this run's adapter-death cap ({maxDeaths}) has already been reached — no further replacement/retry will be attempted for the remainder of this run."]);
 
+    /// <summary>The replacement process itself could not be spawned (see <see cref="TryReplaceProcess"/>) — a distinct failure mode from <see cref="AdapterDeathResult"/> (both attempts ran and both died).</summary>
+    private static SpecResult ReplacementFailedResult(SpecFileBase spec, Exception error) =>
+        new(spec.Id, spec.Category, spec.Description,
+            [$"{AdapterDeathTag}: the adapter process died while running this spec, and a replacement process could not be started ({error.GetType().Name}: {error.Message}). Failing without a further retry."]);
+
+    /// <summary>
+    /// Computes the passed/failed/expected-failure/unexpected-pass display status for a spec's own
+    /// verdict. <b>Deliberately NOT used</b> for <see cref="AdapterDeathResult"/>/
+    /// <see cref="CapExceededResult"/>/<see cref="ReplacementFailedResult"/> (code review follow-up,
+    /// MINOR 4 in the #304 hygiene review): those three always report <c>"failed"</c> even when
+    /// <see cref="SpecSuiteOptions.ExpectedFailuresEngine"/> is set and the spec is marked
+    /// expected-to-fail. This is a deliberate choice, not an oversight — an adapter death (a process
+    /// crash) is a categorically different outcome from an "expected failure" (a known, semantic
+    /// assertion mismatch), and routing it through <see cref="ComputeStatus"/> would let a genuine
+    /// infrastructure crash on an expected-to-fail spec silently read as "expected-failure" in the
+    /// report/JSON/<c>compare</c> output — exactly the row a human scanning for crashes would skip
+    /// past. <see cref="SpecSuiteResult.Create"/>'s exit-code math still independently reclassifies
+    /// these results via <c>spec.IsExpectedToFail</c>, so the exit code is correct either way; only
+    /// the display string is affected.
+    /// </summary>
     private static string ComputeStatus(SpecResult result, SpecFileBase spec, string? expectedFailuresEngine)
     {
         var status = result.Passed ? "passed" : "failed";
