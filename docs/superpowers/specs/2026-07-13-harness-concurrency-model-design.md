@@ -45,7 +45,7 @@ So "one uniform model" cannot mean one uniform behaviour. It must mean **one uni
 ## Architecture
 
 ```
-        ConcurrencyPolicy.For(environment, engine, mode)
+        ConcurrencyPolicy.For(machine, engine)
                           │
         ┌─────────────────┼─────────────────┐
         ▼                 ▼                 ▼
@@ -55,8 +55,10 @@ So "one uniform model" cannot mean one uniform behaviour. It must mean **one uni
 
 One policy object, computed once per process. Three consumers instead of three independent multipliers.
 
-**Inputs:** CPU count, available memory, whether we are in CI, the engine's declared capabilities, and the mode.
+**Inputs:** CPU count, available memory, and the engine's declared capabilities.
 **Outputs:** worker count, pool sizes, `maxParallelThreads`, and reuse on/off per domain.
+
+Note there is no `isCI` input. CI is not a mode — it is a **small machine**, and the policy already takes the machine as an input. Branching on "am I in CI" would be re-introducing exactly the kind of special case this spec exists to delete.
 
 ### Parallelism stays process-level
 
@@ -82,39 +84,37 @@ reuse enabled  ⟺  ReuseSafe(domain)  ∧  ColdStartCost == Expensive
 
 `ReuseSafe` asks *"is it correct?"* — reusing NewRecruit-UI's roster engine was **not** (it changed verdicts). `ColdStartCost` asks *"is it worth anything?"* — reusing a NewRecruit browser is perfectly safe and buys **0.92×**, i.e. nothing, because a headless Chromium relaunch is cheap. Enabling reuse on a safe-but-cheap engine adds a warm-state failure mode for no gain, which is a bad trade even when it is a correct one.
 
-## Two modes
+## One mode: deterministic, and as fast as the hardware allows
 
-### Deterministic (default)
+A pure function of `(CPU count, available memory, engine capabilities)`. The same box gets the same plan every time — and a bigger box gets a bigger plan.
 
-A pure function of `(CPU count, memory, isCI, engine capabilities)`. The same box gets the same plan every time.
+**There is no adaptive/feedback mode.** An earlier draft proposed one (a controller that watches CPU saturation and raises concurrency mid-run). It is cut, deliberately. Controllers oscillate, thrash on noisy shared runners, and have a strong tendency to *look* like they are working while being slower; and there is no evidence a good controller would beat a well-fitted formula here. Building one would be choosing the more interesting mechanism over the justified one — the precise failure this project keeps catching. If a formula ever demonstrably leaves speed on the table, that is the moment to revisit, with the measurement in hand.
 
-Reproducibility is not a nicety here. `compare` establishes verdict-equality by holding everything constant except one variable; a policy that wanders between runs makes that comparison meaningless.
+Reproducibility is also not a nicety: `compare` establishes verdict-equality by holding everything constant except one variable, and a policy that wanders between runs makes that comparison meaningless.
 
-So **`compare` pins both arms to deterministic mode by default** — the config under test is the only thing allowed to differ. The single exception is the adaptive-mode validation below, where *mode itself* is deliberately the variable under test.
-
-### Adaptive ("burn")
-
-A bounded controller that raises concurrency while the box has headroom, using the CPU/GC saturation signal the runtime instrumentation already emits (landed in Spec 1). Intended for CI, where wall-clock is the whole point and reproducibility is not.
-
-Guards, all mandatory:
-
-- never exceeds the engine's declared `MaxParallel`;
-- never exceeds a hard resource ceiling derived from memory;
-- **hysteresis** — it must not oscillate;
-- backs off on thrash (rising GC pressure or rising per-spec latency);
-- **must not change verdicts.**
-
-That last guard is the one that makes adaptive mode safe to ship at all, and it is *mechanically checkable*:
+### The shape
 
 ```
-bs-spec compare --config-a "mode=deterministic" --config-b "mode=adaptive"
+workers = clamp(
+    min( ceil(cpuCount × k_engine),                      // scales with the machine
+         floor(availableMemory / memPerInstance_engine)  // a browser or JVM costs real RAM
+    ),
+    1,
+    MaxParallel                                          // the engine's hard ceiling
+)
 ```
 
-must be verdict-identical. If burning the CPUs changes a single verdict, adaptive mode is broken and the rail from Spec 1 catches it automatically.
+- **`k_engine`** — the per-engine oversubscription factor. **Measured, per engine and domain.** It is *not* a global constant, because the engines demonstrably disagree (below).
+- **`memPerInstance_engine`** — measured RSS per concurrent instance. Without this bound a 64-core box will happily launch 64 Chromium contexts and OOM long before it saturates CPU. CPU count alone is not a safe input.
+- **`MaxParallel`** — declared by the engine; `1` for `battlescribe-ui`, which cannot be parallelised at all.
 
-## The numbers are measured, not invented
+This satisfies the requirement directly: **more cores means more workers**, up to the point where memory or the engine's own ceiling binds.
 
-The deterministic policy's constants come from a measurement campaign on **both** a real 4-vCPU CI runner **and** the development machine — because those two disagree violently, and the disagreement is not intuitive.
+## The numbers are measured, not invented — and the existing data is not yet sufficient
+
+Two hard facts from what has already been measured, both of which constrain the campaign.
+
+### Fact 1: local hardware and CI disagree violently
 
 Measured on `nr-editor-ui-frozen`:
 
@@ -122,13 +122,37 @@ Measured on `nr-editor-ui-frozen`:
 |---:|---:|---:|
 | 2 | 122 s | 167 s |
 | 4 | 65 s | 115 s |
-| **6** | — | **96 s** ← best |
+| 6 | — | 96 s |
 | 8 | 35 s | 93 s |
-| 16 | **27 s** ← best | 91 s |
+| 16 | 27 s | 91 s |
 
-And on `nr-frozen`, the CI runner **degrades past 6**: 48 s at P=6, **75 s at P=16** — worse than P=2.
+The local box says "keep scaling." Extrapolating from it to CI would have made a lane ~30 % **slower** while looking like an optimisation. Any constant not measured on the hardware it runs on is a guess.
 
-The local box says "keep scaling to 16." The runner says "you already lost." Extrapolating from local would have made a CI lane ~30 % slower while looking like an optimisation. **Any constant in this policy that was not measured on the hardware it runs on is a guess**, and this project has already paid for that mistake.
+### Fact 2: the optimum depends on the workload, not just the CPU count
+
+On the **same** 4-vCPU runner:
+
+| Parallelism | `nr-editor-ui-frozen` | `nr-frozen` |
+|---:|---:|---:|
+| 4 | 115 s | 58 s |
+| **6** | 96 s | **48 s** ← best |
+| 8 | 93 s | 59 s |
+| 16 | **91 s** | **75 s** ← *worse than P=2* |
+
+`nr-frozen` (short, fast store specs) **degrades hard** past 6 — contention dominates. `nr-editor-ui-frozen` (long, I/O-heavy UI specs) merely **plateaus**. A single `workers = f(cpu)` cannot express both behaviours. Hence `k_engine`, measured per engine and domain.
+
+### The campaign must find the knee — the existing data does not
+
+**The 32-core sweep stopped at 16 while still improving** (35 s at P=8 → 27 s at P=16). That is not an optimum; it is where the sweep ran out. The true optimum on that box may be 24, 32, or higher, and fitting `k` to "16" would bake in an artifact of the sampling rather than a property of the hardware.
+
+So the campaign must, for each `(engine, domain)` and each hardware class:
+
+1. **sweep parallelism until wall-clock stops improving or begins to degrade** — i.e. actually locate the knee, and keep going far enough to be sure it is one;
+2. record peak RSS per concurrent instance (for `memPerInstance_engine`);
+3. **assert verdict-equality across every level with `bs-spec compare`** — a parallelism level that changes conformance results is not a faster configuration, it is a broken one;
+4. fit `k_engine` to the knee, and state the hardware it was measured on.
+
+Hardware classes to measure: the 4-vCPU GitHub runner (what CI actually runs) and the development machine. If those two fit the same `k`, the formula is portable; if they do not, that itself is a finding and the policy needs a CPU-count-dependent `k`, which must be stated rather than smoothed over.
 
 ## Retiring the knobs
 
@@ -154,23 +178,23 @@ This is the one place the current system is not merely arbitrary but genuinely u
 
 ## CI re-scoping
 
-- CI lanes run in **adaptive mode** — wall-clock is what CI is for.
+- CI lanes get their parallelism from the policy, like everything else. The 4-vCPU runner is simply one hardware class the policy is fitted to — CI is not a special mode, it is a small machine.
 - The present `NR_PARALLEL: 6` (measured optimal on a 4-vCPU runner) becomes a **fallback constant inside the policy**, not a value pasted into YAML in two places that nothing keeps in sync.
-- Lane structure is revisited once adaptive mode's real speedup is measured — not before.
+- Lane structure is revisited once the fitted policy's real speedup is measured on the runner — not before.
 
 ## How this is proven
 
 Three gates, all of which exist today:
 
 1. **`compare` verdict-equality on every policy change.** A configuration change that alters conformance results is not an optimisation; it is a regression.
-2. **`compare deterministic vs adaptive` is verdict-identical**, or adaptive mode does not ship.
+2. **Verdict-equality holds across every parallelism level swept in the campaign.** A level that changes conformance results is not a faster configuration; it is a broken one, and it is disqualified regardless of its wall-clock.
 3. **Peak live resources stays within the declared budget** — now observable, with the caveat that any peak read from `harness.resource.count` is a **lower bound** (a spike shorter than the metric export interval falls between exports and is invisible). That caveat travels with the number wherever it is used to set a bound.
 
 ## Risks, stated plainly
 
-**The adaptive controller is the only genuinely new machinery here, and controllers fail in ways formulas do not** — oscillation, thrash on a noisy shared runner, and a strong tendency to *look* like they are working while making things slower. It must demonstrate a measured win against the deterministic policy on a real runner. **If it does not, the correct outcome is to ship the deterministic policy alone and say so.** Shipping a controller because it is more interesting than a lookup table would be a failure of exactly the kind this project keeps catching.
+**The policy is a single point of failure — deliberately.** Today a bad `NR_PARALLEL` degrades one lane and a bad `--workers` default degrades another, independently and inconsistently. After this, one policy governs everything: get it wrong and everything is wrong. That is the *point*. A single place to be wrong is a single place to measure, fix and tune — which is exactly what the current three-mechanism scatter denies us. The trade is accepted knowingly; it raises the bar on the policy's own tests, and it is the reason verdict-equality gates every change to it.
 
-**A policy is a single point of failure.** Today a bad `NR_PARALLEL` degrades one lane; a bad policy degrades everything. This is an acceptable trade — one place to be wrong is better than three places that are wrong inconsistently — but it raises the bar on the policy's tests.
+**The real risk is fitting `k` to bad data.** The formula is only as good as the campaign behind it, and the existing sweep already contains the failure mode: it stopped at P=16 while still improving, so "16" is an artifact of where I stopped measuring, not a knee. A `k` fitted to that number would be a guess wearing a measurement's clothes. The campaign's job is to *find* the knee, and to keep going far enough past it to be sure it is one.
 
 ## Explicitly out of scope
 
