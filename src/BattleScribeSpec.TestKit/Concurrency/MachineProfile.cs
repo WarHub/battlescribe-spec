@@ -21,6 +21,9 @@ public sealed record MachineProfile(int CpuCount, long AvailableMemoryBytes)
     public static MachineProfile Current()
     {
         var memory = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        // Fallback to 4 GiB if GC.GetGCMemoryInfo() returns 0 (which is defensive and essentially never
+        // happens on modern .NET). The only job of this fallback is to keep the policy from computing
+        // a zero or negative worker count; it will never be the governing constraint on a real system.
         return new MachineProfile(
             CpuCount: Environment.ProcessorCount,
             AvailableMemoryBytes: memory > 0 ? memory : 4L * 1024 * 1024 * 1024);
