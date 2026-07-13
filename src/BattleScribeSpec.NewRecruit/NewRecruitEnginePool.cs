@@ -62,53 +62,67 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         }
 
         var playwright = await Playwright.CreateAsync();
-        var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = headless,
-            SlowMo = slowMo,
-        });
-        ResourceMetrics.Acquired("browser");
-
+        IBrowser? browser = null;
         var contexts = new List<IBrowserContext>();
         var engines = new List<NewRecruitRosterEngine>();
 
-        for (var i = 0; i < concurrency; i++)
+        // Everything from here down is guarded: if any step throws partway through the loop (say
+        // context 3 of 5), the browser/contexts already created above would otherwise never be
+        // disposed — no pool object is ever returned, so the caller has nothing to dispose — which
+        // leaks a real OS-level Chromium process AND permanently inflates harness.resource.count
+        // (the Acquired() calls already fired; the matching Released() never would).
+        try
         {
-            var context = await browser.NewContextAsync();
-            contexts.Add(context);
-            ResourceMetrics.Acquired("browser-context");
-
-            var page = await context.NewPageAsync();
-
-            // Register JS helpers as init script — auto-injected on every navigation
-            await NewRecruitBrowser.RegisterHelpersOnPageAsync(page);
-
-            // HAR replay at page level (context-level RouteFromHAR not available)
-            await page.RouteFromHARAsync(harFilePath, new PageRouteFromHAROptions
+            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
-                Url = "**",
-                NotFound = HarNotFound.Abort,
+                Headless = headless,
+                SlowMo = slowMo,
             });
+            ResourceMetrics.Acquired("browser");
 
-            // Navigate to /app and wait for load
-            await page.GotoAsync($"{baseUrl}/app", new PageGotoOptions
+            for (var i = 0; i < concurrency; i++)
             {
-                WaitUntil = WaitUntilState.Load,
-                Timeout = 60_000,
-            });
+                var context = await browser.NewContextAsync();
+                contexts.Add(context);
+                ResourceMetrics.Acquired("browser-context");
 
-            var nrBrowser = NewRecruitBrowser.CreateFromContext(page, baseUrl, isFrozen: true);
+                var page = await context.NewPageAsync();
 
-            // Wait for Pinia to initialize
-            await nrBrowser.WaitForPiniaAsync();
+                // Register JS helpers as init script — auto-injected on every navigation
+                await NewRecruitBrowser.RegisterHelpersOnPageAsync(page);
 
-            var engine = NewRecruitRosterEngine.CreateFromBrowser(nrBrowser);
-            engine.Visual = visual;
-            engines.Add(engine);
+                // HAR replay at page level (context-level RouteFromHAR not available)
+                await page.RouteFromHARAsync(harFilePath, new PageRouteFromHAROptions
+                {
+                    Url = "**",
+                    NotFound = HarNotFound.Abort,
+                });
+
+                // Navigate to /app and wait for load
+                await page.GotoAsync($"{baseUrl}/app", new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.Load,
+                    Timeout = 60_000,
+                });
+
+                var nrBrowser = NewRecruitBrowser.CreateFromContext(page, baseUrl, isFrozen: true);
+
+                // Wait for Pinia to initialize
+                await nrBrowser.WaitForPiniaAsync();
+
+                var engine = NewRecruitRosterEngine.CreateFromBrowser(nrBrowser);
+                engine.Visual = visual;
+                engines.Add(engine);
+            }
+
+            var pool = EnginePool<NewRecruitRosterEngine>.Create(engines);
+            return new NewRecruitEnginePool(playwright, browser, contexts, pool);
         }
-
-        var pool = EnginePool<NewRecruitRosterEngine>.Create(engines);
-        return new NewRecruitEnginePool(playwright, browser, contexts, pool);
+        catch
+        {
+            await DisposePartialConstructionAsync(playwright, browser, contexts, engines);
+            throw;
+        }
     }
 
     /// <summary>
@@ -122,38 +136,97 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         float? slowMo = null)
     {
         var playwright = await Playwright.CreateAsync();
-        var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = headless,
-            SlowMo = slowMo,
-        });
-        ResourceMetrics.Acquired("browser");
-
+        IBrowser? browser = null;
         var contexts = new List<IBrowserContext>();
         var engines = new List<NewRecruitRosterEngine>();
 
-        for (var i = 0; i < concurrency; i++)
+        // See CreateFrozenAsync above for why this must be exception-safe: a mid-loop throw must
+        // not leak the browser/contexts already acquired, nor leave their ResourceMetrics counters
+        // permanently inflated.
+        try
         {
-            var context = await browser.NewContextAsync();
-            contexts.Add(context);
-            ResourceMetrics.Acquired("browser-context");
-            var page = await context.NewPageAsync();
-            // Register JS helpers as init script — auto-injected on every navigation
-            await NewRecruitBrowser.RegisterHelpersOnPageAsync(page);
-            await page.GotoAsync(baseUrl, new PageGotoOptions
+            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
-                WaitUntil = WaitUntilState.Load,
-                Timeout = 60_000,
+                Headless = headless,
+                SlowMo = slowMo,
             });
+            ResourceMetrics.Acquired("browser");
 
-            var nrBrowser = NewRecruitBrowser.CreateFromContext(page, baseUrl, isFrozen: false);
-            var engine = NewRecruitRosterEngine.CreateFromBrowser(nrBrowser);
-            engine.Visual = visual;
-            engines.Add(engine);
+            for (var i = 0; i < concurrency; i++)
+            {
+                var context = await browser.NewContextAsync();
+                contexts.Add(context);
+                ResourceMetrics.Acquired("browser-context");
+                var page = await context.NewPageAsync();
+                // Register JS helpers as init script — auto-injected on every navigation
+                await NewRecruitBrowser.RegisterHelpersOnPageAsync(page);
+                await page.GotoAsync(baseUrl, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.Load,
+                    Timeout = 60_000,
+                });
+
+                var nrBrowser = NewRecruitBrowser.CreateFromContext(page, baseUrl, isFrozen: false);
+                var engine = NewRecruitRosterEngine.CreateFromBrowser(nrBrowser);
+                engine.Visual = visual;
+                engines.Add(engine);
+            }
+
+            var pool = EnginePool<NewRecruitRosterEngine>.Create(engines);
+            return new NewRecruitEnginePool(playwright, browser, contexts, pool);
+        }
+        catch
+        {
+            await DisposePartialConstructionAsync(playwright, browser, contexts, engines);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Tears down whatever was already created before a construction-time exception, so a partial
+    /// failure (e.g. context 3 of 5 throwing) can never leak a real Chromium process or leave
+    /// <see cref="ResourceMetrics"/> counters permanently inflated with resources that no longer
+    /// exist. Mirrors <see cref="DisposeAsync"/>'s teardown order (engines, then contexts, then
+    /// browser, then Playwright) but only releases what was actually acquired.
+    /// </summary>
+    private static async Task DisposePartialConstructionAsync(
+        IPlaywright playwright,
+        IBrowser? browser,
+        List<IBrowserContext> contexts,
+        List<NewRecruitRosterEngine> engines)
+    {
+        foreach (var engine in engines)
+        {
+            try
+            { engine.Dispose(); }
+            catch { /* best effort */ }
         }
 
-        var pool = EnginePool<NewRecruitRosterEngine>.Create(engines);
-        return new NewRecruitEnginePool(playwright, browser, contexts, pool);
+        foreach (var ctx in contexts)
+        {
+            try
+            { await ctx.CloseAsync(); }
+            catch { /* best effort */ }
+            finally
+            {
+                // In a finally so a throwing close can't leak the counter — a counter that drifts
+                // upward is worse than no counter, because it silently invents resources that don't exist.
+                ResourceMetrics.Released("browser-context");
+            }
+        }
+
+        if (browser is not null)
+        {
+            try
+            { await browser.CloseAsync(); }
+            catch { /* best effort */ }
+            finally
+            {
+                ResourceMetrics.Released("browser");
+            }
+        }
+
+        playwright.Dispose();
     }
 
     /// <summary>

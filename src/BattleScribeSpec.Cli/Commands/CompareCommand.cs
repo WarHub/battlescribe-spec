@@ -267,7 +267,11 @@ internal static class CompareCommand
             is { Length: > 0 } patterns ? patterns : null;
 
         var runId = Guid.NewGuid().ToString("N")[..8];
-        var artifactPath = Path.Combine("artifacts", "telemetry", $"compare-{armLabel}-{runId}");
+        var artifactRoot = Path.Combine("artifacts", "telemetry");
+        var artifactPath = Path.Combine(artifactRoot, $"compare-{armLabel}-{runId}");
+
+        // Bound artifacts/telemetry/'s growth before adding to it — see RunBatch/TelemetryRetention.
+        TelemetryRetention.Sweep(artifactRoot);
 
         var sw = Stopwatch.StartNew();
         SpecSuiteResult result;

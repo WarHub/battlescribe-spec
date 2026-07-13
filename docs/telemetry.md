@@ -133,6 +133,43 @@ same table as a markdown-fenced block and appends it to `$GITHUB_STEP_SUMMARY` w
 is set — which is how every PR gets wall time, cold-starts vs reuses, and peak live resources on
 the checks page, without downloading anything.
 
+## Retention: `artifacts/telemetry/` does not grow forever
+
+Every `run --all`, every `compare` arm, and every `dotnet test` writes a fresh, uniquely-named
+artifact set (three sibling `.pb` files — see above). Nothing deletes them on its own, so a
+developer's `artifacts/telemetry/` would otherwise accumulate indefinitely.
+
+`TelemetryRetention.Sweep` (`src/BattleScribeSpec.Telemetry.Collector/TelemetryRetention.cs`) keeps
+the **20 most recent artifact sets** in a directory and deletes the rest, by last-write time. It is
+called once, right before each of the three real entry points starts its own collector: `RunBatch`,
+`CompareCommand`, and the `dotnet test` assembly fixture (`TelemetryAssemblyFixture`).
+
+**Count-based, not age-based, on purpose.** A day-based policy ("delete anything older than N
+days") does not bound disk usage under a tight edit/test loop or a busy CI matrix — a developer can
+easily produce more than N days' worth of runs within a single day. Keeping the newest 20 SETS
+bounds the directory regardless of how often runs happen, and 20 runs of history is already enough
+to answer "did the last few changes regress something" without weeks of clutter.
+
+**Fail-open, unconditionally**: any sweep failure (missing directory, a locked file, a permissions
+error) is caught and logged to stderr; a housekeeping bug can never fail — or even slow down — a
+real run.
+
+**Never deletes a currently-running process's artifact**, without any process/PID tracking: the
+sweep runs *before* the calling process's own artifact files exist, so its own set is structurally
+never a deletion candidate; and `OtlpArtifactWriter` opens its three files exclusively, so any
+*other* process still writing a set holds an OS-level lock on it — deleting a locked file throws,
+which is caught per-file and skipped, rather than deleting only some of a live set's three sibling
+files.
+
+This is deliberately **not** wired into `HarnessCollector.StartAsync` itself, even though that
+would read as the more obvious "on collector start" hook. Ad hoc unit tests call `StartAsync`
+directly against paths under the shared OS temp directory; a sweep firing automatically on every
+such call would race unrelated parallel tests writing into that same shared directory (the
+lock-based protection above only guards artifacts that are still *open* — not ones that are closed
+but not yet read back or cleaned up by their own test). Scoping the sweep to an explicit call at the
+three call sites that own `artifacts/telemetry/` as a well-known directory avoids that race while
+still covering every real run.
+
 ## `bs-spec compare`
 
 ```bash

@@ -42,7 +42,13 @@ internal static class RunBatch
         Ui.Info($"Domains: {string.Join(", ", options.Domains)}");
 
         var runId = Guid.NewGuid().ToString("N")[..8];
-        var artifactPath = Path.Combine("artifacts", "telemetry", $"run-{runId}");
+        var artifactRoot = Path.Combine("artifacts", "telemetry");
+        var artifactPath = Path.Combine(artifactRoot, $"run-{runId}");
+
+        // Bound artifacts/telemetry/'s growth before adding to it — this run's own artifact set
+        // doesn't exist yet (created below by HarnessCollector.StartAsync), so it is never a sweep
+        // candidate. See TelemetryRetention for why this isn't wired into StartAsync itself.
+        TelemetryRetention.Sweep(artifactRoot);
 
         // The collector must be disposed (which force-flushes the parent's TracerProvider and
         // MeterProvider) BEFORE TraceSummary.FromArtifact reads the artifact back — otherwise the

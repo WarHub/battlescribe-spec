@@ -34,6 +34,15 @@ public sealed class EndToEndTraceTests
         return dll;
     }
 
+    /// <summary>
+    /// The exact spec id under test — <c>SpecLoader.DiscoverSpecs</c> derives it as the yaml
+    /// filename minus extension (<c>specs/roster/protocol/protocol-kitchen-sink.yaml</c>), and
+    /// <c>HarnessTelemetry.StartSpec</c> tags every spec span's <c>test.case.name</c> with exactly
+    /// this value (not the <c>category/id</c> form used by <see cref="SpecSuiteOptions.FilterPatterns"/>).
+    /// Shared between the filter below and assertion (a) so the two can never silently drift apart.
+    /// </summary>
+    private const string SpecId = "protocol-kitchen-sink";
+
     [Fact]
     public async Task RunAsync_ChildProcessSpans_NestUnderTheParentsSpans_InOneArtifact()
     {
@@ -56,7 +65,7 @@ public sealed class EndToEndTraceTests
                 result = await SpecSuiteRunner.RunAsync(
                     new SpecSuiteOptions
                     {
-                        FilterPatterns = ["protocol/protocol-kitchen-sink"],
+                        FilterPatterns = [$"protocol/{SpecId}"],
                         EngineFilter = "battlescribe",
                         AssertionEngine = "battlescribe",
                         Workers = 1,
@@ -87,9 +96,16 @@ public sealed class EndToEndTraceTests
                 .ToList();
             Assert.NotEmpty(allSpans);
 
-            // (a) spec spans exist — HarnessTelemetry.StartSpec tags every spec span with
-            // test.case.name (see SpecSuiteRunner/HarnessTelemetryTests).
-            Assert.Contains(allSpans, x => x.Span.Attributes.Any(a => a.Key == "test.case.name"));
+            // (a) the spec span for THIS spec exists — HarnessTelemetry.StartSpec tags every spec
+            // span with test.case.name (see SpecSuiteRunner/HarnessTelemetryTests). Scoped to the
+            // exact spec id under test (not "any span with a test.case.name attribute anywhere in
+            // the artifact") so this can't in principle be satisfied by a span leaked from some
+            // OTHER, concurrently-running test sharing the process-wide ActivitySource/artifact —
+            // (b) and (c) below carry the real cross-process proof; this one just needs to name the
+            // right spec while it's at it.
+            Assert.Contains(
+                allSpans,
+                x => x.Span.Attributes.Any(a => a.Key == "test.case.name" && a.Value.StringValue == SpecId));
 
             // (b) at least one span was produced by the CHILD PROCESS: its resource has
             // service.name = bs-engine-host (set via HarnessCollector.ChildEnvironment's

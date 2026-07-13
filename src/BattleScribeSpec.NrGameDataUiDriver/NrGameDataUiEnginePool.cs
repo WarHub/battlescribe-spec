@@ -79,30 +79,91 @@ public sealed class NrGameDataUiEnginePool : IAsyncDisposable
         }
 
         var playwright = await Playwright.CreateAsync();
-        var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = headless,
-            SlowMo = slowMo,
-        });
-        ResourceMetrics.Acquired("browser");
-
+        IBrowser? browser = null;
         var contexts = new List<IBrowserContext>();
         var engines = new List<NrGameDataUiEngine>();
 
-        for (var i = 0; i < concurrency; i++)
+        // Everything from here down is guarded: if any step throws partway through the loop (say
+        // context 3 of 5), the browser/contexts already created above would otherwise never be
+        // disposed — no pool object is ever returned, so the caller has nothing to dispose — which
+        // leaks a real OS-level Chromium process AND permanently inflates harness.resource.count
+        // (the Acquired() calls already fired; the matching Released() never would).
+        try
         {
-            var context = await browser.NewContextAsync(new BrowserNewContextOptions
+            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
-                ServiceWorkers = ServiceWorkerPolicy.Block,
+                Headless = headless,
+                SlowMo = slowMo,
             });
-            contexts.Add(context);
-            ResourceMetrics.Acquired("browser-context");
+            ResourceMetrics.Acquired("browser");
 
-            var engine = await NrGameDataUiEngine.CreateFrozenInContextAsync(context, staticDir, headless);
-            engines.Add(engine);
+            for (var i = 0; i < concurrency; i++)
+            {
+                var context = await browser.NewContextAsync(new BrowserNewContextOptions
+                {
+                    ServiceWorkers = ServiceWorkerPolicy.Block,
+                });
+                contexts.Add(context);
+                ResourceMetrics.Acquired("browser-context");
+
+                var engine = await NrGameDataUiEngine.CreateFrozenInContextAsync(context, staticDir, headless);
+                engines.Add(engine);
+            }
+
+            return new NrGameDataUiEnginePool(playwright, browser, contexts, engines);
+        }
+        catch
+        {
+            await DisposePartialConstructionAsync(playwright, browser, contexts, engines);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Tears down whatever was already created before a construction-time exception, so a partial
+    /// failure (e.g. context 3 of 5 throwing) can never leak a real Chromium process or leave
+    /// <see cref="ResourceMetrics"/> counters permanently inflated with resources that no longer
+    /// exist. Mirrors <see cref="DisposeAsync"/>'s teardown order (engines, then contexts, then
+    /// browser, then Playwright) but only releases what was actually acquired.
+    /// </summary>
+    private static async Task DisposePartialConstructionAsync(
+        IPlaywright playwright,
+        IBrowser? browser,
+        List<IBrowserContext> contexts,
+        List<NrGameDataUiEngine> engines)
+    {
+        foreach (var engine in engines)
+        {
+            try
+            { engine.Dispose(); }
+            catch { /* best effort */ }
         }
 
-        return new NrGameDataUiEnginePool(playwright, browser, contexts, engines);
+        foreach (var ctx in contexts)
+        {
+            try
+            { await ctx.CloseAsync(); }
+            catch { /* best effort */ }
+            finally
+            {
+                // In a finally so a throwing close can't leak the counter — a counter that drifts
+                // upward is worse than no counter, because it silently invents resources that don't exist.
+                ResourceMetrics.Released("browser-context");
+            }
+        }
+
+        if (browser is not null)
+        {
+            try
+            { await browser.CloseAsync(); }
+            catch { /* best effort */ }
+            finally
+            {
+                ResourceMetrics.Released("browser");
+            }
+        }
+
+        playwright.Dispose();
     }
 
     /// <summary>
