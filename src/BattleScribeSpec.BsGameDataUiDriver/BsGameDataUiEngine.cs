@@ -279,6 +279,8 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                     var warmFiles = BuildXmlFiles(gameSystem, catalogues);
                     await BsUiDataStaging.StageDataFilesAsync(
                         _app.DataDirectoryPath, gameSystem, catalogues, warmFiles);
+                    await LoadStagedFilesAsync(gameSystem, warmFiles);
+                    Console.Error.WriteLine("[bs-gamedata-ui] Warm start: loaded new game data into existing instance.");
                     return [];
                 }
                 catch
@@ -318,24 +320,34 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             await HandleStartupDialogsAsync();
 
             // Load the staged game data files into the editor.
-            var gsDir = Path.Combine(_app.DataDirectoryPath, gameSystem.Id);
-            var gstPath = Path.Combine(gsDir, "system.gst");
-            var catPaths = files.Where(f => f.FileName.EndsWith(".cat", StringComparison.Ordinal))
-                .Select(f => Path.Combine(gsDir, f.FileName)).ToArray();
-            var loadParams = new JsonObject
-            {
-                ["gstPath"] = gstPath,
-                ["catPaths"] = new JsonArray([.. catPaths.Select(p => JsonValue.Create(p))])
-            };
-            await CallActionAsync("gamedataLoadFilesAction", loadParams);
+            await LoadStagedFilesAsync(gameSystem, files);
 
             return [];
         }
         catch (Exception ex)
         {
-            await CleanupAsync();
+            // force: true — a setup-phase failure leaves no usable app (it may have died mid-start,
+            // or never reached a stable window), so KeepAlive/warm-reuse is meaningless here. Without
+            // force, CleanupAsync would no-op (KeepAlive defaults to true), _app would be silently
+            // overwritten by the next cold-start attempt, and the orphaned JVM process would leak.
+            await CleanupAsync(force: true);
             return [ex.Message];
         }
+    }
+
+    private async Task LoadStagedFilesAsync(
+        ProtocolGameSystem gameSystem, IReadOnlyList<(string FileName, string Content)> files)
+    {
+        var gsDir = Path.Combine(_app!.DataDirectoryPath, gameSystem.Id);
+        var gstPath = Path.Combine(gsDir, "system.gst");
+        var catPaths = files.Where(f => f.FileName.EndsWith(".cat", StringComparison.Ordinal))
+            .Select(f => Path.Combine(gsDir, f.FileName)).ToArray();
+        var loadParams = new JsonObject
+        {
+            ["gstPath"] = gstPath,
+            ["catPaths"] = new JsonArray([.. catPaths.Select(p => JsonValue.Create(p))]),
+        };
+        await CallActionAsync("gamedataLoadFilesAction", loadParams);
     }
 
     private async Task HandleStartupDialogsAsync()

@@ -37,12 +37,31 @@ public sealed class FrozenNrGameDataFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        Engine = await NewRecruitGameDataEngine.CreateFrozenAsync(staticDir, headless, slowMo);
+        // Held for the engine's entire alive window (released in DisposeAsync, after teardown) so
+        // NewRecruitGameDataEngineResourceMetricsTests's own independent CreateFrozenAsync call
+        // can never be alive at the same time as this engine's browser — see
+        // BrowserResourceRaceGate's remarks for why plain [Collection] membership isn't enough.
+        await BrowserResourceRaceGate.FrozenNrGameData.WaitAsync();
+        try
+        {
+            using var span = FixtureTelemetry.StartInit(nameof(FrozenNrGameDataFixture));
+            Engine = await NewRecruitGameDataEngine.CreateFrozenAsync(staticDir, headless, slowMo);
+        }
+        catch
+        {
+            BrowserResourceRaceGate.FrozenNrGameData.Release();
+            throw;
+        }
     }
 
     public ValueTask DisposeAsync()
     {
-        Engine?.Dispose();
+        if (Engine is not null)
+        {
+            Engine.Dispose();
+            BrowserResourceRaceGate.FrozenNrGameData.Release();
+        }
+
         Engine = null;
         return default;
     }

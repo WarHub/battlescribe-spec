@@ -625,14 +625,26 @@ internal static class RunCommand
     {
         // Path convention mirrors BsRosterUiDriver.BsUiDiagnostics.DiagnosticsDirectory
         // (the driver writes dumps here). Inlined so the CLI never references the driver type.
-        var diagDir = Environment.GetEnvironmentVariable("BS_UI_DIAGNOSTICS_DIR")
-            ?? Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "bs-ui-diagnostics");
-        if (!Directory.Exists(diagDir))
+        // The directory is suffixed per worker (bs-ui-diagnostics-w<N>) under parallelism, so
+        // enumerate every worker's directory rather than assuming a single unsuffixed one.
+        var overrideDir = Environment.GetEnvironmentVariable("BS_UI_DIAGNOSTICS_DIR");
+        string[] diagDirs;
+        if (overrideDir is not null)
+        {
+            diagDirs = Directory.Exists(overrideDir) ? [overrideDir] : [];
+        }
+        else
+        {
+            diagDirs = FindWorkerDiagnosticsDirs();
+        }
+
+        if (diagDirs.Length == 0)
         {
             return;
         }
 
-        var diagFiles = Directory.GetFiles(diagDir, "*.txt")
+        var diagFiles = diagDirs
+            .SelectMany(dir => Directory.GetFiles(dir, "*.txt"))
             .OrderByDescending(f => f)
             .Take(3)
             .ToArray();
@@ -647,5 +659,18 @@ internal static class RunCommand
         {
             Ui.Info($"  {file}");
         }
+    }
+
+    /// <summary>
+    /// Finds every per-worker diagnostics directory (<c>artifacts/bs-ui-diagnostics</c> plus any
+    /// <c>-w&lt;N&gt;</c> suffixed siblings) so dumps from every parallel worker are reported, not
+    /// just an unsuffixed directory that only a single-worker run would ever populate.
+    /// </summary>
+    private static string[] FindWorkerDiagnosticsDirs()
+    {
+        var artifactsDir = Path.Combine(Directory.GetCurrentDirectory(), "artifacts");
+        return Directory.Exists(artifactsDir)
+            ? Directory.GetDirectories(artifactsDir, "bs-ui-diagnostics*")
+            : [];
     }
 }

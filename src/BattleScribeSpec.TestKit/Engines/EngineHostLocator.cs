@@ -23,9 +23,10 @@ public static class EngineHostLocator
     /// 4. "bs-engine-host" on PATH.
     /// Throws InvalidOperationException naming all probed locations when not found.
     /// A .dll resolution launches via "dotnet"; an executable launches directly.
-    /// Headed/keep-alive for non-builtin (launchable) entries are NOT conveyed here — the
-    /// CLI sets BSSPEC_HEADED=1 / BSSPEC_KEEP_ALIVE=1 on the child process env when spawning
-    /// launchable adapters instead.
+    /// Headed/keep-alive for non-builtin (launchable) entries are NOT conveyed at all — neither
+    /// as launch arguments nor via any environment variable. <c>--headed</c>/<c>--keep-alive</c>
+    /// are silently dropped for an <c>exec:</c>/<c>dotnet:</c> adapter. Tracked as
+    /// <see href="https://github.com/WarHub/battlescribe-spec/issues/305">#305</see>.
     ///
     /// The default <paramref name="verb"/> is <c>serve</c> (the NDJSON adapter protocol on
     /// stdio). The interactive verbs (<c>probe</c>, <c>discover</c>) pass their full argument

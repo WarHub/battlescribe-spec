@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using BattleScribeSpec.Telemetry;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NrGameDataUiDriver;
@@ -83,6 +84,7 @@ public sealed class NrGameDataUiEnginePool : IAsyncDisposable
             Headless = headless,
             SlowMo = slowMo,
         });
+        ResourceMetrics.Acquired("browser");
 
         var contexts = new List<IBrowserContext>();
         var engines = new List<NrGameDataUiEngine>();
@@ -94,6 +96,7 @@ public sealed class NrGameDataUiEnginePool : IAsyncDisposable
                 ServiceWorkers = ServiceWorkerPolicy.Block,
             });
             contexts.Add(context);
+            ResourceMetrics.Acquired("browser-context");
 
             var engine = await NrGameDataUiEngine.CreateFrozenInContextAsync(context, staticDir, headless);
             engines.Add(engine);
@@ -129,22 +132,44 @@ public sealed class NrGameDataUiEnginePool : IAsyncDisposable
         }
 
         _disposed = true;
-        _available.Writer.Complete();
 
-        foreach (var engine in _engines)
+        // The whole teardown body is guarded by this outer try/finally — mirroring
+        // AdapterProcess.Dispose — so a throw while completing the channel or disposing an
+        // engine can't skip the context/browser release below and leak their counters.
+        try
         {
-            engine.Dispose();
+            _available.Writer.Complete();
+
+            foreach (var engine in _engines)
+            {
+                engine.Dispose();
+            }
         }
-
-        foreach (var ctx in _contexts)
+        finally
         {
+            foreach (var ctx in _contexts)
+            {
+                try
+                { await ctx.CloseAsync(); }
+                catch { /* best effort */ }
+                finally
+                {
+                    // In a finally so a throwing close can't leak the counter — a counter that drifts
+                    // upward is worse than no counter, because it silently invents resources that don't exist.
+                    ResourceMetrics.Released("browser-context");
+                }
+            }
+
             try
-            { await ctx.CloseAsync(); }
+            { await _browser.CloseAsync(); }
             catch { /* best effort */ }
-        }
+            finally
+            {
+                ResourceMetrics.Released("browser");
+            }
 
-        await _browser.CloseAsync();
-        _playwright.Dispose();
+            _playwright.Dispose();
+        }
     }
 }
 

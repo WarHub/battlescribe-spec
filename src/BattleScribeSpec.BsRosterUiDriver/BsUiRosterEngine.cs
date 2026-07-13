@@ -57,6 +57,16 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private bool _disposed;
 
     /// <summary>
+    /// Set when an action fails in a way that leaves the running app in an unknown state (an
+    /// unexpected-modal <see cref="AgentException"/>, or any <see cref="TimeoutException"/>) — see
+    /// <see cref="MarkPoisonedIfUnsafe"/>. A poisoned engine's next <see cref="CleanupAsync"/> tears
+    /// the app down even under <see cref="KeepAlive"/>, so the NEXT spec cold-starts a fresh JVM
+    /// instead of risking a warm-reused app that might still have a dialog open or be mid-corruption.
+    /// One bad spec costs one cold restart; it cannot cascade into later specs.
+    /// </summary>
+    private bool _poisoned;
+
+    /// <summary>
     /// When true, <see cref="Cleanup"/> preserves the running app and agent connection
     /// so subsequent <see cref="Setup"/> calls reuse the same JVM instance (warm start).
     /// Useful for iterative debugging where JVM startup time is significant.
@@ -259,7 +269,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
         catch (Exception ex)
         {
-            await CleanupAsync();
+            // force: true — a setup-phase failure leaves no usable app (it may have died mid-start,
+            // or never reached a stable window), so KeepAlive/warm-reuse is meaningless here. Without
+            // force, CleanupAsync would no-op (KeepAlive defaults to true and _poisoned is only set by
+            // action-phase failures), _app would be silently overwritten by the next cold-start attempt,
+            // and the orphaned JVM process would leak.
+            await CleanupAsync(force: true);
             return [ex.Message];
         }
     }
@@ -282,10 +297,15 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         _engineLocated = false;
 
-        if (KeepAlive && !force)
+        if (KeepAlive && !force && !_poisoned)
         {
             // Warm start: keep app/_client alive, just reset engine state
             return;
+        }
+
+        if (_poisoned)
+        {
+            Console.Error.WriteLine("[bs-ui] Engine poisoned by a prior failure — tearing down for a fresh cold start.");
         }
 
         _client?.Dispose();
@@ -296,6 +316,10 @@ public sealed class BsUiRosterEngine : IRosterEngine
             await _app.DisposeAsync();
             _app = null;
         }
+
+        // The upcoming (re)start is a fresh instance — clear the flag so it isn't
+        // needlessly torn down again if it warm-reuses successfully afterwards.
+        _poisoned = false;
     }
 
     /// <summary>
@@ -1052,6 +1076,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             }
             catch (Exception ex) when (IsTransient(ex) && attempt < attempts)
             {
+                MarkPoisonedIfUnsafe(ex);
                 Console.Error.WriteLine(
                     $"[bs-ui] Action '{actionName}' failed (attempt {attempt}/{attempts}): " +
                     $"{ex.GetType().Name}: {ex.Message}. Retrying in {RetryDelay.TotalSeconds:F0}s...");
@@ -1059,6 +1084,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             }
             catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
             {
+                MarkPoisonedIfUnsafe(ex);
                 CaptureAndRethrow(ex, actionName);
                 throw; // unreachable but required
             }
@@ -1068,6 +1094,23 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private static bool IsTransient(Exception ex) =>
         ex is TimeoutException or OperationCanceledException or AgentException;
+
+    /// <summary>
+    /// Marks the engine poisoned (see <see cref="_poisoned"/>) when <paramref name="ex"/> signals
+    /// the app was left in an unknown state: any <see cref="TimeoutException"/> (the UI thread may
+    /// be wedged/deadlocked — see the class-level timeout architecture docs), or an
+    /// <see cref="AgentException"/> whose message reports an unexpected modal dialog left open by
+    /// <c>DialogInspector.assertNoUnexpectedModals</c> on the Java side. Both mean the running app's
+    /// state can no longer be trusted for warm-reuse by a later, unrelated spec.
+    /// </summary>
+    private void MarkPoisonedIfUnsafe(Exception ex)
+    {
+        if (ex is TimeoutException ||
+            (ex is AgentException && ex.Message.Contains("Unexpected modal dialog", StringComparison.Ordinal)))
+        {
+            _poisoned = true;
+        }
+    }
 
     private static async Task<T> RunWithTimeoutAsync<T>(Func<Task<T>> func, string actionName)
     {

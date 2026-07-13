@@ -5,13 +5,18 @@
       "battlescribespec.bsrosteruidriver": {
         "type": "Project",
         "dependencies": {
+          "BattleScribeSpec.Telemetry": "[1.0.0, )",
           "BattleScribeSpec.TestKit": "[1.0.0, )",
           "BattleScribeSpec.XmlGen": "[1.0.0, )"
         }
       },
+      "battlescribespec.telemetry": {
+        "type": "Project"
+      },
       "battlescribespec.testkit": {
         "type": "Project",
         "dependencies": {
+          "BattleScribeSpec.Telemetry": "[1.0.0, )",
           "Vecc.YamlDotNet.Analyzers.StaticGenerator": "[18.1.0, )",
           "YamlDotNet": "[18.1.0, )"
         }

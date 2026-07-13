@@ -41,7 +41,12 @@ internal static class HostEngineFactory
                 {
                     var options = ResolveBsUiOptions();
                     Ui.Info($"BS UI mode: {options.RosterEditorJarPath}");
-                    return new BsUiRosterEngine(options) { KeepAlive = keepAlive };
+
+                    // Warm-reuse keeps the app alive between specs. `--keep-alive` forces it on even
+                    // when reuse is off (its original iterative-debugging use); BSSPEC_DISABLE_WARM_REUSE
+                    // forces it off, mirroring ServeCommand's ablation toggle.
+                    var rosterReuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
+                    return new BsUiRosterEngine(options) { KeepAlive = keepAlive || !rosterReuseDisabled };
                 }
 
             case "newrecruit-ui":
@@ -82,7 +87,11 @@ internal static class HostEngineFactory
                         "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the agent jar), " +
                         "or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
                     Ui.Info($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
-                    return new BsGameDataUiEngine(options);
+                    // BSSPEC_DISABLE_WARM_REUSE forces this cold too, mirroring ServeCommand's
+                    // ablation toggle — otherwise the host would keep the app alive between
+                    // specs regardless of ServeCommand.BuildOptions' ReuseGameDataEngineAcrossSetups.
+                    var reuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
+                    return new BsGameDataUiEngine(options) { KeepAlive = !reuseDisabled };
                 }
 
             case "newrecruit":

@@ -209,6 +209,27 @@ See `src/BattleScribeSpec.ReferenceAdapter/` for a complete .NET adapter impleme
 that wraps the BattleScribe engine. It's a small amount of code thanks to the
 `AdapterHandler` helper class from the TestKit.
 
+## Distributed Tracing (Optional)
+
+Every command your adapter receives may carry two optional string fields, `traceparent` and
+`tracestate` — a [W3C Trace Context](https://www.w3.org/TR/trace-context/) header pair. You can
+ignore them completely and remain fully conformant; a single `bs-spec`/`bs-engine-host` run just
+won't show your adapter's own work nested in its trace.
+
+If your adapter already uses (or wants to use) OpenTelemetry, you get correct span nesting with
+**no bs-spec-specific code** by:
+
+1. Reading `OTEL_EXPORTER_OTLP_ENDPOINT` from your process environment and pointing your
+   language's stock OTel SDK at it (the harness sets this on the child process it spawns).
+2. Using the command's `traceparent`/`tracestate` as the parent context (via your SDK's normal
+   W3C propagator) before starting your own span to handle the command.
+
+That's it — the harness's spec span, its per-command CLIENT span, and your adapter's spans all
+land in the same distributed trace, in any language, because everyone is speaking the same W3C
+standard. See [adapter-protocol.md](adapter-protocol.md#distributed-tracing-traceparent--tracestate)
+for the full rationale, including why the built-in adapter uses CLIENT/SERVER span kinds rather
+than Internal (it's what lets Jaeger/Tempo draw the `bs-spec → adapter` edge at all).
+
 ## Tips
 
 - **Flush stdout** after every response line — the client waits for a complete line

@@ -30,8 +30,14 @@ public sealed class LiveNrRosterFixture : IAsyncLifetime
             concurrency = envConcurrency;
         }
 
+        using var span = FixtureTelemetry.StartInit(nameof(LiveNrRosterFixture));
         EnginePool = await NewRecruitEnginePool.CreateLiveAsync(concurrency, baseUrl, headless, visual, slowMo);
+        FixtureTelemetry.SetPoolSize(span, EnginePool.Size);
     }
+
+    /// <summary>Acquire an engine from the pool, wrapped in a short acquire-wait span.</summary>
+    public ValueTask<PooledEngine<NewRecruitRosterEngine>> AcquireAsync(CancellationToken ct = default) =>
+        FixtureTelemetry.AcquireAsync(nameof(LiveNrRosterFixture), EnginePool!.AcquireAsync, ct);
 
     public async ValueTask DisposeAsync()
     {

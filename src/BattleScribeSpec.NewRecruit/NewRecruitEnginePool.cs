@@ -1,3 +1,4 @@
+using BattleScribeSpec.Telemetry;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
@@ -66,6 +67,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
             Headless = headless,
             SlowMo = slowMo,
         });
+        ResourceMetrics.Acquired("browser");
 
         var contexts = new List<IBrowserContext>();
         var engines = new List<NewRecruitRosterEngine>();
@@ -74,6 +76,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         {
             var context = await browser.NewContextAsync();
             contexts.Add(context);
+            ResourceMetrics.Acquired("browser-context");
 
             var page = await context.NewPageAsync();
 
@@ -124,6 +127,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
             Headless = headless,
             SlowMo = slowMo,
         });
+        ResourceMetrics.Acquired("browser");
 
         var contexts = new List<IBrowserContext>();
         var engines = new List<NewRecruitRosterEngine>();
@@ -132,6 +136,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
         {
             var context = await browser.NewContextAsync();
             contexts.Add(context);
+            ResourceMetrics.Acquired("browser-context");
             var page = await context.NewPageAsync();
             // Register JS helpers as init script — auto-injected on every navigation
             await NewRecruitBrowser.RegisterHelpersOnPageAsync(page);
@@ -166,16 +171,37 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
 
         _disposed = true;
 
-        await Pool.DisposeAsync();
-
-        foreach (var ctx in _contexts)
+        // The whole teardown body is guarded by this outer try/finally — mirroring
+        // AdapterProcess.Dispose — so a throw from Pool.DisposeAsync() can't skip the
+        // context/browser release below and leak their counters.
+        try
         {
-            try
-            { await ctx.CloseAsync(); }
-            catch { /* best effort */ }
+            await Pool.DisposeAsync();
         }
+        finally
+        {
+            foreach (var ctx in _contexts)
+            {
+                try
+                { await ctx.CloseAsync(); }
+                catch { /* best effort */ }
+                finally
+                {
+                    // In a finally so a throwing close can't leak the counter — a counter that drifts
+                    // upward is worse than no counter, because it silently invents resources that don't exist.
+                    ResourceMetrics.Released("browser-context");
+                }
+            }
 
-        await _browser.CloseAsync();
-        _playwright.Dispose();
+            try
+            { await _browser.CloseAsync(); }
+            catch { /* best effort */ }
+            finally
+            {
+                ResourceMetrics.Released("browser");
+            }
+
+            _playwright.Dispose();
+        }
     }
 }

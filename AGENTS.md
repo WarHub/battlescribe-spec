@@ -53,6 +53,18 @@ dotnet test -p:TestProfile=bs-ui-gamedata
 The JavaFX-capable JDK is auto-discovered (`BS_UI_JAVA_PATH` → `lib/liberica-jdk` → `JAVA_HOME`),
 so neither local runs nor CI need to set anything. Tests self-skip when BS artifacts are absent.
 
+## Telemetry
+
+`bs-spec run --all`/`compare` and `dotnet test` all emit OpenTelemetry traces + metrics — a
+`.traces.pb`/`.metrics.pb` artifact under `artifacts/telemetry/run-<id>.*` (or `compare-a/b-<id>.*`,
+`xunit-<timestamp>.*`), plus a trace-summary table (wall time, cold-starts vs warm-reuses, peak
+live resources) printed after the run and appended to `$GITHUB_STEP_SUMMARY` in CI. Use
+`bs-spec compare --config-a "" --config-b "SOME_ENV=1"` to prove a config change is
+**verdict-neutral** before shipping it as an optimization — it asserts identical per-spec
+pass/fail before reporting any timing delta, and exits non-zero on divergence. See
+[docs/telemetry.md](docs/telemetry.md) for the full model (spans/metrics emitted, the
+parent-as-collector design, reading the artifact, known limitations).
+
 ## Debugging specs
 
 Use `bs-spec` to run a spec step-by-step and inspect full roster state:

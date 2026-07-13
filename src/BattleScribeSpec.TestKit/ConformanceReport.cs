@@ -18,4 +18,5 @@ public record SpecResultSummary(
     string Status,
     List<string> Failures,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    List<string>? Tags = null);
+    List<string>? Tags = null,
+    double DurationMs = 0);

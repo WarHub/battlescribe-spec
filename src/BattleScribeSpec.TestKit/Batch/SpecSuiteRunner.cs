@@ -2,6 +2,7 @@ using System.Diagnostics;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Telemetry;
 
 namespace BattleScribeSpec.Batch;
 
@@ -103,13 +104,14 @@ public static class SpecSuiteRunner
         var assertionEngine = options.AssertionEngine;
         var workers = options.Workers;
 
-        using var adapterProcess = workers <= 1 ? options.AdapterFactory() : null;
+        using var adapterProcess = workers <= 1 ? options.AdapterFactory(0) : null;
 
         // ===== Run specs =====
         var results = new List<SpecResult>();
         var reportResults = new List<SpecResultSummary>();
         var specsByResult = new Dictionary<SpecResult, SpecFile>();
         var gameDataSpecsByResult = new Dictionary<SpecResult, GameDataSpecFile>();
+        var durationsByResult = new Dictionary<SpecResult, double>();
         var sw = Stopwatch.StartNew();
 
         IEnumerable<(string IdForLoad, string Id, string Category, Func<SpecFile> Loader)> specSources;
@@ -145,7 +147,7 @@ public static class SpecSuiteRunner
             {
                 for (var w = 0; w < workers; w++)
                 {
-                    adapterProcesses.Add(options.AdapterFactory());
+                    adapterProcesses.Add(options.AdapterFactory(w));
                 }
 
                 var gameDataSupported = filteredGameDataSpecs.Count == 0
@@ -163,7 +165,7 @@ public static class SpecSuiteRunner
                     processPool.Writer.TryWrite(proc);
                 }
 
-                var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFileBase Spec, bool IsGameData, string Status)>();
+                var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFileBase Spec, bool IsGameData, string Status, double DurationMs)>();
 
                 await Parallel.ForEachAsync(
                     filteredSpecs,
@@ -174,12 +176,9 @@ public static class SpecSuiteRunner
                         var proc = await processPool.Reader.ReadAsync(ct);
                         try
                         {
-                            var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
-                            using var engine = new JsonProtocolEngine(proc, timeout);
-                            var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
-                            var result = runner.Run(spec);
-                            var status = ComputeStatus(result, spec, expectedFailuresEngine);
-                            concurrentResults.Add((result, spec, false, status));
+                            var (result, status, durationMs) = RunOneSpec(
+                                proc, spec, isGameData: false, assertionEngine, engineFilter, expectedFailuresEngine);
+                            concurrentResults.Add((result, spec, false, status, durationMs));
                         }
                         finally
                         {
@@ -196,11 +195,9 @@ public static class SpecSuiteRunner
                         var proc = await processPool.Reader.ReadAsync(ct);
                         try
                         {
-                            using var engine = new JsonProtocolGameDataEngine(proc, null);
-                            var runner = new GameDataRunner(engine, assertionEngine ?? engineFilter);
-                            var result = runner.Run(spec);
-                            var status = ComputeStatus(result, spec, expectedFailuresEngine);
-                            concurrentResults.Add((result, spec, true, status));
+                            var (result, status, durationMs) = RunOneSpec(
+                                proc, spec, isGameData: true, assertionEngine, engineFilter, expectedFailuresEngine);
+                            concurrentResults.Add((result, spec, true, status, durationMs));
                         }
                         finally
                         {
@@ -209,9 +206,10 @@ public static class SpecSuiteRunner
                     });
 
                 // Collect results in order
-                foreach (var (result, spec, isGameData, status) in concurrentResults)
+                foreach (var (result, spec, isGameData, status, durationMs) in concurrentResults)
                 {
                     results.Add(result);
+                    durationsByResult[result] = durationMs;
                     if (isGameData)
                     {
                         gameDataSpecsByResult[result] = (GameDataSpecFile)spec;
@@ -221,7 +219,7 @@ public static class SpecSuiteRunner
                         specsByResult[result] = (SpecFile)spec;
                     }
 
-                    reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags));
+                    reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs));
                 }
             }
             finally
@@ -247,33 +245,30 @@ public static class SpecSuiteRunner
 
             foreach (var (id, category, spec) in filteredSpecs)
             {
-                var timeout = spec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
-                using var engine = new JsonProtocolEngine(adapterProcess!, timeout);
-                var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
-                var result = runner.Run(spec);
+                var (result, status, durationMs) = RunOneSpec(
+                    adapterProcess!, spec, isGameData: false, assertionEngine, engineFilter, expectedFailuresEngine);
                 results.Add(result);
                 specsByResult[result] = spec;
-
-                var status = ComputeStatus(result, spec, expectedFailuresEngine);
-                reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags));
+                durationsByResult[result] = durationMs;
+                reportResults.Add(new SpecResultSummary(
+                    result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs));
             }
 
             foreach (var (id, category, spec) in filteredGameDataSpecs)
             {
-                using var engine = new JsonProtocolGameDataEngine(adapterProcess!, null);
-                var runner = new GameDataRunner(engine, assertionEngine ?? engineFilter);
-                var result = runner.Run(spec);
+                var (result, status, durationMs) = RunOneSpec(
+                    adapterProcess!, spec, isGameData: true, assertionEngine, engineFilter, expectedFailuresEngine);
                 results.Add(result);
                 gameDataSpecsByResult[result] = spec;
-
-                var status = ComputeStatus(result, spec, expectedFailuresEngine);
-                reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags));
+                durationsByResult[result] = durationMs;
+                reportResults.Add(new SpecResultSummary(
+                    result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs));
             }
         }
 
         sw.Stop();
 
-        return SpecSuiteResult.Create(results, reportResults, specsByResult, gameDataSpecsByResult, totalSpecs, sw.Elapsed, expectedFailuresEngine);
+        return SpecSuiteResult.Create(results, reportResults, specsByResult, gameDataSpecsByResult, durationsByResult, totalSpecs, sw.Elapsed, expectedFailuresEngine);
     }
 
     /// <summary>
@@ -350,6 +345,48 @@ public static class SpecSuiteRunner
             reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
                 ["Skipped: engine does not support gamedata domain"], spec.Tags));
         }
+    }
+
+    /// <summary>
+    /// Execute one spec against an adapter. This is the single per-spec execution path — the
+    /// sequential and parallel loops, roster and gamedata, all funnel through here, so timing,
+    /// tracing and verdict computation exist exactly once.
+    /// </summary>
+    private static (SpecResult Result, string Status, double DurationMs) RunOneSpec(
+        AdapterProcess proc,
+        SpecFileBase spec,
+        bool isGameData,
+        string? assertionEngine,
+        string? engineFilter,
+        string? expectedFailuresEngine)
+    {
+        using var activity = HarnessTelemetry.StartSpec(
+            spec.Id,
+            spec.Category,
+            isGameData ? "gamedata" : "roster");
+
+        var sw = Stopwatch.StartNew();
+        SpecResult result;
+        if (isGameData)
+        {
+            using var engine = new JsonProtocolGameDataEngine(proc, null);
+            var runner = new GameDataRunner(engine, assertionEngine ?? engineFilter);
+            result = runner.Run((GameDataSpecFile)spec);
+        }
+        else
+        {
+            var rosterSpec = (SpecFile)spec;
+            var timeout = rosterSpec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
+            using var engine = new JsonProtocolEngine(proc, timeout);
+            var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
+            result = runner.Run(rosterSpec);
+        }
+
+        sw.Stop();
+
+        var status = ComputeStatus(result, spec, expectedFailuresEngine);
+        HarnessTelemetry.SetVerdict(activity, status);
+        return (result, status, sw.Elapsed.TotalMilliseconds);
     }
 
     private static string ComputeStatus(SpecResult result, SpecFileBase spec, string? expectedFailuresEngine)

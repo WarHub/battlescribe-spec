@@ -35,6 +35,7 @@ public class JsonRpcServer {
     private static final Set<String> FX_THREAD_METHODS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
             "dumpTree",
             "getWindows",
+            "getOpenDialogs",
             "findNode",
             "clickNode",
             "fireButton",

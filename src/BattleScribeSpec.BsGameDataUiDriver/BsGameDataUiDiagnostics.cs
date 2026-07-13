@@ -14,12 +14,27 @@ public static class BsGameDataUiDiagnostics
     private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
 
     /// <summary>
-    /// Directory where diagnostic dumps are written. Defaults to ./artifacts/bs-gamedata-ui-diagnostics/.
-    /// Set via <c>BS_GAMEDATA_UI_DIAGNOSTICS_DIR</c> environment variable.
+    /// Directory where diagnostic dumps are written. Defaults to ./artifacts/bs-gamedata-ui-diagnostics/,
+    /// suffixed per worker (e.g. <c>-w2</c>) when <c>BSSPEC_WORKER_INDEX</c> is set — otherwise N
+    /// parallel adapter processes resolve the same directory and overwrite each other's dumps.
+    /// Set via <c>BS_GAMEDATA_UI_DIAGNOSTICS_DIR</c> environment variable (bypasses the worker suffix).
     /// </summary>
-    public static string DiagnosticsDirectory { get; set; } =
+    public static string DiagnosticsDirectory { get; set; } = ResolveDefaultDirectory();
+
+    /// <summary>
+    /// Computes the default diagnostics directory fresh from the current environment. Exposed
+    /// separately from <see cref="DiagnosticsDirectory"/> (whose initializer only runs once, at
+    /// static-init time) so per-worker resolution can be tested without depending on when this
+    /// type happens to be first touched by the process.
+    /// </summary>
+    public static string ResolveDefaultDirectory() =>
         Environment.GetEnvironmentVariable("BS_GAMEDATA_UI_DIAGNOSTICS_DIR")
-        ?? Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "bs-gamedata-ui-diagnostics");
+        ?? Path.Combine(Directory.GetCurrentDirectory(), "artifacts", $"bs-gamedata-ui-diagnostics{WorkerSuffix}");
+
+    private static string WorkerSuffix =>
+        Environment.GetEnvironmentVariable("BSSPEC_WORKER_INDEX") is { Length: > 0 } index
+            ? $"-w{index}"
+            : "";
 
     /// <summary>
     /// Captures the current data editor UI state and writes a diagnostic dump file.
@@ -67,6 +82,18 @@ public static class BsGameDataUiDiagnostics
                     catch (Exception ex)
                     {
                         sb.AppendLine($"  [Failed to get windows: {ex.GetType().Name}: {ex.Message}]");
+                    }
+
+                    sb.AppendLine();
+                    sb.AppendLine("─── OPEN DIALOGS (title/modal/scraped text) ───────────");
+                    try
+                    {
+                        var dialogs = await client.CallAsync("getOpenDialogs", null);
+                        sb.AppendLine(FormatJson(dialogs));
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine($"  [Failed to get open dialogs: {ex.GetType().Name}: {ex.Message}]");
                     }
 
                     sb.AppendLine();

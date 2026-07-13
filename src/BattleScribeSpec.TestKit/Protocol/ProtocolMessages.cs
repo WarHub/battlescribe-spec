@@ -33,6 +33,47 @@ public abstract class ProtocolCommand
 {
     [JsonIgnore]
     public abstract string Type { get; }
+
+    /// <summary>
+    /// Optional correlation id (protocol v1.1+), wire name <c>corrId</c>. Clients SHOULD send it;
+    /// adapters (via <see cref="AdapterHandler"/>) echo it verbatim on the response so a
+    /// client-side timeout can discard a late response instead of desyncing the stream. Omitted
+    /// from the wire when null — a response with no corrId falls back to strict positional
+    /// ordering (legacy adapters). Named <c>corrId</c> rather than <c>id</c> because
+    /// <see cref="GameDataActionCommand.Id"/> already uses the bare "id" wire field for a
+    /// domain concept (declared entry id / openFile target).
+    /// </summary>
+    [JsonPropertyName("corrId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? CorrId { get; set; }
+
+    /// <summary>
+    /// Optional W3C trace-context header (protocol v1.1+), wire name <c>traceparent</c>.
+    /// Clients SHOULD send it so the adapter can parent its spans under the client's spec span,
+    /// producing one distributed trace across the runner and the engine process.
+    /// </summary>
+    /// <remarks>
+    /// Per-request rather than per-process on purpose: one adapter process serves many specs, so
+    /// a process-level parent would collapse every spec into a single trace. Adapters that ignore
+    /// this field remain fully conformant — same optional contract as <see cref="CorrId"/>.
+    /// </remarks>
+    [JsonPropertyName("traceparent")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Traceparent { get; set; }
+
+    /// <summary>
+    /// Optional W3C <c>tracestate</c>, the companion of <see cref="Traceparent"/>.
+    /// </summary>
+    /// <remarks>
+    /// W3C requires a vendor that receives <c>tracestate</c> to forward it on outgoing requests.
+    /// Without it, a third-party adapter sitting behind a vendor backend loses its vendor context —
+    /// which is precisely the cross-language case this field exists to serve. Together the two
+    /// fields form a W3C trace-context carrier, so an adapter in any language can feed them
+    /// straight into its stock propagator.
+    /// </remarks>
+    [JsonPropertyName("tracestate")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Tracestate { get; set; }
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -52,6 +93,17 @@ public abstract class ProtocolResponse
 {
     [JsonIgnore]
     public abstract string Type { get; }
+
+    /// <summary>
+    /// Echo of the originating command's <see cref="ProtocolCommand.CorrId"/> (protocol v1.1+),
+    /// wire name <c>corrId</c>, omitted when the command had none. Named <c>corrId</c> rather
+    /// than <c>id</c> because <see cref="GameDataActionResult.Id"/> already uses the bare "id"
+    /// wire field for a domain concept (loaded file root id). See
+    /// <see cref="ProtocolCommand.CorrId"/>.
+    /// </summary>
+    [JsonPropertyName("corrId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? CorrId { get; set; }
 }
 
 // ===== Runner → Adapter Commands =====

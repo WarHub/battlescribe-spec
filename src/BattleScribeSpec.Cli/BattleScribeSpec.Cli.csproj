@@ -21,6 +21,7 @@
          bs-engine-host. It needs only the test kit (core model/protocol/runners) and XmlGen
          (probe/export XML generation). TestKit was previously transitive via XmlGen — now explicit. -->
     <ProjectReference Include="..\BattleScribeSpec.TestKit\BattleScribeSpec.TestKit.csproj" />
+    <ProjectReference Include="..\BattleScribeSpec.Telemetry.Collector\BattleScribeSpec.Telemetry.Collector.csproj" />
     <ProjectReference Include="..\BattleScribeSpec.XmlGen\BattleScribeSpec.XmlGen.csproj" />
   </ItemGroup>
 

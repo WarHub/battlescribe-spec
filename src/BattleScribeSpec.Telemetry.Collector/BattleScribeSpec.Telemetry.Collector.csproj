@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- NOT AOT-compatible on purpose: hosts ASP.NET Core and Google.Protobuf reflection.
+         Never reference this from Cli's or TestKit's AOT-analyzed code paths except through
+         the non-annotated HarnessCollector facade. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Message types only (GrpcServices="None"): we receive OTLP over HTTP/protobuf and do
+         not serve gRPC, so no service base classes or client stubs are needed. -->
+    <Protobuf Include="opentelemetry/**/*.proto" GrpcServices="None" ProtoRoot="." />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BattleScribeSpec.Telemetry\BattleScribeSpec.Telemetry.csproj" />
+  </ItemGroup>
+
+</Project>

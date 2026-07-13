@@ -483,6 +483,10 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     public void Cleanup()
     {
+        // Capture the list id BEFORE clearing local state — the browser reset needs it to ask NR
+        // to delete the list this spec created.
+        var listId = _listId;
+
         _listId = null;
         _rosterCreated = false;
         _systemLoaded = false;
@@ -498,7 +502,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // (e.g. the Create List dialog's controls become ambiguous once a prior list is present).
         try
         {
-            ResetBrowserStateAsync().GetAwaiter().GetResult();
+            ResetBrowserStateAsync(listId).GetAwaiter().GetResult();
         }
         catch
         {
@@ -506,30 +510,76 @@ public sealed class NrRosterUiEngine : IRosterEngine
         }
     }
 
-    private async Task ResetBrowserStateAsync()
+    /// <summary>
+    /// Returns the shared browser to a clean <c>/app</c> for the next spec.
+    /// <para>
+    /// The list MUST be removed through NR's own store API (<c>listsStore.deleteList</c>), and the
+    /// loaded game data cleared (<c>systemsStore.localLibrary</c>) — mirroring
+    /// <c>NewRecruitRosterEngine.Cleanup</c>. Merely splicing <c>lists</c> and nulling
+    /// <c>currentList</c> (as this method used to do) never tells NR to delete anything, so
+    /// navigating back to <c>/app</c> re-hydrates the old list from persistence. The leftover row
+    /// then makes the Create List dialog's controls ambiguous and EVERY subsequent spec's first
+    /// <c>addForce</c> times out — warm batches passed only their first roster-creating spec.
+    /// </para>
+    /// </summary>
+    private async Task ResetBrowserStateAsync(string? listId)
     {
         if (!Browser.FrozenReady && !Browser.IsFrozen)
         {
             return;
         }
 
-        await Browser.Page.EvaluateAsync("""
-            () => {
+        var error = await Browser.Page.EvaluateAsync<string?>("""
+            async (listId) => {
                 try {
-                    const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const ls = pinia?._s?.get('lists');
-                    if (ls) {
-                        if (Array.isArray(ls.lists)) ls.lists.splice(0, ls.lists.length);
-                        ls.currentList = null;
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    if (!pinia) return null;
+                    const listsStore = pinia._s?.get('lists');
+                    const sysStore = pinia._s?.get('systemsStore');
+                    if (!listsStore) return null;
+
+                    // Drop the open list's forces first (mirrors the store-direct engine).
+                    const current = listsStore.getCurrentList?.() ?? listsStore.currentList;
+                    if (current?.army) {
+                        for (const f of [...(current.army.getForces?.() || [])]) {
+                            if (typeof f.delete === 'function') f.delete();
+                        }
                     }
-                } catch (e) {}
-                try {
+
+                    // Delete EVERY list NR knows about through its own API, not just ours — a spec
+                    // may have created more than one.
+                    const keys = [];
+                    if (listId) keys.push(listId);
+                    for (const l of (listsStore.lists ?? [])) {
+                        const k = l?.list_key ?? l?.id ?? l?.key;
+                        if (k && !keys.includes(k)) keys.push(k);
+                    }
+                    for (const k of keys) {
+                        await listsStore.deleteList?.(k);
+                    }
+                    listsStore.currentList = null;
+
+                    // Unload game data so the next spec's Setup loads its own cleanly.
+                    for (const k of Object.keys(sysStore?.localLibrary || {})) {
+                        delete sysStore.localLibrary[k];
+                    }
+
                     for (const k of Object.keys(localStorage)) {
                         if (/list/i.test(k)) localStorage.removeItem(k);
                     }
-                } catch (e) {}
+                    return null;
+                } catch (e) {
+                    return 'reset error: ' + (e?.stack ?? e?.message ?? String(e));
+                }
             }
-            """);
+            """, listId);
+
+        if (error is not null)
+        {
+            Console.Error.WriteLine($"[nr-ui] {error}");
+        }
+
         await Browser.NavigateToAppAsync();
         await Browser.WaitForPiniaAsync();
     }

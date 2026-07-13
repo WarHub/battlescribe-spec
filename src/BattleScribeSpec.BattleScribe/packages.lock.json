@@ -160,9 +160,13 @@
         "resolved": "8.0.0",
         "contentHash": "c+GfnZt2/HyU+voKw2fctLZClcNjPZPWS+mnIhGvDknRMqL/fwWlREWPgA4csbp9ZkQIgB4qkufgdh/oh5Ubow=="
       },
+      "battlescribespec.telemetry": {
+        "type": "Project"
+      },
       "battlescribespec.testkit": {
         "type": "Project",
         "dependencies": {
+          "BattleScribeSpec.Telemetry": "[1.0.0, )",
           "Vecc.YamlDotNet.Analyzers.StaticGenerator": "[18.1.0, )",
           "YamlDotNet": "[18.1.0, )"
         }

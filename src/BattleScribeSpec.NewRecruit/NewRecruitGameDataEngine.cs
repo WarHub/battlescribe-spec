@@ -1,5 +1,6 @@
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Telemetry;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NewRecruit;
@@ -25,6 +26,13 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
     private IPage? _page;
     private string _specId = "";
     private bool _disposed;
+
+    // This engine always launches and owns its own browser (there is no pool-created,
+    // externally-owned path for this class, unlike NrGameDataUiEngine). Flags guard the
+    // Acquired/Released pairing so DisposeAsync releases exactly once even if it's called more
+    // than once or after a partially-failed initialization.
+    private bool _browserAcquired;
+    private bool _contextAcquired;
 
     // Loaded-file tracking (id -> display name) and the active file id, so export/reload can pick and
     // reopen the right file — mirrors NrGameDataUiEngine.
@@ -111,6 +119,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             Headless = Headless,
             SlowMo = slowMo,
         });
+        ResourceMetrics.Acquired("browser");
+        _browserAcquired = true;
         _page = await _browser.NewPageAsync();
         await _page.GotoAsync(BaseUrl, new PageGotoOptions
         {
@@ -128,11 +138,15 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             Headless = Headless,
             SlowMo = slowMo,
         });
+        ResourceMetrics.Acquired("browser");
+        _browserAcquired = true;
         var context = await _browser.NewContextAsync(new BrowserNewContextOptions
         {
             // Block service workers to prevent them from bypassing route interception
             ServiceWorkers = ServiceWorkerPolicy.Block,
         });
+        ResourceMetrics.Acquired("browser-context");
+        _contextAcquired = true;
         _page = await context.NewPageAsync();
 
         // Set up route interception that serves local static files (shared with the UI driver).
@@ -743,8 +757,26 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         }
         if (_browser is not null)
         {
-            await _browser.CloseAsync();
-            _browser = null;
+            try
+            {
+                await _browser.CloseAsync();
+            }
+            finally
+            {
+                // In a finally so a throwing close can't leak the counter — a counter that drifts
+                // upward is worse than no counter, because it silently invents resources that don't exist.
+                _browser = null;
+                if (_contextAcquired)
+                {
+                    _contextAcquired = false;
+                    ResourceMetrics.Released("browser-context");
+                }
+                if (_browserAcquired)
+                {
+                    _browserAcquired = false;
+                    ResourceMetrics.Released("browser");
+                }
+            }
         }
         _playwright?.Dispose();
         _playwright = null;

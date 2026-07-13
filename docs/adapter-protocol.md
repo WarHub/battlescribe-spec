@@ -38,9 +38,76 @@ sequenceDiagram
 1. Each message is a single JSON object on exactly one line (no embedded newlines).
 2. The adapter MUST NOT write anything to stdout except protocol response messages.
 3. The adapter MAY write diagnostic information to stderr.
-4. The client sends exactly one command, then waits for exactly one response.
+4. Without `corrId` (see below), the client sends exactly one command, then waits for exactly
+   one response, in strict positional order.
 5. The `type` field discriminates message kinds.
 6. Unknown fields should be ignored (forward compatibility).
+
+### Correlation id (`corrId`)
+
+Every command and response accepts an optional integer **`corrId`**. Clients SHOULD send a
+`corrId` on every command; adapters (including the built-in `AdapterHandler`) MUST echo the
+same `corrId` verbatim on the response.
+
+This exists because a client typically enforces its own per-command timeout (e.g. abandoning
+the read after 30s even though the adapter is still working — real engine operations can
+legitimately take well over a minute). Without a `corrId`, the transport has no way to tell a
+late response for the abandoned command apart from the response to whatever the client sends
+next: it reads the late response positionally, hands it to the caller as the answer to the
+*next* command, and every subsequent read is now off by one for the rest of the connection.
+
+With `corrId`, the client matches each response to its command by id and discards a response
+whose `corrId` doesn't match any request it's still waiting on (i.e. one that already timed
+out) — a client-side timeout can no longer desync the stream. A response with **no** `corrId`
+falls back to completing the single oldest outstanding request, preserving strict positional
+behavior for adapters that don't echo it (e.g. hand-written third-party adapters predating this
+addition).
+
+`corrId` is distinct from the `id` field already used by `gamedataAction`/`gamedataActionResult`
+for domain purposes (the declared entry id for `addEntry`/`addLink`, or the loaded file root id
+for `loadFile`) — the two do not collide and may both appear on the same message.
+
+```json
+{"type":"getState","corrId":7}
+{"type":"state","corrId":7, ...}
+```
+
+### Distributed tracing (`traceparent` / `tracestate`)
+
+Every command (not responses — the trace flows one way) accepts two optional string fields,
+`traceparent` and `tracestate`, carrying a [W3C Trace Context](https://www.w3.org/TR/trace-context/)
+header pair. They exist so that a single `bs-engine-host` (or any other adapter) process, which
+serves **many** specs over its lifetime, can nest its own spans under the *correct* per-request
+parent instead of a static per-process one — a process-level traceparent would collapse hundreds
+of specs into a single trace.
+
+Like `corrId`, both fields are optional and omitted from the wire entirely when there is nothing
+to send (no listening tracer on the client side). An adapter that has never heard of them is
+fully protocol-conformant: it just ignores two extra JSON properties.
+
+An adapter that *does* want its own spans to appear correctly nested in the harness's trace gets
+this for free, with **zero harness-specific code**, by:
+
+1. Reading `OTEL_EXPORTER_OTLP_ENDPOINT` (and friends) from its process environment and
+   configuring its own language's stock OpenTelemetry SDK against it — the harness sets this
+   environment variable on the child process it spawns.
+2. Feeding the incoming command's `traceparent`/`tracestate` to that SDK's standard W3C
+   propagator as the parent context before starting its own span for handling the command.
+
+Because both sides speak the same W3C standard, an adapter written in Python, Node, Java, Go,
+or anything else with an off-the-shelf OTel SDK joins the harness's distributed trace correctly
+— this is the property that makes the tracing investment pay off for third-party adapters, not
+just the in-box `.NET` ones.
+
+The built-in `AdapterHandler`/`NdjsonLineConnection` pair uses `ActivityKind.Client` on the
+sending side and `ActivityKind.Server` on the handling side (not `Internal`) specifically so
+that Jaeger's dependency graph and Tempo's servicegraph processor — which derive edges
+**exclusively** from CLIENT→SERVER span pairs — can draw the `bs-spec → bs-engine-host` edge.
+Third-party adapters that want to appear in those graphs should follow the same convention.
+
+```json
+{"type":"getState","corrId":7,"traceparent":"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}
+```
 
 ## Client → Adapter Commands
 
@@ -426,7 +493,7 @@ An adapter is a program that:
 1. Reads JSON lines from **stdin**
 2. Parses the `type` field to determine the command
 3. Dispatches to the native engine API
-4. Writes a JSON response line to **stdout**
+4. Writes a JSON response line to **stdout**, echoing the command's `corrId` if it had one
 5. Repeats until stdin is closed or a `teardown` command is received
 
 ### Pseudocode
@@ -434,26 +501,31 @@ An adapter is a program that:
 ```
 while line = readline(stdin):
     command = json_parse(line)
+    response = dispatch(command)          // one of the branches below
+    response.corrId = command.corrId      // echo verbatim; omit if the command had none
+    write(stdout, response)
+
+def dispatch(command):
     match command.type:
         "setup":
             errors = engine.setup(command.gameSystem, command.catalogues)
-            write(stdout, {"type":"setupResult","errors":errors})
+            return {"type":"setupResult","errors":errors}
         "action":
             try:
                 dispatch_action(engine, command)
-                write(stdout, {"type":"actionResult","ok":true})
+                return {"type":"actionResult","ok":true}
             catch error:
-                write(stdout, {"type":"actionResult","ok":false,"error":str(error)})
+                return {"type":"actionResult","ok":false,"error":str(error)}
         "getState":
             state = engine.get_roster_state()
-            write(stdout, state_to_json(state))
+            return state_to_json(state)
         "getErrors":
             errors = engine.get_validation_errors()
-            write(stdout, {"type":"errors","errors":errors})
+            return {"type":"errors","errors":errors}
         "teardown":
             engine.dispose()
-            write(stdout, {"type":"teardownResult"})
             engine = new_engine()  // ready for next spec
+            return {"type":"teardownResult"}
 ```
 
 ### Notes

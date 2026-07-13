@@ -35,6 +35,7 @@ public sealed class SequentialFrozenNrRosterFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
+        using var span = FixtureTelemetry.StartInit(nameof(SequentialFrozenNrRosterFixture));
         Engine = await NewRecruitRosterEngine.CreateFrozenAsync(HarFilePath, headless: headless, slowMo: slowMo);
         Engine.Visual = visual;
     }

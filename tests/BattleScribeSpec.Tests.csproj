@@ -25,6 +25,7 @@
     <ProjectReference Include="..\src\BattleScribeSpec.NrRosterUiDriver\BattleScribeSpec.NrRosterUiDriver.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.NrGameDataUiDriver\BattleScribeSpec.NrGameDataUiDriver.csproj" />
     <ProjectReference Include="..\src\BattleScribeSpec.BsGameDataUiDriver\BattleScribeSpec.BsGameDataUiDriver.csproj" />
+    <ProjectReference Include="..\src\BattleScribeSpec.Telemetry.Collector\BattleScribeSpec.Telemetry.Collector.csproj" />
   </ItemGroup>
 
   <ItemGroup>

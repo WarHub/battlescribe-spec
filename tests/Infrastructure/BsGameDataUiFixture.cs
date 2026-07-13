@@ -25,7 +25,6 @@ namespace BattleScribeSpec.Tests;
 /// <b>Environment variables</b>:
 /// <list type="bullet">
 ///   <item><c>BS_UI_SKIP</c> — set to "true" to skip all BS UI tests</item>
-///   <item><c>BS_UI_PATH</c> — override path to BattleScribe binary artifacts directory</item>
 ///   <item><c>BS_UI_KEEP_ALIVE</c> — "true" to keep app running between specs (warm start)</item>
 /// </list>
 /// </para>
@@ -49,6 +48,8 @@ public sealed class BsGameDataUiFixture : IAsyncLifetime
         }
 
         var keepAlive = Environment.GetEnvironmentVariable("BS_UI_KEEP_ALIVE") == "true";
+
+        using var span = FixtureTelemetry.StartInit(nameof(BsGameDataUiFixture));
         var engine = new BsGameDataUiEngine(options) { KeepAlive = keepAlive };
 
         // Verify agent is connectable with an empty setup — fail gracefully if not.

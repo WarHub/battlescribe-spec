@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Telemetry;
 
 namespace BattleScribeSpec.Protocol;
 
@@ -28,6 +30,20 @@ public sealed class AdapterOptions
 
     /// <summary>Protocol v1.1 (optional): stop recording and return the recorded actions. Null → unsupported.</summary>
     public Func<IRosterEngine, string?>? RecordStopper { get; init; }
+
+    /// <summary>
+    /// When true, keep the roster engine alive across setup/teardown cycles, resetting it via
+    /// <see cref="IRosterEngine.Cleanup"/> between specs (self-heal to dispose+recreate on failure)
+    /// instead of disposing and recreating. See <see cref="ReuseGameDataEngineAcrossSetups"/>.
+    /// </summary>
+    public bool ReuseRosterEngineAcrossSetups { get; init; }
+
+    /// <summary>
+    /// Gamedata counterpart of <see cref="ReuseRosterEngineAcrossSetups"/>. Independent because a
+    /// single host process serves both domains with separate engines and their warm-reuse feasibility
+    /// differs (e.g. battlescribe-ui: gamedata reusable, roster not). Default false.
+    /// </summary>
+    public bool ReuseGameDataEngineAcrossSetups { get; init; }
 }
 
 /// <summary>
@@ -74,17 +90,39 @@ public static class AdapterHandler
                 }
 
                 ProtocolResponse response;
+                int? commandCorrId = null;
+
+                // Declared OUTSIDE the try: previously this was `using var activity = ...` INSIDE
+                // the try, so when a command handler threw, the span was disposed during unwind —
+                // BEFORE the catch below could mark it — and it recorded no error status at all.
+                // Every failed adapter command then rendered exactly like a successful one in any
+                // backend that renders by span status (Jaeger/Tempo), which is the precise defect
+                // ("a failed spec would have rendered green") the whole SDK migration existed to
+                // avoid, reproduced one level down at the command span.
+                Activity? activity = null;
                 try
                 {
                     var command = ProtocolSerializer.DeserializeCommand(line);
+                    commandCorrId = command?.CorrId;
+
+                    // SERVER: the handling side of a remote call. Pairs with the parent's CLIENT span
+                    // to form the one edge a service graph can actually draw.
+                    activity = command is null
+                        ? null
+                        : HarnessTelemetry.StartOp(
+                            command.Type,
+                            command.Traceparent,
+                            ActivityKind.Server,
+                            command.Tracestate);
+
                     response = command switch
                     {
-                        SetupCommand setup => HandleSetup(setup, engineFactory, ref engine, out catalogueIds),
-                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, ref engine, out catalogueIds),
+                        SetupCommand setup => HandleSetup(setup, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, out catalogueIds),
+                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, out catalogueIds),
                         ActionCommand action => HandleAction(action, engine, catalogueIds),
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
-                        TeardownCommand => HandleTeardown(ref engine, ref gdEngine),
+                        TeardownCommand => HandleTeardown(options.ReuseRosterEngineAcrossSetups, options.ReuseGameDataEngineAcrossSetups, ref engine, ref gdEngine),
                         DescribeCommand => new DescribeResult
                         {
                             Name = options.Name,
@@ -115,11 +153,45 @@ public static class AdapterHandler
                 }
                 catch (Exception ex)
                 {
+                    // The span records the error BEFORE it is disposed below — this is the whole
+                    // point of hoisting `activity` above this try/catch.
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                     response = new ProtocolError { Message = ex.Message };
                 }
 
-                await output.WriteLineAsync(ProtocolSerializer.SerializeResponse(response).AsMemory(), ct);
-                await output.FlushAsync(ct);
+                // Non-throwing failures also render green if left alone: a switch arm can return
+                // ProtocolError (an unsupported/unknown command, a describe-time capability gap)
+                // or an ActionResult/GameDataActionResult with Ok == false (a caught engine
+                // exception re-packaged as a protocol-level failure by HandleAction/
+                // HandleGameDataAction) without ever throwing out of the switch above.
+                switch (response)
+                {
+                    case ProtocolError protocolError:
+                        activity?.SetStatus(ActivityStatusCode.Error, protocolError.Message);
+                        break;
+                    case ActionResult { Ok: false } actionResult:
+                        activity?.SetStatus(ActivityStatusCode.Error, actionResult.Error);
+                        break;
+                    case GameDataActionResult { Ok: false } gameDataActionResult:
+                        activity?.SetStatus(ActivityStatusCode.Error, gameDataActionResult.Error);
+                        break;
+                }
+
+                // Echo the command's corrId (if any) on every response path, including the error
+                // fallback above. A command with no corrId leaves the response corrId null (legacy client).
+                response.CorrId = commandCorrId;
+
+                try
+                {
+                    await output.WriteLineAsync(ProtocolSerializer.SerializeResponse(response).AsMemory(), ct);
+                    await output.FlushAsync(ct);
+                }
+                finally
+                {
+                    // No longer a `using var` (see the comment where `activity` is declared) — disposed
+                    // explicitly here so it still happens on every path, including a write/flush failure.
+                    activity?.Dispose();
+                }
             }
         }
         finally
@@ -130,17 +202,25 @@ public static class AdapterHandler
     }
 
     /// <summary>
-    /// Each setup disposes and recreates the server-side engine. For browser-backed engines
-    /// (newrecruit-ui), this means a full Playwright cold start per spec when one connection
-    /// runs many specs (verify matrices, batch runs) — the old in-process flow reused the live
-    /// browser across setups. Follow-up (#271): warm-reuse inside the host (e.g. wrap Dispose as
-    /// Cleanup for poolable engines) instead of recreate.
+    /// Configures the engine for a spec. When reuse is enabled (browser-backed engines) an
+    /// already-live engine is kept and reconfigured in place — avoiding a per-spec cold start;
+    /// otherwise the engine is disposed and recreated. Reset between specs happens in
+    /// <see cref="HandleTeardown"/> via the engine's Cleanup.
     /// </summary>
     private static ProtocolResponse HandleSetup(
-        SetupCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
+        SetupCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
     {
-        engine?.Dispose();
-        engine = factory();
+        var sw = Stopwatch.StartNew();
+        var reused = engine is not null && reuse;
+        if (!reuse || engine is null)
+        {
+            engine?.Dispose();
+            engine = factory();
+        }
+        sw.Stop();
+        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
+        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalSeconds);
+
         catalogueIds = [.. cmd.Catalogues.Select(c => c.Id)];
         if (cmd.SpecId is { Length: > 0 })
         {
@@ -152,10 +232,19 @@ public static class AdapterHandler
     }
 
     private static ProtocolResponse HandleSetupFromFiles(
-        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
+        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
     {
-        engine?.Dispose();
-        engine = factory();
+        var sw = Stopwatch.StartNew();
+        var reused = engine is not null && reuse;
+        if (!reuse || engine is null)
+        {
+            engine?.Dispose();
+            engine = factory();
+        }
+        sw.Stop();
+        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
+        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalSeconds);
+
         // File-based setup: catalogue IDs unknown — actions must provide catalogueId explicitly
         catalogueIds = [];
         if (cmd.SpecId is { Length: > 0 })
@@ -284,13 +373,50 @@ public static class AdapterHandler
         };
     }
 
-    private static ProtocolResponse HandleTeardown(ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
+    private static ProtocolResponse HandleTeardown(
+        bool reuseRoster, bool reuseGameData, ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
     {
-        engine?.Dispose();
-        engine = null;
-        gdEngine?.Dispose();
-        gdEngine = null;
+        engine = ResetOrDispose(engine, reuseRoster, e => e.Cleanup());
+        gdEngine = ResetOrDispose(gdEngine, reuseGameData, e => e.Cleanup());
         return new TeardownResult();
+    }
+
+    /// <summary>
+    /// End-of-spec engine handling. With <paramref name="reuse"/> true, resets the engine in place and
+    /// keeps it warm for the next setup; if the reset throws, disposes it so the next setup recreates a
+    /// fresh one (self-heal against a crashed browser). With reuse false, disposes and clears it.
+    /// </summary>
+    private static T? ResetOrDispose<T>(T? engine, bool reuse, Action<T> cleanup) where T : class, IDisposable
+    {
+        if (engine is null)
+        {
+            return null;
+        }
+
+        if (!reuse)
+        {
+            engine.Dispose();
+            return null;
+        }
+
+        try
+        {
+            cleanup(engine);
+            return engine;
+        }
+        catch
+        {
+            try
+            {
+                engine.Dispose();
+            }
+            catch
+            {
+                /* best-effort */
+            }
+
+            return null;
+        }
     }
 
     private static ProtocolResponse HandleRecordStart(AdapterOptions options, IRosterEngine? engine)
@@ -305,11 +431,10 @@ public static class AdapterHandler
     }
 
     /// <summary>
-    /// Each gamedataSetup disposes and recreates the server-side engine. For browser-backed
-    /// engines (newrecruit-ui), this means a full Playwright cold start per spec when one
-    /// connection runs many specs (verify matrices, batch runs) — the old in-process flow
-    /// reused the live browser across setups. Follow-up (#271): warm-reuse inside the host
-    /// (e.g. wrap Dispose as Cleanup for poolable engines) instead of recreate.
+    /// Configures the gamedata engine for a spec. When reuse is enabled (browser-backed engines) an
+    /// already-live engine is kept and reconfigured in place — avoiding a per-spec cold start;
+    /// otherwise the engine is disposed and recreated. Reset between specs happens in
+    /// <see cref="HandleTeardown"/> via the engine's Cleanup.
     /// </summary>
     private static ProtocolResponse HandleGameDataSetup(
         GameDataSetupCommand cmd, AdapterOptions options, ref GameData.IGameDataEngine? engine)
@@ -319,8 +444,17 @@ public static class AdapterHandler
             return new ProtocolError { Message = "gamedata domain is not supported by this adapter" };
         }
 
-        engine?.Dispose();
-        engine = options.GameDataEngineFactory();
+        var sw = Stopwatch.StartNew();
+        var reused = engine is not null && options.ReuseGameDataEngineAcrossSetups;
+        if (!options.ReuseGameDataEngineAcrossSetups || engine is null)
+        {
+            engine?.Dispose();
+            engine = options.GameDataEngineFactory();
+        }
+        sw.Stop();
+        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
+        ResourceMetrics.RecordEngineStart("gamedata-engine", reused, sw.Elapsed.TotalSeconds);
+
         if (cmd.SpecId is { Length: > 0 })
         {
             engine.SetTestContext(cmd.SpecId);

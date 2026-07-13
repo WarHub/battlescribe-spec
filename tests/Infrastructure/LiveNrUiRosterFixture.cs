@@ -22,6 +22,7 @@ public sealed class LiveNrUiRosterFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
+        using var span = FixtureTelemetry.StartInit(nameof(LiveNrUiRosterFixture));
         Engine = await NrRosterUiEngine.CreateAsync(baseUrl, headless, slowMo);
     }
 
