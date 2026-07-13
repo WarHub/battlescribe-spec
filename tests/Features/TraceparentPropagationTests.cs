@@ -18,7 +18,11 @@ public sealed class TraceparentPropagationTests
     [Fact]
     public void Command_CarriesTraceparent_OverTheWire()
     {
-        var command = new GetStateCommand { Traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" };
+        // A different W3C example traceparent from HarnessTelemetryTests' — both files' literal
+        // used to be the identical example id, a latent collision trap now that
+        // parallelizeTestCollections runs both test classes concurrently against the same
+        // process-wide ActivitySource.
+        var command = new GetStateCommand { Traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" };
 
         var json = ProtocolSerializer.SerializeCommand(command);
         var round = ProtocolSerializer.DeserializeCommand(json);
@@ -39,8 +43,10 @@ public sealed class TraceparentPropagationTests
     [Fact]
     public async Task AdapterHandler_ParentsItsSpanToTheCommandsTraceparent()
     {
-        const string TraceId = "0af7651916cd43dd8448eb211c80319c";
-        const string ParentSpanId = "b7ad6b7169203331";
+        // Distinct from HarnessTelemetryTests' example id — see the comment on
+        // Command_CarriesTraceparent_OverTheWire above.
+        const string TraceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+        const string ParentSpanId = "00f067aa0ba902b7";
 
         var spans = new List<Activity>();
         using var listener = new ActivityListener

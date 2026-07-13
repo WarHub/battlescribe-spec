@@ -104,7 +104,9 @@ public static class SpecSuiteRunner
         var assertionEngine = options.AssertionEngine;
         var workers = options.Workers;
 
-        using var adapterProcess = workers <= 1 ? options.AdapterFactory(0) : null;
+        // Shared across every worker (sequential has exactly one) so the adapter-death recovery
+        // cap (see AdapterDeathBudget) is enforced per RUN, not per worker.
+        var deathBudget = new AdapterDeathBudget(options.MaxAdapterDeaths);
 
         // ===== Run specs =====
         var results = new List<SpecResult>();
@@ -142,71 +144,78 @@ public static class SpecSuiteRunner
             // Parallel execution with N adapter processes
             progressWriter?.WriteLine($"Running {filteredSpecs.Count + filteredGameDataSpecs.Count} specs with {workers} workers...");
 
-            var adapterProcesses = new List<AdapterProcess>();
+            // Tracks EVERY process ever created for this run (originals + any adapter-death
+            // replacements) so all of them get disposed at the end — a replacement is never part
+            // of the original N-element list a plain foreach-dispose would walk.
+            var allProcesses = new HashSet<AdapterProcess>();
+            var allProcessesLock = new object();
             try
             {
+                var initialProcesses = new List<AdapterProcess>();
                 for (var w = 0; w < workers; w++)
                 {
-                    adapterProcesses.Add(options.AdapterFactory(w));
+                    var p = options.AdapterFactory(w);
+                    initialProcesses.Add(p);
+                    allProcesses.Add(p);
                 }
 
                 var gameDataSupported = filteredGameDataSpecs.Count == 0
-                    || (await AdapterDescriber.DescribeAsync(adapterProcesses[0])).Domains.Contains("gamedata");
+                    || (await AdapterDescriber.DescribeAsync(initialProcesses[0])).Domains.Contains("gamedata");
                 if (filteredGameDataSpecs.Count > 0 && !gameDataSupported)
                 {
                     SkipGameDataDomain(filteredGameDataSpecs, reportResults);
                     filteredGameDataSpecs = [];
                 }
 
-                // Channel-based process pool
-                var processPool = System.Threading.Channels.Channel.CreateBounded<AdapterProcess>(workers);
-                foreach (var proc in adapterProcesses)
+                // Channel-based process pool. Each pooled item remembers which worker index it
+                // belongs to, so a death-replacement process is created with the SAME worker
+                // identity (its diagnostics dir / telemetry tag) as the one it replaces.
+                var processPool = System.Threading.Channels.Channel.CreateBounded<PooledAdapter>(workers);
+                for (var w = 0; w < initialProcesses.Count; w++)
                 {
-                    processPool.Writer.TryWrite(proc);
+                    processPool.Writer.TryWrite(new PooledAdapter(initialProcesses[w], w));
                 }
 
-                var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFileBase Spec, bool IsGameData, string Status, double DurationMs)>();
+                var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFileBase Spec, bool IsGameData, string Status, double DurationMs, int AdapterDeaths)>();
+
+                async ValueTask RunPooledAsync<TSpec>((string Id, string Category, TSpec Spec) item, bool isGameData, CancellationToken ct)
+                    where TSpec : SpecFileBase
+                {
+                    var pooled = await processPool.Reader.ReadAsync(ct);
+                    var proc = pooled.Process;
+                    try
+                    {
+                        var (result, status, durationMs, deaths) = RunOneSpec(
+                            ref proc, pooled.WorkerIndex, item.Spec, isGameData, assertionEngine, engineFilter,
+                            expectedFailuresEngine, options.AdapterFactory, deathBudget, progressWriter);
+                        if (!ReferenceEquals(proc, pooled.Process))
+                        {
+                            lock (allProcessesLock)
+                            {
+                                allProcesses.Add(proc);
+                            }
+                        }
+
+                        concurrentResults.Add((result, item.Spec, isGameData, status, durationMs, deaths));
+                    }
+                    finally
+                    {
+                        processPool.Writer.TryWrite(new PooledAdapter(proc, pooled.WorkerIndex));
+                    }
+                }
 
                 await Parallel.ForEachAsync(
                     filteredSpecs,
                     new ParallelOptions { MaxDegreeOfParallelism = workers },
-                    async (item, ct) =>
-                    {
-                        var (id, category, spec) = item;
-                        var proc = await processPool.Reader.ReadAsync(ct);
-                        try
-                        {
-                            var (result, status, durationMs) = RunOneSpec(
-                                proc, spec, isGameData: false, assertionEngine, engineFilter, expectedFailuresEngine);
-                            concurrentResults.Add((result, spec, false, status, durationMs));
-                        }
-                        finally
-                        {
-                            processPool.Writer.TryWrite(proc);
-                        }
-                    });
+                    (item, ct) => RunPooledAsync(item, isGameData: false, ct));
 
                 await Parallel.ForEachAsync(
                     filteredGameDataSpecs,
                     new ParallelOptions { MaxDegreeOfParallelism = workers },
-                    async (item, ct) =>
-                    {
-                        var (id, category, spec) = item;
-                        var proc = await processPool.Reader.ReadAsync(ct);
-                        try
-                        {
-                            var (result, status, durationMs) = RunOneSpec(
-                                proc, spec, isGameData: true, assertionEngine, engineFilter, expectedFailuresEngine);
-                            concurrentResults.Add((result, spec, true, status, durationMs));
-                        }
-                        finally
-                        {
-                            processPool.Writer.TryWrite(proc);
-                        }
-                    });
+                    (item, ct) => RunPooledAsync(item, isGameData: true, ct));
 
                 // Collect results in order
-                foreach (var (result, spec, isGameData, status, durationMs) in concurrentResults)
+                foreach (var (result, spec, isGameData, status, durationMs, deaths) in concurrentResults)
                 {
                     results.Add(result);
                     durationsByResult[result] = durationMs;
@@ -219,14 +228,16 @@ public static class SpecSuiteRunner
                         specsByResult[result] = (SpecFile)spec;
                     }
 
-                    reportResults.Add(new SpecResultSummary(result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs));
+                    reportResults.Add(new SpecResultSummary(
+                        result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs, deaths));
                 }
             }
             finally
             {
-                // Dispose adapter processes regardless of success, describe-gate failure,
-                // or a Parallel.ForEachAsync exception — otherwise the N child processes leak.
-                foreach (var proc in adapterProcesses)
+                // Dispose every process ever created (originals + adapter-death replacements)
+                // regardless of success, describe-gate failure, or a Parallel.ForEachAsync
+                // exception — otherwise a child process leaks.
+                foreach (var proc in allProcesses)
                 {
                     proc.Dispose();
                 }
@@ -234,35 +245,52 @@ public static class SpecSuiteRunner
         }
         else
         {
-            // Sequential execution with single adapter process
-            var gameDataSupported = filteredGameDataSpecs.Count == 0
-                || (await AdapterDescriber.DescribeAsync(adapterProcess!)).Domains.Contains("gamedata");
-            if (filteredGameDataSpecs.Count > 0 && !gameDataSupported)
+            // Sequential execution with a single adapter process — replaced in place (via `proc`
+            // being passed by ref into RunOneSpec) when it dies mid-batch.
+            var proc = options.AdapterFactory(0);
+            var allProcesses = new HashSet<AdapterProcess> { proc };
+            try
             {
-                SkipGameDataDomain(filteredGameDataSpecs, reportResults);
-                filteredGameDataSpecs = [];
-            }
+                var gameDataSupported = filteredGameDataSpecs.Count == 0
+                    || (await AdapterDescriber.DescribeAsync(proc)).Domains.Contains("gamedata");
+                if (filteredGameDataSpecs.Count > 0 && !gameDataSupported)
+                {
+                    SkipGameDataDomain(filteredGameDataSpecs, reportResults);
+                    filteredGameDataSpecs = [];
+                }
 
-            foreach (var (id, category, spec) in filteredSpecs)
-            {
-                var (result, status, durationMs) = RunOneSpec(
-                    adapterProcess!, spec, isGameData: false, assertionEngine, engineFilter, expectedFailuresEngine);
-                results.Add(result);
-                specsByResult[result] = spec;
-                durationsByResult[result] = durationMs;
-                reportResults.Add(new SpecResultSummary(
-                    result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs));
-            }
+                foreach (var (id, category, spec) in filteredSpecs)
+                {
+                    var (result, status, durationMs, deaths) = RunOneSpec(
+                        ref proc, 0, spec, isGameData: false, assertionEngine, engineFilter, expectedFailuresEngine,
+                        options.AdapterFactory, deathBudget, progressWriter);
+                    allProcesses.Add(proc);
+                    results.Add(result);
+                    specsByResult[result] = spec;
+                    durationsByResult[result] = durationMs;
+                    reportResults.Add(new SpecResultSummary(
+                        result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs, deaths));
+                }
 
-            foreach (var (id, category, spec) in filteredGameDataSpecs)
+                foreach (var (id, category, spec) in filteredGameDataSpecs)
+                {
+                    var (result, status, durationMs, deaths) = RunOneSpec(
+                        ref proc, 0, spec, isGameData: true, assertionEngine, engineFilter, expectedFailuresEngine,
+                        options.AdapterFactory, deathBudget, progressWriter);
+                    allProcesses.Add(proc);
+                    results.Add(result);
+                    gameDataSpecsByResult[result] = spec;
+                    durationsByResult[result] = durationMs;
+                    reportResults.Add(new SpecResultSummary(
+                        result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs, deaths));
+                }
+            }
+            finally
             {
-                var (result, status, durationMs) = RunOneSpec(
-                    adapterProcess!, spec, isGameData: true, assertionEngine, engineFilter, expectedFailuresEngine);
-                results.Add(result);
-                gameDataSpecsByResult[result] = spec;
-                durationsByResult[result] = durationMs;
-                reportResults.Add(new SpecResultSummary(
-                    result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs));
+                foreach (var p in allProcesses)
+                {
+                    p.Dispose();
+                }
             }
         }
 
@@ -348,11 +376,134 @@ public static class SpecSuiteRunner
     }
 
     /// <summary>
-    /// Execute one spec against an adapter. This is the single per-spec execution path — the
-    /// sequential and parallel loops, roster and gamedata, all funnel through here, so timing,
-    /// tracing and verdict computation exist exactly once.
+    /// Execute one spec against an adapter, with #304's adapter-death recovery: if the process died
+    /// during the attempt, retry ONCE on a fresh replacement process (the death is recorded either
+    /// way, via the returned tuple's <c>AdapterDeaths</c> count); if the retry also dies, fail
+    /// the spec with a clear adapter-death reason; if the run's <see cref="AdapterDeathBudget"/> is
+    /// already spent, stop replacing and fail outright instead of spending a retry. This is THE
+    /// single per-spec execution path — the sequential and parallel loops, roster and gamedata, all
+    /// funnel through here, so the recovery policy exists exactly once. <paramref name="proc"/> is
+    /// passed by ref so a replacement transparently becomes the caller's process going forward
+    /// (returned to the pool in the parallel path, or kept as the sequential loop's sole process).
     /// </summary>
-    private static (SpecResult Result, string Status, double DurationMs) RunOneSpec(
+    /// <remarks>
+    /// <b>Death counting (code review follow-up, see MINOR 3 in the #304 hygiene review):</b>
+    /// <paramref name="proc"/>'s <c>HasExited</c> is snapshotted into <c>wasAlreadyDead</c> BEFORE
+    /// this attempt runs. That is what lets every branch below tell "this specific process instance
+    /// just crashed for the first time" (always a real, distinct death — always recorded) apart from
+    /// "the caller handed us a corpse we (or a sibling spec) already recorded" (a repeat — never
+    /// recorded again). The previous version gated recording on the run's aggregate
+    /// <c>deathBudget.IsExceeded</c> instead, which conflated the two: once the cap had tripped
+    /// anywhere, a genuinely new crash on a completely different pooled process (a live scenario
+    /// under parallel workers) silently stopped being counted.
+    /// </remarks>
+    private static (SpecResult Result, string Status, double DurationMs, int AdapterDeaths) RunOneSpec(
+        ref AdapterProcess proc,
+        int workerIndex,
+        SpecFileBase spec,
+        bool isGameData,
+        string? assertionEngine,
+        string? engineFilter,
+        string? expectedFailuresEngine,
+        Func<int, AdapterProcess> adapterFactory,
+        AdapterDeathBudget deathBudget,
+        TextWriter? progressWriter)
+    {
+        var wasAlreadyDead = proc.HasExited;
+
+        var (result, status, durationMs) = RunOneSpecAttempt(
+            proc, spec, isGameData, assertionEngine, engineFilter, expectedFailuresEngine);
+        if (!proc.HasExited)
+        {
+            return (result, status, durationMs, 0);
+        }
+
+        // The adapter process died during this attempt (setup, a step, or best-effort teardown) —
+        // or was already dead when we were handed it (a repeat use of a corpse the cap has already
+        // stopped replacing).
+        if (result.Passed)
+        {
+            // Nothing to rescue — the spec's own verdict already succeeded (e.g. the process died
+            // during best-effort teardown, after every assertion had already passed). The crash is
+            // still real and must stay visible, and the process must be replaced before the next
+            // spec uses it, but a death must never flip an already-genuine pass into a failure.
+            if (!wasAlreadyDead)
+            {
+                RecordDeath(deathBudget, progressWriter);
+            }
+
+            if (!deathBudget.IsExceeded)
+            {
+                proc = TryReplaceProcess(proc, workerIndex, adapterFactory, deathBudget, progressWriter).Process;
+            }
+
+            return (result, status, durationMs, 1);
+        }
+
+        // The spec itself failed AND the process died: a genuine candidate for the rescue retry —
+        // unless the run's death cap is already spent, in which case stop replacing and fail
+        // outright without spending a retry on an engine that's already shown it's dying
+        // deterministically.
+        if (wasAlreadyDead && deathBudget.IsExceeded)
+        {
+            // Pure repeat: this exact corpse was already dead (and its death already recorded)
+            // before this attempt even started, and the cap was already tripped. Fail fast without
+            // touching the counter or calling the factory again.
+            return (CapExceededResult(spec, deathBudget.MaxDeaths), "failed", durationMs, 1);
+        }
+
+        if (!wasAlreadyDead)
+        {
+            // A genuinely new, distinct crash — always counted, regardless of whether some OTHER
+            // process (this worker's earlier one, or a sibling worker's) already tripped the cap.
+            RecordDeath(deathBudget, progressWriter);
+        }
+
+        if (deathBudget.IsExceeded)
+        {
+            // Either this very death tipped the budget over, or a sibling worker's already had —
+            // either way, stop replacing/retrying for this spec.
+            return (CapExceededResult(spec, deathBudget.MaxDeaths), "failed", durationMs, 1);
+        }
+
+        var replacement = TryReplaceProcess(proc, workerIndex, adapterFactory, deathBudget, progressWriter);
+        proc = replacement.Process;
+        if (!replacement.Succeeded)
+        {
+            // adapterFactory itself threw while spawning the replacement — see TryReplaceProcess.
+            // Fail this spec now with a clear reason instead of attempting to run on the inert
+            // sentinel it handed back; `proc` still carries that sentinel forward so the caller (and,
+            // in the parallel path, the pool) always has a non-null process to keep going with.
+            return (ReplacementFailedResult(spec, replacement.Error!), "failed", durationMs, 2);
+        }
+
+        var (retryResult, retryStatus, retryDurationMs) = RunOneSpecAttempt(
+            proc, spec, isGameData, assertionEngine, engineFilter, expectedFailuresEngine);
+        if (!proc.HasExited)
+        {
+            // Retried on a fresh process and it did not die — the retry's verdict wins, but the
+            // death that preceded it is still recorded (never silently swallowed).
+            return (retryResult, retryStatus, retryDurationMs, 1);
+        }
+
+        // The retry ALSO died. The replacement was alive when the retry began, so this is always a
+        // NEW, distinct crash — always counted.
+        if (!deathBudget.IsExceeded)
+        {
+            RecordDeath(deathBudget, progressWriter);
+        }
+
+        var failed = AdapterDeathResult(spec);
+        if (!deathBudget.IsExceeded)
+        {
+            proc = TryReplaceProcess(proc, workerIndex, adapterFactory, deathBudget, progressWriter).Process;
+        }
+
+        return (failed, "failed", retryDurationMs, 2);
+    }
+
+    /// <summary>One execution attempt of one spec — the pre-#304 body of <c>RunOneSpec</c>, unchanged except for the adapter-death telemetry tag at the end.</summary>
+    private static (SpecResult Result, string Status, double DurationMs) RunOneSpecAttempt(
         AdapterProcess proc,
         SpecFileBase spec,
         bool isGameData,
@@ -386,9 +537,99 @@ public static class SpecSuiteRunner
 
         var status = ComputeStatus(result, spec, expectedFailuresEngine);
         HarnessTelemetry.SetVerdict(activity, status);
+
+        // Checked here (right where `proc` is in scope) rather than by the caller re-deriving it —
+        // this is the one place the attempt and the process it ran on are both directly at hand.
+        if (proc.HasExited)
+        {
+            HarnessTelemetry.SetAdapterDeath(activity);
+        }
+
         return (result, status, sw.Elapsed.TotalMilliseconds);
     }
 
+    /// <summary>Records one adapter death: bumps the shared budget, the resource-death counter, and (once, exactly when the cap first trips) a progress-writer warning naming the cap.</summary>
+    private static void RecordDeath(AdapterDeathBudget deathBudget, TextWriter? progressWriter)
+    {
+        var count = deathBudget.Increment();
+        ResourceMetrics.Died("adapter-process");
+        if (count == deathBudget.MaxDeaths + 1)
+        {
+            progressWriter?.WriteLine(
+                $"adapter-death cap ({deathBudget.MaxDeaths}) reached — no further adapter " +
+                "replacement/retry will be attempted for the remainder of this run.");
+        }
+    }
+
+    /// <summary>
+    /// Disposes a dead process and tries to create its replacement via the caller's factory (same
+    /// worker index — same diagnostics/telemetry identity). Never throws: <paramref name="adapterFactory"/>
+    /// is plausibly unreliable right after a crash (the engine binary is gone, the JVM won't start,
+    /// the machine is out of memory), and this is reachable MID-RUN (#304's replacement path), not
+    /// just at startup — an uncaught exception here would fault <c>Parallel.ForEachAsync</c> and
+    /// crash the entire batch. A factory failure is itself treated as an adapter-death-class event
+    /// (recorded and counted against <paramref name="deathBudget"/>, same as a process that starts
+    /// and then crashes) so a permanently broken factory still degrades to "the cap trips and the
+    /// remainder fails fast" instead of being retried forever or propagating out uncaught.
+    /// </summary>
+    /// <returns>
+    /// On success, the new live process. On failure, <paramref name="dead"/> itself (already
+    /// disposed) is returned as an inert sentinel — <c>proc</c> must never become null, because the
+    /// parallel path's pool write-back (<c>processPool.Writer.TryWrite</c> in the caller's
+    /// <c>finally</c>) must always have a non-null <see cref="AdapterProcess"/> to hand back, or a
+    /// worker blocks forever on <c>Channel&lt;T&gt;.Reader.ReadAsync</c>. Any subsequent attempt
+    /// against the sentinel reports <see cref="AdapterProcess.HasExited"/> immediately without
+    /// calling this same broken factory again.
+    /// </returns>
+    private static AdapterReplacement TryReplaceProcess(
+        AdapterProcess dead, int workerIndex, Func<int, AdapterProcess> adapterFactory,
+        AdapterDeathBudget deathBudget, TextWriter? progressWriter)
+    {
+        dead.Dispose();
+        try
+        {
+            return new AdapterReplacement(adapterFactory(workerIndex), true, null);
+        }
+        catch (Exception ex)
+        {
+            RecordDeath(deathBudget, progressWriter);
+            return new AdapterReplacement(dead, false, ex);
+        }
+    }
+
+    /// <summary>Result of <see cref="TryReplaceProcess"/>: either a live replacement (<see cref="Succeeded"/>) or the disposed original process kept as a non-null sentinel, with the factory's exception.</summary>
+    private readonly record struct AdapterReplacement(AdapterProcess Process, bool Succeeded, Exception? Error);
+
+    private const string AdapterDeathTag = "ADAPTER DEATH";
+
+    private static SpecResult AdapterDeathResult(SpecFileBase spec) =>
+        new(spec.Id, spec.Category, spec.Description,
+            [$"{AdapterDeathTag}: the adapter process died while running this spec, and a retry on a fresh process also died. Failing without a further retry."]);
+
+    private static SpecResult CapExceededResult(SpecFileBase spec, int maxDeaths) =>
+        new(spec.Id, spec.Category, spec.Description,
+            [$"{AdapterDeathTag}: the adapter process died while running this spec, and this run's adapter-death cap ({maxDeaths}) has already been reached — no further replacement/retry will be attempted for the remainder of this run."]);
+
+    /// <summary>The replacement process itself could not be spawned (see <see cref="TryReplaceProcess"/>) — a distinct failure mode from <see cref="AdapterDeathResult"/> (both attempts ran and both died).</summary>
+    private static SpecResult ReplacementFailedResult(SpecFileBase spec, Exception error) =>
+        new(spec.Id, spec.Category, spec.Description,
+            [$"{AdapterDeathTag}: the adapter process died while running this spec, and a replacement process could not be started ({error.GetType().Name}: {error.Message}). Failing without a further retry."]);
+
+    /// <summary>
+    /// Computes the passed/failed/expected-failure/unexpected-pass display status for a spec's own
+    /// verdict. <b>Deliberately NOT used</b> for <see cref="AdapterDeathResult"/>/
+    /// <see cref="CapExceededResult"/>/<see cref="ReplacementFailedResult"/> (code review follow-up,
+    /// MINOR 4 in the #304 hygiene review): those three always report <c>"failed"</c> even when
+    /// <see cref="SpecSuiteOptions.ExpectedFailuresEngine"/> is set and the spec is marked
+    /// expected-to-fail. This is a deliberate choice, not an oversight — an adapter death (a process
+    /// crash) is a categorically different outcome from an "expected failure" (a known, semantic
+    /// assertion mismatch), and routing it through <see cref="ComputeStatus"/> would let a genuine
+    /// infrastructure crash on an expected-to-fail spec silently read as "expected-failure" in the
+    /// report/JSON/<c>compare</c> output — exactly the row a human scanning for crashes would skip
+    /// past. <see cref="SpecSuiteResult.Create"/>'s exit-code math still independently reclassifies
+    /// these results via <c>spec.IsExpectedToFail</c>, so the exit code is correct either way; only
+    /// the display string is affected.
+    /// </summary>
     private static string ComputeStatus(SpecResult result, SpecFileBase spec, string? expectedFailuresEngine)
     {
         var status = result.Passed ? "passed" : "failed";
@@ -407,4 +648,12 @@ public static class SpecSuiteRunner
 
         return status;
     }
+
+    /// <summary>
+    /// One pooled adapter process plus the worker index it was created for (see
+    /// <see cref="SpecSuiteOptions.AdapterFactory"/>) — carried through the parallel path's
+    /// <see cref="System.Threading.Channels.Channel{T}"/> so a death-replacement is spawned with the
+    /// same worker identity as the process it replaces, rather than an anonymous one.
+    /// </summary>
+    private sealed record PooledAdapter(AdapterProcess Process, int WorkerIndex);
 }

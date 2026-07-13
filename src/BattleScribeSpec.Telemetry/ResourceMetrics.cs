@@ -38,6 +38,16 @@ public static class ResourceMetrics
     // seconds-valued histogram would land EVERY engine start in a single bucket and make p50/p95
     // meaningless. Supply boundaries fitted to what we actually observe: ~1.6s for a Chromium
     // relaunch, considerably more for a JVM + JavaFX cold start.
+    // A Counter (monotonic, never decrements) is the correct OTel instrument here — unlike
+    // Live/Released above, a death is a one-way event, not a live-count adjustment. Kept as a
+    // SEPARATE instrument (rather than folding into Released) precisely so a death is a
+    // distinguishable signal: a dashboard built on Released alone cannot tell "the process exited
+    // cleanly" from "the process crashed and the harness had to recover" — those are very
+    // different facts about the run's health.
+    private static readonly Counter<long> Deaths =
+        Meter.CreateCounter<long>("harness.resource.death.count", unit: "{resource}",
+            description: "Resources of a kind that died unexpectedly (crashed) rather than being released normally.");
+
     private static readonly Histogram<double> EngineStart =
         Meter.CreateHistogram<double>(
             "harness.engine.start.duration",
@@ -55,6 +65,17 @@ public static class ResourceMetrics
     /// <summary>Record that a resource of <paramref name="kind"/> was released.</summary>
     public static void Released(string kind) =>
         Live.Add(-1, new KeyValuePair<string, object?>("harness.resource.kind", kind));
+
+    /// <summary>
+    /// Record that a resource of <paramref name="kind"/> died (crashed) rather than being released
+    /// normally — e.g. an adapter process (a real engine self-terminating under warm-reuse) found
+    /// exited when the harness's spec-suite runner checks it after a spec.
+    /// Emitted IN ADDITION TO (not instead of) the eventual <see cref="Released(string)"/> call
+    /// that still fires when the dead process is disposed — this is the distinguishing signal that
+    /// a release was NOT graceful.
+    /// </summary>
+    public static void Died(string kind) =>
+        Deaths.Add(1, new KeyValuePair<string, object?>("harness.resource.kind", kind));
 
     /// <summary>
     /// Record what an engine cost to obtain, in <b>seconds</b>. <paramref name="reused"/> distinguishes

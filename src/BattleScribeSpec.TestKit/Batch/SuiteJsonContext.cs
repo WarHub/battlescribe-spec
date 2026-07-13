@@ -58,4 +58,13 @@ public sealed class JsonSpecEntry
     /// <summary>Wall-clock time spent running this spec, in milliseconds.</summary>
     [JsonPropertyName("durationMs")]
     public double DurationMs { get; init; }
+
+    /// <summary>
+    /// How many times an adapter process died while this spec was being attempted (see
+    /// <see cref="SpecResultSummary.AdapterDeaths"/>). Omitted when zero (the common case) to keep
+    /// the JSON output clean for runs with no crashes.
+    /// </summary>
+    [JsonPropertyName("adapterDeaths")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AdapterDeaths { get; init; }
 }

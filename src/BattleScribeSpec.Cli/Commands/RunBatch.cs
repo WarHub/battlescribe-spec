@@ -42,7 +42,17 @@ internal static class RunBatch
         Ui.Info($"Domains: {string.Join(", ", options.Domains)}");
 
         var runId = Guid.NewGuid().ToString("N")[..8];
-        var artifactPath = Path.Combine("artifacts", "telemetry", $"run-{runId}");
+        var artifactRoot = Path.Combine("artifacts", "telemetry");
+        var artifactPath = Path.Combine(artifactRoot, $"run-{runId}");
+
+        // Bound artifacts/telemetry/'s growth before adding to it. This run's own artifact set
+        // doesn't exist yet (created below by HarnessCollector.StartAsync) so it wouldn't be swept
+        // anyway, but artifactPath is passed explicitly as belt-and-braces: it documents the
+        // invariant at the call site and keeps this call correct even if a future refactor moves
+        // the sweep to run later. See TelemetryRetention for why this isn't wired into
+        // StartAsync itself, and for why recency (not locking) is what actually protects a
+        // concurrently-running OTHER process's set.
+        TelemetryRetention.Sweep(artifactRoot, currentArtifactBasePath: artifactPath);
 
         // The collector must be disposed (which force-flushes the parent's TracerProvider and
         // MeterProvider) BEFORE TraceSummary.FromArtifact reads the artifact back — otherwise the

@@ -38,6 +38,45 @@ internal static class ForceFailHook
 }
 
 /// <summary>
+/// Test-only hook, analogous to <see cref="ForceFailHook"/>, that makes this adapter process kill
+/// ITSELF (<see cref="Environment.Exit(int)"/>) on a named spec — simulating the real BattleScribe
+/// app's intermittent self-termination under warm-reuse (the motivating incident for #304: a single
+/// crash mid-batch cascaded into 98 of 102 specs failing). This exists to red/green-test
+/// <c>SpecSuiteRunner</c>'s adapter-death recovery deterministically, without depending on the real
+/// engine's own flakiness. A test double only — never used outside the reference adapter.
+/// </summary>
+/// <remarks>
+/// Value semantics mirror <see cref="ForceFailHook"/>: unset/empty — never kill. <c>"1"</c> — kill
+/// on every spec this process runs (it will only ever get to run one, since it exits immediately).
+/// Any other value — kill only when the spec id contains it (case-insensitive), so a test can name
+/// exactly one spec to crash on while leaving others (and other processes) unaffected. Checked at
+/// <see cref="ForceFailRosterEngine.SetTestContext"/>/<see cref="ForceFailGameDataEngine.SetTestContext"/>
+/// time — i.e. before <c>Setup</c> runs — so the death is deterministic and always happens at the
+/// very start of the targeted spec's attempt.
+/// </remarks>
+internal static class ForceKillHook
+{
+    internal const string EnvVar = "BSSPEC_TEST_FORCE_KILL";
+
+    public static void MaybeKill(string? specId)
+    {
+        var raw = Environment.GetEnvironmentVariable(EnvVar);
+        if (string.IsNullOrEmpty(raw))
+        {
+            return;
+        }
+
+        if (raw == "1" || (specId is not null && specId.Contains(raw, StringComparison.OrdinalIgnoreCase)))
+        {
+            // Simulates the adapter process dying mid-spec. Exit (not a thrown exception): the
+            // whole point is that the OS process itself disappears, taking any in-flight command
+            // response with it, exactly like a real engine crash would.
+            Environment.Exit(1);
+        }
+    }
+}
+
+/// <summary>
 /// Decorates an <see cref="IRosterEngine"/> so <c>BSSPEC_TEST_FORCE_FAIL</c> can inject a
 /// synthetic setup error — <see cref="Roster.RosterRunner"/> treats any non-empty <c>Setup</c>
 /// error list as an immediate spec failure, regardless of the spec's own assertions, which makes
@@ -51,6 +90,7 @@ internal sealed class ForceFailRosterEngine(IRosterEngine inner) : IRosterEngine
     public void SetTestContext(string specId)
     {
         _specId = specId;
+        ForceKillHook.MaybeKill(specId);
         inner.SetTestContext(specId);
     }
 
@@ -110,6 +150,7 @@ internal sealed class ForceFailGameDataEngine(IGameDataEngine inner) : IGameData
     public void SetTestContext(string specId)
     {
         _specId = specId;
+        ForceKillHook.MaybeKill(specId);
         inner.SetTestContext(specId);
     }
 

@@ -77,6 +77,12 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
                 : Path.Combine("artifacts", "telemetry");
             var artifactPath = Path.Combine(artifactRoot, $"xunit-{runId}");
 
+            // Bound artifacts/telemetry/'s growth before adding to it — this run's own artifact set
+            // doesn't exist yet, so it is never a sweep candidate. See TelemetryRetention for why
+            // this isn't wired into HarnessCollector.StartAsync itself (it would also fire for ad
+            // hoc unit tests pointed at a shared temp directory, racing sibling tests' artifacts).
+            TelemetryRetention.Sweep(artifactRoot, currentArtifactBasePath: artifactPath);
+
             Collector = await HarnessCollector.StartAsync(artifactPath);
             _artifactPath = Collector.HasLocalArtifact ? artifactPath : null;
         }
