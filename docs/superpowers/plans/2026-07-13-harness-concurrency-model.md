@@ -674,6 +674,18 @@ On the *same* 4-vCPU runner, `nr-frozen` **degrades** past P=6 (48 s → 75 s at
 
 - [ ] **Step 1: Write the measured `OversubscriptionFactor` and `MemPerInstanceBytes` into each builtin's `EngineProfile`**, citing `docs/concurrency-policy-measurements.md`. **These are the only literals in this task.**
 
+- [ ] **Step 1b: Remove the provisional safety cap in `ConcurrencyPolicy.For`.** A stopgap
+  (`ProvisionalUnmeasuredMemoryCap`, `min(cpuCount, 8)`, added on `perf/concurrency-model` ahead of
+  this task) currently caps worker count whenever an engine declares `MemPerInstanceBytes == 0` —
+  precisely because, before this step, that was true for every builtin. Once Step 1 gives every
+  builtin engine a real, measured `MemPerInstanceBytes`, that condition is never true for a
+  builtin again and the cap becomes dead weight: an unreachable guard nobody remembers the reason
+  for. Delete the cap and its two `Policy_CapsWorkers_WhenMemPerInstanceIsUnmeasured` /
+  `Policy_DoesNotApplyTheProvisionalCap_OnceMemPerInstanceIsMeasured` tests (or, if a third-party
+  adapter can still declare `MemPerInstanceBytes = 0` via `engines.json`, keep the cap but say
+  explicitly in the commit message why it still earns its keep). **A "temporary" guard that
+  outlives its reason is how magic numbers are born — do not let this one become one.**
+
 - [ ] **Step 2: Delete the CI knobs.** The three `NR_PARALLEL: 6` / `NR_PARALLEL: 2` settings and the `--workers 2` in ci.yml go; the policy decides. The 4-vCPU runner is simply one machine the policy is fitted to.
 
 - [ ] **Step 3: Prove it, on CI, not locally**

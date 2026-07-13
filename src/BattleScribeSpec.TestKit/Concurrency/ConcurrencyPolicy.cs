@@ -7,6 +7,14 @@ namespace BattleScribeSpec.Concurrency;
 /// </summary>
 public static class ConcurrencyPolicy
 {
+    /// <summary>
+    /// PROVISIONAL safety ceiling on worker count, applied ONLY while an engine's
+    /// <see cref="EngineProfile.MemPerInstanceBytes"/> is unmeasured (<c>== 0</c>). This is a
+    /// stopgap, not a fitted value — see the comment at its use site and Task 8/9 of
+    /// <c>docs/superpowers/plans/2026-07-13-harness-concurrency-model.md</c>.
+    /// </summary>
+    private const int ProvisionalUnmeasuredMemoryCap = 8;
+
     /// <summary>Derive the plan. Deterministic: the same machine and engine always give the same plan.</summary>
     /// <param name="machine">The machine the run is happening on.</param>
     /// <param name="engine">What the engine declares about itself.</param>
@@ -26,6 +34,22 @@ public static class ConcurrencyPolicy
             : int.MaxValue;
 
         var workers = Math.Max(1, Math.Min(byCpu, byMemory));
+
+        // PROVISIONAL SAFETY CAP — NOT a fitted value, do not tune it. MemPerInstanceBytes == 0
+        // means "nobody has measured what one instance of this engine costs yet", which makes
+        // byMemory above int.MaxValue, i.e. inactive. Without a guard here, a 32-core box picks
+        // 32 workers for an engine with an unmeasured memory footprint — which is exactly what
+        // happened and would exhaust memory on a 32-core/16 GB developer laptop running 32
+        // concurrent Chromium instances. This cap exists only to prevent that failure while
+        // Task 8 of docs/superpowers/plans/2026-07-13-harness-concurrency-model.md measures the
+        // real MemPerInstanceBytes per engine. Task 9 writes the measured value into
+        // EngineRegistry AND removes this cap — once MemPerInstanceBytes is non-zero for an
+        // engine, the real (measured) memory bound above governs and this cap must not further
+        // restrict the result.
+        if (engine.MemPerInstanceBytes == 0)
+        {
+            workers = Math.Min(workers, Math.Min(machine.CpuCount, ProvisionalUnmeasuredMemoryCap));
+        }
 
         // The engine's hard ceiling wins over everything. 0 = unlimited.
         if (engine.MaxParallel > 0)

@@ -154,6 +154,40 @@ public sealed class ConcurrencyPolicyTests
     }
 
     [Fact]
+    public void Policy_CapsWorkers_WhenMemPerInstanceIsUnmeasured()
+    {
+        // Big box (64 CPU, 256 GiB) but the engine declares NO MemPerInstanceBytes (0 = unknown).
+        // Without a provisional cap this picks 64 workers — exactly what shipped and would
+        // exhaust memory on a 32-core/16 GB developer laptop running that many Chromium instances.
+        var engine = new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap,
+            ReuseSafeRoster: false, ReuseSafeGameData: false,
+            MemPerInstanceBytes: 0, OversubscriptionFactor: 1.0);
+
+        var plan = ConcurrencyPolicy.For(new MachineProfile(64, 256L << 30), engine);
+
+        Assert.True(
+            plan.Workers <= 8,
+            $"an engine with no measured memory footprint must be capped provisionally; got {plan.Workers}");
+    }
+
+    [Fact]
+    public void Policy_DoesNotApplyTheProvisionalCap_OnceMemPerInstanceIsMeasured()
+    {
+        // Same big box — but this time the engine HAS declared MemPerInstanceBytes (post-Task-9).
+        // The real, measured memory bound must govern; the provisional cap must not additionally
+        // restrict the result below what the measured bound already allows.
+        var engine = new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap,
+            ReuseSafeRoster: false, ReuseSafeGameData: false,
+            MemPerInstanceBytes: 1L * 1024 * 1024 * 1024, OversubscriptionFactor: 1.0);
+
+        var plan = ConcurrencyPolicy.For(new MachineProfile(64, 256L << 30), engine);
+
+        // byCpu = 64, byMemory = 256 GiB / 1 GiB = 256 -> workers bound by CPU at 64.
+        // If the provisional cap wrongly applied here, this would be <= 8 instead of 64.
+        Assert.Equal(64, plan.Workers);
+    }
+
+    [Fact]
     public void Policy_IsPure_SameInputsSamePlan()
     {
         // Reproducibility is not a nicety: `compare` holds everything constant except one variable,
