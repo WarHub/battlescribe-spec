@@ -10,6 +10,16 @@ internal static class TestPaths
     private static readonly Lazy<string?> RepoRoot = new(FindRepoRoot);
 
     /// <summary>
+    /// The repository root directory (identified by <c>BattleScribeSpec.slnx</c>), resolved by
+    /// walking up from the test assembly's own location. Null if it could not be found (e.g. the
+    /// test binaries were copied somewhere outside a checkout). Public so any caller needing a
+    /// path anchored at the repo root — regardless of the test host process's own working
+    /// directory, which VSTest sets to the test assembly's output folder, not the repo root — can
+    /// reuse this instead of re-deriving it (see <see cref="BattleScribeSpec.Tests.TelemetryAssemblyFixture"/>).
+    /// </summary>
+    public static string? RepoRootDirectory => RepoRoot.Value;
+
+    /// <summary>
     /// Path to wh40k-9e data directory. Checks WH40K_DATA_DIR env var first,
     /// then falls back to .testdata/wh40k-9e relative to the repository root.
     /// Returns null if neither is available.

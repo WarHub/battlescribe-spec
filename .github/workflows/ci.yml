@@ -87,6 +87,16 @@ jobs:
             --expected-failures battlescribe \
             --output github-actions \
             --workers 2
+      # The trace summary (wall time, cold-starts vs reuses, peak live resources) for the steps
+      # above is appended to $GITHUB_STEP_SUMMARY automatically by the CLI/dotnet-test telemetry
+      # code itself (TraceSummary.AppendToGitHubStepSummary) — no extra script needed here.
+      - name: Upload telemetry
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
+          path: artifacts/telemetry/
+          if-no-files-found: ignore
 
   # ── SMOKE — every push. Kitchen-sink through every real engine, proving each
   #    engine/adapter/submodule/dependency wires up end-to-end. ──
@@ -237,6 +247,13 @@ jobs:
         env:
           NR_HEADLESS: true
           NR_PARALLEL: 6
+      - name: Upload telemetry
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
+          path: artifacts/telemetry/
+          if-no-files-found: ignore
 
   # ── THOROUGH: full BS GameData UI (opt-in). Warm start + sharded across N jobs.
   #    The matrix MUST match GameDataConformanceTestBase.ShardCount. ──
@@ -298,6 +315,13 @@ jobs:
           name: thorough-ui-bs-diagnostics-${{ matrix.shard }}
           path: |
             artifacts/bs-ui-diagnostics/
+      - name: Upload telemetry
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
+          path: artifacts/telemetry/
+          if-no-files-found: ignore
 
   # ── LIVE NR conformance (opt-in). ──
   nr-conformance:

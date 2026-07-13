@@ -50,6 +50,12 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
     /// </summary>
     public HarnessCollector? Collector { get; private set; }
 
+    /// <summary>The local artifact path passed to <see cref="HarnessCollector.StartAsync"/>, kept so
+    /// <see cref="DisposeAsync"/> can read it back once the collector has flushed. Null when the
+    /// collector never started (see the fail-open <c>catch</c> in <see cref="InitializeAsync"/>) or
+    /// exported externally (no local artifact to read).</summary>
+    private string? _artifactPath;
+
     /// <inheritdoc />
     public async ValueTask InitializeAsync()
     {
@@ -58,9 +64,21 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
             Environment.SetEnvironmentVariable("OTEL_METRIC_EXPORT_INTERVAL", "2000");
 
             var runId = DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmssfff", CultureInfo.InvariantCulture);
-            var artifactPath = Path.Combine("artifacts", "telemetry", $"xunit-{runId}");
+
+            // Anchored at the repo root, NOT a bare relative path: VSTest runs the test host with
+            // its working directory set to the test assembly's own output folder (e.g.
+            // artifacts/bin/BattleScribeSpec.Tests/debug/), not the repo root the CLI path uses. A
+            // bare "artifacts/telemetry" here would silently write under that nested bin folder —
+            // a path CI's "Upload telemetry" step (which looks at the repo-root artifacts/telemetry/)
+            // would never find. Falls back to the bare relative path (old behavior) only if the
+            // repo root genuinely cannot be located.
+            var artifactRoot = TestPaths.RepoRootDirectory is { } repoRoot
+                ? Path.Combine(repoRoot, "artifacts", "telemetry")
+                : Path.Combine("artifacts", "telemetry");
+            var artifactPath = Path.Combine(artifactRoot, $"xunit-{runId}");
 
             Collector = await HarnessCollector.StartAsync(artifactPath);
+            _artifactPath = Collector.HasLocalArtifact ? artifactPath : null;
         }
         catch (Exception ex)
         {
@@ -74,7 +92,23 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
     {
         if (Collector is not null)
         {
+            // Dispose FIRST: this force-flushes the assembly-wide TracerProvider/MeterProvider, so
+            // the artifact TraceSummary.FromArtifact reads below actually has every span/metric the
+            // whole dotnet test run produced (mirrors RunBatch's ordering, and for the same reason).
             await Collector.DisposeAsync();
+        }
+
+        if (_artifactPath is { } artifactPath)
+        {
+            var summary = TraceSummary.FromArtifact(artifactPath);
+
+            // Unlike the CLI paths (RunBatch/CompareCommand), this artifact typically has
+            // SpecCount == 0 — see the remarks on TraceSummary.FromArtifact — so the print gate is
+            // "not the Empty singleton" (any real signal at all), not "ran at least one spec".
+            if (!ReferenceEquals(summary, TraceSummary.Empty))
+            {
+                summary.AppendToGitHubStepSummary("Trace summary — dotnet test");
+            }
         }
     }
 }

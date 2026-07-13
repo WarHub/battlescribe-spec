@@ -75,6 +75,12 @@ in-box adapter process that hosts all four, over the same protocol used for exte
 adapters. `bs-spec probe` and `bs-spec discover` (interactive inspection / NR schema
 discovery) always run this way, forwarding to `bs-engine-host` with inherited stdio.
 
+Every `run --all`/`compare` also emits OpenTelemetry traces + metrics: a `.traces.pb`/`.metrics.pb`
+artifact under `artifacts/telemetry/`, and a compact table (wall time, cold-starts vs warm-reuses,
+peak live resources) printed after the run. `bs-spec compare` is how a config change (warm-reuse,
+a parallelism level, ...) gets proven verdict-neutral before it ships — see
+[Telemetry](docs/telemetry.md).
+
 ## Architecture
 
 ```mermaid
@@ -165,6 +171,7 @@ battlescribe-spec/
 - [ADR 001: Spec Test Kit Architecture](docs/adr/001-spec-test-kit-architecture.md) — Architecture decisions
 - [Coverage Report](docs/comprehensive-engine-coverage-report.md) — Detailed coverage analysis
 - [Host Warm-Reuse](docs/warm-reuse.md) — Keeping a UI engine instance alive across specs, per-engine applicability, and measured speedups
+- [Telemetry](docs/telemetry.md) — OpenTelemetry traces/metrics, the parent-as-collector architecture, reading the artifact, `bs-spec compare`, and known limitations
 
 ## Development
 

@@ -83,14 +83,29 @@ public sealed record TraceSummary(
 
     /// <summary>
     /// Build a summary from a run artifact written by <see cref="OtlpArtifactWriter"/>. Fail-open:
-    /// returns <see cref="Empty"/> when the artifact is missing, unreadable, or carries no spec
-    /// spans — telemetry is a bonus, printing a summary must never be a reason to fail a run.
+    /// returns <see cref="Empty"/> when the artifact is missing, unreadable, or carries neither spec
+    /// spans nor cold-start/live-resource metrics — telemetry is a bonus, printing a summary must
+    /// never be a reason to fail a run.
     /// </summary>
+    /// <remarks>
+    /// A dotnet-test artifact (<c>TelemetryAssemblyFixture</c> in <c>tests/Infrastructure</c>)
+    /// legitimately has <see cref="SpecCount"/> == 0: its per-spec
+    /// xUnit <c>[Fact]</c>/<c>[Theory]</c> tests call <c>GameDataRunner</c>/<c>RosterRunner</c>
+    /// directly rather than through <c>SpecSuiteRunner</c> (the only emitter of the <c>test.case.name</c>
+    /// spans this reads), so no spec spans ever land in that artifact. Its engine pools still emit
+    /// <c>harness.resource.count</c>/<c>harness.engine.start.duration</c> directly, so gating the
+    /// WHOLE summary on <see cref="SpecCount"/> alone would discard real, otherwise-unobtainable
+    /// concurrency data purely because no spec spans happen to exist. Only an artifact with
+    /// literally nothing in any of the three signals collapses to <see cref="Empty"/>.
+    /// </remarks>
     /// <param name="basePath">The base artifact path passed to <see cref="OtlpArtifactWriter"/>.</param>
     public static TraceSummary FromArtifact(string basePath)
     {
         var scan = ScanTraces(basePath);
-        if (scan.Specs.Count == 0)
+        var (coldStarts, reuses) = CollectEngineStarts(basePath);
+        var (peakTotal, peakByKind, peakSampled) = CollectPeakLiveResources(basePath);
+
+        if (scan.Specs.Count == 0 && coldStarts == 0 && reuses == 0 && !peakSampled)
         {
             return Empty;
         }
@@ -100,9 +115,6 @@ public sealed record TraceSummary(
         var totalWall = scan.RunStartNano is { } runStart && scan.RunEndNano is { } runEnd
             ? NanosToTimeSpan(runEnd - runStart)
             : NanosToTimeSpan((scan.MaxEndNano ?? 0) - (scan.MinStartNano ?? 0));
-
-        var (coldStarts, reuses) = CollectEngineStarts(basePath);
-        var (peakTotal, peakByKind, peakSampled) = CollectPeakLiveResources(basePath);
 
         var slowest = scan.Specs
             .OrderByDescending(s => s.DurationMs)
@@ -160,6 +172,41 @@ public sealed record TraceSummary(
                 writer.WriteLine(FormattableString.Invariant(
                     $"    {spec.DurationMs,8:F1}ms  {spec.Category}/{spec.Id}"));
             }
+        }
+    }
+
+    /// <summary>
+    /// Best-effort: when running under GitHub Actions (<c>GITHUB_STEP_SUMMARY</c> names a file every
+    /// step in the job appends markdown to), render this summary as a fenced code block under
+    /// <paramref name="heading"/> and append it there — so wall time, cold-starts vs reuses, and
+    /// peak live resources show up on the job's summary page without downloading the artifact. A
+    /// no-op when the env var is unset (i.e. everywhere except GitHub Actions). Never throws:
+    /// telemetry is a bonus and must never fail a build, mirroring <see cref="OtlpArtifactWriter"/>
+    /// and <see cref="HarnessCollector"/>'s fail-open handling elsewhere in this project.
+    /// </summary>
+    /// <param name="heading">A short label for this summary's section (e.g. the engine/job name).</param>
+    public void AppendToGitHubStepSummary(string heading)
+    {
+        ArgumentNullException.ThrowIfNull(heading);
+
+        var path = Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY");
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        try
+        {
+            using var body = new StringWriter();
+            WriteTable(body);
+            var markdown = string.Concat(
+                "### ", heading, Environment.NewLine, Environment.NewLine,
+                "```text", Environment.NewLine, body.ToString(), "```", Environment.NewLine, Environment.NewLine);
+            File.AppendAllText(path, markdown);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[telemetry] could not append to GITHUB_STEP_SUMMARY: {ex.Message}");
         }
     }
 

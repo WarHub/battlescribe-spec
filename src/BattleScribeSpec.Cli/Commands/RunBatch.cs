@@ -154,6 +154,7 @@ internal static class RunBatch
             {
                 Console.Error.WriteLine();
                 summary.WriteTable(Console.Error);
+                summary.AppendToGitHubStepSummary($"Trace summary — {engineLabel}");
             }
         }
 

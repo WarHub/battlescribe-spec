@@ -198,6 +198,7 @@ internal static class CompareCommand
             Ui.Blank();
             Ui.Info("Arm A trace summary:");
             armA.Trace.WriteTable(Console.Error);
+            armA.Trace.AppendToGitHubStepSummary($"Trace summary — {engineLabel} (arm A)");
         }
 
         if (armB.Trace.SpecCount > 0)
@@ -205,6 +206,7 @@ internal static class CompareCommand
             Ui.Blank();
             Ui.Info("Arm B trace summary:");
             armB.Trace.WriteTable(Console.Error);
+            armB.Trace.AppendToGitHubStepSummary($"Trace summary — {engineLabel} (arm B)");
         }
 
         return 0;

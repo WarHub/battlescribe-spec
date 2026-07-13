@@ -174,6 +174,100 @@ public sealed class TraceSummaryTests
         }
     }
 
+    /// <summary>
+    /// The dotnet-test path (<c>TelemetryAssemblyFixture</c>) never emits spec spans — its per-spec
+    /// xUnit tests call the runners directly, not through <c>SpecSuiteRunner</c> — but its engine
+    /// pools still emit <c>harness.resource.count</c>/<c>harness.engine.start.duration</c> directly.
+    /// An artifact with real metrics but zero spec spans must NOT collapse to <see cref="TraceSummary.Empty"/>:
+    /// that would silently discard the one concurrency signal a <c>dotnet test</c> run can produce.
+    /// </summary>
+    [Fact]
+    public async Task FromArtifact_MetricsWithNoSpecSpans_IsNotEmpty()
+    {
+        var artifact = Path.Combine(Path.GetTempPath(), $"bsspec-tracesummary-metricsonly-{Guid.NewGuid():N}");
+        try
+        {
+            await using (var writer = new OtlpArtifactWriter(artifact))
+            {
+                // No trace request at all — only metrics, as a pure `dotnet test` run produces.
+                await writer.WriteAsync(MakeEngineStartMetricsRequest(tick: 1, browserCold: 1, jvmCold: 0, browserReused: 0));
+                await writer.WriteAsync(MakeResourceCountMetricsRequest(timestamp: 1, browser: 3, jvm: 0));
+            }
+
+            var summary = TraceSummary.FromArtifact(artifact);
+
+            Assert.NotSame(TraceSummary.Empty, summary);
+            Assert.Equal(0, summary.SpecCount);
+            Assert.Equal(1, summary.ColdStarts);
+            Assert.True(summary.PeakLiveResourcesSampled);
+            Assert.Equal(3, summary.PeakLiveResources);
+        }
+        finally
+        {
+            File.Delete(artifact + ".traces.pb");
+            File.Delete(artifact + ".metrics.pb");
+            File.Delete(artifact + ".logs.pb");
+        }
+    }
+
+    [Fact]
+    public void AppendToGitHubStepSummary_NoEnvVar_DoesNothing()
+    {
+        var original = Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY");
+        try
+        {
+            Environment.SetEnvironmentVariable("GITHUB_STEP_SUMMARY", null);
+
+            var summary = MakeMinimalSummary();
+
+            // Must not throw when the env var is unset — this is the "everywhere except GitHub
+            // Actions" case, and telemetry must never fail (or even affect) the caller.
+            summary.AppendToGitHubStepSummary("heading");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GITHUB_STEP_SUMMARY", original);
+        }
+    }
+
+    [Fact]
+    public void AppendToGitHubStepSummary_EnvVarSet_AppendsFencedTable()
+    {
+        var original = Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY");
+        var summaryFile = Path.Combine(Path.GetTempPath(), $"bsspec-step-summary-{Guid.NewGuid():N}.md");
+        try
+        {
+            Environment.SetEnvironmentVariable("GITHUB_STEP_SUMMARY", summaryFile);
+            File.WriteAllText(summaryFile, "existing content" + Environment.NewLine);
+
+            var summary = MakeMinimalSummary();
+            summary.AppendToGitHubStepSummary("my heading");
+
+            var written = File.ReadAllText(summaryFile);
+            Assert.StartsWith("existing content", written, StringComparison.Ordinal);
+            Assert.Contains("### my heading", written, StringComparison.Ordinal);
+            Assert.Contains("```text", written, StringComparison.Ordinal);
+            Assert.Contains("specs:", written, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GITHUB_STEP_SUMMARY", original);
+            File.Delete(summaryFile);
+        }
+    }
+
+    private static TraceSummary MakeMinimalSummary() => new(
+        SpecCount: 1,
+        TotalWall: TimeSpan.FromSeconds(1),
+        P50SpecMs: 10,
+        P95SpecMs: 10,
+        ColdStarts: 1,
+        Reuses: 0,
+        PeakLiveResources: 2,
+        PeakLiveResourcesByKind: new Dictionary<string, long> { ["browser"] = 2 },
+        PeakLiveResourcesSampled: true,
+        SlowestSpecs: [new TraceSummary.SlowSpec("only", "cat", 10)]);
+
     [Fact]
     public void WriteTable_LabelsThePeakAsALowerBound()
     {
