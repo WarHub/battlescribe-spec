@@ -54,7 +54,7 @@ public sealed class ResourceMetricsTests
             bool? reused = null;
             foreach (var tag in tags)
             {
-                if (tag.Key == "harness.resource.kind" && tag.Value is string k)
+                if (tag.Key == "harness.engine.kind" && tag.Value is string k)
                 {
                     kind = k;
                 }

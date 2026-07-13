@@ -91,6 +91,15 @@ public static class AdapterHandler
 
                 ProtocolResponse response;
                 int? commandCorrId = null;
+
+                // Declared OUTSIDE the try: previously this was `using var activity = ...` INSIDE
+                // the try, so when a command handler threw, the span was disposed during unwind —
+                // BEFORE the catch below could mark it — and it recorded no error status at all.
+                // Every failed adapter command then rendered exactly like a successful one in any
+                // backend that renders by span status (Jaeger/Tempo), which is the precise defect
+                // ("a failed spec would have rendered green") the whole SDK migration existed to
+                // avoid, reproduced one level down at the command span.
+                Activity? activity = null;
                 try
                 {
                     var command = ProtocolSerializer.DeserializeCommand(line);
@@ -98,7 +107,7 @@ public static class AdapterHandler
 
                     // SERVER: the handling side of a remote call. Pairs with the parent's CLIENT span
                     // to form the one edge a service graph can actually draw.
-                    using var activity = command is null
+                    activity = command is null
                         ? null
                         : HarnessTelemetry.StartOp(
                             command.Type,
@@ -144,15 +153,45 @@ public static class AdapterHandler
                 }
                 catch (Exception ex)
                 {
+                    // The span records the error BEFORE it is disposed below — this is the whole
+                    // point of hoisting `activity` above this try/catch.
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                     response = new ProtocolError { Message = ex.Message };
+                }
+
+                // Non-throwing failures also render green if left alone: a switch arm can return
+                // ProtocolError (an unsupported/unknown command, a describe-time capability gap)
+                // or an ActionResult/GameDataActionResult with Ok == false (a caught engine
+                // exception re-packaged as a protocol-level failure by HandleAction/
+                // HandleGameDataAction) without ever throwing out of the switch above.
+                switch (response)
+                {
+                    case ProtocolError protocolError:
+                        activity?.SetStatus(ActivityStatusCode.Error, protocolError.Message);
+                        break;
+                    case ActionResult { Ok: false } actionResult:
+                        activity?.SetStatus(ActivityStatusCode.Error, actionResult.Error);
+                        break;
+                    case GameDataActionResult { Ok: false } gameDataActionResult:
+                        activity?.SetStatus(ActivityStatusCode.Error, gameDataActionResult.Error);
+                        break;
                 }
 
                 // Echo the command's corrId (if any) on every response path, including the error
                 // fallback above. A command with no corrId leaves the response corrId null (legacy client).
                 response.CorrId = commandCorrId;
 
-                await output.WriteLineAsync(ProtocolSerializer.SerializeResponse(response).AsMemory(), ct);
-                await output.FlushAsync(ct);
+                try
+                {
+                    await output.WriteLineAsync(ProtocolSerializer.SerializeResponse(response).AsMemory(), ct);
+                    await output.FlushAsync(ct);
+                }
+                finally
+                {
+                    // No longer a `using var` (see the comment where `activity` is declared) — disposed
+                    // explicitly here so it still happens on every path, including a write/flush failure.
+                    activity?.Dispose();
+                }
             }
         }
         finally

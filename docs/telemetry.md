@@ -39,7 +39,7 @@ from the analyzer-strict `Cli`/`TestKit` projects.
 | Metric | Kind | Description |
 |---|---|---|
 | `harness.resource.count` | UpDownCounter, `{resource}` | Expensive resources currently alive, by `harness.resource.kind` (`jvm`, `browser`, `browser-context`, `adapter-process`, ...). The signal that makes the harness's parallelism visible — nothing else in the system can answer "how many are alive right now?" |
-| `harness.engine.start.duration` | Histogram, seconds | Engine acquisition cost, tagged `harness.resource.kind` and `harness.engine.reused` (cold start vs warm reuse). |
+| `harness.engine.start.duration` | Histogram, seconds | Engine acquisition cost, tagged `harness.engine.kind` (`roster-engine`, `gamedata-engine` — a disjoint vocabulary from `harness.resource.count`'s `harness.resource.kind`, so a dashboard group-by never mixes the two) and `harness.engine.reused` (cold start vs warm reuse). |
 
 Both are defined in `src/BattleScribeSpec.Telemetry/ResourceMetrics.cs` and recorded directly by
 the engine pools (browser-context pools, the JVM/BS-UI pool, `AdapterProcess`) — independent of
@@ -71,7 +71,7 @@ every child's protocol spans in one place, correctly parented to each other.
 The harness honors an **externally-set** `OTEL_EXPORTER_OTLP_ENDPOINT` instead of self-hosting its
 own receiver — this is the one environment variable the harness *honors* rather than *owns*,
 because it is an industry standard rather than a bespoke dial of ours. Point it at a local Jaeger
-(or Tempo, or any OTLP/HTTP backend):
+(or Tempo, or any OTLP/**HTTP** backend — port 4318, not 4317):
 
 ```bash
 docker run -d --name jaeger -p 4318:4318 -p 16686:16686 jaegertracing/all-in-one:latest
@@ -79,6 +79,15 @@ docker run -d --name jaeger -p 4318:4318 -p 16686:16686 jaegertracing/all-in-one
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
   bs-spec run --all --engine battlescribe --workers 2
 ```
+
+**HTTP/protobuf only — this is not configurable.** Both `ParentProviders` (the parent's own spans/
+metrics) and `HarnessCollector.ChildEnvironment` (every child adapter's `OTEL_EXPORTER_OTLP_PROTOCOL`)
+unconditionally force `http/protobuf`, even when an externally-set `OTEL_EXPORTER_OTLP_ENDPOINT` is
+honored above. If you point that env var at a **gRPC** collector endpoint (the conventional `:4317`,
+or your own collector with `OTEL_EXPORTER_OTLP_PROTOCOL=grpc` already set), the protocol override
+silently wins and every export 404s — fail-open, so the run itself is unaffected, but you get **no
+telemetry at all** and no error. Use the HTTP port (`:4318` for Jaeger/Tempo/most collectors) when
+pointing the harness at anything external.
 
 Open `http://localhost:16686` and look for the `bs-spec`/`bs-engine-host` services. In this mode
 there is **no local `.traces.pb` artifact** — the externally-set collector owns the data, and
@@ -108,9 +117,13 @@ receiver got over HTTP, one per line the collector received, written verbatim
 Three separate files rather than one interleaved stream, because a length-delimited protobuf
 stream is only self-describing when every message in it has the same type.
 
-Read it back with `OtlpArtifactReader.ReadTraces`/`ReadMetrics`/`ReadLogs`
+Read it back with `OtlpArtifactReader.ReadTraces`/`ReadMetrics`
 (`src/BattleScribeSpec.Telemetry.Collector/OtlpArtifactReader.cs`), which yields the generated OTLP
-types directly — or, for the common case of "just show me the numbers", use
+types directly — there is no `ReadLogs`: the harness configures no `LoggerProvider` (neither the
+parent nor any child emits OTLP logs), so `.logs.pb` is always an empty file. The `/v1/logs` route
+still exists on the receiver — it is receiver-generic on purpose, so a third-party adapter that
+happens to also export logs is accepted rather than 404ing — it is just never populated by anything
+this harness emits itself. Or, for the common case of "just show me the numbers", use
 `TraceSummary.FromArtifact(basePath)`
 (`src/BattleScribeSpec.Telemetry.Collector/TraceSummary.cs`). It turns the artifact into a compact
 record: spec count, wall time, p50/p95 spec duration, cold-starts vs warm-reuses, peak live

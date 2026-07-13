@@ -204,6 +204,15 @@ public sealed class NdjsonLineConnection : IAdapterConnection, IDisposable
 /// </summary>
 public sealed class AdapterProcess : IAdapterConnection, IDisposable
 {
+    /// <summary>
+    /// Cap on <see cref="_stderrLines"/>: <see cref="GetStderrTail"/> only ever reads the last 10,
+    /// and every line is ALSO forwarded live to the parent's stderr (see <see cref="Start"/>) — so
+    /// beyond a small tail, the queue is pure unbounded retention for the process's whole lifetime.
+    /// Over a warm batch of hundreds of specs against a chatty JVM that would grow without bound.
+    /// 200 is generous headroom over the 10-line tail actually read.
+    /// </summary>
+    private const int MaxStderrLines = 200;
+
     private readonly Process _process;
     private readonly NdjsonLineConnection _connection;
     private readonly ConcurrentQueue<string> _stderrLines;
@@ -256,6 +265,14 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
                 stderrLines.Enqueue(e.Data);
+                // Bounded retention: only the last MaxStderrLines are kept for GetStderrTail's
+                // benefit. Every line is still forwarded live below regardless, so trimming here
+                // loses nothing a human could otherwise see.
+                while (stderrLines.Count > MaxStderrLines && stderrLines.TryDequeue(out var discarded))
+                {
+                    _ = discarded;
+                }
+
                 // Host-side diagnostics were previously invisible during a run: nothing ever drained
                 // this queue except GetStderrTail(10), and only on failure. Forward every line live
                 // (#303) so N parallel workers' host processes stay legible via the tag prefix.

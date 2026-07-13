@@ -296,7 +296,7 @@ public sealed class TraceSummaryTests
     /// <summary>
     /// The bug this guards against: <c>--workers N</c> children are distinguished ONLY by their
     /// OTel <c>Resource</c> (<c>service.instance.id</c>, set per-worker in <c>RunBatch</c>) — the
-    /// point attributes on a cold-start data point (<c>harness.resource.kind</c>,
+    /// point attributes on a cold-start data point (<c>harness.engine.kind</c>,
     /// <c>harness.engine.reused</c>) look IDENTICAL across workers doing the same kind of cold
     /// start. A dedup key built from point attributes alone therefore collapses N workers' series
     /// into one, and "latest wins" then keeps only whichever single data point happens to have the
@@ -322,7 +322,7 @@ public sealed class TraceSummaryTests
                     serviceInstanceId: "0", timeNano: BaseNanos + 3_000_000_000, kind: "jvm", reused: false, count: 5));
 
                 // Worker 1: a single tick, same point attributes as worker 0's series
-                // (harness.resource.kind=jvm|harness.engine.reused=false) — distinguished from
+                // (harness.engine.kind=jvm|harness.engine.reused=false) — distinguished from
                 // worker 0 ONLY by its Resource's service.instance.id.
                 await writer.WriteAsync(MakeEngineStartMetricsRequestForResource(
                     serviceInstanceId: "1", timeNano: BaseNanos + 1_000_000_000, kind: "jvm", reused: false, count: 3));
@@ -479,7 +479,7 @@ public sealed class TraceSummaryTests
     private static HistogramDataPoint EngineStartDataPoint(ulong timeNano, string kind, bool reused, long count)
     {
         var dataPoint = new HistogramDataPoint { TimeUnixNano = timeNano, Count = (ulong)count };
-        dataPoint.Attributes.Add(StringAttribute("harness.resource.kind", kind));
+        dataPoint.Attributes.Add(StringAttribute("harness.engine.kind", kind));
         dataPoint.Attributes.Add(BoolAttribute("harness.engine.reused", reused));
         return dataPoint;
     }

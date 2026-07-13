@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Telemetry;
 using BattleScribeSpec.Tests.Infrastructure;
 
 namespace BattleScribeSpec.Tests.Features;
@@ -91,6 +93,110 @@ public sealed class AdapterHandlerTests
         var error = Assert.IsType<ProtocolError>(
             await connection.SendCommandAsync(new ScreenshotCommand(), TestContext.Current.CancellationToken));
         Assert.Contains("not supported", error.Message);
+    }
+
+    /// <summary>
+    /// Code-review follow-up (final whole-branch review): the SERVER-side command span used to be
+    /// declared as `using var activity = ...` INSIDE the per-command try, so a throwing handler
+    /// disposed the span during unwind before the catch could mark it — it recorded no error
+    /// status at all, and every failed adapter command rendered exactly like a success in any
+    /// backend (Jaeger/Tempo) that renders by span status. This pins that a genuinely-throwing
+    /// command handler (not one that catches its own exception and returns Ok=false) now marks the
+    /// span <see cref="ActivityStatusCode.Error"/>, mirroring <see cref="HarnessTelemetryTests"/>'s
+    /// coverage of the spec-level span for the same property.
+    /// </summary>
+    [Fact]
+    public async Task ServerSpan_RecordsErrorStatus_WhenTheCommandHandlerThrows()
+    {
+        var isThisTest = new AsyncLocal<bool>();
+        var captured = new List<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == HarnessTelemetry.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                if (isThisTest.Value)
+                {
+                    lock (captured)
+                    {
+                        captured.Add(activity);
+                    }
+                }
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // IsThisTest must be set BEFORE the connection is constructed: InMemoryAdapterConnection's
+        // handler loop is a Task.Run captured at construction time (see ResourceMetricsTests for
+        // the same requirement), so noise from any concurrently-running, unrelated test on the
+        // same process-wide ActivitySource is excluded rather than breaking an exact-count assertion.
+        isThisTest.Value = true;
+        var connection = new InMemoryAdapterConnection(
+            (input, output, ct) => AdapterHandler.RunAsync(
+                () => new CountingRosterEngine { ThrowOnSetup = true }, input, output, ct));
+
+        var setup = await connection.SendCommandAsync(new SetupCommand
+        {
+            GameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" },
+        }, TestContext.Current.CancellationToken);
+        Assert.IsType<ProtocolError>(setup);
+
+        await connection.DisposeAsync();
+        isThisTest.Value = false;
+
+        var setupSpan = Assert.Single(captured, a => a.OperationName == "setup");
+        Assert.Equal(ActivityStatusCode.Error, setupSpan.Status);
+    }
+
+    /// <summary>
+    /// Companion to <see cref="ServerSpan_RecordsErrorStatus_WhenTheCommandHandlerThrows"/>: a
+    /// NON-throwing failure (a switch arm returning <see cref="ProtocolError"/> directly, e.g. an
+    /// unsupported command) must mark the span exactly the same way — that path never touches the
+    /// catch block at all, so hoisting `activity` alone would not have been sufficient.
+    /// </summary>
+    [Fact]
+    public async Task ServerSpan_RecordsErrorStatus_WhenTheHandlerReturnsProtocolErrorWithoutThrowing()
+    {
+        var isThisTest = new AsyncLocal<bool>();
+        var captured = new List<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == HarnessTelemetry.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                if (isThisTest.Value)
+                {
+                    lock (captured)
+                    {
+                        captured.Add(activity);
+                    }
+                }
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        isThisTest.Value = true;
+        var connection = ConnectV11(); // no ScreenshotProvider registered -> ProtocolError, no throw
+
+        await connection.SendCommandAsync(new SetupCommand
+        {
+            GameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" },
+        }, TestContext.Current.CancellationToken);
+        var screenshot = await connection.SendCommandAsync(new ScreenshotCommand(), TestContext.Current.CancellationToken);
+        Assert.IsType<ProtocolError>(screenshot);
+
+        await connection.DisposeAsync();
+        isThisTest.Value = false;
+
+        var screenshotSpan = Assert.Single(captured, a => a.OperationName == "screenshot");
+        Assert.Equal(ActivityStatusCode.Error, screenshotSpan.Status);
+
+        // Baseline: the setup call in the same run genuinely succeeded and must stay Unset —
+        // proof this isn't just marking every span red regardless of outcome.
+        var setupSpan = Assert.Single(captured, a => a.OperationName == "setup");
+        Assert.Equal(ActivityStatusCode.Unset, setupSpan.Status);
     }
 
     [Fact]
@@ -238,10 +344,16 @@ public sealed class AdapterHandlerTests
         public int CleanupCalls { get; private set; }
         public int DisposeCalls { get; private set; }
         public bool ThrowOnCleanup { get; init; }
+        public bool ThrowOnSetup { get; init; }
 
         public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
         {
             SetupCalls++;
+            if (ThrowOnSetup)
+            {
+                throw new InvalidOperationException("setup boom");
+            }
+
             return [];
         }
 

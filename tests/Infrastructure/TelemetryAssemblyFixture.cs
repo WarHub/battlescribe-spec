@@ -107,6 +107,12 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
             // "not the Empty singleton" (any real signal at all), not "ran at least one spec".
             if (!ReferenceEquals(summary, TraceSummary.Empty))
             {
+                // AppendToGitHubStepSummary alone means a developer running `dotnet test` locally
+                // sees nothing — the peak (this whole fixture's deliverable) would exist only in an
+                // unread $GITHUB_STEP_SUMMARY file that is unset outside CI. WriteTable to stderr
+                // too, mirroring RunBatch/CompareCommand's own CLI-path printing.
+                Console.Error.WriteLine();
+                summary.WriteTable(Console.Error);
                 summary.AppendToGitHubStepSummary("Trace summary — dotnet test");
             }
         }

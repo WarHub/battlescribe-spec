@@ -101,38 +101,56 @@ public sealed record TraceSummary(
     /// <param name="basePath">The base artifact path passed to <see cref="OtlpArtifactWriter"/>.</param>
     public static TraceSummary FromArtifact(string basePath)
     {
-        var scan = ScanTraces(basePath);
-        var (coldStarts, reuses) = CollectEngineStarts(basePath);
-        var (peakTotal, peakByKind, peakSampled) = CollectPeakLiveResources(basePath);
-
-        if (scan.Specs.Count == 0 && coldStarts == 0 && reuses == 0 && !peakSampled)
+        try
         {
+            var scan = ScanTraces(basePath);
+            var (coldStarts, reuses) = CollectEngineStarts(basePath);
+            var (peakTotal, peakByKind, peakSampled) = CollectPeakLiveResources(basePath);
+
+            if (scan.Specs.Count == 0 && coldStarts == 0 && reuses == 0 && !peakSampled)
+            {
+                return Empty;
+            }
+
+            var durations = scan.Specs.Select(s => s.DurationMs).OrderBy(d => d).ToList();
+
+            var totalWall = scan.RunStartNano is { } runStart && scan.RunEndNano is { } runEnd
+                ? NanosToTimeSpan(runEnd - runStart)
+                : NanosToTimeSpan((scan.MaxEndNano ?? 0) - (scan.MinStartNano ?? 0));
+
+            var slowest = scan.Specs
+                .OrderByDescending(s => s.DurationMs)
+                .Take(10)
+                .Select(s => new SlowSpec(s.Id, s.Category, s.DurationMs))
+                .ToList();
+
+            return new TraceSummary(
+                SpecCount: scan.Specs.Count,
+                TotalWall: totalWall,
+                P50SpecMs: Percentile(durations, 0.50),
+                P95SpecMs: Percentile(durations, 0.95),
+                ColdStarts: coldStarts,
+                Reuses: reuses,
+                PeakLiveResources: peakTotal,
+                PeakLiveResourcesByKind: peakByKind,
+                PeakLiveResourcesSampled: peakSampled,
+                SlowestSpecs: slowest);
+        }
+        catch (Exception ex)
+        {
+            // Fail-open, for real this time: a missing artifact already returns Empty from the
+            // ScanTraces/CollectEngineStarts/CollectPeakLiveResources helpers (they treat "no
+            // files" as "no data"), but anything else that can go wrong while reading the three
+            // artifact files — a locked file (IOException from File.OpenRead; a Windows AV/indexer
+            // lock is realistic), a truncated/corrupt write (InvalidProtocolBufferException), or a
+            // cumulative counter overflowing the `checked((int)...)` casts below — must not turn
+            // into an exception that reaches a caller. Printing a trace summary is a bonus; it must
+            // never be a reason a `dotnet test` run (see TelemetryAssemblyFixture.DisposeAsync,
+            // which calls this from an assembly fixture's teardown with no surrounding try/catch of
+            // its own) or a CLI run fails.
+            Console.Error.WriteLine($"[telemetry] could not summarize artifact '{basePath}': {ex.Message}");
             return Empty;
         }
-
-        var durations = scan.Specs.Select(s => s.DurationMs).OrderBy(d => d).ToList();
-
-        var totalWall = scan.RunStartNano is { } runStart && scan.RunEndNano is { } runEnd
-            ? NanosToTimeSpan(runEnd - runStart)
-            : NanosToTimeSpan((scan.MaxEndNano ?? 0) - (scan.MinStartNano ?? 0));
-
-        var slowest = scan.Specs
-            .OrderByDescending(s => s.DurationMs)
-            .Take(10)
-            .Select(s => new SlowSpec(s.Id, s.Category, s.DurationMs))
-            .ToList();
-
-        return new TraceSummary(
-            SpecCount: scan.Specs.Count,
-            TotalWall: totalWall,
-            P50SpecMs: Percentile(durations, 0.50),
-            P95SpecMs: Percentile(durations, 0.95),
-            ColdStarts: coldStarts,
-            Reuses: reuses,
-            PeakLiveResources: peakTotal,
-            PeakLiveResourcesByKind: peakByKind,
-            PeakLiveResourcesSampled: peakSampled,
-            SlowestSpecs: slowest);
     }
 
     /// <summary>Render this summary as a compact plain-text table.</summary>

@@ -61,8 +61,16 @@ public static class ResourceMetrics
     /// a warm reuse from a cold start — this is the warm-reuse question, asked continuously rather
     /// than by a one-off benchmark script.
     /// </summary>
+    /// <remarks>
+    /// Tagged <c>harness.engine.kind</c> (values: <c>roster-engine</c>, <c>gamedata-engine</c>) —
+    /// deliberately a DIFFERENT attribute key from <see cref="Acquired"/>/<see cref="Released"/>'s
+    /// <c>harness.resource.kind</c> (values: <c>jvm</c>, <c>browser</c>, <c>browser-context</c>,
+    /// <c>adapter-process</c>). The two metrics classify along disjoint vocabularies — a domain
+    /// (which engine kind was started) vs. a process/handle kind (what is currently alive) — and
+    /// sharing one attribute key would let a dashboard group-by on it silently mix the two.
+    /// </remarks>
     public static void RecordEngineStart(string kind, bool reused, double seconds) =>
         EngineStart.Record(seconds,
-            new KeyValuePair<string, object?>("harness.resource.kind", kind),
+            new KeyValuePair<string, object?>("harness.engine.kind", kind),
             new KeyValuePair<string, object?>("harness.engine.reused", reused));
 }

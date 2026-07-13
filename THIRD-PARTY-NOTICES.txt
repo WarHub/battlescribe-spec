@@ -3,6 +3,7 @@ This product includes software developed by third parties.
 --------------------------------------------------------------------------------
 OpenTelemetry Protocol (OTLP) .proto definitions
 Source: https://github.com/open-telemetry/opentelemetry-proto
+Revision: f0b375969f4500b8ede72d8055c50fb9518eeccc
 License: Apache License 2.0
 Location: src/BattleScribeSpec.Telemetry.Collector/opentelemetry/proto/
 

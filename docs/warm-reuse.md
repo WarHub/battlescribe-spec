@@ -19,11 +19,11 @@ been measured to be both correct and faster.**
 | `newrecruit-ui` | gamedata | ❌ cold | Verdicts identical, but **0.92× — no benefit**. |
 | `newrecruit-ui` | roster | ❌ cold | Warm-reuse was **0.56× and produced wrong verdicts**. |
 | `newrecruit` | both | ❌ cold | Same economics as `newrecruit-ui`. |
+| `battlescribe` | both | ⚪ n/a | In-process; engine construction is cheap. Nothing to save. |
 
 For NewRecruit the answer is **not** warm-reuse — it is **`--workers N`** (3.8× at 4 workers, verdicts
 identical). Each spec already gets an isolated `BrowserContext` on a shared browser, so parallelism
 is safe. See "NewRecruit: browser reuse is the wrong lever" below.
-| `battlescribe` | both | ⚪ n/a | In-process; engine construction is cheap. Nothing to save. |
 
 Both BattleScribe UI domains pay off for the same reason: their cold cost is a **JVM + JavaFX launch
 per spec**. Neither NewRecruit domain does, because a headless Chromium relaunch is cheap (~1.6s).
@@ -164,7 +164,9 @@ pair can be checked for verdict-neutrality this way — not just warm vs cold.
 
 ## Related
 
-- **#303** — `AdapterProcess` buffers the engine host's stderr instead of forwarding it, so host-side
-  diagnostics are invisible during a run. This actively obstructed the NR-UI roster diagnosis above.
+- **#303 (fixed)** — `AdapterProcess` used to buffer the engine host's stderr instead of forwarding
+  it, so host-side diagnostics were invisible during a run (this actively obstructed the NR-UI
+  roster diagnosis above). Fixed by commit `3a564a0` ("closes #303"): stderr lines are now also
+  forwarded live to the parent's stderr, tagged with the worker index.
 - **#304** — `SpecSuiteRunner` has no recovery when a pooled adapter process dies; one crash fails
   every remaining spec on that worker.
