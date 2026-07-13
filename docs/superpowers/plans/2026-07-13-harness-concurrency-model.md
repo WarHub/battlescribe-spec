@@ -628,6 +628,20 @@ Read the metrics artifact back and report the **peak `harness.resource.count`** 
 
 - [ ] **Step 4: Commit**
 
+**Residual, documented rather than fixed here (code review follow-up):** this task bounds xUnit's
+own thread count (`maxParallelThreads`) and bounds each individual pool's size
+(`ConcurrencyPolicy.For(...).PoolSize`). It does **not** bound the product across
+simultaneously-live xUnit collection fixtures — a collection fixture lives for the whole
+collection, not for one thread-slot, so two independent collections (e.g.
+`FrozenNrRosterFixture` and `FrozenNrGameDataUiFixture`) can be fully alive at once, each with a
+pool sized up to the cap; total live browser-contexts can reach the *sum* across them, not the
+cap. `BrowserResourceRaceGate` only serializes a fixture against its own resource-metrics test, not
+against sibling fixtures. The original framing — "collections × pools × the JVM compose
+multiplicatively with nothing capping the product" — is therefore bounded **per-factor** here, not
+as a product. Tracked as [#314](https://github.com/WarHub/battlescribe-spec/issues/314) (a shared
+budget the pools draw from is the likely real fix); not attempted in this task, since it is
+architecture, not cleanup.
+
 ---
 
 ### Task 8: The measurement campaign — find the knee

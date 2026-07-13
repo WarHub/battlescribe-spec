@@ -14,11 +14,28 @@ public static class ConcurrencyPolicy
     /// <c>docs/superpowers/plans/2026-07-13-harness-concurrency-model.md</c>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>tests/xunit.runner.json</c> and <c>tests/BattleScribeSpec.Cli.Tests/xunit.runner.json</c>
     /// hardcode <c>maxParallelThreads: 8</c> to this same number (Task 7). That file is static JSON
     /// read by the xUnit runner before any of our code runs, so it cannot call this policy at
     /// runtime — the literal is a deliberate, honest stand-in for it, not a coincidence. When Task
     /// 8/9 retires this cap, revisit that literal too.
+    /// </para>
+    /// <para>
+    /// Investigated and rejected as an alternative: xunit.v3's VSTest RunSettings override
+    /// (confirmed live via <c>Xunit.Runner.VisualStudio.RunSettings.Parse</c> — an
+    /// <c>&lt;xUnit&gt;&lt;MaxParallelThreads&gt;</c> element in a <c>.runsettings</c> file, or
+    /// <c>dotnet test -- xUnit.MaxParallelThreads=&lt;value&gt;</c>, both of which this repo's
+    /// <c>xunit.runner.visualstudio</c> adapter genuinely honors). It shares the exact same
+    /// limitation as this JSON file: the RunSettings XML is also read by the runner before this
+    /// process's code executes, so it cannot call <see cref="ConcurrencyPolicy.For"/> either — using
+    /// it would only move the hardcoded <c>8</c> from one static file format to another, at the cost
+    /// of a second static file to keep in sync (this repo's <c>.runsettings</c> files are already
+    /// spoken for, encoding <c>TestCaseFilter</c> per profile). Making the value truly dynamic would
+    /// need an external wrapper script that computes it and writes/overrides the RunSettings before
+    /// invoking the runner — reintroducing the wrapper-script axis this design exists to avoid. Not
+    /// pursued.
+    /// </para>
     /// </remarks>
     internal const int ProvisionalUnmeasuredMemoryCap = 8;
 
