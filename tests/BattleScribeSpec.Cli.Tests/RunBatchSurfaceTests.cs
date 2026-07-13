@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
+using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Cli.Tests;
 
@@ -78,12 +80,168 @@ public sealed class RunBatchSurfaceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task Workers_MustBeAtLeastOne()
+    public async Task Workers_IsGoneAsAFlag_RejectedAsUnrecognized()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "--all", "--workers", "0");
+        // #271 Task 5: --workers is not demoted, it is DELETED (one policy key, one flag: --policy
+        // workers=N). System.CommandLine rejects the unknown option before RunCommand's own handler
+        // ever runs — the exact wording is locale-dependent (System.CommandLine localizes parse
+        // errors), so only the failure itself (a non-zero, non-success exit) is asserted here, not
+        // the message text.
+        var (exitCode, _, _) = await RunCliAsync("run", "--all", "--workers", "2");
+        Assert.NotEqual(0, exitCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task KeepAlive_IsGoneAsAFlag_RejectedAsUnrecognized()
+    {
+        // --keep-alive is sugar for "force reuse on" — one concept, expressed only as --policy
+        // reuse=on now. System.CommandLine no longer recognizes --keep-alive as an option, so it
+        // falls through to the positional <spec> slot, which then collides with --all
+        // ("mutually exclusive") — a different-looking error than an outright parse failure, but
+        // still a non-zero exit for what used to be a valid flag.
+        var (exitCode, _, _) = await RunCliAsync("run", "--all", "--keep-alive");
+        Assert.NotEqual(0, exitCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Policy_WorkersMustBeAtLeastOne()
+    {
+        var (exitCode, _, stdErr) = await RunCliAsync("run", "--all", "--policy", "workers=0");
         Assert.Equal(1, exitCode);
-        Assert.Contains("--workers must be at least 1", stdErr);
+        Assert.Contains("must be a positive integer", stdErr, StringComparison.Ordinal);
         Assert.DoesNotContain("Unhandled exception", stdErr);
+    }
+
+    // ===== --policy: capability mismatch (reject) vs policy override (allow + warn) (#271 Task 5) =====
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyPolicyOverride_NoPolicyFlag_ReturnsSelectionUnchanged()
+    {
+        var selection = ResolveSelection("battlescribe");
+        var warnings = new List<string>();
+
+        var result = RunCommand.ApplyPolicyOverride(selection, policyRaw: null, warnings.Add);
+
+        Assert.Same(selection, result);
+        Assert.Empty(warnings);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyPolicyOverride_ForcingReuseOn_AnEngineNotDeclaredReuseSafe_WarnsButAllows()
+    {
+        // battlescribe (non-ui) declares ReuseSafeRoster/ReuseSafeGameData = false. Forcing reuse=on
+        // anyway must NOT be rejected — it is exactly the ablation `bs-spec compare` needs to prove
+        // reuse-(un)safety — but it must never be silent either.
+        var selection = ResolveSelection("battlescribe");
+        var warnings = new List<string>();
+
+        var result = RunCommand.ApplyPolicyOverride(selection, "reuse=on", warnings.Add);
+
+        Assert.True(result.EffectivePlan.ReuseRoster);
+        Assert.True(result.EffectivePlan.ReuseGameData);
+        Assert.Equal(2, warnings.Count);
+        Assert.All(warnings, w => Assert.Contains("not declared reuse-safe", w, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyPolicyOverride_ForcingReuseOn_AnEngineDeclaredReuseSafe_DoesNotWarn()
+    {
+        // battlescribe-ui declares both domains reuse-safe, so the same override is unremarkable.
+        var selection = ResolveSelection("battlescribe-ui");
+        var warnings = new List<string>();
+
+        var result = RunCommand.ApplyPolicyOverride(selection, "reuse=on", warnings.Add);
+
+        Assert.True(result.EffectivePlan.ReuseRoster);
+        Assert.Empty(warnings);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyPolicyOverride_InvalidPolicyString_ThrowsCliInputException()
+    {
+        var selection = ResolveSelection("battlescribe");
+        Assert.Throws<CliInputException>(() => RunCommand.ApplyPolicyOverride(selection, "workers=0", _ => { }));
+    }
+
+    private static EngineSelection ResolveSelection(string engineName)
+    {
+        var entry = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(engineName));
+        return new EngineSelection(entry, EngineDomain.Roster, Headed: false, KeepAlive: false);
+    }
+
+    // ===== The policy — not a hardcoded default — picks the worker count (#271 Task 5) =====
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task RunAll_NoPolicyFlag_PicksMoreThanOneWorker_OnAMultiCoreMachine()
+    {
+        // With no --workers (deleted) and no --policy override, run --all must plan more than one
+        // worker for an engine whose registry MaxParallel is 0 (unlimited) on a multi-core box —
+        // today's-hardcoded-1 is exactly the defect this task removes. The reference adapter run as
+        // an ad-hoc dotnet: connectable gets the registry's conservative DefaultProfile
+        // (MaxParallel: 0), so ConcurrencyPolicy.For scales workers with Environment.ProcessorCount.
+        if (Environment.ProcessorCount < 2)
+        {
+            return;
+        }
+
+        var repoRoot = FindRepoRoot();
+        var adapterDll = FindReferenceAdapterDll(repoRoot);
+
+        var (exitCode, _, stdErr) = await RunCliAsync(
+            "run", "--all",
+            "--engine", $"battlescribe=dotnet:{adapterDll}",
+            "--filter", "protocol/protocol-kitchen-sink",
+            "--output", "summary");
+
+        Assert.Equal(0, exitCode);
+        var match = Regex.Match(stdErr, @"Workers: (\d+)", RegexOptions.None);
+        Assert.True(match.Success, $"Expected a 'Workers: N' line in stderr:\n{stdErr}");
+        Assert.True(int.Parse(match.Groups[1].Value) > 1, $"Expected more than one worker, stderr:\n{stdErr}");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task RunAll_PolicyWorkers_WinsOverTheAutoPickedDefault()
+    {
+        // An explicit --policy override can only be conveyed to a BUILT-IN engine (a launchable
+        // exec:/dotnet: adapter has no --policy channel at all, and throws rather than silently
+        // drop one — see EngineHostLocator.Resolve), so this uses the "battlescribe" built-in
+        // (in-process, cheap) rather than the reference adapter.
+        var (exitCode, _, stdErr) = await RunCliAsync(
+            "run", "--all",
+            "--engine", "battlescribe",
+            "--filter", "protocol/protocol-kitchen-sink",
+            "--policy", "workers=1",
+            "--output", "summary");
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Workers: 1", stdErr, StringComparison.Ordinal);
+    }
+
+    private static string FindReferenceAdapterDll(string repoRoot)
+    {
+        var pivot = ExtractPivot(AppContext.BaseDirectory);
+        foreach (var candidatePivot in new[] { pivot, "debug" }.Where(p => p is not null).Distinct())
+        {
+            var dll = Path.Combine(repoRoot, "artifacts", "bin",
+                "BattleScribeSpec.ReferenceAdapter", candidatePivot!, "bs-reference-adapter.dll");
+            if (File.Exists(dll))
+            {
+                return dll;
+            }
+        }
+
+        var expected = Path.Combine(repoRoot, "artifacts", "bin",
+            "BattleScribeSpec.ReferenceAdapter", pivot ?? "debug", "bs-reference-adapter.dll");
+        Assert.Fail($"Reference adapter not built: {expected}");
+        return expected;
     }
 
     // ===== ClampWorkers (pure function) =====

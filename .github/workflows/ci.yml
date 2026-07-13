@@ -86,7 +86,7 @@ jobs:
             --filter "protocol/protocol-kitchen-sink,category/" \
             --expected-failures battlescribe \
             --output github-actions \
-            --workers 2
+            --policy workers=2
       # The trace summary (wall time, cold-starts vs reuses, peak live resources) for the steps
       # above is appended to $GITHUB_STEP_SUMMARY automatically by the CLI/dotnet-test telemetry
       # code itself (TraceSummary.AppendToGitHubStepSummary) — no extra script needed here.

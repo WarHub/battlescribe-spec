@@ -23,8 +23,7 @@ internal static class RunBatch
         string? Tags,
         string? ReportPath,
         string? ExpectedFailures,
-        string? AssertionEngine,
-        int Workers);
+        string? AssertionEngine);
 
     /// <summary>Run the full spec suite over the selected engine (<c>bs-spec run --all</c>).</summary>
     public static async Task<int> ExecuteAsync(BatchOptions options)
@@ -32,7 +31,13 @@ internal static class RunBatch
         var selection = options.Selection;
         var engineLabel = selection.EngineName ?? selection.Display;
 
-        var workers = await ResolveWorkersAsync(selection, options.Workers, Ui.Warn);
+        // The policy picks the worker count by itself — no --workers default to fall back on
+        // (RunCommand deleted it; see #271 Task 5). selection.EffectivePlan already folds in any
+        // --policy override, so "requested" here is "what the policy/override says," and
+        // ResolveWorkersAsync's describe-probe clamp still gets the final word (an adapter may
+        // advertise a lower ceiling than the registry knows).
+        var workers = await ResolveWorkersAsync(selection, selection.EffectivePlan.Workers, Ui.Warn);
+        Ui.Info($"Workers: {workers}");
 
         var filterPatterns = options.Filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             is { Length: > 0 } patterns ? patterns : null;

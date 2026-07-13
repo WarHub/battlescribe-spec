@@ -177,7 +177,31 @@ internal sealed class EngineOptions
             throw new CliInputException(ex.Message);
         }
 
-        return new EngineSelection(entry, domain, parseResult.GetValue(Headed), KeepAlive: false);
+        var headed = parseResult.GetValue(Headed);
+        if (headed)
+        {
+            // A flag is accepted or rejected — never silently dropped (#305). Historically
+            // EngineHostLocator.Resolve just dropped --headed on the floor for launchable
+            // (exec:/dotnet:) adapters and for built-ins with no window to show; the user believed
+            // they configured something, and they had not. Reject here, before a process is ever
+            // spawned, naming what the engine actually supports.
+            if (!entry.Builtin)
+            {
+                throw new CliInputException(
+                    $"--headed cannot be delivered to '{entry.Name ?? entry.Executable}': launchable " +
+                    "(exec:/dotnet:) adapters have no channel to receive it. Use a built-in -ui engine " +
+                    "(battlescribe-ui, newrecruit-ui) instead.");
+            }
+
+            if (entry.Name is not { } name || !name.EndsWith("-ui", StringComparison.Ordinal))
+            {
+                throw new CliInputException(
+                    $"engine '{entry.Name}' has no UI to show; --headed only applies to -ui engines " +
+                    "(battlescribe-ui, newrecruit-ui). Pass --ui, or select an -ui engine variant directly.");
+            }
+        }
+
+        return new EngineSelection(entry, domain, headed, KeepAlive: false);
     }
 }
 

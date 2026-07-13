@@ -203,6 +203,47 @@ public sealed class EngineSpecTests
         Assert.Throws<InvalidOperationException>(selection.ResolveLaunch);
     }
 
+    // ---- --headed: a flag is accepted or rejected, never silently dropped (#305, #271 Task 5) ----
+
+    [Fact]
+    public void Resolve_HeadedAgainstLaunchableAdapter_ThrowsNamingNoChannel()
+    {
+        // EngineHostLocator.Resolve has no channel to convey --headed to an exec:/dotnet: adapter
+        // and used to just drop it on the floor. Reject at the CLI layer instead, before any
+        // process is spawned.
+        var ex = Assert.Throws<CliInputException>(
+            () => Resolve("plain-spec-id", "--engine", "wham=dotnet:adapter.dll", "--headed"));
+
+        Assert.Contains("no channel", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_HeadedAgainstNonUiBuiltin_ThrowsNamingNoUi()
+    {
+        // "battlescribe" (no -ui suffix) has no window to show; --headed against it is a mistake,
+        // not a no-op.
+        var ex = Assert.Throws<CliInputException>(
+            () => Resolve("plain-spec-id", "--engine", "battlescribe", "--headed"));
+
+        Assert.Contains("no UI", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_HeadedAgainstUiBuiltin_Succeeds()
+    {
+        var selection = Resolve("plain-spec-id", "--engine", "battlescribe-ui", "--headed");
+        Assert.True(selection.Headed);
+    }
+
+    [Fact]
+    public void Resolve_HeadedWithUiSugar_Succeeds()
+    {
+        // --ui appends "-ui" to a plain name BEFORE the headed capability check runs, so this must
+        // not throw even though the user typed the non-ui name.
+        var selection = Resolve("plain-spec-id", "--engine", "newrecruit", "--ui", "--headed");
+        Assert.True(selection.Headed);
+    }
+
     private static EngineSelection Resolve(string specInput, params string[] extraArgs)
     {
         var options = new EngineOptions();
