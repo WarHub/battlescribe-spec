@@ -11,7 +11,8 @@ namespace BattleScribeSpec.Tests;
 ///
 /// Uses parallel execution with a browser-context pool (mirrors <see cref="FrozenNrRosterConformanceTests"/>):
 /// each spec runs on its own engine/context acquired from the pool, so specs are isolated and the
-/// suite scales with <c>NR_PARALLEL</c> instead of running serially on one page.
+/// suite scales with the pool size <c>ConcurrencyPolicy</c> assigns to the <c>newrecruit-ui</c>
+/// engine, instead of running serially on one page.
 ///
 /// Skipped when .testdata/nr-editor/ is missing (run setup.ps1) or NR_EDITOR_UI_FROZEN_SKIP=true.
 /// </summary>

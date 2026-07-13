@@ -13,6 +13,13 @@ public static class ConcurrencyPolicy
     /// stopgap, not a fitted value — see the comment at its use site and Task 8/9 of
     /// <c>docs/superpowers/plans/2026-07-13-harness-concurrency-model.md</c>.
     /// </summary>
+    /// <remarks>
+    /// <c>tests/xunit.runner.json</c> and <c>tests/BattleScribeSpec.Cli.Tests/xunit.runner.json</c>
+    /// hardcode <c>maxParallelThreads: 8</c> to this same number (Task 7). That file is static JSON
+    /// read by the xUnit runner before any of our code runs, so it cannot call this policy at
+    /// runtime — the literal is a deliberate, honest stand-in for it, not a coincidence. When Task
+    /// 8/9 retires this cap, revisit that literal too.
+    /// </remarks>
     private const int ProvisionalUnmeasuredMemoryCap = 8;
 
     /// <summary>Derive the plan. Deterministic: the same machine and engine always give the same plan.</summary>

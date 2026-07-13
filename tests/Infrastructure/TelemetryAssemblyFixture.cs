@@ -15,8 +15,11 @@ namespace BattleScribeSpec.Tests;
 /// <c>bs-engine-host</c> process its own OTLP exporter env. The <c>dotnet test</c> path has no
 /// such entry point to hook — there are 11 independent collection fixtures, each free to spin up
 /// whenever xUnit decides to run their collection, with <c>parallelizeTestCollections: true</c>
-/// and <c>maxParallelThreads</c> left at its CPU-count default (see
-/// <c>tests/xunit.runner.json</c>). An assembly fixture is the one hook that spans that: xUnit v3
+/// and <c>maxParallelThreads</c> capped at a conservative, hardcoded 8 (see
+/// <c>tests/xunit.runner.json</c> and Task 7 of
+/// <c>docs/superpowers/plans/2026-07-13-harness-concurrency-model.md</c> — that file is static JSON
+/// read by the runner before any of our code runs, so it cannot pull the number from
+/// <c>ConcurrencyPolicy</c> at runtime). An assembly fixture is the one hook that spans that: xUnit v3
 /// constructs it once before any test runs and disposes it once after the last one finishes,
 /// regardless of how many collections ran, or how many of them overlapped.
 /// </para>

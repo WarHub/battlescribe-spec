@@ -236,7 +236,6 @@ filters automatically. You can also run suites manually with `--filter`:
 | `NR_VISUAL` | Set to `true` to navigate to the roster editor UI after setup | `true` |
 | `NR_SLOW_MO` | Playwright SlowMo in ms — pauses between browser actions | `500` |
 | `NR_FROZEN_SKIP` | Set to `true` to skip frozen NR tests | `true` |
-| `NR_PARALLEL` | Number of parallel browser contexts | `5` |
 | `NR_SEQUENTIAL` | Set to `true` to run sequential (per-spec) NR tests | `true` |
 
 Example — run live NR conformance tests with visible browser and roster editor UI:

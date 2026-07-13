@@ -6,7 +6,7 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// Shared fixture for NR UI driver conformance tests in frozen (HAR replay) mode.
 /// Engines are not pooled — UI-driven tests are sequential within a single browser context
-/// to avoid visual conflicts. Use NR_PARALLEL to allow small concurrency if needed.
+/// to avoid visual conflicts.
 /// </summary>
 public sealed class FrozenNrUiRosterFixture : IAsyncLifetime
 {

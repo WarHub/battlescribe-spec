@@ -18,8 +18,10 @@ namespace BattleScribeSpec.Tests;
 /// Environment variables:
 ///   NR_HEADLESS               — "false" to show the browser (default: true)
 ///   NR_SLOW_MO                — milliseconds to slow Playwright actions (for debugging)
-///   NR_PARALLEL               — number of parallel browser contexts (default: 5)
 ///   NR_EDITOR_UI_FROZEN_SKIP  — "true" to skip all frozen NR Editor UI tests
+///
+/// Pool size (number of parallel browser contexts) comes from <see cref="NrFixtureConcurrency"/>
+/// (backed by <c>ConcurrencyPolicy</c>), not from an env var.
 /// </summary>
 public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
 {
@@ -45,11 +47,7 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        var concurrency = 5;
-        if (int.TryParse(Environment.GetEnvironmentVariable("NR_PARALLEL"), out var envConcurrency) && envConcurrency > 0)
-        {
-            concurrency = envConcurrency;
-        }
+        var concurrency = NrFixtureConcurrency.Resolve("newrecruit-ui").PoolSize;
 
         // Held for the pool's entire alive window (released in DisposeAsync, after teardown) so
         // NrGameDataUiEnginePoolResourceMetricsTests/NrGameDataUiEngineResourceMetricsTests's own
