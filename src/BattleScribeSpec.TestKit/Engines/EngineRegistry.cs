@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BattleScribeSpec.Concurrency;
 
 namespace BattleScribeSpec.Engines;
 
@@ -7,14 +8,14 @@ namespace BattleScribeSpec.Engines;
 /// <param name="Executable">Launch executable; null for built-ins (resolved by the engine host integration).</param>
 /// <param name="Arguments">Launch arguments; null when none.</param>
 /// <param name="Domains">Spec domains the engine claims; the describe handshake narrows this at runtime.</param>
-/// <param name="MaxParallel">Max concurrent instances; 0 = unlimited.</param>
+/// <param name="Profile">What the engine declares about itself — the single source of <c>MaxParallel</c> etc.</param>
 /// <param name="Builtin">True for the in-box engines.</param>
 public sealed record EngineEntry(
     string? Name,
     string? Executable,
     string? Arguments,
     IReadOnlyList<string> Domains,
-    int MaxParallel,
+    EngineProfile Profile,
     bool Builtin);
 
 /// <summary>
@@ -25,12 +26,31 @@ public sealed class EngineRegistry
 {
     private static readonly string[] BothDomains = ["roster", "gamedata"];
 
+    // Conservative default for engines that declare nothing: no parallelism ceiling assumed
+    // beyond serial, cheap to construct, and no reuse claimed (reuse must be earned — see
+    // EngineProfile's remarks).
+    private static readonly EngineProfile DefaultProfile = new(
+        MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false);
+
+    // Values transcribed from what has been MEASURED (see docs/warm-reuse.md) — never invented.
     private static readonly Dictionary<string, EngineEntry> Builtins = new()
     {
-        ["battlescribe"] = new("battlescribe", null, null, BothDomains, 0, Builtin: true),
-        ["battlescribe-ui"] = new("battlescribe-ui", null, null, BothDomains, 1, Builtin: true),
-        ["newrecruit"] = new("newrecruit", null, null, BothDomains, 0, Builtin: true),
-        ["newrecruit-ui"] = new("newrecruit-ui", null, null, BothDomains, 0, Builtin: true),
+        ["battlescribe"] = new(
+            "battlescribe", null, null, BothDomains,
+            new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false),
+            Builtin: true),
+        ["battlescribe-ui"] = new(
+            "battlescribe-ui", null, null, BothDomains,
+            new EngineProfile(MaxParallel: 1, ColdStartCost.Expensive, ReuseSafeRoster: true, ReuseSafeGameData: true),
+            Builtin: true),
+        ["newrecruit"] = new(
+            "newrecruit", null, null, BothDomains,
+            new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false),
+            Builtin: true),
+        ["newrecruit-ui"] = new(
+            "newrecruit-ui", null, null, BothDomains,
+            new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false),
+            Builtin: true),
     };
 
     private readonly Dictionary<string, EngineEntry> _configured;
@@ -73,7 +93,13 @@ public sealed class EngineRegistry
                 launch?.Executable,
                 launch?.Arguments,
                 entry.Domains is { Count: > 0 } ? [.. entry.Domains] : BothDomains,
-                entry.MaxParallel,
+                new EngineProfile(
+                    entry.MaxParallel,
+                    entry.ColdStartCost,
+                    entry.ReuseSafeRoster,
+                    entry.ReuseSafeGameData,
+                    entry.MemPerInstanceBytes,
+                    entry.OversubscriptionFactor),
                 Builtin: false);
         }
 
@@ -110,7 +136,7 @@ public sealed class EngineRegistry
                 connectable.Executable,
                 connectable.Arguments,
                 metadata?.Domains ?? BothDomains,
-                metadata?.MaxParallel ?? 0,
+                metadata?.Profile ?? DefaultProfile,
                 Builtin: false);
         }
 

@@ -1,4 +1,5 @@
 using BattleScribeSpec.Concurrency;
+using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Tests.Features;
 
@@ -44,5 +45,27 @@ public sealed class ConcurrencyPolicyTests
 
         Assert.Equal(64, big.CpuCount);
         Assert.Equal(big_Memory, big.AvailableMemoryBytes);
+    }
+
+    [Fact]
+    public void EngineProfiles_EncodeWhatWasMeasured_NotWhatWasAssumed()
+    {
+        var registry = EngineRegistry.LoadDefault();
+
+        // battlescribe-ui: expensive cold start (JVM + JavaFX), cannot be parallelized,
+        // and reuse is verdict-neutral in BOTH domains (measured: 2.20x gamedata / 1.79x roster).
+        var bsUi = registry.Resolve(EngineConnectable.Parse("battlescribe-ui")).Profile;
+        Assert.Equal(1, bsUi.MaxParallel);
+        Assert.Equal(ColdStartCost.Expensive, bsUi.ColdStartCost);
+        Assert.True(bsUi.ReuseSafeRoster);
+        Assert.True(bsUi.ReuseSafeGameData);
+
+        // newrecruit-ui: cheap cold start (~1.6s Chromium), parallelizes freely — and roster reuse
+        // is NOT verdict-safe. It was once enabled on a plausible assumption and silently changed
+        // six spec verdicts. That is why ReuseSafe is a declared property and not a guess.
+        var nrUi = registry.Resolve(EngineConnectable.Parse("newrecruit-ui")).Profile;
+        Assert.Equal(0, nrUi.MaxParallel);
+        Assert.Equal(ColdStartCost.Cheap, nrUi.ColdStartCost);
+        Assert.False(nrUi.ReuseSafeRoster);
     }
 }

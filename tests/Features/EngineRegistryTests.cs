@@ -21,7 +21,7 @@ public sealed class EngineRegistryTests : IDisposable
         var registry = EngineRegistry.Load(null);
         var entry = registry.Resolve(EngineConnectable.Parse("battlescribe-ui"));
         Assert.True(entry.Builtin);
-        Assert.Equal(1, entry.MaxParallel);
+        Assert.Equal(1, entry.Profile.MaxParallel);
         Assert.Contains("gamedata", entry.Domains);
     }
 
@@ -38,7 +38,7 @@ public sealed class EngineRegistryTests : IDisposable
         Assert.Equal("node", entry.Executable);
         Assert.Equal("adapters/wham.js", entry.Arguments);
         Assert.Equal(["roster"], entry.Domains);
-        Assert.Equal(8, entry.MaxParallel);
+        Assert.Equal(8, entry.Profile.MaxParallel);
         Assert.False(entry.Builtin);
     }
 
@@ -72,7 +72,7 @@ public sealed class EngineRegistryTests : IDisposable
         var entry = registry.Resolve(EngineConnectable.Parse("wham=exec:node new.js"));
         Assert.Equal("wham", entry.Name);
         Assert.Equal("new.js", entry.Arguments);
-        Assert.Equal(2, entry.MaxParallel); // metadata merged from config
+        Assert.Equal(2, entry.Profile.MaxParallel); // metadata merged from config
     }
 
     [Fact]

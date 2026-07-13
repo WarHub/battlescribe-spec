@@ -182,7 +182,7 @@ internal static class RunBatch
     /// </summary>
     internal static async Task<int> ResolveWorkersAsync(EngineSelection selection, int requested, Action<string> warn)
     {
-        var registryMax = selection.Entry.MaxParallel;
+        var registryMax = selection.Entry.Profile.MaxParallel;
         var registryClamped = registryMax > 0 && requested > registryMax ? registryMax : requested;
 
         var describedMax = 0;

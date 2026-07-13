@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text.Json;
 using BattleScribeSpec.BsRosterUiDriver;
+using BattleScribeSpec.Engines;
 using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Protocol;
 
@@ -48,6 +49,11 @@ internal static class ServeCommand
         // forces every domain cold, regardless of engine identity. See docs/warm-reuse.md.
         var reuseDisabled = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE") == "1";
 
+        // MaxParallel has exactly one declaration — the engine's own EngineProfile (see
+        // EngineRegistry.Builtins) — not a string-match here. This mirrors what EngineRegistry
+        // already knows about the same built-in name.
+        var maxParallel = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(name)).Profile.MaxParallel;
+
         return new()
         {
             Name = name,
@@ -61,7 +67,7 @@ internal static class ServeCommand
                 Screenshot = name is "battlescribe-ui" or "newrecruit-ui",
                 Record = name is "battlescribe-ui",
                 RosterXml = name is "battlescribe-ui",
-                MaxParallel = name is "battlescribe-ui" ? 1 : 0,
+                MaxParallel = maxParallel,
             },
             // Warm-reuse is enabled ONLY where it is measured both CORRECT (per-spec verdicts
             // identical to cold) and FASTER (bs-spec compare — see docs/warm-reuse.md):

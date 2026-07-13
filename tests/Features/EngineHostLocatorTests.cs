@@ -1,16 +1,19 @@
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Tests.Features;
 
 public sealed class EngineHostLocatorTests
 {
+    private static readonly EngineProfile Profile = new(0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false);
+
     private static readonly EngineEntry Builtin =
-        new("battlescribe", null, null, ["roster", "gamedata"], 0, Builtin: true);
+        new("battlescribe", null, null, ["roster", "gamedata"], Profile, Builtin: true);
 
     [Fact]
     public void LaunchableEntry_PassesThrough()
     {
-        var entry = new EngineEntry("wham", "node", "adapters/wham.js", ["roster"], 0, Builtin: false);
+        var entry = new EngineEntry("wham", "node", "adapters/wham.js", ["roster"], Profile, Builtin: false);
         var launch = EngineHostLocator.Resolve(entry);
         Assert.Equal("node", launch.Executable);
         Assert.Equal("adapters/wham.js", launch.Arguments);
@@ -74,7 +77,7 @@ public sealed class EngineHostLocatorTests
     [Fact]
     public void ConfiguredEntryWithoutExec_Throws()
     {
-        var entry = new EngineEntry("wham", null, null, ["roster"], 0, Builtin: false);
+        var entry = new EngineEntry("wham", null, null, ["roster"], Profile, Builtin: false);
         var ex = Assert.Throws<InvalidOperationException>(() => EngineHostLocator.Resolve(entry));
         Assert.Contains("wham", ex.Message);
     }
