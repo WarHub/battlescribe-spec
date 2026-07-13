@@ -145,8 +145,14 @@ public sealed class AdapterHandlerTests
         await connection.DisposeAsync();
         isThisTest.Value = false;
 
-        var setupSpan = Assert.Single(captured, a => a.OperationName == "setup");
+        // connection.DisposeAsync() above already drains the adapter loop's Task to completion,
+        // which sequences after every command's finally block (including the activity dispose) —
+        // so the span is guaranteed present here. Still routed through SpanWait (rather than
+        // Assert.Single) so the whole suite uses one idiom for span assertions; see SpanWait's
+        // XML docs for why that idiom exists.
+        var setupSpan = await SpanWait.ForAsync(captured, a => a.OperationName == "setup", TestContext.Current.CancellationToken);
         Assert.Equal(ActivityStatusCode.Error, setupSpan.Status);
+        Assert.Single(captured, a => a.OperationName == "setup"); // exactly one, not merely at-least-one
     }
 
     /// <summary>
@@ -190,13 +196,19 @@ public sealed class AdapterHandlerTests
         await connection.DisposeAsync();
         isThisTest.Value = false;
 
-        var screenshotSpan = Assert.Single(captured, a => a.OperationName == "screenshot");
+        // See ServerSpan_RecordsErrorStatus_WhenTheCommandHandlerThrows above for why
+        // connection.DisposeAsync() already guarantees both spans are present here, and why
+        // SpanWait is still used for a single consistent idiom across the suite.
+        var ct = TestContext.Current.CancellationToken;
+        var screenshotSpan = await SpanWait.ForAsync(captured, a => a.OperationName == "screenshot", ct);
         Assert.Equal(ActivityStatusCode.Error, screenshotSpan.Status);
+        Assert.Single(captured, a => a.OperationName == "screenshot"); // exactly one, not merely at-least-one
 
         // Baseline: the setup call in the same run genuinely succeeded and must stay Unset —
         // proof this isn't just marking every span red regardless of outcome.
-        var setupSpan = Assert.Single(captured, a => a.OperationName == "setup");
+        var setupSpan = await SpanWait.ForAsync(captured, a => a.OperationName == "setup", ct);
         Assert.Equal(ActivityStatusCode.Unset, setupSpan.Status);
+        Assert.Single(captured, a => a.OperationName == "setup"); // exactly one, not merely at-least-one
     }
 
     [Fact]

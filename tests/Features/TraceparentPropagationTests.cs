@@ -75,7 +75,13 @@ public sealed class TraceparentPropagationTests
             Traceparent = $"00-{TraceId}-{ParentSpanId}-01",
         }, ct);
 
-        var handled = spans.Single(s => s.OperationName == "getState");
+        // AdapterHandler disposes its span in a finally that runs AFTER the response is written, so
+        // SendCommandAsync returning does NOT mean ActivityStopped has fired yet. Asserting straight
+        // away races that callback: the test then passes only when the scheduler happens to run the
+        // finally first, which is why it was green in a full suite and red in isolation. Wait for the
+        // span instead of racing it — see SpanWait for the full explanation.
+        var handled = await SpanWait.ForAsync(spans, s => s.OperationName == "getState", ct);
+
         Assert.Equal(TraceId, handled.TraceId.ToHexString());
         Assert.Equal(ParentSpanId, handled.ParentSpanId.ToHexString());
     }
