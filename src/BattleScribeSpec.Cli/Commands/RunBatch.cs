@@ -218,7 +218,7 @@ internal static class RunBatch
         var effective = requested;
         if (registryMax > 0 && effective > registryMax)
         {
-            warn($"engine registry limits parallelism to {registryMax}; reducing --workers {requested} to {registryMax}.");
+            warn($"engine registry limits parallelism to {registryMax}; reducing the planned {requested} worker(s) to {registryMax}.");
             effective = registryMax;
         }
 

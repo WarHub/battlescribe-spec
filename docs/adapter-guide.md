@@ -184,8 +184,14 @@ matrices or multi-engine comparisons:
 
 ```bash
 dotnet bs-spec.dll run --all --engine "myengine=exec:/path/to/your-adapter" \
-  --specs specs --workers 4 --output github-actions --report artifacts/myengine-conformance.json
+  --specs specs --output github-actions --report artifacts/myengine-conformance.json
 ```
+
+The worker count is chosen by the harness's `ConcurrencyPolicy` (machine + what the engine declares),
+clamped by the `maxParallel` your `describe` response advertises — there is no `--workers` flag to
+set. Note `--policy` cannot be delivered to an `exec:`/`dotnet:` adapter at all (there is no channel
+for it, and the CLI errors rather than silently dropping it); `describe`'s `maxParallel` is how a
+launchable adapter states its own ceiling.
 
 ### With Docker
 
