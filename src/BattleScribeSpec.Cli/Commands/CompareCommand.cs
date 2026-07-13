@@ -271,7 +271,7 @@ internal static class CompareCommand
         var artifactPath = Path.Combine(artifactRoot, $"compare-{armLabel}-{runId}");
 
         // Bound artifacts/telemetry/'s growth before adding to it — see RunBatch/TelemetryRetention.
-        TelemetryRetention.Sweep(artifactRoot);
+        TelemetryRetention.Sweep(artifactRoot, currentArtifactBasePath: artifactPath);
 
         var sw = Stopwatch.StartNew();
         SpecSuiteResult result;

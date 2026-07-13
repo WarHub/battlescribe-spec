@@ -150,16 +150,24 @@ easily produce more than N days' worth of runs within a single day. Keeping the 
 bounds the directory regardless of how often runs happen, and 20 runs of history is already enough
 to answer "did the last few changes regress something" without weeks of clutter.
 
-**Fail-open, unconditionally**: any sweep failure (missing directory, a locked file, a permissions
-error) is caught and logged to stderr; a housekeeping bug can never fail — or even slow down — a
-real run.
+**Fail-open, unconditionally**: any sweep failure (missing directory, a permissions error) is
+caught and logged to stderr; a housekeeping bug can never fail — or even slow down — a real run.
 
-**Never deletes a currently-running process's artifact**, without any process/PID tracking: the
-sweep runs *before* the calling process's own artifact files exist, so its own set is structurally
-never a deletion candidate; and `OtlpArtifactWriter` opens its three files exclusively, so any
-*other* process still writing a set holds an OS-level lock on it — deleting a locked file throws,
-which is caught per-file and skipped, rather than deleting only some of a live set's three sibling
-files.
+**Never deletes a currently-running process's artifact — without relying on file locking.** An
+earlier version of this relied on `OtlpArtifactWriter`'s exclusive-share file handle: deleting an
+open file throws on Windows, so the sweep would skip it. That guarantee does **not** exist on
+POSIX platforms — `unlink` on an open file succeeds immediately (the directory entry is removed,
+the writer keeps its descriptor and keeps writing into the now-unlinked inode), so the delete
+"succeeds" with no exception while a live run's telemetry is silently destroyed underneath it.
+Linux CI caught exactly this. The replacement is two platform-agnostic checks: (1) the caller's own
+in-flight artifact path, if known, is passed in and excluded outright, and (2) any set whose newest
+file was modified more recently than `TelemetryRetention.DefaultMinAge` (5 minutes) is skipped
+regardless of `keepRuns` — a set under active writing has its last-write time constantly advancing,
+so "recently modified" is a reliable, identical-on-both-platforms stand-in for "currently live",
+and this is what protects an *other*, concurrently-running process's set too (which a
+"current process only" exclusion could never cover, since a sweep has no way to know another
+process's path in advance). A genuinely crashed run's artifacts age out of the recency window and
+become collectable on a later sweep rather than leaking forever.
 
 This is deliberately **not** wired into `HarnessCollector.StartAsync` itself, even though that
 would read as the more obvious "on collector start" hook. Ad hoc unit tests call `StartAsync`

@@ -81,7 +81,7 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
             // doesn't exist yet, so it is never a sweep candidate. See TelemetryRetention for why
             // this isn't wired into HarnessCollector.StartAsync itself (it would also fire for ad
             // hoc unit tests pointed at a shared temp directory, racing sibling tests' artifacts).
-            TelemetryRetention.Sweep(artifactRoot);
+            TelemetryRetention.Sweep(artifactRoot, currentArtifactBasePath: artifactPath);
 
             Collector = await HarnessCollector.StartAsync(artifactPath);
             _artifactPath = Collector.HasLocalArtifact ? artifactPath : null;

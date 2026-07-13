@@ -27,7 +27,11 @@ public sealed class TelemetryRetentionTests
                 CreateSet(bases[i], DateTime.UtcNow.AddMinutes(-(bases.Count - i)));
             }
 
-            TelemetryRetention.Sweep(dir, keepRuns: 2);
+            // minAge: TimeSpan.Zero isolates the count-based ("keep newest N") behavior under
+            // test here from the separate recency protection (covered by its own tests below) —
+            // otherwise these deliberately-recent (minutes-old) timestamps would themselves fall
+            // inside the production recency window and nothing would be deleted.
+            TelemetryRetention.Sweep(dir, keepRuns: 2, minAge: TimeSpan.Zero);
 
             // Newest two (index 3, 4) survive in full...
             AssertSetExists(bases[3]);
@@ -57,7 +61,7 @@ public sealed class TelemetryRetentionTests
                 CreateSet(b, DateTime.UtcNow);
             }
 
-            TelemetryRetention.Sweep(dir, keepRuns: 3);
+            TelemetryRetention.Sweep(dir, keepRuns: 3, minAge: TimeSpan.Zero);
 
             foreach (var b in bases)
             {
@@ -83,63 +87,97 @@ public sealed class TelemetryRetentionTests
 
     /// <summary>
     /// The falsifiable proof behind "must never delete an artifact belonging to a
-    /// currently-running process", PLUS the reason the per-file skip has to live inside the sweep
-    /// loop rather than only as an outer fail-open wrapper around the whole sweep: a locked set
-    /// (mirroring exactly how <c>OtlpArtifactWriter</c> holds a live run's three files open with
-    /// the default exclusive share mode) must not only survive itself, it must not abort sweeping
-    /// of OTHER, unrelated, perfectly-deletable stale sets that sort before it in the deletion
-    /// order. An outer-only try/catch around the whole sweep would satisfy the first half (nothing
-    /// throws out of <c>Sweep</c>) while silently failing the second half — the locked file's
-    /// exception would unwind out of the loop entirely and leave every later candidate un-swept.
-    /// Once the "process" releases its files, a later sweep is free to collect it too — proving the
-    /// survival above was a deferral, not a rule that nothing ever gets deleted (which would make
-    /// this test pass vacuously).
+    /// currently-running process" — reworked to test the actual, platform-agnostic mechanism
+    /// (recency of last write), not Windows-only file-locking semantics. The original version of
+    /// this test simulated a "live" set by holding its files open with <see cref="FileShare.None"/>
+    /// and relying on <see cref="File.Delete(string)"/> throwing <see cref="IOException"/> — which
+    /// is exactly the assumption that shipped the production bug: POSIX <c>unlink</c> succeeds on
+    /// an open file (no exception, silent deletion), so that version of this test could never have
+    /// failed on Linux even though the code it was meant to protect was already broken there. A
+    /// "live" set is now simulated the way it actually differs from a stale one everywhere: a
+    /// recent last-write time — no open handles, no platform-specific delete semantics, so this
+    /// passes identically on Windows and Linux.
     /// </summary>
+    /// <remarks>
+    /// This also proves the per-file skip has to live inside the sweep loop rather than only as an
+    /// outer fail-open wrapper: the recently-modified set must not only survive itself, it must not
+    /// abort sweeping of OTHER, unrelated, perfectly-deletable stale sets that sort before it in the
+    /// deletion order. And the final re-sweep (with time advanced past the recency window, via an
+    /// explicit later <c>nowUtc</c> rather than a real sleep) proves the survival above was a
+    /// deferral — exactly what "a crashed run's artifacts must eventually become collectable"
+    /// requires — not a rule that nothing ever gets deleted (which would make this test pass
+    /// vacuously).
+    /// </remarks>
     [Fact]
-    public void Sweep_SkipsALockedSet_WithoutAbortingOtherStaleSets_ThenCollectsItOnceUnlocked()
+    public void Sweep_SkipsARecentlyModifiedSet_WithoutAbortingOtherStaleSets_ThenCollectsItOnceAged()
     {
         var dir = MakeTestDirectory();
         try
         {
+            var now = DateTime.UtcNow;
             var keptA = Path.Combine(dir, "run-kept-a");
             var keptB = Path.Combine(dir, "run-kept-b");
-            var live = Path.Combine(dir, "run-live"); // 2nd-oldest — processed BEFORE staleUnlocked below
-            var staleUnlocked = Path.Combine(dir, "run-stale-unlocked"); // oldest of all four
-            CreateSet(staleUnlocked, DateTime.UtcNow.AddMinutes(-10));
-            CreateSet(live, DateTime.UtcNow.AddMinutes(-8));
-            CreateSet(keptA, DateTime.UtcNow.AddMinutes(-2));
-            CreateSet(keptB, DateTime.UtcNow.AddMinutes(-1));
+            var live = Path.Combine(dir, "run-live"); // 3rd-newest by write time — beyond keepRuns: 2
+            var staleOld = Path.Combine(dir, "run-stale-old"); // oldest of all four, well past minAge
+            CreateSet(staleOld, now.AddDays(-1));
+            // "live" is modified recently enough to fall inside minAge (below), simulating a
+            // concurrently-running process whose writer keeps flushing — but its rank by write
+            // time still sorts it beyond keepRuns: 2, so it is a genuine deletion CANDIDATE that
+            // only survives because of the recency check, not because it's one of the newest 2.
+            CreateSet(live, now.AddMinutes(-2));
+            CreateSet(keptA, now.AddMinutes(-1));
+            CreateSet(keptB, now);
 
-            // Simulate a currently-running process: hold all three of "live"'s files open
-            // exclusively, exactly as OtlpArtifactWriter does for the run that owns them. Sweep
-            // processes stale candidates newest-first, so "live" (2nd-oldest) is attempted BEFORE
-            // "staleUnlocked" (oldest) — the exact ordering needed to prove a lock on one candidate
-            // doesn't stop the sweep from reaching the next one.
-            var locks = SuffixesForTest.Select(suffix =>
-                File.Open(live + suffix, FileMode.Open, FileAccess.Read, FileShare.None)).ToList();
-            try
-            {
-                var exception = Record.Exception(() => TelemetryRetention.Sweep(dir, keepRuns: 2));
+            var minAge = TimeSpan.FromMinutes(5);
+            var exception = Record.Exception(() => TelemetryRetention.Sweep(dir, keepRuns: 2, minAge: minAge, nowUtc: now));
 
-                Assert.Null(exception); // fail-open: a locked file must never surface as a thrown exception
-                AssertSetExists(live); // the locked set must survive, even though it's a deletion candidate
-                AssertSetGone(staleUnlocked); // ...but a later, unrelated, unlocked candidate must still go
-                AssertSetExists(keptA);
-                AssertSetExists(keptB);
-            }
-            finally
-            {
-                foreach (var l in locks)
-                {
-                    l.Dispose();
-                }
-            }
+            Assert.Null(exception); // fail-open
+            AssertSetExists(live); // recently modified — must survive even though it's a deletion candidate
+            AssertSetGone(staleOld); // ...but a later, unrelated, genuinely-stale candidate must still go
+            AssertSetExists(keptA);
+            AssertSetExists(keptB);
 
-            // Now unlocked: a later sweep (still keepRuns: 2, still the oldest of the three left) collects it.
-            TelemetryRetention.Sweep(dir, keepRuns: 2);
+            // Advance time (deterministically — no real sleep) past minAge: the same set, now
+            // outside the recency window, is free to be collected by a later sweep, proving the
+            // survival above was a deferral rather than permanent protection (no crash-leak).
+            var later = now.Add(minAge).AddMinutes(1);
+            TelemetryRetention.Sweep(dir, keepRuns: 2, minAge: minAge, nowUtc: later);
             AssertSetGone(live);
             AssertSetExists(keptA);
             AssertSetExists(keptB);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// The other half of "never delete a currently-running process's artifact": the caller's own
+    /// path is excluded outright, independent of the recency check above — proven here by making
+    /// the "own" set the single oldest, best-aged deletion candidate in the directory (minAge:
+    /// zero, so recency contributes nothing) and confirming it alone survives a sweep that deletes
+    /// every other equally-stale candidate beyond keepRuns.
+    /// </summary>
+    [Fact]
+    public void Sweep_NeverDeletesCurrentProcessOwnSet_RegardlessOfAgeOrKeepRuns()
+    {
+        var dir = MakeTestDirectory();
+        try
+        {
+            var now = DateTime.UtcNow;
+            var own = Path.Combine(dir, "run-own"); // oldest — would normally be the first deleted
+            var otherStale = Path.Combine(dir, "run-other-stale");
+            var newest = Path.Combine(dir, "run-newest");
+            CreateSet(own, now.AddDays(-2));
+            CreateSet(otherStale, now.AddDays(-1));
+            CreateSet(newest, now);
+
+            TelemetryRetention.Sweep(dir, keepRuns: 1, currentArtifactBasePath: own, minAge: TimeSpan.Zero, nowUtc: now);
+
+            AssertSetExists(own); // excluded explicitly, despite being the oldest/best deletion candidate
+            AssertSetGone(otherStale); // an equally-stale but unrelated candidate is still collected
+            AssertSetExists(newest); // kept by keepRuns regardless
         }
         finally
         {
