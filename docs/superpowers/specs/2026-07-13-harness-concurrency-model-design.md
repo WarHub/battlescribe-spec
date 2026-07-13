@@ -181,12 +181,33 @@ No environment variable is in the loop, and there is exactly one authoritative d
 - `NR_PARALLEL` — the pools' size comes from the policy.
 - `BSSPEC_DISABLE_WARM_REUSE` — replaced by `compare --policy-a/--policy-b`, which is a *better* ablation channel: it can vary any policy decision, not just reuse.
 
-**Demoted to an explicit override** (for diagnosis, not for ordinary use):
+**Deleted, because they are the same concept under two names:**
 
-- `--workers N`
-- `--reuse` / `--no-reuse`
+- `--workers N` — it is one policy key wearing its own flag.
+- `--keep-alive` — "keep the app alive between specs" *is* reuse. Two names, one idea, and in the new model `KeepAlive` literally means "the plan says reuse this engine."
 
-The test is simple: **if you have to set a flag to get good performance, the policy has failed.**
+### One flag, one vocabulary, everywhere
+
+| Command | Perf/reuse | Other |
+|---|---|---|
+| `run` | `--policy k=v,...` | `--headed` |
+| `compare` | `--policy-a` / `--policy-b` | `--config-a` / `--config-b` |
+| `serve` | `--policy k=v,...` | `--headed` |
+
+Keys: `workers=N`, `reuse=on|off`, `reuse-roster=on|off`, `reuse-gamedata=on|off`. **One parser, shared by all three commands.**
+
+`--headed` stays a separate flag because it is *presentation*, not performance — a different axis entirely. `--config-*` stays because it is *environment*, not policy.
+
+The test is simple: **if you have to set a flag to get good performance, the policy has failed.** These overrides exist for diagnosis, not for operating.
+
+### Flags must be accepted or rejected — never silently dropped
+
+Today `EngineHostLocator` **silently drops** `--headed` and `--keep-alive` for launchable (`exec:`/`dotnet:`) adapters (#305). A flag that quietly does nothing is worse than one that errors: the user believes they configured something, and they did not.
+
+Two rules, and the distinction between them matters:
+
+- **A capability mismatch is an error.** `--headed` against an engine with no UI, or against an adapter that cannot receive it, is a *mistake*. Fail loudly, naming what the engine does support.
+- **A policy override is allowed, and warned.** Forcing `reuse=on` on an engine not declared reuse-safe is precisely the ablation `compare` needs in order to *prove* reuse-safety. That is what an override is for. But it warns: *"forcing reuse on an engine not declared reuse-safe; verdicts may change — use `bs-spec compare` to check."*
 
 Afterwards, exactly one environment variable remains in the harness: `OTEL_EXPORTER_OTLP_ENDPOINT`. It survives precisely because it is *not ours* — it is an industry standard we honour, not a dial we invented.
 
