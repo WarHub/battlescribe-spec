@@ -20,7 +20,7 @@ public static class ConcurrencyPolicy
     /// runtime — the literal is a deliberate, honest stand-in for it, not a coincidence. When Task
     /// 8/9 retires this cap, revisit that literal too.
     /// </remarks>
-    private const int ProvisionalUnmeasuredMemoryCap = 8;
+    internal const int ProvisionalUnmeasuredMemoryCap = 8;
 
     /// <summary>Derive the plan. Deterministic: the same machine and engine always give the same plan.</summary>
     /// <param name="machine">The machine the run is happening on.</param>
