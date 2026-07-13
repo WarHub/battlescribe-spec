@@ -29,6 +29,18 @@ public sealed class SpecSuiteOptions
     /// see <see cref="SpecSuiteRunner"/>'s remarks.
     /// </summary>
     public IReadOnlyList<string> Domains { get; init; } = ["roster"];
+
+    /// <summary>
+    /// Caps the number of adapter-process deaths tolerated across the whole run (every worker
+    /// shares one budget) before <see cref="SpecSuiteRunner"/>'s recovery policy — retry the dying
+    /// spec once on a fresh replacement process — stops replacing dead processes and fails the
+    /// remainder outright with a message naming the cap. Default 3: an engine that dies
+    /// deterministically must not respawn forever, but a couple of independent crashes across a
+    /// long batch (hundreds of specs under warm-reuse) are worth rescuing — 3 clears genuine flakes
+    /// with room to spare while still catching a systemic crash quickly (the incident that motivated
+    /// this policy was a SINGLE crash cascading into 98 of 102 specs failing).
+    /// </summary>
+    public int MaxAdapterDeaths { get; init; } = 3;
 }
 
 public sealed class SpecSuiteResult

@@ -35,6 +35,13 @@ public static class SpecSuiteOutput
 
     public static void WriteJson(SpecSuiteResult result, string? engineLabel, TextWriter output)
     {
+        // result.Results (SpecResult) carries no adapter-death info by design (SpecResult is a
+        // long-standing public shape used as a dictionary key elsewhere) — that signal lives on
+        // the parallel ReportResults (SpecResultSummary) list instead, keyed the same way
+        // CompareCommand's verdict map is, so it can be looked up here for the JSON surface too.
+        var deathsByKey = result.ReportResults.ToDictionary(
+            r => $"{r.Category}/{r.SpecId}", r => r.AdapterDeaths, StringComparer.Ordinal);
+
         var report = new JsonRunReport
         {
             Engine = engineLabel,
@@ -57,6 +64,7 @@ public static class SpecSuiteOutput
                     Failures = r.Failures,
                     Tags = spec?.Tags,
                     DurationMs = durationMs,
+                    AdapterDeaths = deathsByKey.GetValueOrDefault($"{r.Category}/{r.SpecId}"),
                 };
             })],
         };

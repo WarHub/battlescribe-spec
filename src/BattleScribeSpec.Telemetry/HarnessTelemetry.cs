@@ -86,6 +86,21 @@ public static class HarnessTelemetry
     }
 
     /// <summary>
+    /// Tag the current spec's span with a distinguishable adapter-death signal — an event plus an
+    /// error status, not merely a normal assertion failure (which <see cref="SetVerdict"/> already
+    /// covers via <c>bsspec.verdict</c>/<c>test.case.result.status</c>). Called by the harness's
+    /// spec-suite runner immediately after it detects the underlying adapter process exited during
+    /// this spec's attempt, so the crash is visible in any OTel backend rendering this span even
+    /// when a subsequent retry rescues the spec's verdict.
+    /// </summary>
+    public static void SetAdapterDeath(Activity? activity)
+    {
+        activity?.SetTag("bsspec.adapter_death", true);
+        activity?.AddEvent(new ActivityEvent("adapter.process.died"));
+        activity?.SetStatus(ActivityStatusCode.Error, "adapter process died while running this spec");
+    }
+
+    /// <summary>
     /// The W3C <c>traceparent</c> for <see cref="Activity.Current"/>, or null when untraced.
     /// Send this over the adapter protocol so the child parents its spans correctly.
     /// </summary>

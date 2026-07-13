@@ -152,6 +152,8 @@ internal static class CompareCommand
 
         var statusA = ToStatusMap(armA.Suite);
         var statusB = ToStatusMap(armB.Suite);
+        var deathsA = ToDeathMap(armA.Suite);
+        var deathsB = ToDeathMap(armB.Suite);
 
         var allIds = statusA.Keys.Union(statusB.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
         var divergences = new List<string>();
@@ -161,7 +163,18 @@ internal static class CompareCommand
             var b = statusB.GetValueOrDefault(id, "(not run)");
             if (!string.Equals(a, b, StringComparison.Ordinal))
             {
-                divergences.Add($"{id}: A={a} B={b}");
+                // #304: retry-on-adapter-death makes a divergence non-deterministic in the presence
+                // of crashes — if one arm's retry rescued a spec and the other's didn't (or didn't
+                // even crash), a verdict divergence here is really a flake, not a conformance
+                // regression. Annotate it so it's explicable rather than mysterious.
+                var deathA = deathsA.GetValueOrDefault(id, 0);
+                var deathB = deathsB.GetValueOrDefault(id, 0);
+                var deathNote = (deathA, deathB) switch
+                {
+                    (0, 0) => "",
+                    _ => $" [adapter death recorded: A={deathA}, B={deathB} — likely a flake, not a conformance regression]",
+                };
+                divergences.Add($"{id}: A={a} B={b}{deathNote}");
             }
         }
 
@@ -232,6 +245,14 @@ internal static class CompareCommand
     /// <summary>Build the id -> status map ("category/specId" -> passed/failed/expected-failure/unexpected-pass/skipped) for one arm.</summary>
     private static Dictionary<string, string> ToStatusMap(SpecSuiteResult suite) =>
         suite.ReportResults.ToDictionary(r => $"{r.Category}/{r.SpecId}", r => r.Status, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Build the id -> adapter-death-count map for one arm, keyed identically to
+    /// <see cref="ToStatusMap"/> — lets a verdict divergence be cross-referenced against whether an
+    /// adapter actually died while running that spec in either arm (see #304).
+    /// </summary>
+    private static Dictionary<string, int> ToDeathMap(SpecSuiteResult suite) =>
+        suite.ReportResults.ToDictionary(r => $"{r.Category}/{r.SpecId}", r => r.AdapterDeaths, StringComparer.Ordinal);
 
     /// <summary>
     /// Run the full spec set for one arm: its own <see cref="HarnessCollector"/> (so <see cref="TraceSummary"/>

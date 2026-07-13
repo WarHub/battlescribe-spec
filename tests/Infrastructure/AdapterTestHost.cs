@@ -15,7 +15,14 @@ internal static class AdapterTestHost
     /// in its engine registration) — it is the standard adapter used for
     /// <see cref="BattleScribeSpec.Batch.SpecSuiteRunner"/> integration tests.
     /// </summary>
-    public static AdapterProcess StartReferenceAdapter() => AdapterProcess.Start("dotnet", FindAdapterDll());
+    /// <param name="environment">
+    /// Extra child-process environment variables, e.g. <c>BSSPEC_TEST_FORCE_KILL</c> to make the
+    /// process kill itself on a named spec (see <c>ForceKillHook</c> in the reference adapter) —
+    /// used to deterministically exercise <see cref="BattleScribeSpec.Batch.SpecSuiteRunner"/>'s
+    /// adapter-death recovery.
+    /// </param>
+    public static AdapterProcess StartReferenceAdapter(IReadOnlyDictionary<string, string>? environment = null) =>
+        AdapterProcess.Start("dotnet", FindAdapterDll(), environment);
 
     private static string FindAdapterDll()
     {

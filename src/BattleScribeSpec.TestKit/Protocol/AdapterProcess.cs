@@ -318,6 +318,16 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
     }
 
     /// <summary>
+    /// True once the underlying process has exited (a crash, or the adapter's own self-termination —
+    /// the motivating case: the BattleScribe app kept alive across hundreds of warm-reused specs
+    /// intermittently self-terminates). <see cref="BattleScribeSpec.Batch.SpecSuiteRunner"/> checks
+    /// this AFTER every spec attempt — rather than pattern-matching the exception text — to distinguish a genuine
+    /// adapter death (this is true) from a transport error that leaves the process itself alive
+    /// (a bad response, a hung call): only the former warrants retry-with-replacement.
+    /// </summary>
+    public bool HasExited => _disposed || _process.HasExited;
+
+    /// <summary>
     /// Send a protocol command and deserialize the correlated response. On timeout/cancellation
     /// the caller's waiter is abandoned without touching the stream — the adapter's eventual late
     /// response is discarded by id (see <see cref="NdjsonLineConnection"/>).
