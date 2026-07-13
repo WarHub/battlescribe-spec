@@ -253,7 +253,9 @@ Values, transcribed from what has been **measured** (see `docs/warm-reuse.md`) �
 | `newrecruit` | 0 | `Cheap` | false | false |
 | `newrecruit-ui` | 0 | `Cheap` | **false** | false |
 
-Leave `MemPerInstanceBytes = 0` and `OversubscriptionFactor = 1.0` for now — **Task 8 measures them, Task 9 writes them down.** A `1.0` here reproduces today's behaviour when the policy lands, which is exactly what Phase 1 requires.
+Leave `MemPerInstanceBytes = 0` and `OversubscriptionFactor = 1.0` for now — **Task 8 measures them, Task 9 writes them down.**
+
+> **Correction to this plan's "Phase 1 is behaviour-identical" framing.** That claim is true of **reuse** and false of the **worker count**, and conflating them was an error in an earlier draft. Reuse behaviour is genuinely preserved (`worthReusing` requires `ColdStartCost.Expensive`, so cheap engines still get none — exactly as today). But the worker count is **deliberately not** preserved from Task 5 onward: `run --all` stops defaulting to a hardcoded `1` and starts sizing itself, which is the entire point of the task. Two different claims; do not read one as the other. The worker count is safety-capped (`min(cpuCount, 8)` while `MemPerInstanceBytes` is unmeasured) pending Task 8/9.
 
 Extend `EngineConfigEntry` (engines.json) with the same fields so third-party adapters can declare them, defaulting to the conservative values above.
 
