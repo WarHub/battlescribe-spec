@@ -540,11 +540,18 @@ Two rules, and the distinction is the point:
 
 Add a test for each rule.
 
+- [ ] **Step 3c: Update `.github/workflows/ci.yml` IN THIS TASK — or you break CI**
+
+`ci.yml:89` passes `--workers 2` to the reference-adapter step. **Deleting `--workers` without updating it breaks CI immediately**, three tasks before Task 9 gets to the YAML. Change it to `--policy workers=2` in this task.
+
+(The three `NR_PARALLEL:` env settings can stay for now — after Task 7 they are inert no-ops, not breakages. Task 9 removes them.)
+
 - [ ] **Step 4: Verify**
 
 ```bash
 dotnet test -p:TestProfile=core
 dotnet test tests/BattleScribeSpec.Cli.Tests
+python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"   # the YAML must still parse
 ```
 
 And prove verdict-neutrality at the new default:
