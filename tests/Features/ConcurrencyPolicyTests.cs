@@ -97,4 +97,70 @@ public sealed class ConcurrencyPolicyTests
         Assert.Equal(0L, profile.MemPerInstanceBytes);
         Assert.Equal(1.0, profile.OversubscriptionFactor);
     }
+
+    [Fact]
+    public void Policy_ScalesWithTheMachine()
+    {
+        var engine = new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap,
+            ReuseSafeRoster: false, ReuseSafeGameData: false,
+            MemPerInstanceBytes: 512L * 1024 * 1024, OversubscriptionFactor: 1.0);
+
+        var small = ConcurrencyPolicy.For(new MachineProfile(4, 64L << 30), engine);
+        var big = ConcurrencyPolicy.For(new MachineProfile(32, 256L << 30), engine);
+
+        Assert.True(big.Workers > small.Workers, "a bigger box must get a bigger plan");
+    }
+
+    [Fact]
+    public void Policy_NeverExceedsTheEnginesCeiling()
+    {
+        // battlescribe-ui cannot be parallelized at all — a 64-core box changes nothing.
+        var bsUi = new EngineProfile(MaxParallel: 1, ColdStartCost.Expensive,
+            ReuseSafeRoster: true, ReuseSafeGameData: true);
+
+        var plan = ConcurrencyPolicy.For(new MachineProfile(64, 256L << 30), bsUi);
+
+        Assert.Equal(1, plan.Workers);
+    }
+
+    [Fact]
+    public void Policy_IsBoundedByMemory_NotJustCpu()
+    {
+        // 64 cores but only 2 GB free, and each instance costs 512 MB: memory binds, not CPU.
+        // Without this bound a big box launches 64 browsers and dies before it saturates CPU.
+        var engine = new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap,
+            ReuseSafeRoster: false, ReuseSafeGameData: false,
+            MemPerInstanceBytes: 512L * 1024 * 1024, OversubscriptionFactor: 1.0);
+
+        var plan = ConcurrencyPolicy.For(new MachineProfile(64, 2L << 30), engine);
+
+        Assert.True(plan.Workers <= 4, $"memory must bind before CPU does; got {plan.Workers}");
+        Assert.True(plan.Workers >= 1, "always at least one worker");
+    }
+
+    [Theory]
+    [InlineData(ColdStartCost.Expensive, true, true, true, true)]    // BS-UI: safe AND worth it
+    [InlineData(ColdStartCost.Cheap, true, true, false, false)]      // safe but WORTHLESS (NR: 0.92x)
+    [InlineData(ColdStartCost.Expensive, false, false, false, false)] // worth it but NOT SAFE
+    public void Policy_EnablesReuse_OnlyWhenSafeAndWorthIt(
+        ColdStartCost cost, bool safeRoster, bool safeGameData, bool expectRoster, bool expectGameData)
+    {
+        var engine = new EngineProfile(MaxParallel: 0, cost, safeRoster, safeGameData);
+
+        var plan = ConcurrencyPolicy.For(new MachineProfile(8, 32L << 30), engine);
+
+        Assert.Equal(expectRoster, plan.ReuseRoster);
+        Assert.Equal(expectGameData, plan.ReuseGameData);
+    }
+
+    [Fact]
+    public void Policy_IsPure_SameInputsSamePlan()
+    {
+        // Reproducibility is not a nicety: `compare` holds everything constant except one variable,
+        // and a policy that wanders between runs makes that comparison meaningless.
+        var machine = new MachineProfile(8, 32L << 30);
+        var engine = new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, false, false);
+
+        Assert.Equal(ConcurrencyPolicy.For(machine, engine), ConcurrencyPolicy.For(machine, engine));
+    }
 }
