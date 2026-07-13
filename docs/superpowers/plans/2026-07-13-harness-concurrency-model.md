@@ -449,7 +449,8 @@ Today the **child** decides reuse by string-matching its own engine name (`Serve
 
 **Interfaces:**
 - Consumes: `ConcurrencyPlan` (Task 3).
-- Produces: `serve --reuse-roster <true|false> --reuse-gamedata <true|false>`; `EngineSelection` gains `ConcurrencyPlan? PlanOverride`; `EngineHostLocator.Resolve` composes the reuse flags.
+- Produces: `serve --policy k=v,...` (the SAME vocabulary and the SAME parser as `run`/`compare`); `EngineSelection` gains `ConcurrencyPlan? PlanOverride`; `EngineHostLocator.Resolve` composes the policy args.
+- Produces: `PolicyOverride.Parse(string) -> ConcurrencyPlan modifications` — **one parser, shared by all three commands.** Keys: `workers=N`, `reuse=on|off`, `reuse-roster=on|off`, `reuse-gamedata=on|off`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -466,7 +467,11 @@ Assert that `ServeCommand.BuildOptions` takes the reuse decision **as parameters
             ReuseGameDataEngineAcrossSetups = plan.ReuseGameData,
 ```
 
-`AdapterCapabilities.MaxParallel` comes from the engine's `EngineProfile.MaxParallel` (Task 2), **not** a string-match. Add `--reuse-roster` / `--reuse-gamedata` options to `serve` and build the plan from them.
+`AdapterCapabilities.MaxParallel` comes from the engine's `EngineProfile.MaxParallel` (Task 2), **not** a string-match.
+
+**Add a single `--policy k=v,...` option to `serve`** and build the plan from it — the same vocabulary and the same parser `run` and `compare` use. Do not invent `serve`-specific reuse flags; that would be three vocabularies for one idea, which is the disease being cured.
+
+**Delete `--keep-alive` from `serve`.** "Keep the app alive between specs" *is* reuse — two names for one concept. It becomes `--policy reuse=on`.
 
 - [ ] **Step 4: Fix the `KeepAlive` contradiction in `HostEngineFactory`**
 
@@ -511,15 +516,29 @@ git add -A && git commit -m "refactor(host): parent decides the policy; child is
 
 - [ ] **Step 3: Implement**
 
-`--workers`'s `DefaultValueFactory = _ => 1` becomes **no default** (`int?`). `RunBatch.ExecuteAsync` computes `ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile)` and uses `plan.Workers` **unless** `--workers` was given explicitly.
+**DELETE `--workers` and `--keep-alive` from `run`.** They are not demoted — they are *removed*, because each is one policy key wearing its own flag:
 
-Keep `ResolveWorkersAsync`'s live describe-probe clamp — an adapter may advertise a lower ceiling than the registry knows. The policy proposes; the describe handshake still disposes.
+- `--workers N` → `--policy workers=N`
+- `--keep-alive` → `--policy reuse=on` (keeping the app alive between specs IS reuse; two names, one concept)
 
-Update `--workers`'s description to say what it now is: *"Override the automatic worker count (diagnostic; the policy normally decides)."*
+**Add `--policy k=v,...`** — the one perf/reuse vocabulary, using the shared parser from Task 4. `RunBatch.ExecuteAsync` computes `ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile)` and applies any `--policy` overrides on top.
 
-**Also add `--policy` to `run`** — the same `key=value` override vocabulary `compare` gets in Task 6 (`reuse=on|off`, `reuse-roster=`, `reuse-gamedata=`, `workers=N`), applied to the single run. The spec demotes reuse to *"an explicit override for diagnosis, not for ordinary use"*, and this is that channel. Reuse the same parser both commands share; do not write it twice.
+Keep `ResolveWorkersAsync`'s live describe-probe clamp — an adapter may advertise a lower ceiling than the registry knows. **The policy proposes; the describe handshake still disposes.**
 
-> The acceptance test for the whole spec is this: **if you have to set a flag to get good performance, the policy has failed.** These overrides exist for diagnosing, not for operating.
+> The acceptance test for the whole spec: **if you have to set a flag to get good performance, the policy has failed.** These overrides exist for diagnosing, not for operating — so their verbosity is a feature, not a cost.
+
+**`--headed` stays**, because it is *presentation*, not performance. But see Step 3b.
+
+- [ ] **Step 3b: A flag is accepted or rejected — never silently dropped**
+
+`EngineHostLocator.Resolve` currently **drops `--headed` and `--keep-alive` on the floor for launchable (`exec:`/`dotnet:`) adapters** (#305). A flag that quietly does nothing is worse than one that errors: the user believes they configured something, and they did not.
+
+Two rules, and the distinction is the point:
+
+- **Capability mismatch → ERROR.** `--headed` against an engine with no UI, or against an adapter that cannot receive it, is a *mistake*. Fail loudly, naming what the engine actually supports. This closes #305 properly — by rejecting, not by silently conveying.
+- **Policy override → ALLOWED, but warned.** Forcing `reuse=on` on an engine whose profile says `ReuseSafe = false` is precisely the ablation `compare` needs in order to *prove* reuse-safety. That is what an override is for. Warn: *"forcing reuse on an engine not declared reuse-safe; verdicts may change — use `bs-spec compare` to check."*
+
+Add a test for each rule.
 
 - [ ] **Step 4: Verify**
 
@@ -555,7 +574,11 @@ Deleting `BSSPEC_DISABLE_WARM_REUSE` removes the channel `compare` uses to ablat
 
 - [ ] **Step 3: Implement**
 
-Add `--policy-a` / `--policy-b`: comma-separated `key=value` overrides applied to the arm's `ConcurrencyPlan` (`reuse=on|off`, `reuse-roster=`, `reuse-gamedata=`, `workers=N`). They flow into `EngineSelection.PlanOverride`, hence into the child's `serve` args. `--config-a/-b` stays for **environment** experiments and is not the policy channel.
+**DELETE `--workers` from `compare`** — it becomes `--policy-a "workers=N" --policy-b "workers=N"`, the same as everywhere else.
+
+Add `--policy-a` / `--policy-b`, using the **shared parser** from Task 4 (`workers=N`, `reuse=on|off`, `reuse-roster=`, `reuse-gamedata=`). They flow into `EngineSelection.PlanOverride`, hence into the child's `serve --policy` args.
+
+`--config-a` / `--config-b` **stays** for genuine **environment** experiments — it is a different axis, not the policy channel. Keeping both is not redundancy: one varies the harness's decisions, the other varies the child's environment.
 
 - [ ] **Step 4: Reproduce the recorded warm-reuse result through the new channel** — this proves the rail still works:
 
