@@ -144,23 +144,44 @@ CI never caught the original bug because the NR-UI roster lane runs a **single**
 
 ## Reproducing
 
+### ⚠️ BROKEN ABLATION LEVER — Temporarily Unavailable
+
+The recipe below is **documented but does not work** — a dangerous state:
+
 ```bash
-# Warm vs cold, with a verdict-equality assertion — bs-spec compare asserts the two arms'
-# per-spec verdicts are identical before it reports the timing delta; a divergence exits non-zero.
+# BROKEN — This example no longer works. Do not use.
 dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll compare \
   --engine battlescribe-ui --gamedata --filter "entry/,export/" \
   --config-a "" --config-b "BSSPEC_DISABLE_WARM_REUSE=1"
 ```
 
-Force cold for any engine (ablation / diagnosis):
+**Why it is broken:** `BSSPEC_DISABLE_WARM_REUSE` is dead code — nothing in the harness reads it anymore. The variable was deleted when warm-reuse moved to a `ConcurrencyPolicy` computed and passed by the parent. Following this documented recipe today:
+
+1. Injects an environment variable nobody reads
+2. Runs **both arms warm** (identical configurations)
+3. Reports "verdicts identical, 1.00× speedup"
+4. **Produces a false green** that reads exactly like "warm-reuse is verdict-safe — confirmed"
+
+The lever is disconnected while the gauge still says PASS. This is worse than no documentation at all.
+
+### The Working Replacement (Not Yet Available)
+
+The correct way to ablate warm-reuse will be:
 
 ```bash
-BSSPEC_DISABLE_WARM_REUSE=1 bs-spec run --all --engine battlescribe-ui --gamedata
+bs-spec compare --engine battlescribe-ui --gamedata --filter "entry/,export/" \
+  --policy-a "reuse=on" --policy-b "reuse=off"
 ```
 
-`bs-spec compare` is the general form of this: `--config-a`/`--config-b` are each a comma-separated
-`KEY=VALUE` list of environment settings applied to that arm's child processes, so any configuration
-pair can be checked for verdict-neutrality this way — not just warm vs cold.
+**Status: NOT YET IMPLEMENTED.** This flag is being wired up in Tasks 5–6 of `docs/superpowers/plans/2026-07-13-harness-concurrency-model.md`. Do not use the flag yet — it does not exist.
+
+### Measurements (Still Valid)
+
+The recorded verdicts and speedups (2.20× gamedata, 1.79× roster, verdicts identical) were produced with a working lever and remain valid. It is only the *reproduction instructions* that are broken — do not follow the recipe above.
+
+### Diagnosis (Temporary Workaround)
+
+For now, there is no user-facing knob to force cold. Internal diagnosis can temporarily modify `src/BattleScribeSpec.EngineHost/HostEngineFactory.cs` to force `KeepAlive = false`, rebuild, and run — then revert and rebuild. This is not a documented path; use only for urgent investigation.
 
 ## Related
 

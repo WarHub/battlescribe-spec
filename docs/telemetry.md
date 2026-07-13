@@ -180,10 +180,7 @@ still covering every real run.
 
 ## `bs-spec compare`
 
-```bash
-bs-spec compare --engine battlescribe-ui --gamedata \
-  --config-a "" --config-b "BSSPEC_DISABLE_WARM_REUSE=1"
-```
+### Current Usage
 
 `compare` runs the **same spec set twice**, once per `--config-*` arm, each arm's child adapter
 processes getting their own extra environment. Before reporting any timing, it asserts that the
@@ -191,9 +188,34 @@ two arms' **per-spec verdicts are identical**. The command's entire reason to ex
 guarantee: **a configuration change that alters conformance results is not an optimization, it is
 a regression.** A speedup that also changes which specs pass or fail has not been validated — it
 has only been timed. `compare` exits non-zero the moment a verdict diverges, before printing a
-single timing number, so a regression can never hide behind an attractive speedup figure. See
-`docs/warm-reuse.md` for the measurements this command produced (e.g. `battlescribe-ui` gamedata
-warm-reuse: 54 specs, verdicts identical, 2.20× faster).
+single timing number, so a regression can never hide behind an attractive speedup figure.
+
+```bash
+# General form: compare any pair of configurations
+bs-spec compare --engine <name> --gamedata \
+  --config-a <k=v,...> --config-b <k=v,...>
+```
+
+Each `--config-*` is a comma-separated list of `KEY=VALUE` environment settings applied to that arm's
+child processes. An empty string (the default) means no extra environment. Example: `--config-a "" --config-b "SOME_VAR=value"`.
+
+### Known Ablation Lever: BROKEN
+
+**Do not use this recipe — it is documented but broken:**
+
+```bash
+# BROKEN — DO NOT USE
+bs-spec compare --engine battlescribe-ui --gamedata \
+  --config-a "" --config-b "BSSPEC_DISABLE_WARM_REUSE=1"
+```
+
+`BSSPEC_DISABLE_WARM_REUSE` is dead code and produces a false green (verdicts identical, 1.00× speedup) while both arms run warm. See `docs/warm-reuse.md` for details and a temporary workaround.
+
+The correct ablation lever (`--policy-a`/`--policy-b`) is being implemented and is not yet available.
+
+### Measurements
+
+See `docs/warm-reuse.md` for the measurements produced with a working ablation lever (e.g. `battlescribe-ui` gamedata: 54 specs, verdicts identical, 2.20× faster).
 
 ## Known limitations, stated honestly
 
