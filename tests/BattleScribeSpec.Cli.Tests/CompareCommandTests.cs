@@ -63,11 +63,21 @@ public sealed class CompareCommandTests
         // Identical configs run the identical arm twice, so the reported speedup (B/A wall time)
         // is genuinely expected to be near 1.0 — this is what the test's name promises, so assert
         // the actual value rather than just the literal word "speedup" appearing somewhere.
+        //
+        // This assertion is the thing that caught a real bug: `compare` used to run arm A first
+        // with no warm-up, so arm A ate the process's first-run costs (JIT, cold OS file cache,
+        // first AV scan of freshly built DLLs) that arm B then got for free — an intermittent
+        // ~1-in-6 failure with speedup as low as 0.29 for two IDENTICAL arms. CompareCommand now
+        // runs a discarded warm-up pass (same spec set, neither config) before timing either arm,
+        // which removes that systematic bias. Post-fix, 40 consecutive local runs of this exact
+        // scenario landed in [0.94, 1.02]. [0.6, 1.6] keeps real headroom for slower/noisier CI
+        // runners while still being far tighter than the old [0.5, 2.0] — which was only wide
+        // enough to let the bug slip through, not to describe a fair instrument's real variance.
         var speedupMatch = Regex.Match(
             combined, @"speedup \(B/A\):\s*([0-9]+\.[0-9]+)x", RegexOptions.IgnoreCase);
         Assert.True(speedupMatch.Success, $"Expected a 'speedup (B/A): N.NNx' line in output:\n{combined}");
         var speedup = double.Parse(speedupMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-        Assert.InRange(speedup, 0.5, 2.0);
+        Assert.InRange(speedup, 0.6, 1.6);
     }
 
     [Fact]

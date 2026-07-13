@@ -19,6 +19,12 @@ namespace BattleScribeSpec.Cli;
 /// (<c>BSSPEC_DISABLE_WARM_REUSE=1</c>) to any pair of child-process environment configurations —
 /// including the parallelism levels a future auto-tuner would need to prove verdict-neutral.
 /// </remarks>
+/// <remarks>
+/// Before either arm is timed, a discarded warm-up pass runs the same spec set once under neither
+/// config, so arm A doesn't unfairly eat the process's first-run costs (JIT, cold OS file cache,
+/// first AV scan of freshly built DLLs) that arm B would then get for free. See the warm-up comment
+/// in <see cref="ExecuteAsync"/>.
+/// </remarks>
 internal static class CompareCommand
 {
     private sealed record CompareOptions(
@@ -34,6 +40,13 @@ internal static class CompareCommand
 
     /// <summary>One arm's outcome: the suite result, measured wall time, and trace summary (empty when telemetry produced no local artifact).</summary>
     private sealed record ArmResult(SpecSuiteResult Suite, TimeSpan Wall, TraceSummary Trace);
+
+    /// <summary>
+    /// The environment for the discarded warm-up pass: deliberately empty, i.e. neither
+    /// <c>--config-a</c> nor <c>--config-b</c>. See the warm-up comment in <see cref="ExecuteAsync"/>.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> WarmupConfig =
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     public static Command Create()
     {
@@ -138,6 +151,21 @@ internal static class CompareCommand
         ArmResult armB;
         try
         {
+            // #<bug>: whichever arm ran first was systematically slower — not a real effect of
+            // --config-a/--config-b, but an artifact of the *first* process this invocation spawns
+            // paying costs the second one gets for free (JIT, OS page cache for the adapter's
+            // assemblies, first-open AV scan of freshly built DLLs, etc). Identical configs proved it:
+            // "A" vs "A" measured a ~3.4x slowdown for arm A on a bad run. A discarded warm-up pass —
+            // same spec set, same filter/workers/domains, but NEITHER arm's config — pays that
+            // first-process tax once, untimed, so arm A and arm B then both start from an equally
+            // warm machine. It deliberately does NOT use ConfigA or ConfigB: applying either one here
+            // would pre-warm that arm's own config-specific state (e.g. a warm-reuse cache) and bias
+            // the comparison right back in its favor.
+            Ui.Rule("Warm-up (untimed, discarded)");
+            var warmup = await RunArmAsync(options, workers, WarmupConfig, "warmup").ConfigureAwait(false);
+            Ui.Info(FormattableString.Invariant(
+                $"Warm-up pass ran the same spec set once under neither config in {warmup.Wall.TotalSeconds:F1}s (discarded — its only purpose is to equalize JIT/OS-cache state before arm A and arm B are timed)."));
+
             Ui.Rule("Arm A");
             armA = await RunArmAsync(options, workers, options.ConfigA, "a").ConfigureAwait(false);
 
