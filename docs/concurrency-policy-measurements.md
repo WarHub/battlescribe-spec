@@ -1252,7 +1252,33 @@ deliberately reintroduced version of the defect (the mutant is named):
 | `FixtureConcurrencyTests.PoolSizeFor_IsThePolicysAnswer_UnmodifiedByAnyFixtureLevelCap` | re-add any fixture-level cap that binds on the running machine (e.g. the old 8, against a plan of 16) |
 | `PolicyOverrideTests.Workers_OverridesTheProcessAxisOnly_NotThePool` | restore `poolSize = parsedWorkers` |
 
-## 8.8 What §8 did NOT reach
+## 8.8 What CI measured after the change
+
+Run [29325721441](https://github.com/WarHub/battlescribe-spec/actions/runs/29325721441) (all 8 jobs
+green) against the  baseline
+[29239979347](https://github.com/WarHub/battlescribe-spec/actions/runs/29239979347) — the only
+comparable sample (older runs predate the CI split #291).
+
+**The pools applied, proven from telemetry** ( in the uploaded traces, on the real
+runner):  = **4**,  = **16**.
+
+| step (lane) | pool:  → now |  | now | Δ |
+|---|---|--:|--:|--:|
+| Run NR conformance tests () | 2 → **4** | 230 s | **145 s** | **−37%** |
+| Full frozen NR Editor GameData UI () | 6 → **16** | 101 s | **95 s** | **−6%** |
+| Full frozen NR roster () | 6 → **4** | 53 s | 54 s | +2% (flat) |
+
+Job walls:  **10.15 → 8.27 min (−18.5%)**;  11.75 → 12.02 min
+(**+2.3% — parity**, its −6 s win swamped by build/cache noise on a single sample).
+
+⚠️ **'s −6% is far short of the −33% §7.5 predicts for 6 → 16.** The likely cause is
+§7's own surprise #3: pool construction is **serial** and grows linearly with P, and per-context init on
+a real GitHub runner is dearer than on the WSL VM that modelled it — so init eats most of the execution
+gain. **The true runner optimum is plausibly below 16 (8–12).** 16 is not being nudged on one CI sample;
+the fix is the thing this document has now said three times — **sweep the context axis on the runner
+itself**, which the  telemetry has just been shown to support there.
+
+## 8.9 What §8 did NOT reach
 
 - **Verdict-safety was inherited, not re-run.** §7.6 diffed every pool size 1–64 against the serial
   baseline on both boxes and found **zero divergent specs** — that is what licenses raising the pools.
