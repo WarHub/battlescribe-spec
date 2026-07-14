@@ -142,7 +142,7 @@ jobs:
       # code itself (TraceSummary.AppendToGitHubStepSummary) — no extra script needed here.
       - name: Upload telemetry
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
           path: artifacts/telemetry/
@@ -298,7 +298,7 @@ jobs:
           NR_HEADLESS: true
       - name: Upload telemetry
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
           path: artifacts/telemetry/
@@ -367,7 +367,7 @@ jobs:
             artifacts/bs-ui-diagnostics/
       - name: Upload telemetry
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
           path: artifacts/telemetry/
@@ -441,7 +441,7 @@ jobs:
       # cheap; a crash you cannot read twice is not.
       - name: Upload telemetry
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
           path: artifacts/telemetry/
