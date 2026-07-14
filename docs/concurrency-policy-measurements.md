@@ -1,9 +1,25 @@
 # Concurrency policy measurements (Task 8) — and what Task 9 did with them
 
+> ## ⚠ THIS DOCUMENT COVERS TWO DIFFERENT AXES. DO NOT MIX THEM.
+>
+> | | **Process axis** (§1–§6) | **Context axis** (§7)|
+> |---|---|---|
+> | Path measured | **CLI** — `bs-spec run --all` | **xUnit** — `dotnet test` |
+> | What is replicated | an adapter **process family** (adapter + Node driver + own Chromium tree) | a browser **context** inside ONE shared browser + ONE shared Node driver |
+> | Sized by | `ConcurrencyPlan.Workers` | `ConcurrencyPlan.PoolSize` |
+> | Fitted constant | `OversubscriptionFactor` (`k`): `newrecruit` 0.375, `newrecruit-ui` 1.0 | **a constant, not a factor** — see §7 |
+> | Costs (measured) | **1.22–1.44 GiB** per worker | **163–225 MiB** per context |
+> | Which one does CI run? | the `checks` / batch lanes | **every NewRecruit conformance lane** |
+>
+> `ConcurrencyPolicy.For` sets `PoolSize: workers` — it feeds **one number to both axes**. §7 shows
+> that number is wrong for the context axis, and by how much.
+
 **Status: measured.** On the dev box: `newrecruit-ui` roster (§1–§3) **and** `newrecruit` roster
 (§5) are both swept, fitted, verdict-safety-checked and memory-measured; `battlescribe-ui`'s
-`MemPerInstanceBytes` is measured (§4). The **4-vCPU CI runner is NOT measured** and its `k` must not
-be inferred from this box — see "What was not reached". `battlescribe` (non-UI) is also unmeasured
+`MemPerInstanceBytes` is measured (§4). **§7 measures the context axis on BOTH a 32-core dev box and
+a 4-CPU/16 GiB Linux container** (the CI-runner class), for `newrecruit` and `newrecruit-ui`.
+The 4-vCPU runner remains unmeasured **on the process axis** and `k` must not be inferred from the
+dev box — see "What was not reached". `battlescribe` (non-UI) is also unmeasured
 and therefore still declares `MemPerInstanceBytes = 0`, leaving it bound by
 `ConcurrencyPolicy.UndeclaredMemoryWorkerCap` — which is exactly what that cap is for.
 
@@ -777,6 +793,12 @@ constant, and not a substitute for the real fix, which is a shared budget the po
 (**issue #314**). Sizing the xUnit path honestly needs a sweep of `dotnet test`, which this campaign
 never ran.
 
+> **§7 has now run that sweep.** Both statements above survive, but the framing "the error is
+> conservative, so it can only over-provision" turns out to be **exactly backwards for CI**: on the
+> 4-vCPU runner the policy *under*-provisions the pool, and the cost is a **2.0× wall-clock
+> regression** on `nr-editor-ui-frozen`. `FixturePoolCap = 8` also binds the dev box, where it costs
+> the `newrecruit-ui` lane **31%**. Read §7 before touching either number.
+
 ---
 
 ## What was NOT reached
@@ -805,3 +827,298 @@ Stated plainly, because inferring these from the dev box would be wrong:
 - **Headroom decisions — left to Task 9.** This document reports what was *measured*; whether to bank
   extra headroom before writing into `EngineRegistry` (given `AvailableMemoryBytes` is *total*, not
   *free*, memory) is flagged in sections 3 and 5 but deliberately not decided here.
+
+---
+
+# 7. The CONTEXT axis — the `dotnet test` path, measured
+
+**Status: measured, on both hardware classes.** This section is a *separate campaign* from §1–§6 and
+measures a **different quantity on a different code path**. Nothing in §1–§6 is revised or
+contradicted by it — the two are not comparable numbers, and the single most important thing to take
+from this document is that they were never the same number.
+
+## 7.0 Why this is a different quantity (and why it is the one CI pays for)
+
+`ConcurrencyPolicy.For` returns `PoolSize: workers` — the *same integer* for two consumers that share
+no mechanism:
+
+- **CLI / batch path** (`bs-spec run --all`): the parent spawns `Workers` adapter **processes**; each
+  runs its specs strictly serially (`SpecSuiteRunner.cs`, `AdapterHandler.RunAsync`). `PoolSize` is
+  **not even on the wire** — `EngineHostLocator` sends only `workers=`, `reuse-roster=`,
+  `reuse-gamedata=`. §1–§6 swept *this*.
+- **xUnit path** (`dotnet test`): there are **no worker processes at all**. Concurrency is the
+  fixture's eagerly-created pool of browser **contexts**, sized by `FixtureConcurrency.PoolSizeFor()`
+  and used as `MaxDegreeOfParallelism` inside a single `[Fact]`. `Workers` is read **nowhere** in
+  `tests/Infrastructure/`. §7 sweeps *this*.
+
+**Every NewRecruit CI conformance lane runs the xUnit path.** `nr-frozen`, `nr-ui-frozen`,
+`nr-editor-frozen`, `nr-editor-ui-frozen` are all `dotnet test -p:TestProfile=...` (see `ci.yml`). The
+axis that governs CI's wall-clock is the one that had never been measured.
+
+The retired `NR_PARALLEL` env var sized **contexts on this axis** (`ci.yml` used 6/6/2). When the
+policy replaced it, the mirror `PoolSize: workers` handed the *process-axis* `k` to the *context*
+pool, and CI's pools became `nr-frozen` **6 to 2** and `nr-editor-ui-frozen` **6 to 4**. §7.5 shows
+that this — and not anything else — is the measured cause of the observed CI regression.
+
+## 7.1 Method
+
+Deliberately **not** the §-Method recipe: `bs-spec compare` cannot help here, because it drives the
+CLI path, **which has no pool at all**. There is no way to reach this axis from the CLI.
+
+1. **Sweep the real lanes.** `dotnet test -p:TestProfile=nr-frozen` (engine `newrecruit`, fixture
+   `FrozenNrRosterFixture`, **365 specs / 363 executed**) and `-p:TestProfile=nr-editor-ui-frozen`
+   (engine `newrecruit-ui`, `FrozenNrGameDataUiFixture`, **113 specs / 112 executed**). Exactly what
+   CI runs, with `NR_HEADLESS=true`.
+2. **Forcing the pool size.** `FixtureConcurrency.PoolSizeFor` derives the pool from the policy, so a
+   **temporary, local, uncommitted** env override (`BSSPEC_CAMPAIGN_POOL`) was added inside it for the
+   duration of the campaign, together with a per-spec verdict/duration recorder. **This scaffolding was
+   reverted before committing** — `git status` shows no source changes, and the tree was rebuilt clean.
+   It was deliberately *not* named `NR_PARALLEL`: that knob is retired and mechanically gated by
+   `ConcurrencyConfigurationDriftTests` (commit `2191e7e`), and nothing here reintroduces it.
+3. **Two walls are recorded, and they are not the same.**
+   - **`[Fact]` wall** — the `Parallel.ForEachAsync` execution only.
+   - **`dotnet test` wall** — the whole invocation, **which is what CI actually pays**, and which also
+     contains the fixture's pool construction. Contexts are created **serially** in a loop, each doing
+     a full page load (+ HAR route + Pinia wait for `newrecruit`), so **init cost grows linearly with
+     pool size**. The two walls disagree about the optimum, and `dotnet test` is the one that decides
+     CI. It is the objective used below.
+4. **Both hardware classes.** 32-core / 93.6 GiB Windows dev box, **and** a 4-CPU / 16 GiB Linux
+   container modelling the GitHub runner.
+5. **Bracketing.** Every knee is carried at least two — mostly four to six — levels past, and only
+   called a knee once it gets *worse*.
+6. **Hygiene.** Leftover `testhost` / `chrome-headless-shell` / Node-driver trees are reaped and
+   **verified zero before every point**; a point that finds a survivor *aborts rather than reports*
+   (this fired once; that sample was discarded and re-run). Runs are foreground, never `nohup`'d. No
+   `--no-build` was trusted without first confirming a real rebuild — the pool size echoed back in each
+   run's header is the proof the fresh dll is live.
+
+### The 4-CPU container is a real 4-CPU box, not a CFS quota
+
+This matters enough to state precisely, because the easy version of it is wrong. `podman run
+--cpus=4` sets a **CFS quota** (`cpu.max=400000 100000`) but leaves `nproc` reporting **32** — so
+Chromium and the .NET thread pool would still size themselves for a 32-core machine while being
+throttled to 4 cores' worth of time. That is not the runner. `--cpuset-cpus` is not delegated under
+rootless podman on WSL, so instead **the WSL VM itself was pinned to 4 processors / 16 GB**
+(`.wslconfig`), giving a genuine `nproc=4`, `MemTotal ≈ 16 GiB` box. The original `.wslconfig` was
+backed up and **restored byte-identically** afterwards.
+
+## 7.2 `newrecruit` (`nr-frozen`) — 363 specs
+
+**32-core dev box** (mean of *n* runs; the star marks the optimum):
+
+| P | **`dotnet test` wall** | `[Fact]` wall | p50 | p95 | peak browser+driver RSS |
+|--:|--:|--:|--:|--:|--:|
+| 1 | 25.73 s | 20.24 s | 19 ms | 33 ms | 1 270 MiB |
+| 2 | 19.25 s | 12.00 s | 17 ms | 28 ms | 1 611 MiB |
+| **4** | **17.57 s** * *(n=3)* | 9.65 s | 19 ms | 36 ms | 2 218 MiB |
+| **6** | **17.58 s** * *(n=3)* | 9.14 s | 17 ms | 37 ms | 2 664 MiB |
+| 8 | 18.75 s *(n=3)* | 9.16 s | 19 ms | 35 ms | 2 997 MiB |
+| 12 | 20.85 s (worse) | 9.00 s | 23 ms | 48 ms | 3 722 MiB |
+| 16 | 22.45 s (worse) | 9.08 s | 29 ms | **1 120 ms** | 4 500 MiB |
+| 24 | 25.81 s (worse) | 9.09 s | 42 ms | 1 290 ms | 6 199 MiB |
+| 32 | 28.90 s (worse) | 9.12 s | 59 ms | 1 289 ms | 8 184 MiB |
+
+**4-CPU / 16 GiB container:**
+
+| P | **`dotnet test` wall** | `[Fact]` wall | p50 | p95 |
+|--:|--:|--:|--:|--:|
+| 1 | 29.51 s | 24.33 s | 24 ms | 38 ms |
+| 2 | 19.81 s *(n=3)* | 14.28 s | 23 ms | 37 ms |
+| **4** | **17.75 s** * *(n=3)* | 11.20 s | 34 ms | 67 ms |
+| 6 | 18.50 s *(n=3)* | 10.93 s | 40 ms | 106 ms |
+| 8 | 19.25 s *(n=3)* | 10.96 s | 47 ms | 149 ms |
+| 12 | 21.34 s (worse) *(n=3)* | 11.12 s | 79 ms | **1 363 ms** |
+| 16 | 23.15 s (worse) | 10.78 s | 103 ms | 1 513 ms |
+| 24 | 26.67 s (worse) | 10.63 s | 161 ms | 4 437 ms |
+| 32 | 31.36 s (worse) | 11.55 s | 220 ms | 4 565 ms |
+
+**The knee is at P=4, and it IS one.** The `dotnet test` wall rises **monotonically for six
+consecutive levels past it** on the container (6, 8, 12, 16, 24, 32) and five on the dev box, ending
+**77% worse** than the optimum at P=32. Run-to-run spread at the knee is < 0.5%.
+
+**Why it saturates so early:** the `[Fact]` wall **floors at ~9 s (dev) / ~11 s (container) from P=4
+and never improves again** — 8x more contexts buys **zero** execution throughput. That floor is a
+**serialization ceiling**, not a CPU limit: all N contexts share **one Chromium and one Playwright
+Node driver**, and every CDP message funnels through that single driver process. Past P=4 the extra
+contexts buy nothing and cost two things — linear pool-init time, and contention that inflates the
+tail by **~40x** (p95: 33 ms to 1 289 ms). The per-spec work here is tiny (p50 **19 ms**), so the
+driver round-trip *is* the workload.
+
+## 7.3 `newrecruit-ui` (`nr-editor-ui-frozen`) — 112 specs
+
+**32-core dev box:**
+
+| P | **`dotnet test` wall** | `[Fact]` wall | p50 | p95 | peak browser+driver RSS |
+|--:|--:|--:|--:|--:|--:|
+| 1 | 245.62 s | 240.05 s | 1 340 ms | 4 967 ms | 824 MiB |
+| 2 | 125.74 s | 119.59 s | 1 339 ms | 4 995 ms | 1 120 MiB |
+| 4 | 66.86 s | 60.04 s | 1 324 ms | 4 914 ms | 2 389 MiB |
+| 6 | 47.80 s | 40.25 s | 1 332 ms | 4 940 ms | 2 801 MiB |
+| 8 | 37.63 s *(n=3)* | 30.40 s | 1 331 ms | 5 016 ms | 3 337 MiB |
+| 12 | 30.22 s *(n=3)* | 22.84 s | 1 379 ms | 5 087 ms | 4 009 MiB |
+| **16** | **28.81 s** * *(n=3)* | 21.35 s | 1 446 ms | 5 222 ms | 4 595 MiB |
+| 24 | 29.39 s *(n=3)* | 20.10 s | 1 847 ms | 5 772 ms | 5 881 MiB |
+| 32 | 30.36 s (worse) | 20.56 s | 2 242 ms | 6 478 ms | 7 077 MiB |
+| 48 | 32.20 s (worse) | 20.96 s | 3 082 ms | 7 418 ms | 9 333 MiB |
+| 64 | 36.99 s (worse) | 21.96 s | 3 987 ms | 8 671 ms | 11 566 MiB |
+
+**4-CPU / 16 GiB container:**
+
+| P | **`dotnet test` wall** | `[Fact]` wall | p50 | p95 |
+|--:|--:|--:|--:|--:|
+| 1 | 246.53 s | 241.17 s | 1 350 ms | 4 984 ms |
+| 2 | 127.51 s | 122.30 s | 1 365 ms | 4 999 ms |
+| 4 | 68.37 s | 62.69 s | 1 337 ms | 4 997 ms |
+| 6 | 51.17 s | 45.52 s | 1 364 ms | 5 004 ms |
+| 8 | 42.25 s | 36.30 s | 1 382 ms | 5 017 ms |
+| 12 | 36.23 s *(n=3)* | 29.99 s | 1 590 ms | 5 253 ms |
+| **16** | **34.22 s** * *(n=3)* | 27.47 s | 1 899 ms | 5 741 ms |
+| 20 | 34.50 s *(n=3)* | 27.24 s | 2 277 ms | 6 609 ms |
+| 24 | 35.45 s (worse) *(n=3)* | 27.83 s | 2 668 ms | 7 485 ms |
+| 32 | 38.12 s (worse) | 29.48 s | 3 660 ms | 10 826 ms |
+| 48 | 44.13 s (worse) | 33.23 s | 6 258 ms | 17 931 ms |
+
+**The knee is at P=16 on BOTH boxes**, bracketed three-to-four levels past on each (dev: 24, 32, 48,
+64 — ending 28% worse; container: 20, 24, 32, 48 — ending 29% worse). P=20 is inside noise of P=16;
+P=24 upward is unambiguously worse.
+
+This engine's specs are **~1.34 s each** and **latency-bound**, so oversubscription genuinely pays —
+p50 stays flat (1 337 to 1 382 ms) all the way to **P=8 on a 4-CPU box, i.e. 2x oversubscribed**, and
+the wall keeps falling to 16.
+
+## 7.4 The headline: **the optimum does not depend on CPU count**
+
+This is the finding, and it invalidates the *shape* of the model, not just its constants.
+
+| engine | optimum, 32-core | optimum, 4-CPU | `pool / cpuCount` on 32-core | `pool / cpuCount` on 4-CPU |
+|---|--:|--:|--:|--:|
+| `newrecruit` | **4** (4–6 tie) | **4** | 0.125 | **1.0** |
+| `newrecruit-ui` | **16** | **16** | 0.5 | **4.0** |
+
+The optimal pool is **identical on both boxes**. Expressed as a *factor of `cpuCount`* the two
+hardware classes disagree by **exactly 8x** — which is precisely the CPU ratio, i.e. the optimum did
+**not move with CPU count at all**. A `ceil(cpuCount × k)` model cannot fit this: any `k` fitted on
+one box is wrong by the full core-count ratio on the other.
+
+**The cleanest single piece of evidence** — `newrecruit-ui` at P=1, the same 112 specs:
+
+| | 32 logical CPUs | 4 CPUs | difference |
+|---|--:|--:|--:|
+| `[Fact]` wall | 240.05 s | 241.17 s | **+0.5%** |
+
+An **8x reduction in CPU** produced a **0.5%** change in wall-clock. This workload is not CPU-bound in
+any meaningful sense — it is bound by browser round-trip latency (`newrecruit-ui`) and by the shared
+Playwright driver (`newrecruit`). **`cpuCount` is close to the wrong independent variable for this
+axis.** The context-axis constant is an **absolute pool size per engine**, bounded by memory — not an
+oversubscription factor.
+
+For anyone who must have a "factor" to slot into today's model: on the CI runner it would be
+`newrecruit` **k_ctx = 1.0** and `newrecruit-ui` **k_ctx = 4.0** — but they are *not* transferable to
+another box, which is the whole point, and the honest transcription is a constant plus a memory bound.
+
+## 7.5 What this costs CI today — and it explains the observed regression exactly
+
+On the 4-vCPU / 16 GiB runner the shipped policy computes:
+
+- `newrecruit`: `ceil(4 × 0.375) = 2`, memory bound 10 → **pool = 2**
+- `newrecruit-ui`: `ceil(4 × 1.0) = 4`, memory bound 8 → **pool = 4**
+
+Measured cost of those choices, on CI-class hardware:
+
+| lane | pool | measured wall | vs measured optimum | vs retired `NR_PARALLEL=6` |
+|---|--:|--:|--:|--:|
+| `nr-frozen` | policy **2** | 19.81 s | **+11.6%** (opt. 4 = 17.75 s) | +7.1% (6 = 18.50 s) |
+| `nr-editor-ui-frozen` | policy **4** | 68.37 s | **+99.8% — 2.0x slower** (opt. 16 = 34.22 s) | **+33.6%** (6 = 51.17 s) |
+
+The `nr-editor-ui-frozen` lane at **+33.6% against the retired `NR_PARALLEL=6`** is, on its own, the
+reported **~30% `nr-conformance` regression** (13.15 min vs 10.15 min). The measurement reproduces the
+CI regression independently, and attributes it: **the policy under-provisioned the context pool.**
+
+**Does the container's optimum agree with `NR_PARALLEL`'s historical 6?**
+
+- `newrecruit`: **near enough.** Optimum 4; 6 measures 18.50 s vs 17.75 s — **4% off**. The old
+  hand-tuned constant was close to right, and better than the policy's 2.
+- `newrecruit-ui`: **no — 6 was far too LOW.** Optimum is **16**; 6 measures 51.17 s vs 34.22 s, i.e.
+  the *old* value also left **50%** on the table. The policy then made it worse still. Nobody has ever
+  run this lane near its optimum.
+
+### What the caps do
+
+`FixtureConcurrency.FixturePoolCap = 8` **does bind the dev box** (the policy asks 32/12 there, capped
+to 8). On `newrecruit` that is harmless-to-helpful (8 → 18.75 s, vs 20.85 s uncapped at 12). On
+`newrecruit-ui` it **costs 31%** (8 → 37.63 s vs 28.81 s at the optimal 16). Its docstring's claim
+that it "can over-provision, not OOM" is true of *memory* and false of *time*.
+
+## 7.6 Verdict safety — PASSED: every pool size, both engines, both boxes
+
+This was the real risk on this axis: contexts share one browser, and NR-UI roster reuse has silently
+changed six conformance verdicts in this project before. `bs-spec compare` **cannot test this** (no
+pool on the CLI path), so the check is a direct **per-spec verdict-set diff** — the recorder captured
+`pass` / `fail` / `xfail` / `pass-unexpected` / `skip` for **every spec by name**, and every pool size
+was diffed against the **serial P=1 baseline**.
+
+| box | engine | pools diffed vs P=1 | specs | result |
+|---|---|---|--:|---|
+| 32-core | `newrecruit` | 2, 4, 6, 8, 12, 16, 24, 32 | 365 | **IDENTICAL** |
+| 32-core | `newrecruit-ui` | 2, 4, 6, 8, 12, 16, 24, 32, 48, 64 | 113 | **IDENTICAL** |
+| 4-CPU | `newrecruit` | 2, 4, 6, 8, 12, 16, 24, 32 (x3 reps) | 365 | **IDENTICAL** |
+| 4-CPU | `newrecruit-ui` | 2, 4, 6, 8, 12, 16, 20, 24, 32, 48 (x3 reps) | 113 | **IDENTICAL** |
+
+**Zero divergent spec IDs anywhere**, up to 64 contexts (16x oversubscription on the dev box, and 12x
+on a 4-CPU box). Every run: `newrecruit` 363 pass / 2 skip; `newrecruit-ui` 112 pass / 1 skip.
+Contexts are genuinely isolated on both engines; **raising the pool to the measured optimum is
+verdict-safe.**
+
+## 7.7 Per-context memory — the slope
+
+Sampled by walking the process tree **from the run's own root PID** (never by global process name —
+the "Peak RSS per instance" note above explains why that distinction is load-bearing on this machine),
+summing working set across the whole `testhost` -> Node driver -> Chromium tree. Fitted by least
+squares over the pool sweep, so this is a **slope across many pool sizes**, not a two-point difference.
+
+| box | engine | **per-context slope** | fixed baseline (P->0) | R² | pools fitted |
+|---|---|--:|--:|--:|---|
+| 32-core (Win) | `newrecruit` | **213.4 MiB / context** | 1 220 MiB | 0.9964 | 1...32 |
+| 32-core (Win) | `newrecruit-ui` | **162.6 MiB / context** | 1 607 MiB | 0.9774 | 1...64 |
+| 4-CPU (Linux) | `newrecruit` | **215.4 MiB / context** | 1 058 MiB | 0.9927 | 2...16 |
+| 4-CPU (Linux) | `newrecruit-ui` | **224.9 MiB / context** | 1 310 MiB | 0.9834 | 2...16 |
+
+`newrecruit`'s slope reproduces across OS and hardware to within **1%** (213.4 vs 215.4 MiB) — this
+constant looks genuinely hardware-invariant, unlike `k`. Take **≈225 MiB/context** as the conservative
+figure (the highest measured, on the Linux/CI class).
+
+**A context is ~6-7x cheaper than a worker process**, which is exactly what the mirror gets wrong:
+
+| | per **worker** (process axis, §3/§5) | per **context** (this axis) | over-charge factor |
+|---|--:|--:|--:|
+| `newrecruit` | 1 313 420 083 B (1.22 GiB) | ≈ 215 MiB | **5.8x** |
+| `newrecruit-ui` | 1 548 969 984 B (1.44 GiB) | ≈ 225 MiB | **6.6x** |
+
+Each context adds **exactly one Chromium renderer process** (measured: chrome procs = `P + 3`, the 3
+being the shared browser main + GPU + network processes).
+
+**Bounding the pool the way `MemPerInstanceBytes` bounds workers.** With a `MemPerContextBytes ≈
+225 MiB` and the same `MemoryHeadroomFactor = 0.8`, a 16 GiB CI runner affords
+`(16 × 0.8 − 1.3 GiB baseline) / 0.225 GiB ≈ 51` contexts. **Memory does not bind at the measured
+optimum of 16** — confirmed directly: peak whole-container RSS at P=16 was **6.16 GiB**
+(`newrecruit-ui`) and **6.70 GiB** (`newrecruit`) of 16 GiB. Pool 16 stays memory-safe down to an
+~8 GiB box. The binding constraint on this axis is **contention, not memory** — the opposite of the
+process axis.
+
+## 7.8 What §7 did NOT reach
+
+- **No code was changed.** §7 is measurement only; the constants above are **not** transcribed into
+  `EngineRegistry` / `FixtureConcurrency`, and `ConcurrencyPolicy` still returns `PoolSize: workers`.
+  Acting on this needs a decision the measurement cannot make for you: today's model has **no place to
+  put a per-engine context constant**, and `PoolSize` would have to stop mirroring `Workers`.
+- **`nr-ui-frozen` and `nr-editor-frozen` — not swept.** The other two NR lanes run the same xUnit
+  path and are presumably subject to the same effect, but were not measured. `battlescribe-ui` was not
+  swept on this axis either.
+- **Only the frozen (offline) suites.** Live-network lanes will have a different latency profile and
+  therefore, on the reasoning in §7.4, plausibly a *different* absolute optimum.
+- **The `[Fact]`-wall vs `dotnet test`-wall split is workload-dependent.** These suites are short
+  (20–35 s at the optimum), so linear pool-init is a large fraction of the wall and it pulls the
+  optimum *down*. A much longer suite would push the optimum toward the `[Fact]`-wall optimum (24+ for
+  `newrecruit-ui`). The optima above are correct **for the suites CI actually runs**, which is what was
+  asked.
+- **Issue #314 (unbounded product across collections) is untouched** — §7 measures one pool at a time.
