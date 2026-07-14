@@ -221,14 +221,86 @@ skipped)"**. Because both arms were the *same* `workers=P`, this establishes onl
 is deterministic when run twice at the same parallelism level** — at every level from 4 to 48. It
 does **not** establish that parallelism preserves verdicts. That is a separate run, below.
 
-## 2. Verdict safety: serial vs the knee
+## 2. Verdict safety: serial vs the knee ✅ PASSED
 
 ```bash
 bs-spec compare --engine newrecruit-ui --roster --filter "cost/,condition/" \
   --policy-a "workers=1" --policy-b "workers=32"
 ```
 
-**IN FLIGHT — the result, and the fitted `MemPerInstanceBytes` sampled during it, land here.**
+```
+✓ Verdicts identical across 365 spec(s) (64 executed, 301 skipped).
+  A wall: 1122.2s     B wall: 78.3s
+```
+
+**Running 32 workers in parallel does NOT change conformance results.** This is the check that
+matters, and it is the one the identical-arm sweep above could never have made. Serial (`workers=1`)
+and the knee (`workers=32`) produce **the same verdict for every one of the 64 executed specs** —
+including the same 4 baseline failures, which is the specific thing that had to be confirmed: those
+4 are genuine `newrecruit-ui` conformance failures (hidden-entry specs), not a parallelism artifact,
+and parallelism neither hides them nor adds new ones. Since serial and P=32 agree, the levels
+between are very likely safe.
+
+Per-arm evidence that the two arms genuinely ran differently (i.e. the lever was connected, not a
+false green):
+
+| | Arm A (`workers=1`) | Arm B (`workers=32`) |
+|---|---:|---:|
+| wall | 1122.0s | 75.1s |
+| p50 / p95 | 17132 / 18440ms | 20547 / 44083ms |
+| peak `adapter-process` | 1 | **32** |
+| peak `browser` | 1 | **32** |
+| peak `browser-context` | 1 | **32** |
+
+Log: `.superpowers/sdd/campaign-logs/nrui-verdict-w1-vs-w32.log`.
+
+## 3. `MemPerInstanceBytes` for `newrecruit-ui` ✅ MEASURED
+
+Sampled every 3s across the run above (`bs-engine-host` adapter + `chrome-headless-shell` tree, both
+families — see Method).
+
+**Steady state with all 32 workers up (n=14 samples):**
+
+| | total | **per worker** |
+|---|---:|---:|
+| `bs-engine-host` (adapter) | 7,999 MB | 250 MB |
+| `chrome-headless-shell` tree | 14,246 MB | 445 MB |
+| **mean TOTAL** | **22,244 MB** | **695 MB** |
+| **PEAK TOTAL** | **25,193 MB (24.6 GiB)** | **787 MB** |
+
+Least-squares across every sample (workers ∈ {1, 8, 13, 32}): `total = 826 MB + 529 MB × workers`
+— a **marginal** cost of 529 MB per worker on top of a fixed ~826 MB.
+
+> **Measuring only the browser would have understated this by ~45%.** The adapter process is 250 MB
+> of the 695 MB, and a worker cannot exist without one. Any figure derived from
+> `chrome-headless-shell` alone (a browser-only sampler fits 486 MB/instance) is wrong for this
+> field.
+
+**Measured peak per instance: 787 MB.** Recommended transcription for Task 9:
+
+```
+MemPerInstanceBytes: 1_073_741_824   // 1 GiB — measured peak 787 MB + ~30% headroom
+```
+
+**Why round up, and why this is a judgement call Task 9 must make consciously:**
+`MachineProfile.AvailableMemoryBytes` is `GC.GetGCMemoryInfo().TotalAvailableMemoryBytes` — **total**
+physical memory (or the cgroup limit), *not free* memory. So `availableMemory / memPerInstance`
+leaves **zero headroom for the OS by construction**. Transcribing the raw measured 787 MB would let
+a 32-core / 16 GiB laptop pick 20 workers and consume ~15.7 GB of its 16 GB — precisely the OOM the
+provisional cap exists to prevent. At 1 GiB that box picks 16 workers (~12.6 GB, 78%), and this box
+still picks 32 (memory does not bind: 93.6 GiB / 1 GiB = 93 ≫ 32), so **the measured knee is
+preserved on the hardware where it was measured** while a small-memory box is genuinely constrained.
+
+A note on time-dependence found while measuring: a **single** long-lived `bs-engine-host` grows its
+working set substantially over a long serial run (mean 933 MB, peak 1.6 GB with its browser over the
+19-minute `workers=1` arm — GC heap growth across 64 cold starts), whereas at 32 workers each host
+only reaches ~250 MB because each handles just 2 specs. Per-worker memory is therefore a function of
+how many specs a worker processes, not a constant. The 787 MB figure is the one measured **at the
+concurrency the policy will actually pick**, which is the number the policy needs.
+
+**Retiring the cap:** `ConcurrencyPolicy.For` applies `ProvisionalUnmeasuredMemoryCap` only while
+`MemPerInstanceBytes == 0`. Setting this field is what retires it — and unlocks the measured **2.65×**
+(149.5s → 56.4s).
 
 ---
 
