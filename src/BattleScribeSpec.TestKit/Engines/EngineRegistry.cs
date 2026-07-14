@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using BattleScribeSpec.Concurrency;
 
@@ -26,12 +27,12 @@ public sealed class EngineRegistry
 {
     private static readonly string[] BothDomains = ["roster", "gamedata"];
 
-    // Conservative default for engines that declare nothing: no parallelism ceiling assumed
-    // beyond serial, cheap to construct, and no reuse claimed (reuse must be earned — see
-    // EngineProfile's remarks). MemPerInstanceBytes stays 0 = "undeclared", which is what makes
-    // ConcurrencyPolicy.UndeclaredMemoryWorkerCap bind for such an engine. That is deliberate and
-    // permanent: an engine that has not declared its memory footprint does not get machine-width
-    // parallelism.
+    // Conservative default for engines that declare nothing: cheap to construct, no reuse claimed
+    // (reuse must be earned — see EngineProfile's remarks), and NO declared ceiling of its own —
+    // MaxParallel: 0 means "unlimited", not "serial". What actually bounds such an engine is
+    // ConcurrencyPolicy.UndeclaredMemoryWorkerCap, which binds precisely because
+    // MemPerInstanceBytes stays 0 = "undeclared". That is deliberate and permanent: an engine that
+    // has not declared its memory footprint does not get machine-width parallelism.
     private static readonly EngineProfile DefaultProfile = new(
         MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false);
 
@@ -146,6 +147,8 @@ public sealed class EngineRegistry
                         $"Invalid engines config '{configPath}', entry '{name}': {ex.Message}", ex);
                 }
             }
+            Validate(configPath, name, entry);
+
             // A third-party engine that omits memPerInstanceBytes gets 0 — i.e. "undeclared" — and is
             // therefore bound by ConcurrencyPolicy.UndeclaredMemoryWorkerCap rather than the machine's
             // full width. Declaring a measured footprint is how an engine opts into full parallelism;
@@ -166,6 +169,53 @@ public sealed class EngineRegistry
         }
 
         return new EngineRegistry(configured);
+    }
+
+    /// <summary>
+    /// Reject the numbers a third-party <c>engines.json</c> can state that the policy cannot safely
+    /// interpret. These are hostile-to-the-machine values, not typos to be silently normalized.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A negative <c>memPerInstanceBytes</c> used to unbind the safety cap.</b>
+    /// <c>ConcurrencyPolicy</c>'s memory bound is gated on <c>&gt; 0</c> and its undeclared-engine cap
+    /// was gated on <c>== 0</c>, so <c>-1</c> escaped BOTH: no memory bound, no cap, and a 64-core box
+    /// would launch 64 instances of an engine nobody measured — reachable with one minus sign. The
+    /// policy's gate is now <c>&lt;= 0</c> (so such a profile is merely treated as undeclared), but a
+    /// negative memory footprint is meaningless and almost certainly a mistake in the author's file:
+    /// it is better to say so at load than to quietly pick an interpretation for them.
+    /// </para>
+    /// <para>
+    /// <c>oversubscriptionFactor</c> must be positive for the same reason — <c>ceil(cpu × k)</c> with
+    /// <c>k &lt;= 0</c> is a worker count of zero, silently floored back to 1 — and <c>maxParallel</c>
+    /// is a count, where 0 already has the meaning "unlimited" and a negative is nonsense.
+    /// </para>
+    /// </remarks>
+    private static void Validate(string configPath, string name, EngineConfigEntry entry)
+    {
+        if (entry.MemPerInstanceBytes < 0)
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': memPerInstanceBytes must be >= 0 " +
+                $"(got {entry.MemPerInstanceBytes}). Omit it (or use 0) to declare the footprint unknown, " +
+                $"which caps the engine at ConcurrencyPolicy's conservative default; state a measured " +
+                $"byte count to opt into full machine-width parallelism.");
+        }
+
+        if (entry.OversubscriptionFactor <= 0 || double.IsNaN(entry.OversubscriptionFactor))
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': oversubscriptionFactor must be > 0 " +
+                $"(got {entry.OversubscriptionFactor.ToString(CultureInfo.InvariantCulture)}). It is the 'k' in " +
+                $"workers ≈ cpuCount × k; 1.0 means one instance per logical processor.");
+        }
+
+        if (entry.MaxParallel < 0)
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': maxParallel must be >= 0 " +
+                $"(got {entry.MaxParallel}). 0 means unlimited.");
+        }
     }
 
     /// <summary>Walk up from <paramref name="startDirectory"/> looking for engines.json.</summary>

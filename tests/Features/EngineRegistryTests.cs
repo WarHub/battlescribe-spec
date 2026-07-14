@@ -1,3 +1,4 @@
+using System.Globalization;
 using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Tests.Features;
@@ -92,5 +93,62 @@ public sealed class EngineRegistryTests : IDisposable
         var ex = Assert.Throws<InvalidDataException>(() => EngineRegistry.Load(path));
         Assert.Contains("wham", ex.Message);
         Assert.Contains(path, ex.Message);
+    }
+
+    /// <summary>
+    /// A NEGATIVE memPerInstanceBytes used to escape BOTH of ConcurrencyPolicy's guards — the memory
+    /// bound (gated on <c>&gt; 0</c>) and the undeclared-engine worker cap (gated on <c>== 0</c>) —
+    /// handing an unmeasured third-party engine the machine's full width. One minus sign, safety cap
+    /// gone. It is rejected at load now, before any policy can be asked to interpret it.
+    /// </summary>
+    [Fact]
+    public void NegativeMemPerInstanceBytes_IsRejectedAtLoad()
+    {
+        var path = WriteConfig("""{"engines":{"wham":{"exec":"node w.js","memPerInstanceBytes":-1}}}""");
+
+        var ex = Assert.Throws<InvalidDataException>(() => EngineRegistry.Load(path));
+
+        Assert.Contains("memPerInstanceBytes", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("wham", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(path, ex.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-0.5)]
+    public void NonPositiveOversubscriptionFactor_IsRejectedAtLoad(double factor)
+    {
+        // k <= 0 makes ceil(cpu × k) zero workers, silently floored back to 1 — a config that says
+        // one thing and means another.
+        var value = factor.ToString(CultureInfo.InvariantCulture);
+        var path = WriteConfig(
+            "{\"engines\":{\"wham\":{\"exec\":\"node w.js\",\"oversubscriptionFactor\":" + value + "}}}");
+
+        var ex = Assert.Throws<InvalidDataException>(() => EngineRegistry.Load(path));
+
+        Assert.Contains("oversubscriptionFactor", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NegativeMaxParallel_IsRejectedAtLoad()
+    {
+        var path = WriteConfig("""{"engines":{"wham":{"exec":"node w.js","maxParallel":-1}}}""");
+
+        var ex = Assert.Throws<InvalidDataException>(() => EngineRegistry.Load(path));
+
+        Assert.Contains("maxParallel", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Omitting the optional numbers stays legal — the conservative defaults apply.</summary>
+    [Fact]
+    public void OmittedProfileNumbers_LoadWithConservativeDefaults()
+    {
+        var path = WriteConfig("""{"engines":{"wham":{"exec":"node w.js"}}}""");
+
+        var profile = EngineRegistry.Load(path).Resolve(EngineConnectable.Parse("wham")).Profile;
+
+        Assert.Equal(0, profile.MemPerInstanceBytes); // "undeclared" → the policy's cap binds
+        Assert.Equal(1.0, profile.OversubscriptionFactor);
+        Assert.Equal(0, profile.MaxParallel); // 0 = unlimited (the cap is what actually bounds it)
     }
 }
