@@ -539,7 +539,52 @@ public sealed class EngineSpecTests
         // command line may not turn the live fail-safe off.
         var refused = Assert.Throws<CliInputException>(
             () => Resolve("plain-spec-id", "--engine", "newrecruit", "--engine-endpoint", "local"));
-        Assert.Contains("applies only to an exec:/dotnet: adapter", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("its endpoints are measured facts, declared", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>#317 review — the tenth instance of this branch's signature defect.</b> The old guard was
+    /// <c>!connectable.IsLaunchable</c>: a fact about the <em>syntax of the <c>--engine</c> token</em>
+    /// (did it carry an <c>exec:</c>/<c>dotnet:</c> target?), stood in for "is this a built-in", a fact
+    /// about the <em>resolved engine</em>. The two part company for exactly one input: an
+    /// <c>engines.json</c>-registered engine referenced by plain name — foreign code, no measured
+    /// profile, <see cref="EngineEntry.Builtin"/> false, and no <c>exec:</c>/<c>dotnet:</c> token
+    /// anywhere in what the user typed. The old predicate rejected <c>--engine-endpoint</c> for it with
+    /// a message that was false on every clause ("'wham' is a built-in engine…").
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: restore <c>!connectable.IsLaunchable</c> as the guard in
+    /// <c>EngineOptions.Resolve</c> and the declared arm goes red — <c>Resolve</c> throws
+    /// <see cref="CliInputException"/> for a plain-name registry engine that is not built-in.
+    /// </remarks>
+    [Fact]
+    public void EnginesJsonEngine_ReferencedByPlainName_MayDeclareAnEndpoint()
+    {
+        var dir = Directory.CreateTempSubdirectory("bsspec-engine-options-test-");
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(dir.FullName, "engines.json"),
+                """{"engines":{"wham":{"exec":"node w.js"}}}""");
+            var options = new EngineOptions { RegistryStartDirectory = dir.FullName };
+
+            // Undeclared: a plain-name registry engine with no endpoint in engines.json still gets the
+            // fail-safe answer — the same as any other foreign adapter nobody has measured.
+            var undeclared = Resolve(options, "plain-spec-id", "--engine", "wham");
+            Assert.False(undeclared.Entry.Builtin);
+            Assert.Equal(LoadTarget.ThirdPartyLive, undeclared.LoadTarget);
+
+            // THE BUG: a plain-name registry engine must be ALLOWED to declare --engine-endpoint. It
+            // carries no exec:/dotnet: token, so IsLaunchable is false for it — the old predicate treated
+            // that as "this is a built-in" and refused the flag with a message that was false about it.
+            var declared = Resolve(options, "plain-spec-id", "--engine", "wham", "--engine-endpoint", "local");
+            Assert.False(declared.Entry.Builtin);
+            Assert.Equal(LoadTarget.Local, declared.LoadTarget);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
     }
 
     private static EngineEntry Builtin(string name) =>
@@ -697,9 +742,13 @@ public sealed class EngineSpecTests
         Assert.True(selection.Headed);
     }
 
-    private static EngineSelection Resolve(string specInput, params string[] extraArgs)
+    private static EngineSelection Resolve(string specInput, params string[] extraArgs) =>
+        Resolve(new EngineOptions(), specInput, extraArgs);
+
+    /// <summary>Overload taking a caller-built <see cref="EngineOptions"/> — the seam for tests that
+    /// need <see cref="EngineOptions.RegistryStartDirectory"/> pointed at a temp-dir engines.json.</summary>
+    private static EngineSelection Resolve(EngineOptions options, string specInput, params string[] extraArgs)
     {
-        var options = new EngineOptions();
         string[] args = [specInput, .. extraArgs];
         return options.Resolve(ParseWith(options, args), specInput);
     }

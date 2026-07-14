@@ -199,6 +199,16 @@ internal sealed record EngineSelection(
 /// </summary>
 internal sealed class EngineOptions
 {
+    /// <summary>
+    /// Test seam for <see cref="EngineRegistry.LoadDefault"/>'s walk-up start point. Null (the
+    /// production default — every production caller constructs <see cref="EngineOptions"/> with no
+    /// initializer) means "start from <see cref="Directory.GetCurrentDirectory"/>", exactly the
+    /// behaviour before this property existed. Tests set it to reach a temp-directory
+    /// <c>engines.json</c> without mutating the process-wide working directory, which would leak into
+    /// every other test in the run.
+    /// </summary>
+    internal string? RegistryStartDirectory { get; init; }
+
     public Option<string> Engine { get; } = new("--engine")
     {
         Description = "Engine to use: a built-in name (battlescribe, battlescribe-ui, newrecruit, " +
@@ -322,7 +332,7 @@ internal sealed class EngineOptions
         EngineEntry entry;
         try
         {
-            entry = EngineRegistry.LoadDefault().Resolve(connectable);
+            entry = EngineRegistry.LoadDefault(RegistryStartDirectory).Resolve(connectable);
         }
         catch (KeyNotFoundException ex)
         {
@@ -331,18 +341,26 @@ internal sealed class EngineOptions
 
         if (parseResult.GetValue(EndpointDeclaration) is { Length: > 0 } declaration)
         {
-            // Only an ad-hoc adapter may be declared here. A built-in's endpoints are measured facts about
+            // Only a foreign adapter may be declared here. A built-in's endpoints are measured facts about
             // engines we wrote, declared per domain in EngineRegistry.Builtins — and this flag would
             // otherwise be a one-word override of the fail-safe: `--engine newrecruit --engine-endpoint
             // local` with NR_ENGINE_URL pointed at the live site is exactly the regression this branch
             // exists to prevent. Rejected, not silently ignored (#305: a flag is honoured or refused).
-            if (!connectable.IsLaunchable)
+            //
+            // Test the RESOLVED engine, not the shape of the --engine token. IsLaunchable is a fact about
+            // the token's syntax (did it carry an exec:/dotnet: target?); Builtin is a fact about what the
+            // token resolved to. They part company for an engines.json-registered engine referenced by
+            // plain name — foreign code, no measured profile, and every word of the message below false
+            // about it. That confusion of one fact for a neighbouring one is this branch's signature bug;
+            // --headed makes the same decision 30 lines down and gets the predicate right.
+            if (entry.Builtin)
             {
                 throw new CliInputException(
-                    $"--engine-endpoint applies only to an exec:/dotnet: adapter — '{entry.Name}' is a " +
-                    "built-in engine and declares its own endpoint, per domain, from what has been measured " +
-                    "about it (EngineRegistry). Overriding that from the command line would let one word " +
-                    "turn the third-party load limit off for a live site.");
+                    "--engine-endpoint declares where a foreign/ad-hoc adapter's service lives — " +
+                    $"'{entry.Name}' is a built-in engine, and its endpoints are measured facts, declared " +
+                    "per domain (EngineRegistry), not something a flag may state on its behalf. Overriding " +
+                    "that from the command line would let one word turn the third-party load limit off for " +
+                    "a live site.");
             }
 
             EngineEndpoint endpoint;
