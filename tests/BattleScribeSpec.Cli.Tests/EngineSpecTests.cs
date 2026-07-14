@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics;
 using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.Engines;
 
@@ -310,6 +311,73 @@ public sealed class EngineSpecTests
         Assert.Equal(
             ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile, LoadTarget.Local),
             selection.EffectivePlan);
+    }
+
+    /// <summary>
+    /// <b>The endpoint variable means whatever it means TO THE CHILD.</b> <c>--config-a
+    /// "nr_engine_url=…"</c> and <c>--config-a "NR_ENGINE_URL=…"</c> are the <em>same</em> variable to a
+    /// Windows child (<see cref="ProcessStartInfo.Environment"/> is case-insensitive there) and
+    /// <em>different</em> variables to a Linux one. The parent's <see cref="EngineSelection.LoadTarget"/>
+    /// must be whatever the child will actually do — on the platform it is actually running on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the gate that did not exist, and the defect it catches was live.</b> The parent used to
+    /// look the variable up in its own <c>Dictionary&lt;string,string&gt;(StringComparer.Ordinal)</c>, so
+    /// a single lowercased letter made it a <em>miss</em> ⇒ <c>LoadTarget.Local</c> ⇒
+    /// <c>ceil(cpuCount × 1.0)</c> workers — <b>32 live browsers at newrecruit.eu on a 32-core box</b> —
+    /// while the child, reading the OS's own case-insensitive environment, went live anyway. One name,
+    /// two meanings, and the safety limit evaporated between them.
+    /// </para>
+    /// <para>
+    /// <b>The expectation is taken from the OS, not from the code under test.</b>
+    /// <see cref="ProcessStartInfo.Environment"/> IS the dictionary the child is handed, and it carries
+    /// the platform's own name semantics. Deriving the expectation from it is what makes this test
+    /// falsifiable <em>on both platforms</em> rather than encoding one platform's answer as a constant:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <b>Windows</b> — revert to a case-sensitive lookup (the defect) and this goes red: the OS says the
+    /// child gets the URL, the parent says <c>Local</c>.
+    /// </description></item>
+    /// <item><description>
+    /// <b>Linux</b> — "fix" it by hard-coding <see cref="StringComparer.OrdinalIgnoreCase"/> (the obvious
+    /// wrong fix, which trades one platform's bug for the other's) and this goes red: the OS says the
+    /// child never sees <c>NR_ENGINE_URL</c> at all and replays the frozen HAR, while the parent throttles
+    /// a local run to 2 workers.
+    /// </description></item>
+    /// </list>
+    /// </remarks>
+    [Fact]
+    public void EffectivePlan_EndpointConfigKey_IsReadWithTheChildProcessesOwnCasingRules()
+    {
+        const string MixedCaseKey = "nr_engine_url";
+        const string LiveUrl = "https://www.newrecruit.eu";
+
+        var selection = Resolve("plain-spec-id", "--engine", "newrecruit-ui") with
+        {
+            ChildEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [MixedCaseKey] = LiveUrl,
+            },
+        };
+
+        // Ground truth: exactly what AdapterProcess hands the child (psi.Environment[key] = value),
+        // through the BCL type whose comparer is the OS's own — NOT through any comparer of ours.
+        var psi = new ProcessStartInfo();
+        psi.Environment[MixedCaseKey] = LiveUrl;
+        var childGoesLive =
+            psi.Environment.TryGetValue("NR_ENGINE_URL", out var seen) && !string.IsNullOrEmpty(seen);
+
+        Assert.Equal(childGoesLive ? LoadTarget.ThirdPartyLive : LoadTarget.Local, selection.LoadTarget);
+
+        // ...and the worker count follows it. A live child must be held to the limit; a child that will
+        // replay the frozen HAR must keep the machine's measured width.
+        var expectedWorkers = childGoesLive
+            ? ConcurrencyPolicy.ThirdPartyLiveLoadLimit
+            : ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile, LoadTarget.Local).Workers;
+
+        Assert.Equal(expectedWorkers, selection.EffectivePlan.Workers);
     }
 
     /// <summary>

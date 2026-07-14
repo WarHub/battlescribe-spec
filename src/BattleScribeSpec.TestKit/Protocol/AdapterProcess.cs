@@ -318,6 +318,44 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
     }
 
     /// <summary>
+    /// <b>The environment the child will actually receive</b> if it is started with
+    /// <paramref name="environment"/> as its overlay: this process's own environment with the overlay
+    /// applied, exactly as <see cref="BuildStartInfo"/> composes it — same code, same dictionary, same
+    /// comparer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This exists so that "what will the child see?" has exactly one answer.</b> A caller that needs
+    /// to reason about the child's environment BEFORE spawning it — <c>EngineSelection.LoadTarget</c>
+    /// derives from <c>NR_ENGINE_URL</c> whether the run points at a third party's website, and therefore
+    /// how many browsers it may open — must read the same dictionary the child is handed, not a second
+    /// dictionary that happens to hold the same pairs.
+    /// </para>
+    /// <para>
+    /// <b>Because a variable NAME does not mean the same thing on both platforms.</b>
+    /// <see cref="ProcessStartInfo.Environment"/> is built with <see cref="StringComparer.OrdinalIgnoreCase"/>
+    /// on Windows and <see cref="StringComparer.Ordinal"/> on Unix — the OS's own rules. A parent that
+    /// looked the endpoint up in its own <c>Ordinal</c> dictionary therefore disagreed with its own child
+    /// on Windows: <c>--config-a "nr_engine_url=https://www.newrecruit.eu"</c> was a MISS for the parent
+    /// (which then planned <c>ceil(cpuCount × k)</c> workers, the machine's full width) and a HIT for the
+    /// child (which went live) — the load limit evaporated on a single lowercased letter, and the banner
+    /// that says "held to N concurrent sessions" never printed. Hard-coding <c>OrdinalIgnoreCase</c>
+    /// instead would merely have moved the disagreement to Linux, where the child genuinely would not see
+    /// the variable and would replay its frozen HAR while the parent throttled it.
+    /// </para>
+    /// <para>
+    /// So neither comparer is hard-coded anywhere: the answer is <em>read back out of the dictionary the
+    /// OS itself defines</em>, which cannot be wrong about its own semantics and cannot drift from what
+    /// the spawn does.
+    /// </para>
+    /// </remarks>
+    /// <param name="environment">The overlay a child would be started with; null = no overlay.</param>
+    /// <returns>The composed child environment, keyed by the platform's own variable-name rules.</returns>
+    public static IReadOnlyDictionary<string, string?> ComposeChildEnvironment(
+        IReadOnlyDictionary<string, string>? environment) =>
+        BuildStartInfo(executable: "", arguments: null, environment).Environment.AsReadOnly();
+
+    /// <summary>
     /// Bounded wait (see <see cref="SendCommandAsync"/>'s catch clause) for a just-failed process to
     /// report its exit before it is classified as still alive. On Windows <c>Process.HasExited</c>
     /// flips essentially immediately when a child dies, so this never actually waits the full

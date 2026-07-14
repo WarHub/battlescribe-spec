@@ -77,15 +77,26 @@ internal sealed record EngineSelection(
             .ResolveLoadTarget(LookupChildEnvironment);
 
     /// <summary>
-    /// The environment the <b>child</b> will see: <see cref="ChildEnvironment"/> layered over this
-    /// process's own, which is exactly what <see cref="StartProcess"/> hands it (a child inherits the
-    /// parent's environment, and the caller's extras override). The parent's verdict about the endpoint
-    /// and the child's behaviour therefore cannot disagree — they read the same value.
+    /// Reads the endpoint variable <b>out of the environment the child is actually handed</b> —
+    /// <see cref="Protocol.AdapterProcess.ComposeChildEnvironment"/>, the same code, the same dictionary
+    /// and the same comparer that <see cref="StartProcess"/> spawns with.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>It is not enough for the two to hold the same pairs; they must be the same lookup.</b> This
+    /// method used to consult <see cref="ChildEnvironment"/> directly — a dictionary the CLI builds with
+    /// <see cref="StringComparer.Ordinal"/> — and fall back to <c>Environment.GetEnvironmentVariable</c>.
+    /// That is a <em>second</em> implementation of "what does this variable name mean", and on Windows it
+    /// disagreed with the first: <c>ProcessStartInfo.Environment</c> is case-INsensitive there, so
+    /// <c>--config-a "nr_engine_url=https://www.newrecruit.eu"</c> was a miss here (⇒
+    /// <see cref="LoadTarget.Local"/> ⇒ <c>ceil(cpuCount × k)</c> browsers) and a hit for the child (⇒
+    /// live). The clamp vanished on one lowercased letter. Composing the child's environment and reading
+    /// the answer back out of <em>it</em> leaves no second implementation to drift — and it is right on
+    /// Linux too, where the same variable genuinely is a different one.
+    /// </para>
+    /// </remarks>
     private string? LookupChildEnvironment(string variable) =>
-        ChildEnvironment is not null && ChildEnvironment.TryGetValue(variable, out var value)
-            ? value
-            : Environment.GetEnvironmentVariable(variable);
+        Protocol.AdapterProcess.ComposeChildEnvironment(ChildEnvironment).GetValueOrDefault(variable);
 
     /// <summary>Assertion engine: strip a trailing "-ui" from the identity.</summary>
     public string? AssertionEngineName =>
@@ -140,10 +151,49 @@ internal sealed record EngineSelection(
         EngineHostLocator.Resolve(Entry, Headed, KeepAlive, plan: Entry.Builtin ? EffectivePlan : PlanOverride);
 
     /// <summary>Start the adapter process for this selection, with optional extra child environment.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b><see cref="ChildEnvironment"/> is applied HERE, not by the caller.</b> It used to be the
+    /// caller's job (<c>compare</c> copied its <c>--config-*</c> into the environment it passed), which
+    /// meant the environment that <em>decided the load target</em> and the environment the child was
+    /// <em>actually started with</em> were assembled by two different pieces of code — the shape of every
+    /// bug on this branch. Now the selection carries the fact and applies it, so a child cannot be
+    /// spawned into an environment its own plan was not computed against.
+    /// </para>
+    /// <para>
+    /// <paramref name="environment"/> is the harness's own wiring (the telemetry collector's endpoint,
+    /// the worker index); <see cref="ChildEnvironment"/> is the user's, and it goes on top — a
+    /// <c>--config-*</c> may override our wiring, never the reverse. It is also the only one of the two
+    /// that may name an <em>endpoint</em> variable, which is what lets <see cref="LoadTarget"/> be derived
+    /// from it alone.
+    /// </para>
+    /// </remarks>
     public Protocol.AdapterProcess StartProcess(IReadOnlyDictionary<string, string>? environment = null)
     {
         var launch = ResolveLaunch();
-        return Protocol.AdapterProcess.Start(launch.Executable, launch.Arguments, environment);
+        return Protocol.AdapterProcess.Start(launch.Executable, launch.Arguments, ChildOverlay(environment));
+    }
+
+    /// <summary>The overlay a child of this selection is started with: <paramref name="extra"/> with <see cref="ChildEnvironment"/> layered on top.</summary>
+    private IReadOnlyDictionary<string, string>? ChildOverlay(IReadOnlyDictionary<string, string>? extra)
+    {
+        if (ChildEnvironment is null || ChildEnvironment.Count == 0)
+        {
+            return extra;
+        }
+
+        if (extra is null || extra.Count == 0)
+        {
+            return ChildEnvironment;
+        }
+
+        var merged = new Dictionary<string, string>(extra, StringComparer.Ordinal);
+        foreach (var (key, value) in ChildEnvironment)
+        {
+            merged[key] = value;
+        }
+
+        return merged;
     }
 }
 

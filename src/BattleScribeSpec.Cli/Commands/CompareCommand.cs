@@ -348,11 +348,13 @@ internal static class CompareCommand
     private static async Task<ArmResult> RunArmAsync(
         CompareOptions options, EngineSelection selection, int workers, string armLabel)
     {
-        // The arm's --config-* comes from the selection itself — the same object whose LoadTarget and
-        // plan were derived from it. The warm-up arm passes options.Selection, which carries no config
-        // (that is what "under neither config" means), so it needs no separate empty-dictionary constant.
-        var config = selection.ChildEnvironment ?? new Dictionary<string, string>(StringComparer.Ordinal);
-
+        // The arm's --config-* is NOT re-applied here. It lives on the selection
+        // (EngineSelection.ChildEnvironment), and EngineSelection.StartProcess is what layers it onto the
+        // child — the same object, and the same composed environment, that EngineSelection.LoadTarget
+        // derived this arm's plan from. Copying it into the spawn environment separately (as this method
+        // used to) is a second assembly of "the environment the child sees", and a second assembly is a
+        // second thing to get wrong. The warm-up arm passes options.Selection, which carries no config —
+        // that is exactly what "under neither config" means, and it now needs no special case.
         var filterPatterns = options.Filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             is { Length: > 0 } patterns ? patterns : null;
 
@@ -383,14 +385,13 @@ internal static class CompareCommand
                     AdapterFactory = workerIndex =>
                     {
                         var index = workerIndex.ToString(CultureInfo.InvariantCulture);
-                        var env = new Dictionary<string, string>(collector.ChildEnvironment);
-                        foreach (var (key, value) in config)
+                        var env = new Dictionary<string, string>(collector.ChildEnvironment)
                         {
-                            env[key] = value;
-                        }
+                            ["BSSPEC_WORKER_INDEX"] = index,
+                            ["OTEL_RESOURCE_ATTRIBUTES"] = $"service.instance.id={index}",
+                        };
 
-                        env["BSSPEC_WORKER_INDEX"] = index;
-                        env["OTEL_RESOURCE_ATTRIBUTES"] = $"service.instance.id={index}";
+                        // The arm's --config-* rides on the selection and is applied by StartProcess.
                         return selection.StartProcess(env);
                     },
                 },
@@ -403,7 +404,20 @@ internal static class CompareCommand
         return new ArmResult(result, sw.Elapsed, trace);
     }
 
-    /// <summary>Parse a comma-separated <c>KEY=VALUE</c> list; an empty/null string yields an empty (no extra environment) map.</summary>
+    /// <summary>
+    /// Parse a comma-separated <c>KEY=VALUE</c> list; an empty/null string yields an empty (no extra
+    /// environment) map. The keys are carried <b>verbatim</b>, exactly as the user typed them.
+    /// </summary>
+    /// <remarks>
+    /// <b>This map is an overlay, not an answer.</b> Nothing reads an environment variable out of it —
+    /// not the load target, not the plan. It is handed to <c>EngineSelection.ChildEnvironment</c>, and the
+    /// question "what will the child see for <c>NR_ENGINE_URL</c>?" is answered by composing the child's
+    /// real environment (<c>AdapterProcess.ComposeChildEnvironment</c>), whose comparer is the OS's own.
+    /// That is why the comparer here does not matter and must not be made to matter: a
+    /// <c>StringComparer.Ordinal</c> lookup on this dictionary is precisely the second, disagreeing
+    /// implementation of "what does this variable name mean" that let <c>--config-a
+    /// "nr_engine_url=https://www.newrecruit.eu"</c> defeat the third-party load limit on Windows.
+    /// </remarks>
     private static IReadOnlyDictionary<string, string> ParseConfig(string? raw, string flagName)
     {
         var config = new Dictionary<string, string>(StringComparer.Ordinal);
