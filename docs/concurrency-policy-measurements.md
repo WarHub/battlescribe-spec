@@ -7,12 +7,14 @@
 > | Path measured | **CLI** — `bs-spec run --all` | **xUnit** — `dotnet test` |
 > | What is replicated | an adapter **process family** (adapter + Node driver + own Chromium tree) | a browser **context** inside ONE shared browser + ONE shared Node driver |
 > | Sized by | `ConcurrencyPlan.Workers` | `ConcurrencyPlan.PoolSize` |
-> | Fitted constant | `OversubscriptionFactor` (`k`): `newrecruit` 0.375, `newrecruit-ui` 1.0 | **a constant, not a factor** — see §7 |
-> | Costs (measured) | **1.22–1.44 GiB** per worker | **163–225 MiB** per context |
+> | Engine declares | `OversubscriptionFactor` (`k`): `newrecruit` 0.375, `newrecruit-ui` 1.0 | `ContextPoolSize`: **an absolute count, not a factor** — `newrecruit` 4, `newrecruit-ui` 16 |
+> | Scales with CPU? | **yes** — `ceil(cpuCount × k)` | **NO.** The optimum is identical on 32 CPUs and on 4 (§7.4) |
+> | Costs (measured) | `MemPerInstanceBytes`: **1.22–1.44 GiB** per worker | `MemPerContextBytes`: **163–225 MiB** per context |
 > | Which one does CI run? | the `checks` / batch lanes | **every NewRecruit conformance lane** |
 >
-> `ConcurrencyPolicy.For` sets `PoolSize: workers` — it feeds **one number to both axes**. §7 shows
-> that number is wrong for the context axis, and by how much.
+> `ConcurrencyPolicy.For` **used to** set `PoolSize: workers` — feeding **one number to both axes**.
+> §7 measured how wrong that is for the context axis; **§8 records the code change that separated
+> them** (issue #314). The two axes now have four separate declared facts and share no number.
 
 **Status: measured.** On the dev box: `newrecruit-ui` roster (§1–§3) **and** `newrecruit` roster
 (§5) are both swept, fitted, verdict-safety-checked and memory-measured; `battlescribe-ui`'s
@@ -1107,10 +1109,9 @@ process axis.
 
 ## 7.8 What §7 did NOT reach
 
-- **No code was changed.** §7 is measurement only; the constants above are **not** transcribed into
-  `EngineRegistry` / `FixtureConcurrency`, and `ConcurrencyPolicy` still returns `PoolSize: workers`.
-  Acting on this needs a decision the measurement cannot make for you: today's model has **no place to
-  put a per-engine context constant**, and `PoolSize` would have to stop mirroring `Workers`.
+- ~~**No code was changed.**~~ **§8 changed it.** §7 was measurement only; the constants above are now
+  transcribed into `EngineRegistry`, `ConcurrencyPolicy` no longer returns `PoolSize: workers`, and
+  the model has gained the place to put a per-engine context constant that it lacked. See §8.
 - **`nr-ui-frozen` and `nr-editor-frozen` — not swept.** The other two NR lanes run the same xUnit
   path and are presumably subject to the same effect, but were not measured. `battlescribe-ui` was not
   swept on this axis either.
@@ -1122,3 +1123,142 @@ process axis.
   `newrecruit-ui`). The optima above are correct **for the suites CI actually runs**, which is what was
   asked.
 - **Issue #314 (unbounded product across collections) is untouched** — §7 measures one pool at a time.
+
+---
+
+# 8. The axis separation — what §7 changed in the code (#314)
+
+**Status: transcribed.** §7 measured the context axis and stopped. §8 is what was done with it. The
+one-line summary: **`ConcurrencyPolicy.For` no longer computes `PoolSize` from `Workers`.** Each axis
+now has its own declared facts on `EngineProfile`, its own bound in the policy, and its own tests.
+
+## 8.1 The model, stated once
+
+```
+# PROCESS axis — CLI (`bs-spec run --all`): adapter processes. UNCHANGED.
+workers = clamp(min(ceil(cpuCount × k_engine),
+                    floor(availableMemory × 0.8 / memPerInstance_engine)), 1, MaxParallel)
+#   ...and, ONLY while memPerInstance_engine == 0 (undeclared):
+workers = min(workers, min(cpuCount, 8))          # UndeclaredMemoryWorkerCap
+
+# CONTEXT axis — xUnit (`dotnet test`): browser contexts in a fixture pool. NEW.
+pool    = clamp(min(contextPoolSize_engine,       # an ABSOLUTE measured count; 0 → 4 (default)
+                    floor(availableMemory × 0.8 / memPerContext_engine)), 1, MaxParallel)
+```
+
+**Note what is absent from the second formula: `cpuCount`.** That is the finding of §7.4, not an
+oversight — the optimum is *identical* on a 32-core box and a 4-CPU container, and `newrecruit-ui` at
+pool=1 takes 240.05 s on 32 CPUs vs 241.17 s on 4 (an 8× CPU cut costs 0.5%). Contexts share one
+Chromium and one Playwright driver; they contend on **that driver**, and no number of cores relieves
+it. `ceil(cpuCount × k)` cannot express this and must not be reintroduced here.
+
+Both axes share exactly two things — `MemoryHeadroomFactor = 0.8` and `MaxParallel` — because those
+are properties of the *machine* and of the *engine's hard ceiling*, not of either axis.
+
+## 8.2 The declared facts — two per axis
+
+`EngineProfile` (`src/BattleScribeSpec.TestKit/Concurrency/EngineProfile.cs`), all four also settable
+from `engines.json`, all four rejected at load if negative:
+
+| field | axis | `newrecruit` | `newrecruit-ui` | `battlescribe-ui` | `battlescribe` |
+|---|---|--:|--:|--:|--:|
+| `MemPerInstanceBytes` | process | 1,313,420,083 | 1,548,969,984 | 1,055,391,744 | **0 (undeclared)** |
+| `OversubscriptionFactor` | process | 0.375 | 1.0 | *(moot)* | *(moot)* |
+| **`ContextPoolSize`** | **context** | **4** | **16** | 0 → `MaxParallel` clamps to 1 | **0 (undeclared)** |
+| **`MemPerContextBytes`** | **context** | **225,863,270** (215.4 MiB) | **235,824,742** (224.9 MiB) | 0 | 0 |
+
+The per-context figures are §7.7's least-squares slopes, taking the **larger (Linux/CI-class)** of the
+two boxes in each case — the conservative direction, and CI is the machine that has to survive it.
+They are **~6× smaller** than the per-process figures; charging a context at a process's rate is
+exactly what the mirror did.
+
+**`ConcurrencyPolicy.UndeclaredContextPoolSize = 4`** is the default for an engine that declares no
+pool size. It is the *smaller* of the two measured optima: exactly right for one measured engine,
+merely slower — never degraded — for the other, and memory-trivial (4 × 225 MiB ≈ 0.9 GiB). The
+asymmetry justifies the low end: past the optimum this axis degrades hard (**+77%** at pool 32 for
+`newrecruit`, six consecutive worsening levels), while below it you only leave throughput on the
+table.
+
+## 8.3 What each box now gets
+
+| box | `newrecruit` W / **P** | `newrecruit-ui` W / **P** | `battlescribe-ui` W / **P** | `battlescribe` W / **P** |
+|---|---|---|---|---|
+| 4-vCPU / 16 GiB CI runner | 2 / **4** | 4 / **16** | 1 / **1** | 4 / **4** |
+| 16-core / 16 GiB laptop | 6 / **4** | 8 / **16** | 1 / **1** | 8 / **4** |
+| 32-core / 93.6 GiB dev box | 12 / **4** | 32 / **16** | 1 / **1** | 8 / **4** |
+
+`W` = `Workers` (process axis, CLI). `P` = `PoolSize` (context axis, xUnit). **They differ on every
+row for every browser engine, which is the entire point.** Memory binds the pool on none of these
+boxes (a 16 GiB runner affords ≈58 contexts); it starts binding below ≈8 GiB.
+
+## 8.4 What CI gets back
+
+| CI lane | fixture → engine | `NR_PARALLEL` (historic) | mirrored policy (the regression) | **now** |
+|---|---|--:|--:|--:|
+| `nr-frozen` | `FrozenNrRosterFixture` → `newrecruit` | 6 | 2 | **4** ⭐ measured optimum |
+| `nr-editor-ui-frozen` | `FrozenNrGameDataUiFixture` → `newrecruit-ui` | 6 | 4 | **16** ⭐ measured optimum |
+| `nr-live-conformance` | `LiveNrRosterFixture` → `newrecruit` | 2 | 2 | **4** ⚠️ see below |
+
+**CI should end up faster than `main`, not merely back at parity**, because `NR_PARALLEL: 6` was
+*itself* far below `newrecruit-ui`'s true optimum of 16 — that lane has never once been run near it
+(§7.5: 6 costs 50%; the mirrored 4 costs 100%).
+
+⚠️ **`nr-live-conformance` 2 → 4 is a side-effect worth watching.** It shares the `newrecruit` engine
+with `nr-frozen`, so it inherits the declared pool of 4. §7 swept only the **frozen** suites; a live
+lane has a different latency profile, and 4 concurrent contexts is more traffic to a third-party
+service than 2. It is still below the pre-policy code default for that fixture (5), and the sweep says
+the shared Playwright driver saturates at 4 regardless — but it is the one number here that no
+measurement covers.
+
+## 8.5 `FixtureConcurrency.FixturePoolCap` — DELETED, not re-derived
+
+It was `8`, and it was the wrong kind of constant: a round number defending an unmeasured path, with a
+docstring claiming it "can over-provision, not OOM". True of memory, **false of time** — it was
+capping `newrecruit-ui`'s measured optimum of 16 down to 8 and costing that lane **31%** on the dev
+box (§7.5). A defensive bound that costs more than the thing it defends against is not a defence.
+
+What replaces it is a real bound rather than nothing: the policy's own per-context memory bound
+(`MemPerContextBytes` × `MemoryHeadroomFactor`) plus `MaxParallel`. Unlike a magic 8, it tightens on a
+*small* box (where the risk is) instead of on a big one.
+
+**It does not widen issue #314's composed-bound gap.** The three NR pools now ask for 4 + 4 + 16 =
+**24** contexts across simultaneously-live collection fixtures — exactly what the 8-cap permitted
+(8 + 8 + 8 = 24). A shared budget the pools draw from is still the real fix, and still #314's business.
+
+## 8.6 The other mirror: `--policy workers=N`
+
+`PolicyOverride` used to assign `PoolSize` from `workers=N` too ("which mirrors it"). It no longer
+does: `workers=` sets the process axis and nothing else. There is deliberately **no `pool=` key** —
+every command that parses `--policy` is a CLI command, the CLI path has no pool, and `PoolSize` is not
+on the protocol wire, so a `pool=` flag would be accepted, forwarded, and inert. That is the
+silently-dropped flag #305 forbids. (It is also why §7's campaign had to reach its axis with a
+temporary env var: `--policy workers=` could not.)
+
+## 8.7 The tests that would have caught the original bug
+
+In `tests/Features/ConcurrencyPolicyTests.cs` unless noted. Each was verified to fail against a
+deliberately reintroduced version of the defect (the mutant is named):
+
+| test | mutant that makes it fail |
+|---|---|
+| `Policy_PoolSize_IsIndependentOfCpuCount` | restore `PoolSize: workers` — **the original bug**. Also fails on *any* `cpuCount` term in the pool computation: the shape is what was wrong, not just the constant |
+| `Policy_TheTwoAxes_MoveIndependently_ProcessWithCpu_ContextNotAtAll` | restore the mirror (pool assertions), **or** delete the `cpuCount` term from the *worker* computation "for symmetry" (worker assertions) |
+| `Policy_PoolSize_OnTheCiRunner_IsTheMeasuredOptimum` | the mirror (gives 2 / 4), or `NR_PARALLEL`'s old 6 |
+| `Policy_PoolSize_IsBoundedByMemory_OnASmallMemoryBox` | drop the pool's memory bound (plans the full 16 on a 2 GiB box), or drop `MemoryHeadroomFactor` (plans 9 instead of 7) |
+| `Policy_BattlescribeUi_StaysAtOneWorker_OnEveryProfile` | drop the `MaxParallel` clamp on the pool — it would take the undeclared default of 4 |
+| `Policy_UndeclaredContextPoolSize_GetsTheConservativeDefault` | fall back to the worker count for an undeclared engine — the 64-core box would plan 64 contexts |
+| `Policy_NegativeContextDeclarations_AreTreatedAsUndeclared` | gate the pool on `!= 0` instead of `> 0` |
+| `EngineRegistryTests.NegativeContextAxisDeclarations_AreRejectedAtLoad` | delete either `Validate` check |
+| `FixtureConcurrencyTests.PoolSizeFor_IsThePolicysAnswer_UnmodifiedByAnyFixtureLevelCap` | re-add any fixture-level cap that binds on the running machine (e.g. the old 8, against a plan of 16) |
+| `PolicyOverrideTests.Workers_OverridesTheProcessAxisOnly_NotThePool` | restore `poolSize = parsedWorkers` |
+
+## 8.8 What §8 did NOT reach
+
+- **Verdict-safety was inherited, not re-run.** §7.6 diffed every pool size 1–64 against the serial
+  baseline on both boxes and found **zero divergent specs** — that is what licenses raising the pools.
+  §8 re-ran `nr-frozen` and `nr-editor-ui-frozen` at the new pools (4 / 16) on the dev box and both are
+  green, but that is a check, not a new campaign.
+- **`nr-live-conformance`'s pool of 4 is unmeasured** (§8.4).
+- **`battlescribe` declares nothing on either axis** and takes both conservative defaults.
+- **Issue #314's composed bound across collections is still open.** Unchanged by this work, and no
+  longer masked by a cap that was costing more than it saved.
