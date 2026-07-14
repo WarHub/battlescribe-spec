@@ -132,54 +132,107 @@ public sealed class ConcurrencyConfigurationDriftTests
     }
 
     /// <summary>
-    /// <b>The one fixture that talks to a third party's production website must say so.</b>
-    /// <c>ConcurrencyPolicy</c>'s load limit can only bind a caller that declares
-    /// <c>LoadTarget.ThirdPartyLive</c>; a policy nobody invokes is a policy nobody has. This is the
-    /// only test in the repo that connects the constant to the lane it protects — the unit tests prove
-    /// the policy <em>would</em> return 2, and this proves the live lane <em>asks</em> for it.
+    /// <b>EVERY fixture that opens a session on a third party's production website must draw it from
+    /// <see cref="LiveLoadBudget"/>.</b> A policy nobody invokes is a policy nobody has — and four of
+    /// the five live fixtures did not invoke this one.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Falsifiable, in both of the ways this can go wrong.</b> Change <c>LiveNrRosterFixture</c>'s
-    /// argument to <c>LoadTarget.Local</c> — the change that "restores" it to the frozen lane's
-    /// measured pool of 4, i.e. the exact regression of #314/edf3b4a — and the first assertion goes
-    /// red. Declare <c>ThirdPartyLive</c> in a fixture that only ever touches local disk (throttling a
-    /// lane nobody else pays for, the mirror-image mistake) and the second goes red.
+    /// <b>What this test used to assert, and why that was backwards.</b> It required that
+    /// <c>LiveNrRosterFixture</c> be the <em>only</em> file in <c>tests/Infrastructure/</c> containing
+    /// <c>LoadTarget.ThirdPartyLive)</c>. The intent was sound — a LOCAL fixture that declares
+    /// <c>ThirdPartyLive</c> would silently throttle itself to 2 and look, in the diff, like a safety
+    /// improvement — but the rule it wrote down was "only one fixture may be bounded", and the four
+    /// other fixtures that drive <c>newrecruit.eu</c> and <c>giloushaker.github.io</c> were therefore
+    /// <em>forbidden</em> from coming under the limit. The gate was enforcing the gap.
     /// </para>
     /// <para>
-    /// It matches on the call shape (<c>LoadTarget.ThirdPartyLive)</c> — with the closing paren) rather
-    /// than the bare name, so prose and <c>&lt;see cref&gt;</c> references in the fixtures' own docs are
-    /// not offenders. This file is excluded from the scan because it necessarily contains the string it
-    /// searches for.
+    /// The real rule is a biconditional, and it is what this asserts now: a fixture opens live
+    /// third-party sessions <b>if and only if</b> it draws them from the budget. "Opens live sessions"
+    /// is detected the same way the CLI detects it — the fixture reads an endpoint URL variable
+    /// (<c>NR_ENGINE_URL</c>, <c>NR_EDITOR_URL</c>), which is exactly what turns a frozen fixture into a
+    /// live one.
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable in both directions</b> (both verified by mutation):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// Delete the <c>LiveLoadBudget.Reserve</c> call from any live fixture — the sessions it opens stop
+    /// counting against the site's budget, which is precisely how 2 + 1 = 3 got onto newrecruit.eu — and
+    /// this goes red naming that fixture.
+    /// </description></item>
+    /// <item><description>
+    /// Reserve from the budget in a fixture that reads no endpoint variable (throttling a lane nobody
+    /// else pays for — the mirror-image mistake the old test was guarding) and this goes red too.
+    /// </description></item>
+    /// <item><description>
+    /// Change <c>LiveNrRosterFixture</c>'s pool argument to <c>LoadTarget.Local</c> — the change that
+    /// "restores" it to the frozen lane's measured pool of 4, i.e. the exact regression of #314/edf3b4a
+    /// — and the first assertion goes red.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// This file is excluded from the scan: it necessarily contains every string it searches for.
     /// </para>
     /// </remarks>
     [Fact]
-    public void LiveFixture_DeclaresThirdPartyLive_SoTheLoadLimitApplies()
+    public void EveryLiveFixture_DrawsItsSessionsFromTheThirdPartyLoadBudget()
     {
         var infrastructure = Path.Combine(RepoRoot, "tests", "Infrastructure");
-        var liveFixture = Path.Combine(infrastructure, "LiveNrRosterFixture.cs");
 
         // The live NR conformance pool — the 363-spec lane that drives newrecruit.eu — must ask the
         // policy for the third-party load limit, by name, with the engine it shares with `nr-frozen`.
         Assert.Contains(
             "PoolSizeFor(\"newrecruit\", LoadTarget.ThirdPartyLive)",
-            File.ReadAllText(liveFixture),
+            File.ReadAllText(Path.Combine(infrastructure, "LiveNrRosterFixture.cs")),
             StringComparison.Ordinal);
 
-        // ...and nothing else may claim it. A local lane that declares ThirdPartyLive would be silently
-        // throttled to 2 (a 2x CI regression on a suite that costs nobody but us) while looking, in the
-        // diff, like a safety improvement.
-        var declaring = Directory
+        // An endpoint URL variable is what makes a fixture live — the same fact the CLI derives its
+        // LoadTarget from (EngineEndpoint.FromUrlVariable). A fixture that reads one opens sessions on
+        // somebody else's server; a fixture that does not, cannot.
+        string[] endpointVariables = ["NR_ENGINE_URL", "NR_EDITOR_URL"];
+
+        var offenders = new List<string>();
+
+        foreach (var file in Directory
             .EnumerateFiles(infrastructure, "*.cs", SearchOption.AllDirectories)
             .Where(f => !Path.GetFileName(f).Equals(
                 $"{nameof(ConcurrencyConfigurationDriftTests)}.cs", StringComparison.Ordinal))
-            .Where(f => File.ReadAllText(f).Contains("LoadTarget.ThirdPartyLive)", StringComparison.Ordinal))
-            .Select(f => Path.GetRelativePath(RepoRoot, f))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+            .Order(StringComparer.Ordinal))
+        {
+            var text = File.ReadAllText(file);
+            var relative = Path.GetRelativePath(RepoRoot, file);
 
-        string[] onlyTheLiveFixture = [Path.GetRelativePath(RepoRoot, liveFixture)];
-        Assert.Equal(onlyTheLiveFixture, declaring);
+            var drivesALiveSite = endpointVariables.Any(
+                v => text.Contains($"GetEnvironmentVariable(\"{v}\")", StringComparison.Ordinal));
+            var budgeted = text.Contains($"{nameof(LiveLoadBudget)}.{nameof(LiveLoadBudget.Reserve)}(", StringComparison.Ordinal);
+
+            if (drivesALiveSite && !budgeted)
+            {
+                offenders.Add(
+                    $"  {relative} opens sessions on a third party's live site (it reads an endpoint URL " +
+                    $"variable) but never reserves them from {nameof(LiveLoadBudget)}.");
+            }
+            else if (budgeted && !drivesALiveSite)
+            {
+                offenders.Add(
+                    $"  {relative} reserves from {nameof(LiveLoadBudget)} but drives no third-party site " +
+                    $"(it reads no endpoint URL variable) — that throttles a lane nobody else pays for.");
+            }
+        }
+
+        if (offenders.Count > 0)
+        {
+            Assert.Fail(
+                $"Live-load budget and live fixtures disagree:\n{string.Join("\n", offenders)}\n\n" +
+                $"ConcurrencyPolicy.ThirdPartyLiveLoadLimit calls itself \"the only thing standing between a " +
+                $"363-spec conformance run and a volunteer-run website\". It can only be that if every fixture " +
+                $"that opens a session there draws it from the one budget: `-p:TestProfile=nr-live` selects BOTH " +
+                $"live NR roster collections, and the pool's 2 contexts plus the sequential fixture's 1 engine " +
+                $"were 3 concurrent sessions on newrecruit.eu — over a limit its own docstring forbids raising " +
+                $"by 1 for a measured speed-up. Reserve the sessions, or stop opening them.");
+        }
     }
 
     /// <summary>

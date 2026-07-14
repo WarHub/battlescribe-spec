@@ -33,7 +33,7 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
     [MemberData(nameof(ConformanceTestBase.AllSpecs), MemberType = typeof(ConformanceTestBase))]
     public void LiveNrUiRosterEngine(string specPath, string specName)
     {
-        Assert.SkipWhen(!_fixture.Available, "NR_ENGINE_URL not set — skipping live NR UI tests");
+        Assert.SkipWhen(!_fixture.Available, _fixture.Unavailable);
         Assert.SkipWhen(!TargetSpecs.Contains(specName), $"Spec '{specName}' not in NR UI target list");
 
         var spec = SpecLoader.Load(specPath);

@@ -31,7 +31,7 @@ public sealed class LiveNrGameDataConformanceTests : GameDataConformanceTestBase
     {
         if (!_fixture.Available)
         {
-            Assert.Skip("NR_EDITOR_URL not set — skipping NR Editor GameData tests");
+            Assert.Skip(_fixture.Unavailable);
             return null;
         }
 

@@ -33,11 +33,28 @@ public sealed class SequentialLiveNrRosterFixture : IAsyncLifetime
     private readonly Lock _gate = new();
     private string? _baseUrl;
     private NewRecruitRosterEngine? _engine;
+    private LiveLoadLease? _lease;
 
     /// <summary>
     /// The live engine, launched on first access. Null only when <see cref="Available"/> is false
     /// (NR_ENGINE_URL unset) — every caller checks that first and skips.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The session is drawn from <see cref="LiveLoadBudget"/>, and it may be refused.</b> This
+    /// fixture's engine is a real visitor on <c>newrecruit.eu</c>, and so are
+    /// <see cref="LiveNrRosterFixture"/>'s pooled contexts — both collections carry
+    /// <c>Engine=LiveNrRoster</c>, so <c>-p:TestProfile=nr-live</c> selects both and xUnit runs them in
+    /// parallel: <b>2 + 1 = 3 concurrent sessions</b> on a volunteer-run site whose limit is 2. That
+    /// went unnoticed because this fixture never asked anyone whether it could have one.
+    /// </para>
+    /// <para>
+    /// It asks now, at the moment it would actually open the browser (which is why the laziness above
+    /// matters twice over: a fixture that never opens a session never spends the budget, so CI's
+    /// conformance lane still gets its full pool of 2). When the budget is spent, the test SKIPS with a
+    /// message naming the holder — rather than quietly becoming the third visitor.
+    /// </para>
+    /// </remarks>
     public NewRecruitRosterEngine? Engine
     {
         get
@@ -50,7 +67,15 @@ public sealed class SequentialLiveNrRosterFixture : IAsyncLifetime
 
             lock (_gate)
             {
-                return _engine ??= CreateEngine(baseUrl);
+                if (_engine is not null)
+                {
+                    return _engine;
+                }
+
+                _lease = LiveLoadBudget.Reserve(nameof(SequentialLiveNrRosterFixture), baseUrl, 1);
+                _lease.EnsureGranted();
+
+                return _engine = CreateEngine(baseUrl);
             }
         }
     }
@@ -74,6 +99,10 @@ public sealed class SequentialLiveNrRosterFixture : IAsyncLifetime
         {
             _engine?.Dispose();
             _engine = null;
+
+            // The session is closed; hand it back to the site's budget.
+            _lease?.Dispose();
+            _lease = null;
         }
 
         _baseUrl = null;

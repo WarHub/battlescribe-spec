@@ -27,8 +27,13 @@ namespace BattleScribeSpec.Tests;
 /// </remarks>
 public sealed class LiveNrRosterFixture : IAsyncLifetime
 {
+    private LiveLoadLease? _lease;
+
     public NewRecruitEnginePool? EnginePool { get; private set; }
     public bool Available => EnginePool is not null;
+
+    /// <summary>Why this fixture opened no pool, when it did not — an unset URL, or an exhausted live budget.</summary>
+    public string Unavailable { get; private set; } = "NR_ENGINE_URL not set";
 
     public async ValueTask InitializeAsync()
     {
@@ -45,8 +50,18 @@ public sealed class LiveNrRosterFixture : IAsyncLifetime
         // ThirdPartyLive: every context in this pool is a real visitor on newrecruit.eu.
         var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit", LoadTarget.ThirdPartyLive);
 
+        // ...and the policy's answer is a ceiling for THIS fixture, not for the process. Whatever other
+        // live fixtures are alive in this test host draw on the same site's budget, so take what is
+        // actually left rather than what we would like — see LiveLoadBudget for the 2 + 1 = 3 this closes.
+        _lease = LiveLoadBudget.Reserve(nameof(LiveNrRosterFixture), baseUrl, concurrency);
+        if (_lease.Sessions == 0)
+        {
+            Unavailable = _lease.Explanation;
+            return;
+        }
+
         using var span = FixtureTelemetry.StartInit(nameof(LiveNrRosterFixture));
-        EnginePool = await NewRecruitEnginePool.CreateLiveAsync(concurrency, baseUrl, headless, visual, slowMo);
+        EnginePool = await NewRecruitEnginePool.CreateLiveAsync(_lease.Sessions, baseUrl, headless, visual, slowMo);
         FixtureTelemetry.SetPoolSize(span, EnginePool.Size);
     }
 
@@ -62,6 +77,10 @@ public sealed class LiveNrRosterFixture : IAsyncLifetime
         }
 
         EnginePool = null;
+
+        // The sessions are closed; give them back before the next fixture asks for them.
+        _lease?.Dispose();
+        _lease = null;
     }
 }
 

@@ -30,8 +30,7 @@ public sealed class LiveNrUiRosterConformanceTests
     [Fact]
     public async Task AllSpecs()
     {
-        Assert.SkipWhen(!_fixture.Available,
-            "NR_ENGINE_URL not set — skipping live NR UI tests");
+        Assert.SkipWhen(!_fixture.Available, _fixture.Unavailable);
 
         var engine = _fixture.Engine!;
         var allSpecs = ConformanceTestBase.AllSpecPaths();
