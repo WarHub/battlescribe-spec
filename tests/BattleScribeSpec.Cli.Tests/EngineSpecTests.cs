@@ -238,19 +238,24 @@ public sealed class EngineSpecTests
         var selection = Live(Resolve("plain-spec-id", "--engine", "newrecruit-ui"));
 
         Assert.Equal(LoadTarget.ThirdPartyLive, selection.LoadTarget);
-        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, selection.EffectivePlan.Workers);
+
+        // The machine's own answer, HELD TO the limit — a ceiling, not a floor. (Asserting the bare
+        // limit here encodes the box the test was written on; see LiveWorkersEntitlement.)
+        Assert.Equal(LiveWorkersEntitlement(selection.Entry.Profile), selection.EffectivePlan.Workers);
+        Assert.True(selection.EffectivePlan.Workers <= ConcurrencyPolicy.ThirdPartyLiveLoadLimit);
 
         // Both axes: the remote host feels requests in flight and cannot see whether we spawned them as
         // processes or as browser contexts.
-        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, selection.EffectivePlan.PoolSize);
+        Assert.True(selection.EffectivePlan.PoolSize <= ConcurrencyPolicy.ThirdPartyLiveLoadLimit);
 
-        // And it is STRICTLY below what this machine would otherwise have been given — on any box with
-        // enough cores for the two numbers to differ (k = 1.0, so ceil(3 × 1.0) = 3 > 2).
-        if (Environment.ProcessorCount >= 3)
+        // And it is STRICTLY below what this machine would otherwise have been given — wherever the two
+        // numbers can differ at all. On a box already under the limit on its own (the 2-vCPU CI runner:
+        // ceil(2 × 1.0) = 2) they coincide, and there is nothing here to prove; the machine-independent
+        // form of this proof is ConcurrencyPolicyTests.Policy_LoadLimit_DoesNotScaleWithCpuCountOrMemory,
+        // which uses synthetic MachineProfiles precisely so the box it runs on cannot silence it.
+        var machineWidth = LocalWorkers(selection.Entry.Profile);
+        if (machineWidth > ConcurrencyPolicy.ThirdPartyLiveLoadLimit)
         {
-            var machineWidth = ConcurrencyPolicy.For(
-                MachineProfile.Current(), selection.Entry.Profile, LoadTarget.Local).Workers;
-
             Assert.True(
                 selection.EffectivePlan.Workers < machineWidth,
                 $"a live run got {selection.EffectivePlan.Workers} workers — the machine's own width is " +
@@ -366,11 +371,12 @@ public sealed class EngineSpecTests
 
         Assert.Equal(childGoesLive ? LoadTarget.ThirdPartyLive : LoadTarget.Local, selection.LoadTarget);
 
-        // ...and the worker count follows it. A live child must be held to the limit; a child that will
-        // replay the frozen HAR must keep the machine's measured width.
+        // ...and the worker count follows it. A live child is held to the limit; a child that will replay
+        // the frozen HAR keeps the machine's measured width. (The live figure is the machine's own answer
+        // HELD TO the limit — a ceiling, not a floor. See LiveWorkersEntitlement.)
         var expectedWorkers = childGoesLive
-            ? ConcurrencyPolicy.ThirdPartyLiveLoadLimit
-            : ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile, LoadTarget.Local).Workers;
+            ? LiveWorkersEntitlement(selection.Entry.Profile)
+            : LocalWorkers(selection.Entry.Profile);
 
         Assert.Equal(expectedWorkers, selection.EffectivePlan.Workers);
     }
@@ -393,8 +399,12 @@ public sealed class EngineSpecTests
     {
         var selection = Resolve("plain-spec-id", "--engine", "exec:./some-third-party-adapter");
 
+        // The fail-safe is the DERIVATION — an undeclared endpoint is treated as live. The worker count
+        // that follows from it is the machine's own answer held to the limit (a ceiling, not a floor:
+        // on a 2-vCPU runner an unmeasured engine is already under it).
         Assert.Equal(LoadTarget.ThirdPartyLive, selection.LoadTarget);
-        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, selection.EffectivePlan.Workers);
+        Assert.Equal(LiveWorkersEntitlement(selection.Entry.Profile), selection.EffectivePlan.Workers);
+        Assert.True(selection.EffectivePlan.Workers <= ConcurrencyPolicy.ThirdPartyLiveLoadLimit);
     }
 
     /// <summary>
@@ -428,11 +438,12 @@ public sealed class EngineSpecTests
         Assert.Equal(LoadTarget.Local, reference.LoadTarget);
 
         // ...and it keeps the machine's measured width rather than a stranger's courtesy limit.
-        Assert.Equal(
-            ConcurrencyPolicy.For(MachineProfile.Current(), reference.Entry.Profile, LoadTarget.Local).Workers,
-            reference.EffectivePlan.Workers);
+        Assert.Equal(LocalWorkers(reference.Entry.Profile), reference.EffectivePlan.Workers);
 
-        if (Environment.ProcessorCount >= 3)
+        // The teeth, wherever the two numbers can differ at all. On the 2-vCPU CI runner the machine's
+        // own answer for this engine is 2, which IS the limit — the throttle was invisible there, and
+        // that is precisely why it survived: the misclassification cost CI nothing it could measure.
+        if (LocalWorkers(reference.Entry.Profile) > ConcurrencyPolicy.ThirdPartyLiveLoadLimit)
         {
             Assert.True(
                 reference.EffectivePlan.Workers > ConcurrencyPolicy.ThirdPartyLiveLoadLimit,
@@ -481,12 +492,30 @@ public sealed class EngineSpecTests
 
         // An override that says nothing about workers must not resurrect the machine-width count through
         // the base plan it edits: `--policy reuse-roster=on` is not a request for 12 browsers.
+        //
+        // THIS IS THE ASSERTION THAT WENT RED THE FIRST TIME CI EVER RAN THIS PROJECT (#317 I5). It read
+        // `Assert.Equal(ThirdPartyLiveLoadLimit, …Workers)` and the runner said "expected 2, actual 1" —
+        // because the runner has 2 logical processors, `ceil(2 × 0.375) = 1`, and this engine is already
+        // under the limit on its own. The CODE was right. The test had turned a ceiling into a floor.
         var reuseOnly = RunCommand.ApplyPolicyOverride(live, "reuse-roster=on", _ => { });
-        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, reuseOnly.EffectivePlan.Workers);
 
-        // The backstop: even a plan handed in directly cannot exceed the limit.
+        Assert.True(reuseOnly.EffectivePlan.ReuseRoster, "the flag the user actually passed was dropped");
+        Assert.Equal(LiveWorkersEntitlement(live.Entry.Profile), reuseOnly.EffectivePlan.Workers);
+
+        var machineWidth = LocalWorkers(live.Entry.Profile);
+        if (machineWidth > ConcurrencyPolicy.ThirdPartyLiveLoadLimit)
+        {
+            Assert.True(
+                reuseOnly.EffectivePlan.Workers < machineWidth,
+                $"`--policy reuse-roster=on` — which says nothing about workers — resurrected the " +
+                $"machine-width count ({machineWidth}) through the base plan it edits");
+        }
+
+        // The backstop: even a plan handed in directly cannot exceed the limit. Machine-independent —
+        // 32 is above the limit on every box.
         var forced = live with { PlanOverride = new ConcurrencyPlan(32, 32, ReuseRoster: false, ReuseGameData: false) };
         Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, forced.EffectivePlan.Workers);
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, forced.EffectivePlan.PoolSize);
     }
 
     /// <summary>A frozen engine's <c>--policy workers=N</c> is untouched — the limit binds live runs only.</summary>
@@ -499,6 +528,34 @@ public sealed class EngineSpecTests
 
         Assert.Equal(32, overridden.EffectivePlan.Workers);
     }
+
+    /// <summary>
+    /// <b>The worker count a live run is entitled to on THIS machine: the machine's own answer, held to
+    /// <see cref="ConcurrencyPolicy.ThirdPartyLiveLoadLimit"/>.</b> A ceiling, not a target.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Asserting the bare limit is a machine-dependent test, and it went red the first time CI ever
+    /// ran this project.</b> On the GitHub runner — which reports <b>2</b> logical processors, not the
+    /// 4 this repo's docs assume — <c>newrecruit</c>'s own answer is <c>ceil(2 × 0.375) = 1</c>, already
+    /// <em>below</em> the limit of 2. So <c>Assert.Equal(ThirdPartyLiveLoadLimit, …Workers)</c> read
+    /// "expected 2, actual 1" — and the code was right: the load limit is a **ceiling**. A test that
+    /// demands a run be *exactly* as parallel as the limit permits has quietly turned a ceiling into a
+    /// floor, and would fail any box small enough to be under it on its own.
+    /// </para>
+    /// <para>
+    /// This is exactly what #317's I5 was about: these tests had never been executed by CI, so every one
+    /// of them encodes the 32-core box they were written on.
+    /// </para>
+    /// </remarks>
+    private static int LiveWorkersEntitlement(EngineProfile profile) =>
+        Math.Min(
+            ConcurrencyPolicy.For(MachineProfile.Current(), profile, LoadTarget.Local).Workers,
+            ConcurrencyPolicy.ThirdPartyLiveLoadLimit);
+
+    /// <summary>The machine's unclamped answer for this engine — what a live run must NOT be given.</summary>
+    private static int LocalWorkers(EngineProfile profile) =>
+        ConcurrencyPolicy.For(MachineProfile.Current(), profile, LoadTarget.Local).Workers;
 
     /// <summary>Point the selection's children at the live site (as <c>NR_ENGINE_URL</c> in the shell would).</summary>
     private static EngineSelection Live(EngineSelection selection) => selection with

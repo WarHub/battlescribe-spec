@@ -67,6 +67,20 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
       - name: Build
         run: dotnet build
+      # WHAT MACHINE IS THIS, ACTUALLY? Every constant in docs/concurrency-policy-measurements.md is
+      # machine-relative (`ceil(cpuCount × k)`, `maxParallelThreads: "0.5x"`), the doc calls this the
+      # "4-vCPU / 16 GiB CI runner" throughout — and nobody had ever checked. The first CI run of the
+      # CLI test project reported a worker count that is only consistent with cpuCount = 2. Print it,
+      # so the next person tuning against "the CI runner" is reading a measurement and not a memory.
+      - name: Runner profile (the machine every constant here is relative to)
+        run: |
+          echo "nproc:    $(nproc)"
+          echo "MemTotal: $(awk '/MemTotal/ {printf "%.1f GiB", $2/1048576}' /proc/meminfo)"
+          echo ""
+          echo "ConcurrencyPolicy reads Environment.ProcessorCount and GC.GetGCMemoryInfo()."
+          echo "The 'Reference adapter' step below prints 'Workers: N' for a Local, k=1.0, unmeasured"
+          echo "engine — i.e. N == min(ProcessorCount, UndeclaredMemoryWorkerCap=8). That is the number"
+          echo "the policy actually saw."
       # Style rules are enforced during the build (EnforceCodeStyleInBuild); this only needs
       # to add the whitespace/formatting check, which is much faster than a full format run.
       - name: Verify formatting (whitespace)
@@ -97,13 +111,17 @@ jobs:
       # the step was failing on every run of this job. The worker count is ConcurrencyPolicy's to
       # choose anyway — that is the whole point of the model.
       #
-      # It picks min(cpuCount, UndeclaredMemoryWorkerCap) = 4 on this 4-vCPU runner — but only since
-      # the endpoint fix: this connectable claims the name `battlescribe`, and a launchable name used
-      # to be looked up in engines.json ALONE (a file this repo does not have), so it resolved to an
-      # UNDECLARED endpoint and the fail-safe called an in-process IKVM engine "third-party live
-      # service — held to 2 concurrent sessions", in CI, on every run. A launchable that claims a
-      # built-in's name now inherits that engine's declaration (EngineRegistry.Resolve), so this step
-      # is correctly Local, and runs at 4.
+      # It picks min(cpuCount, UndeclaredMemoryWorkerCap=8) — see the "Runner profile" step for what
+      # cpuCount actually is here; the previous version of this comment asserted 4 without checking.
+      #
+      # And it is LOCAL now, which it was not. This connectable claims the name `battlescribe`, and a
+      # launchable name used to be looked up in engines.json ALONE (a file this repo does not have), so
+      # it resolved to an UNDECLARED endpoint and the fail-safe announced an in-process IKVM engine with
+      # no network code as "third-party live service — held to 2 concurrent sessions", in CI, on every
+      # run. A launchable that claims a built-in's name now inherits that engine's declaration
+      # (EngineRegistry.Resolve). Note the throttle was INVISIBLE on this runner — a 2-vCPU box is
+      # already at the load limit on its own — which is exactly how it survived: it cost CI nothing it
+      # could measure, and would have halved any larger runner.
       - name: Reference adapter (dotnet) — roster kitchen-sink
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
