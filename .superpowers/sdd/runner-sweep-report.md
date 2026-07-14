@@ -185,3 +185,37 @@ No level is unusable. The pool was proven live at every point (fixture-reported 
   party's website.
 - Above pool 24 on the runner — the right-hand bracket is a plateau, not a measured cliff.
 - One workload, one spec set.
+
+---
+
+## 8. CI payoff — run [29332238785](https://github.com/WarHub/battlescribe-spec/actions/runs/29332238785), all 8 jobs green
+
+**Read this with one caveat up front: my change moves NO constant, so its contribution to CI
+wall-clock is exactly zero.** The deltas below against the *previous* branch run are the live-lane fix
+(`4db354c`/`c411e2f`, another agent's work, which deliberately returns the live pool 4 → 2 as a
+courtesy limit to newrecruit.eu) plus runner noise. The comparison that matters is **against `main`**.
+
+| job | `main` baseline | branch (before this work) | **now** | vs `main` |
+|---|--:|--:|--:|--:|
+| `nr-conformance` | 10.15 min | 8.27 min | **10.00 min** | −1.5% |
+| **`thorough-conformance`** | 11.75 min | 12.02 min | **10.62 min** | **−9.6%** ✅ |
+| `thorough-ui-bs` (0 / 1) | 8.03 / 6.87 min | 7.68 / 7.10 min | **7.47 / 7.00 min** | −7.0% / +1.9% |
+| `checks` / `smoke` | 4.63 / 5.38 min | 4.27 / 5.18 min | 4.35 / 5.07 min | −6.0% / −5.8% |
+
+**Step times — the only steps the context pool can move:**
+
+| step (lane) | pool | `main` | **now** | Δ |
+|---|--:|--:|--:|--:|
+| Full frozen NR Editor GameData UI (`nr-editor-ui-frozen`) | **16** | 101 s | **75 s** | **−26%** |
+| Full frozen NR roster (`nr-frozen`) | **4** | 53 s | **49 s** | −8% |
+
+**`thorough-conformance` — the lane these two constants govern — is now −9.6% against `main`**, where
+the previous branch run measured +2.3% (parity). Nothing in the constants changed between those two
+runs. That swing *is* the runner-CPU noise this whole report is about: a single CI sample of these
+steps carries the same ±17–27% hardware spread that made the cold matrix unusable. The blocked sweep
+(§10.2/§10.3) is the reliable estimate of these lanes' behaviour; a single CI run is not.
+
+⚠️ **`nr-conformance` gave back its −18.5%, on purpose and not by my hand.** That win came from the
+live lane's pool going 2 → 4 — which the live-lane fix has since identified as unearned traffic to a
+third party's production website and returned to 2. Correct call; the lane is back at `main` parity
+(−1.5%). Not a regression in this work, and not mine to re-take.
