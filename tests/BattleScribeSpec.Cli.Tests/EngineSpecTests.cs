@@ -531,9 +531,9 @@ public sealed class EngineSpecTests
 
         // What the declaration does NOT do: hand over a measured profile. It says where the traffic lands,
         // and nothing else — an undeclared footprint still binds ConcurrencyPolicy's conservative cap for
-        // engines nobody has measured, whatever the endpoint says.
+        // engines nobody has measured, whatever the endpoint says. The two arms differ ONLY in endpoint.
         Assert.Equal(0L, declared.Entry.Profile.MemPerInstanceBytes);
-        Assert.Equal(DefaultProfileOf(undeclared), declared.Entry.Profile);
+        Assert.Equal(undeclared.Entry.Profile, declared.Entry.Profile);
 
         // And a built-in refuses the flag: its endpoints are measured facts, per domain, and one word on a
         // command line may not turn the live fail-safe off.
@@ -544,9 +544,6 @@ public sealed class EngineSpecTests
 
     private static EngineEntry Builtin(string name) =>
         EngineRegistry.Load(null).Resolve(EngineConnectable.Parse(name));
-
-    /// <summary>The profile an adapter nobody declared gets — the conservative default, whatever it is called.</summary>
-    private static EngineProfile DefaultProfileOf(EngineSelection undeclaredAdapter) => undeclaredAdapter.Entry.Profile;
 
     /// <summary>
     /// A <c>--policy</c> override may lower the load on a third party's site; it may not raise it — and it
