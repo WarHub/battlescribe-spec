@@ -1317,6 +1317,20 @@ strictly better on the real runner than both values it replaces (the mirrored 4 
 The fix is the thing this document has now said three times — **sweep the context axis on the runner
 itself**, which the `harness.pool.size` telemetry has just been shown to support there.
 
+> 🛑 **The hypothesis in the paragraph above is WRONG, and §10 is the sweep that proves it.** It is left
+> standing rather than rewritten, because the *refusal to act on it* was the right call and the record of
+> why should survive. The sweep it demanded has now run **on the runner**: **pool 8 is 5.6% SLOWER than
+> 16 and pool 12 is 3.8% slower** — nothing at or below 12 beats 16, and the true runner optimum is a
+> **plateau at 16–20–24**. The constants do not move.
+>
+> The *mechanism* guessed at here is real (per-context init is ≈0.32 s and serial — §10.4), it is simply
+> far too small to move this optimum: the execution gain from 4 → 16 contexts is −24%, against +4 s of
+> init. The reason CI saw −6% instead of −33% is that **the runner is ~2.7× slower than the WSL container
+> that modelled it** (92.4 s vs 34.2 s at pool 16), which makes this workload more CPU-bound and
+> oversubscription worth less: the real 6 → 16 gain there is ≈10%, and −6% was one noisy sample of it.
+> **The model box got the optimum right and the speed wrong** — and only the optimum is what the constant
+> encodes. See §10.
+
 ## 8.9 What §8 did NOT reach
 
 - **Verdict-safety was inherited, not re-run.** §7.6 diffed every pool size 1–64 against the serial
@@ -1434,3 +1448,209 @@ Two things make the 2 load-bearing rather than decorative:
   #318 stays open. What §9 *does* give #318 is the thing it was missing: `nr-conformance` now uploads
   its telemetry (`if: always()`), so the next crash on that lane leaves a trace behind. It was the only
   lane in `ci.yml` without that step.
+
+---
+
+# 10. The context axis, fitted ON A REAL GITHUB RUNNER
+
+**Status: measured, on the hardware CI actually runs.** §7 fitted this axis on a 32-core dev box and
+in a 4-CPU/16 GiB WSL container built to model the runner. §8.8 then looked at one CI sample, found
+`nr-editor-ui-frozen` had improved only **−6%** where §7 predicted −33%, and wrote down a hypothesis:
+
+> *"pool construction is serial and per-context init is dearer on a real GitHub runner than on the WSL
+> VM, so the true runner optimum is plausibly below 16 (8–12), and the model box was not the runner
+> after all."*
+
+It then — correctly — refused to act on it. **§10 tested it. The hypothesis is REFUTED.**
+
+**On the runner, pool 8 is 5.6% SLOWER than 16, and pool 12 is 3.8% slower** — both distinguishable
+from 16 with 95% confidence, both losing in 5–6 of 6 paired blocks. Nothing at or below 12 beats 16.
+**The constants do not move. `newrecruit-ui` stays 16; `newrecruit` stays 4.** The WSL container
+modelled the runner well enough, and that is a result worth writing down.
+
+The *mechanism* in the hypothesis was real — per-context init **is** dearer on the runner (§10.4) — but
+it is nowhere near large enough to drag the optimum below 16. The step from "init is dearer" to "the
+optimum must be 8–12" was the part that skipped the measurement.
+
+## 10.1 Why the obvious design failed, and what replaced it
+
+The brief's design — a workflow matrix over `pool × repetition`, one job per level, ≥3 reps — was run
+first: **39 jobs, all green, verdicts identical everywhere.** It cannot rank the levels, and the reason
+is worth recording because it will bite the next person.
+
+**GitHub hands out CPU models at random.** Across those 39 jobs the fleet served **AMD EPYC 7763, EPYC
+9V45, EPYC 9V74, Intel Xeon Platinum 8573C and Xeon 6973P-C**, and they are not the same speed. The
+within-level spread came out at **17–27%** — as large as *every* between-level difference in the sweep.
+Pool 24 happened to draw three 7763s (the slowest of them); pool 4 drew none. Averaging that away needs
+far more repetitions than blocking it away needs jobs.
+
+**The fix is a blocked design: one job = one runner = one BLOCK containing every level.** Runner speed
+then becomes a per-block constant and cancels exactly whenever levels are compared *within* a block.
+Each block runs a discarded warm-up first (so no level pays the block's cold-cache cost), then every
+level, with browser/`testhost` survivors reaped and **verified zero** before each point.
+
+| design | jobs | within-level spread | can it rank the levels? |
+|---|--:|--:|---|
+| cold matrix (pool × rep, one level per job) | 39 | **17–27%** | **no** — swamped by runner CPU |
+| blocked (every level on one runner) | 12 | **2–9%** | yes |
+| blocked + clean Latin square (tie-break) | 6 | residual sd **2.3%** | yes, and position-balanced |
+
+The cold matrix is not wasted: each of its timed runs is the *first* run in a fresh job, which is
+exactly how CI pays for the step, so it supplies the honest absolute numbers and the verdict-safety
+sample. It simply cannot be used to rank levels.
+
+### The design defect in the first blocked run — owned, not buried
+
+Its ordering was "rotate the level list by the block index, and reverse it on even blocks". Over an
+**even** number of levels that **preserves position parity**: every level landed in odd slots only, or
+in even slots only (verified from the recorded positions). Since later slots run ~1–3% faster
+(page-cache warmth), the one comparison that straddles the two classes — **16 (even slots) vs 20 (odd
+slots)** — was confounded with warmth, and two ways of reading the same data disagreed about it by
+exactly the size of that confound.
+
+It did **not** touch the finding that matters: *within each parity class independently*, every level at
+or below 12 loses to the 16/20 region. But the 16-vs-20 tie needed its own run, so it got one. **Five
+levels — an ODD count — with rotation only is a proper cyclic Latin square**: every level visits every
+position, and the warmth trend cancels exactly. Confirmed from the data: position effects in the
+tie-break are ≤1.5%, and the model-based and raw paired readings now agree.
+
+## 10.2 `newrecruit-ui` (`nr-editor-ui-frozen`) — the answer
+
+**Tie-break: 6 blocks, clean Latin square, 112 specs.** The quantity is the **`dotnet test` invocation
+wall** (a stopwatch around the invocation), never job wall-clock — §8.8 was right that a ~6 s delta
+inside a ~12 min job is unmeasurable. Effects below have block (runner) and position (warmth) removed
+by an additive fit; the raw paired counts are given beside them so nothing rests on the model alone.
+
+| pool | median wall | vs 16 (block+position removed) | 95% CI | faster than 16 in |
+|--:|--:|--:|--:|--:|
+| 8 | 97.9 s | **+5.6%** | [+3.1, +8.2] | 1 of 6 blocks |
+| 12 | 96.0 s | **+3.8%** | [+1.2, +6.4] | **0 of 6 blocks** |
+| **16** | **92.4 s** | — *(reference)* | — | — |
+| 20 | 91.2 s | −0.8% | [−3.4, +1.8] | 5 of 6 blocks |
+| 24 | 93.5 s | +0.7% | [−1.9, +3.3] | 2 of 6 blocks |
+
+**The bottom of the curve is a PLATEAU (16–20–24), not a point.** Those three are statistically
+indistinguishable from one another. 8 and 12 are distinguishable — and they are **worse**.
+
+**The null result, stated plainly: 20 is nominally 0.8–1.0% faster than 16, and that is inside the
+noise (its CI includes zero). It is not crowned.** 16 stays. It is already the measured optimum on two
+other hardware classes, it sits in the flat bottom of the runner's curve, and nudging a cross-machine
+constant to chase 1% on one machine is precisely the habit this branch exists to end.
+
+Bracketing, honestly: 16 is bracketed **below** by 12 (+3.8%) and 8 (+5.6%) — measurably worse, two
+levels deep. **Above**, it is bracketed by a plateau rather than a cliff: 24 is +0.7% here, and +2.3%
+in the first blocked run's (internally clean) even-parity class. §7 already showed 32/48/64 degrading
+hard on both other boxes. **A minimum sitting in a flat basin is a real finding, not a failure to find
+a knee** — and it is the reason the exact value in 16–24 matters so little.
+
+The wider first blocked run (levels 4–24, 6 blocks) puts the small pools where they belong:
+
+| pool | 4 | 6 | 8 | 10 | 12 | 16 | 20 | 24 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| vs 16 (fit) | +16.4% | +10.7% | +3.8% | +5.2% | +1.2% | — | −3.5% \* | +2.3% |
+
+\* the parity-confounded figure — see §10.1. The clean tie-break puts 20 at **−0.8%**, inside noise.
+
+## 10.3 `newrecruit` (`nr-frozen`) — 4 is confirmed, and the rise past it is real
+
+6 blocks, levels 2–16, 365 specs. A noisier engine than `newrecruit-ui` (residual sd **7.4%** against
+2.3%), so its confidence intervals are correspondingly wide — which is itself the finding.
+
+| pool | median wall | vs 4 (block+position removed) | 95% CI | reading |
+|--:|--:|--:|--:|---|
+| 2 | 48.9 s | −1.5% | [−9.9, +6.9] | within noise of 4 |
+| **4** | **50.5 s** | — *(reference)* | — | **shipped** |
+| 6 | 49.5 s | +2.3% | [−6.1, +10.7] | within noise of 4 |
+| 8 | 51.8 s | −2.2% | [−10.6, +6.2] | within noise of 4 |
+| 12 | 59.0 s | **+19.9%** | [+11.5, +28.3] | **distinguishable — worse** |
+| 16 | 64.7 s | **+23.6%** | [+15.2, +32.0] | **distinguishable — worse** |
+
+**2, 4, 6 and 8 are all within noise of each other; 12 and 16 are far worse.** The shipped **4** sits in
+the middle of the flat region with two levels of margin before the rise. It stays.
+
+A raw paired read of the same data appeared to favour 2 by 3.4% (it "won" 6 of 6 blocks) — that was the
+position-parity confound of §10.1, and the position-balanced fit dissolves it to −1.5% ± 8.4%, a tie.
+Recorded because it is exactly the sort of 3% "win" that a careless sweep would have shipped.
+
+## 10.4 The mechanism — per-context init, measured on the runner
+
+The `dotnet test` wall decomposes cleanly here, because each suite is a single `[Fact]`: the TRX gives
+the `[Fact]` duration (the `Parallel.ForEachAsync` execution alone), and **invocation − `[Fact]`** is
+test-host startup plus the fixture's **serial** pool construction. Both were recorded at every point,
+so the hypothesis under test is measured rather than inferred.
+
+| | `newrecruit-ui` | `newrecruit` |
+|---|---|---|
+| init at the smallest pool swept | 13.5 s (pool 4) | 14.0 s (pool 2) |
+| init at the largest pool swept | 19.9 s (pool 24) | 31.6 s (pool 16) |
+| **per-context construction cost** | **≈0.32 s** | **≈1.26 s** |
+| `[Fact]` wall, small pool → optimum | 98.7 s → 75.3 s (4 → 16) | 34.9 s → 29.6 s (2 → 8) |
+| `[Fact]` wall past the optimum | 74.9 s at 20 **and** 24 — **floors** | 33.1 s at 16 — **degrades** |
+
+**§8.8's hypothesis was half right, and the half it got right is not the half it acted on.** Per-context
+init *is* real, *is* serial and *is* linear in pool size — and a `newrecruit` context is **4× dearer to
+build** than a `newrecruit-ui` one (1.26 s vs 0.32 s: the roster engine installs HAR route interception
+and waits for Pinia on a real SPA, while the editor engine loads static files). That difference is
+precisely *why* `newrecruit` wants 4 contexts and `newrecruit-ui` wants 16 — §7's conclusion, now
+confirmed on the machine that pays for it.
+
+But for `newrecruit-ui` the execution gain up to 16 (98.7 s → 75.3 s, **−24%**) dwarfs the init it buys
+(13.5 s → 17.5 s, **+4 s**). Init does not drag that optimum below 16. Only past ~20, where the `[Fact]`
+wall floors at ~75 s, does the ≈0.32 s/context stop paying for itself — which is why the curve turns
+flat rather than falling further.
+
+### So why did CI see −6% where §7 predicted −33%?
+
+Because **the runner is ~2.7× slower than the container that modelled it** — pool 16 measures **92.4 s**
+here against **34.2 s** in the WSL container, on the same 112 specs — and on slower cores this workload
+is *less* latency-bound and *more* CPU-bound, so oversubscription buys less. The real 6 → 16 gain on the
+runner is **≈10–11%** (104.5 s → 92.9 s in the wide blocked run), not 33%. The observed −6% was one noisy
+sample of a genuine ~10% effect, not the signature of a wrong constant.
+
+**The WSL container reproduced the runner's optimum correctly and its speed badly.** Only the optimum is
+what the constant encodes — which is why "model the runner with a container" turned out to be a sound
+method even though its wall-clock predictions were not transferable. That distinction is the lesson.
+
+## 10.5 Verdict safety on the runner — PASSED, with one flake reported in full
+
+Every pool level, in every run, on the real runner:
+
+| engine | levels swept on the runner | timed runs | verdicts |
+|---|---|--:|---|
+| `newrecruit` | 2, 4, 6, 8, 12, 16 | 51 | **363 passed / 2 skipped / 0 failed — identical at every level** |
+| `newrecruit-ui` | 4, 6, 8, 10, 12, 16, 20, 24 | 102 | **112 passed / 1 skipped / 0 failed — identical at every level** |
+
+The pool was **proven live at every single point**, two independent ways: the fixture's own reported
+size (`Pool size: N contexts`, read back from the constructed pool) and the harness's OTel telemetry
+(peak `harness.resource.count` for `browser-context` = N). A point whose lever was not connected
+**aborted rather than reporting** — an unforced sweep is not data.
+
+**One divergence in 153 runs, and it is not a conformance divergence:**
+
+- **Spec `constraint/constraint-create-and-fields`** — `newrecruit-ui`, first blocked run, block 3,
+  **pool 6**, last position in its block.
+- **`Setup error: Navigation to editor failed: Timeout 30000ms exceeded`** — a Playwright page load that
+  did not finish in 30 s. The spec's assertions never ran. **No spec produced a different answer.**
+- **It is not pool-dependent.** It landed at **pool 6**, a *low*-contention level, while pools 20 and 24
+  were clean in every block, and pool 6 was clean in the other five blocks. A contention effect appears
+  at the top of the range, not the bottom.
+- Rate: **1 in 153** runs (≈0.7%). Excluded from the timing curves (a 30 s timeout sits inside its wall)
+  and reported here rather than averaged away.
+
+**No conformance verdict changed at any pool level on the runner.** §7.6's result — pools 1–64, both
+engines, both other hardware classes, zero divergent specs — now holds on the runner as well.
+
+## 10.6 What §10 did NOT reach
+
+- **`nr-ui-frozen` and `nr-editor-frozen` — still not swept**, on any hardware. They run the same xUnit
+  path and are presumably subject to the same effect. Nobody has measured them.
+- **The live lanes were deliberately not touched.** A concurrency sweep is not a thing to point at a
+  third party's website, and after §9 the live lane's pool is `LoadTarget`'s business, not this axis's.
+- **Above 24 was not swept on the runner.** The right-hand bracket here is a plateau (16–24); the
+  32/48/64 degradation is dev-box and container evidence, not runner evidence.
+- **One workload, one spec set.** As §7 said: the optimum is a property of the workload's duration
+  profile as much as of the engine's.
+- **The scaffolding is gone.** The sweep ran on a scratch branch (`perf/context-axis-ci-sweep`) whose
+  workflow forced the pool by patching the constant before the build (cold matrix) or by a temporary
+  env-var override read (blocked runs, so one build could serve every level). Both were deleted with the
+  branch. The retired-knob lint gate is green, and nothing in this section is reachable from `main`.
