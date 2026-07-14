@@ -197,7 +197,7 @@ public sealed class EngineSpecTests
         // ...but an override the USER explicitly asked for must never be silently ignored.
         var selection = Resolve("plain-spec-id", "--engine", "wham=dotnet:adapter.dll") with
         {
-            PlanOverride = new ConcurrencyPlan(2, 2, 2, ReuseRoster: true, ReuseGameData: true),
+            PlanOverride = new ConcurrencyPlan(2, 2, ReuseRoster: true, ReuseGameData: true),
         };
 
         Assert.Throws<InvalidOperationException>(selection.ResolveLaunch);

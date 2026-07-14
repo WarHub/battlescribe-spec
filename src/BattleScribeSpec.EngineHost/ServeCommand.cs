@@ -33,7 +33,7 @@ internal static class ServeCommand
     /// </para>
     /// </summary>
     private static readonly ConcurrencyPlan NoPolicyPlan =
-        new(Workers: 1, PoolSize: 1, MaxParallelThreads: 1, ReuseRoster: false, ReuseGameData: false);
+        new(Workers: 1, PoolSize: 1, ReuseRoster: false, ReuseGameData: false);
 
     public static Command Create()
     {

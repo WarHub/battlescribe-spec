@@ -39,27 +39,28 @@ public static class ConcurrencyPolicy
     /// and did not write.
     /// </para>
     /// <para>
-    /// <c>tests/xunit.runner.json</c> and <c>tests/BattleScribeSpec.Cli.Tests/xunit.runner.json</c>
-    /// hardcode <c>maxParallelThreads: 8</c> to this same number (Task 7), mechanically pinned by
-    /// <c>ConcurrencyConfigurationDriftTests</c>. That file is static JSON read by the xUnit runner
-    /// before any of our code runs, so it cannot call this policy at runtime — the literal is a
-    /// deliberate, honest stand-in for it, not a coincidence. Note it governs the <em>test suite's
-    /// own</em> xUnit thread count, which is a different quantity from an engine's worker count;
-    /// they share a value, not a meaning.
+    /// <b>This is an engine worker cap, and nothing else.</b> It used to be borrowed as the value of
+    /// <c>maxParallelThreads</c> in the two <c>xunit.runner.json</c> files, mechanically pinned to
+    /// it by <c>ConcurrencyConfigurationDriftTests</c> — a coupling between two quantities that share
+    /// no meaning (a memory-safety ceiling for unmeasured engines vs the test runner's own thread
+    /// count), such that raising this cap would silently have re-sized the test host. That link is
+    /// cut: the xUnit value now carries its own constant and its own justification, in
+    /// <c>ConcurrencyConfigurationDriftTests</c>. Raising or lowering this cap no longer touches the
+    /// test runner.
     /// </para>
     /// <para>
-    /// Investigated and rejected as an alternative: xunit.v3's VSTest RunSettings override
-    /// (confirmed live via <c>Xunit.Runner.VisualStudio.RunSettings.Parse</c> — an
+    /// The reason xUnit's thread count cannot simply come from <see cref="For"/>: the runner reads
+    /// that static JSON <em>before any of this code executes</em>. The obvious alternative was
+    /// investigated and rejected — xunit.v3's VSTest RunSettings override (confirmed live via
+    /// <c>Xunit.Runner.VisualStudio.RunSettings.Parse</c>: an
     /// <c>&lt;xUnit&gt;&lt;MaxParallelThreads&gt;</c> element in a <c>.runsettings</c> file, or
-    /// <c>dotnet test -- xUnit.MaxParallelThreads=&lt;value&gt;</c>, both of which this repo's
-    /// <c>xunit.runner.visualstudio</c> adapter genuinely honors). It shares the exact same
-    /// limitation as this JSON file: the RunSettings XML is also read by the runner before this
-    /// process's code executes, so it cannot call <see cref="For"/> either — using it would only
-    /// move the hardcoded <c>8</c> from one static file format to another, at the cost of a second
-    /// static file to keep in sync (this repo's <c>.runsettings</c> files are already spoken for,
-    /// encoding <c>TestCaseFilter</c> per profile). Making the value truly dynamic would need an
-    /// external wrapper script that computes it and writes/overrides the RunSettings before invoking
-    /// the runner — reintroducing the wrapper-script axis this design exists to avoid. Not pursued.
+    /// <c>dotnet test -- xUnit.MaxParallelThreads=&lt;value&gt;</c>, both genuinely honored by this
+    /// repo's adapter) is read by the runner at the same point, so it cannot call <see cref="For"/>
+    /// either. It would only move a static literal from one file format to another, at the cost of a
+    /// second file to keep in sync. Making the value truly dynamic would need an external wrapper
+    /// script that computes it and rewrites the config before invoking the runner — reintroducing the
+    /// wrapper-script axis this design exists to remove. The value therefore stays declarative, and
+    /// uses xUnit's own machine-relative multiplier syntax instead of a hardcoded thread count.
     /// </para>
     /// </remarks>
     internal const int UndeclaredMemoryWorkerCap = 8;
@@ -135,14 +136,19 @@ public static class ConcurrencyPolicy
         var workers = Math.Max(1, Math.Min(byCpu, byMemory));
 
         // An engine that has not declared what one instance costs does not get the whole machine.
-        // MemPerInstanceBytes == 0 means "undeclared", which makes byMemory above int.MaxValue —
-        // i.e. inactive — so without this guard a 32-core box would launch 32 instances of an engine
-        // whose footprint nobody knows, and exhaust memory on a laptop. This is the PERMANENT
-        // conservative default for such engines (two built-ins and every third-party engine that
-        // omits the field are in exactly this position); declaring MemPerInstanceBytes is how an
+        // "Undeclared" is MemPerInstanceBytes <= 0, and the two halves of that condition must agree
+        // with the memory bound above, which is gated on `> 0`. They did not: `== 0` here left a
+        // NEGATIVE value escaping BOTH gates — byMemory became int.MaxValue (no bound) and this cap
+        // did not fire — so a single minus sign in engines.json bought unbounded ceil(cpu × k)
+        // workers of an engine nobody measured, which is the exact failure this cap exists to
+        // prevent. EngineRegistry.Load now rejects a negative value outright; this gate is the
+        // second line of defence, for a profile constructed in code rather than parsed from config.
+        //
+        // Undeclared is the PERMANENT conservative default (two built-ins and every third-party
+        // engine that omits the field are in that position): declaring MemPerInstanceBytes is how an
         // engine opts into full machine-width parallelism, and doing so retires this cap for that
-        // engine automatically — the gate below simply stops firing. See UndeclaredMemoryWorkerCap.
-        if (engine.MemPerInstanceBytes == 0)
+        // engine automatically — the gate simply stops firing. See UndeclaredMemoryWorkerCap.
+        if (engine.MemPerInstanceBytes <= 0)
         {
             workers = Math.Min(workers, Math.Min(machine.CpuCount, UndeclaredMemoryWorkerCap));
         }
@@ -161,7 +167,6 @@ public static class ConcurrencyPolicy
         return new ConcurrencyPlan(
             Workers: workers,
             PoolSize: workers,
-            MaxParallelThreads: workers,
             ReuseRoster: worthReusing && engine.ReuseSafeRoster,
             ReuseGameData: worthReusing && engine.ReuseSafeGameData);
     }

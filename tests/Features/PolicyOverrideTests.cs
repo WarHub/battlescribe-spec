@@ -11,7 +11,7 @@ namespace BattleScribeSpec.Tests.Features;
 public sealed class PolicyOverrideTests
 {
     private static readonly ConcurrencyPlan Base = new(
-        Workers: 2, PoolSize: 2, MaxParallelThreads: 2, ReuseRoster: false, ReuseGameData: false);
+        Workers: 2, PoolSize: 2, ReuseRoster: false, ReuseGameData: false);
 
     [Fact]
     public void NullOrEmpty_ReturnsBasePlanUnchanged()
@@ -21,13 +21,12 @@ public sealed class PolicyOverrideTests
     }
 
     [Fact]
-    public void Workers_OverridesWorkersPoolSizeAndMaxParallelThreads()
+    public void Workers_OverridesWorkersAndPoolSize()
     {
         var plan = PolicyOverride.Apply("workers=5", Base);
 
         Assert.Equal(5, plan.Workers);
         Assert.Equal(5, plan.PoolSize);
-        Assert.Equal(5, plan.MaxParallelThreads);
         // Untouched by this key.
         Assert.Equal(Base.ReuseRoster, plan.ReuseRoster);
         Assert.Equal(Base.ReuseGameData, plan.ReuseGameData);

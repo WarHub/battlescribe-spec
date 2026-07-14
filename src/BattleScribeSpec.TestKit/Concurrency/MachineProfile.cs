@@ -21,9 +21,15 @@ public sealed record MachineProfile(int CpuCount, long AvailableMemoryBytes)
     public static MachineProfile Current()
     {
         var memory = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
-        // Fallback to 4 GiB if GC.GetGCMemoryInfo() returns 0 (which is defensive and essentially never
-        // happens on modern .NET). The only job of this fallback is to keep the policy from computing
-        // a zero or negative worker count; it will never be the governing constraint on a real system.
+        // Fallback to 4 GiB if GC.GetGCMemoryInfo() returns 0 (defensive; essentially never happens on
+        // modern .NET, on any supported OS, and it honors cgroup limits on Linux).
+        //
+        // If it ever DOES fire, it is GOVERNING, not merely a floor: now that MemPerInstanceBytes is
+        // declared, 4 GiB yields floor(4 GiB x 0.8 / 1.55 GB) = 2 workers for newrecruit-ui — i.e. the
+        // memory bound binds hard and the machine looks tiny. That is the safe direction to be wrong
+        // in (too few workers costs wall-clock; too many OOMs the run), but do not read this constant
+        // as inert: an earlier comment here claimed it "will never be the governing constraint on a
+        // real system", which stopped being true the moment the memory bound went live.
         return new MachineProfile(
             CpuCount: Environment.ProcessorCount,
             AvailableMemoryBytes: memory > 0 ? memory : 4L * 1024 * 1024 * 1024);

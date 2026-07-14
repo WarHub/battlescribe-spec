@@ -22,9 +22,11 @@ public sealed class EngineHostLocatorTests
     [Fact]
     public void Builtin_NoOverrides_ComposesPlainServeArgs()
     {
-        // Behavior-identity path: when neither keepAlive nor a plan is given, no --policy flag is
-        // composed at all — the child computes its own default plan (ConcurrencyPolicy.For), same
-        // as if this caller didn't exist yet.
+        // When neither keepAlive nor a plan is given, no --policy flag is composed at all, and the
+        // child falls back to ServeCommand.NoPolicyPlan — a hardcoded, deliberately conservative
+        // (1, 1, no-reuse). The child does NOT compute a policy of its own: the parent decides, the
+        // child is told. In practice the harness always passes --policy, so this path is reached
+        // only by a hand-run `bs-engine-host serve`.
         var fake = Path.Combine(Path.GetTempPath(), "fake-host.dll");
         File.WriteAllText(fake, "");
         var priorValue = Environment.GetEnvironmentVariable("BSSPEC_ENGINE_HOST");
@@ -73,7 +75,7 @@ public sealed class EngineHostLocatorTests
         try
         {
             Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", fake);
-            var plan = new ConcurrencyPlan(Workers: 3, PoolSize: 3, MaxParallelThreads: 3, ReuseRoster: true, ReuseGameData: false);
+            var plan = new ConcurrencyPlan(Workers: 3, PoolSize: 3, ReuseRoster: true, ReuseGameData: false);
 
             // keepAlive: true would (alone) mean "reuse=on" — but an explicit plan is the
             // authoritative decision and must win, including its ReuseGameData=false.
@@ -97,7 +99,7 @@ public sealed class EngineHostLocatorTests
         // policy override must never suffer the same silent drop. There is no channel to convey it
         // to a launchable adapter, so this must fail loudly instead of quietly ignoring the plan.
         var entry = new EngineEntry("wham", "node", "adapters/wham.js", ["roster"], Profile, Builtin: false);
-        var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, MaxParallelThreads: 1, ReuseRoster: false, ReuseGameData: false);
+        var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, ReuseRoster: false, ReuseGameData: false);
 
         var ex = Assert.Throws<InvalidOperationException>(() => EngineHostLocator.Resolve(entry, plan: plan));
         Assert.Contains("wham", ex.Message, StringComparison.Ordinal);

@@ -276,7 +276,6 @@ public sealed class ConcurrencyPolicyTests
 
         Assert.Equal(1, plan.Workers);
         Assert.Equal(1, plan.PoolSize);
-        Assert.Equal(1, plan.MaxParallelThreads);
     }
 
     [Fact]
@@ -316,6 +315,32 @@ public sealed class ConcurrencyPolicyTests
         // (A 12 or a 32 here cannot come from min(cpuCount, 8) by construction; the 2/4/6/8 cases
         // could numerically coincide with it, so assert the mechanism directly.)
         Assert.NotEqual(0L, Builtin(engineName).MemPerInstanceBytes);
+    }
+
+    /// <summary>
+    /// A non-positive <c>MemPerInstanceBytes</c> must be treated as UNDECLARED, i.e. capped — not as
+    /// a licence to take the whole machine.
+    /// </summary>
+    /// <remarks>
+    /// The two guards used to disagree about what "undeclared" meant: the memory bound was gated on
+    /// <c>&gt; 0</c> and the cap on <c>== 0</c>, so a negative slipped between them — no memory bound
+    /// (byMemory became int.MaxValue) and no cap, yielding ceil(cpu × k) workers of an engine nobody
+    /// measured. Falsifiable: restore the gate to <c>== 0</c> and this returns 32 on the dev box
+    /// instead of 8. <c>EngineRegistry</c> now also rejects such a config at load; this is the
+    /// in-code second line of defence, for a profile built in C# rather than parsed from JSON.
+    /// </remarks>
+    [Theory]
+    [InlineData(-1L)]
+    [InlineData(long.MinValue)]
+    public void Policy_NegativeMemPerInstance_IsTreatedAsUndeclared_AndStillCapped(long memPerInstanceBytes)
+    {
+        var hostile = new EngineProfile(
+            MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
+            MemPerInstanceBytes: memPerInstanceBytes, OversubscriptionFactor: 1.0);
+
+        var plan = ConcurrencyPolicy.For(DevBox, hostile);
+
+        Assert.Equal(ConcurrencyPolicy.UndeclaredMemoryWorkerCap, plan.Workers);
     }
 
     [Fact]
