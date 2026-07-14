@@ -14,7 +14,21 @@ public enum ColdStartCost
 /// What an engine declares about itself. The policy derives every number from this plus a
 /// <see cref="MachineProfile"/>; nothing string-matches an engine's name.
 /// </summary>
-/// <param name="MaxParallel">Hard ceiling on concurrent instances — of EITHER axis; 0 = unlimited.</param>
+/// <param name="MaxParallel">
+/// <b>PROCESS AXIS.</b> Hard ceiling on concurrent adapter <em>processes</em>; 0 = unlimited. This is
+/// the quantity the protocol puts on the wire (<c>describe</c> → <c>capabilities.maxParallel</c>,
+/// docs/adapter-guide.md) and the one <c>RunBatch.ClampWorkers</c> applies to the worker count.
+/// <para>
+/// <b>It does NOT bound <see cref="ContextPoolSize"/>, and it used to.</b> The policy clamped the pool
+/// by this number too, justified as "battlescribe-ui runs one JVM, and that is as true of a context
+/// pool as of a worker process" — true of that engine, and a generalization of one engine's
+/// coincidence into a cross-axis rule. The protocol documents this as a ceiling on <em>processes</em>,
+/// so an adapter author writing <c>{"maxParallel": 2, "contextPoolSize": 4}</c> means "don't run more
+/// than 2 of my processes" and would have silently lost half their measured pool. That is
+/// <c>PoolSize: workers</c> again, in the other direction: one number, two axes. The context axis has
+/// its own ceiling now — <see cref="MaxContexts"/>.
+/// </para>
+/// </param>
 /// <param name="ColdStartCost">Whether reuse can pay for itself at all.</param>
 /// <param name="ReuseSafeRoster">May the roster engine be reused across setups without changing verdicts?</param>
 /// <param name="ReuseSafeGameData">May the gamedata engine be reused across setups without changing verdicts?</param>
@@ -65,14 +79,29 @@ public enum ColdStartCost
 /// at the measured optima on any machine we run: pool 16 peaks at ≈6.2 GiB of a 16 GiB runner.
 /// </para>
 /// </param>
+/// <param name="MaxContexts">
+/// <b>CONTEXT AXIS.</b> Hard ceiling on concurrent browser <em>contexts</em> in one in-process pool;
+/// 0 = unlimited. The context axis's own <see cref="MaxParallel"/>, and it exists because that one is
+/// not it: <see cref="MaxParallel"/> is a <em>process</em> ceiling, on the protocol wire, read by
+/// adapter authors from docs/adapter-guide.md, and using it to clamp the pool made a declaration about
+/// one axis silently govern the other.
+/// <para>
+/// Only <c>battlescribe-ui</c> declares it (1): it drives ONE JavaFX desktop app through one Java
+/// agent, so a pool of contexts is meaningless for it — the same fact its <c>MaxParallel: 1</c>
+/// states, but stated separately, because they are separate facts that happen to coincide. Nothing
+/// else needs it: <c>PoolSize</c> is not on the protocol wire, no adapter reads it, and the two
+/// measured pools (4 and 16) are already bounded by <see cref="MemPerContextBytes"/> and the machine.
+/// </para>
+/// </param>
 /// <remarks>
 /// <para>
-/// <b>The two axes are separate facts and must stay separate.</b> <see cref="MemPerInstanceBytes"/> /
-/// <see cref="OversubscriptionFactor"/> size adapter <em>processes</em> on the CLI path
-/// (<c>bs-spec run --all</c>). <see cref="ContextPoolSize"/> / <see cref="MemPerContextBytes"/> size
-/// browser <em>contexts</em> on the xUnit path (<c>dotnet test</c> — what every NewRecruit CI lane
-/// runs). No number is shared between them, deliberately: the whole bug was two quantities wearing
-/// one name.
+/// <b>The two axes are separate facts and must stay separate.</b> <see cref="MaxParallel"/> /
+/// <see cref="MemPerInstanceBytes"/> / <see cref="OversubscriptionFactor"/> size adapter
+/// <em>processes</em> on the CLI path (<c>bs-spec run --all</c>). <see cref="MaxContexts"/> /
+/// <see cref="ContextPoolSize"/> / <see cref="MemPerContextBytes"/> size browser <em>contexts</em> on
+/// the xUnit path (<c>dotnet test</c> — what every NewRecruit CI lane runs). No number is shared
+/// between them, deliberately: the whole bug was two quantities wearing one name. <see cref="MaxParallel"/>
+/// was the last one still shared, and it is not any more.
 /// </para>
 /// <para>
 /// <b><see cref="ReuseSafeRoster"/> and <see cref="ReuseSafeGameData"/> are EARNED, not asserted.</b>
@@ -95,4 +124,5 @@ public sealed record EngineProfile(
     long MemPerInstanceBytes = 0,
     double OversubscriptionFactor = 1.0,
     int ContextPoolSize = 0,
-    long MemPerContextBytes = 0);
+    long MemPerContextBytes = 0,
+    int MaxContexts = 0);

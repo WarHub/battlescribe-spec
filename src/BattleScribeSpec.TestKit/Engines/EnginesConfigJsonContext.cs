@@ -24,8 +24,24 @@ public sealed class EngineConfigEntry
     [JsonPropertyName("domains")]
     public List<string>? Domains { get; set; }
 
+    /// <summary>
+    /// PROCESS axis: hard ceiling on concurrent adapter <b>processes</b>; 0 = unlimited. The same
+    /// quantity the <c>describe</c> handshake advertises as <c>capabilities.maxParallel</c>
+    /// (docs/adapter-guide.md). It does <b>not</b> bound the harness's in-process browser-context pool —
+    /// that is <see cref="MaxContexts"/>, a different axis with a different ceiling.
+    /// </summary>
     [JsonPropertyName("maxParallel")]
     public int MaxParallel { get; set; }
+
+    /// <summary>
+    /// CONTEXT axis: hard ceiling on browser <b>contexts</b> in one in-process pool; 0 = unlimited.
+    /// Declare it only if your engine physically cannot hold more than N contexts at once (the built-in
+    /// <c>battlescribe-ui</c> declares 1: it drives a single desktop app). <see cref="MaxParallel"/> used
+    /// to clamp this axis too, so <c>{"maxParallel": 2, "contextPoolSize": 4}</c> — "don't run more than
+    /// 2 of my processes", exactly what the protocol says that field means — silently halved the pool.
+    /// </summary>
+    [JsonPropertyName("maxContexts")]
+    public int MaxContexts { get; set; }
 
     [JsonPropertyName("coldStartCost")]
     public ColdStartCost ColdStartCost { get; set; } = ColdStartCost.Cheap;

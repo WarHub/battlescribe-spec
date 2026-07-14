@@ -97,17 +97,22 @@ public sealed class EngineRegistry
         // bound can never actually bind here; the number exists so the policy can *prove* that
         // rather than assume it. OversubscriptionFactor is therefore moot and stays at its default.
         //
-        // CONTEXT AXIS: undeclared, and moot for the same reason. This engine has no browser-context
-        // pool at all (it drives one JavaFX desktop app), and MaxParallel: 1 clamps PoolSize to 1 on
-        // every machine regardless of what the undeclared default would otherwise give. Pinned by
-        // Policy_BattlescribeUi_StaysAtOneWorker_OnEveryProfile across four machine profiles.
+        // CONTEXT AXIS: MaxContexts: 1 — this engine has no browser-context pool at all (it drives ONE
+        // JavaFX desktop app through one Java agent), so one context is all there can ever be. It is
+        // declared on the CONTEXT axis, in its own field, and NOT inherited from MaxParallel: 1 — which
+        // is what the policy used to do, generalizing this engine's coincidence (its two ceilings happen
+        // to be the same number) into a cross-axis rule that then silently halved a third-party adapter's
+        // measured pool. Two facts about two axes that agree; not one fact wearing two hats.
+        // ContextPoolSize stays undeclared: MaxContexts already pins it at 1, so there is no number to
+        // measure. Pinned by Policy_BattlescribeUi_StaysAtOneWorker_OnEveryProfile across four machine
+        // profiles.
         //
         // ENDPOINT: this machine, in both domains — a JavaFX desktop app driven over a local Java agent.
         ["battlescribe-ui"] = new(
             "battlescribe-ui", null, null, BothDomains,
             new EngineProfile(
                 MaxParallel: 1, ColdStartCost.Expensive, ReuseSafeRoster: true, ReuseSafeGameData: true,
-                MemPerInstanceBytes: 1_055_391_744L),
+                MemPerInstanceBytes: 1_055_391_744L, MaxContexts: 1),
             Builtin: true,
             RosterEndpoint: EngineEndpoint.OnThisMachine,
             GameDataEndpoint: EngineEndpoint.OnThisMachine),
@@ -319,7 +324,8 @@ public sealed class EngineRegistry
                     entry.MemPerInstanceBytes,
                     entry.OversubscriptionFactor,
                     entry.ContextPoolSize,
-                    entry.MemPerContextBytes),
+                    entry.MemPerContextBytes,
+                    entry.MaxContexts),
                 Builtin: false,
                 RosterEndpoint: endpoint,
                 GameDataEndpoint: endpoint);
@@ -410,7 +416,18 @@ public sealed class EngineRegistry
         {
             throw new InvalidDataException(
                 $"Invalid engines config '{configPath}', entry '{name}': maxParallel must be >= 0 " +
-                $"(got {entry.MaxParallel}). 0 means unlimited.");
+                $"(got {entry.MaxParallel}). 0 means unlimited. It is a ceiling on concurrent adapter " +
+                $"PROCESSES — the same number your describe handshake advertises as capabilities.maxParallel " +
+                $"— and it does not bound the harness's in-process browser-context pool; that is maxContexts.");
+        }
+
+        if (entry.MaxContexts < 0)
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': maxContexts must be >= 0 " +
+                $"(got {entry.MaxContexts}). 0 means unlimited. It is a ceiling on concurrent browser " +
+                $"CONTEXTS in one in-process pool — declare it only if your engine physically cannot hold " +
+                $"more than N at once. It is not maxParallel: that one bounds processes.");
         }
 
         if (entry.ContextPoolSize < 0)

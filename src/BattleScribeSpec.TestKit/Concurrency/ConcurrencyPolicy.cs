@@ -326,11 +326,17 @@ public static class ConcurrencyPolicy
 
         var poolSize = Math.Max(1, Math.Min(declaredPool, poolByMemory));
 
-        // The engine's hard ceiling is a ceiling on EITHER axis: battlescribe-ui runs one JVM, and
-        // that is as true of a context pool as of a worker process.
-        if (engine.MaxParallel > 0)
+        // This axis's OWN hard ceiling. It used to be `engine.MaxParallel` — the PROCESS ceiling, the
+        // one on the protocol wire (docs/adapter-guide.md: "the worker count ... clamped by the
+        // maxParallel your describe response advertises") — justified as "battlescribe-ui runs one JVM,
+        // and that is as true of a context pool as of a worker process". True of THAT engine, and a
+        // generalization of its coincidence into a cross-axis rule. An adapter author writing
+        // {"maxParallel": 2, "contextPoolSize": 4} means "don't run more than 2 of my processes", which
+        // is exactly what the protocol told them it means — and their measured pool of 4 silently became
+        // 2. One number, two axes: `PoolSize: workers` again, pointing the other way.
+        if (engine.MaxContexts > 0)
         {
-            poolSize = Math.Min(poolSize, engine.MaxParallel);
+            poolSize = Math.Min(poolSize, engine.MaxContexts);
         }
 
         // Reuse needs BOTH: correct AND worth it. Reusing a cheap-to-start engine is safe and

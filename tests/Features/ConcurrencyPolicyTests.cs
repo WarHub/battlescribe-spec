@@ -286,12 +286,57 @@ public sealed class ConcurrencyPolicyTests
 
         Assert.Equal(1, plan.Workers);
 
-        // ...and MaxParallel is a ceiling on BOTH axes, so the context pool is 1 too. This engine
-        // declares no ContextPoolSize (it drives a JavaFX desktop app; it has no browser contexts to
-        // pool), so without the MaxParallel clamp on the pool it would take
-        // UndeclaredContextPoolSize = 4 here. Falsifiable: drop that clamp and this reads 4.
+        // ...and the context pool is 1 too — but from MaxContexts: 1, this axis's OWN ceiling, NOT from
+        // MaxParallel. The two numbers agree for this engine (it drives one desktop app, so one process
+        // and one context are the same fact seen twice) and that coincidence is exactly what used to be
+        // generalized into a cross-axis rule. This engine declares no ContextPoolSize, so without a
+        // context-axis ceiling it would take UndeclaredContextPoolSize = 4 here.
+        // Falsifiable: drop the MaxContexts clamp and this reads 4.
         Assert.Equal(1, plan.PoolSize);
         Assert.Equal(0, Builtin("battlescribe-ui").ContextPoolSize);
+        Assert.Equal(1, Builtin("battlescribe-ui").MaxContexts);
+    }
+
+    /// <summary>
+    /// <b>A ceiling on PROCESSES does not bound CONTEXTS.</b> <c>MaxParallel</c> is what the protocol
+    /// puts on the wire and what <c>docs/adapter-guide.md</c> tells adapter authors is "the worker
+    /// count ... clamped by the <c>maxParallel</c> your <c>describe</c> response advertises". It used to
+    /// clamp <see cref="ConcurrencyPlan.PoolSize"/> as well.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The concrete input that broke:</b> an adapter author writes
+    /// <c>{"maxParallel": 2, "contextPoolSize": 4}</c> — meaning "don't run more than 2 of my
+    /// processes", which is precisely what the protocol told them that field means — and their measured
+    /// pool of 4 silently became 2. Same shape as <c>PoolSize: workers</c>, pointing the other way: one
+    /// number, two axes, and the axis that loses is the one nobody was talking about.
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable:</b> restore <c>poolSize = Math.Min(poolSize, engine.MaxParallel)</c> in
+    /// <c>ConcurrencyPolicy.For</c> and the first assertion goes red (4 → 2). Delete the
+    /// <c>MaxContexts</c> clamp instead and the second goes red (2 → 4) — the context axis must still
+    /// HAVE a ceiling, just its own one.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Policy_MaxParallel_BoundsProcessesOnly_TheContextAxisHasItsOwnCeiling()
+    {
+        var machine = new MachineProfile(32, 64L << 30);
+
+        // "Don't run more than 2 of my processes." Says nothing about contexts.
+        var processCeiling = new EngineProfile(
+            MaxParallel: 2, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
+            MemPerInstanceBytes: 1_000_000_000L, ContextPoolSize: 4);
+
+        var plan = ConcurrencyPolicy.For(machine, processCeiling, LoadTarget.Local);
+
+        Assert.Equal(2, plan.Workers);
+        Assert.Equal(4, plan.PoolSize);
+
+        // ...and an engine that DOES mean "no more than 2 contexts" says so, on the context axis.
+        var contextCeiling = processCeiling with { MaxContexts = 2 };
+
+        Assert.Equal(2, ConcurrencyPolicy.For(machine, contextCeiling, LoadTarget.Local).PoolSize);
     }
 
     [Fact]
