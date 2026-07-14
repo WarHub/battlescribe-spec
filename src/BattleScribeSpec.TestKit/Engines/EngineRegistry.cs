@@ -150,6 +150,15 @@ public sealed class EngineRegistry
         // ~40×): six consecutive worsening levels, +77% at pool 32. Verdict-safe at every pool size
         // swept, 1–32 (§7.6).
         //
+        // NOW ALSO FITTED ON A REAL GITHUB RUNNER (§10.3) — the third hardware class, and the one CI
+        // pays for. 6 paired blocks (every level on one runner, so GitHub's random CPU assignment
+        // cancels): pools 2, 4, 6 and 8 are ALL WITHIN NOISE of each other (4 is the reference; 2 is
+        // −1.5% ±8.4%, 8 is −2.2% ±8.4%), and then it rises hard — 12 is +19.9% and 16 is +23.6%,
+        // both distinguishable at 95%. 4 sits mid-plateau, two levels clear of the rise. The runner
+        // agrees with the dev box and the container. Do NOT chase the ~1–3% inside the plateau: a raw
+        // read of this same data made pool 2 look like a 3.4% winner (it "beat" 4 in 6 of 6 blocks),
+        // and that was an artefact of run-order, not a real effect (§10.3).
+        //
         // MemPerContextBytes MEASURED: 225,863,270 B (215.4 MiB) — the least-squares slope across the
         // pool sweep on the 4-CPU Linux container (R²=0.99); the 32-core Windows box measured 213.4
         // MiB, i.e. this constant reproduces across OS and hardware to within 1%, unlike k. Take the
@@ -207,6 +216,25 @@ public sealed class EngineRegistry
         // TWO THINGS THIS 16 REPLACES, BOTH TOO LOW. The policy's mirrored PoolSize gave this lane 4
         // on CI (2.0× slower than optimal), and the hand-set NR_PARALLEL: 6 before it gave 6 (still
         // 50% off). This lane has never once been run near its optimum.
+        //
+        // 16 IS NOW ALSO FITTED ON A REAL GITHUB RUNNER (§10.2) — and this is the constant somebody was
+        // about to LOWER. §8.8 saw the runner deliver only −6% where §7 predicted −33%, reasoned that
+        // per-context init must be dearer there, and wrote that "the true runner optimum is plausibly
+        // 8–12". IT IS NOT. Swept on the runner in 6 paired blocks with a Latin-square run order, so
+        // that neither GitHub's random CPU assignment nor page-cache warmth can leak into the ranking:
+        //
+        //     pool  8 : +5.6% SLOWER than 16   [95% CI +3.1, +8.2]   loses 5 of 6 blocks
+        //     pool 12 : +3.8% SLOWER than 16   [95% CI +1.2, +6.4]   loses 6 of 6 blocks
+        //     pool 16 / 20 / 24 : STATISTICALLY TIED (every CI spans zero) — a flat plateau
+        //
+        // Nothing at or below 12 beats 16. 20 is nominally 0.8% faster and is deliberately NOT crowned:
+        // that is inside the noise, and 16 is already the measured optimum on the dev box and on the
+        // container. The mechanism §8.8 guessed at is REAL but far too small — per-context init is
+        // 0.32 s and serial, so 4 → 16 costs +4 s of init and buys −24% of execution (§10.4). CI saw
+        // −6% instead of −33% because THE RUNNER IS ~2.7× SLOWER than the container that modelled it
+        // (92.4 s vs 34.2 s at pool 16), which makes this workload more CPU-bound and oversubscription
+        // worth less; the genuine 6 → 16 gain there is ~10%. The model box got the optimum right and
+        // the speed wrong — and this constant encodes the optimum.
         //
         // MemPerContextBytes MEASURED: 235,824,742 B (224.9 MiB) — least-squares slope, 4-CPU Linux
         // container (R²=0.98); the 32-core Windows box measured 162.6 MiB. Take the LARGER, i.e. the
