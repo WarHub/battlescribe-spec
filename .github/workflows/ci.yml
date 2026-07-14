@@ -233,7 +233,6 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-          NR_PARALLEL: 6
       - name: Full frozen NR UI roster
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
@@ -246,7 +245,6 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-          NR_PARALLEL: 6
       - name: Upload telemetry
         if: always()
         uses: actions/upload-artifact@v4
@@ -366,7 +364,6 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live-conformance --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-          NR_PARALLEL: 2
       - name: Generate BattleScribe conformance report
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \

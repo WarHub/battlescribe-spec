@@ -6,11 +6,15 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Ensures xunit.runner.json maxParallelThreads values stay in sync with
-/// <see cref="ConcurrencyPolicy.ProvisionalUnmeasuredMemoryCap"/>.
+/// <see cref="ConcurrencyPolicy.UndeclaredMemoryWorkerCap"/>.
 ///
 /// Two static declarations of one bound: the policy constant and the xUnit runner JSON files.
-/// This test mechanically links them, so when Task 9 retires the provisional cap,
-/// the test goes red and forces a deliberate conversation about what the xUnit bound should become.
+/// The JSON is read by the xUnit runner before any of our code runs, so it cannot call the policy;
+/// this test mechanically links them instead, so the literal cannot drift away from the constant
+/// unnoticed. Note the two govern *different quantities* that currently share a value — the JSON
+/// bounds the test suite's own xUnit thread count, the constant bounds an engine's worker count —
+/// so if this goes red, decide deliberately what the xUnit bound should be rather than re-syncing
+/// the literal reflexively.
 /// </summary>
 [Trait("Category", "Lint")]
 public sealed class ConcurrencyConfigurationDriftTests
@@ -37,7 +41,7 @@ public sealed class ConcurrencyConfigurationDriftTests
     [Fact]
     public void XunitRunnerJsonMaxParallelThreadsMatchesConcurrencyPolicy()
     {
-        var expectedCap = ConcurrencyPolicy.ProvisionalUnmeasuredMemoryCap;
+        var expectedCap = ConcurrencyPolicy.UndeclaredMemoryWorkerCap;
 
         var xunitFiles = new[]
         {
@@ -78,11 +82,12 @@ public sealed class ConcurrencyConfigurationDriftTests
         if (mismatches.Count > 0)
         {
             Assert.Fail(
-                $"xunit.runner.json maxParallelThreads values do not match ConcurrencyPolicy.ProvisionalUnmeasuredMemoryCap ({expectedCap}):\n" +
+                $"xunit.runner.json maxParallelThreads values do not match ConcurrencyPolicy.UndeclaredMemoryWorkerCap ({expectedCap}):\n" +
                 $"{string.Join("\n", mismatches)}\n" +
                 $"\n" +
-                $"These are two declarations of one bound. If the provisional cap was retired (plan Task 9), " +
-                $"decide deliberately what the xUnit bound should be — do not just re-sync the literal.");
+                $"These are two declarations of one bound — and they govern different quantities that " +
+                $"currently share a value (xUnit's own thread count vs an engine's worker count). " +
+                $"Decide deliberately what the xUnit bound should be — do not just re-sync the literal.");
         }
     }
 }

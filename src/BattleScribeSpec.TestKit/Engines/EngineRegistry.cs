@@ -28,28 +28,86 @@ public sealed class EngineRegistry
 
     // Conservative default for engines that declare nothing: no parallelism ceiling assumed
     // beyond serial, cheap to construct, and no reuse claimed (reuse must be earned — see
-    // EngineProfile's remarks).
+    // EngineProfile's remarks). MemPerInstanceBytes stays 0 = "undeclared", which is what makes
+    // ConcurrencyPolicy.UndeclaredMemoryWorkerCap bind for such an engine. That is deliberate and
+    // permanent: an engine that has not declared its memory footprint does not get machine-width
+    // parallelism.
     private static readonly EngineProfile DefaultProfile = new(
         MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false);
 
-    // Values transcribed from what has been MEASURED (see docs/warm-reuse.md) — never invented.
+    // Values transcribed from what has been MEASURED — never invented. Reuse-safety and cold-start
+    // cost come from docs/warm-reuse.md; MemPerInstanceBytes and OversubscriptionFactor come from
+    // docs/concurrency-policy-measurements.md (the Task 8 campaign).
     private static readonly Dictionary<string, EngineEntry> Builtins = new()
     {
+        // MemPerInstanceBytes UNDECLARED (0) — never measured. While it is 0 this engine is bound by
+        // ConcurrencyPolicy.UndeclaredMemoryWorkerCap, which is the correct, conservative answer for
+        // an engine nobody has measured. Measure it and the cap retires for this engine by itself.
         ["battlescribe"] = new(
             "battlescribe", null, null, BothDomains,
             new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false),
             Builtin: true),
+
+        // MemPerInstanceBytes MEASURED: 1,055,391,744 B (≈0.98 GiB) — one JVM (app + -javaagent in
+        // the same process) plus its bs-engine-host adapter, peak working set over a full 54-spec
+        // gamedata run (docs/concurrency-policy-measurements.md §4). MaxParallel: 1 means the memory
+        // bound can never actually bind here; the number exists so the policy can *prove* that
+        // rather than assume it. OversubscriptionFactor is therefore moot and stays at its default.
         ["battlescribe-ui"] = new(
             "battlescribe-ui", null, null, BothDomains,
-            new EngineProfile(MaxParallel: 1, ColdStartCost.Expensive, ReuseSafeRoster: true, ReuseSafeGameData: true),
+            new EngineProfile(
+                MaxParallel: 1, ColdStartCost.Expensive, ReuseSafeRoster: true, ReuseSafeGameData: true,
+                MemPerInstanceBytes: 1_055_391_744L),
             Builtin: true),
+
+        // MemPerInstanceBytes MEASURED: 1,313,420,083 B (≈1.22 GiB) per worker — adapter (≈543 MB) +
+        // Playwright driver (≈377 MB) + chrome-headless-shell tree (≈332 MB). Lighter than
+        // newrecruit-ui's 1.44 GiB, as expected: no heavy SPA in the page
+        // (docs/concurrency-policy-measurements.md §5).
+        //
+        // OversubscriptionFactor: 0.375 is MEASURED — and is deliberately BELOW the measured optimum
+        // of 0.47 (P=15 on 32 logical cpus). Two things you must know before touching it:
+        //
+        // 1. THE CLIFF IS BRUTALLY ASYMMETRIC. P=15 → P=16 costs 1.97x for ONE extra worker (15.8s →
+        //    31.0s, reproduced in all four runs; p95 blows up 4358ms → 16033ms while p50 barely
+        //    moves — a starved tail). Overshooting by one worker doubles the wall-clock; undershooting
+        //    by one costs a few percent. Fitting below the optimum is correct here, not timid.
+        //    ceil(32 × 0.375) = 12 workers = 18.4s, 17% off the optimum for 3 workers of margin.
+        //
+        // 2. THIS CONSTANT IS NOT PORTABLE, AND THE MODEL CANNOT SAY SO PROPERLY. The cliff lands on
+        //    the box's PHYSICAL core count (16 of 32 logical — a 2:1 SMT box). Physically the optimum
+        //    is "one worker per physical core"; it is not a property of the number 0.47. But
+        //    MachineProfile only knows Environment.ProcessorCount — LOGICAL processors — so k has to
+        //    encode the SMT ratio of the box it was fitted on. On another 2:1 SMT machine 0.375 lands
+        //    at or below physical cores (safe). ON A NON-SMT MACHINE IT UNDER-PROVISIONS BY ~2x.
+        //    This engine is CPU-bound (p50 2.4s/spec, pure compute) so it gets nothing from
+        //    hyperthreads; newrecruit-ui is I/O-bound (p50 17.1s/spec) and scales past them fine —
+        //    which is exactly why k is per-engine (1.0 vs 0.375: a 2.7x spread on identical hardware).
+        //    A PhysicalCoreCount input to MachineProfile is the real fix; it is filed as a follow-up,
+        //    not attempted here. Do not read 0.375 as a portable truth.
         ["newrecruit"] = new(
             "newrecruit", null, null, BothDomains,
-            new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false),
+            new EngineProfile(
+                MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
+                MemPerInstanceBytes: 1_313_420_083L, OversubscriptionFactor: 0.375),
             Builtin: true),
+
+        // MemPerInstanceBytes MEASURED: 1,548,969,984 B (≈1.44 GiB) per worker — bs-engine-host
+        // adapter (≈520 MiB) + the Playwright Node driver (≈432 MiB) + the whole
+        // chrome-headless-shell tree (≈526 MiB). A worker cannot exist without all three, so all
+        // three are counted (docs/concurrency-policy-measurements.md §3).
+        //
+        // OversubscriptionFactor: 1.0 is now MEASURED, not assumed. The knee is at P=32 on 32
+        // logical processors (32 ÷ 32 = 1.0): P=48 is *slower* than P=32 in both independent arms
+        // (+19% / +22% wall) and its p50 explodes to 2.6× serial, while P=32 beats P=24 in both
+        // arms. It was previously 1.0 only because that is the record's default — right by luck.
+        // Caveat that must travel with it: this k was fitted on a 32-core box. The 4-vCPU CI runner
+        // is NOT measured, and the design doc records the two hardware classes disagreeing.
         ["newrecruit-ui"] = new(
             "newrecruit-ui", null, null, BothDomains,
-            new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false),
+            new EngineProfile(
+                MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
+                MemPerInstanceBytes: 1_548_969_984L, OversubscriptionFactor: 1.0),
             Builtin: true),
     };
 
@@ -88,6 +146,10 @@ public sealed class EngineRegistry
                         $"Invalid engines config '{configPath}', entry '{name}': {ex.Message}", ex);
                 }
             }
+            // A third-party engine that omits memPerInstanceBytes gets 0 — i.e. "undeclared" — and is
+            // therefore bound by ConcurrencyPolicy.UndeclaredMemoryWorkerCap rather than the machine's
+            // full width. Declaring a measured footprint is how an engine opts into full parallelism;
+            // this is the safe default for engines we did not write and cannot measure, not an oversight.
             configured[name] = new EngineEntry(
                 name,
                 launch?.Executable,

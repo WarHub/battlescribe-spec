@@ -14,7 +14,7 @@ namespace BattleScribeSpec.Concurrency;
 /// <para>
 /// <b>What is bounded and what is not (Task 7 residual — tracked, not yet fixed):</b> this plan
 /// bounds xUnit's own thread count (<see cref="MaxParallelThreads"/>, hardcoded to
-/// <see cref="ConcurrencyPolicy.ProvisionalUnmeasuredMemoryCap"/> in both <c>xunit.runner.json</c>
+/// <see cref="ConcurrencyPolicy.UndeclaredMemoryWorkerCap"/> in both <c>xunit.runner.json</c>
 /// files) and it bounds each individual pool's size (<see cref="PoolSize"/>). It does <b>not</b>
 /// bound the product across simultaneously-live xUnit collection fixtures. A collection fixture
 /// lives for the whole collection, not for one thread-slot, so two independent collections (e.g.

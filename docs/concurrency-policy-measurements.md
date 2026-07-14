@@ -10,12 +10,12 @@ and therefore still declares `MemPerInstanceBytes = 0`, leaving it bound by
 > **Note on §5 vs §6.** Two sections were written concurrently by two agents working this branch at
 > the same time and both are kept: **§5** is Task 8's `newrecruit` measurement (its `k`, its cliff,
 > its memory), **§6** is Task 9's transcription decisions. §5 landed *after* Task 9 was dispatched on
-> the premise that `newrecruit` was unmeasured. **`newrecruit`'s `k` IS measured (0.47 optimum →
-> 0.375 recommended) and is ready to transcribe — but Task 9 did NOT transcribe it**, deliberately;
-> §6a says why, and why leaving it capped at 8 workers is safe rather than merely conservative.
+> the premise that `newrecruit` was unmeasured; Task 9 was corrected mid-flight and **§5's numbers
+> are transcribed** (§6a) — including the deliberately-below-optimum `k = 0.375` and the two caveats
+> that must travel with it.
 
-See `.superpowers/sdd/task-8-concurrency-report.md` and `.superpowers/sdd/task-9-report.md` for the
-tasks' final reports.
+See `.superpowers/sdd/task-8-concurrency-report.md` and `.superpowers/sdd/task-9-concurrency-report.md`
+for the tasks' final reports.
 
 This is the measurement campaign behind `ConcurrencyPolicy.For`
 (`src/BattleScribeSpec.TestKit/Concurrency/ConcurrencyPolicy.cs`):
@@ -362,14 +362,14 @@ all.
 **not currently-free** memory. A bare `availableMemory / memPerInstance` would therefore leave zero
 headroom for the OS and every other process on the box, *by construction*. A real 16 GiB laptop
 already running a browser and an IDE has nothing like 16 GiB free. Compounding it, a sampled peak is
-a **lower bound** — the true peak is at least 1,548,969,984 B, never less. See §5.
+a **lower bound** — the true peak is at least 1,548,969,984 B, never less. See §6c.
 
 ### What the measured number does to this engine's plan
 
 `ConcurrencyPolicy.For` applies `UndeclaredMemoryWorkerCap` (`min(cpuCount, 8)`) only while
 `MemPerInstanceBytes == 0`. That is no longer true for `newrecruit-ui` — **the cap self-retires for
 this engine**, and the real, memory-aware bound takes over. (It stays live for the engines that are
-still undeclared; see §5.)
+still undeclared; see §6b.)
 
 Worked examples with the measured `k = 1.0` (§1), `MemPerInstanceBytes = 1,548,969,984`, and
 `MemoryHeadroomFactor = 0.8`:
@@ -596,7 +596,7 @@ this box.
 |---|--:|--:|
 | `battlescribe` | **0 — UNDECLARED** (never measured) | 1.0 (default; moot while undeclared) |
 | `battlescribe-ui` | **1,055,391,744** (§4) | 1.0 (default; moot — `MaxParallel = 1`) |
-| `newrecruit` | **0 — UNDECLARED** (measured in §5, **deliberately not transcribed** — see below) | 1.0 (default; moot while undeclared) |
+| `newrecruit` | **1,313,420,083** (§5) | **0.375 — MEASURED** (§5: optimum P=15 → 0.47, fitted **below** it; 1.97× cliff at P=16) |
 | `newrecruit-ui` | **1,548,969,984** (§3) | **1.0 — MEASURED** (§1: knee at P=32 / 32 cores; P=48 degrades) |
 
 `newrecruit-ui`'s `k` was *already* 1.0 in the registry as an unmeasured default. The literal did not
@@ -604,23 +604,35 @@ change; **its status did.** It is now measured, and the code comment says so. It
 only by luck, and a value that is right by luck is indistinguishable from one that is wrong until
 someone measures it.
 
-**Why `newrecruit`'s measured numbers (§5) are NOT transcribed here.** §5 landed *while this task was
-executing* — Task 9 was dispatched on the explicit premise that `newrecruit` was unmeasured and that
-its `MemPerInstanceBytes` should stay at `0`. Transcribing it is not a mechanical step: §5 itself
-recommends `k = 0.375` rather than the measured optimum `0.47`, deliberately trading 17% of the
-optimum for three workers of margin against a **1.97× cliff** sitting one worker to the right of the
-peak. That is a real judgment, and it deserves its own review rather than being swept into a task
-that was scoped to transcribe someone else's finished numbers. It is a **follow-up, not a
-regression**: while the field stays `0`, `UndeclaredMemoryWorkerCap` gives `newrecruit`
-`min(32, 8) = 8` workers on this box — **23.1s, comfortably left of its cliff at P=16** (§5). Slower
-than the 15.8s optimum, never dangerous.
+**The engines disagree by 2.7× and the policy now reproduces that.** On the same 32-core box the same
+64 specs want **12 workers** under `newrecruit` and **32** under `newrecruit-ui`. A single global
+oversubscription factor could not have served both; this is the per-engine `k` earning its existence.
+
+**Two caveats ride with `newrecruit`'s `k = 0.375`** — both written at the constant in
+`EngineRegistry.cs`, repeated here because they are the kind of thing a future reader "cleans up":
+
+1. **It is deliberately below the measured optimum (0.47), and must stay there.** The cliff is
+   brutally asymmetric: one worker *past* the peak costs **1.97×** (15.8s → 31.0s); one worker short
+   costs a few percent. `ceil(32 × 0.375) = 12` buys three workers of margin for 17% of the optimum.
+   A test (`Policy_NewRecruit_StaysLeftOfItsMeasuredCliff_OnTheBoxItWasMeasuredOn`) pins this so a
+   future tweak cannot silently walk it over the edge.
+2. **It is not portable, and the model cannot currently say so.** The cliff lands on the box's
+   **physical** core count (16 of 32 logical — a 2:1 SMT box). Physically the optimum is *"one worker
+   per physical core"*; 0.47 is not a property of the number, it is a property of this box's SMT
+   ratio. `MachineProfile` only knows `Environment.ProcessorCount` (**logical**). On another 2:1 SMT
+   box, 0.375 lands safely at-or-below physical cores. **On a non-SMT box it under-provisions by
+   ~2×.** `newrecruit` is CPU-bound (p50 2.4s/spec) so it gains nothing from hyperthreads;
+   `newrecruit-ui` is I/O-bound (p50 17.1s/spec) and scales past them happily — which is *why* `k` is
+   per-engine. A `PhysicalCoreCount` input to `MachineProfile` is the real fix and is filed as a
+   follow-up; it was not attempted here.
 
 > **§5 is also the empirical vindication of §6b.** Had this task followed the plan and *deleted* the
-> cap, `newrecruit` — still declaring `MemPerInstanceBytes = 0` — would have fallen through to
-> `byCpu = 32` workers on this box. §5 measures that configuration at **58.9s against 23.1s at the
-> capped 8** — a **2.55× regression**, straight over a cliff the plan did not know existed when it
-> was written. The cap did not merely fail to be dead weight; it was actively holding an engine back
-> from a measured cliff the whole time.
+> cap, `newrecruit` — which declared `MemPerInstanceBytes = 0` right up until §5 landed — would have
+> fallen through to `byCpu` = 32 workers on this box. §5 measures that configuration at **58.9s
+> against 23.1s at the capped 8**: a **2.55× regression**, straight over a cliff the plan did not
+> know existed when it was written. The cap was not dead weight awaiting removal; it was holding an
+> unmeasured engine back from a cliff nobody knew was there. **`battlescribe` is in exactly that
+> position today** — unmeasured, cap-bound, cliff unknown.
 
 ### 6b. The cap was KEPT and PROMOTED, not deleted
 
@@ -629,9 +641,8 @@ once every builtin declares a measured footprint, the `MemPerInstanceBytes == 0`
 again and the cap becomes dead weight. **That premise turned out to be false**, so the step was not
 followed:
 
-- Only **two of four** builtins were measured *when this task was dispatched*, and `battlescribe`
-  still is not. `newrecruit` was measured concurrently (§5) but is not transcribed here (§6a), so
-  **two of four still declare 0** in the shipped registry either way.
+- **`battlescribe` is still unmeasured** and declares `0`. One built-in is all it takes; and §5 is the
+  proof that an unmeasured engine can hide a 1.97× cliff.
 - `EngineRegistry.DefaultProfile` and the `engines.json` config path both let an engine register
   **without declaring `MemPerInstanceBytes` at all**, defaulting to 0. This harness is explicitly
   open to other engines — "every engine is measured" is a state it can never reach.
@@ -677,9 +688,49 @@ policy; policy lives in one tunable place.
 
 **What it costs, checked against the measurement:** on the 32-core / 93.6 GiB dev box it costs
 **nothing** — `byMemory` falls from 64 to 51, both still ≫ `byCpu = 32`, so `newrecruit-ui` still
-resolves to **32**, exactly the measured knee. The headroom factor does not make the harness slower
-than measured-optimal anywhere it was measured. It binds only on memory-constrained boxes (the 16 GiB
-laptop: 11 → 8), which is precisely where it should.
+resolves to **32**, exactly the measured knee. It costs `newrecruit` nothing either (byMemory 76 → 61,
+both ≫ its `byCpu = 12`). **The headroom factor does not make the harness slower than measured-optimal
+anywhere it was measured.** It binds only on memory-constrained boxes (the 16 GiB laptop: 11 → 8 for
+`newrecruit-ui`), which is precisely where it should.
+
+### 6d. What the policy now picks, per box — and what it replaces in CI
+
+`ceil(cpuCount × k)` vs `floor(availableMemory × 0.8 / memPerInstance)`, whichever is smaller:
+
+| box | `newrecruit` (k=0.375, 1.22 GiB) | `newrecruit-ui` (k=1.0, 1.44 GiB) | `battlescribe-ui` | `battlescribe` (undeclared) |
+|---|--:|--:|--:|--:|
+| 32-core / 93.6 GiB dev box | **12** (cpu binds; mem allows 61) | **32** (cpu binds; mem allows 51) | 1 | 8 (cap) |
+| 16-core / 16 GiB laptop | **6** (cpu binds; mem allows 10) | **8** (**mem binds**; cpu allows 16) | 1 | 8 (cap) |
+| 4-vCPU / 16 GB CI runner | **2** (cpu binds; mem allows 10) | **4** (cpu binds; mem allows 8) | 1 | 4 (cap → cpuCount) |
+
+**The three `NR_PARALLEL` settings deleted from `ci.yml`, and what replaces them:**
+
+| CI lane | fixture → engine | was | now | Δ |
+|---|---|--:|--:|---|
+| `nr-frozen` | `FrozenNrRosterFixture` → `newrecruit` | `NR_PARALLEL: 6` | **2** | ⚠️ **3× fewer** |
+| `nr-editor-ui-frozen` | `FrozenNrGameDataUiFixture` → `newrecruit-ui` | `NR_PARALLEL: 6` | **4** | 1.5× fewer |
+| `nr-live-conformance` | `LiveNrRosterFixture` → `newrecruit` | `NR_PARALLEL: 2` | **2** | **unchanged** |
+
+⚠️ **`nr-frozen` 6 → 2 is the one to watch, and it is a genuine open risk, not a rounding.** CI's own
+historical figure — `NR_PARALLEL: 6` was recorded as *measured optimal on the 4-vCPU runner* (48 s;
+degrading past 6) — implies `k ≈ 1.5` for `newrecruit` **there**, while this box measured `0.375`
+**here**: a 4× disagreement on the same engine. At least three things could explain it, and this
+campaign cannot distinguish them:
+
+- **`k` genuinely does not transfer across hardware classes.** Precisely the caveat "What was not
+  reached" insists on: the 4-vCPU runner is **NOT measured**, and its `k` must not be inferred from a
+  32-core box. This is the honest default reading.
+- **The SMT gap (§6a, caveat 2).** `k = 0.375` encodes "one worker per *physical* core" on a 2:1 SMT
+  box. Applied to a 4-vCPU runner it yields 2 — right if that runner is 2 physical cores × 2 threads,
+  ~2× too low if its vCPUs are physical.
+- **The two numbers may not measure the same quantity.** `NR_PARALLEL` sized *browser contexts in an
+  in-process pool*; the sweep behind `k` sized *whole worker processes* (adapter + Node driver +
+  Chromium tree each). A context is far cheaper than a process tree, so the optimum for one is not
+  the optimum for the other — and the unified policy now feeds one number to both.
+
+**This is shipped watching, not shipped assuming.** The plan's own gate (Task 9, Step 3) is that CI
+lane wall-times must be **no worse** than the recorded baselines (`nr-frozen` 48 s). If `nr-frozen`
+regresses, the fix is to measure `k` **on the runner** — the constant is wrong, not the architecture.
 
 ---
 

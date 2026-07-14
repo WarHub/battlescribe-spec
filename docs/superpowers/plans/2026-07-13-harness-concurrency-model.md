@@ -690,6 +690,22 @@ On the *same* 4-vCPU runner, `nr-frozen` **degrades** past P=6 (48 s → 75 s at
 
 - [ ] **Step 1: Write the measured `OversubscriptionFactor` and `MemPerInstanceBytes` into each builtin's `EngineProfile`**, citing `docs/concurrency-policy-measurements.md`. **These are the only literals in this task.**
 
+> ⚠️ **Step 1b was NOT followed — its premise was false. Read this before re-reading it.** The step
+> below reasons that once *every* builtin declares a measured `MemPerInstanceBytes`, the cap's
+> `== 0` gate can never fire again and it becomes dead weight. Two things falsify that: (a) only two
+> of four builtins were measured, and (b) `EngineRegistry.DefaultProfile` **and** the `engines.json`
+> path both let an engine register *without declaring `MemPerInstanceBytes` at all* — this harness is
+> explicitly open to other engines, so "every engine is measured" is a state it can never reach.
+> The `== 0` gate means the cap **self-retires per engine, automatically** — the measured engines
+> bypass it with no code change. So it was **kept and renamed `UndeclaredMemoryWorkerCap`**, and
+> redocumented as the permanent conservative default for any engine that has not declared its
+> footprint (declaring one is how an engine opts into full machine-width parallelism).
+>
+> The `newrecruit` sweep (measured *after* this plan was written; `docs/concurrency-policy-measurements.md`
+> §5) then vindicated the deviation empirically: that engine still declares `0`, and deleting the cap
+> would have given it `cpuCount` = 32 workers on the dev box — **58.9 s vs 23.1 s at the capped 8**,
+> straight over a **1.97× cliff at P=16** the plan did not know existed. See Task 9's report.
+
 - [ ] **Step 1b: Remove the provisional safety cap in `ConcurrencyPolicy.For`.** A stopgap
   (`ProvisionalUnmeasuredMemoryCap`, `min(cpuCount, 8)`, added on `perf/concurrency-model` ahead of
   this task) currently caps worker count whenever an engine declares `MemPerInstanceBytes == 0` —
