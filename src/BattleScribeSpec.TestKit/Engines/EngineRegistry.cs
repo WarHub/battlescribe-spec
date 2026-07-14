@@ -455,16 +455,35 @@ public sealed class EngineRegistry
     {
         if (connectable.IsLaunchable)
         {
-            // Ad-hoc launch; merge metadata when the identity is a configured name.
-            var metadata = connectable.Name is not null && _configured.TryGetValue(connectable.Name, out var known)
-                ? known
+            // Ad-hoc launch; merge metadata when the identity is a KNOWN name — configured first
+            // (engines.json wins, as it does for a plain name below), then the built-ins.
+            //
+            // THE BUILT-IN FALLBACK IS NOT COSMETIC. Without it, `--engine
+            // "battlescribe=dotnet:…/bs-reference-adapter.dll"` — the exact line CI runs on every push —
+            // resolved to NO metadata (there is no engines.json in this repo), hence null endpoints,
+            // hence Undeclared, hence LoadTarget.ThirdPartyLive: CI announced an IN-PROCESS IKVM ADAPTER
+            // WITH NO NETWORK CODE AT ALL as "third-party live service — held to 2 concurrent sessions",
+            // on every run, and throttled it to 2 workers on a runner that affords 4. A fail-safe firing
+            // on a case it was never meant to catch is not free — it is a permanent, invisible 2x on a
+            // lane whose traffic costs nobody anything.
+            //
+            // A launchable that CLAIMS a name we ship gets that name's declarations. That is the same
+            // trust already extended to `_configured` (a configured name's endpoint is taken from the
+            // user's file), and it is safe in the direction that matters: `--engine
+            // "newrecruit=exec:whatever"` inherits newrecruit's UrlVariable endpoint, so it is still
+            // derived from NR_ENGINE_URL and still fails safe to ThirdPartyLive when that names a live
+            // site. It inherits a DECLARATION, never a verdict. What it cannot do is invent a "local"
+            // for an adapter nobody has declared.
+            //
+            // An ad-hoc adapter under an UNKNOWN name still declares nothing at all — endpoints stay null
+            // ⇒ Undeclared ⇒ ThirdPartyLive. That trade is unchanged and correct: the alternative is
+            // assuming, of an executable we have never seen, that nobody else pays for its traffic.
+            // Register it in engines.json with "endpoint": "local" to state the fact and take the
+            // machine's full width.
+            var metadata = connectable.Name is { } claimed
+                ? _configured.GetValueOrDefault(claimed) ?? Builtins.GetValueOrDefault(claimed)
                 : null;
-            // An ad-hoc exec:/dotnet: adapter that is NOT a configured name declares nothing at all — we
-            // cannot see what it drives, so its endpoints stay null ⇒ EngineEndpoint.Undeclared ⇒
-            // LoadTarget.ThirdPartyLive. It costs such an adapter wall-clock (the load limit instead of
-            // the undeclared-memory cap) and it is the correct trade: the alternative is assuming, on an
-            // executable we have never seen, that nobody else pays for its traffic. Register it in
-            // engines.json with "endpoint": "local" to state the fact and get the machine's full width.
+
             return new EngineEntry(
                 connectable.Name,
                 connectable.Executable,

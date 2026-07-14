@@ -95,7 +95,15 @@ jobs:
       # silently dropping the flag (#305). This step used to pass `--workers 2`; the flag's
       # replacement (`--policy workers=2`) is exactly what a launchable adapter must refuse, so
       # the step was failing on every run of this job. The worker count is ConcurrencyPolicy's to
-      # choose anyway — that is the whole point of the model — and it picks 4 on this runner.
+      # choose anyway — that is the whole point of the model.
+      #
+      # It picks min(cpuCount, UndeclaredMemoryWorkerCap) = 4 on this 4-vCPU runner — but only since
+      # the endpoint fix: this connectable claims the name `battlescribe`, and a launchable name used
+      # to be looked up in engines.json ALONE (a file this repo does not have), so it resolved to an
+      # UNDECLARED endpoint and the fail-safe called an in-process IKVM engine "third-party live
+      # service — held to 2 concurrent sessions", in CI, on every run. A launchable that claims a
+      # built-in's name now inherits that engine's declaration (EngineRegistry.Resolve), so this step
+      # is correctly Local, and runs at 4.
       - name: Reference adapter (dotnet) — roster kitchen-sink
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
