@@ -114,6 +114,51 @@ public sealed class RunBatchSurfaceTests
         Assert.DoesNotContain("Unhandled exception", stdErr);
     }
 
+    /// <summary>
+    /// <c>workers=N</c> is inapplicable to a single-spec run — one spec runs in exactly one adapter
+    /// process, and the child never reads the key — so it must be REJECTED, not accepted, forwarded
+    /// and dropped. A flag is accepted or rejected, never silently ignored (#305).
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: delete <c>RunCommand.RejectInertPolicyKeys</c>'s call site and this run exits 0
+    /// (the spec executes, the knob does nothing), which is exactly the pre-fix behaviour.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Policy_Workers_IsRejectedForASingleSpecRun_NotSilentlyDropped()
+    {
+        var (exitCode, _, stdErr) = await RunCliAsync(
+            "run", "protocol-kitchen-sink", "--engine", "battlescribe", "--policy", "workers=8");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("workers", stdErr, StringComparison.Ordinal);
+        Assert.Contains("--all", stdErr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unhandled exception", stdErr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// ...but the reuse keys DO reach the child and change its engine's behaviour, so a single-spec
+    /// run must keep accepting them. Guards against over-correcting the fix above into "no --policy
+    /// in single-spec mode", which would break the warm-vs-cold poke this flag exists for.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void Policy_ReuseKeys_StayLegalForASingleSpecRun()
+    {
+        RunCommand.RejectInertPolicyKeys("reuse=off");
+        RunCommand.RejectInertPolicyKeys("reuse-roster=on,reuse-gamedata=off");
+        RunCommand.RejectInertPolicyKeys(null);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void Policy_UnknownKey_IsRejectedForASingleSpecRunToo()
+    {
+        // The single-spec key check parses with the same rules as --all, so a typo still fails here.
+        var ex = Assert.Throws<CliInputException>(() => RunCommand.RejectInertPolicyKeys("bogus=1"));
+        Assert.Contains("unknown key", ex.Message, StringComparison.Ordinal);
+    }
+
     // ===== --policy: capability mismatch (reject) vs policy override (allow + warn) (#271 Task 5) =====
 
     [Fact]

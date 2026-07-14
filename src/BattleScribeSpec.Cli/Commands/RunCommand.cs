@@ -228,6 +228,8 @@ internal static class RunCommand
                     throw new CliInputException($"--output '{outputStr}' is not valid for a single-spec run; use tree or json.");
                 }
 
+                RejectInertPolicyKeys(parseResult.GetValue(policy));
+
                 var format = parseResult.GetValue(json) || outputStr == "json" ? OutputFormat.Json : OutputFormat.Tree;
                 var options = new RunOptions(
                     Spec: specInput!,
@@ -251,6 +253,48 @@ internal static class RunCommand
         });
 
         return command;
+    }
+
+    /// <summary>
+    /// Reject <c>--policy</c> keys that a <b>single-spec</b> run cannot act on, instead of accepting
+    /// them and doing nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>workers=N</c> sizes the pool of adapter processes <c>run --all</c> spreads a spec suite
+    /// across (<c>RunBatch</c> → <c>SpecSuiteRunner</c>). A single-spec run spawns exactly one
+    /// adapter and the child never reads the key, so <c>--policy workers=8</c> was accepted,
+    /// forwarded to the child, and completely inert — with no warning. This repo's standard is that a
+    /// flag is accepted or rejected, never silently dropped (#305); an inert knob tells the user they
+    /// configured something when they did not, which is worse than an error.
+    /// </para>
+    /// <para>
+    /// The <c>reuse*</c> keys stay legal here: they reach the child (<c>serve --policy</c>) and do set
+    /// its engine's reuse behaviour, so a single-spec run is a legitimate way to poke at a warm vs
+    /// cold engine even though one spec means one setup.
+    /// </para>
+    /// </remarks>
+    /// <param name="policyRaw">The raw <c>--policy k=v,...</c> string, or null when omitted.</param>
+    /// <exception cref="CliInputException">A key was given that a single-spec run cannot honour.</exception>
+    internal static void RejectInertPolicyKeys(string? policyRaw)
+    {
+        IReadOnlySet<string> keys;
+        try
+        {
+            keys = PolicyOverride.Keys(policyRaw);
+        }
+        catch (FormatException ex)
+        {
+            throw new CliInputException(ex.Message);
+        }
+
+        if (keys.Contains("workers"))
+        {
+            throw new CliInputException(
+                "--policy: 'workers' is meaningless for a single-spec run — one spec runs in exactly one " +
+                "adapter process, so there is nothing to spread across workers. Use it with --all (which " +
+                "spreads a suite across N adapters), or drop it.");
+        }
     }
 
     /// <summary>
