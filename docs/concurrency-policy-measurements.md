@@ -1,13 +1,21 @@
 # Concurrency policy measurements (Task 8) — and what Task 9 did with them
 
-**Status: TRANSCRIBED (Task 9 complete).** `newrecruit-ui` roster timing/knee swept and fitted on
-the dev box; serial-vs-32-way verdict safety confirmed; `MemPerInstanceBytes` measured for both
-`newrecruit-ui` and `battlescribe-ui` and **now written into `EngineRegistry`**. `newrecruit` (non-UI)
-roster's `k` and the entire 4-vCPU CI runner remain **NOT measured** — see "What was not reached";
-those two engines therefore still declare `MemPerInstanceBytes = 0` and are still bound by
-`ConcurrencyPolicy.UndeclaredMemoryWorkerCap`, which is exactly what that cap is for. See
-`.superpowers/sdd/task-8-concurrency-report.md` and `.superpowers/sdd/task-9-report.md` for the
-tasks' final reports, and §5 below for Task 9's one judgment call (the memory headroom factor).
+**Status: measured.** On the dev box: `newrecruit-ui` roster (§1–§3) **and** `newrecruit` roster
+(§5) are both swept, fitted, verdict-safety-checked and memory-measured; `battlescribe-ui`'s
+`MemPerInstanceBytes` is measured (§4). The **4-vCPU CI runner is NOT measured** and its `k` must not
+be inferred from this box — see "What was not reached". `battlescribe` (non-UI) is also unmeasured
+and therefore still declares `MemPerInstanceBytes = 0`, leaving it bound by
+`ConcurrencyPolicy.UndeclaredMemoryWorkerCap` — which is exactly what that cap is for.
+
+> **Note on §5 vs §6.** Two sections were written concurrently by two agents working this branch at
+> the same time and both are kept: **§5** is Task 8's `newrecruit` measurement (its `k`, its cliff,
+> its memory), **§6** is Task 9's transcription decisions. §5 landed *after* Task 9 was dispatched on
+> the premise that `newrecruit` was unmeasured. **`newrecruit`'s `k` IS measured (0.47 optimum →
+> 0.375 recommended) and is ready to transcribe — but Task 9 did NOT transcribe it**, deliberately;
+> §6a says why, and why leaving it capped at 8 workers is safe rather than merely conservative.
+
+See `.superpowers/sdd/task-8-concurrency-report.md` and `.superpowers/sdd/task-9-report.md` for the
+tasks' final reports.
 
 This is the measurement campaign behind `ConcurrencyPolicy.For`
 (`src/BattleScribeSpec.TestKit/Concurrency/ConcurrencyPolicy.cs`):
@@ -22,7 +30,7 @@ workers = min(workers, min(cpuCount, 8))
 
 `k_engine` is `EngineProfile.OversubscriptionFactor`; `memPerInstance_engine` is
 `EngineProfile.MemPerInstanceBytes`; the `0.8` is `ConcurrencyPolicy.MemoryHeadroomFactor` (Task 9 —
-§5). Both engine constants live in `src/BattleScribeSpec.TestKit/Engines/EngineRegistry.cs`. This
+§6c). Both engine constants live in `src/BattleScribeSpec.TestKit/Engines/EngineRegistry.cs`. This
 document is the measurement; Task 9 transcribed the fitted numbers into the registry.
 
 ## Hardware
@@ -147,7 +155,7 @@ ramp-mixing, no re-running the expensive P=32 knee.
 ## Finding 0: the undeclared-memory cap does not bind a `--policy workers=N` override
 
 > Naming note: this cap was called `ProvisionalUnmeasuredMemoryCap` while this campaign ran. Task 9
-> renamed it `UndeclaredMemoryWorkerCap` and kept it (see §5) — the mechanism below is unchanged.
+> renamed it `UndeclaredMemoryWorkerCap` and kept it (see §6b) — the mechanism below is unchanged.
 
 `ConcurrencyPolicy.For` clamps `workers` to `min(cpuCount, 8)` when `MemPerInstanceBytes == 0`. It
 does **not** clamp an override: `PolicyOverride.Apply` assigns `workers` directly, and
@@ -346,7 +354,7 @@ scratch data).
 No headroom multiplier is baked into this number — this document reports what was *measured*, and
 `EngineProfile.MemPerInstanceBytes` holds exactly this figure, unmodified. **Headroom is policy, not
 measurement**, so Task 9 put it in the policy instead (`ConcurrencyPolicy.MemoryHeadroomFactor`,
-§5) rather than inflating an honest measured constant. The caveat directly below is why it exists at
+§6c) rather than inflating an honest measured constant. The caveat directly below is why it exists at
 all.
 
 **Caveat that must travel with this number:** `MachineProfile.AvailableMemoryBytes` is
@@ -580,15 +588,15 @@ this box.
 
 ---
 
-## 5. Task 9's decisions — what was transcribed, and the one judgment call
+## 6. Task 9's decisions — what was transcribed, and the one judgment call
 
-### 5a. Transcribed into `EngineRegistry`
+### 6a. Transcribed into `EngineRegistry`
 
 | Engine | `MemPerInstanceBytes` | `OversubscriptionFactor` (k) |
 |---|--:|--:|
-| `battlescribe` | **0 — UNDECLARED** (not measured) | 1.0 (default; moot while undeclared) |
+| `battlescribe` | **0 — UNDECLARED** (never measured) | 1.0 (default; moot while undeclared) |
 | `battlescribe-ui` | **1,055,391,744** (§4) | 1.0 (default; moot — `MaxParallel = 1`) |
-| `newrecruit` | **0 — UNDECLARED** (not measured) | 1.0 (default; moot while undeclared) |
+| `newrecruit` | **0 — UNDECLARED** (measured in §5, **deliberately not transcribed** — see below) | 1.0 (default; moot while undeclared) |
 | `newrecruit-ui` | **1,548,969,984** (§3) | **1.0 — MEASURED** (§1: knee at P=32 / 32 cores; P=48 degrades) |
 
 `newrecruit-ui`'s `k` was *already* 1.0 in the registry as an unmeasured default. The literal did not
@@ -596,14 +604,34 @@ change; **its status did.** It is now measured, and the code comment says so. It
 only by luck, and a value that is right by luck is indistinguishable from one that is wrong until
 someone measures it.
 
-### 5b. The cap was KEPT and PROMOTED, not deleted
+**Why `newrecruit`'s measured numbers (§5) are NOT transcribed here.** §5 landed *while this task was
+executing* — Task 9 was dispatched on the explicit premise that `newrecruit` was unmeasured and that
+its `MemPerInstanceBytes` should stay at `0`. Transcribing it is not a mechanical step: §5 itself
+recommends `k = 0.375` rather than the measured optimum `0.47`, deliberately trading 17% of the
+optimum for three workers of margin against a **1.97× cliff** sitting one worker to the right of the
+peak. That is a real judgment, and it deserves its own review rather than being swept into a task
+that was scoped to transcribe someone else's finished numbers. It is a **follow-up, not a
+regression**: while the field stays `0`, `UndeclaredMemoryWorkerCap` gives `newrecruit`
+`min(32, 8) = 8` workers on this box — **23.1s, comfortably left of its cliff at P=16** (§5). Slower
+than the 15.8s optimum, never dangerous.
+
+> **§5 is also the empirical vindication of §6b.** Had this task followed the plan and *deleted* the
+> cap, `newrecruit` — still declaring `MemPerInstanceBytes = 0` — would have fallen through to
+> `byCpu = 32` workers on this box. §5 measures that configuration at **58.9s against 23.1s at the
+> capped 8** — a **2.55× regression**, straight over a cliff the plan did not know existed when it
+> was written. The cap did not merely fail to be dead weight; it was actively holding an engine back
+> from a measured cliff the whole time.
+
+### 6b. The cap was KEPT and PROMOTED, not deleted
 
 The plan (Task 9, Step 1b) said to delete `ProvisionalUnmeasuredMemoryCap` on the reasoning that,
 once every builtin declares a measured footprint, the `MemPerInstanceBytes == 0` gate can never fire
 again and the cap becomes dead weight. **That premise turned out to be false**, so the step was not
 followed:
 
-- Only **two of four** builtins were measured. `battlescribe` and `newrecruit` still declare 0.
+- Only **two of four** builtins were measured *when this task was dispatched*, and `battlescribe`
+  still is not. `newrecruit` was measured concurrently (§5) but is not transcribed here (§6a), so
+  **two of four still declare 0** in the shipped registry either way.
 - `EngineRegistry.DefaultProfile` and the `engines.json` config path both let an engine register
   **without declaring `MemPerInstanceBytes` at all**, defaulting to 0. This harness is explicitly
   open to other engines — "every engine is measured" is a state it can never reach.
@@ -625,7 +653,7 @@ The two `xunit.runner.json` files stay pinned to it at `maxParallelThreads: 8`
 xUnit thread count** — a different quantity from an engine's worker count that currently shares a
 value. Retuning it was deliberately left out of scope.
 
-### 5c. The judgment call: `MemoryHeadroomFactor = 0.8`
+### 6c. The judgment call: `MemoryHeadroomFactor = 0.8`
 
 With `MemPerInstanceBytes` non-zero, the memory bound goes **live** for the first time. As written it
 computed `availableMemory / memPerInstance` — i.e. it planned to consume **100% of available
