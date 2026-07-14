@@ -1255,28 +1255,32 @@ deliberately reintroduced version of the defect (the mutant is named):
 ## 8.8 What CI measured after the change
 
 Run [29325721441](https://github.com/WarHub/battlescribe-spec/actions/runs/29325721441) (all 8 jobs
-green) against the  baseline
+green) against the `main` baseline
 [29239979347](https://github.com/WarHub/battlescribe-spec/actions/runs/29239979347) — the only
 comparable sample (older runs predate the CI split #291).
 
-**The pools applied, proven from telemetry** ( in the uploaded traces, on the real
-runner):  = **4**,  = **16**.
+**The pools applied, proven from telemetry** (`harness.pool.size` in the uploaded traces, on the real
+runner): `FrozenNrRosterFixture` = **4**, `FrozenNrGameDataUiFixture` = **16**. Green was not taken as
+evidence that the change was live; the tag is.
 
-| step (lane) | pool:  → now |  | now | Δ |
+| step (lane) | pool: `main` → now | `main` | now | Δ |
 |---|---|--:|--:|--:|
-| Run NR conformance tests () | 2 → **4** | 230 s | **145 s** | **−37%** |
-| Full frozen NR Editor GameData UI () | 6 → **16** | 101 s | **95 s** | **−6%** |
-| Full frozen NR roster () | 6 → **4** | 53 s | 54 s | +2% (flat) |
+| Run NR conformance tests (`nr-live-conformance`) | 2 → **4** | 230 s | **145 s** | **−37%** |
+| Full frozen NR Editor GameData UI (`nr-editor-ui-frozen`) | 6 → **16** | 101 s | **95 s** | **−6%** |
+| Full frozen NR roster (`nr-frozen`) | 6 → **4** | 53 s | 54 s | +2% (flat) |
 
-Job walls:  **10.15 → 8.27 min (−18.5%)**;  11.75 → 12.02 min
-(**+2.3% — parity**, its −6 s win swamped by build/cache noise on a single sample).
+Job walls: `nr-conformance` **10.15 → 8.27 min (−18.5%)**; `thorough-conformance` 11.75 → 12.02 min
+(**+2.3% — parity**, its −6 s win swamped by build/cache noise on a single baseline sample);
+`thorough-ui-bs` 8.03/6.87 → 7.68/7.10 min (untouched by this change).
 
-⚠️ **'s −6% is far short of the −33% §7.5 predicts for 6 → 16.** The likely cause is
-§7's own surprise #3: pool construction is **serial** and grows linearly with P, and per-context init on
-a real GitHub runner is dearer than on the WSL VM that modelled it — so init eats most of the execution
-gain. **The true runner optimum is plausibly below 16 (8–12).** 16 is not being nudged on one CI sample;
-the fix is the thing this document has now said three times — **sweep the context axis on the runner
-itself**, which the  telemetry has just been shown to support there.
+⚠️ **`nr-editor-ui-frozen`'s −6% is far short of the −33% §7.5 predicts for 6 → 16.** The likely cause
+is §7's own surprise #3: pool construction is **serial** and grows linearly with P, and per-context init
+on a real GitHub runner is dearer than on the WSL VM that modelled it — so init eats most of the
+execution gain. **The true runner optimum is plausibly below 16 (8–12), and the model box was not the
+runner after all.** 16 is *not* being nudged on the strength of one CI sample: it is measured, and it is
+strictly better on the real runner than both values it replaces (the mirrored 4 and the historic 6).
+The fix is the thing this document has now said three times — **sweep the context axis on the runner
+itself**, which the `harness.pool.size` telemetry has just been shown to support there.
 
 ## 8.9 What §8 did NOT reach
 
