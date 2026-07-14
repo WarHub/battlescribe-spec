@@ -77,6 +77,12 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Category!=Conformance" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       - name: BattleScribe reference engine — kitchen-sink
         run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "(Engine=BsRoster|Engine=BsGameData)&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+      # No --policy here, deliberately: this engine is a LAUNCHABLE (dotnet:) adapter, and a plan
+      # cannot be conveyed to one — there is no channel for it, so the CLI errors rather than
+      # silently dropping the flag (#305). This step used to pass `--workers 2`; the flag's
+      # replacement (`--policy workers=2`) is exactly what a launchable adapter must refuse, so
+      # the step was failing on every run of this job. The worker count is ConcurrencyPolicy's to
+      # choose anyway — that is the whole point of the model — and it picks 4 on this runner.
       - name: Reference adapter (dotnet) — roster kitchen-sink
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
@@ -85,8 +91,7 @@ jobs:
             --roster \
             --filter "protocol/protocol-kitchen-sink,category/" \
             --expected-failures battlescribe \
-            --output github-actions \
-            --policy workers=2
+            --output github-actions
       # The trace summary (wall time, cold-starts vs reuses, peak live resources) for the steps
       # above is appended to $GITHUB_STEP_SUMMARY automatically by the CLI/dotnet-test telemetry
       # code itself (TraceSummary.AppendToGitHubStepSummary) — no extra script needed here.
