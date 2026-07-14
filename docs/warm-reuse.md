@@ -21,17 +21,19 @@ been measured to be both correct and faster.**
 | `newrecruit` | both | ❌ cold | Same economics as `newrecruit-ui`. |
 | `battlescribe` | both | ⚪ n/a | In-process; engine construction is cheap. Nothing to save. |
 
-For NewRecruit the answer is **not** warm-reuse — it is **`--workers N`** (3.8× at 4 workers, verdicts
-identical). Each spec already gets an isolated `BrowserContext` on a shared browser, so parallelism
-is safe. See "NewRecruit: browser reuse is the wrong lever" below.
+For NewRecruit the answer is **not** warm-reuse — it is **parallelism** (3.8× at 4 workers, verdicts
+identical; the worker count is now chosen by `ConcurrencyPolicy`, and forced only for an ablation via
+`--policy workers=N`). Each spec already gets an isolated `BrowserContext` on a shared browser, so
+parallelism is safe. See "NewRecruit: browser reuse is the wrong lever" below.
 
 Both BattleScribe UI domains pay off for the same reason: their cold cost is a **JVM + JavaFX launch
 per spec**. Neither NewRecruit domain does, because a headless Chromium relaunch is cheap (~1.6s).
 
 ## Measurements
 
-All runs `--workers 1`, warm vs cold on the identical spec set, via `bs-spec compare` (see
-"Reproducing" below).
+All runs single-worker (`--policy workers=1`, which is also what the policy picks for
+`battlescribe-ui`: its `MaxParallel` is 1), warm vs cold on the identical spec set, via
+`bs-spec compare` (see "Reproducing" below).
 The harness **asserts that per-spec PASS/FAIL verdicts are identical** between warm and cold — a
 speedup that changes conformance results is not a speedup, it's a bug.
 
@@ -75,8 +77,8 @@ Two measurements settle how NR should actually be sped up (8 roster specs):
 
 | Approach | Wall | vs sequential | Verdicts |
 |---|---:|---:|---|
-| Sequential (`--workers 1`) | 143.7s | — | 7 pass / 1 fail |
-| **Parallel (`--workers 4`)** | **37.8s** | **3.8× faster** | ✅ identical |
+| Sequential (1 worker) | 143.7s | — | 7 pass / 1 fail |
+| **Parallel (4 workers)** | **37.8s** | **3.8× faster** | ✅ identical |
 | Engine/page warm-reuse | 258.8s | 0.56× (*slower*) | ❌ 6 wrong |
 
 **Sharing the browser saved nothing** (143.7s vs a 145.0s per-spec-browser baseline) — launching
@@ -88,8 +90,8 @@ So the engines split cleanly by where their cost lives:
 
 - **BattleScribe UI** — expensive cold start (JVM + JavaFX), cannot parallelize (`MaxParallel = 1`)
   → **warm-reuse** wins (1.79–2.20×).
-- **NewRecruit** — cheap cold start, parallelizes freely → **`--workers N`** wins (3.8× at 4), and
-  warm-reuse is worthless.
+- **NewRecruit** — cheap cold start, parallelizes freely → **parallelism** wins (3.8× at 4 workers),
+  and warm-reuse is worthless.
 
 ## Why long warm sessions are safe now
 
@@ -138,29 +140,58 @@ Warm-reuse of the NR roster engine used to corrupt results: only the first roste
 of a batch passed, because `Cleanup` never fully cleared the previous list and the leftover row
 made NR's Create List dropdown ambiguous. **This class of bug is now structurally impossible** —
 each spec gets its own `BrowserContext` (see above), so there is no shared state to leak. NR
-warm-reuse remains disabled anyway, because it buys nothing: use `--workers N` instead.
+warm-reuse remains disabled anyway, because it buys nothing: parallelism is the lever there, and the
+policy already picks the worker count.
 
 CI never caught the original bug because the NR-UI roster lane runs a **single** spec.
 
 ## Reproducing
 
+The ablation lever is `bs-spec compare --policy-a/--policy-b`: each arm gets its own
+`ConcurrencyPlan` override, in the same `--policy` vocabulary `run` and `serve` use (`workers=N`,
+`reuse=on|off`, `reuse-roster=on|off`, `reuse-gamedata=on|off`). `compare` runs both arms, asserts
+per-spec verdict-equality, and only then reports timing.
+
 ```bash
-# Warm vs cold, with a verdict-equality assertion — bs-spec compare asserts the two arms'
-# per-spec verdicts are identical before it reports the timing delta; a divergence exits non-zero.
 dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll compare \
   --engine battlescribe-ui --gamedata --filter "entry/,export/" \
-  --config-a "" --config-b "BSSPEC_DISABLE_WARM_REUSE=1"
+  --policy-a "reuse=on" --policy-b "reuse=off"
 ```
 
-Force cold for any engine (ablation / diagnosis):
+Verified 2026-07-13 (54 executed specs, 113 reported): **verdicts identical, 2.21×** — reproducing
+the recorded 2.20× figure through the new channel.
 
-```bash
-BSSPEC_DISABLE_WARM_REUSE=1 bs-spec run --all --engine battlescribe-ui --gamedata
-```
+**A ratio alone is not evidence.** The two arms must be shown to have genuinely done different
+things, or the lever is disconnected and the number means nothing. `compare` prints a per-arm trace
+summary for exactly this; the load-bearing line is `engine starts`:
 
-`bs-spec compare` is the general form of this: `--config-a`/`--config-b` are each a comma-separated
-`KEY=VALUE` list of environment settings applied to that arm's child processes, so any configuration
-pair can be checked for verdict-neutrality this way — not just warm vs cold.
+| | Arm A (`reuse=on`) | Arm B (`reuse=off`) |
+|---|---|---|
+| wall | 160.5s | 354.6s |
+| engine starts | **1 cold, 53 reused** | **54 cold, 0 reused** |
+| p50 spec | 2998.7ms | 6614.6ms |
+| peak live `jvm` | 1 | 1 |
+
+Arm A cold-starts the JVM once and reuses it for the other 53 specs; arm B cold-starts a fresh one
+for every spec. **Note `peak live jvm` is 1 in both arms and that is correct, not a bug:** it is a
+*concurrency* measure, and `battlescribe-ui` declares `MaxParallel = 1`, so at most one JVM is ever
+alive at a time in either arm. Arm B's 54 JVM launches are sequential — the cost shows up in the
+`54 cold` count and the wall time, never as a higher peak. Read the cold/reuse counts, not the peak,
+to confirm the arms differ.
+
+`--config-a`/`--config-b` still exist and are a *different axis*: comma-separated `KEY=VALUE` child
+**environment**, for genuine environment experiments. They are optional; varying the policy needs
+only `--policy-a`/`--policy-b`.
+
+### Historical note: `BSSPEC_DISABLE_WARM_REUSE`
+
+The old lever was `--config-b "BSSPEC_DISABLE_WARM_REUSE=1"`. That variable was deleted when
+warm-reuse moved to a `ConcurrencyPolicy` the parent computes and sends to the child. Because
+`--config-*` is generic environment injection with no validation, the old recipe kept *running* — it
+injected a variable nobody read, ran **both arms warm**, and reported "verdicts identical, 1.00×",
+which reads exactly like confirmation. The lever was disconnected while the gauge said PASS. It is
+recorded here because a false green is worse than a red one, and because `--config-*`'s
+no-validation property still makes that failure mode possible for any other dead variable.
 
 ## Related
 

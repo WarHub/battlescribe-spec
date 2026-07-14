@@ -1,3 +1,5 @@
+using BattleScribeSpec.Concurrency;
+
 namespace BattleScribeSpec.Engines;
 
 /// <summary>Launch descriptor: what to Start() for an engine.</summary>
@@ -23,28 +25,57 @@ public static class EngineHostLocator
     /// 4. "bs-engine-host" on PATH.
     /// Throws InvalidOperationException naming all probed locations when not found.
     /// A .dll resolution launches via "dotnet"; an executable launches directly.
-    /// Headed/keep-alive for non-builtin (launchable) entries are NOT conveyed at all — neither
-    /// as launch arguments nor via any environment variable. <c>--headed</c>/<c>--keep-alive</c>
-    /// are silently dropped for an <c>exec:</c>/<c>dotnet:</c> adapter. Tracked as
-    /// <see href="https://github.com/WarHub/battlescribe-spec/issues/305">#305</see>.
+    /// <c>--headed</c> for non-builtin (launchable) entries is NOT conveyed at all — neither as a
+    /// launch argument nor via any environment variable — so the CLI rejects it before a process is
+    /// spawned rather than dropping it silently. Tracked as
+    /// <see href="https://github.com/WarHub/battlescribe-spec/issues/305">#305</see>. A
+    /// <paramref name="plan"/> likewise: a launchable entry that receives one throws, because there
+    /// is no channel to convey it (see below).
     ///
     /// The default <paramref name="verb"/> is <c>serve</c> (the NDJSON adapter protocol on
     /// stdio). The interactive verbs (<c>probe</c>, <c>discover</c>) pass their full argument
     /// tail via <paramref name="verbArgs"/> — the host command owns those options — and this
     /// method just prefixes the verb and quotes any element containing whitespace. For those
-    /// verbs the <paramref name="headed"/>/<paramref name="keepAlive"/> flags are not composed
-    /// here; the caller places them in <paramref name="verbArgs"/> at the position the host
-    /// command expects (e.g. after a discover subcommand token).
+    /// verbs the <paramref name="headed"/>/<paramref name="plan"/> are not composed here; the
+    /// caller places them in <paramref name="verbArgs"/> at the position the host command expects
+    /// (e.g. after a discover subcommand token).
     /// </summary>
+    /// <param name="entry">The resolved engine entry (built-in or launchable).</param>
+    /// <param name="headed">Show the browser/app window (serve verb only; presentation, not policy).</param>
+    /// <param name="verb">The host subcommand to invoke (default <c>serve</c>).</param>
+    /// <param name="verbArgs">Full argument tail for non-<c>serve</c> verbs (see remarks).</param>
+    /// <param name="plan">
+    /// The concurrency/reuse decision to hand the child, composed as <c>--policy
+    /// workers=N,reuse-roster=on|off,reuse-gamedata=on|off</c> (serve verb only). The harness always
+    /// supplies this for a built-in engine (see <c>EngineSelection.EffectivePlan</c>) — <b>the parent
+    /// decides and the child is told</b>; the child never recomputes a policy, because as a separate
+    /// process it may see a different machine and silently disagree. Null composes no <c>--policy</c>
+    /// flag, which drives the host to its conservative no-reuse default; that is a hand-run
+    /// convenience, not a second decision-maker.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="plan"/> is non-null and <paramref name="entry"/> is not a built-in — there
+    /// is no channel to convey a policy override to a launchable (<c>exec:</c>/<c>dotnet:</c>)
+    /// adapter, and unlike #305's headed/keep-alive gap, a policy override is never silently
+    /// dropped.
+    /// </exception>
     public static EngineLaunch Resolve(
         EngineEntry entry,
         bool headed = false,
-        bool keepAlive = false,
         string verb = "serve",
-        IReadOnlyList<string>? verbArgs = null)
+        IReadOnlyList<string>? verbArgs = null,
+        ConcurrencyPlan? plan = null)
     {
         if (!entry.Builtin)
         {
+            if (plan is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Engine '{entry.Name}' is a launchable adapter (exec:/dotnet:) and cannot receive a " +
+                    "ConcurrencyPlan override — there is no channel to convey --policy to it. " +
+                    "Do not pass a plan for a non-builtin engine.");
+            }
+
             return new EngineLaunch(entry.Executable ?? throw new InvalidOperationException($"Engine '{entry.Name}' has no executable configured."), entry.Arguments ?? string.Empty);
         }
 
@@ -59,7 +90,24 @@ public static class EngineHostLocator
         string hostArgs;
         if (verb == "serve")
         {
-            var flags = (headed ? " --headed" : "") + (keepAlive ? " --keep-alive" : "");
+            // The plan is the ONE reuse decision. There is deliberately no second channel here: a
+            // `keepAlive` parameter used to compose `--policy reuse=on` when no plan was given, described
+            // as "legacy sugar ... e.g. interactive debugging via `run --keep-alive`" — a flag this branch
+            // DELETED. Both construction sites of EngineSelection passed KeepAlive: false, so the branch it
+            // guarded was unreachable and its docstring named a flag the CLI errors on. That is exactly the
+            // zero-consumer-field-dressed-as-control pattern the branch removed from ConcurrencyPlan
+            // (MaxParallelThreads), left standing one layer up. Reuse is ConcurrencyPolicy's to decide; it
+            // arrives in the plan or not at all.
+            var policyParts = new List<string>();
+            if (plan is { } p)
+            {
+                policyParts.Add($"workers={p.Workers}");
+                policyParts.Add($"reuse-roster={(p.ReuseRoster ? "on" : "off")}");
+                policyParts.Add($"reuse-gamedata={(p.ReuseGameData ? "on" : "off")}");
+            }
+
+            var policyFlag = policyParts.Count > 0 ? $" --policy {string.Join(',', policyParts)}" : "";
+            var flags = (headed ? " --headed" : "") + policyFlag;
             hostArgs = $"serve --engine {entry.Name}{flags}";
         }
         else

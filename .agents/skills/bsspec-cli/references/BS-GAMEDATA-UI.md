@@ -113,9 +113,13 @@ Java runtime and jars auto-discover (`BsUiPaths.ResolveJavaPath`, `BsGameDataUiE
 resolution order `BS_UI_JAVA_PATH` → `lib/liberica-jdk` → `JAVA_HOME`. CI relies on
 `JAVA_HOME` from `actions/setup-java` (`jdk+fx`).
 
-- Each spec relaunches the app → full suite ≈ 8 min (80 specs), matching CI.
-- `BS_UI_KEEP_ALIVE=true` is **broken for gamedata** (stale data across specs → "Tree item not
-  found"); leave it unset.
+- **Warm start is the default, and it is not a knob.** The app survives between specs because
+  `ConcurrencyPolicy.For(machine, battlescribe-ui).ReuseGameData` says so (an expensive cold start —
+  a JVM + JavaFX launch per spec — that is declared reuse-safe). Reuse was *earned*: `bs-spec compare`
+  measured 54 gamedata specs warm vs cold with **identical verdicts, 2.20× faster**
+  (`docs/warm-reuse.md`). The old `BS_UI_KEEP_ALIVE` env var is deleted and read nowhere; the stale
+  "warm is broken for gamedata (stale data across specs)" note it carried described a defect fixed by
+  that work. To run cold for a one-off diagnosis, use the CLI's `--policy reuse-gamedata=off`.
 - Single spec end-to-end with assertions:
   `dotnet run --project src/BattleScribeSpec.Cli -- run --engine battlescribe --ui specs/gamedata/entry/se-create-in-gamesystem.yaml`
   (add `--all-steps` for per-step state).

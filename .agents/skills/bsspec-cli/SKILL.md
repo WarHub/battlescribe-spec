@@ -78,7 +78,12 @@ is dumped after the **last** step; assertions run and a pass/fail summary prints
 | `--timeline <file>` | Write a self-contained HTML timeline report (screenshots embedded for UI engines). |
 | `--record <file>` | Record UI actions to JSON (battlescribe-ui). |
 | `--save-roster <dir>` | Save the final roster as `.ros` XML (battlescribe-ui). |
-| `--keep-alive` | Keep the BattleScribe app running between runs (battlescribe-ui). |
+| `--policy <k=v,...>` | Override the concurrency/reuse policy: `workers=N` (`--all` only), `reuse=on\|off`, `reuse-roster=`, `reuse-gamedata=`. For diagnosis/ablation — the policy picks these itself. |
+
+There is no `--keep-alive` and no `--workers`: "keep the app alive between specs" *is* engine reuse,
+and both were one policy key wearing their own flag. `ConcurrencyPolicy.For(machine, engine)` decides
+worker count and reuse; `--policy` is the only way to override it. Passing `workers=N` to a
+single-spec run is an error, not a no-op (one spec = one adapter process).
 
 **Uniform capability handling:** every artifact flag is accepted for every engine. If the
 chosen engine can't honor one (e.g. `--screenshots` on the in-process engine), the CLI prints

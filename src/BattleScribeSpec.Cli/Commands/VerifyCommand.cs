@@ -167,7 +167,7 @@ internal static class VerifyCommand
             // JsonProtocolGameDataEngine per engine for the whole matrix: GameDataRunner.Run
             // does the setup/steps/cleanup lifecycle per spec over that same connection, so
             // engine instances are reused across specs exactly as the in-process engines were.
-            var selection = new EngineSelection(column.Entry!, EngineDomain.Gamedata, Headed: !headless, KeepAlive: false);
+            var selection = new EngineSelection(column.Entry!, EngineDomain.Gamedata, Headed: !headless);
 
             AdapterProcess? process = null;
             DescribeResult described;

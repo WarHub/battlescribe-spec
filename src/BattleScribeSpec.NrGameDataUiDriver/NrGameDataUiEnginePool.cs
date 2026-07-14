@@ -58,7 +58,7 @@ public sealed class NrGameDataUiEnginePool : IAsyncDisposable
     /// </summary>
     public static async Task<NrGameDataUiEnginePool> CreateFrozenAsync(
         string staticDir,
-        int concurrency = 5,
+        int concurrency,
         bool headless = true,
         float? slowMo = null)
     {

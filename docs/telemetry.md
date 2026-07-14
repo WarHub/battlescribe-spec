@@ -77,7 +77,7 @@ because it is an industry standard rather than a bespoke dial of ours. Point it 
 docker run -d --name jaeger -p 4318:4318 -p 16686:16686 jaegertracing/all-in-one:latest
 
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-  bs-spec run --all --engine battlescribe --workers 2
+  bs-spec run --all --engine battlescribe --policy workers=2
 ```
 
 **HTTP/protobuf only — this is not configurable.** Both `ParentProviders` (the parent's own spans/
@@ -180,20 +180,60 @@ still covering every real run.
 
 ## `bs-spec compare`
 
-```bash
-bs-spec compare --engine battlescribe-ui --gamedata \
-  --config-a "" --config-b "BSSPEC_DISABLE_WARM_REUSE=1"
-```
+### Usage
 
-`compare` runs the **same spec set twice**, once per `--config-*` arm, each arm's child adapter
-processes getting their own extra environment. Before reporting any timing, it asserts that the
-two arms' **per-spec verdicts are identical**. The command's entire reason to exist is this
+`compare` runs the **same spec set twice**, once per arm. Before reporting any timing, it asserts
+that the two arms' **per-spec verdicts are identical**. The command's entire reason to exist is this
 guarantee: **a configuration change that alters conformance results is not an optimization, it is
 a regression.** A speedup that also changes which specs pass or fail has not been validated — it
 has only been timed. `compare` exits non-zero the moment a verdict diverges, before printing a
-single timing number, so a regression can never hide behind an attractive speedup figure. See
-`docs/warm-reuse.md` for the measurements this command produced (e.g. `battlescribe-ui` gamedata
-warm-reuse: 54 specs, verdicts identical, 2.20× faster).
+single timing number, so a regression can never hide behind an attractive speedup figure.
+
+The two arms can differ along **two independent axes**:
+
+- **`--policy-a` / `--policy-b`** — the arm's `ConcurrencyPlan`, in the same `--policy` vocabulary
+  `run` and `serve` use (one shared parser, `PolicyOverride.Apply`): `workers=N`, `reuse=on|off`,
+  `reuse-roster=on|off`, `reuse-gamedata=on|off`. This varies the **harness's decisions**, and flows
+  into that arm's child `serve --policy` args. This is the ablation channel.
+- **`--config-a` / `--config-b`** — a comma-separated `KEY=VALUE` list applied to that arm's child
+  **environment**. Optional (default: none). This varies the child's *environment*, not the policy —
+  a different axis, kept for genuine environment experiments.
+
+```bash
+# Ablate a policy decision (the common case)
+bs-spec compare --engine <name> --gamedata \
+  --policy-a "reuse=on" --policy-b "reuse=off"
+
+# Vary the child environment instead
+bs-spec compare --engine <name> --gamedata \
+  --config-a "" --config-b "SOME_VAR=value"
+```
+
+### The warm-reuse ablation
+
+```bash
+bs-spec compare --engine battlescribe-ui --gamedata --filter "entry/,export/" \
+  --policy-a "reuse=on" --policy-b "reuse=off"
+```
+
+Verified 2026-07-13: verdicts identical across 113 specs (54 executed), **2.21×**.
+
+**Read the per-arm trace summary, not just the ratio.** A speedup number cannot tell you the two
+arms actually did different things — a disconnected lever produces a plausible-looking ratio just as
+happily. The `engine starts` line is the evidence: arm A reported **1 cold, 53 reused**; arm B
+reported **54 cold, 0 reused**. Peak live `jvm` is 1 in *both* arms and that is correct — it is a
+concurrency measure, and `battlescribe-ui` declares `MaxParallel = 1`, so arm B's 54 JVM launches
+are sequential and never raise the peak.
+
+(This replaces `--config-b "BSSPEC_DISABLE_WARM_REUSE=1"`. That variable was deleted when warm-reuse
+moved to a parent-computed `ConcurrencyPolicy`; because `--config-*` is unvalidated environment
+injection, the stale recipe kept running, ran both arms warm, and reported a false "verdicts
+identical, 1.00×". See `docs/warm-reuse.md`.)
+
+### Measurements
+
+See `docs/warm-reuse.md` for the full measurement table (e.g. `battlescribe-ui` gamedata: 54 specs,
+verdicts identical, 2.20–2.21× faster).
 
 ## Known limitations, stated honestly
 

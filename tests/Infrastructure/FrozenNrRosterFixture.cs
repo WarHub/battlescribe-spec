@@ -1,3 +1,4 @@
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.NewRecruit;
 
 namespace BattleScribeSpec.Tests;
@@ -29,11 +30,10 @@ public sealed class FrozenNrRosterFixture : IAsyncLifetime
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        var concurrency = 5;
-        if (int.TryParse(Environment.GetEnvironmentVariable("NR_PARALLEL"), out var envConcurrency) && envConcurrency > 0)
-        {
-            concurrency = envConcurrency;
-        }
+        // Local: this pool replays `harFile` from disk. No request leaves the machine, so the pool is
+        // the engine's measured optimum (4) — the live lane, same engine, is a different question and
+        // gets LoadTarget.ThirdPartyLive.
+        var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit", LoadTarget.Local);
 
         // Held for the pool's entire alive window (released in DisposeAsync, after teardown) so
         // NewRecruitEnginePoolResourceMetricsTests's own independent CreateFrozenAsync call can

@@ -50,7 +50,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
     /// </summary>
     public static async Task<NewRecruitEnginePool> CreateFrozenAsync(
         string harFilePath,
-        int concurrency = 5,
+        int concurrency,
         string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         bool visual = false,
@@ -129,7 +129,7 @@ public sealed class NewRecruitEnginePool : IAsyncDisposable
     /// Create a live engine pool pointed at the real NR website.
     /// </summary>
     public static async Task<NewRecruitEnginePool> CreateLiveAsync(
-        int concurrency = 10,
+        int concurrency,
         string baseUrl = "https://www.newrecruit.eu",
         bool headless = true,
         bool visual = false,

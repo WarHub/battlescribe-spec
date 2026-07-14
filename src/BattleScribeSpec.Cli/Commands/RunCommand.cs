@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
@@ -34,7 +35,6 @@ internal static class RunCommand
         string? TimelinePath,
         string? RecordPath,
         string? SaveRosterDir,
-        bool KeepAlive,
         int? BreakAt)
     {
         public bool Headless => !Headed;
@@ -95,10 +95,12 @@ internal static class RunCommand
         {
             Description = "Engine name for step-level assertion overrides (--all; defaults to the engine identity).",
         };
-        var workers = new Option<int>("--workers")
+        var policy = new Option<string?>("--policy")
         {
-            Description = "Run --all specs in parallel with N adapter processes (default: 1).",
-            DefaultValueFactory = _ => 1,
+            Description = "Override the concurrency/reuse policy, comma-separated KEY=VALUE: workers=N, " +
+                "reuse=on|off, reuse-roster=on|off, reuse-gamedata=on|off. Without this, the policy " +
+                "(ConcurrencyPolicy.For — machine + engine) picks the worker count and reuse decision " +
+                "by itself; this exists to diagnose or ablate, not to operate.",
         };
         var allSteps = new Option<bool>("--all-steps")
         {
@@ -120,10 +122,6 @@ internal static class RunCommand
         {
             Description = "Save the final roster as .ros XML into <dir> (battlescribe-ui).",
         };
-        var keepAlive = new Option<bool>("--keep-alive")
-        {
-            Description = "Keep the BattleScribe app running between runs (battlescribe-ui).",
-        };
         var breakAt = new Option<int?>("--break")
         {
             Description = "Pause before step <n> and drop into a REPL / inspection prompt.",
@@ -134,8 +132,8 @@ internal static class RunCommand
         engineOptions.AddTo(command);
         foreach (var option in new Option[]
         {
-            output, json, all, matrix, specs, filter, tags, report, expectedFailures, assertionEngine, workers,
-            allSteps, screenshots, timeline, record, saveRoster, keepAlive, breakAt,
+            output, json, all, matrix, specs, filter, tags, report, expectedFailures, assertionEngine, policy,
+            allSteps, screenshots, timeline, record, saveRoster, breakAt,
         })
         {
             command.Options.Add(option);
@@ -180,14 +178,9 @@ internal static class RunCommand
                         throw new CliInputException($"--output '{batchOutput}' is not valid for --all; use summary, json, or github-actions.");
                     }
 
-                    var workerCount = parseResult.GetValue(workers);
-                    if (workerCount < 1)
-                    {
-                        throw new CliInputException("--workers must be at least 1.");
-                    }
-
                     // Resolve validates --gamedata/--roster exclusivity, --ui, and the engine identity.
-                    var selection = engineOptions.Resolve(parseResult, specInput: null);
+                    var selection = ApplyPolicyOverride(
+                        engineOptions.Resolve(parseResult, specInput: null), parseResult.GetValue(policy), Ui.Warn);
 
                     // Batch runs both domains by default; --gamedata/--roster narrow. Resolve already
                     // rejected the both-set case, so the remaining cases are single-domain or neither→both.
@@ -205,7 +198,6 @@ internal static class RunCommand
                         (parseResult.GetValue(timeline) is not null, "--timeline"),
                         (parseResult.GetValue(record) is not null, "--record"),
                         (parseResult.GetValue(saveRoster) is not null, "--save-roster"),
-                        (parseResult.GetValue(keepAlive), "--keep-alive"),
                         (parseResult.GetValue(breakAt) is not null, "--break"),
                         (parseResult.GetValue(allSteps), "--all-steps"),
                     })
@@ -225,23 +217,24 @@ internal static class RunCommand
                         parseResult.GetValue(tags),
                         parseResult.GetValue(report),
                         parseResult.GetValue(expectedFailures),
-                        parseResult.GetValue(assertionEngine),
-                        workerCount);
+                        parseResult.GetValue(assertionEngine));
                     return RunBatch.ExecuteAsync(batch);
                 }
 
                 // Single-spec mode (unchanged behavior).
-                var keepAliveValue = parseResult.GetValue(keepAlive);
                 var outputStr = parseResult.GetValue(output);
                 if (outputStr is not null && outputStr is not ("tree" or "json"))
                 {
                     throw new CliInputException($"--output '{outputStr}' is not valid for a single-spec run; use tree or json.");
                 }
 
+                RejectInertPolicyKeys(parseResult.GetValue(policy));
+
                 var format = parseResult.GetValue(json) || outputStr == "json" ? OutputFormat.Json : OutputFormat.Tree;
                 var options = new RunOptions(
                     Spec: specInput!,
-                    Engine: engineOptions.Resolve(parseResult, specInput) with { KeepAlive = keepAliveValue },
+                    Engine: ApplyPolicyOverride(
+                        engineOptions.Resolve(parseResult, specInput), parseResult.GetValue(policy), Ui.Warn),
                     Format: format,
                     Headed: parseResult.GetValue(engineOptions.Headed),
                     AllSteps: parseResult.GetValue(allSteps),
@@ -249,7 +242,6 @@ internal static class RunCommand
                     TimelinePath: parseResult.GetValue(timeline),
                     RecordPath: parseResult.GetValue(record),
                     SaveRosterDir: parseResult.GetValue(saveRoster),
-                    KeepAlive: keepAliveValue,
                     BreakAt: parseResult.GetValue(breakAt));
                 return ExecuteAsync(options);
             }
@@ -261,6 +253,123 @@ internal static class RunCommand
         });
 
         return command;
+    }
+
+    /// <summary>
+    /// Reject <c>--policy</c> keys that a <b>single-spec</b> run cannot act on, instead of accepting
+    /// them and doing nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>workers=N</c> sizes the pool of adapter processes <c>run --all</c> spreads a spec suite
+    /// across (<c>RunBatch</c> → <c>SpecSuiteRunner</c>). A single-spec run spawns exactly one
+    /// adapter and the child never reads the key, so <c>--policy workers=8</c> was accepted,
+    /// forwarded to the child, and completely inert — with no warning. This repo's standard is that a
+    /// flag is accepted or rejected, never silently dropped (#305); an inert knob tells the user they
+    /// configured something when they did not, which is worse than an error.
+    /// </para>
+    /// <para>
+    /// The <c>reuse*</c> keys stay legal here: they reach the child (<c>serve --policy</c>) and do set
+    /// its engine's reuse behaviour, so a single-spec run is a legitimate way to poke at a warm vs
+    /// cold engine even though one spec means one setup.
+    /// </para>
+    /// </remarks>
+    /// <param name="policyRaw">The raw <c>--policy k=v,...</c> string, or null when omitted.</param>
+    /// <exception cref="CliInputException">A key was given that a single-spec run cannot honour.</exception>
+    internal static void RejectInertPolicyKeys(string? policyRaw)
+    {
+        IReadOnlySet<string> keys;
+        try
+        {
+            keys = PolicyOverride.Keys(policyRaw);
+        }
+        catch (FormatException ex)
+        {
+            throw new CliInputException(ex.Message);
+        }
+
+        if (keys.Contains("workers"))
+        {
+            throw new CliInputException(
+                "--policy: 'workers' is meaningless for a single-spec run — one spec runs in exactly one " +
+                "adapter process, so there is nothing to spread across workers. Use it with --all (which " +
+                "spreads a suite across N adapters), or drop it.");
+        }
+    }
+
+    /// <summary>
+    /// Apply a <c>--policy</c> override on top of the machine/engine's own <see cref="ConcurrencyPolicy"/>
+    /// answer, and return <paramref name="selection"/> with <see cref="EngineSelection.PlanOverride"/> set
+    /// accordingly. Null/absent <paramref name="policyRaw"/> leaves <paramref name="selection"/> untouched
+    /// — no override was asked for, so none is fabricated (a launchable adapter must only see
+    /// <see cref="EngineSelection.PlanOverride"/> become non-null when the user actually typed
+    /// <c>--policy</c>; a launchable entry that receives one throws — see
+    /// <see cref="EngineSelection.ResolveLaunch"/>).
+    /// </summary>
+    /// <param name="selection">The resolved engine selection to override.</param>
+    /// <param name="policyRaw">The raw <c>--policy k=v,...</c> string, or null when omitted.</param>
+    /// <param name="warn">
+    /// Sink for the "policy override, not capability mismatch" warning: forcing reuse on for a domain
+    /// the engine's <see cref="EngineProfile"/> does not declare reuse-safe is ALLOWED (it is exactly
+    /// the ablation <c>bs-spec compare</c> needs to prove reuse-safety) but is never silent.
+    /// </param>
+    /// <returns><paramref name="selection"/>, with <see cref="EngineSelection.PlanOverride"/> set when an override was given.</returns>
+    /// <exception cref="CliInputException"><paramref name="policyRaw"/> fails to parse (see <see cref="PolicyOverride.Apply"/>).</exception>
+    internal static EngineSelection ApplyPolicyOverride(EngineSelection selection, string? policyRaw, Action<string> warn)
+    {
+        if (policyRaw is null)
+        {
+            return selection;
+        }
+
+        // The base plan is the policy's answer FOR THIS LOAD TARGET, not a machine-width one that the
+        // override then edits. --policy only replaces the keys it names, so a base plan computed without
+        // the load target would let `--policy reuse-roster=on` — a flag that says nothing about workers —
+        // hand a live NewRecruit run ceil(cpuCount × k) browsers through the untouched Workers field.
+        var loadTarget = selection.LoadTarget;
+        var basePlan = ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile, loadTarget);
+        ConcurrencyPlan overridden;
+        try
+        {
+            overridden = PolicyOverride.Apply(policyRaw, basePlan);
+        }
+        catch (FormatException ex)
+        {
+            throw new CliInputException(ex.Message);
+        }
+
+        // An explicit override may lower the load on a third party's site; it may not raise it. Rejected
+        // rather than clamped, because this repo's rule is that a flag is honoured or refused, never
+        // silently dropped (#305) — and because a user who typed `workers=32` at newrecruit.eu should be
+        // told no, not quietly given 2 and left believing they got 32. (EffectivePlan clamps regardless;
+        // that is the backstop, not the answer.)
+        if (loadTarget == LoadTarget.ThirdPartyLive
+            && (overridden.Workers > ConcurrencyPolicy.ThirdPartyLiveLoadLimit
+                || overridden.PoolSize > ConcurrencyPolicy.ThirdPartyLiveLoadLimit))
+        {
+            throw new CliInputException(
+                $"--policy: engine '{selection.EngineName ?? selection.Display}' resolves to a third party's " +
+                $"live service for this run, so its concurrency is a load question, not a throughput one. " +
+                $"It is held to {ConcurrencyPolicy.ThirdPartyLiveLoadLimit} concurrent sessions " +
+                $"(ConcurrencyPolicy.ThirdPartyLiveLoadLimit) and no override may raise that — you asked for " +
+                $"workers={overridden.Workers}, pool={overridden.PoolSize}. Lower it, or point the engine at a " +
+                $"local endpoint (unset NR_ENGINE_URL to replay the frozen HAR, which is what the measured " +
+                $"worker count was fitted against).");
+        }
+
+        if (overridden.ReuseRoster && !selection.Entry.Profile.ReuseSafeRoster)
+        {
+            warn("forcing reuse on for the roster domain on an engine not declared reuse-safe; " +
+                "verdicts may change — use `bs-spec compare` to check.");
+        }
+
+        if (overridden.ReuseGameData && !selection.Entry.Profile.ReuseSafeGameData)
+        {
+            warn("forcing reuse on for the gamedata domain on an engine not declared reuse-safe; " +
+                "verdicts may change — use `bs-spec compare` to check.");
+        }
+
+        return selection with { PlanOverride = overridden };
     }
 
     private static async Task<int> ExecuteAsync(RunOptions options)
@@ -608,7 +717,6 @@ internal static class RunCommand
             (options.TimelinePath is not null, "--timeline"),
             (options.RecordPath is not null, "--record"),
             (options.SaveRosterDir is not null, "--save-roster"),
-            (options.KeepAlive, "--keep-alive"),
             (options.BreakAt is not null, "--break"),
         ];
 

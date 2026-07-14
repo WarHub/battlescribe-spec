@@ -7,30 +7,66 @@ using BattleScribeSpec.Telemetry.Collector;
 namespace BattleScribeSpec.Cli;
 
 /// <summary>
-/// <c>bs-spec compare</c> — the verdict-equality rail. Runs the same spec set twice, once per
-/// <c>--config-*</c> arm, each arm's child adapter processes getting their own extra environment
-/// (a comma-separated <c>KEY=VALUE</c> list). Before any timing is reported, the two arms' per-spec
-/// verdicts are asserted identical — a configuration change (warm-reuse, a parallelism level, any
-/// other environment-gated behavior) that alters conformance results is not an optimization, it is a
-/// regression, and this command's whole reason to exist is to catch that before it ships.
+/// <c>bs-spec compare</c> — the verdict-equality rail. Runs the same spec set twice, once per arm,
+/// and asserts the two arms' per-spec verdicts are identical BEFORE any timing is reported. A
+/// configuration change (warm-reuse, a parallelism level, any other gated behavior) that alters
+/// conformance results is not an optimization, it is a regression, and catching that before it ships
+/// is this command's whole reason to exist.
 /// </summary>
 /// <remarks>
-/// This replaces the retired <c>scripts/bench-warm-reuse.ps1</c>, generalized from "warm vs cold"
-/// (<c>BSSPEC_DISABLE_WARM_REUSE=1</c>) to any pair of child-process environment configurations —
-/// including the parallelism levels a future auto-tuner would need to prove verdict-neutral.
+/// <para>
+/// The arms may differ along <b>two independent axes</b>, and keeping both is not redundancy:
+/// </para>
+/// <list type="bullet">
+/// <item><description>
+/// <c>--policy-a</c>/<c>--policy-b</c> — that arm's <see cref="Concurrency.ConcurrencyPlan"/>, parsed by the
+/// ONE shared <c>--policy</c> parser (<see cref="Concurrency.PolicyOverride.Apply"/>, also used by
+/// <c>run --policy</c> and <c>serve --policy</c>) and carried as that arm's
+/// <see cref="EngineSelection.PlanOverride"/> — hence into that arm's child <c>serve --policy</c>
+/// args. This varies the <b>harness's decisions</b>. It is the ablation channel.
+/// </description></item>
+/// <item><description>
+/// <c>--config-a</c>/<c>--config-b</c> — a comma-separated <c>KEY=VALUE</c> list layered onto that
+/// arm's child <b>environment</b>. This varies the <i>child's environment</i>, a different thing.
+/// </description></item>
+/// </list>
+/// <para>
+/// The reuse ablation used to ride the environment axis (<c>--config-b
+/// "BSSPEC_DISABLE_WARM_REUSE=1"</c>), and that is the cautionary tale this command's design answers:
+/// when reuse moved to a parent-computed policy the variable was deleted, but because
+/// <c>--config-*</c> is unvalidated environment injection the stale recipe kept RUNNING — injecting a
+/// variable nobody read, running both arms warm, and reporting "verdicts identical, 1.00x", which
+/// reads exactly like confirmation. A disconnected lever with the gauge still showing PASS is worse
+/// than no lever. Ablating a policy decision now goes through the policy axis, where the decision
+/// actually lives.
+/// </para>
+/// </remarks>
+/// <remarks>
+/// Before either arm is timed, a discarded warm-up pass runs the same spec set once under neither
+/// config, so arm A doesn't unfairly eat the process's first-run costs (JIT, cold OS file cache,
+/// first AV scan of freshly built DLLs) that arm B would then get for free. See the warm-up comment
+/// in <see cref="ExecuteAsync"/>.
 /// </remarks>
 internal static class CompareCommand
 {
+    /// <summary>
+    /// Resolved inputs for a comparison. Each arm's <c>--config-*</c> lives on that arm's
+    /// <see cref="EngineSelection.ChildEnvironment"/> rather than beside it here: the config is not just
+    /// something to hand the child at spawn time, it is an input to <see cref="EngineSelection.LoadTarget"/>
+    /// (<c>--config-a NR_ENGINE_URL=https://www.newrecruit.eu</c> takes arm A live), so the selection that
+    /// computes the plan and the environment that decides the endpoint must be the <em>same</em> object.
+    /// Held apart, they were two facts about one arm that could disagree — and the one that decided how
+    /// many browsers to spawn was the one that could not see the site.
+    /// </summary>
     private sealed record CompareOptions(
         EngineSelection Selection,
+        EngineSelection SelectionA,
+        EngineSelection SelectionB,
         IReadOnlyList<string> Domains,
         string? Filter,
         string? SpecsDir,
         string? ExpectedFailures,
-        string? AssertionEngine,
-        int Workers,
-        IReadOnlyDictionary<string, string> ConfigA,
-        IReadOnlyDictionary<string, string> ConfigB);
+        string? AssertionEngine);
 
     /// <summary>One arm's outcome: the suite result, measured wall time, and trace summary (empty when telemetry produced no local artifact).</summary>
     private sealed record ArmResult(SpecSuiteResult Suite, TimeSpan Wall, TraceSummary Trace);
@@ -57,27 +93,37 @@ internal static class CompareCommand
             Description = "Engine name for step-level assertion overrides, applied to both arms " +
                 "(mirrors 'run --all'; defaults to the engine identity).",
         };
-        var workers = new Option<int>("--workers")
+        var policyA = new Option<string?>("--policy-a")
         {
-            Description = "Run each arm with N adapter processes (default: 1).",
-            DefaultValueFactory = _ => 1,
+            Description = "Override arm A's concurrency/reuse policy — comma-separated KEY=VALUE, the " +
+                "SAME vocabulary and shared parser as `run --policy`/`serve --policy`: workers=N, " +
+                "reuse=on|off, reuse-roster=on|off, reuse-gamedata=on|off. This is the axis that lets " +
+                "`compare` ablate a policy decision (e.g. reuse=on vs reuse=off) and still assert " +
+                "verdict-equality; --config-a/--config-b remain a separate axis for genuine " +
+                "environment experiments. Without this, arm A uses whatever ConcurrencyPolicy.For " +
+                "picks for this machine and engine.",
         };
-        var configA = new Option<string>("--config-a")
+        var policyB = new Option<string?>("--policy-b")
         {
-            Description = "Comma-separated KEY=VALUE environment settings applied to arm A's child processes. May be empty.",
-            Required = true,
+            Description = "Override arm B's concurrency/reuse policy — same vocabulary as --policy-a.",
         };
-        var configB = new Option<string>("--config-b")
+        var configA = new Option<string?>("--config-a")
         {
-            Description = "Comma-separated KEY=VALUE environment settings applied to arm B's child processes. May be empty.",
-            Required = true,
+            Description = "Comma-separated KEY=VALUE environment settings applied to arm A's child processes. " +
+                "Optional (default: none) — --policy-a/--policy-b is the primary axis; this one is for genuine " +
+                "environment experiments and needn't be set just to vary the policy.",
+        };
+        var configB = new Option<string?>("--config-b")
+        {
+            Description = "Comma-separated KEY=VALUE environment settings applied to arm B's child processes. " +
+                "Optional (default: none) — same as --config-a.",
         };
 
         var command = new Command(
             "compare",
             "Run the same spec set under two configurations and assert the verdicts are identical before reporting the timing delta.");
         engineOptions.AddTo(command);
-        foreach (var option in new Option[] { filter, specs, expectedFailures, assertionEngine, workers, configA, configB })
+        foreach (var option in new Option[] { filter, specs, expectedFailures, assertionEngine, policyA, policyB, configA, configB })
         {
             command.Options.Add(option);
         }
@@ -96,22 +142,34 @@ internal static class CompareCommand
                         _ => ["roster", "gamedata"],
                     };
 
-                var workerCount = parseResult.GetValue(workers);
-                if (workerCount < 1)
-                {
-                    throw new CliInputException("--workers must be at least 1.");
-                }
+                // Each arm gets its own EngineSelection.PlanOverride — RunCommand.ApplyPolicyOverride
+                // is the shared wrapper around PolicyOverride.Apply (the one --policy parser); calling
+                // it here rather than re-implementing it keeps `compare` on the same vocabulary as
+                // `run --policy`/`serve --policy`. Thrown synchronously (before ExecuteAsync's first
+                // await), so it is caught by this method's own try/catch below like every other
+                // input error.
+                // The arm's --config-* is attached BEFORE its --policy is applied, because the config can
+                // change where the arm's engine points (NR_ENGINE_URL) and therefore what its base plan
+                // and its allowed worker ceiling are. Applied the other way round, an arm sent live by
+                // --config-a would have had its plan computed against a frozen HAR's measured optimum.
+                var selectionA = RunCommand.ApplyPolicyOverride(
+                    selection with { ChildEnvironment = ParseConfig(parseResult.GetValue(configA), "--config-a") },
+                    parseResult.GetValue(policyA),
+                    Ui.Warn);
+                var selectionB = RunCommand.ApplyPolicyOverride(
+                    selection with { ChildEnvironment = ParseConfig(parseResult.GetValue(configB), "--config-b") },
+                    parseResult.GetValue(policyB),
+                    Ui.Warn);
 
                 var options = new CompareOptions(
                     selection,
+                    selectionA,
+                    selectionB,
                     domains,
                     parseResult.GetValue(filter),
                     parseResult.GetValue(specs),
                     parseResult.GetValue(expectedFailures),
-                    parseResult.GetValue(assertionEngine),
-                    workerCount,
-                    ParseConfig(parseResult.GetValue(configA), "--config-a"),
-                    ParseConfig(parseResult.GetValue(configB), "--config-b"));
+                    parseResult.GetValue(assertionEngine));
                 return ExecuteAsync(options);
             }
             catch (CliInputException ex)
@@ -129,7 +187,15 @@ internal static class CompareCommand
         var selection = options.Selection;
         var engineLabel = selection.EngineName ?? selection.Display;
 
-        var workers = await RunBatch.ResolveWorkersAsync(selection, options.Workers, Ui.Warn).ConfigureAwait(false);
+        // Each arm resolves its OWN worker count: options.SelectionA/SelectionB carry independent
+        // PlanOverrides (a --policy-a "workers=N" need not equal --policy-b's), so the describe-probe
+        // clamp must run once per arm rather than once for the whole comparison — the bug this
+        // replaces resolved workers ONCE and reused it for both arms, silently ignoring any per-arm
+        // --policy-a/--policy-b worker override. The untimed warm-up pass uses neither arm's plan
+        // (see the comment below), so it resolves against options.Selection's own unmodified plan.
+        var workersWarmup = await RunBatch.ResolveWorkersAsync(selection, selection.EffectivePlan.Workers, Ui.Warn).ConfigureAwait(false);
+        var workersA = await RunBatch.ResolveWorkersAsync(options.SelectionA, options.SelectionA.EffectivePlan.Workers, Ui.Warn).ConfigureAwait(false);
+        var workersB = await RunBatch.ResolveWorkersAsync(options.SelectionB, options.SelectionB.EffectivePlan.Workers, Ui.Warn).ConfigureAwait(false);
 
         Ui.Info($"Engine: {engineLabel}");
         Ui.Info($"Domains: {string.Join(", ", options.Domains)}");
@@ -138,11 +204,27 @@ internal static class CompareCommand
         ArmResult armB;
         try
         {
+            // #<bug>: whichever arm ran first was systematically slower — not a real effect of
+            // --config-a/--config-b, but an artifact of the *first* process this invocation spawns
+            // paying costs the second one gets for free (JIT, OS page cache for the adapter's
+            // assemblies, first-open AV scan of freshly built DLLs, etc). Identical configs proved it:
+            // "A" vs "A" measured a ~3.4x slowdown for arm A on a bad run. A discarded warm-up pass —
+            // same spec set, same filter/domains, but NEITHER arm's config NOR either arm's policy
+            // override — pays that first-process tax once, untimed, so arm A and arm B then both
+            // start from an equally warm machine. It deliberately does NOT use ConfigA/ConfigB or
+            // SelectionA/SelectionB: applying either arm's config or policy override here would
+            // pre-warm that arm's own config/policy-specific state (e.g. a warm-reuse cache) and bias
+            // the comparison right back in its favor.
+            Ui.Rule("Warm-up (untimed, discarded)");
+            var warmup = await RunArmAsync(options, selection, workersWarmup, "warmup").ConfigureAwait(false);
+            Ui.Info(FormattableString.Invariant(
+                $"Warm-up pass ran the same spec set once under neither config in {warmup.Wall.TotalSeconds:F1}s (discarded — its only purpose is to equalize JIT/OS-cache state before arm A and arm B are timed)."));
+
             Ui.Rule("Arm A");
-            armA = await RunArmAsync(options, workers, options.ConfigA, "a").ConfigureAwait(false);
+            armA = await RunArmAsync(options, options.SelectionA, workersA, "a").ConfigureAwait(false);
 
             Ui.Rule("Arm B");
-            armB = await RunArmAsync(options, workers, options.ConfigB, "b").ConfigureAwait(false);
+            armB = await RunArmAsync(options, options.SelectionB, workersB, "b").ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
         {
@@ -256,13 +338,23 @@ internal static class CompareCommand
 
     /// <summary>
     /// Run the full spec set for one arm: its own <see cref="HarnessCollector"/> (so <see cref="TraceSummary"/>
-    /// can report cold-starts/reuses/peak live resources independently per arm) and its own child
-    /// environment (the collector's OTel wiring layered under the arm's <c>--config-*</c> settings, so
-    /// a config can override telemetry wiring but never the other way around).
+    /// can report cold-starts/reuses/peak live resources independently per arm), its own
+    /// <see cref="EngineSelection"/> (so a per-arm <c>--policy-a</c>/<c>--policy-b</c>
+    /// <see cref="EngineSelection.PlanOverride"/> reaches that arm's child <c>serve --policy</c>
+    /// and no other), and its own child environment (the collector's OTel wiring layered under the
+    /// arm's <c>--config-*</c> settings, so a config can override telemetry wiring but never the
+    /// other way around).
     /// </summary>
     private static async Task<ArmResult> RunArmAsync(
-        CompareOptions options, int workers, IReadOnlyDictionary<string, string> config, string armLabel)
+        CompareOptions options, EngineSelection selection, int workers, string armLabel)
     {
+        // The arm's --config-* is NOT re-applied here. It lives on the selection
+        // (EngineSelection.ChildEnvironment), and EngineSelection.StartProcess is what layers it onto the
+        // child — the same object, and the same composed environment, that EngineSelection.LoadTarget
+        // derived this arm's plan from. Copying it into the spawn environment separately (as this method
+        // used to) is a second assembly of "the environment the child sees", and a second assembly is a
+        // second thing to get wrong. The warm-up arm passes options.Selection, which carries no config —
+        // that is exactly what "under neither config" means, and it now needs no special case.
         var filterPatterns = options.Filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             is { Length: > 0 } patterns ? patterns : null;
 
@@ -285,23 +377,22 @@ internal static class CompareCommand
                 {
                     SpecsDirectory = options.SpecsDir,
                     FilterPatterns = filterPatterns,
-                    EngineFilter = options.Selection.EngineName,
+                    EngineFilter = selection.EngineName,
                     ExpectedFailuresEngine = options.ExpectedFailures,
-                    AssertionEngine = options.AssertionEngine ?? options.Selection.AssertionEngineName,
+                    AssertionEngine = options.AssertionEngine ?? selection.AssertionEngineName,
                     Workers = workers,
                     Domains = options.Domains,
                     AdapterFactory = workerIndex =>
                     {
                         var index = workerIndex.ToString(CultureInfo.InvariantCulture);
-                        var env = new Dictionary<string, string>(collector.ChildEnvironment);
-                        foreach (var (key, value) in config)
+                        var env = new Dictionary<string, string>(collector.ChildEnvironment)
                         {
-                            env[key] = value;
-                        }
+                            ["BSSPEC_WORKER_INDEX"] = index,
+                            ["OTEL_RESOURCE_ATTRIBUTES"] = $"service.instance.id={index}",
+                        };
 
-                        env["BSSPEC_WORKER_INDEX"] = index;
-                        env["OTEL_RESOURCE_ATTRIBUTES"] = $"service.instance.id={index}";
-                        return options.Selection.StartProcess(env);
+                        // The arm's --config-* rides on the selection and is applied by StartProcess.
+                        return selection.StartProcess(env);
                     },
                 },
                 progressWriter: Console.Error).ConfigureAwait(false);
@@ -313,7 +404,20 @@ internal static class CompareCommand
         return new ArmResult(result, sw.Elapsed, trace);
     }
 
-    /// <summary>Parse a comma-separated <c>KEY=VALUE</c> list; an empty/null string yields an empty (no extra environment) map.</summary>
+    /// <summary>
+    /// Parse a comma-separated <c>KEY=VALUE</c> list; an empty/null string yields an empty (no extra
+    /// environment) map. The keys are carried <b>verbatim</b>, exactly as the user typed them.
+    /// </summary>
+    /// <remarks>
+    /// <b>This map is an overlay, not an answer.</b> Nothing reads an environment variable out of it —
+    /// not the load target, not the plan. It is handed to <c>EngineSelection.ChildEnvironment</c>, and the
+    /// question "what will the child see for <c>NR_ENGINE_URL</c>?" is answered by composing the child's
+    /// real environment (<c>AdapterProcess.ComposeChildEnvironment</c>), whose comparer is the OS's own.
+    /// That is why the comparer here does not matter and must not be made to matter: a
+    /// <c>StringComparer.Ordinal</c> lookup on this dictionary is precisely the second, disagreeing
+    /// implementation of "what does this variable name mean" that let <c>--config-a
+    /// "nr_engine_url=https://www.newrecruit.eu"</c> defeat the third-party load limit on Windows.
+    /// </remarks>
     private static IReadOnlyDictionary<string, string> ParseConfig(string? raw, string flagName)
     {
         var config = new Dictionary<string, string>(StringComparer.Ordinal);

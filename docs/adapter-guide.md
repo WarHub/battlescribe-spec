@@ -184,8 +184,67 @@ matrices or multi-engine comparisons:
 
 ```bash
 dotnet bs-spec.dll run --all --engine "myengine=exec:/path/to/your-adapter" \
-  --specs specs --workers 4 --output github-actions --report artifacts/myengine-conformance.json
+  --specs specs --output github-actions --report artifacts/myengine-conformance.json
 ```
+
+The worker count is chosen by the harness's `ConcurrencyPolicy` (machine + what the engine declares),
+clamped by the `maxParallel` your `describe` response advertises — there is no `--workers` flag to
+set. Note `--policy` cannot be delivered to an `exec:`/`dotnet:` adapter at all (there is no channel
+for it, and the CLI errors rather than silently dropping it); `describe`'s `maxParallel` is how a
+launchable adapter states its own ceiling.
+
+**`maxParallel` is a ceiling on adapter PROCESSES, and on nothing else.** It does not bound the
+harness's in-process browser-context pool — a separate axis, sized by `contextPoolSize`, with its own
+ceiling (`maxContexts`) in `engines.json`. The two were briefly the same number, which meant
+`{"maxParallel": 2, "contextPoolSize": 4}` — "don't run more than 2 of my processes", exactly what
+this paragraph says that field means — silently halved the pool. Declare the axis you mean.
+
+**But read this before you tune `maxParallel`: it is probably not what is binding you.** An adapter
+the harness does not recognise has an *undeclared endpoint*, and an undeclared endpoint is treated as
+**a third party's live service** — so both axes are held to `ConcurrencyPolicy.ThirdPartyLiveLoadLimit`
+(2), whatever your `describe` advertises. That is deliberate: guessing "local" for an executable we
+have never seen spends *someone else's* production capacity, and the harness will not do that on an
+assumption. It costs you wall-clock, and you take it back with one line:
+
+```jsonc
+// engines.json, at the repo root
+{
+  "engines": {
+    "myengine": {
+      "exec": "/path/to/your-adapter",
+      "endpoint": "local",            // "my service runs on this machine" — the opt-in to full width
+      "maxParallel": 0,               // 0 = unlimited: let the policy size the PROCESS axis
+      "memPerInstanceBytes": 0        // declare a measured footprint to lift the conservative cap
+    }
+  }
+}
+```
+
+`"endpoint"` takes `"local"`, `"third-party-live"` (you drive someone else's production site — please
+say so), or `"url-var:NAME"` (live iff `NAME` holds a non-loopback URL, which is how the built-in
+NewRecruit engines work via `NR_ENGINE_URL`). If your run prints *"Load target: third-party live
+service — held to 2 concurrent sessions"* and it is not, this is the line you are missing.
+
+**Without an `engines.json` — declare it on the command line.** An ad-hoc `--engine
+"<name>=exec:<command>"` is registered nowhere, so it has the same one-word escape hatch as a flag:
+
+```bash
+bs-spec run --all --engine "myengine=exec:/path/to/your-adapter" --engine-endpoint local
+```
+
+`--engine-endpoint` takes the same three values as the JSON field, and it is how this repo's own CI
+runs the reference adapter (`--engine "battlescribe=dotnet:…/bs-reference-adapter.dll"
+--engine-endpoint local`). Built-in engines refuse the flag: they declare their own endpoints, per
+domain, from what has been measured about them.
+
+**And the name is not a shortcut.** Calling your adapter `newrecruit` is *required* — that is what
+selects which specs apply to it — but it earns you **nothing**: not the built-in `newrecruit`'s
+endpoint, and not its measured `EngineProfile` (its `k`, its per-process memory footprint). A name is
+an applicability label; a profile is a *measurement*, and nothing about your executable has been
+measured because of what you called it. A launchable adapter that claims a built-in's name briefly did
+inherit both, and `newrecruit=exec:./anything` was consequently planned as `local` at
+`ceil(cpuCount × 0.375)` = 12 concurrent processes — through the undeclared-endpoint fail-safe *and*
+through the memory cap for unmeasured engines. Declare what you know; inherit nothing.
 
 ### With Docker
 

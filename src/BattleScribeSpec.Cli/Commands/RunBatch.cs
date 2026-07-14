@@ -1,5 +1,6 @@
 using System.Globalization;
 using BattleScribeSpec.Batch;
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Telemetry;
 using BattleScribeSpec.Telemetry.Collector;
@@ -23,8 +24,7 @@ internal static class RunBatch
         string? Tags,
         string? ReportPath,
         string? ExpectedFailures,
-        string? AssertionEngine,
-        int Workers);
+        string? AssertionEngine);
 
     /// <summary>Run the full spec suite over the selected engine (<c>bs-spec run --all</c>).</summary>
     public static async Task<int> ExecuteAsync(BatchOptions options)
@@ -32,7 +32,24 @@ internal static class RunBatch
         var selection = options.Selection;
         var engineLabel = selection.EngineName ?? selection.Display;
 
-        var workers = await ResolveWorkersAsync(selection, options.Workers, Ui.Warn);
+        // The policy picks the worker count by itself — no --workers default to fall back on
+        // (RunCommand deleted it; see #271 Task 5). selection.EffectivePlan already folds in any
+        // --policy override, so "requested" here is "what the policy/override says," and
+        // ResolveWorkersAsync's describe-probe clamp still gets the final word (an adapter may
+        // advertise a lower ceiling than the registry knows).
+        var workers = await ResolveWorkersAsync(selection, selection.EffectivePlan.Workers, Ui.Warn);
+        Ui.Info($"Workers: {workers}");
+
+        // Say it out loud. A run that is throttled from ceil(cpuCount × k) to a courtesy limit looks, from
+        // the outside, exactly like a run that is mysteriously slow — and the reason is not the user's
+        // machine, it is whose machine is on the other end. The one number this line must never invite
+        // anyone to raise is the limit itself: see ConcurrencyPolicy.ThirdPartyLiveLoadLimit.
+        if (selection.LoadTarget == LoadTarget.ThirdPartyLive)
+        {
+            Ui.Info(
+                $"Load target: third-party live service — held to {ConcurrencyPolicy.ThirdPartyLiveLoadLimit} " +
+                $"concurrent sessions. Parallelism here is a load question, not a throughput one.");
+        }
 
         var filterPatterns = options.Filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             is { Length: > 0 } patterns ? patterns : null;
@@ -182,7 +199,7 @@ internal static class RunBatch
     /// </summary>
     internal static async Task<int> ResolveWorkersAsync(EngineSelection selection, int requested, Action<string> warn)
     {
-        var registryMax = selection.Entry.MaxParallel;
+        var registryMax = selection.Entry.Profile.MaxParallel;
         var registryClamped = registryMax > 0 && requested > registryMax ? registryMax : requested;
 
         var describedMax = 0;
@@ -213,7 +230,7 @@ internal static class RunBatch
         var effective = requested;
         if (registryMax > 0 && effective > registryMax)
         {
-            warn($"engine registry limits parallelism to {registryMax}; reducing --workers {requested} to {registryMax}.");
+            warn($"engine registry limits parallelism to {registryMax}; reducing the planned {requested} worker(s) to {registryMax}.");
             effective = registryMax;
         }
 

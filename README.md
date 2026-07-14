@@ -65,6 +65,12 @@ bs-spec run selection/selection-page --engine battlescribe --ui
 bs-spec run selection/selection-page --engine "dotnet:path/to/adapter.dll"
 bs-spec run selection/selection-page --engine "myengine=exec:/path/to/adapter"
 
+# An adapter the harness has never seen has an UNDECLARED endpoint, and an undeclared
+# endpoint is treated as a third party's live service — held to a courtesy load limit on
+# both axes. Say what your adapter drives and it takes the machine's full width. (Naming
+# it after a built-in earns nothing: a name selects specs; it is not a measurement.)
+bs-spec run --all --engine "myengine=exec:/path/to/adapter" --engine-endpoint local
+
 # Full suite, matrix report
 bs-spec run --all --engine battlescribe --report artifacts/battlescribe-conformance.json
 ```
@@ -236,7 +242,6 @@ filters automatically. You can also run suites manually with `--filter`:
 | `NR_VISUAL` | Set to `true` to navigate to the roster editor UI after setup | `true` |
 | `NR_SLOW_MO` | Playwright SlowMo in ms — pauses between browser actions | `500` |
 | `NR_FROZEN_SKIP` | Set to `true` to skip frozen NR tests | `true` |
-| `NR_PARALLEL` | Number of parallel browser contexts | `5` |
 | `NR_SEQUENTIAL` | Set to `true` to run sequential (per-spec) NR tests | `true` |
 
 Example — run live NR conformance tests with visible browser and roster editor UI:

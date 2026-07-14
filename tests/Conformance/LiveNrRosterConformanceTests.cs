@@ -27,8 +27,10 @@ public sealed class LiveNrRosterConformanceTests
     [Fact]
     public async Task AllSpecs()
     {
-        Assert.SkipWhen(!_fixture.Available,
-            "NR_ENGINE_URL not set — skipping live NR conformance tests");
+        // _fixture.Unavailable, not a hardcoded "NR_ENGINE_URL not set": a pool can also be absent
+        // because another live fixture in this process holds the site's whole load budget, and a skip
+        // that misreports WHY is how a throttled lane looks like an unconfigured one.
+        Assert.SkipWhen(!_fixture.Available, _fixture.Unavailable);
 
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var pool = _fixture.EnginePool!;

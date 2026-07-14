@@ -63,11 +63,21 @@ public sealed class CompareCommandTests
         // Identical configs run the identical arm twice, so the reported speedup (B/A wall time)
         // is genuinely expected to be near 1.0 — this is what the test's name promises, so assert
         // the actual value rather than just the literal word "speedup" appearing somewhere.
+        //
+        // This assertion is the thing that caught a real bug: `compare` used to run arm A first
+        // with no warm-up, so arm A ate the process's first-run costs (JIT, cold OS file cache,
+        // first AV scan of freshly built DLLs) that arm B then got for free — an intermittent
+        // ~1-in-6 failure with speedup as low as 0.29 for two IDENTICAL arms. CompareCommand now
+        // runs a discarded warm-up pass (same spec set, neither config) before timing either arm,
+        // which removes that systematic bias. Post-fix, 40 consecutive local runs of this exact
+        // scenario landed in [0.94, 1.02]. [0.6, 1.6] keeps real headroom for slower/noisier CI
+        // runners while still being far tighter than the old [0.5, 2.0] — which was only wide
+        // enough to let the bug slip through, not to describe a fair instrument's real variance.
         var speedupMatch = Regex.Match(
             combined, @"speedup \(B/A\):\s*([0-9]+\.[0-9]+)x", RegexOptions.IgnoreCase);
         Assert.True(speedupMatch.Success, $"Expected a 'speedup (B/A): N.NNx' line in output:\n{combined}");
         var speedup = double.Parse(speedupMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-        Assert.InRange(speedup, 0.5, 2.0);
+        Assert.InRange(speedup, 0.6, 1.6);
     }
 
     [Fact]
@@ -194,18 +204,79 @@ public sealed class CompareCommandTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task Compare_Workers_MustBeAtLeastOne()
+    public async Task Compare_PolicyA_InvalidValue_ReportsCliError()
     {
+        // --workers was deleted from `compare` (#271 Task 6) — it becomes --policy-a/--policy-b,
+        // the same vocabulary as `run --policy` and `serve --policy`, parsed by the shared
+        // PolicyOverride.Apply. This asserts a malformed --policy-a is a clean CLI error, not an
+        // unhandled exception, mirroring Compare_RejectsMalformedConfig for --config-a.
         var (exitCode, _, stdErr) = await RunCliAsync(
             FindCliDll(FindRepoRoot()),
             "compare", "--engine", "battlescribe",
-            "--workers", "0",
+            "--policy-a", "workers=0",
             "--config-a", "",
             "--config-b", "");
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("--workers must be at least 1", stdErr, StringComparison.Ordinal);
+        // "positive integer", not just "workers": before --policy-a existed, System.CommandLine's
+        // own "unrecognized argument 'workers=0'" error also happens to contain the substring
+        // "workers" — asserting the actual PolicyOverride.Apply message keeps this falsifiable.
+        Assert.Contains("positive integer", stdErr, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Unhandled exception", stdErr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Compare_ConfigAB_AreOptional_WhenOnlyPolicyVaries()
+    {
+        // --config-a/--config-b used to be Required=true, which forced every --policy-a/--policy-b
+        // caller to also type two empty strings for an axis they weren't using. Now that
+        // --policy-a/--policy-b is the primary axis (this is the exact recipe documented in
+        // docs/warm-reuse.md and the #271 plan's Task 6 gate), --config-a/--config-b must be
+        // omittable — this is the literal command shape from that recipe, minus the real UI
+        // engine (uses "battlescribe" so it runs hermetically, no JVM/browser needed).
+        var (exitCode, stdOut, stdErr) = await RunCliAsync(
+            FindCliDll(FindRepoRoot()),
+            "compare",
+            "--engine", "battlescribe",
+            "--filter", "protocol/protocol-kitchen-sink",
+            "--policy-a", "reuse=on",
+            "--policy-b", "reuse=off");
+
+        var combined = stdOut + stdErr;
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Verdicts identical", combined, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Compare_PolicyAB_RunsArmsWithDifferentReuseDecisions_VerdictsStillAsserted()
+    {
+        // The verdict-equality rail's whole reconnection: BSSPEC_DISABLE_WARM_REUSE (the old
+        // ablation channel) was deleted along with warm-reuse moving to a ConcurrencyPolicy the
+        // parent computes and sends. --policy-a/--policy-b is the replacement — a per-arm
+        // ConcurrencyPlan override, using the exact vocabulary `run --policy`/`serve --policy`
+        // share (PolicyOverride.Apply), NOT a second parser. A launchable (dotnet:) adapter has no
+        // channel to receive a plan override at all (EngineHostLocator.Resolve throws), so this
+        // uses the "battlescribe" BUILT-IN (in-process, no JVM/browser dependency) — forcing
+        // reuse=on/off on it genuinely changes whether AdapterHandler recreates the engine per
+        // spec or calls Cleanup() and keeps it alive, even though the engine's own profile
+        // declares neither domain reuse-safe (an explicit override is allowed — it is exactly the
+        // ablation this rail exists to run — just warned).
+        var (exitCode, stdOut, stdErr) = await RunCliAsync(
+            FindCliDll(FindRepoRoot()),
+            "compare",
+            "--engine", "battlescribe",
+            "--filter", "protocol/protocol-kitchen-sink",
+            "--config-a", "",
+            "--config-b", "",
+            "--policy-a", "reuse=on",
+            "--policy-b", "reuse=off");
+
+        var combined = stdOut + stdErr;
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Verdicts identical", combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("DIVERGENCE", combined, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()

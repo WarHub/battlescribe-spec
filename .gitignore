@@ -20,3 +20,8 @@ lib/
 .squad/.scratch/
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
+
+# Raw OTLP protobuf dumps from a local collector run. ~600 KB of binary landed in a *docs* commit
+# (a59738c) because this directory did not exist at the merge-base and nothing ignored it. Telemetry
+# artifacts belong in artifacts/telemetry/, which is already ignored.
+tel/

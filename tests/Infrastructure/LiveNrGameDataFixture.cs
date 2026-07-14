@@ -11,10 +11,21 @@ namespace BattleScribeSpec.Tests;
 ///   NR_HEADLESS    — "false" to show the browser (default: true)
 ///   NR_SLOW_MO     — milliseconds to slow down Playwright actions (for debugging)
 /// </summary>
+/// <remarks>
+/// The NR Editor is hosted on <b>giloushaker.github.io</b> — someone else's server, and a different
+/// someone from <c>newrecruit.eu</c>. Its session is drawn from that host's own
+/// <see cref="LiveLoadBudget"/>: one constant, one budget per third party, because a courtesy limit on
+/// one site says nothing about another.
+/// </remarks>
 public sealed class LiveNrGameDataFixture : IAsyncLifetime
 {
+    private LiveLoadLease? _lease;
+
     public NewRecruitGameDataEngine? Engine { get; private set; }
     public bool Available => Engine is not null;
+
+    /// <summary>Why no engine was created, when none was — an unset URL, or an exhausted live budget.</summary>
+    public string Unavailable { get; private set; } = "NR_EDITOR_URL not set";
 
     public async ValueTask InitializeAsync()
     {
@@ -27,14 +38,29 @@ public sealed class LiveNrGameDataFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
+        var lease = LiveLoadBudget.Reserve(nameof(LiveNrGameDataFixture), baseUrl, 1);
+        if (lease.Sessions == 0)
+        {
+            Unavailable = lease.Explanation;
+            lease.Dispose();
+            return;
+        }
+
         using var span = FixtureTelemetry.StartInit(nameof(LiveNrGameDataFixture));
-        Engine = await NewRecruitGameDataEngine.CreateAsync(baseUrl, headless, slowMo);
+
+        // The permit is returned if the engine fails to come up — see LiveLoadLease.Open: a fixture that
+        // holds no session must hold no permit, or an outage starves every later fixture.
+        _lease = lease;
+        Engine = await lease.OpenAsync(() => NewRecruitGameDataEngine.CreateAsync(baseUrl, headless, slowMo));
     }
 
     public ValueTask DisposeAsync()
     {
         Engine?.Dispose();
         Engine = null;
+
+        _lease?.Dispose();
+        _lease = null;
         return default;
     }
 }

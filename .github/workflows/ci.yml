@@ -67,6 +67,20 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
       - name: Build
         run: dotnet build
+      # WHAT MACHINE IS THIS, ACTUALLY? Every constant in docs/concurrency-policy-measurements.md is
+      # machine-relative (`ceil(cpuCount × k)`, `maxParallelThreads: "0.5x"`), the doc calls this the
+      # "4-vCPU / 16 GiB CI runner" throughout — and nobody had ever checked. The first CI run of the
+      # CLI test project reported a worker count that is only consistent with cpuCount = 2. Print it,
+      # so the next person tuning against "the CI runner" is reading a measurement and not a memory.
+      - name: Runner profile (the machine every constant here is relative to)
+        run: |
+          echo "nproc:    $(nproc)"
+          echo "MemTotal: $(awk '/MemTotal/ {printf "%.1f GiB", $2/1048576}' /proc/meminfo)"
+          echo ""
+          echo "ConcurrencyPolicy reads Environment.ProcessorCount and GC.GetGCMemoryInfo()."
+          echo "The 'Reference adapter' step below prints 'Workers: N' for a Local, k=1.0, unmeasured"
+          echo "engine — i.e. N == min(ProcessorCount, UndeclaredMemoryWorkerCap=8). That is the number"
+          echo "the policy actually saw."
       # Style rules are enforced during the build (EnforceCodeStyleInBuild); this only needs
       # to add the whitespace/formatting check, which is much faster than a full format run.
       - name: Verify formatting (whitespace)
@@ -75,18 +89,54 @@ jobs:
         run: node --test scripts/har-diff.test.mjs
       - name: Unit / protocol / lint (offline)
         run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Category!=Conformance" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+      # THE CLI'S OWN TESTS. There are two test projects in this repo and, until now, CI ran ONE of
+      # them: every `dotnet test` step here targeted tests/BattleScribeSpec.Tests.csproj, and nothing
+      # ran tests/BattleScribeSpec.Cli.Tests — not even a solution-wide sweep. So every gate on the
+      # CLI's concurrency model (EngineSpecTests: the third-party load limit, the fail-safe for
+      # undeclared adapters, the --policy rejection gates), plus RunBatchSurfaceTests and
+      # CompareCommandTests, had never once been executed by CI. A gate nobody invokes is a gate
+      # nobody has.
+      #
+      # It belongs in THIS job: these tests are offline and CPU-only. They drive the in-process
+      # BattleScribe engine and the dotnet: reference adapter — both of which this job already builds
+      # and runs in the two steps below — and they touch no browser and no network.
+      - name: CLI (engine selection / load target / protocol surface)
+        run: dotnet test tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       - name: BattleScribe reference engine — kitchen-sink
         run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "(Engine=BsRoster|Engine=BsGameData)&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+      # No --policy here, deliberately: this engine is a LAUNCHABLE (dotnet:) adapter, and a plan
+      # cannot be conveyed to one — there is no channel for it, so the CLI errors rather than
+      # silently dropping the flag (#305). This step used to pass `--workers 2`; the flag's
+      # replacement (`--policy workers=2`) is exactly what a launchable adapter must refuse, so
+      # the step was failing on every run of this job. The worker count is ConcurrencyPolicy's to
+      # choose anyway — that is the whole point of the model.
+      #
+      # It picks min(cpuCount, UndeclaredMemoryWorkerCap=8) — see the "Runner profile" step for what
+      # cpuCount actually is here; the previous version of this comment asserted 4 without checking.
+      #
+      # --engine-endpoint local IS LOAD-BEARING, AND IT IS A DECLARATION, NOT A TUNING FLAG. Without it
+      # this connectable is an executable the harness has never seen: its endpoint is UNDECLARED, and an
+      # undeclared endpoint fails safe to "a third party's live service" — so CI announced an in-process
+      # IKVM adapter with no network code at all as "third-party live service — held to 2 concurrent
+      # sessions", on every run, and throttled it. The flag states the fact (this adapter's service is
+      # this machine) and the throttle lifts. It is stated HERE, by the people who chose the binary,
+      # rather than inferred from the name: an adapter named `battlescribe` is not necessarily ours, and
+      # letting a NAME grant a built-in's endpoint and measured profile is how `newrecruit=exec:./anything`
+      # briefly got 12 workers and no load limit (EngineRegistry.Resolve).
+      #
+      # Note the throttle was INVISIBLE on this runner — a 2-vCPU box is already at the load limit on its
+      # own — which is exactly how it survived: it cost CI nothing it could measure, and would have halved
+      # any larger runner.
       - name: Reference adapter (dotnet) — roster kitchen-sink
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
             --engine "battlescribe=dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
+            --engine-endpoint local \
             --specs specs/roster \
             --roster \
             --filter "protocol/protocol-kitchen-sink,category/" \
             --expected-failures battlescribe \
-            --output github-actions \
-            --workers 2
+            --output github-actions
       # The trace summary (wall time, cold-starts vs reuses, peak live resources) for the steps
       # above is appended to $GITHUB_STEP_SUMMARY automatically by the CLI/dotnet-test telemetry
       # code itself (TraceSummary.AppendToGitHubStepSummary) — no extra script needed here.
@@ -173,10 +223,11 @@ jobs:
         env:
           NR_HEADLESS: true
           NR_UI_SMOKE: 1
+      # Warm start (the JVM survives between specs) is ConcurrencyPolicy's decision now, taken from
+      # the engine's declared ColdStartCost/ReuseSafeGameData — not the BS_UI_KEEP_ALIVE env var this
+      # step used to set. The variable is read nowhere; setting it here would be decoration.
       - name: BS GameData UI — kitchen-sink (engine + Java agent + app)
         run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
-        env:
-          BS_UI_KEEP_ALIVE: true
       - name: BS UI roster driver — kitchen-sink
         # --no-build: reuse the binaries from the Build step above. Without it, `dotnet run`
         # rebuilds with default props (analyzers on), re-doing the whole solution.
@@ -233,7 +284,6 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-          NR_PARALLEL: 6
       - name: Full frozen NR UI roster
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
@@ -246,7 +296,6 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-          NR_PARALLEL: 6
       - name: Upload telemetry
         if: always()
         uses: actions/upload-artifact@v4
@@ -304,10 +353,11 @@ jobs:
         run: pwsh -File src/bs-ui-java-agent/build.ps1
       - name: Build
         run: dotnet build
+      # "warm start" is ConcurrencyPolicy.For(machine, battlescribe-ui).ReuseGameData — the fixture
+      # asks the policy. It used to be BS_UI_KEEP_ALIVE, set here and nowhere else, so this suite ran
+      # warm in CI and cold on every developer's machine. Both now run warm, from one decision.
       - name: BS GameData UI (shard ${{ matrix.shard }}, warm start)
         run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&Shard=${{ matrix.shard }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
-        env:
-          BS_UI_KEEP_ALIVE: true
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -366,11 +416,14 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live-conformance --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-          NR_PARALLEL: 2
+      # --engine-endpoint local: same declaration as the `checks` job's reference-adapter step — this
+      # adapter's service is this machine. Without it the endpoint is undeclared and the fail-safe holds
+      # the run to the third-party live load limit. See that step for why it is declared and not inferred.
       - name: Generate BattleScribe conformance report
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
             --engine "battlescribe=dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
+            --engine-endpoint local \
             --specs specs/roster \
             --roster \
             --expected-failures battlescribe \
@@ -381,6 +434,18 @@ jobs:
         with:
           name: battlescribe-conformance-report
           path: artifacts/battlescribe-conformance-report.json
+      # `if: always()` — this is the ONE lane that drives a third party's live site, so it is the one
+      # lane whose diagnostics matter most on a FAILING run, and it was the only lane in this workflow
+      # without this step. When it crashed (#318) the traces died with the runner: no pool size, no
+      # span timings, nothing to distinguish a resource exhaustion from a network blip. Telemetry is
+      # cheap; a crash you cannot read twice is not.
+      - name: Upload telemetry
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
+          path: artifacts/telemetry/
+          if-no-files-found: ignore
 
   ci-gate:
     if: always()
