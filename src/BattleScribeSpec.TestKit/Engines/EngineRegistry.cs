@@ -37,13 +37,24 @@ public sealed class EngineRegistry
         MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false);
 
     // Values transcribed from what has been MEASURED — never invented. Reuse-safety and cold-start
-    // cost come from docs/warm-reuse.md; MemPerInstanceBytes and OversubscriptionFactor come from
-    // docs/concurrency-policy-measurements.md (the Task 8 campaign).
+    // cost come from docs/warm-reuse.md; MemPerInstanceBytes and OversubscriptionFactor (the PROCESS
+    // axis — adapter processes on the CLI path) come from docs/concurrency-policy-measurements.md
+    // §1–§6; ContextPoolSize and MemPerContextBytes (the CONTEXT axis — browser contexts in the xUnit
+    // fixture pools, which is what every NR CI lane runs) come from §7 of the same document.
+    //
+    // THE TWO AXES ARE MEASURED ON DIFFERENT PATHS AND DISAGREE. Do not "reconcile" them: on a 4-vCPU
+    // runner newrecruit-ui wants 4 worker processes and 16 browser contexts, and both numbers are
+    // right. Feeding one number to both is the bug this separation fixes (#314).
     private static readonly Dictionary<string, EngineEntry> Builtins = new()
     {
         // MemPerInstanceBytes UNDECLARED (0) — never measured. While it is 0 this engine is bound by
         // ConcurrencyPolicy.UndeclaredMemoryWorkerCap, which is the correct, conservative answer for
         // an engine nobody has measured. Measure it and the cap retires for this engine by itself.
+        //
+        // CONTEXT AXIS: also undeclared (0) → ConcurrencyPolicy.UndeclaredContextPoolSize. This engine
+        // is in-process IKVM with no browser and no context pool, so no fixture asks it for a pool
+        // size today; the default is what it would get if one ever did, and 4 is the low end of the
+        // measured band (see the constant). Do not invent a number for it — measure it, like the rest.
         ["battlescribe"] = new(
             "battlescribe", null, null, BothDomains,
             new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false),
@@ -54,6 +65,11 @@ public sealed class EngineRegistry
         // gamedata run (docs/concurrency-policy-measurements.md §4). MaxParallel: 1 means the memory
         // bound can never actually bind here; the number exists so the policy can *prove* that
         // rather than assume it. OversubscriptionFactor is therefore moot and stays at its default.
+        //
+        // CONTEXT AXIS: undeclared, and moot for the same reason. This engine has no browser-context
+        // pool at all (it drives one JavaFX desktop app), and MaxParallel: 1 clamps PoolSize to 1 on
+        // every machine regardless of what the undeclared default would otherwise give. Pinned by
+        // Policy_BattlescribeUi_StaysAtOneWorker_OnEveryProfile across four machine profiles.
         ["battlescribe-ui"] = new(
             "battlescribe-ui", null, null, BothDomains,
             new EngineProfile(
@@ -86,11 +102,31 @@ public sealed class EngineRegistry
         //    which is exactly why k is per-engine (1.0 vs 0.375: a 2.7x spread on identical hardware).
         //    A PhysicalCoreCount input to MachineProfile is the real fix; it is filed as a follow-up,
         //    not attempted here. Do not read 0.375 as a portable truth.
+        //
+        // ---- CONTEXT AXIS (the xUnit fixture pool — `nr-frozen`, `nr-live-conformance`) ----
+        //
+        // ContextPoolSize: 4 is MEASURED, and it is an ABSOLUTE COUNT, NOT ceil(cpuCount × anything).
+        // The `dotnet test` wall bottoms out at pool 4 on a 32-core box AND on a 4-CPU/16 GiB
+        // container — the same 4 (§7.2). The [Fact] wall FLOORS at ~9s (dev) / ~11s (container) from
+        // pool 4 and never improves again however many contexts you add: all contexts share ONE
+        // Chromium and ONE Playwright Node driver, and every CDP message funnels through that single
+        // driver. Per-spec work is 19 ms — the driver round-trip IS the workload. Past 4, extra
+        // contexts buy nothing and cost linear pool-init plus tail contention (p95 33 ms → 1289 ms,
+        // ~40×): six consecutive worsening levels, +77% at pool 32. Verdict-safe at every pool size
+        // swept, 1–32 (§7.6).
+        //
+        // MemPerContextBytes MEASURED: 225,863,270 B (215.4 MiB) — the least-squares slope across the
+        // pool sweep on the 4-CPU Linux container (R²=0.99); the 32-core Windows box measured 213.4
+        // MiB, i.e. this constant reproduces across OS and hardware to within 1%, unlike k. Take the
+        // larger. Each context adds exactly one Chromium renderer process. Note this is ~5.8× SMALLER
+        // than MemPerInstanceBytes above — a context is not a process family, and charging one at the
+        // other's rate is precisely the mistake that motivated separating the axes.
         ["newrecruit"] = new(
             "newrecruit", null, null, BothDomains,
             new EngineProfile(
                 MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
-                MemPerInstanceBytes: 1_313_420_083L, OversubscriptionFactor: 0.375),
+                MemPerInstanceBytes: 1_313_420_083L, OversubscriptionFactor: 0.375,
+                ContextPoolSize: 4, MemPerContextBytes: 225_863_270L),
             Builtin: true),
 
         // MemPerInstanceBytes MEASURED: 1,548,969,984 B (≈1.44 GiB) per worker — bs-engine-host
@@ -104,11 +140,32 @@ public sealed class EngineRegistry
         // arms. It was previously 1.0 only because that is the record's default — right by luck.
         // Caveat that must travel with it: this k was fitted on a 32-core box. The 4-vCPU CI runner
         // is NOT measured, and the design doc records the two hardware classes disagreeing.
+        //
+        // ---- CONTEXT AXIS (the xUnit fixture pool — `nr-editor-ui-frozen`) ----
+        //
+        // ContextPoolSize: 16 is MEASURED — on BOTH hardware classes, and it is the SAME 16 (§7.3).
+        // Read that again before you reach for cpuCount: 16 contexts is optimal on a 32-core box and
+        // on a 4-CPU container alike. The decisive evidence is at pool=1, same 112 specs: 240.05 s on
+        // 32 CPUs vs 241.17 s on 4 CPUs — an 8× CPU cut costs 0.5%. This workload is latency-bound
+        // (p50 ≈1.34 s/spec, flat even at 2× oversubscription on 4 CPUs), so oversubscription pays
+        // right up to 16 and then stops: bracketed four levels past on both boxes (+28% at 64 on dev,
+        // +29% at 48 on the container). Verdict-safe at every pool size swept, 1–64 (§7.6).
+        //
+        // TWO THINGS THIS 16 REPLACES, BOTH TOO LOW. The policy's mirrored PoolSize gave this lane 4
+        // on CI (2.0× slower than optimal), and the hand-set NR_PARALLEL: 6 before it gave 6 (still
+        // 50% off). This lane has never once been run near its optimum.
+        //
+        // MemPerContextBytes MEASURED: 235,824,742 B (224.9 MiB) — least-squares slope, 4-CPU Linux
+        // container (R²=0.98); the 32-core Windows box measured 162.6 MiB. Take the LARGER, i.e. the
+        // CI-class figure: it is the conservative one, and CI is the machine that has to survive it.
+        // At pool 16 the whole container peaked at 6.16 GiB of 16 GiB — memory does not bind at the
+        // optimum on this axis; contention does. That is the exact opposite of the process axis.
         ["newrecruit-ui"] = new(
             "newrecruit-ui", null, null, BothDomains,
             new EngineProfile(
                 MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
-                MemPerInstanceBytes: 1_548_969_984L, OversubscriptionFactor: 1.0),
+                MemPerInstanceBytes: 1_548_969_984L, OversubscriptionFactor: 1.0,
+                ContextPoolSize: 16, MemPerContextBytes: 235_824_742L),
             Builtin: true),
     };
 
@@ -164,7 +221,9 @@ public sealed class EngineRegistry
                     entry.ReuseSafeRoster,
                     entry.ReuseSafeGameData,
                     entry.MemPerInstanceBytes,
-                    entry.OversubscriptionFactor),
+                    entry.OversubscriptionFactor,
+                    entry.ContextPoolSize,
+                    entry.MemPerContextBytes),
                 Builtin: false);
         }
 
@@ -190,6 +249,14 @@ public sealed class EngineRegistry
     /// <c>k &lt;= 0</c> is a worker count of zero, silently floored back to 1 — and <c>maxParallel</c>
     /// is a count, where 0 already has the meaning "unlimited" and a negative is nonsense.
     /// </para>
+    /// <para>
+    /// The context-axis pair (<c>contextPoolSize</c>, <c>memPerContextBytes</c>) is validated the same
+    /// way and for the same reason: both are gated on <c>&gt; 0</c> in the policy, so a negative would
+    /// fall through to the undeclared default while looking, in the author's file, like a declaration.
+    /// A config that says one thing and means another is the failure mode being closed here, on both
+    /// axes. (Neither is a floating-point value, so unlike <c>oversubscriptionFactor</c> there is no
+    /// NaN to reject.)
+    /// </para>
     /// </remarks>
     private static void Validate(string configPath, string name, EngineConfigEntry entry)
     {
@@ -207,7 +274,8 @@ public sealed class EngineRegistry
             throw new InvalidDataException(
                 $"Invalid engines config '{configPath}', entry '{name}': oversubscriptionFactor must be > 0 " +
                 $"(got {entry.OversubscriptionFactor.ToString(CultureInfo.InvariantCulture)}). It is the 'k' in " +
-                $"workers ≈ cpuCount × k; 1.0 means one instance per logical processor.");
+                $"workers ≈ cpuCount × k; 1.0 means one instance per logical processor. It sizes worker " +
+                $"PROCESSES only — the browser-context pool is contextPoolSize, an absolute count.");
         }
 
         if (entry.MaxParallel < 0)
@@ -215,6 +283,26 @@ public sealed class EngineRegistry
             throw new InvalidDataException(
                 $"Invalid engines config '{configPath}', entry '{name}': maxParallel must be >= 0 " +
                 $"(got {entry.MaxParallel}). 0 means unlimited.");
+        }
+
+        if (entry.ContextPoolSize < 0)
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': contextPoolSize must be >= 0 " +
+                $"(got {entry.ContextPoolSize}). It is an ABSOLUTE measured pool size — the number of " +
+                $"browser contexts one in-process pool should hold — not a factor of cpuCount. Omit it " +
+                $"(or use 0) to declare it unknown and take ConcurrencyPolicy's conservative default.");
+        }
+
+        if (entry.MemPerContextBytes < 0)
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': memPerContextBytes must be >= 0 " +
+                $"(got {entry.MemPerContextBytes}). It is the memory cost of ONE browser context (~225 MiB " +
+                $"for the built-in browser engines), not of a whole adapter process — that is " +
+                $"memPerInstanceBytes, and it is roughly 6x larger. Omit it (or use 0) to declare it " +
+                $"unknown; the pool then gets no memory bound, which is safe only because the undeclared " +
+                $"pool size is small.");
         }
     }
 

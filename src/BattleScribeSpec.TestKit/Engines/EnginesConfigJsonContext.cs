@@ -36,11 +36,31 @@ public sealed class EngineConfigEntry
     [JsonPropertyName("reuseSafeGameData")]
     public bool ReuseSafeGameData { get; set; }
 
+    /// <summary>PROCESS axis: bytes per adapter process family. 0 = undeclared (conservatively capped).</summary>
     [JsonPropertyName("memPerInstanceBytes")]
     public long MemPerInstanceBytes { get; set; }
 
+    /// <summary>PROCESS axis: the `k` in <c>workers ≈ cpuCount × k</c>.</summary>
     [JsonPropertyName("oversubscriptionFactor")]
     public double OversubscriptionFactor { get; set; } = 1.0;
+
+    /// <summary>
+    /// CONTEXT axis: the measured optimal browser-context pool size, as an <b>absolute count</b> —
+    /// not a factor of cpuCount, which the measurements show does not move this optimum. 0 =
+    /// undeclared → <c>ConcurrencyPolicy.UndeclaredContextPoolSize</c>. See
+    /// <see cref="EngineProfile.ContextPoolSize"/>; this is a different quantity from
+    /// <see cref="OversubscriptionFactor"/> and must not be derived from it.
+    /// </summary>
+    [JsonPropertyName("contextPoolSize")]
+    public int ContextPoolSize { get; set; }
+
+    /// <summary>
+    /// CONTEXT axis: bytes per additional browser context (~6× smaller than
+    /// <see cref="MemPerInstanceBytes"/> — a context is not a process family). 0 = undeclared → the
+    /// pool gets no memory bound, which is safe only because the undeclared pool size is small.
+    /// </summary>
+    [JsonPropertyName("memPerContextBytes")]
+    public long MemPerContextBytes { get; set; }
 }
 
 [JsonSourceGenerationOptions(ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true)]

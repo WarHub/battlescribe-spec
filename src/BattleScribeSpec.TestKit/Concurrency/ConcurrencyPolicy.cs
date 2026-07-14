@@ -112,7 +112,49 @@ public static class ConcurrencyPolicy
     /// </remarks>
     internal const double MemoryHeadroomFactor = 0.8;
 
+    /// <summary>
+    /// The conservative context-pool size for any engine that has <b>not declared</b> a measured one
+    /// (<see cref="EngineProfile.ContextPoolSize"/> == 0). An <b>absolute count</b> — like the axis
+    /// itself, it does not scale with <see cref="MachineProfile.CpuCount"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why 4, and why an absolute number is the honest default here.</b> This axis is bound by
+    /// contention on the ONE Playwright driver every context in a pool shares, not by CPU — the two
+    /// engines that were swept have the same optimum on a 32-core box and on a 4-CPU container
+    /// (docs/concurrency-policy-measurements.md §7.4). 4 is the <em>smaller</em> of the two measured
+    /// optima (<c>newrecruit</c> 4, <c>newrecruit-ui</c> 16), which makes it the safe end of the only
+    /// evidence that exists: it is exactly optimal for one measured engine and merely slower — never
+    /// degraded — for the other.
+    /// </para>
+    /// <para>
+    /// <b>Undershooting and overshooting are not symmetric, and the asymmetry points down.</b> Past
+    /// the optimum this axis degrades hard and monotonically: <c>newrecruit</c> at pool 32 is
+    /// <b>+77%</b> wall-clock against its optimum of 4, over six consecutive worsening levels. Below
+    /// the optimum you merely leave throughput on the table. For an engine nobody has swept, sitting
+    /// at the low end of the measured band is the cheap mistake to make.
+    /// </para>
+    /// <para>
+    /// It is also memory-trivial (4 × ≈225 MiB ≈ 0.9 GiB at the measured slope), so an engine that
+    /// declares no <see cref="EngineProfile.MemPerContextBytes"/> — and therefore gets no memory
+    /// bound on its pool — still cannot hurt a small box with it.
+    /// </para>
+    /// </remarks>
+    internal const int UndeclaredContextPoolSize = 4;
+
     /// <summary>Derive the plan. Deterministic: the same machine and engine always give the same plan.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Two axes, computed independently. They must never be mirrored onto each other again.</b>
+    /// <see cref="ConcurrencyPlan.Workers"/> counts adapter <em>processes</em> and scales with
+    /// <see cref="MachineProfile.CpuCount"/>; <see cref="ConcurrencyPlan.PoolSize"/> counts browser
+    /// <em>contexts</em> and <b>does not</b>. This method used to end with <c>PoolSize: workers</c> —
+    /// one integer feeding two consumers that share no mechanism — which handed a constant fitted by
+    /// sweeping processes to a pool of contexts and cost CI up to 2× on the lanes it governs. The
+    /// measurements behind each axis are in docs/concurrency-policy-measurements.md (§1–§6 processes,
+    /// §7 contexts).
+    /// </para>
+    /// </remarks>
     /// <param name="machine">The machine the run is happening on.</param>
     /// <param name="engine">What the engine declares about itself.</param>
     /// <returns>The concurrency and reuse decisions for this machine/engine pair.</returns>
@@ -120,6 +162,8 @@ public static class ConcurrencyPolicy
     {
         ArgumentNullException.ThrowIfNull(machine);
         ArgumentNullException.ThrowIfNull(engine);
+
+        // ===== PROCESS AXIS (CLI: `bs-spec run --all` spawns this many adapter processes) =====
 
         // Scale with the machine...
         var byCpu = (int)Math.Ceiling(machine.CpuCount * engine.OversubscriptionFactor);
@@ -159,6 +203,40 @@ public static class ConcurrencyPolicy
             workers = Math.Min(workers, engine.MaxParallel);
         }
 
+        // ===== CONTEXT AXIS (xUnit: the fixture pool's browser contexts). =====
+        //
+        // NOTE WHAT IS ABSENT: machine.CpuCount. That is not an oversight and it is not laziness —
+        // it is the measurement. The optimal pool is IDENTICAL on a 32-core box and on a 4-CPU
+        // container for both engines that were swept (newrecruit 4, newrecruit-ui 16), because every
+        // context in a pool talks to the SAME Chromium through the SAME Playwright Node driver: the
+        // binding constraint is contention on that one driver, not cores. newrecruit-ui at pool=1
+        // takes 240.05s on 32 CPUs and 241.17s on 4 CPUs — an 8x CPU cut costs 0.5%.
+        //
+        // The previous line here was `PoolSize: workers`, which made this axis a function of
+        // ceil(cpuCount × k) — a shape the data refutes — and cost the CI lanes it governs up to 2x.
+        // If you are about to reintroduce a cpuCount term here, read §7 of
+        // docs/concurrency-policy-measurements.md first; Policy_PoolSize_IsIndependentOfCpuCount
+        // exists to stop you.
+        var declaredPool = engine.ContextPoolSize > 0 ? engine.ContextPoolSize : UndeclaredContextPoolSize;
+
+        // Memory still bounds it — a context is ~6x cheaper than a worker process (≈225 MiB vs
+        // ≈1.4 GiB), so this rarely binds (a 16 GiB runner affords ~58 contexts against a measured
+        // optimum of 16), but "rarely" is not "never": a 4 GiB container is a real thing. Same
+        // headroom factor as the process axis — the reasons for it (a sampled peak is a lower bound;
+        // "available" is not "spare") are properties of the machine, not of the axis.
+        var poolByMemory = engine.MemPerContextBytes > 0
+            ? (int)Math.Min(int.MaxValue, claimableMemory / engine.MemPerContextBytes)
+            : int.MaxValue;
+
+        var poolSize = Math.Max(1, Math.Min(declaredPool, poolByMemory));
+
+        // The engine's hard ceiling is a ceiling on EITHER axis: battlescribe-ui runs one JVM, and
+        // that is as true of a context pool as of a worker process.
+        if (engine.MaxParallel > 0)
+        {
+            poolSize = Math.Min(poolSize, engine.MaxParallel);
+        }
+
         // Reuse needs BOTH: correct AND worth it. Reusing a cheap-to-start engine is safe and
         // buys nothing (measured: 0.92x for NewRecruit) — it would add a warm-state failure mode
         // for no gain, which is a bad trade even when it is a correct one.
@@ -166,7 +244,7 @@ public static class ConcurrencyPolicy
 
         return new ConcurrencyPlan(
             Workers: workers,
-            PoolSize: workers,
+            PoolSize: poolSize,
             ReuseRoster: worthReusing && engine.ReuseSafeRoster,
             ReuseGameData: worthReusing && engine.ReuseSafeGameData);
     }

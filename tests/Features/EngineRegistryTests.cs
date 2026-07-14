@@ -1,4 +1,5 @@
 using System.Globalization;
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Tests.Features;
@@ -139,6 +140,50 @@ public sealed class EngineRegistryTests : IDisposable
         Assert.Contains("maxParallel", ex.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The context-axis declarations are validated exactly like the process-axis ones, and for the
+    /// same reason: the policy gates both on <c>&gt; 0</c>, so a negative silently falls through to
+    /// the undeclared default while looking, in the author's file, like a declaration.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: delete either check from <c>EngineRegistry.Validate</c> and the corresponding row
+    /// loads without throwing. The error message must also name the field, so an author who wrote
+    /// <c>-1</c> is told which of the four numbers they broke.
+    /// </remarks>
+    [Theory]
+    [InlineData("contextPoolSize", -1)]
+    [InlineData("memPerContextBytes", -1)]
+    public void NegativeContextAxisDeclarations_AreRejectedAtLoad(string field, int value)
+    {
+        var path = WriteConfig(
+            "{\"engines\":{\"wham\":{\"exec\":\"node w.js\",\"" + field + "\":" +
+            value.ToString(CultureInfo.InvariantCulture) + "}}}");
+
+        var ex = Assert.Throws<InvalidDataException>(() => EngineRegistry.Load(path));
+
+        Assert.Contains(field, ex.Message, StringComparison.Ordinal);
+        Assert.Contains("wham", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(path, ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A third-party engine can declare the context axis, and the policy reads it.</summary>
+    [Fact]
+    public void DeclaredContextAxis_IsLoadedAsTheEnginesOwnAbsolutePoolSize()
+    {
+        var path = WriteConfig(
+            """{"engines":{"wham":{"exec":"node w.js","contextPoolSize":12,"memPerContextBytes":209715200}}}""");
+
+        var profile = EngineRegistry.Load(path).Resolve(EngineConnectable.Parse("wham")).Profile;
+
+        Assert.Equal(12, profile.ContextPoolSize);
+        Assert.Equal(209_715_200L, profile.MemPerContextBytes);
+
+        // And it is an ABSOLUTE count: the same 12 on a 4-CPU box and on a 64-core box. (200 MiB per
+        // context × 12 = 2.4 GiB, so the 16 GiB box's memory bound — 65 — does not bind either.)
+        Assert.Equal(12, ConcurrencyPolicy.For(new MachineProfile(4, 16L << 30), profile).PoolSize);
+        Assert.Equal(12, ConcurrencyPolicy.For(new MachineProfile(64, 256L << 30), profile).PoolSize);
+    }
+
     /// <summary>Omitting the optional numbers stays legal — the conservative defaults apply.</summary>
     [Fact]
     public void OmittedProfileNumbers_LoadWithConservativeDefaults()
@@ -150,5 +195,11 @@ public sealed class EngineRegistryTests : IDisposable
         Assert.Equal(0, profile.MemPerInstanceBytes); // "undeclared" → the policy's cap binds
         Assert.Equal(1.0, profile.OversubscriptionFactor);
         Assert.Equal(0, profile.MaxParallel); // 0 = unlimited (the cap is what actually bounds it)
+
+        // Context axis: undeclared too → ConcurrencyPolicy.UndeclaredContextPoolSize, and no memory
+        // bound on the pool. An omitted field must not mean "take the machine".
+        Assert.Equal(0, profile.ContextPoolSize);
+        Assert.Equal(0L, profile.MemPerContextBytes);
+        Assert.Equal(4, ConcurrencyPolicy.For(new MachineProfile(64, 256L << 30), profile).PoolSize);
     }
 }

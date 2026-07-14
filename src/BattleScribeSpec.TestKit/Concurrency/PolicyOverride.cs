@@ -13,11 +13,28 @@ public static class PolicyOverride
 {
     /// <summary>
     /// Parse <paramref name="raw"/> and apply recognized keys on top of <paramref name="basePlan"/>.
-    /// Recognized keys: <c>workers=N</c> (positive integer; also sets <see cref="ConcurrencyPlan.PoolSize"/>,
-    /// which mirrors it), <c>reuse=on|off</c> (both domains at once), <c>reuse-roster=on|off</c>,
-    /// <c>reuse-gamedata=on|off</c>. A key given more than once uses the last occurrence. Unset keys
-    /// leave <paramref name="basePlan"/>'s value unchanged.
+    /// Recognized keys: <c>workers=N</c> (positive integer), <c>reuse=on|off</c> (both domains at
+    /// once), <c>reuse-roster=on|off</c>, <c>reuse-gamedata=on|off</c>. A key given more than once
+    /// uses the last occurrence. Unset keys leave <paramref name="basePlan"/>'s value unchanged.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b><c>workers=N</c> sets <see cref="ConcurrencyPlan.Workers"/> and NOTHING ELSE.</b> It used
+    /// to also assign <see cref="ConcurrencyPlan.PoolSize"/> "which mirrors it" — the same mirror the
+    /// policy has now dropped, for the same reason: they are different quantities on different axes
+    /// (adapter processes vs browser contexts), and a <c>--policy</c> sweep of one was never a sweep
+    /// of the other. The context-axis campaign had to reach its axis with a temporary env var
+    /// precisely because <c>--policy workers=</c> could not.
+    /// </para>
+    /// <para>
+    /// <b>And there is deliberately no <c>pool=N</c> key.</b> Every command that parses
+    /// <c>--policy</c> is a CLI command, and the CLI path has no pool at all —
+    /// <see cref="ConcurrencyPlan.PoolSize"/> is not on the protocol wire and no adapter reads it. A
+    /// <c>pool=</c> key here would be accepted, forwarded and completely inert: the silently-dropped
+    /// flag that #305 exists to forbid. The pool lives in the xUnit fixtures, and its size is the
+    /// engine's declared constant — measure the engine, don't add a knob.
+    /// </para>
+    /// </remarks>
     /// <param name="raw">Comma-separated <c>KEY=VALUE</c> pairs; null or empty means no overrides.</param>
     /// <param name="basePlan">The plan the overrides apply on top of.</param>
     /// <returns><paramref name="basePlan"/> with any recognized keys overridden.</returns>
@@ -33,7 +50,6 @@ public static class PolicyOverride
         }
 
         var workers = basePlan.Workers;
-        var poolSize = basePlan.PoolSize;
         var reuseRoster = basePlan.ReuseRoster;
         var reuseGameData = basePlan.ReuseGameData;
 
@@ -48,8 +64,8 @@ public static class PolicyOverride
                         throw new FormatException($"--policy: 'workers' must be a positive integer, got '{value}'.");
                     }
 
+                    // Workers only — see the remarks. PoolSize is a different axis and is left alone.
                     workers = parsedWorkers;
-                    poolSize = parsedWorkers;
                     break;
 
                 case "reuse":
@@ -76,7 +92,6 @@ public static class PolicyOverride
         return basePlan with
         {
             Workers = workers,
-            PoolSize = poolSize,
             ReuseRoster = reuseRoster,
             ReuseGameData = reuseGameData,
         };
