@@ -25,29 +25,23 @@ public static class EngineHostLocator
     /// 4. "bs-engine-host" on PATH.
     /// Throws InvalidOperationException naming all probed locations when not found.
     /// A .dll resolution launches via "dotnet"; an executable launches directly.
-    /// Headed/keep-alive for non-builtin (launchable) entries are NOT conveyed at all — neither
-    /// as launch arguments nor via any environment variable. <c>--headed</c>/<c>--keep-alive</c>
-    /// are silently dropped for an <c>exec:</c>/<c>dotnet:</c> adapter. Tracked as
+    /// <c>--headed</c> for non-builtin (launchable) entries is NOT conveyed at all — neither as a
+    /// launch argument nor via any environment variable — so the CLI rejects it before a process is
+    /// spawned rather than dropping it silently. Tracked as
     /// <see href="https://github.com/WarHub/battlescribe-spec/issues/305">#305</see>. A
-    /// <paramref name="plan"/>, by contrast, is never silently dropped: a launchable entry that
-    /// receives one throws, because there is no channel to convey it (see below).
+    /// <paramref name="plan"/> likewise: a launchable entry that receives one throws, because there
+    /// is no channel to convey it (see below).
     ///
     /// The default <paramref name="verb"/> is <c>serve</c> (the NDJSON adapter protocol on
     /// stdio). The interactive verbs (<c>probe</c>, <c>discover</c>) pass their full argument
     /// tail via <paramref name="verbArgs"/> — the host command owns those options — and this
     /// method just prefixes the verb and quotes any element containing whitespace. For those
-    /// verbs the <paramref name="headed"/>/<paramref name="keepAlive"/>/<paramref name="plan"/>
-    /// are not composed here; the caller places them in <paramref name="verbArgs"/> at the
-    /// position the host command expects (e.g. after a discover subcommand token).
+    /// verbs the <paramref name="headed"/>/<paramref name="plan"/> are not composed here; the
+    /// caller places them in <paramref name="verbArgs"/> at the position the host command expects
+    /// (e.g. after a discover subcommand token).
     /// </summary>
     /// <param name="entry">The resolved engine entry (built-in or launchable).</param>
     /// <param name="headed">Show the browser/app window (serve verb only; presentation, not policy).</param>
-    /// <param name="keepAlive">
-    /// Legacy sugar for "force reuse on" (e.g. interactive debugging via <c>run --keep-alive</c>).
-    /// Composed as <c>--policy reuse=on</c> (serve no longer has its own <c>--keep-alive</c> flag —
-    /// two names for the same concept would be the disease this converged vocabulary cures).
-    /// Ignored when <paramref name="plan"/> is given (the plan is the authoritative decision).
-    /// </param>
     /// <param name="verb">The host subcommand to invoke (default <c>serve</c>).</param>
     /// <param name="verbArgs">Full argument tail for non-<c>serve</c> verbs (see remarks).</param>
     /// <param name="plan">
@@ -68,7 +62,6 @@ public static class EngineHostLocator
     public static EngineLaunch Resolve(
         EngineEntry entry,
         bool headed = false,
-        bool keepAlive = false,
         string verb = "serve",
         IReadOnlyList<string>? verbArgs = null,
         ConcurrencyPlan? plan = null)
@@ -97,16 +90,20 @@ public static class EngineHostLocator
         string hostArgs;
         if (verb == "serve")
         {
+            // The plan is the ONE reuse decision. There is deliberately no second channel here: a
+            // `keepAlive` parameter used to compose `--policy reuse=on` when no plan was given, described
+            // as "legacy sugar ... e.g. interactive debugging via `run --keep-alive`" — a flag this branch
+            // DELETED. Both construction sites of EngineSelection passed KeepAlive: false, so the branch it
+            // guarded was unreachable and its docstring named a flag the CLI errors on. That is exactly the
+            // zero-consumer-field-dressed-as-control pattern the branch removed from ConcurrencyPlan
+            // (MaxParallelThreads), left standing one layer up. Reuse is ConcurrencyPolicy's to decide; it
+            // arrives in the plan or not at all.
             var policyParts = new List<string>();
             if (plan is { } p)
             {
                 policyParts.Add($"workers={p.Workers}");
                 policyParts.Add($"reuse-roster={(p.ReuseRoster ? "on" : "off")}");
                 policyParts.Add($"reuse-gamedata={(p.ReuseGameData ? "on" : "off")}");
-            }
-            else if (keepAlive)
-            {
-                policyParts.Add("reuse=on");
             }
 
             var policyFlag = policyParts.Count > 0 ? $" --policy {string.Join(',', policyParts)}" : "";

@@ -22,7 +22,7 @@ public sealed class EngineHostLocatorTests
     [Fact]
     public void Builtin_NoOverrides_ComposesPlainServeArgs()
     {
-        // When neither keepAlive nor a plan is given, no --policy flag is composed at all, and the
+        // When no plan is given, no --policy flag is composed at all, and the
         // child falls back to ServeCommand.NoPolicyPlan — a hardcoded, deliberately conservative
         // (1, 1, no-reuse). The child does NOT compute a policy of its own: the parent decides, the
         // child is told. In practice the harness always passes --policy, so this path is reached
@@ -44,30 +44,19 @@ public sealed class EngineHostLocatorTests
         }
     }
 
-    [Fact]
-    public void Builtin_KeepAlive_ComposesPolicyReuseOn()
-    {
-        // --keep-alive no longer exists on `serve`; the caller-facing "keep it alive" concept is
-        // now sugar for `--policy reuse=on` — one vocabulary, not two.
-        var fake = Path.Combine(Path.GetTempPath(), "fake-host.dll");
-        File.WriteAllText(fake, "");
-        var priorValue = Environment.GetEnvironmentVariable("BSSPEC_ENGINE_HOST");
-        try
-        {
-            Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", fake);
-            var launch = EngineHostLocator.Resolve(Builtin, headed: true, keepAlive: true);
-            Assert.Equal("dotnet", launch.Executable);
-            Assert.Equal($"{fake} serve --engine battlescribe --headed --policy reuse=on", launch.Arguments);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", priorValue);
-            File.Delete(fake);
-        }
-    }
+    // Builtin_KeepAlive_ComposesPolicyReuseOn lived here. `EngineHostLocator.Resolve`'s `keepAlive`
+    // parameter composed `--policy reuse=on` when no plan was given, and its docstring called it
+    // "legacy sugar ... e.g. interactive debugging via `run --keep-alive`" — a flag this branch had
+    // already deleted from the CLI. Both EngineSelection construction sites passed `KeepAlive: false`,
+    // so no production path could reach the branch: only this test could, by calling the parameter
+    // directly. Reuse is ConcurrencyPolicy's ONE decision and it travels in the plan.
 
+    /// <summary>
+    /// A plan composes the full <c>--policy</c> string: the child is TOLD every decision, including the
+    /// negative ones (<c>reuse-gamedata=off</c>), so it never has to infer one from an absence.
+    /// </summary>
     [Fact]
-    public void Builtin_Plan_ComposesFullPolicyString_AndWinsOverKeepAlive()
+    public void Builtin_Plan_ComposesFullPolicyString()
     {
         var fake = Path.Combine(Path.GetTempPath(), "fake-host.dll");
         File.WriteAllText(fake, "");
@@ -77,9 +66,7 @@ public sealed class EngineHostLocatorTests
             Environment.SetEnvironmentVariable("BSSPEC_ENGINE_HOST", fake);
             var plan = new ConcurrencyPlan(Workers: 3, PoolSize: 3, ReuseRoster: true, ReuseGameData: false);
 
-            // keepAlive: true would (alone) mean "reuse=on" — but an explicit plan is the
-            // authoritative decision and must win, including its ReuseGameData=false.
-            var launch = EngineHostLocator.Resolve(Builtin, keepAlive: true, plan: plan);
+            var launch = EngineHostLocator.Resolve(Builtin, plan: plan);
 
             Assert.Equal(
                 $"{fake} serve --engine battlescribe --policy workers=3,reuse-roster=on,reuse-gamedata=off",

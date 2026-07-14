@@ -217,7 +217,7 @@ public sealed class RunBatchSurfaceTests
     private static EngineSelection ResolveSelection(string engineName)
     {
         var entry = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(engineName));
-        return new EngineSelection(entry, EngineDomain.Roster, Headed: false, KeepAlive: false);
+        return new EngineSelection(entry, EngineDomain.Roster, Headed: false);
     }
 
     // ===== The policy — not a hardcoded default — picks the worker count (#271 Task 5) =====

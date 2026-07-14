@@ -167,23 +167,18 @@ public sealed class EngineSpecTests
         Assert.True(selection.EffectivePlan.ReuseGameData);
     }
 
-    [Fact]
-    public void EffectivePlan_KeepAlive_ForcesReuseOn_AndIsFoldedIntoThePolicySentToTheChild()
-    {
-        // --keep-alive is sugar for "force reuse on". It must be folded into the ONE decision the
-        // child receives, not survive as a separate flag the child has to reconcile.
-        var selection = Resolve("plain-spec-id", "--engine", "newrecruit-ui") with { KeepAlive = true };
-
-        Assert.True(selection.EffectivePlan.ReuseRoster);
-        Assert.True(selection.EffectivePlan.ReuseGameData);
-        Assert.Contains("reuse-roster=on,reuse-gamedata=on", selection.ResolveLaunch().Arguments, StringComparison.Ordinal);
-    }
+    // EffectivePlan_KeepAlive_ForcesReuseOn_AndIsFoldedIntoThePolicySentToTheChild lived here. It
+    // constructed `EngineSelection with { KeepAlive = true }` DIRECTLY — a state no user could reach:
+    // both production construction sites passed KeepAlive: false, `run --keep-alive` had been deleted
+    // from the CLI, and the field's only branch was therefore dead. A test that manufactures the input
+    // its subject cannot receive proves the branch compiles, not that anything uses it. The field is
+    // gone (see EngineSelection); reuse is ConcurrencyPolicy's decision and arrives in the plan.
 
     [Fact]
     public void ResolveLaunch_LaunchableAdapter_GetsNoPolicy_AndIsNotGivenAFabricatedOne()
     {
-        // exec:/dotnet: adapters have no --policy channel (#305 is the sibling gap for
-        // --headed/--keep-alive). They must not be handed a policy flag they'd choke on...
+        // exec:/dotnet: adapters have no --policy channel (#305 is the sibling gap for --headed).
+        // They must not be handed a policy flag they'd choke on...
         var selection = Resolve("plain-spec-id", "--engine", "wham=dotnet:adapter.dll");
 
         var launch = selection.ResolveLaunch();

@@ -22,7 +22,6 @@ internal enum OutputFormat
 /// <param name="Entry">The resolved registry entry (built-in or launchable).</param>
 /// <param name="Domain">Which kind of spec this selection edits.</param>
 /// <param name="Headed">Show the browser/app window instead of running headless.</param>
-/// <param name="KeepAlive">Force the child to stay alive between specs (interactive debugging sugar for reuse=on).</param>
 /// <param name="PlanOverride">
 /// A user-supplied override of the policy's own answer (Tasks 5-6 wire <c>run</c>/<c>compare</c>'s
 /// <c>--policy</c> to it). Null does <b>not</b> mean "let the child decide" — the parent still
@@ -41,7 +40,6 @@ internal sealed record EngineSelection(
     EngineEntry Entry,
     EngineDomain Domain,
     bool Headed,
-    bool KeepAlive,
     ConcurrencyPlan? PlanOverride = null,
     IReadOnlyDictionary<string, string>? ChildEnvironment = null)
 {
@@ -106,9 +104,9 @@ internal sealed record EngineSelection(
 
     /// <summary>
     /// The plan this selection sends to the child, on <b>every</b> spawn: what
-    /// <see cref="ConcurrencyPolicy"/> decides for this machine and this engine, with any
-    /// <see cref="PlanOverride"/> replacing it and <see cref="KeepAlive"/> layered on top as
-    /// "force reuse on".
+    /// <see cref="ConcurrencyPolicy"/> decides for this machine, this engine and this
+    /// <see cref="LoadTarget"/>, with any <see cref="PlanOverride"/> replacing it — and the load limit
+    /// applied last, to whichever of the two it ends up being.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -133,11 +131,7 @@ internal sealed record EngineSelection(
         {
             var loadTarget = LoadTarget;
             var plan = PlanOverride ?? ConcurrencyPolicy.For(MachineProfile.Current(), Entry.Profile, loadTarget);
-            plan = ConcurrencyPolicy.ClampToLoadTarget(plan, loadTarget);
-
-            // --keep-alive is interactive-debugging sugar for "force reuse on"; it is folded into
-            // the plan HERE so the child sees one decision, not a flag it must reconcile.
-            return KeepAlive ? plan with { ReuseRoster = true, ReuseGameData = true } : plan;
+            return ConcurrencyPolicy.ClampToLoadTarget(plan, loadTarget);
         }
     }
 
@@ -148,7 +142,7 @@ internal sealed record EngineSelection(
     /// silent drop (see <see cref="EngineHostLocator.Resolve"/> and #305).
     /// </summary>
     public EngineLaunch ResolveLaunch() =>
-        EngineHostLocator.Resolve(Entry, Headed, KeepAlive, plan: Entry.Builtin ? EffectivePlan : PlanOverride);
+        EngineHostLocator.Resolve(Entry, Headed, plan: Entry.Builtin ? EffectivePlan : PlanOverride);
 
     /// <summary>Start the adapter process for this selection, with optional extra child environment.</summary>
     /// <remarks>
@@ -317,7 +311,7 @@ internal sealed class EngineOptions
             }
         }
 
-        return new EngineSelection(entry, domain, headed, KeepAlive: false);
+        return new EngineSelection(entry, domain, headed);
     }
 }
 
