@@ -659,10 +659,28 @@ conservative default for any engine that has not declared its per-instance memor
 it does, it gets `min(cpuCount, 8)` — slower than optimal, but it cannot OOM a laptop. That is the
 right default for code we did not write and did not measure.
 
-The two `xunit.runner.json` files stay pinned to it at `maxParallelThreads: 8`
-(`ConcurrencyConfigurationDriftTests` enforces the link). That literal governs the **test suite's own
-xUnit thread count** — a different quantity from an engine's worker count that currently shares a
-value. Retuning it was deliberately left out of scope.
+The two `xunit.runner.json` files **used** to be pinned to this same constant at
+`maxParallelThreads: 8`. That link is now **cut**, for two reasons found in review:
+
+- **The quantities have no shared meaning.** One is a memory-safety ceiling for engines that declare
+  no footprint; the other is the test runner's own thread count. Pinning them together meant raising
+  the engine cap would have silently re-sized the test host.
+- **The literal `8` was a *raise*, not a cap, where it mattered most.** xUnit's default is
+  `Environment.ProcessorCount`. On the 32-core dev box `8` capped (32 → 8), but on the **4-vCPU CI
+  runner it doubled** collection parallelism (4 → 8) — an unmeasured increase in contention on the
+  smallest, most memory-constrained machine in the fleet, shipped under a commit message that said
+  the opposite.
+
+The value is now a machine-relative multiplier, **`"0.5x"`**, declared and justified in
+`ConcurrencyConfigurationDriftTests` (which still pins both files to it). It can never exceed xUnit's
+own default on any box, and half is the honest half: xUnit's thread accounting covers only *its own
+test threads*, while the tests spawn the things that actually consume the machine — JVMs, Playwright
+Node drivers, Chromium trees — none of which xUnit can see. Verified live with `diagnosticMessages`:
+**4-vCPU runner → 2 threads; this 32-core box → 16 threads.**
+
+`ConcurrencyPlan.MaxParallelThreads` — a field with **zero consumers**, whose doc comment claimed it
+governed xUnit — was deleted rather than left as decoration. xUnit reads that JSON before any of our
+code runs, so no plan can govern it; saying so is better than pretending otherwise.
 
 ### 6c. The judgment call: `MemoryHeadroomFactor = 0.8`
 
@@ -731,6 +749,33 @@ campaign cannot distinguish them:
 **This is shipped watching, not shipped assuming.** The plan's own gate (Task 9, Step 3) is that CI
 lane wall-times must be **no worse** than the recorded baselines (`nr-frozen` 48 s). If `nr-frozen`
 regresses, the fix is to measure `k` **on the runner** — the constant is wrong, not the architecture.
+
+### The xUnit fixture path is bounded defensively, and it is still not measured
+
+The third bullet above ("the two numbers may not measure the same quantity") is not just a caveat on
+CI's `k` — it describes **the whole `dotnet test` path**, and every sweep in this campaign was
+`bs-spec run` (the CLI), never `dotnet test`. Two things follow, and both are now written into the
+code rather than only into this document:
+
+1. **`PoolSize` is in a different unit from `Workers`.** A worker is a whole process family (adapter
+   + Node driver + Chromium tree — that is what `MemPerInstanceBytes` measured); a fixture pool's
+   element is an in-process browser **context** sharing one browser and one driver with its siblings.
+   The policy feeds the same number to both. The error is conservative (it over-charges per context,
+   so it cannot OOM) but it is an error.
+
+2. **Nothing bounds the product across collections.** Real concurrency inside a conformance test is
+   `Parallel.ForEachAsync(MaxDegreeOfParallelism = pool.Size)` *within a single `[Fact]`*, which
+   xUnit's `maxParallelThreads` does not constrain at all; and collection fixtures live for the whole
+   collection, so several pools can be alive at once. Uncapped, this 32-core box would ask for **32 /
+   12 / 12** contexts across the three NR fixtures (≤ 56 live) where the pre-policy defaults were
+   **5 / 5 / 10** (≤ 20).
+
+`FixtureConcurrency.FixturePoolCap = 8` is the interim guard: worst case ≤ 24 live contexts, no lower
+than the old frozen defaults, and it **does not bind on the 4-vCPU CI runner** (sized 2–4), so the CI
+table above is unchanged by it. It is a defensive bound over an unmeasured path — *not* a fitted
+constant, and not a substitute for the real fix, which is a shared budget the pools draw from
+(**issue #314**). Sizing the xUnit path honestly needs a sweep of `dotnet test`, which this campaign
+never ran.
 
 ---
 

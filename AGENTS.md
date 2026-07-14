@@ -81,7 +81,9 @@ Verbs: `run` (execute + assert), `probe` (open a UI engine for inspection), `exp
 drive the real app, and the domain (roster/gamedata) is inferred from the spec path
 (override with `--gamedata`/`--roster`). `run` options include `--all-steps`,
 `--output {tree,json}` (or `--json`), `--headed`, `--screenshots <dir>`, `--timeline <file>`,
-`--record <file>`, `--save-roster <dir>`, `--keep-alive`, and `--break <n>`.
+`--record <file>`, `--save-roster <dir>`, and `--break <n>`. Concurrency and engine reuse are not
+flags: `ConcurrencyPolicy` derives them from the machine and the engine, and `--policy
+workers=N,reuse=on|off` overrides that for diagnosis (`--workers` and `--keep-alive` are deleted).
 Specs can include `action: dump` steps for explicit dump points.
 
 ## After editing specs
