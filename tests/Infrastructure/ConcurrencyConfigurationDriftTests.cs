@@ -39,8 +39,9 @@ namespace BattleScribeSpec.Tests;
 /// <para>
 /// Note what this does <em>not</em> bound, so nobody mistakes it for a solution to #314: the real
 /// browser concurrency in a conformance test is <c>Parallel.ForEachAsync</c> inside a single
-/// <c>[Fact]</c>, which xUnit's thread count does not constrain at all. That is
-/// <c>FixtureConcurrency.FixturePoolCap</c>'s job.
+/// <c>[Fact]</c>, sized by <c>ConcurrencyPlan.PoolSize</c> (the context axis), which xUnit's thread
+/// count does not constrain at all. A third quantity, on a third axis — do not pin any of the three
+/// to either of the others, which is the mistake this class's own history records.
 /// </para>
 /// </remarks>
 [Trait("Category", "Lint")]

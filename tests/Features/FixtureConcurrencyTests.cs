@@ -1,3 +1,6 @@
+using BattleScribeSpec.Concurrency;
+using BattleScribeSpec.Engines;
+
 namespace BattleScribeSpec.Tests.Features;
 
 /// <summary>
@@ -64,30 +67,52 @@ public sealed class FixtureConcurrencyTests
     }
 
     /// <summary>
-    /// The fixture pool cap actually binds. Pure inputs, so this is falsifiable on every machine —
-    /// on the 4-vCPU CI runner the policy's own answer (2–4) is already below the cap, so asserting
-    /// only against a live <c>PoolSizeFor</c> would pass there whether or not the cap existed.
+    /// The fixtures apply <b>no bound of their own</b> on top of the policy. A blanket
+    /// <c>FixturePoolCap = 8</c> used to sit here, and it was quietly capping <c>newrecruit-ui</c>'s
+    /// measured optimum of 16 — costing that lane 31% while its docstring claimed the cap could only
+    /// "over-provision, not OOM" (true of memory; false of time). The policy's per-context memory
+    /// bound does the real work now.
     /// </summary>
-    [Fact]
-    public void CapPoolSize_BoundsABigBoxesPlan_AndLeavesASmallOneAlone()
-    {
-        // Uncapped, the policy asks this 32-core box for 32 contexts for newrecruit-ui.
-        Assert.Equal(FixtureConcurrency.FixturePoolCap, FixtureConcurrency.CapPoolSize(32));
-
-        // ...but the cap is a ceiling, never a floor: it must not inflate the CI runner's 2.
-        Assert.Equal(2, FixtureConcurrency.CapPoolSize(2));
-    }
-
+    /// <remarks>
+    /// Falsifiable, and it is the test that fails if anyone re-adds a magic ceiling: on any machine
+    /// with enough memory for the declared pool — which includes the 4-vCPU / 16 GiB CI runner, where
+    /// the policy asks for 16 — reintroducing a cap below 16 makes <c>PoolSizeFor</c> disagree with
+    /// the plan. It cannot be satisfied by a cap that "happens not to bind here", because it compares
+    /// against the plan itself rather than a literal.
+    /// </remarks>
     [Theory]
     [InlineData("newrecruit")]
     [InlineData("newrecruit-ui")]
-    public void PoolSizeFor_IsThePolicysAnswerBoundedByTheCap(string engineName)
+    public void PoolSizeFor_IsThePolicysAnswer_UnmodifiedByAnyFixtureLevelCap(string engineName)
     {
-        var expected = FixtureConcurrency.CapPoolSize(FixtureConcurrency.Resolve(engineName).PoolSize);
+        var plan = FixtureConcurrency.Resolve(engineName);
 
-        var actual = FixtureConcurrency.PoolSizeFor(engineName);
+        Assert.Equal(plan.PoolSize, FixtureConcurrency.PoolSizeFor(engineName));
+    }
 
-        Assert.Equal(expected, actual);
-        Assert.InRange(actual, 1, FixtureConcurrency.FixturePoolCap);
+    /// <summary>
+    /// And the pool the fixtures will actually build is the engine's measured optimum, not the
+    /// worker count that used to be mirrored into it. Asserted on explicit machine profiles so it is
+    /// falsifiable on whatever box the suite happens to run on (the CI runner is 4-vCPU; the dev box
+    /// is 32-core; the old mirror gave those two boxes different pools, which is the bug).
+    /// </summary>
+    private static readonly MachineProfile[] Machines =
+    [
+        new MachineProfile(CpuCount: 4, AvailableMemoryBytes: 16L << 30),   // CI runner
+        new MachineProfile(CpuCount: 32, AvailableMemoryBytes: 96L << 30),  // dev box
+    ];
+
+    [Theory]
+    [InlineData("newrecruit", 4)]
+    [InlineData("newrecruit-ui", 16)]
+    public void PoolSizeFor_DeliversTheMeasuredOptimum_OnEveryMachineWithMemoryForIt(
+        string engineName, int measuredOptimum)
+    {
+        var profile = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(engineName)).Profile;
+
+        foreach (var machine in Machines)
+        {
+            Assert.Equal(measuredOptimum, ConcurrencyPolicy.For(machine, profile).PoolSize);
+        }
     }
 }

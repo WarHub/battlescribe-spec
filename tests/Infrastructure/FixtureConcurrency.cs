@@ -21,42 +21,6 @@ namespace BattleScribeSpec.Tests;
 internal static class FixtureConcurrency
 {
     /// <summary>
-    /// Ceiling on any single fixture's in-process pool, applied on top of the policy's
-    /// <see cref="ConcurrencyPlan.PoolSize"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>A defensive bound over an unmeasured path, not a fitted constant.</b> Every sweep in the
-    /// measurement campaign (<c>docs/concurrency-policy-measurements.md</c>) drove the <b>CLI</b>
-    /// path, where a worker is a whole adapter <em>process family</em> (adapter + Node driver +
-    /// browser tree) and exactly one pool exists per process. The xUnit path is a different shape,
-    /// and it was never measured:
-    /// </para>
-    /// <para>
-    /// 1. <b>The unit differs.</b> <see cref="ConcurrencyPlan.PoolSize"/> mirrors the worker count,
-    /// but a fixture pool's elements are in-process browser <em>contexts</em> sharing one browser and
-    /// one Node driver. <c>MemPerInstanceBytes</c> over-charges for those, so the sizing errs
-    /// conservatively — it can over-provision, not OOM.
-    /// </para>
-    /// <para>
-    /// 2. <b>The product across collections is unbounded.</b> Real concurrency inside a conformance
-    /// test is <c>Parallel.ForEachAsync(MaxDegreeOfParallelism = pool.Size)</c> within a single
-    /// <c>[Fact]</c> — which xUnit's <c>maxParallelThreads</c> does not constrain at all. Collection
-    /// fixtures live for the whole collection, so several pools can be alive simultaneously and
-    /// nothing bounds the sum. Tracked in <b>issue #314</b>; a shared budget the pools draw from is
-    /// the real fix. This cap is the interim guard, not that fix.
-    /// </para>
-    /// <para>
-    /// The value keeps the worst-case composed context count on a big box in the region the machine
-    /// already held before the policy existed. The three NR fixtures previously defaulted to 5 / 5 /
-    /// 10 contexts (≤ 20 live at once); the policy uncapped asks this 32-core box for 32 / 12 / 12
-    /// (≤ 56). Capped at 8: ≤ 24 — no lower than the old frozen defaults, and no step-change upward.
-    /// It does not bind on the 4-vCPU CI runner (which the policy sizes at 2–4), so CI is unchanged.
-    /// </para>
-    /// </remarks>
-    internal const int FixturePoolCap = 8;
-
-    /// <summary>
     /// The <see cref="ConcurrencyPlan"/> for the named built-in engine (e.g. <c>"newrecruit"</c>,
     /// <c>"battlescribe-ui"</c>) on the real machine this process is running on.
     /// </summary>
@@ -68,14 +32,34 @@ internal static class FixtureConcurrency
     }
 
     /// <summary>
-    /// The pool size a fixture may use for <paramref name="engineName"/>: the policy's answer,
-    /// bounded by <see cref="FixturePoolCap"/>. Fixtures call this rather than reading
-    /// <see cref="ConcurrencyPlan.PoolSize"/> directly.
+    /// The pool size a fixture uses for <paramref name="engineName"/>: <b>the policy's answer,
+    /// unmodified</b>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>There is deliberately no second cap here any more.</b> A blanket
+    /// <c>FixturePoolCap = 8</c> used to sit on this line, justified as a defensive bound over "an
+    /// unmeasured path" whose sizing "can over-provision, not OOM". The path has now been measured
+    /// (docs/concurrency-policy-measurements.md §7) and the docstring was half right in the worst
+    /// way: true of memory, false of time. <c>newrecruit-ui</c>'s measured optimum is a pool of
+    /// <b>16</b>, so the 8 was silently halving it and costing that lane <b>31%</b> on this box —
+    /// a defensive constant that cost more than the thing it defended against.
+    /// </para>
+    /// <para>
+    /// What replaces it is not "nothing": <see cref="ConcurrencyPolicy.For"/> now bounds the pool by
+    /// the engine's own measured per-context memory cost and the machine's memory
+    /// (<c>MemoryHeadroomFactor</c>), and by <c>MaxParallel</c>. That is a real bound derived from
+    /// what a context actually costs, rather than a round number — and unlike the round number, it
+    /// gets tighter on a small box instead of on a big one.
+    /// </para>
+    /// <para>
+    /// The worst-case composed count across simultaneously-live collection fixtures (<b>issue
+    /// #314</b>, still open) is <em>not</em> made worse by removing the cap: the three NR pools now
+    /// ask for 4 + 4 + 16 = <b>24</b> contexts, which is exactly what the 8-cap allowed
+    /// (8 + 8 + 8 = 24) and above the pre-policy defaults' 20. The composed bound was never this
+    /// cap's to give; a shared budget the pools draw from is #314's business.
+    /// </para>
+    /// </remarks>
     /// <param name="engineName">Built-in engine identity.</param>
-    public static int PoolSizeFor(string engineName) => CapPoolSize(Resolve(engineName).PoolSize);
-
-    /// <summary>The pure half of <see cref="PoolSizeFor"/>, so the cap is testable on any machine.</summary>
-    /// <param name="planPoolSize">The policy's unbounded answer for this machine and engine.</param>
-    internal static int CapPoolSize(int planPoolSize) => Math.Min(planPoolSize, FixturePoolCap);
+    public static int PoolSizeFor(string engineName) => Resolve(engineName).PoolSize;
 }
