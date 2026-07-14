@@ -1,8 +1,10 @@
 # Concurrency policy measurements (Task 8)
 
-**Status: `newrecruit-ui` roster swept and fitted on the dev box. `newrecruit`, `battlescribe-ui`
-and the 4-vCPU CI runner are NOT measured — see "What was not reached".** See
-`.superpowers/sdd/task-8-concurrency-report.md` for the task's final report.
+**Status: `newrecruit-ui` roster timing/knee swept and fitted on the dev box; serial-vs-32-way
+verdict safety confirmed; `MemPerInstanceBytes` now measured for both `newrecruit-ui` and
+`battlescribe-ui`. `newrecruit` (non-UI) roster's `k` and the entire 4-vCPU CI runner remain NOT
+measured — see "What was not reached".** See `.superpowers/sdd/task-8-concurrency-report.md` for
+the task's final report.
 
 This is the measurement campaign behind `ConcurrencyPolicy.For`
 (`src/BattleScribeSpec.TestKit/Concurrency/ConcurrencyPolicy.cs`):
@@ -93,15 +95,45 @@ comparison can support — the real serial-vs-parallel check is a separate run.
 ### Peak RSS per instance
 
 The harness has no built-in RSS metric (`harness.resource.count` is a concurrency gauge, not
-memory). Sampled externally: a PowerShell loop polls `Win32_Process` + `Get-Process` every 3s and
-totals working set across **both** per-worker process families —
+memory). Sampled externally: a PowerShell loop polls `Win32_Process` every 2s and totals working
+set across **all** per-worker process families discovered by walking the live process tree from
+the measurement run's own root PID —
 
-- the `bs-engine-host` adapter process (one per worker), and
+- the `bs-engine-host` adapter process (one per worker),
+- the Playwright Node.js driver process (`node.exe`, one per worker — sits between the adapter and
+  the browser; not anticipated when this method note was first written, found while measuring, see
+  below), and
 - the `chrome-headless-shell` tree (one per worker; itself main + GPU + network + renderer
   children, so "one instance" is the whole tree, not one PID).
 
-Counting only the browser would **understate** `memPerInstanceBytes`, because a worker cannot exist
-without its adapter process too.
+Counting only the browser would **understate** `memPerInstanceBytes` — a worker cannot exist
+without its adapter process and driver too.
+
+**Tree-scoping, not name-matching, and why it is load-bearing here (not just tidy):** the sampler
+enumerates `Win32_Process`, builds a parent→child map, and BFS-walks it from the measurement run's
+own root PID, summing working set only over processes that are actual descendants of *that*
+invocation. It does **not** match on process name globally. This was not a theoretical concern: a
+**separate, unrelated Claude Code session was running its own Playwright-based tests against a
+different project on this same machine during this measurement window**, spawning its own
+`chrome-headless-shell` tree the whole time. A name-only sampler (`Get-Process -Name
+chrome-headless-shell`) would have silently summed someone else's browsers into this number. Sampler
+script: `.superpowers/sdd/campaign-logs/sample-mem.ps1` (gitignored, like the rest of this
+campaign's scratch data); verified clean by cross-checking `adapterCount`/`chromeCount` in every
+sample against the known worker count for the whole run (see below).
+
+**Use a modest, single, fixed `P` — not the P=1-vs-`<knee>` verdict-safety run.** An earlier attempt
+(commit `9018a31`, now superseded by this section) sampled *during* the `workers=1` vs
+`workers=32` compare above and fit a line across whatever concurrency happened to be live at each
+2–3s tick — which is not just P=1 and P=32, but also every transient in-between state while workers
+were still starting up or shutting down (its own data shows samples at `workers ∈ {1, 8, 13, 32}`,
+i.e. mid-ramp states from a run that was never actually running at 8 or 13 workers as a matter of
+policy). Worse, it conflated two different things: `workers=1`'s single worker processes **all 64**
+specs serially (so its managed heap grows across 64 cold starts), while each of `workers=32`'s
+workers processes only 2 — so "memory per worker" was really measuring "memory as a function of how
+many specs that worker has processed so far", not a per-instance constant. The corrected method
+below runs **one dedicated, modest-P batch** (`P=8`, matching the sweep's own P=8 point for
+cross-validation) and samples only *that* steady population of exactly 8 workers throughout — no
+ramp-mixing, no re-running the expensive P=32 knee.
 
 ---
 
@@ -254,53 +286,152 @@ false green):
 
 Log: `.superpowers/sdd/campaign-logs/nrui-verdict-w1-vs-w32.log`.
 
-## 3. `MemPerInstanceBytes` for `newrecruit-ui` ✅ MEASURED
+## 3. `MemPerInstanceBytes` for `newrecruit-ui` ✅ MEASURED (corrected)
 
-Sampled every 3s across the run above (`bs-engine-host` adapter + `chrome-headless-shell` tree, both
-families — see Method).
+> **This section supersedes commit `9018a31`'s 787 MB / 1 GiB figure.** That measurement sampled
+> *during* the P=1-vs-P=32 verdict-safety compare above and is methodologically unsound for this
+> purpose — see the "Peak RSS per instance" method note above for exactly why (ramp-state
+> contamination, and conflating per-worker memory with per-worker spec count). It is left in this
+> document's git history rather than scrubbed, in keeping with this campaign's practice of
+> disclosing its own errors rather than quietly overwriting them.
 
-**Steady state with all 32 workers up (n=14 samples):**
+**Measurement run (dedicated, not reused from any other point):**
 
-| | total | **per worker** |
-|---|---:|---:|
-| `bs-engine-host` (adapter) | 7,999 MB | 250 MB |
-| `chrome-headless-shell` tree | 14,246 MB | 445 MB |
-| **mean TOTAL** | **22,244 MB** | **695 MB** |
-| **PEAK TOTAL** | **25,193 MB (24.6 GiB)** | **787 MB** |
-
-Least-squares across every sample (workers ∈ {1, 8, 13, 32}): `total = 826 MB + 529 MB × workers`
-— a **marginal** cost of 529 MB per worker on top of a fixed ~826 MB.
-
-> **Measuring only the browser would have understated this by ~45%.** The adapter process is 250 MB
-> of the 695 MB, and a worker cannot exist without one. Any figure derived from
-> `chrome-headless-shell` alone (a browser-only sampler fits 486 MB/instance) is wrong for this
-> field.
-
-**Measured peak per instance: 787 MB.** Recommended transcription for Task 9:
-
-```
-MemPerInstanceBytes: 1_073_741_824   // 1 GiB — measured peak 787 MB + ~30% headroom
+```bash
+bs-spec run --all --engine newrecruit-ui --roster --filter "cost/,condition/" --policy "workers=8"
 ```
 
-**Why round up, and why this is a judgement call Task 9 must make consciously:**
-`MachineProfile.AvailableMemoryBytes` is `GC.GetGCMemoryInfo().TotalAvailableMemoryBytes` — **total**
-physical memory (or the cgroup limit), *not free* memory. So `availableMemory / memPerInstance`
-leaves **zero headroom for the OS by construction**. Transcribing the raw measured 787 MB would let
-a 32-core / 16 GiB laptop pick 20 workers and consume ~15.7 GB of its 16 GB — precisely the OOM the
-provisional cap exists to prevent. At 1 GiB that box picks 16 workers (~12.6 GB, 78%), and this box
-still picks 32 (memory does not bind: 93.6 GiB / 1 GiB = 93 ≫ 32), so **the measured knee is
-preserved on the hardware where it was measured** while a small-memory box is genuinely constrained.
+Chosen deliberately as a **fixed P=8** — modest per the brief ("do NOT re-run P=32"), and it
+reproduces the sweep's own P=8 timing almost exactly (150.0s here vs 149.1s/149.8s in section 1,
+same 60 passed/4 failed), which cross-validates that this was a normal, representative run and not
+an outlier. Sampled every 2s for the run's full 150s lifetime (63 samples), tree-scoped to this
+run's own process descendants (see Method) so the concurrent unrelated session on this machine
+could not contaminate the count.
 
-A note on time-dependence found while measuring: a **single** long-lived `bs-engine-host` grows its
-working set substantially over a long serial run (mean 933 MB, peak 1.6 GB with its browser over the
-19-minute `workers=1` arm — GC heap growth across 64 cold starts), whereas at 32 workers each host
-only reaches ~250 MB because each handles just 2 specs. Per-worker memory is therefore a function of
-how many specs a worker processes, not a constant. The 787 MB figure is the one measured **at the
-concurrency the policy will actually pick**, which is the number the policy needs.
+Every sample through the run's steady state read exactly `adapterCount=8`, `driverCount=8`,
+`chromeCount=32` (8 workers × the 4-process Chromium tree) — confirming P=8 was honoured throughout
+and nothing outside this run's own tree was being counted.
 
-**Retiring the cap:** `ConcurrencyPolicy.For` applies `ProvisionalUnmeasuredMemoryCap` only while
-`MemPerInstanceBytes == 0`. Setting this field is what retires it — and unlocks the measured **2.65×**
-(149.5s → 56.4s).
+**Peak total (near end of batch — the dotnet adapters' managed heaps grow across the batch, so the
+true peak is late, not at steady-state startup; early samples read only ~2.4 GB total):**
+
+| process family | count | total @ peak | **per instance** |
+|---|--:|--:|--:|
+| `bs-engine-host` adapter (`dotnet.exe`) | 8 | 4,360,798,208 B | 545,099,776 B (≈520 MiB) |
+| Playwright driver (`node.exe`) | 8 | 3,620,548,608 B | 452,568,576 B (≈432 MiB) |
+| `chrome-headless-shell` tree | 32 | 4,410,413,056 B | 551,301,632 B (≈526 MiB) |
+| **TOTAL** | **8 instances** | **12,391,759,872 B (≈11.54 GiB)** | **1,548,969,984 B (≈1.44 GiB)** |
+
+> **The Playwright driver is a real, non-trivial cost (≈432 MiB/instance, ~29% of the total)** that
+> the original method note (written before this measurement) did not anticipate — it only named the
+> adapter and the browser tree. Omitting it would have understated `MemPerInstanceBytes` by roughly
+> 30%, which is the same class of mistake the method note already warns about for browser-only
+> sampling.
+
+**Measured `MemPerInstanceBytes` for `newrecruit-ui` = 1,548,969,984 bytes (≈1.44 GiB / ≈1.55 GB).**
+Raw log: `.superpowers/sdd/campaign-logs/nrui-mem-P8.log`; raw samples:
+`.superpowers/sdd/campaign-logs/mem-nrui-P8.csv` (gitignored, same as the rest of this campaign's
+scratch data).
+
+No headroom multiplier is added here — this document reports what was *measured*; how much
+headroom to bank when transcribing into `EngineRegistry` is Task 9's call, not this task's (Task 9
+should still read the caveat directly below about `AvailableMemoryBytes` being *total*, not *free*,
+memory before deciding).
+
+### What retiring the cap actually does — worked example
+
+`ConcurrencyPolicy.For` applies `ProvisionalUnmeasuredMemoryCap` (`min(cpuCount, 8)`) only while
+`MemPerInstanceBytes == 0`. That is no longer true for `newrecruit-ui` once Task 9 transcribes the
+number above — **the cap can retire for this engine.**
+
+Using the real formula with the measured `k = 1.0` (section 1) and `MemPerInstanceBytes =
+1,548,969,984`:
+
+**A hypothetical 16 GiB / 32-core laptop** (`AvailableMemoryBytes` ≈ 16 GiB = 17,179,869,184 bytes
+— see the caveat below on what this field actually measures):
+
+```
+byCpu    = ceil(32 × 1.0)                         = 32
+byMemory = floor(17,179,869,184 / 1,548,969,984)  = 11
+workers  = min(32, 11)                            = 11    (MaxParallel = 0 → unlimited, no further clamp)
+```
+
+**11 workers.** That is *more* than the provisional cap gives this same laptop **today**
+(`min(32, 8) = 8`) — the cap is purely CPU-shaped (`min(cpuCount, 8)`) and does not look at memory
+at all, so it does not even correctly protect the box it exists to protect: a hypothetical 64-core
+box with 4 GiB of RAM gets the same `8` from the cap today, which would still be enough to
+overcommit that box's real, measured, memory bound (8 × 1.44 GiB ≈ 11.5 GiB > 4 GiB). The real
+measured bound is a genuine memory-aware guard where the cap is a coarse CPU-shaped guess; retiring
+the cap is a net improvement even on the small-memory box the cap was written to protect, not only
+on the large dev box.
+
+**Sanity check on the dev box itself** (93.6 GiB = 100,451,844,096 bytes, per "Hardware" above):
+
+```
+byCpu    = ceil(32 × 1.0)                            = 32
+byMemory = floor(100,451,844,096 / 1,548,969,984)    = 64
+workers  = min(32, 64)                               = 32
+```
+
+**Reproduces the empirically-found knee exactly.** On this box CPU binds before memory (64 ≫ 32),
+consistent with section 1's finding that the P=48 degradation was contention/thrashing, not memory
+exhaustion — the measured number is not just plausible, it is self-consistent with the independently
+observed knee.
+
+**Caveat that must travel with this number:** `MachineProfile.AvailableMemoryBytes` is
+`GC.GetGCMemoryInfo().TotalAvailableMemoryBytes` — **total** physical memory (or a cgroup limit),
+**not currently-free** memory. `availableMemory / memPerInstance` therefore leaves zero headroom for
+the OS and every other process on the box by construction. The 16 GiB worked example above is
+computed the same way the policy itself computes it (matching what the reader will actually see if
+they run the policy on such a box), but a real 16 GiB laptop already running a browser and an IDE
+has less than 16 GiB free — Task 9 should weigh that when deciding whether to transcribe the raw
+measured value or add headroom.
+
+---
+
+## 4. `MemPerInstanceBytes` for `battlescribe-ui` ✅ MEASURED
+
+`MaxParallel = 1` for `battlescribe-ui`, so `k` (`OversubscriptionFactor`) is moot — the engine can
+never run more than one instance regardless of what the formula computes. Only the one-JVM peak RSS
+needed measuring.
+
+**Measurement run:**
+
+```bash
+bs-spec run --all --engine battlescribe-ui --gamedata --filter "entry/,export/"
+```
+
+No `--policy` override — the default plan already resolves to `workers=1` (the engine's own
+`MaxParallel` ceiling), so this is the policy's real, unmodified default behaviour for this engine.
+54/54 specs passed, wall 159.8s (matches the 159.7s recorded in `docs/warm-reuse.md` for this same
+spec set almost exactly, confirming warm-reuse fired normally and this was a representative run: one
+JVM alive for the whole batch, not 54 cold starts). Sampled every 2s for the full run (76 samples),
+same tree-scoped method as above.
+
+The BS app and its automation agent share **one JVM** (`bs-ui-java-agent` is loaded via
+`-javaagent` into the same `java` process that runs the Roster/Data Editor — see
+`BsRosterApp.cs`/`BsGameDataUiEngine.cs`), so "one instance" here is genuinely one process, not a
+tree.
+
+**Peak total:**
+
+| process family | count | total @ peak | |
+|---|--:|--:|--:|
+| adapter (`dotnet.exe`, `bs-engine-host`) | 1 | 80,945,152 B (≈77 MiB) | |
+| JVM (`java.exe`, app + agent) | 1 | 974,446,592 B (≈929 MiB) | |
+| **TOTAL** | **1 instance** | **1,055,391,744 B (≈1006.6 MiB / ≈0.98 GiB)** | **= per instance, directly (MaxParallel=1)** |
+
+**Measured `MemPerInstanceBytes` for `battlescribe-ui` = 1,055,391,744 bytes (≈0.98 GiB / ≈1.06
+GB).** Raw log: `.superpowers/sdd/campaign-logs/bsui-mem-gamedata.log`; raw samples:
+`.superpowers/sdd/campaign-logs/mem-bsui-gamedata.csv`.
+
+**What retiring the cap does here: nothing, and that is correct.** `MemPerInstanceBytes` becoming
+non-zero retires `ProvisionalUnmeasuredMemoryCap`'s trigger for this engine too, but
+`ConcurrencyPolicy.For` applies the engine's `MaxParallel` ceiling *after* the memory/CPU
+computation (`workers = min(byCpu, byMemory)`, then clamped again to `MaxParallel`), so the worker
+count stays `1` on every box, 16 GiB laptop or 93.6 GiB dev box alike. Measuring this number was
+still necessary — it is the input the formula needs to *prove* memory never binds here, not merely
+assume it — but it changes no externally-visible behaviour.
 
 ---
 
@@ -312,10 +443,21 @@ Stated plainly, because inferring these from the dev box would be wrong:
   box.** The two hardware classes demonstrably disagree: the design doc records `nr-frozen`
   *degrading* past P=6 on the 4-vCPU runner while `nr-editor-ui-frozen` merely plateaus. This box
   shows `newrecruit-ui` scaling cleanly to 32. A `k` fitted here says nothing about a 4-vCPU
-  container, where 4 browsers already saturate the box and memory is far tighter.
+  container, where 4 browsers already saturate the box and memory is far tighter. This applies to
+  **every** number in this document, including the two `MemPerInstanceBytes` figures — RSS per
+  Chromium/JVM instance is plausibly closer to hardware-invariant than `k` is (it is not a
+  contention effect), but that has not been verified on the 4-vCPU class either.
 - **`newrecruit` (non-UI) roster — NOT MEASURED.** The other parallelising engine. Its `k` is
   expected to differ from `newrecruit-ui`'s (short CPU-bound specs vs long I/O-heavy ones is
   precisely the axis the design doc predicts engines will disagree on), so it must be swept on its
-  own, with its own fixed filter.
-- **`battlescribe-ui` `MemPerInstanceBytes` — NOT MEASURED.** `MaxParallel = 1`, so `k` is moot
-  there, but the one-JVM peak RSS still needs measuring.
+  own, with its own fixed filter. A background sweep attempt for this (`nr-sweep-correct.sh`,
+  single-arm method, two reps per level — the *right* method this time) was found already running
+  when this task's memory-measurement work began; it was stopped deliberately, uncompleted, to get
+  a clean box for the RSS sampling below (a concurrent heavy job would have contaminated the process
+  tree it needed to isolate). Its partial logs (`nr-roster-P1-r1.log` and earlier) are incomplete
+  and were not used for anything in this document. `newrecruit`'s `k` remains open.
+- ~~`battlescribe-ui` `MemPerInstanceBytes` — NOT MEASURED.~~ **Now measured — see section 4.**
+- **`newrecruit-ui`'s `MemPerInstanceBytes` headroom decision — left to Task 9.** This document
+  reports the raw measured figure (1,548,969,984 B); whether to bank extra headroom on top before
+  writing it into `EngineRegistry` (given `AvailableMemoryBytes` is total, not free, memory) is
+  flagged in section 3 but deliberately not decided here.
