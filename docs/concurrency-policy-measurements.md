@@ -1139,12 +1139,21 @@ Each context adds **exactly one Chromium renderer process** (measured: chrome pr
 being the shared browser main + GPU + network processes).
 
 **Bounding the pool the way `MemPerInstanceBytes` bounds workers.** With a `MemPerContextBytes ≈
-225 MiB` and the same `MemoryHeadroomFactor = 0.8`, a 16 GiB CI runner affords
+225 MiB` and the same `MemoryHeadroomFactor = 0.8`, a **16 GiB container** affords
 `(16 × 0.8 − 1.3 GiB baseline) / 0.225 GiB ≈ 51` contexts. **Memory does not bind at the measured
 optimum of 16** — confirmed directly: peak whole-container RSS at P=16 was **6.16 GiB**
-(`newrecruit-ui`) and **6.70 GiB** (`newrecruit`) of 16 GiB. Pool 16 stays memory-safe down to an
+(`newrecruit-ui`) and **6.70 GiB** (`newrecruit`) **of 16 GiB**. Pool 16 stays memory-safe down to an
 ~8 GiB box. The binding constraint on this axis is **contention, not memory** — the opposite of the
 process axis.
+
+> ⚠️ **"Down to an ~8 GiB box" — and the real CI runner has 7.8 GiB (§11.6).** This paragraph's
+> reassurance was computed against the 16 GiB *container*, not against the machine CI actually runs
+> on, which has now been measured: **2 vCPU / 7.8 GiB**. A 6.16–6.70 GiB peak on a 7.8 GiB box is
+> **79–86% of total memory** — the policy still computes pool 16 there
+> (`7.8 × 0.8 / 0.225 ≈ 28 > 16`, so the memory bound does not bind), and the lane does pass, but the
+> headroom is a fraction of what this paragraph implies. **Do not read "memory does not bind" as a
+> statement about CI.** It is the one number in this section that was fitted against the wrong
+> machine, and §11.6 does not re-fit it: measuring the peak ON the runner is the follow-up.
 
 ## 7.8 What §7 did NOT reach
 
@@ -1222,13 +1231,21 @@ table.
 
 | box | `newrecruit` W / **P** | `newrecruit-ui` W / **P** | `battlescribe-ui` W / **P** | `battlescribe` W / **P** |
 |---|---|---|---|---|
-| 4-vCPU / 16 GiB CI runner | 2 / **4** | 4 / **16** | 1 / **1** | 4 / **4** |
+| **2-vCPU / 7.8 GiB — the REAL GitHub runner** (§11.6) | **1** / **4** | **2** / **16** | 1 / **1** | **2** / **4** |
+| 4-vCPU / 16 GiB *container* (the local model of CI) | 2 / **4** | 4 / **16** | 1 / **1** | 4 / **4** |
 | 16-core / 16 GiB laptop | 6 / **4** | 8 / **16** | 1 / **1** | 8 / **4** |
 | 32-core / 93.6 GiB dev box | 12 / **4** | 32 / **16** | 1 / **1** | 8 / **4** |
 
 `W` = `Workers` (process axis, CLI). `P` = `PoolSize` (context axis, xUnit). **They differ on every
-row for every browser engine, which is the entire point.** Memory binds the pool on none of these
-boxes (a 16 GiB runner affords ≈58 contexts); it starts binding below ≈8 GiB.
+row for every browser engine, which is the entire point.**
+
+> ⚠️ **The row that used to head this table said "4-vCPU / 16 GiB CI runner". THAT IS NOT THE CI
+> RUNNER.** It is the local container that was used to *model* CI. The GitHub runner has now been
+> measured, from inside a CI job: **`nproc: 2`, `MemTotal: 7.8 GiB`** (§11.6). Every "CI" row in this
+> document that says 4-vCPU/16 GiB describes the model, not the machine — and the two disagree by 2×
+> on cores and 2× on memory, on both axes of a document whose every number is machine-relative.
+> Memory binds the pool on none of these boxes (the container affords ≈58 contexts), but the margin
+> on the *real* runner is far thinner than this document claims — read §11.6 before you rely on it.
 
 ## 8.4 What CI gets back
 
@@ -1806,3 +1823,41 @@ CLI's load target — had **never been executed by CI**: all fifteen `dotnet tes
 project. `EveryTestProject_IsRunBySomeCiStep` enumerates `tests/**/*.csproj` and requires each to appear
 in a `dotnet test` command line. A gate nobody invokes is a gate nobody has, and that was true of the
 gates protecting the number at the top of this document.
+
+## 11.6 THE CI RUNNER IS NOT THE MACHINE THIS DOCUMENT DESCRIBES — measured
+
+Every constant here is machine-relative (`ceil(cpuCount × k)`, `maxParallelThreads: "0.5x"`,
+`MemoryHeadroomFactor × availableMemory`), this document calls CI "the 4-vCPU / 16 GiB CI runner"
+throughout — and **nobody had ever asked the runner.** A `Runner profile` step now does, in the
+`checks` job, on every run. First reading:
+
+```
+nproc:    2
+MemTotal: 7.8 GiB
+```
+
+**2 cores, not 4. 7.8 GiB, not 16.** The "4-vCPU / 16 GiB" box is the *local container* that was used
+to model CI (§7.4 says so plainly; §6d and §8.3 then relabelled it "CI runner", and that is the
+conflation). What follows from the real numbers:
+
+- **`bs-spec run --all` on the runner gets HALF the workers this document states**, on every engine:
+  `newrecruit` **1** (not 2), `newrecruit-ui` **2** (not 4), `battlescribe` **2** (not 4).
+- **`maxParallelThreads: "0.5x"` yields 1 thread there, not the 2**
+  `ConcurrencyConfigurationDriftTests` states in its remarks. (Benign — 1 is a valid, conservative
+  thread count — but the stated yield is wrong, and it is stated as a measurement.)
+- **The context-pool memory margin is much thinner than §7.7 claims.** Pool 16 peaked at 6.16 GiB on
+  the 16 GiB container: on a 7.8 GiB runner that is ~79% of *total* memory. The policy still computes
+  16 (the memory bound gives ≈28), and `nr-editor-ui-frozen` does pass — but "memory does not bind"
+  was established on a box with twice the RAM.
+
+**How this was found — and it is the same lesson as everything else in §11.** It was not found by
+reading. `tests/BattleScribeSpec.Cli.Tests` had never been executed by CI (§11.5); the first run that
+executed it went **red**, on an assertion that hardcoded `ThirdPartyLiveLoadLimit` as an expected
+worker count. The code was right — the limit is a *ceiling*, and on a 2-core box `ceil(2 × 0.375) = 1`
+is already under it. The test had encoded the 32-core machine it was written on, and so, it turns out,
+had the document.
+
+**Nothing is re-tuned here on the strength of this.** Fitting constants against a freshly-inferred
+machine profile is the exact sin this document exists to record. The measurement is now printed on
+every CI run; re-deriving §6d/§7.5/§8.3's CI column against the real runner is the follow-up, and it
+should be done by *sweeping the runner*, not by arithmetic.

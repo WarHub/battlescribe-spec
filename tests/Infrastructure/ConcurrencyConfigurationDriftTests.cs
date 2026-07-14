@@ -34,9 +34,18 @@ namespace BattleScribeSpec.Tests;
 /// covers <em>only its own test threads</em>, while this suite's tests spawn the things that
 /// actually consume the box — JVMs, Playwright Node drivers, Chromium trees, adapter processes —
 /// none of which xUnit can see. Leaving half the cores to the processes the tests launch is the
-/// honest reading of a suite like this one. Yields: <b>4-vCPU CI runner → 2 threads</b> (was 4 by
-/// default, 8 under the old literal); <b>32-core dev box → 16 threads</b> (was 32 by default, 8
-/// under the old literal).
+/// honest reading of a suite like this one.
+/// </para>
+/// <para>
+/// <b>Yields — and the CI figure is MEASURED now, not assumed.</b> The GitHub runner reports
+/// <c>nproc: 2</c> / <c>MemTotal: 7.8 GiB</c> (printed by the <c>Runner profile</c> step in the
+/// <c>checks</c> job; docs/concurrency-policy-measurements.md §11.6) — <b>not</b> the "4-vCPU / 16 GiB
+/// CI runner" this repo's docs assumed throughout, which was really the local <em>container</em> used
+/// to model CI. So: <b>2-vCPU CI runner → 1 thread</b> (was 2 by default, and <b>8</b> under the old
+/// literal — which means that literal raised the smallest box in the fleet <em>eightfold</em>, not
+/// twofold as previously claimed); <b>32-core dev box → 16 threads</b> (was 32 by default, 8 under the
+/// old literal). One thread is a valid, conservative answer for a 2-core box that must leave room for a
+/// Chromium tree; it was the <em>literal</em> that was indefensible, and it is gone.
 /// </para>
 /// <para>
 /// Note what this does <em>not</em> bound, so nobody mistakes it for a solution to #314: the real
