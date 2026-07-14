@@ -173,10 +173,11 @@ jobs:
         env:
           NR_HEADLESS: true
           NR_UI_SMOKE: 1
+      # Warm start (the JVM survives between specs) is ConcurrencyPolicy's decision now, taken from
+      # the engine's declared ColdStartCost/ReuseSafeGameData — not the BS_UI_KEEP_ALIVE env var this
+      # step used to set. The variable is read nowhere; setting it here would be decoration.
       - name: BS GameData UI — kitchen-sink (engine + Java agent + app)
         run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
-        env:
-          BS_UI_KEEP_ALIVE: true
       - name: BS UI roster driver — kitchen-sink
         # --no-build: reuse the binaries from the Build step above. Without it, `dotnet run`
         # rebuilds with default props (analyzers on), re-doing the whole solution.
@@ -302,10 +303,11 @@ jobs:
         run: pwsh -File src/bs-ui-java-agent/build.ps1
       - name: Build
         run: dotnet build
+      # "warm start" is ConcurrencyPolicy.For(machine, battlescribe-ui).ReuseGameData — the fixture
+      # asks the policy. It used to be BS_UI_KEEP_ALIVE, set here and nowhere else, so this suite ran
+      # warm in CI and cold on every developer's machine. Both now run warm, from one decision.
       - name: BS GameData UI (shard ${{ matrix.shard }}, warm start)
         run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&Shard=${{ matrix.shard }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
-        env:
-          BS_UI_KEEP_ALIVE: true
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v7

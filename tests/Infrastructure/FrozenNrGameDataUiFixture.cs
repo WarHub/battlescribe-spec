@@ -20,7 +20,7 @@ namespace BattleScribeSpec.Tests;
 ///   NR_SLOW_MO                — milliseconds to slow Playwright actions (for debugging)
 ///   NR_EDITOR_UI_FROZEN_SKIP  — "true" to skip all frozen NR Editor UI tests
 ///
-/// Pool size (number of parallel browser contexts) comes from <see cref="NrFixtureConcurrency"/>
+/// Pool size (number of parallel browser contexts) comes from <see cref="FixtureConcurrency"/>
 /// (backed by <c>ConcurrencyPolicy</c>), not from an env var.
 /// </summary>
 public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
@@ -47,7 +47,7 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        var concurrency = NrFixtureConcurrency.Resolve("newrecruit-ui").PoolSize;
+        var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit-ui");
 
         // Held for the pool's entire alive window (released in DisposeAsync, after teardown) so
         // NrGameDataUiEnginePoolResourceMetricsTests/NrGameDataUiEngineResourceMetricsTests's own

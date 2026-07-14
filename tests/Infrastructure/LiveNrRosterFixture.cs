@@ -4,7 +4,7 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared fixture that creates a pool of NewRecruitRosterEngines pointed at a live NR site.
-/// Gated by NR_ENGINE_URL env var. Pool size comes from <see cref="NrFixtureConcurrency"/>
+/// Gated by NR_ENGINE_URL env var. Pool size comes from <see cref="FixtureConcurrency"/>
 /// (backed by <c>ConcurrencyPolicy</c>) — not from an env var.
 /// This is the default fixture for live NR conformance tests.
 /// </summary>
@@ -25,7 +25,7 @@ public sealed class LiveNrRosterFixture : IAsyncLifetime
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        var concurrency = NrFixtureConcurrency.Resolve("newrecruit").PoolSize;
+        var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit");
 
         using var span = FixtureTelemetry.StartInit(nameof(LiveNrRosterFixture));
         EnginePool = await NewRecruitEnginePool.CreateLiveAsync(concurrency, baseUrl, headless, visual, slowMo);

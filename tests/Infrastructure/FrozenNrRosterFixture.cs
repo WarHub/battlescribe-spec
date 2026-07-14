@@ -29,7 +29,7 @@ public sealed class FrozenNrRosterFixture : IAsyncLifetime
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        var concurrency = NrFixtureConcurrency.Resolve("newrecruit").PoolSize;
+        var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit");
 
         // Held for the pool's entire alive window (released in DisposeAsync, after teardown) so
         // NewRecruitEnginePoolResourceMetricsTests's own independent CreateFrozenAsync call can

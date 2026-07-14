@@ -1,4 +1,5 @@
 using BattleScribeSpec.BsGameDataUiDriver;
+using BattleScribeSpec.Concurrency;
 
 namespace BattleScribeSpec.Tests;
 
@@ -22,10 +23,19 @@ namespace BattleScribeSpec.Tests;
 /// </para>
 ///
 /// <para>
+/// <b>Reuse (warm start) is not a knob here.</b> Whether the JVM survives between specs is
+/// <see cref="ConcurrencyPlan.ReuseGameData"/>, resolved from <see cref="FixtureConcurrency"/> like
+/// every other concurrency/reuse decision in the harness. It used to be the <c>BS_UI_KEEP_ALIVE</c>
+/// environment variable, which answered the same question and <em>disagreed</em> with the policy by
+/// default — unset (any local <c>dotnet test</c>) ran cold while the policy said warm, and CI set
+/// the variable in two jobs to paper over the gap. That is exactly the "two mechanisms that can
+/// disagree, one silently" defect the concurrency model exists to remove.
+/// </para>
+///
+/// <para>
 /// <b>Environment variables</b>:
 /// <list type="bullet">
 ///   <item><c>BS_UI_SKIP</c> — set to "true" to skip all BS UI tests</item>
-///   <item><c>BS_UI_KEEP_ALIVE</c> — "true" to keep app running between specs (warm start)</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -47,7 +57,9 @@ public sealed class BsGameDataUiFixture : IAsyncLifetime
             return;
         }
 
-        var keepAlive = Environment.GetEnvironmentVariable("BS_UI_KEEP_ALIVE") == "true";
+        // KeepAlive means exactly "the plan says reuse this engine" — the same single decision the
+        // CLI path takes (HostEngineFactory.CreateBsUiGameDataEngine). No environment variable.
+        var keepAlive = FixtureConcurrency.Resolve("battlescribe-ui").ReuseGameData;
 
         using var span = FixtureTelemetry.StartInit(nameof(BsGameDataUiFixture));
         var engine = new BsGameDataUiEngine(options) { KeepAlive = keepAlive };
