@@ -192,7 +192,13 @@ does **not** clamp an override: `PolicyOverride.Apply` assigns `workers` directl
 **Confirmed empirically at every level below.** Each sweep point reports `peak live resources` by
 kind, and at `P > 8` those read `adapter-process: P`, `browser: P`, `browser-context: P` — 16, 24,
 32, 48 — not 8. If the cap bound the override they would all read 8. It does not. **No source was
-modified to run this campaign.**
+modified to run the §1–§6 campaign.**
+
+> That sentence is scoped, and the scope matters: **later campaigns did patch source, and said so.**
+> §7.1 adds a temporary `BSSPEC_CAMPAIGN_POOL` override inside `FixtureConcurrency` to sweep the
+> context axis (there is no other way to vary a number the policy owns — which is the point of the
+> policy), and §10.6 edits the constant before each build. Both are reverted; neither is in the tree.
+> Read the blanket claim as belonging to §1–§6 only.
 
 ## The spec set
 
@@ -750,11 +756,16 @@ anywhere it was measured.** It binds only on memory-constrained boxes (the 16 Gi
 
 **The three `NR_PARALLEL` settings deleted from `ci.yml`, and what replaces them:**
 
-| CI lane | fixture → engine | was | now | Δ |
+| CI lane | fixture → engine | was | **at §6** (the mirrored policy) | Δ |
 |---|---|--:|--:|---|
 | `nr-frozen` | `FrozenNrRosterFixture` → `newrecruit` | `NR_PARALLEL: 6` | **2** | ⚠️ **3× fewer** |
 | `nr-editor-ui-frozen` | `FrozenNrGameDataUiFixture` → `newrecruit-ui` | `NR_PARALLEL: 6` | **4** | 1.5× fewer |
 | `nr-live-conformance` | `LiveNrRosterFixture` → `newrecruit` | `NR_PARALLEL: 2` | **2** | **unchanged — but only by coincidence** |
+
+> ⚠️ **THIS COLUMN IS HISTORY, NOT THE SHIPPED NUMBERS. Do not read a constant off it.** It records
+> what the *mirrored* policy (`PoolSize: workers`) computed when §6 was written — which §7 measured and
+> §8 replaced. **The shipped pools today are 4 / 16 / 2**; the §8.4 table is the current one. Every row
+> here is wrong about the present, and the last one is wrong twice over — read its correction below.
 
 > ⚠️ **CORRECTION (§9).** That last row's "unchanged" was true when written and stayed true only by
 > **accident**: the mirrored policy happened to compute `ceil(4 × 0.375) = 2` for that lane, the same 2
@@ -807,18 +818,19 @@ code rather than only into this document:
    12 / 12** contexts across the three NR fixtures (≤ 56 live) where the pre-policy defaults were
    **5 / 5 / 10** (≤ 20).
 
-`FixtureConcurrency.FixturePoolCap = 8` is the interim guard: worst case ≤ 24 live contexts, no lower
-than the old frozen defaults, and it **does not bind on the 4-vCPU CI runner** (sized 2–4), so the CI
-table above is unchanged by it. It is a defensive bound over an unmeasured path — *not* a fitted
+`FixtureConcurrency.FixturePoolCap = 8` **was** the interim guard: worst case ≤ 24 live contexts, no
+lower than the old frozen defaults, and it did not bind on the 4-vCPU CI runner (sized 2–4), so the CI
+table above was unchanged by it. It was a defensive bound over an unmeasured path — *not* a fitted
 constant, and not a substitute for the real fix, which is a shared budget the pools draw from
 (**issue #314**). Sizing the xUnit path honestly needs a sweep of `dotnet test`, which this campaign
 never ran.
 
-> **§7 has now run that sweep.** Both statements above survive, but the framing "the error is
-> conservative, so it can only over-provision" turns out to be **exactly backwards for CI**: on the
-> 4-vCPU runner the policy *under*-provisions the pool, and the cost is a **2.0× wall-clock
-> regression** on `nr-editor-ui-frozen`. `FixturePoolCap = 8` also binds the dev box, where it costs
-> the `newrecruit-ui` lane **31%**. Read §7 before touching either number.
+> **§7 has now run that sweep, and §8.5 DELETED that cap. `FixturePoolCap` DOES NOT EXIST** —
+> `FixtureConcurrency` has no second cap of any kind. The paragraph above is history. Its framing —
+> "the error is conservative, so it can only over-provision" — turned out to be **exactly backwards
+> for CI**: on the 4-vCPU runner the policy *under*-provisioned the pool, at a **2.0× wall-clock
+> regression** on `nr-editor-ui-frozen`. The cap also bound the dev box, where it cost the
+> `newrecruit-ui` lane **31%**. Read §7 and §8.5 before you reach for a round number again.
 
 ---
 
@@ -860,8 +872,10 @@ from this document is that they were never the same number.
 
 ## 7.0 Why this is a different quantity (and why it is the one CI pays for)
 
-`ConcurrencyPolicy.For` returns `PoolSize: workers` — the *same integer* for two consumers that share
-no mechanism:
+`ConcurrencyPolicy.For` **returned** `PoolSize: workers` when this section was written — the *same
+integer* for two consumers that share no mechanism. §8 removed that mirror: the two axes are computed
+independently now, and this section is the measurement that proved they had to be. The list below is
+why one integer could never have served both:
 
 - **CLI / batch path** (`bs-spec run --all`): the parent spawns `Workers` adapter **processes**; each
   runs its specs strictly serially (`SpecSuiteRunner.cs`, `AdapterHandler.RunAsync`). `PoolSize` is
@@ -1037,9 +1051,14 @@ For anyone who must have a "factor" to slot into today's model: on the CI runner
 `newrecruit` **k_ctx = 1.0** and `newrecruit-ui` **k_ctx = 4.0** — but they are *not* transferable to
 another box, which is the whole point, and the honest transcription is a constant plus a memory bound.
 
-## 7.5 What this costs CI today — and it explains the observed regression exactly
+## 7.5 What this cost CI under the MIRRORED policy — and it explains the observed regression exactly
 
-On the 4-vCPU / 16 GiB runner the shipped policy computes:
+> ⚠️ **HISTORIC NUMBERS. Do not read a current constant off this section.** These are what the
+> *mirrored* policy computed — i.e. the regression §8 fixed. **The shipped pools today are
+> `newrecruit` → 4 and `newrecruit-ui` → 16** (their measured optima, transcribed into
+> `EngineRegistry`), and the live lane is held at **2** by `ConcurrencyPolicy.ThirdPartyLiveLoadLimit`.
+
+On the 4-vCPU / 16 GiB runner the mirrored policy computed:
 
 - `newrecruit`: `ceil(4 × 0.375) = 2`, memory bound 10 → **pool = 2**
 - `newrecruit-ui`: `ceil(4 × 1.0) = 4`, memory bound 8 → **pool = 4**
@@ -1063,12 +1082,13 @@ CI regression independently, and attributes it: **the policy under-provisioned t
   the *old* value also left **50%** on the table. The policy then made it worse still. Nobody has ever
   run this lane near its optimum.
 
-### What the caps do
+### What the caps did (the cap is DELETED — §8.5)
 
-`FixtureConcurrency.FixturePoolCap = 8` **does bind the dev box** (the policy asks 32/12 there, capped
-to 8). On `newrecruit` that is harmless-to-helpful (8 → 18.75 s, vs 20.85 s uncapped at 12). On
-`newrecruit-ui` it **costs 31%** (8 → 37.63 s vs 28.81 s at the optimal 16). Its docstring's claim
-that it "can over-provision, not OOM" is true of *memory* and false of *time*.
+`FixtureConcurrency.FixturePoolCap = 8` **bound the dev box** (the mirrored policy asked 32/12 there,
+capped to 8). On `newrecruit` that was harmless-to-helpful (8 → 18.75 s, vs 20.85 s uncapped at 12). On
+`newrecruit-ui` it **cost 31%** (8 → 37.63 s vs 28.81 s at the optimal 16). Its docstring's claim that
+it "can over-provision, not OOM" was true of *memory* and false of *time* — which is why §8.5 deleted it
+rather than re-deriving it. **There is no `FixturePoolCap` in the tree.**
 
 ## 7.6 Verdict safety — PASSED: every pool size, both engines, both boxes
 
@@ -1240,12 +1260,24 @@ capping `newrecruit-ui`'s measured optimum of 16 down to 8 and costing that lane
 box (§7.5). A defensive bound that costs more than the thing it defends against is not a defence.
 
 What replaces it is a real bound rather than nothing: the policy's own per-context memory bound
-(`MemPerContextBytes` × `MemoryHeadroomFactor`) plus `MaxParallel`. Unlike a magic 8, it tightens on a
-*small* box (where the risk is) instead of on a big one.
+(`MemPerContextBytes` × `MemoryHeadroomFactor`) plus `MaxContexts`, the context axis's **own** declared
+ceiling. (It was `MaxParallel` — the *process* ceiling — until that was recognised as the same
+cross-axis mistake in miniature; see `EngineProfile`.) Unlike a magic 8, it tightens on a *small* box
+(where the risk is) instead of on a big one.
 
-**It does not widen issue #314's composed-bound gap.** The three NR pools now ask for 4 + 4 + 16 =
-**24** contexts across simultaneously-live collection fixtures — exactly what the 8-cap permitted
-(8 + 8 + 8 = 24). A shared budget the pools draw from is still the real fix, and still #314's business.
+**It does not widen issue #314's composed-bound gap.** The three NR pools ask for **2 + 4 + 16 = 22**
+contexts across simultaneously-live collection fixtures — `LiveNrRosterFixture` **2** (held at
+`ThirdPartyLiveLoadLimit`, *not* `newrecruit`'s declared 4), `FrozenNrRosterFixture` **4**,
+`FrozenNrGameDataUiFixture` **16** — against the 8-cap's 24 and the pre-policy defaults' 20. A shared
+budget the *local* pools draw from is still the real fix, and still #314's business.
+
+> The **live** composed bound is a different quantity with a different owner, and it is now enforced
+> rather than reasoned about: every fixture that opens a session on a third party's site draws it from
+> `LiveLoadBudget`, which holds at most `ThirdPartyLiveLoadLimit` sessions **per host**. It had to be:
+> the pooled and the sequential live NR fixtures are selected by the same `Engine=LiveNrRoster` filter,
+> so `-p:TestProfile=nr-live` put **2 + 1 = 3** concurrent sessions on `newrecruit.eu`. Do not merge the
+> two bounds — conflating a courtesy limit on someone else's server with a throughput budget on our own
+> is exactly how the 2 was lost the first time.
 
 ## 8.6 The other mirror: `--policy workers=N`
 
@@ -1717,3 +1749,60 @@ engines, both other hardware classes, zero divergent specs — now holds on the 
   workflow forced the pool by patching the constant before the build (cold matrix) or by a temporary
   env-var override read (blocked runs, so one build could serve every level). Both were deleted with the
   branch. The retired-knob lint gate is green, and nothing in this section is reachable from `main`.
+
+---
+
+# 11. Final review — the two ceilings that were not ceilings, and the limit that had one enforcer
+
+> **Nothing measured here.** §11 changed no constant that any sweep fitted. It fixed three places where
+> a number *crossed a boundary and changed meaning on the way* — the failure family this whole document
+> is about — and one place where a bound was enforced against one caller out of five.
+
+**11.1 `--config-a NR_ENGINE_URL=…` vs `--config-a nr_engine_url=…` — the load limit evaporated on a
+lowercased letter.** The CLI parent looked the endpoint variable up in its own
+`Dictionary<string, string>(StringComparer.Ordinal)`; the child reads it out of the environment the OS
+hands it, which is **case-insensitive on Windows**. So the parent computed `LoadTarget.Local` and planned
+`ceil(32 × 1.0) = 32` browsers while the child went **live** — 32 adapter processes at `newrecruit.eu`,
+and the "held to 2 concurrent sessions" banner never printed. The fix is not a comparer swap (hard-coding
+`OrdinalIgnoreCase` merely moves the bug to Linux, where the variable genuinely *is* a different one):
+`AdapterProcess.ComposeChildEnvironment` composes the child's environment through
+`ProcessStartInfo.Environment` — **the dictionary the OS itself defines** — and the load target is read
+back out of *that*. One value, one source, no second implementation of "what does this variable name
+mean" left to drift.
+
+**11.2 `MaxParallel` was clamping the context axis.** It is a ceiling on adapter **processes** — on the
+protocol wire, in `docs/adapter-guide.md`, applied by `RunBatch.ClampWorkers` to the worker count — and
+`ConcurrencyPolicy` was also using it to clamp `PoolSize`. Justified as *"battlescribe-ui runs one JVM,
+and that is as true of a context pool as of a worker process"*: true of that engine, and a
+generalization of one engine's coincidence into a cross-axis rule. `{"maxParallel": 2,
+"contextPoolSize": 4}` — "don't run more than 2 of my processes", exactly what the protocol says that
+field means — silently halved a measured pool. **The context axis now has its own declared ceiling,
+`MaxContexts`** (`engines.json`: `maxContexts`), and `battlescribe-ui` declares **both** 1s. Same shape
+as `PoolSize: workers`, pointing the other way. *No number is shared between the axes any more.*
+
+**11.3 The live load limit governed one fixture out of five.** `ThirdPartyLiveLoadLimit` calls itself
+"the only thing standing between a 363-spec conformance run and a volunteer-run website"; four fixtures
+opened sessions at `newrecruit.eu` / `giloushaker.github.io` without asking it anything, and the drift
+gate **forbade** them from declaring `ThirdPartyLive` (it asserted `LiveNrRosterFixture` was the only
+file allowed to). The gate was enforcing the gap. Concretely: `-p:TestProfile=nr-live` selects
+`Engine=LiveNrRoster`, which is *both* the pooled collection (2 contexts) and the sequential one (1
+engine), and xUnit runs collections in parallel ⇒ **3 concurrent sessions**, 50% over a limit this
+document forbids raising by 1 for a measured speed-up. **`LiveLoadBudget`** now holds at most
+`ThirdPartyLiveLoadLimit` sessions **per host** (two third parties are not one third party), every live
+fixture draws from it, and the gate is a biconditional: a fixture reads an endpoint URL variable **iff**
+it reserves from the budget.
+
+**11.4 CI announced an in-process adapter as someone else's website.** `--engine
+"battlescribe=dotnet:…/bs-reference-adapter.dll"` is a *launchable* connectable, and a launchable's
+metadata was looked up in `engines.json` alone — a file this repo does not have. So it resolved to an
+**undeclared** endpoint, the fail-safe fired, and every `checks` run printed *"Load target: third-party
+live service — held to 2 concurrent sessions"* for an IKVM engine with **no network code at all**, at
+half the width the runner affords. A launchable that claims a name we ship now inherits that engine's
+*declaration* (never its verdict: `newrecruit=exec:…` still derives from `NR_ENGINE_URL` and still fails
+safe). An adapter under an **unknown** name is still undeclared, and undeclared is still live.
+
+**11.5 And the tests now run.** `tests/BattleScribeSpec.Cli.Tests` — which holds *every* gate on the
+CLI's load target — had **never been executed by CI**: all fifteen `dotnet test` steps named the other
+project. `EveryTestProject_IsRunBySomeCiStep` enumerates `tests/**/*.csproj` and requires each to appear
+in a `dotnet test` command line. A gate nobody invokes is a gate nobody has, and that was true of the
+gates protecting the number at the top of this document.

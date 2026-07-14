@@ -7,11 +7,14 @@ namespace BattleScribeSpec.Telemetry;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <c>harness.resource.count</c> is the signal that makes the harness's unbounded parallelism
-/// visible. Three in-process browser-context pools and a JVM can currently be alive at once
-/// (xUnit's <c>maxParallelThreads</c> is unset, so collections run up to CPU-count wide) and
-/// nothing in the system reports it. A span cannot express "how many are alive right now" —
-/// only an up-down counter can.
+/// <c>harness.resource.count</c> is the signal that makes the harness's parallelism visible.
+/// Several in-process browser-context pools and a JVM can be alive at once — xUnit runs collections
+/// in parallel, and its own thread count (<c>maxParallelThreads: "0.5x"</c>, declared in both
+/// <c>xunit.runner.json</c> files and pinned by <c>ConcurrencyConfigurationDriftTests</c>) does
+/// <b>not</b> bound them: a pool's real browser concurrency is <c>ConcurrencyPlan.PoolSize</c>
+/// inside a single <c>[Fact]</c>, which xUnit cannot see at all. Nothing else in the system reports
+/// the product (issue #314). A span cannot express "how many are alive right now" — only an up-down
+/// counter can.
 /// </para>
 /// <para>
 /// <b>Every peak read off this counter is a lower bound, not an exact maximum.</b> The value only

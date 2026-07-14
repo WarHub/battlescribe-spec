@@ -1,5 +1,27 @@
 # Harness Concurrency & Reuse Model — Implementation Plan
 
+> ⚠️ **AS SHIPPED, this is not what happened — and the difference is load-bearing.** This is the plan
+> as written, kept as the record of the intent. Three of its statements are false about the code:
+>
+> 1. **`ConcurrencyPlan.MaxParallelThreads` does not exist.** The policy does *not* output xUnit's
+>    thread count and cannot: the runner reads `xunit.runner.json` **before any of our code executes**.
+>    The field shipped with **zero consumers** while its doc comment claimed it governed xUnit — the
+>    very "decoration dressed as control" this plan exists to delete — and it was removed. The value is
+>    declared statically as `"0.5x"` (a machine-relative multiplier) and pinned by
+>    `ConcurrencyConfigurationDriftTests`, which carries its own justification. See
+>    `ConcurrencyPolicy`'s remarks for the VSTest `RunSettings` alternative, investigated and rejected.
+> 2. **`ConcurrencyPolicy.For` takes THREE inputs, not two:** `(MachineProfile, EngineProfile,
+>    LoadTarget)`. The third is not a performance parameter — it is *whose machine pays for the
+>    traffic*. Its absence is exactly how a courtesy limit on a third party's website got replaced by a
+>    constant fitted against a HAR file. See `ConcurrencyPolicy.ThirdPartyLiveLoadLimit`.
+> 3. **`Workers` and `PoolSize` are two axes, measured separately, sharing no number.** The plan speaks
+>    of "worker count, pool sizes" as one derivation; feeding one integer to both (`PoolSize: workers`)
+>    was the defect (#314). `docs/concurrency-policy-measurements.md` §7–§8 is the measurement.
+>
+> **The authoritative record of what shipped is `docs/concurrency-policy-measurements.md` plus the
+> XML docs on `ConcurrencyPolicy` / `EngineProfile` / `ConcurrencyPlan`.** Read a constant off those,
+> never off this file.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace three mutually-unaware parallelism mechanisms and two environment variables with one `ConcurrencyPolicy` that derives every concurrency and reuse decision from the machine plus what each engine declares about itself.

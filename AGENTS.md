@@ -82,8 +82,12 @@ drive the real app, and the domain (roster/gamedata) is inferred from the spec p
 (override with `--gamedata`/`--roster`). `run` options include `--all-steps`,
 `--output {tree,json}` (or `--json`), `--headed`, `--screenshots <dir>`, `--timeline <file>`,
 `--record <file>`, `--save-roster <dir>`, and `--break <n>`. Concurrency and engine reuse are not
-flags: `ConcurrencyPolicy` derives them from the machine and the engine, and `--policy
-workers=N,reuse=on|off` overrides that for diagnosis (`--workers` and `--keep-alive` are deleted).
+flags: `ConcurrencyPolicy` derives them from the machine, the engine, and where the engine's traffic
+lands. `--policy reuse=on|off,reuse-roster=…,reuse-gamedata=…` overrides the reuse decisions for
+diagnosis; `--policy workers=N` applies to `run --all` (a batch has workers) and is **rejected** on a
+single-spec `run`, which has exactly one — a flag is honoured or refused, never silently dropped.
+`--policy` cannot raise the load on a third party's live site, and it cannot be delivered to an
+`exec:`/`dotnet:` adapter at all. (`--workers` and `--keep-alive` are deleted.)
 Specs can include `action: dump` steps for explicit dump points.
 
 ## After editing specs

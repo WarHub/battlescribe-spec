@@ -1,5 +1,27 @@
 # Harness Concurrency & Reuse Model (Spec 2 of 2)
 
+> ⚠️ **AS SHIPPED, this is not what happened — and the difference is load-bearing.** This is the plan
+> as written, kept as the record of the intent. Three of its statements are false about the code:
+>
+> 1. **`ConcurrencyPlan.MaxParallelThreads` does not exist.** The policy does *not* output xUnit's
+>    thread count and cannot: the runner reads `xunit.runner.json` **before any of our code executes**.
+>    The field shipped with **zero consumers** while its doc comment claimed it governed xUnit — the
+>    very "decoration dressed as control" this plan exists to delete — and it was removed. The value is
+>    declared statically as `"0.5x"` (a machine-relative multiplier) and pinned by
+>    `ConcurrencyConfigurationDriftTests`, which carries its own justification. See
+>    `ConcurrencyPolicy`'s remarks for the VSTest `RunSettings` alternative, investigated and rejected.
+> 2. **`ConcurrencyPolicy.For` takes THREE inputs, not two:** `(MachineProfile, EngineProfile,
+>    LoadTarget)`. The third is not a performance parameter — it is *whose machine pays for the
+>    traffic*. Its absence is exactly how a courtesy limit on a third party's website got replaced by a
+>    constant fitted against a HAR file. See `ConcurrencyPolicy.ThirdPartyLiveLoadLimit`.
+> 3. **`Workers` and `PoolSize` are two axes, measured separately, sharing no number.** The plan speaks
+>    of "worker count, pool sizes" as one derivation; feeding one integer to both (`PoolSize: workers`)
+>    was the defect (#314). `docs/concurrency-policy-measurements.md` §7–§8 is the measurement.
+>
+> **The authoritative record of what shipped is `docs/concurrency-policy-measurements.md` plus the
+> XML docs on `ConcurrencyPolicy` / `EngineProfile` / `ConcurrencyPlan`.** Read a constant off those,
+> never off this file.
+
 **Status:** proposed
 **Follows:** Spec 1 — *Harness telemetry* (`2026-07-12-harness-telemetry-design.md`), merged as #306. Its measurable inputs and its `bs-spec compare` verdict rail are what make this spec possible.
 **Does not include:** expanding the `nr-ui-frozen` lane to its full spec set. That is gated on triaging 46 conformance failures, which is engine-conformance work, not harness work. Tracked separately (see *Explicitly out of scope*).
@@ -209,7 +231,12 @@ Two rules, and the distinction between them matters:
 - **A capability mismatch is an error.** `--headed` against an engine with no UI, or against an adapter that cannot receive it, is a *mistake*. Fail loudly, naming what the engine does support.
 - **A policy override is allowed, and warned.** Forcing `reuse=on` on an engine not declared reuse-safe is precisely the ablation `compare` needs in order to *prove* reuse-safety. That is what an override is for. But it warns: *"forcing reuse on an engine not declared reuse-safe; verdicts may change — use `bs-spec compare` to check."*
 
-Afterwards, exactly one environment variable remains in the harness: `OTEL_EXPORTER_OTLP_ENDPOINT`. It survives precisely because it is *not ours* — it is an industry standard we honour, not a dial we invented.
+Afterwards, **two** environment variables remain in the harness that concern this design, and neither is a dial:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` — survives precisely because it is *not ours*: an industry standard we honour, not a knob we invented.
+- `NR_ENGINE_URL` (and `NR_EDITOR_URL`) — **endpoint configuration, not a performance knob.** It answers a question the policy cannot ask and has no other source for: *which server*. It does not set a worker count; it is the input from which `LoadTarget` — and hence the third-party load limit — is *derived*, exactly once, by the one policy. (The original text of this line said "exactly one environment variable remains", and that was false in a way that mattered: it wrote off, as an implementation detail, the fact the whole load limit hangs from.)
+
+The knobs that are genuinely gone are the ones that answered a question `ConcurrencyPolicy` owns: `NR_PARALLEL`, `BS_UI_KEEP_ALIVE`, `BSSPEC_DISABLE_WARM_REUSE`. `ConcurrencyConfigurationDriftTests.RetiredEnvironmentKnobs_...` asserts mechanically that no production code, fixture, or workflow reads or sets one.
 
 ## Bounding the xUnit path
 
