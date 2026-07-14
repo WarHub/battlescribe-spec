@@ -191,6 +191,13 @@ Pool sizes the policy now yields (4-vCPU CI runner):
 
 ## 6. Known gap, filed not fixed (§9.4 of the measurements doc)
 
+> **CLOSED** by the follow-up in `.superpowers/sdd/cli-load-target-report.md` (§9.5 of the measurements
+> doc). The design change called for below is the one that was made: the **engine** now declares which
+> service it drives (`EngineEndpoint`, per domain), and `EngineSelection.LoadTarget` derives the answer at
+> engine-resolution time. A live CLI run gets 2 workers; a frozen one keeps its full measured count; an
+> engine that declares nothing is assumed live. The paragraph below is left standing as the record of the
+> gap and of the reasoning that correctly refused to guess at it.
+
 **The CLI path does not declare its load target.** `bs-spec run --all` with `NR_ENGINE_URL` set makes
 the child engine host go live (`HostEngineFactory.cs:35`), and the parent that computes the plan never
 asks — so that path is still bounded only by `Workers` (`ceil(cpuCount × 0.375)` = **12** worker

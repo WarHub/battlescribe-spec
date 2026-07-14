@@ -1432,15 +1432,13 @@ Two things make the 2 load-bearing rather than decorative:
 
 ## 9.4 What §9 did NOT reach
 
-- **The CLI path does not declare its load target.** `bs-spec run --all` with `NR_ENGINE_URL` set makes
-  the child engine host go live (`HostEngineFactory`), and the parent that computes the plan never
-  asks — so that path is still bounded only by `Workers` (`ceil(cpuCount × 0.375)`: **12** worker
-  processes on the dev box, each with its own browser, against newrecruit.eu). `ConcurrencyPolicy.For`
-  now *accepts* the answer and clamps both axes when given it; the CLI simply never passes it. Wiring
-  it honestly needs the **engine** to declare which service it talks to (the policy is forbidden from
-  string-matching engine names, and `NR_ENGINE_URL` is meaningless for `battlescribe`), which is a
-  design change, not a patch. **Filed, not fixed.** The xUnit lane — the one CI actually runs against
-  the live site — is bounded.
+- **The CLI path does not declare its load target. — CLOSED, see §9.5.** `bs-spec run --all` with
+  `NR_ENGINE_URL` set made the child engine host go live (`HostEngineFactory`), and the parent that
+  computed the plan never asked — so that path was bounded only by `Workers` (`ceil(cpuCount × 0.375)`:
+  **12** worker processes on the dev box, each with its own browser, against newrecruit.eu).
+  `ConcurrencyPolicy.For` *accepted* the answer and clamped both axes when given it; the CLI simply never
+  passed it. The design change this called for — **the engine declares which service it talks to** — is
+  what §9.5 does.
 - **The 2 itself is not, and will not be, measured.** That is the point. A sweep can tell you how fast
   newrecruit.eu answers 8 concurrent sessions. It cannot tell you whether we are entitled to ask.
 - **This does not explain issue #318** (the `nr-conformance` crash). The evidence there is n=2 and the
@@ -1448,6 +1446,71 @@ Two things make the 2 load-bearing rather than decorative:
   #318 stays open. What §9 *does* give #318 is the thing it was missing: `nr-conformance` now uploads
   its telemetry (`if: always()`), so the next crash on that lane leaves a trace behind. It was the only
   lane in `ci.yml` without that step.
+
+## 9.5 The CLI path: the engine declares which service it drives
+
+**Status: fixed.** §9.4's first bullet, closed. Nothing in this section is a measurement — it is the
+mechanism that decides *which* of the measured numbers a run is entitled to.
+
+**The defect.** `bs-spec run --all --engine newrecruit` resolves the same `EngineEntry` and the same
+`EngineProfile` whether the child will replay `newrecruit.har` off local disk or drive `newrecruit.eu`.
+The only thing that differs is `NR_ENGINE_URL`, which `HostEngineFactory` reads and the *parent* — the
+process that computes the plan and spawns the workers — did not. So both got the same machine-width
+answer: **`ceil(32 × 0.375)` = 12 adapter processes, each with its own browser**, at a volunteer-run
+website. On `main` that same path was **serial** (`--workers`, default 1). The 12× was nobody's decision.
+
+**Why it could not simply read the variable.** `ConcurrencyPolicy` is a pure function of
+`(MachineProfile, EngineProfile, LoadTarget)` and may never string-match an engine name — and
+"is `NR_ENGINE_URL` set?" is meaningless for `battlescribe`, an in-process IKVM engine with no network
+code, which that rule would throttle in any shell that happened to export the variable. The fact belongs
+to the **engine**, so the engine states it:
+
+| Engine | Roster endpoint | GameData endpoint |
+|---|---|---|
+| `battlescribe`, `battlescribe-ui` | `OnThisMachine` | `OnThisMachine` |
+| `newrecruit`, `newrecruit-ui` | `FromUrlVariable("NR_ENGINE_URL")` | `OnThisMachine` |
+| any `exec:`/`dotnet:` adapter | **undeclared** | **undeclared** |
+
+`EngineSelection.LoadTarget` (CLI, at engine-resolution time — before a process is spawned) turns that
+declaration plus the environment *the child will see* into the `LoadTarget` it hands
+`ConcurrencyPolicy.For`. Three steps, one decision-maker each; the policy still knows nothing about
+engine names.
+
+**Per-domain, and that is what preserves the win.** `HostEngineFactory`'s *gamedata* switch never reads
+`NR_ENGINE_URL` — the NR gamedata engine is always a frozen static dir — so a gamedata run keeps its full
+measured worker count even in a shell that has the variable exported for live roster work. Pinned by
+`ConcurrencyConfigurationDriftTests.HostEngineFactory_LiveEndpointRoutes_AreDeclaredByTheRegistry`, which
+compares the endpoint variables the factory actually *reads*, per domain, against what the registry
+*declares*: a live route the policy cannot see now fails the build.
+
+**Fail-safe: only positive evidence buys `Local`.** `Undeclared` is the enum's zero value; an unparseable
+URL resolves live; loopback and `file:` resolve local. An adapter we did not write is held to the load
+limit and takes the machine's full width back with one line of `engines.json` — `"endpoint": "local"` —
+the same bargain as `memPerInstanceBytes`, on the axis that costs a stranger rather than this box.
+
+**And the limit holds against `--policy`.** The override's *base* plan is now computed for the load target
+(so `--policy reuse-roster=on`, which says nothing about workers, cannot resurrect 12 of them through an
+untouched `Workers` field), and an override that would *raise* the limit on a live engine is **refused**,
+not silently clamped (#305). `ConcurrencyPolicy.ClampToLoadTarget` is the backstop for any other path that
+builds a plan: a ceiling that only holds when nobody pushes on it is not a ceiling.
+
+**What a CLI run gets on the 32-core dev box:**
+
+| Run | Workers | Why |
+|---|---:|---|
+| `run --all --engine newrecruit` (frozen) | **12** | `ceil(32 × 0.375)` — the measured optimum, §5. Never touches the network. |
+| `run --all --engine newrecruit-ui` (frozen) | **32** | `ceil(32 × 1.0)` — §3. |
+| either, with `NR_ENGINE_URL` set | **2** | `ThirdPartyLiveLoadLimit`. Not measured, and not ours to measure. |
+| `--gamedata`, with `NR_ENGINE_URL` set | **12 / 32** | The gamedata engine does not read that variable. |
+| any unknown `exec:` adapter | **2** | Undeclared ⇒ assumed live. Declare `"endpoint": "local"` to opt out. |
+
+**`NR_ENGINE_URL` is not a retired knob.** The knobs the concurrency model deleted (`NR_PARALLEL`,
+`BS_UI_KEEP_ALIVE`, `BSSPEC_DISABLE_WARM_REUSE` — pinned by
+`ConcurrencyConfigurationDriftTests.RetiredEnvironmentKnobs_*`) were each a *second answer* to a question
+the policy owns: how parallel, and whether to reuse. This one answers a question the policy cannot ask and
+has no other source for: **which server**. It does not set the worker count; the worker count is derived
+from it, exactly once, by the one policy. The gate stays green, and it would go red if this reintroduced a
+knob.
 
 ---
 
