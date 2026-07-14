@@ -65,6 +65,12 @@ bs-spec run selection/selection-page --engine battlescribe --ui
 bs-spec run selection/selection-page --engine "dotnet:path/to/adapter.dll"
 bs-spec run selection/selection-page --engine "myengine=exec:/path/to/adapter"
 
+# An adapter the harness has never seen has an UNDECLARED endpoint, and an undeclared
+# endpoint is treated as a third party's live service — held to a courtesy load limit on
+# both axes. Say what your adapter drives and it takes the machine's full width. (Naming
+# it after a built-in earns nothing: a name selects specs; it is not a measurement.)
+bs-spec run --all --engine "myengine=exec:/path/to/adapter" --engine-endpoint local
+
 # Full suite, matrix report
 bs-spec run --all --engine battlescribe --report artifacts/battlescribe-conformance.json
 ```
