@@ -61,6 +61,24 @@ public sealed class EngineConfigEntry
     /// </summary>
     [JsonPropertyName("memPerContextBytes")]
     public long MemPerContextBytes { get; set; }
+
+    /// <summary>
+    /// <b>LOAD axis — where this engine's traffic lands, which is not a performance property at all.</b>
+    /// <c>"local"</c> = its service runs on this machine (a frozen replay, a local server, an in-process
+    /// engine), so its concurrency is a throughput question and it gets the machine's full measured
+    /// width. <c>"third-party-live"</c> = it drives someone else's production site, so its concurrency is
+    /// a <em>load</em> question and it is held to <c>ConcurrencyPolicy.ThirdPartyLiveLoadLimit</c>.
+    /// <c>"url-var:NAME"</c> = it is live iff the <c>NAME</c> environment variable holds a non-loopback
+    /// URL (how the built-in NewRecruit engines work, via <c>NR_ENGINE_URL</c>).
+    /// <para>
+    /// <b>Omitted ⇒ undeclared ⇒ treated as third-party-live.</b> That is deliberate and it is the only
+    /// default here that is <em>pessimistic</em>: getting this wrong towards "local" spends a stranger's
+    /// production capacity, and no adapter we did not write gets the benefit of that doubt. Declaring
+    /// <c>"local"</c> is a one-line opt-in to the full worker count.
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("endpoint")]
+    public string? Endpoint { get; set; }
 }
 
 [JsonSourceGenerationOptions(ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true)]

@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Tests;
 
@@ -178,6 +180,107 @@ public sealed class ConcurrencyConfigurationDriftTests
 
         string[] onlyTheLiveFixture = [Path.GetRelativePath(RepoRoot, liveFixture)];
         Assert.Equal(onlyTheLiveFixture, declaring);
+    }
+
+    /// <summary>
+    /// <b>The engine that can go live must be the engine that says it can.</b> The CLI derives its
+    /// <c>LoadTarget</c> from what an engine declares (<c>EngineEntry.RosterEndpoint</c> /
+    /// <c>GameDataEndpoint</c>), and a declaration is only worth what it costs to falsify: if
+    /// <c>HostEngineFactory</c> grew a live route the registry did not declare, the parent would plan
+    /// <c>ceil(cpuCount × k)</c> browsers against it and nothing would notice. This ties the declaration
+    /// to the code that acts on it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Falsifiable, in each of the three ways this can rot:</b>
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// Move the <c>NR_ENGINE_URL</c> read into <c>CreateGameDataEngineAsync</c> (or add any other
+    /// <c>*_URL</c> endpoint to it) — the gamedata assertion goes red, because every built-in declares its
+    /// gamedata endpoint as this machine.
+    /// </description></item>
+    /// <item><description>
+    /// Add a live route to a <em>new</em> engine's roster branch without declaring it — the roster
+    /// assertion goes red on the undeclared variable.
+    /// </description></item>
+    /// <item><description>
+    /// Delete <c>RosterEndpoint: EngineEndpoint.FromUrlVariable("NR_ENGINE_URL")</c> from the NR engines
+    /// while the factory still reads it — the roster assertion goes red on the orphaned read. (That
+    /// deletion also fails safe rather than open — an undeclared engine is treated as live — so this
+    /// gate is what stops it being a <em>silent</em> 2×-slower frozen lane.)
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// It matches the read shape <c>GetEnvironmentVariable("…_URL")</c>: an endpoint variable, not the
+    /// artifact-path variables (<c>BS_UI_APP_DIR</c>, <c>BS_UI_AGENT_JAR</c>) that point at local files
+    /// and cannot send traffic anywhere.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void HostEngineFactory_LiveEndpointRoutes_AreDeclaredByTheRegistry()
+    {
+        var factory = Path.Combine(
+            RepoRoot, "src", "BattleScribeSpec.EngineHost", "HostEngineFactory.cs");
+        var source = File.ReadAllText(factory);
+
+        // The file's two engine-construction methods, in source order: everything from the roster factory
+        // up to the gamedata factory, and everything after it (the BS-UI path helpers live there and read
+        // no *_URL variable).
+        var gamedataStart = source.IndexOf("CreateGameDataEngineAsync", StringComparison.Ordinal);
+        Assert.True(gamedataStart > 0, $"could not find CreateGameDataEngineAsync in {factory}");
+
+        var rosterStart = source.IndexOf("CreateRosterEngineAsync", StringComparison.Ordinal);
+        Assert.True(rosterStart > 0 && rosterStart < gamedataStart, $"unexpected method order in {factory}");
+
+        var registry = EngineRegistry.Load(null);
+        var builtins = registry.KnownNames
+            .Select(name => registry.Resolve(EngineConnectable.Parse(name)))
+            .ToArray();
+
+        AssertEndpointReadsAreDeclared(
+            "roster",
+            source[rosterStart..gamedataStart],
+            builtins.Select(e => e.EndpointFor("roster")));
+
+        AssertEndpointReadsAreDeclared(
+            "gamedata",
+            source[gamedataStart..],
+            builtins.Select(e => e.EndpointFor("gamedata")));
+    }
+
+    /// <summary>
+    /// The set of endpoint URL variables <paramref name="factorySource"/> reads must equal the set the
+    /// built-in engines <b>declare</b> for that domain. Not a subset either way: an undeclared read is a
+    /// live route the policy cannot see, and an unread declaration is a throttle nobody is paying for.
+    /// </summary>
+    private static void AssertEndpointReadsAreDeclared(
+        string domain, string factorySource, IEnumerable<EngineEndpoint> declared)
+    {
+        var read = Regex
+            .Matches(factorySource, """GetEnvironmentVariable\("(\w*_URL)"\)""", RegexOptions.None)
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var expected = declared
+            .Where(e => e.Kind == EngineEndpointKind.UrlVariable)
+            .Select(e => e.UrlVariable!)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            expected.SequenceEqual(read, StringComparer.Ordinal),
+            $"HostEngineFactory's {domain} engines read endpoint URL variables [{string.Join(", ", read)}], " +
+            $"but the built-in registry declares [{string.Join(", ", expected)}] for the {domain} domain.\n\n" +
+            $"These must be the same set. The CLI derives its LoadTarget from what the registry declares " +
+            $"(EngineEntry.RosterEndpoint / GameDataEndpoint), so a live route the registry does not know " +
+            $"about is a route the concurrency policy cannot bound: bs-spec run --all would plan " +
+            $"ceil(cpuCount x k) adapter processes — each with its own browser — against a third party's " +
+            $"production website, which is the regression #317 fixed. Declare the endpoint on the engine " +
+            $"(EngineEndpoint.FromUrlVariable) or stop reading the variable.");
     }
 
     /// <summary>

@@ -11,13 +11,36 @@ namespace BattleScribeSpec.Engines;
 /// <param name="Domains">Spec domains the engine claims; the describe handshake narrows this at runtime.</param>
 /// <param name="Profile">What the engine declares about itself — the single source of <c>MaxParallel</c> etc.</param>
 /// <param name="Builtin">True for the in-box engines.</param>
+/// <param name="RosterEndpoint">
+/// Where this engine's <b>roster</b> service lives (see <see cref="EngineEndpoint"/>). Null =
+/// undeclared, which resolves to <see cref="Concurrency.LoadTarget.ThirdPartyLive"/> — an entry
+/// constructed without stating this fails <em>safe</em>, not fast.
+/// </param>
+/// <param name="GameDataEndpoint">
+/// Where this engine's <b>gamedata</b> service lives. Separate from <paramref name="RosterEndpoint"/>
+/// because the built-in NewRecruit engines genuinely differ by domain: the roster engine honours
+/// <c>NR_ENGINE_URL</c> and can go live; the gamedata engine is always a frozen static dir.
+/// </param>
 public sealed record EngineEntry(
     string? Name,
     string? Executable,
     string? Arguments,
     IReadOnlyList<string> Domains,
     EngineProfile Profile,
-    bool Builtin);
+    bool Builtin,
+    EngineEndpoint? RosterEndpoint = null,
+    EngineEndpoint? GameDataEndpoint = null)
+{
+    /// <summary>
+    /// This engine's endpoint declaration for <paramref name="domain"/> (<c>"roster"</c> /
+    /// <c>"gamedata"</c>), never null: an absent declaration is
+    /// <see cref="EngineEndpoint.Undeclared"/>, which is the fail-safe answer, not the convenient one.
+    /// </summary>
+    /// <param name="domain">The spec domain the run is in.</param>
+    public EngineEndpoint EndpointFor(string domain) =>
+        (string.Equals(domain, "gamedata", StringComparison.Ordinal) ? GameDataEndpoint : RosterEndpoint)
+            ?? EngineEndpoint.Undeclared;
+}
 
 /// <summary>
 /// Maps engine names to launch info: built-in entries plus optional repo-level
@@ -55,10 +78,18 @@ public sealed class EngineRegistry
         // is in-process IKVM with no browser and no context pool, so no fixture asks it for a pool
         // size today; the default is what it would get if one ever did, and 4 is the low end of the
         // measured band (see the constant). Do not invent a number for it — measure it, like the rest.
+        //
+        // ENDPOINT: this machine, in both domains, unconditionally — an in-process IKVM engine with no
+        // network code at all. It is the reason the load target cannot be "is NR_ENGINE_URL set?": that
+        // question would throttle THIS engine in any shell that happened to export the variable, for a
+        // service it does not have. Each engine declares its own endpoint; nobody else's environment
+        // speaks for it (EngineEndpoint).
         ["battlescribe"] = new(
             "battlescribe", null, null, BothDomains,
             new EngineProfile(MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false),
-            Builtin: true),
+            Builtin: true,
+            RosterEndpoint: EngineEndpoint.OnThisMachine,
+            GameDataEndpoint: EngineEndpoint.OnThisMachine),
 
         // MemPerInstanceBytes MEASURED: 1,055,391,744 B (≈0.98 GiB) — one JVM (app + -javaagent in
         // the same process) plus its bs-engine-host adapter, peak working set over a full 54-spec
@@ -70,12 +101,16 @@ public sealed class EngineRegistry
         // pool at all (it drives one JavaFX desktop app), and MaxParallel: 1 clamps PoolSize to 1 on
         // every machine regardless of what the undeclared default would otherwise give. Pinned by
         // Policy_BattlescribeUi_StaysAtOneWorker_OnEveryProfile across four machine profiles.
+        //
+        // ENDPOINT: this machine, in both domains — a JavaFX desktop app driven over a local Java agent.
         ["battlescribe-ui"] = new(
             "battlescribe-ui", null, null, BothDomains,
             new EngineProfile(
                 MaxParallel: 1, ColdStartCost.Expensive, ReuseSafeRoster: true, ReuseSafeGameData: true,
                 MemPerInstanceBytes: 1_055_391_744L),
-            Builtin: true),
+            Builtin: true,
+            RosterEndpoint: EngineEndpoint.OnThisMachine,
+            GameDataEndpoint: EngineEndpoint.OnThisMachine),
 
         // MemPerInstanceBytes MEASURED: 1,313,420,083 B (≈1.22 GiB) per worker — adapter (≈543 MB) +
         // Playwright driver (≈377 MB) + chrome-headless-shell tree (≈332 MB). Lighter than
@@ -121,13 +156,31 @@ public sealed class EngineRegistry
         // larger. Each context adds exactly one Chromium renderer process. Note this is ~5.8× SMALLER
         // than MemPerInstanceBytes above — a context is not a process family, and charging one at the
         // other's rate is precisely the mistake that motivated separating the axes.
+        //
+        // ---- ENDPOINT (the axis neither profile above can see) ----
+        //
+        // ROSTER: NR_ENGINE_URL. Set ⇒ HostEngineFactory.CreateRosterEngineAsync drives that URL live;
+        // unset ⇒ it replays .testdata/newrecruit-har/newrecruit.har off local disk. SAME ENGINE, SAME
+        // PROFILE, SAME MEASURED NUMBERS — and one of the two is a third party's production website. That
+        // is the whole fact the CLI was missing: `bs-spec run --all --engine newrecruit` with the variable
+        // set spawned ceil(32 × 0.375) = 12 headless browsers at newrecruit.eu, because the parent
+        // computing the plan never asked which of the two it was. Everything else in this file is a
+        // throughput number fitted against the HAR file; NONE of it may size the live case.
+        //
+        // GAMEDATA: this machine, unconditionally. CreateGameDataEngineAsync does not read NR_ENGINE_URL
+        // at all — the NR gamedata engine is always a frozen static dir (.testdata/nr-editor). Declared
+        // per-domain precisely so a gamedata run keeps its full measured worker count in a shell that has
+        // NR_ENGINE_URL exported for live roster work. Pinned by
+        // ConcurrencyConfigurationDriftTests.HostEngineFactory_LiveEndpointRoutes_AreDeclaredByTheRegistry.
         ["newrecruit"] = new(
             "newrecruit", null, null, BothDomains,
             new EngineProfile(
                 MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
                 MemPerInstanceBytes: 1_313_420_083L, OversubscriptionFactor: 0.375,
                 ContextPoolSize: 4, MemPerContextBytes: 225_863_270L),
-            Builtin: true),
+            Builtin: true,
+            RosterEndpoint: EngineEndpoint.FromUrlVariable("NR_ENGINE_URL"),
+            GameDataEndpoint: EngineEndpoint.OnThisMachine),
 
         // MemPerInstanceBytes MEASURED: 1,548,969,984 B (≈1.44 GiB) per worker — bs-engine-host
         // adapter (≈520 MiB) + the Playwright Node driver (≈432 MiB) + the whole
@@ -160,13 +213,20 @@ public sealed class EngineRegistry
         // CI-class figure: it is the conservative one, and CI is the machine that has to survive it.
         // At pool 16 the whole container peaked at 6.16 GiB of 16 GiB — memory does not bind at the
         // optimum on this axis; contention does. That is the exact opposite of the process axis.
+        //
+        // ENDPOINT: same shape as `newrecruit`, and the sharper case for the process axis — k = 1.0, so a
+        // live `bs-spec run --all --engine newrecruit-ui` on this 32-core box planned a FULL 32 browsers
+        // against newrecruit.eu. Roster: NR_ENGINE_URL (NrRosterUiEngine.CreateAsync vs CreateFrozenAsync).
+        // Gamedata: always the frozen .testdata/nr-editor static dir.
         ["newrecruit-ui"] = new(
             "newrecruit-ui", null, null, BothDomains,
             new EngineProfile(
                 MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
                 MemPerInstanceBytes: 1_548_969_984L, OversubscriptionFactor: 1.0,
                 ContextPoolSize: 16, MemPerContextBytes: 235_824_742L),
-            Builtin: true),
+            Builtin: true,
+            RosterEndpoint: EngineEndpoint.FromUrlVariable("NR_ENGINE_URL"),
+            GameDataEndpoint: EngineEndpoint.OnThisMachine),
     };
 
     private readonly Dictionary<string, EngineEntry> _configured;
@@ -210,6 +270,14 @@ public sealed class EngineRegistry
             // therefore bound by ConcurrencyPolicy.UndeclaredMemoryWorkerCap rather than the machine's
             // full width. Declaring a measured footprint is how an engine opts into full parallelism;
             // this is the safe default for engines we did not write and cannot measure, not an oversight.
+            // The endpoint declaration is the same bargain as memPerInstanceBytes, on the axis that costs
+            // a THIRD PARTY rather than this box: an engine that does not say where its service lives is
+            // treated as driving someone else's live site and held to
+            // ConcurrencyPolicy.ThirdPartyLiveLoadLimit. `"endpoint": "local"` is how an adapter author
+            // states the fact and takes the machine's full width. Omitting it costs wall-clock; guessing
+            // "local" on their behalf would cost a stranger's bandwidth.
+            var endpoint = ParseEndpoint(configPath, name, entry.Endpoint);
+
             configured[name] = new EngineEntry(
                 name,
                 launch?.Executable,
@@ -224,11 +292,43 @@ public sealed class EngineRegistry
                     entry.OversubscriptionFactor,
                     entry.ContextPoolSize,
                     entry.MemPerContextBytes),
-                Builtin: false);
+                Builtin: false,
+                RosterEndpoint: endpoint,
+                GameDataEndpoint: endpoint);
         }
 
         return new EngineRegistry(configured);
     }
+
+    /// <summary>
+    /// Parse an <c>engines.json</c> <c>"endpoint"</c> declaration: <c>"local"</c> (this machine — takes
+    /// the machine's full measured width), <c>"third-party-live"</c> (someone else's production service —
+    /// held to <see cref="ConcurrencyPolicy.ThirdPartyLiveLoadLimit"/>), or a URL-variable form
+    /// <c>"url-var:NAME"</c> (live iff <c>NAME</c> names a non-loopback URL, exactly like the built-in
+    /// NewRecruit engines' <c>NR_ENGINE_URL</c>).
+    /// </summary>
+    /// <remarks>
+    /// <b>Absent is not "local".</b> An omitted declaration yields <see cref="EngineEndpoint.Undeclared"/>
+    /// ⇒ <see cref="LoadTarget.ThirdPartyLive"/>. We did not write this adapter and cannot see what it
+    /// drives; the harness will not spend a stranger's capacity on an assumption. An unrecognized value
+    /// is rejected outright rather than being quietly read as "undeclared" — a config that says something
+    /// the loader silently ignores is the failure mode the rest of <see cref="Validate"/> exists to close.
+    /// </remarks>
+    private static EngineEndpoint? ParseEndpoint(string configPath, string name, string? declared) => declared switch
+    {
+        null or "" => null,
+        "local" => EngineEndpoint.OnThisMachine,
+        "third-party-live" => EngineEndpoint.ThirdPartyLive,
+        _ when declared.StartsWith("url-var:", StringComparison.Ordinal)
+            && declared["url-var:".Length..] is { Length: > 0 } variable => EngineEndpoint.FromUrlVariable(variable),
+        _ => throw new InvalidDataException(
+            $"Invalid engines config '{configPath}', entry '{name}': endpoint must be \"local\" (the engine's " +
+            $"service runs on this machine), \"third-party-live\" (it drives someone else's production site, " +
+            $"so it is held to a load limit), or \"url-var:NAME\" (live iff the NAME environment variable " +
+            $"holds a non-loopback URL) — got \"{declared}\". Omit it to leave the endpoint undeclared, which " +
+            $"is treated as third-party-live: declaring \"local\" is how an engine opts into this machine's " +
+            $"full worker count."),
+    };
 
     /// <summary>
     /// Reject the numbers a third-party <c>engines.json</c> can state that the policy cannot safely
@@ -331,13 +431,21 @@ public sealed class EngineRegistry
             var metadata = connectable.Name is not null && _configured.TryGetValue(connectable.Name, out var known)
                 ? known
                 : null;
+            // An ad-hoc exec:/dotnet: adapter that is NOT a configured name declares nothing at all — we
+            // cannot see what it drives, so its endpoints stay null ⇒ EngineEndpoint.Undeclared ⇒
+            // LoadTarget.ThirdPartyLive. It costs such an adapter wall-clock (the load limit instead of
+            // the undeclared-memory cap) and it is the correct trade: the alternative is assuming, on an
+            // executable we have never seen, that nobody else pays for its traffic. Register it in
+            // engines.json with "endpoint": "local" to state the fact and get the machine's full width.
             return new EngineEntry(
                 connectable.Name,
                 connectable.Executable,
                 connectable.Arguments,
                 metadata?.Domains ?? BothDomains,
                 metadata?.Profile ?? DefaultProfile,
-                Builtin: false);
+                Builtin: false,
+                RosterEndpoint: metadata?.RosterEndpoint,
+                GameDataEndpoint: metadata?.GameDataEndpoint);
         }
 
         var name = connectable.Name!;

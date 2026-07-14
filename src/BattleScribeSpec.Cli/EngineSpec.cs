@@ -29,10 +29,63 @@ internal enum OutputFormat
 /// computes and sends a plan; null merely means "no override, use what
 /// <see cref="ConcurrencyPolicy"/> says". See <see cref="EffectivePlan"/>.
 /// </param>
-internal sealed record EngineSelection(EngineEntry Entry, EngineDomain Domain, bool Headed, bool KeepAlive, ConcurrencyPlan? PlanOverride = null)
+/// <param name="ChildEnvironment">
+/// Extra environment this selection's child processes are started with (today: <c>compare</c>'s
+/// per-arm <c>--config-a</c>/<c>--config-b</c>). It is part of the selection rather than a loose
+/// argument because it can <b>change which service the engine drives</b> — <c>--config-a
+/// NR_ENGINE_URL=https://www.newrecruit.eu</c> takes an arm live from a parent shell that has no such
+/// variable — and therefore it is an input to <see cref="LoadTarget"/>. Null = the child sees the
+/// parent's environment unchanged.
+/// </param>
+internal sealed record EngineSelection(
+    EngineEntry Entry,
+    EngineDomain Domain,
+    bool Headed,
+    bool KeepAlive,
+    ConcurrencyPlan? PlanOverride = null,
+    IReadOnlyDictionary<string, string>? ChildEnvironment = null)
 {
     /// <summary>Identity for applicability/assertions/labels; null for anonymous ad-hoc adapters.</summary>
     public string? EngineName => Entry.Name;
+
+    /// <summary>
+    /// <b>Whose machine pays for this run's traffic</b> — derived from what the engine declares about
+    /// its endpoint (<see cref="EngineEndpoint"/>) and the environment its children will actually see.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the fix for the load regression.</b> <c>bs-spec run --all --engine newrecruit</c>
+    /// resolves the same <see cref="EngineEntry"/> and the same <see cref="EngineProfile"/> whether the
+    /// child will replay a HAR file off local disk or drive <c>newrecruit.eu</c> — the only thing that
+    /// differs is <c>NR_ENGINE_URL</c>, which the parent never read. So the policy, which cannot see an
+    /// environment and must never string-match an engine name, gave both the same machine-width answer:
+    /// <c>ceil(32 × 0.375)</c> = <b>12 adapter processes, each with its own browser</b>, pointed at a
+    /// volunteer-run website — up from the serial <c>--workers 1</c> default that preceded it, and chosen
+    /// by nobody.
+    /// </para>
+    /// <para>
+    /// The engine declares the fact; this derives the answer; <see cref="ConcurrencyPolicy.For"/> acts on
+    /// it. Three steps, one decision-maker each. And it is <b>fail-safe</b>: an engine that has not
+    /// declared where its service lives (any <c>exec:</c>/<c>dotnet:</c> adapter we did not write)
+    /// resolves to <see cref="LoadTarget.ThirdPartyLive"/> — see
+    /// <see cref="EngineEndpoint.ResolveLoadTarget"/> for why the unsafe answer is the one that has to be
+    /// earned.
+    /// </para>
+    /// </remarks>
+    public LoadTarget LoadTarget =>
+        Entry.EndpointFor(Domain == EngineDomain.Gamedata ? "gamedata" : "roster")
+            .ResolveLoadTarget(LookupChildEnvironment);
+
+    /// <summary>
+    /// The environment the <b>child</b> will see: <see cref="ChildEnvironment"/> layered over this
+    /// process's own, which is exactly what <see cref="StartProcess"/> hands it (a child inherits the
+    /// parent's environment, and the caller's extras override). The parent's verdict about the endpoint
+    /// and the child's behaviour therefore cannot disagree — they read the same value.
+    /// </summary>
+    private string? LookupChildEnvironment(string variable) =>
+        ChildEnvironment is not null && ChildEnvironment.TryGetValue(variable, out var value)
+            ? value
+            : Environment.GetEnvironmentVariable(variable);
 
     /// <summary>Assertion engine: strip a trailing "-ui" from the identity.</summary>
     public string? AssertionEngineName =>
@@ -47,16 +100,29 @@ internal sealed record EngineSelection(EngineEntry Entry, EngineDomain Domain, b
     /// "force reuse on".
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <b>The parent decides; the child is told.</b> The plan is computed HERE and passed down —
     /// never recomputed by the child, which is a separate process that may see a different machine
     /// (container CPU limits, cgroup quotas) and could therefore silently disagree. Two
     /// decision-makers for one decision is the defect this design exists to remove.
+    /// </para>
+    /// <para>
+    /// <b>The load limit is applied last, and it also holds against a <see cref="PlanOverride"/>.</b>
+    /// An override replaces the policy's answer wholesale, so without the final clamp
+    /// <c>--policy workers=32</c> — or even <c>--policy reuse-roster=on</c>, whose <em>base</em> plan
+    /// would have been recomputed without a load target — would put a machine's worth of browsers back
+    /// on a third party's website. <c>run --policy</c> rejects such an override before we get here, so
+    /// the clamp is never silently dropping a flag; it is the backstop that makes the ceiling true for
+    /// any path that constructs a plan, not just the one that asks nicely.
+    /// </para>
     /// </remarks>
     public ConcurrencyPlan EffectivePlan
     {
         get
         {
-            var plan = PlanOverride ?? ConcurrencyPolicy.For(MachineProfile.Current(), Entry.Profile);
+            var loadTarget = LoadTarget;
+            var plan = PlanOverride ?? ConcurrencyPolicy.For(MachineProfile.Current(), Entry.Profile, loadTarget);
+            plan = ConcurrencyPolicy.ClampToLoadTarget(plan, loadTarget);
 
             // --keep-alive is interactive-debugging sugar for "force reuse on"; it is folded into
             // the plan HERE so the child sees one decision, not a flag it must reconcile.

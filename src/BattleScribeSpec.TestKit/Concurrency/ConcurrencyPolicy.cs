@@ -208,8 +208,15 @@ public static class ConcurrencyPolicy
     /// out of someone else's bandwidth. If this lane must get faster, make it send <em>fewer</em>
     /// requests — not more of them at once.
     /// </para>
+    /// <para>
+    /// <b>Public because the harness has to be able to say the number out loud.</b> <c>bs-spec run --all</c>
+    /// tells the user, on stderr, that it has held their run to this limit and why; the CLI's tests state
+    /// the expected worker count in terms of this constant rather than duplicating a literal <c>2</c> that
+    /// could drift away from it. It is exposed to be <em>read and reported</em>, not to be minimum'd into
+    /// by hand: <see cref="ClampToLoadTarget"/> is the one place that applies it.
+    /// </para>
     /// </remarks>
-    internal const int ThirdPartyLiveLoadLimit = 2;
+    public const int ThirdPartyLiveLoadLimit = 2;
 
     /// <summary>Derive the plan. Deterministic: the same machine and engine always give the same plan.</summary>
     /// <remarks>
@@ -234,13 +241,15 @@ public static class ConcurrencyPolicy
     /// reach a live third-party service <b>must</b> say so, and <c>FixtureConcurrency</c> — the xUnit
     /// path, which is where the live lane lives — gives it no default at all.
     /// <para>
-    /// <b>KNOWN GAP, stated rather than hidden:</b> the CLI batch path (<c>bs-spec run --all</c>) does
-    /// not declare this yet. The child engine host picks live-vs-frozen from <c>NR_ENGINE_URL</c>
-    /// (<c>HostEngineFactory</c>) and the parent that computes the plan never asks, so
-    /// <c>bs-spec run --all</c> against live NR is still bounded only by <c>Workers</c>. Wiring it needs
-    /// the engine to declare which service it talks to — the policy is forbidden from string-matching
-    /// engine names — and that is out of this change's scope. Recorded in
-    /// docs/concurrency-policy-measurements.md §9.4.
+    /// <b>Both paths now answer it.</b> The xUnit path answers per fixture (<c>FixtureConcurrency</c>).
+    /// The CLI path answers per engine, at engine-resolution time: an engine declares where its service
+    /// lives (<see cref="Engines.EngineEndpoint"/>) and <c>EngineSelection.LoadTarget</c> derives this
+    /// value from that declaration plus the environment the child will see — which is how
+    /// <c>bs-spec run --all --engine newrecruit</c> can tell a HAR file on local disk from
+    /// <c>newrecruit.eu</c> when both resolve the same engine and the same
+    /// <see cref="EngineProfile"/>. It could not, and it planned 12 browsers at the live site; the
+    /// derivation lives in the caller because <b>this method must never string-match an engine name</b>.
+    /// (Closed the §9.4 gap in docs/concurrency-policy-measurements.md.)
     /// </para>
     /// </param>
     /// <returns>The concurrency and reuse decisions for this machine/engine pair.</returns>
@@ -324,31 +333,65 @@ public static class ConcurrencyPolicy
             poolSize = Math.Min(poolSize, engine.MaxParallel);
         }
 
-        // ===== THE LOAD LIMIT. NOT A THIRD AXIS — THE OTHER PARTY'S CONSTRAINT ON BOTH OF THEM. =====
-        //
-        // Every line above this one asks "how fast can THIS MACHINE go?" and answers it from something
-        // we measured. The clamp below asks a question no measurement of ours can answer — "how hard
-        // may we hit a stranger's server?" — so it is not fitted, and it does not move up. It applies
-        // to BOTH axes because the remote host feels requests in flight and cannot see whether we
-        // spawned them as processes or as contexts.
-        //
-        // Do not fold this into ContextPoolSize, do not scale it with the machine, and do not sweep
-        // it. ThirdPartyLiveLoadLimit carries the rationale, quoted from the commit that set it.
-        if (loadTarget == LoadTarget.ThirdPartyLive)
-        {
-            workers = Math.Min(workers, ThirdPartyLiveLoadLimit);
-            poolSize = Math.Min(poolSize, ThirdPartyLiveLoadLimit);
-        }
-
         // Reuse needs BOTH: correct AND worth it. Reusing a cheap-to-start engine is safe and
         // buys nothing (measured: 0.92x for NewRecruit) — it would add a warm-state failure mode
         // for no gain, which is a bad trade even when it is a correct one.
         var worthReusing = engine.ColdStartCost == ColdStartCost.Expensive;
 
-        return new ConcurrencyPlan(
-            Workers: workers,
-            PoolSize: poolSize,
-            ReuseRoster: worthReusing && engine.ReuseSafeRoster,
-            ReuseGameData: worthReusing && engine.ReuseSafeGameData);
+        // ===== THE LOAD LIMIT. NOT A THIRD AXIS — THE OTHER PARTY'S CONSTRAINT ON BOTH OF THEM. =====
+        // Every line above this one asks "how fast can THIS MACHINE go?". ClampToLoadTarget asks the one
+        // question no measurement of ours can answer. It is the LAST thing that happens to a plan, here
+        // and everywhere else — see its own remarks.
+        return ClampToLoadTarget(
+            new ConcurrencyPlan(
+                Workers: workers,
+                PoolSize: poolSize,
+                ReuseRoster: worthReusing && engine.ReuseSafeRoster,
+                ReuseGameData: worthReusing && engine.ReuseSafeGameData),
+            loadTarget);
+    }
+
+    /// <summary>
+    /// Hold <paramref name="plan"/> to <see cref="ThirdPartyLiveLoadLimit"/> on <b>both</b> axes when it
+    /// points at someone else's live production service. A no-op for <see cref="LoadTarget.Local"/>, and
+    /// idempotent.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why this is separable from <see cref="For"/> at all: because a plan can arrive from somewhere
+    /// else.</b> <see cref="For"/> applies it as its last step, so the policy's own answer is always
+    /// bounded. But <c>--policy workers=32</c> (<c>PolicyOverride</c>) <em>replaces</em> that answer
+    /// wholesale — and a user override is still not a mandate to put 32 browsers on a stranger's website.
+    /// The CLI rejects such an override outright, loudly, rather than dropping it silently (#305), and
+    /// then passes the plan through here anyway: <b>a ceiling that only holds when nobody is pushing on
+    /// it is not a ceiling.</b>
+    /// </para>
+    /// <para>
+    /// It clamps both axes for the reason the constant gives: the remote host feels requests in flight
+    /// and cannot see whether we spawned them as worker processes or as browser contexts. It does not
+    /// touch the reuse decisions — reuse is a correctness property of the engine, and it does not change
+    /// with who is serving it.
+    /// </para>
+    /// <para>
+    /// Do not inline <c>Math.Min(x, ThirdPartyLiveLoadLimit)</c> at a call site instead. The limit is a
+    /// policy decision and it stays in the policy, applied in one place, so that "where does the live
+    /// bound come from?" has exactly one answer — the failure this whole design exists to prevent is two
+    /// places deciding one thing.
+    /// </para>
+    /// </remarks>
+    /// <param name="plan">The plan the machine and the engine justify.</param>
+    /// <param name="loadTarget">Where the load lands.</param>
+    /// <returns><paramref name="plan"/>, bounded by the load limit when it is aimed at a third party.</returns>
+    public static ConcurrencyPlan ClampToLoadTarget(ConcurrencyPlan plan, LoadTarget loadTarget)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        return loadTarget == LoadTarget.ThirdPartyLive
+            ? plan with
+            {
+                Workers = Math.Min(plan.Workers, ThirdPartyLiveLoadLimit),
+                PoolSize = Math.Min(plan.PoolSize, ThirdPartyLiveLoadLimit),
+            }
+            : plan;
     }
 }

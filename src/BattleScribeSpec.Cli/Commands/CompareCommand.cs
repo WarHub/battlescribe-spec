@@ -49,6 +49,15 @@ namespace BattleScribeSpec.Cli;
 /// </remarks>
 internal static class CompareCommand
 {
+    /// <summary>
+    /// Resolved inputs for a comparison. Each arm's <c>--config-*</c> lives on that arm's
+    /// <see cref="EngineSelection.ChildEnvironment"/> rather than beside it here: the config is not just
+    /// something to hand the child at spawn time, it is an input to <see cref="EngineSelection.LoadTarget"/>
+    /// (<c>--config-a NR_ENGINE_URL=https://www.newrecruit.eu</c> takes arm A live), so the selection that
+    /// computes the plan and the environment that decides the endpoint must be the <em>same</em> object.
+    /// Held apart, they were two facts about one arm that could disagree — and the one that decided how
+    /// many browsers to spawn was the one that could not see the site.
+    /// </summary>
     private sealed record CompareOptions(
         EngineSelection Selection,
         EngineSelection SelectionA,
@@ -57,19 +66,10 @@ internal static class CompareCommand
         string? Filter,
         string? SpecsDir,
         string? ExpectedFailures,
-        string? AssertionEngine,
-        IReadOnlyDictionary<string, string> ConfigA,
-        IReadOnlyDictionary<string, string> ConfigB);
+        string? AssertionEngine);
 
     /// <summary>One arm's outcome: the suite result, measured wall time, and trace summary (empty when telemetry produced no local artifact).</summary>
     private sealed record ArmResult(SpecSuiteResult Suite, TimeSpan Wall, TraceSummary Trace);
-
-    /// <summary>
-    /// The environment for the discarded warm-up pass: deliberately empty, i.e. neither
-    /// <c>--config-a</c> nor <c>--config-b</c>. See the warm-up comment in <see cref="ExecuteAsync"/>.
-    /// </summary>
-    private static readonly IReadOnlyDictionary<string, string> WarmupConfig =
-        new Dictionary<string, string>(StringComparer.Ordinal);
 
     public static Command Create()
     {
@@ -148,8 +148,18 @@ internal static class CompareCommand
                 // `run --policy`/`serve --policy`. Thrown synchronously (before ExecuteAsync's first
                 // await), so it is caught by this method's own try/catch below like every other
                 // input error.
-                var selectionA = RunCommand.ApplyPolicyOverride(selection, parseResult.GetValue(policyA), Ui.Warn);
-                var selectionB = RunCommand.ApplyPolicyOverride(selection, parseResult.GetValue(policyB), Ui.Warn);
+                // The arm's --config-* is attached BEFORE its --policy is applied, because the config can
+                // change where the arm's engine points (NR_ENGINE_URL) and therefore what its base plan
+                // and its allowed worker ceiling are. Applied the other way round, an arm sent live by
+                // --config-a would have had its plan computed against a frozen HAR's measured optimum.
+                var selectionA = RunCommand.ApplyPolicyOverride(
+                    selection with { ChildEnvironment = ParseConfig(parseResult.GetValue(configA), "--config-a") },
+                    parseResult.GetValue(policyA),
+                    Ui.Warn);
+                var selectionB = RunCommand.ApplyPolicyOverride(
+                    selection with { ChildEnvironment = ParseConfig(parseResult.GetValue(configB), "--config-b") },
+                    parseResult.GetValue(policyB),
+                    Ui.Warn);
 
                 var options = new CompareOptions(
                     selection,
@@ -159,9 +169,7 @@ internal static class CompareCommand
                     parseResult.GetValue(filter),
                     parseResult.GetValue(specs),
                     parseResult.GetValue(expectedFailures),
-                    parseResult.GetValue(assertionEngine),
-                    ParseConfig(parseResult.GetValue(configA), "--config-a"),
-                    ParseConfig(parseResult.GetValue(configB), "--config-b"));
+                    parseResult.GetValue(assertionEngine));
                 return ExecuteAsync(options);
             }
             catch (CliInputException ex)
@@ -208,15 +216,15 @@ internal static class CompareCommand
             // pre-warm that arm's own config/policy-specific state (e.g. a warm-reuse cache) and bias
             // the comparison right back in its favor.
             Ui.Rule("Warm-up (untimed, discarded)");
-            var warmup = await RunArmAsync(options, selection, workersWarmup, WarmupConfig, "warmup").ConfigureAwait(false);
+            var warmup = await RunArmAsync(options, selection, workersWarmup, "warmup").ConfigureAwait(false);
             Ui.Info(FormattableString.Invariant(
                 $"Warm-up pass ran the same spec set once under neither config in {warmup.Wall.TotalSeconds:F1}s (discarded — its only purpose is to equalize JIT/OS-cache state before arm A and arm B are timed)."));
 
             Ui.Rule("Arm A");
-            armA = await RunArmAsync(options, options.SelectionA, workersA, options.ConfigA, "a").ConfigureAwait(false);
+            armA = await RunArmAsync(options, options.SelectionA, workersA, "a").ConfigureAwait(false);
 
             Ui.Rule("Arm B");
-            armB = await RunArmAsync(options, options.SelectionB, workersB, options.ConfigB, "b").ConfigureAwait(false);
+            armB = await RunArmAsync(options, options.SelectionB, workersB, "b").ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
         {
@@ -338,8 +346,13 @@ internal static class CompareCommand
     /// other way around).
     /// </summary>
     private static async Task<ArmResult> RunArmAsync(
-        CompareOptions options, EngineSelection selection, int workers, IReadOnlyDictionary<string, string> config, string armLabel)
+        CompareOptions options, EngineSelection selection, int workers, string armLabel)
     {
+        // The arm's --config-* comes from the selection itself — the same object whose LoadTarget and
+        // plan were derived from it. The warm-up arm passes options.Selection, which carries no config
+        // (that is what "under neither config" means), so it needs no separate empty-dictionary constant.
+        var config = selection.ChildEnvironment ?? new Dictionary<string, string>(StringComparer.Ordinal);
+
         var filterPatterns = options.Filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             is { Length: > 0 } patterns ? patterns : null;
 

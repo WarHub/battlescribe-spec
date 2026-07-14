@@ -1,5 +1,6 @@
 using System.Globalization;
 using BattleScribeSpec.Batch;
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Telemetry;
 using BattleScribeSpec.Telemetry.Collector;
@@ -38,6 +39,17 @@ internal static class RunBatch
         // advertise a lower ceiling than the registry knows).
         var workers = await ResolveWorkersAsync(selection, selection.EffectivePlan.Workers, Ui.Warn);
         Ui.Info($"Workers: {workers}");
+
+        // Say it out loud. A run that is throttled from ceil(cpuCount × k) to a courtesy limit looks, from
+        // the outside, exactly like a run that is mysteriously slow — and the reason is not the user's
+        // machine, it is whose machine is on the other end. The one number this line must never invite
+        // anyone to raise is the limit itself: see ConcurrencyPolicy.ThirdPartyLiveLoadLimit.
+        if (selection.LoadTarget == LoadTarget.ThirdPartyLive)
+        {
+            Ui.Info(
+                $"Load target: third-party live service — held to {ConcurrencyPolicy.ThirdPartyLiveLoadLimit} " +
+                $"concurrent sessions. Parallelism here is a load question, not a throughput one.");
+        }
 
         var filterPatterns = options.Filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             is { Length: > 0 } patterns ? patterns : null;

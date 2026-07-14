@@ -322,7 +322,12 @@ internal static class RunCommand
             return selection;
         }
 
-        var basePlan = ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile);
+        // The base plan is the policy's answer FOR THIS LOAD TARGET, not a machine-width one that the
+        // override then edits. --policy only replaces the keys it names, so a base plan computed without
+        // the load target would let `--policy reuse-roster=on` — a flag that says nothing about workers —
+        // hand a live NewRecruit run ceil(cpuCount × k) browsers through the untouched Workers field.
+        var loadTarget = selection.LoadTarget;
+        var basePlan = ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile, loadTarget);
         ConcurrencyPlan overridden;
         try
         {
@@ -331,6 +336,25 @@ internal static class RunCommand
         catch (FormatException ex)
         {
             throw new CliInputException(ex.Message);
+        }
+
+        // An explicit override may lower the load on a third party's site; it may not raise it. Rejected
+        // rather than clamped, because this repo's rule is that a flag is honoured or refused, never
+        // silently dropped (#305) — and because a user who typed `workers=32` at newrecruit.eu should be
+        // told no, not quietly given 2 and left believing they got 32. (EffectivePlan clamps regardless;
+        // that is the backstop, not the answer.)
+        if (loadTarget == LoadTarget.ThirdPartyLive
+            && (overridden.Workers > ConcurrencyPolicy.ThirdPartyLiveLoadLimit
+                || overridden.PoolSize > ConcurrencyPolicy.ThirdPartyLiveLoadLimit))
+        {
+            throw new CliInputException(
+                $"--policy: engine '{selection.EngineName ?? selection.Display}' resolves to a third party's " +
+                $"live service for this run, so its concurrency is a load question, not a throughput one. " +
+                $"It is held to {ConcurrencyPolicy.ThirdPartyLiveLoadLimit} concurrent sessions " +
+                $"(ConcurrencyPolicy.ThirdPartyLiveLoadLimit) and no override may raise that — you asked for " +
+                $"workers={overridden.Workers}, pool={overridden.PoolSize}. Lower it, or point the engine at a " +
+                $"local endpoint (unset NR_ENGINE_URL to replay the frozen HAR, which is what the measured " +
+                $"worker count was fitted against).");
         }
 
         if (overridden.ReuseRoster && !selection.Entry.Profile.ReuseSafeRoster)

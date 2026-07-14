@@ -203,6 +203,202 @@ public sealed class EngineSpecTests
         Assert.Throws<InvalidOperationException>(selection.ResolveLaunch);
     }
 
+    // ===================================================================================================
+    //  THE LOAD TARGET: whose machine pays for this run's traffic (#317).
+    //
+    //  `bs-spec run --all --engine newrecruit` resolves the SAME EngineEntry and the SAME EngineProfile
+    //  whether the child will replay a HAR file off local disk or drive newrecruit.eu. Before this, the
+    //  parent computing the plan never asked which — so it planned ceil(cpuCount × k) adapter processes,
+    //  EACH WITH ITS OWN BROWSER, at a volunteer-run website: 12 on a 32-core box, up from the serial
+    //  `--workers 1` default that preceded the policy. Nothing else in src/BattleScribeSpec.NewRecruit/
+    //  bounds that load — no retry, no backoff, no throttle, no 429 handling. Concurrency IS the brake.
+    // ===================================================================================================
+
+    /// <summary>
+    /// <b>The regression itself.</b> A CLI run resolved against a LIVE NewRecruit endpoint is held to
+    /// <see cref="ConcurrencyPolicy.ThirdPartyLiveLoadLimit"/> workers — not the machine's measured width.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Falsifiable, and precisely against the defect being fixed:</b> delete the load-target derivation
+    /// from <see cref="EngineSelection.EffectivePlan"/> (i.e. go back to
+    /// <c>ConcurrencyPolicy.For(MachineProfile.Current(), Entry.Profile)</c>, which defaults to
+    /// <see cref="LoadTarget.Local"/>) and the first assertion goes red with the real machine-width number
+    /// — 12 on the 32-core dev box, 4 on a 4-vCPU runner. Remove the <c>RosterEndpoint</c> declaration
+    /// from the registry instead and it stays green (undeclared fails safe), but
+    /// <see cref="EffectivePlan_FrozenNewRecruit_KeepsTheFullMeasuredWorkerCount"/> goes red — the two
+    /// tests pin the derivation from both sides, so it cannot be satisfied by throttling everything.
+    /// </para>
+    /// <para>
+    /// The engine is <c>newrecruit-ui</c> because its measured <c>k</c> is 1.0: it is the sharper case
+    /// (a full <c>cpuCount</c> browsers at the live site), and it keeps the last assertion meaningful on
+    /// a 4-vCPU CI runner, where <c>newrecruit</c>'s own <c>ceil(4 × 0.375) = 2</c> would coincide with
+    /// the limit and prove nothing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EffectivePlan_LiveNewRecruit_IsHeldToTheThirdPartyLoadLimit_NotTheMachinesWidth()
+    {
+        var selection = Live(Resolve("plain-spec-id", "--engine", "newrecruit-ui"));
+
+        Assert.Equal(LoadTarget.ThirdPartyLive, selection.LoadTarget);
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, selection.EffectivePlan.Workers);
+
+        // Both axes: the remote host feels requests in flight and cannot see whether we spawned them as
+        // processes or as browser contexts.
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, selection.EffectivePlan.PoolSize);
+
+        // And it is STRICTLY below what this machine would otherwise have been given — on any box with
+        // enough cores for the two numbers to differ (k = 1.0, so ceil(3 × 1.0) = 3 > 2).
+        if (Environment.ProcessorCount >= 3)
+        {
+            var machineWidth = ConcurrencyPolicy.For(
+                MachineProfile.Current(), selection.Entry.Profile, LoadTarget.Local).Workers;
+
+            Assert.True(
+                selection.EffectivePlan.Workers < machineWidth,
+                $"a live run got {selection.EffectivePlan.Workers} workers — the machine's own width is " +
+                $"{machineWidth}, and nothing would be capped");
+        }
+    }
+
+    /// <summary>
+    /// <b>The other half: the 14.3× must survive.</b> A frozen NewRecruit run keeps the full measured
+    /// worker count. The fix is a derivation, not a blanket throttle.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: default the CLI to <see cref="LoadTarget.ThirdPartyLive"/> "to be safe" — the lazy
+    /// version of this fix, which would look identical in the live test above — and this goes red on any
+    /// box whose measured worker count exceeds 2 (every machine this repo runs on, CI included).
+    /// </remarks>
+    [Fact]
+    public void EffectivePlan_FrozenNewRecruit_KeepsTheFullMeasuredWorkerCount()
+    {
+        // NR_ENGINE_URL empty is exactly what HostEngineFactory reads as "replay the frozen HAR"
+        // (`url is { Length: > 0 }`), and it makes this test independent of the ambient shell.
+        var selection = Frozen(Resolve("plain-spec-id", "--engine", "newrecruit-ui"));
+
+        Assert.Equal(LoadTarget.Local, selection.LoadTarget);
+
+        var measured = ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile, LoadTarget.Local);
+        Assert.Equal(measured, selection.EffectivePlan);
+
+        if (Environment.ProcessorCount >= 3)
+        {
+            Assert.True(
+                selection.EffectivePlan.Workers > ConcurrencyPolicy.ThirdPartyLiveLoadLimit,
+                "a frozen run must not be throttled to the third-party load limit — it never leaves this box");
+        }
+    }
+
+    /// <summary>
+    /// The NR <b>gamedata</b> engine is always a frozen static dir — <c>HostEngineFactory</c>'s gamedata
+    /// switch does not read <c>NR_ENGINE_URL</c> at all — so a gamedata run keeps its full width even in a
+    /// shell that exports the variable for live roster work.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: declare the endpoint once per engine instead of once per domain (the obvious
+    /// simplification) and this goes red — a developer with <c>NR_ENGINE_URL</c> exported would silently
+    /// drop from the machine's width to 2 workers on a suite that never touches the network.
+    /// </remarks>
+    [Fact]
+    public void EffectivePlan_GameDataDomain_IsLocal_EvenWithTheLiveUrlSet()
+    {
+        var selection = Live(Resolve("plain-spec-id", "--engine", "newrecruit", "--gamedata"));
+
+        Assert.Equal(LoadTarget.Local, selection.LoadTarget);
+        Assert.Equal(
+            ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile, LoadTarget.Local),
+            selection.EffectivePlan);
+    }
+
+    /// <summary>
+    /// <b>The fail-safe.</b> An engine whose target cannot be established — any <c>exec:</c>/<c>dotnet:</c>
+    /// adapter we did not write — gets <see cref="LoadTarget.ThirdPartyLive"/>, not
+    /// <see cref="LoadTarget.Local"/>.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: give <c>EngineEntry</c>'s endpoint parameters a "sensible" default of
+    /// <c>EngineEndpoint.OnThisMachine</c>, or make <c>EngineRegistry.Resolve</c>'s ad-hoc branch hand one
+    /// out, and this goes red. Getting this wrong costs an unknown adapter some wall-clock; getting it
+    /// wrong the other way spends a stranger's production capacity on an assumption. The adapter can
+    /// state the fact and take the full width back with one line of engines.json:
+    /// <c>"endpoint": "local"</c>.
+    /// </remarks>
+    [Fact]
+    public void EffectivePlan_UnknownAdapter_FailsSafeToThirdPartyLive()
+    {
+        var selection = Resolve("plain-spec-id", "--engine", "exec:./some-third-party-adapter");
+
+        Assert.Equal(LoadTarget.ThirdPartyLive, selection.LoadTarget);
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, selection.EffectivePlan.Workers);
+    }
+
+    /// <summary>
+    /// A <c>--policy</c> override may lower the load on a third party's site; it may not raise it — and it
+    /// is refused, not silently clamped (#305: a flag is honoured or rejected, never dropped).
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: drop the check in <c>RunCommand.ApplyPolicyOverride</c> and the first assertion goes
+    /// red (the override sails through). Drop the <c>ClampToLoadTarget</c> backstop in
+    /// <see cref="EngineSelection.EffectivePlan"/> and the last one goes red — a plan built by any other
+    /// path would put 32 browsers on the live site.
+    /// </remarks>
+    [Fact]
+    public void PolicyOverride_CannotRaiseTheLoadLimit_OnALiveEngine()
+    {
+        var live = Live(Resolve("plain-spec-id", "--engine", "newrecruit"));
+
+        var ex = Assert.Throws<CliInputException>(
+            () => RunCommand.ApplyPolicyOverride(live, "workers=32", _ => { }));
+        Assert.Contains("load question", ex.Message, StringComparison.Ordinal);
+
+        // Lowering it is always allowed.
+        var quieter = RunCommand.ApplyPolicyOverride(live, "workers=1", _ => { });
+        Assert.Equal(1, quieter.EffectivePlan.Workers);
+
+        // An override that says nothing about workers must not resurrect the machine-width count through
+        // the base plan it edits: `--policy reuse-roster=on` is not a request for 12 browsers.
+        var reuseOnly = RunCommand.ApplyPolicyOverride(live, "reuse-roster=on", _ => { });
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, reuseOnly.EffectivePlan.Workers);
+
+        // The backstop: even a plan handed in directly cannot exceed the limit.
+        var forced = live with { PlanOverride = new ConcurrencyPlan(32, 32, ReuseRoster: false, ReuseGameData: false) };
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, forced.EffectivePlan.Workers);
+    }
+
+    /// <summary>A frozen engine's <c>--policy workers=N</c> is untouched — the limit binds live runs only.</summary>
+    [Fact]
+    public void PolicyOverride_OnAFrozenEngine_IsHonouredInFull()
+    {
+        var frozen = Frozen(Resolve("plain-spec-id", "--engine", "newrecruit"));
+
+        var overridden = RunCommand.ApplyPolicyOverride(frozen, "workers=32", _ => { });
+
+        Assert.Equal(32, overridden.EffectivePlan.Workers);
+    }
+
+    /// <summary>Point the selection's children at the live site (as <c>NR_ENGINE_URL</c> in the shell would).</summary>
+    private static EngineSelection Live(EngineSelection selection) => selection with
+    {
+        ChildEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["NR_ENGINE_URL"] = "https://www.newrecruit.eu",
+        },
+    };
+
+    /// <summary>
+    /// Pin the selection to the frozen HAR regardless of the ambient shell: an empty <c>NR_ENGINE_URL</c>
+    /// is what <c>HostEngineFactory</c> reads as "no live URL — load the frozen HAR".
+    /// </summary>
+    private static EngineSelection Frozen(EngineSelection selection) => selection with
+    {
+        ChildEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["NR_ENGINE_URL"] = string.Empty,
+        },
+    };
+
     // ---- --headed: a flag is accepted or rejected, never silently dropped (#305, #271 Task 5) ----
 
     [Fact]

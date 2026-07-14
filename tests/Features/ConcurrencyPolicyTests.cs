@@ -724,6 +724,41 @@ public sealed class ConcurrencyPolicyTests
             ConcurrencyPolicy.For(DevBox, engine));
     }
 
+    /// <summary>
+    /// <b>The limit must hold against a plan the policy did not compute.</b> <c>--policy workers=32</c>
+    /// replaces the policy's answer wholesale; <see cref="ConcurrencyPolicy.ClampToLoadTarget"/> is what
+    /// makes the ceiling true for such a plan too. A ceiling that only holds when nobody pushes on it is
+    /// not a ceiling.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: delete the clamp (or make it clamp only <c>Workers</c>, leaving the context pool free
+    /// — the remote host cannot tell the difference between the two) and the first block goes red. Make
+    /// it touch <see cref="LoadTarget.Local"/> plans and the second goes red, which is the "just throttle
+    /// everything" mistake.
+    /// </remarks>
+    [Fact]
+    public void Policy_ClampToLoadTarget_BindsAPlanTheOverrideBuilt_AndLeavesLocalPlansAlone()
+    {
+        var hostile = new ConcurrencyPlan(32, 32, ReuseRoster: true, ReuseGameData: true);
+
+        var clamped = ConcurrencyPolicy.ClampToLoadTarget(hostile, LoadTarget.ThirdPartyLive);
+
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, clamped.Workers);
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, clamped.PoolSize);
+
+        // Reuse is a correctness property of the engine; who serves it does not change it.
+        Assert.True(clamped.ReuseRoster);
+        Assert.True(clamped.ReuseGameData);
+
+        // A local plan passes through untouched — this is not a throttle on everything.
+        Assert.Equal(hostile, ConcurrencyPolicy.ClampToLoadTarget(hostile, LoadTarget.Local));
+
+        // Idempotent, and it never RAISES a plan that is already below the limit.
+        var quiet = new ConcurrencyPlan(1, 1, ReuseRoster: false, ReuseGameData: false);
+        Assert.Equal(quiet, ConcurrencyPolicy.ClampToLoadTarget(quiet, LoadTarget.ThirdPartyLive));
+        Assert.Equal(clamped, ConcurrencyPolicy.ClampToLoadTarget(clamped, LoadTarget.ThirdPartyLive));
+    }
+
     [Fact]
     public void Policy_IsPure_SameInputsSamePlan()
     {
