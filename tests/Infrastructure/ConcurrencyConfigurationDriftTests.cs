@@ -64,7 +64,8 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// </summary>
     internal const string XunitMaxParallelThreads = "0.5x";
 
-    private static readonly string RepoRoot = FindRepoRoot();
+    /// <summary>The repo root, for the source-scanning gates (this class's, and LiveLoadBudgetTests').</summary>
+    internal static readonly string RepoRoot = FindRepoRoot();
 
     private static string FindRepoRoot([CallerFilePath] string callerFilePath = "")
     {
@@ -228,6 +229,23 @@ public sealed class ConcurrencyConfigurationDriftTests
                 offenders.Add(
                     $"  {relative} reserves from {nameof(LiveLoadBudget)} but drives no third-party site " +
                     $"(it reads no endpoint URL variable) — that throttles a lane nobody else pays for.");
+            }
+
+            // ...and reserving is only half of it: the permit must come BACK when the session fails to
+            // open. Constructing the engine is exactly the step that throws when the site is down, and a
+            // fixture that kept the permit turned that outage into a SKIP that blamed the load budget —
+            // after two of them, every later test in the process was granted 0. LiveLoadLease.Open /
+            // OpenAsync is the one exception-safe path; a hand-rolled try/catch in a sixth fixture is the
+            // one the sixth author forgets.
+            if (budgeted
+                && !text.Contains($".{nameof(LiveLoadLease.Open)}(", StringComparison.Ordinal)
+                && !text.Contains($".{nameof(LiveLoadLease.OpenAsync)}(", StringComparison.Ordinal))
+            {
+                offenders.Add(
+                    $"  {relative} reserves from {nameof(LiveLoadBudget)} but does not open its session " +
+                    $"through {nameof(LiveLoadLease)}.{nameof(LiveLoadLease.Open)}/" +
+                    $"{nameof(LiveLoadLease.OpenAsync)} — if the engine fails to construct, the permit " +
+                    $"leaks and a site outage becomes a skip that blames the budget.");
             }
         }
 

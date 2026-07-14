@@ -77,12 +77,15 @@ namespace BattleScribeSpec.Concurrency;
 /// </param>
 /// <param name="PoolSize">
 /// <b>CONTEXT AXIS.</b> How many browser <em>contexts</em> one in-process fixture pool holds. An
-/// engine's absolute measured constant (<c>EngineProfile.ContextPoolSize</c>), bounded by memory
-/// (<c>MemPerContextBytes</c>) and by <c>MaxParallel</c> — and <b>deliberately not a function of
+/// engine's absolute measured constant (<c>EngineProfile.ContextPoolSize</c>), bounded by memory (the
+/// pool's fixed <c>MemPoolBaselineBytes</c> <em>plus</em> <c>MemPerContextBytes</c> per context) and by
+/// <c>MaxContexts</c> — <b>not</b> by <c>MaxParallel</c>, which is the <em>process</em> ceiling on the
+/// protocol wire and used to clamp this axis too (that was <c>PoolSize: workers</c> pointing the other
+/// way; see <c>EngineProfile.MaxParallel</c>) — and <b>deliberately not a function of
 /// <c>CpuCount</c></b>, because the sweep found the same optimum on a 32-core box and a 4-CPU
 /// container. <b>Read only by the xUnit path</b> (<c>FixtureConcurrency.PoolSizeFor</c>); it is not
 /// on the protocol wire and the CLI has no pool at all. It is <em>not</em> a rescaled
-/// <see cref="Workers"/>: for <c>newrecruit-ui</c> on a 4-vCPU runner the two are 4 and 16.
+/// <see cref="Workers"/>: for <c>newrecruit-ui</c> on the 2-vCPU CI runner the two are 2 and 16.
 /// </param>
 /// <param name="ReuseRoster">Whether the roster engine may be reused across setups instead of cold-started each time.</param>
 /// <param name="ReuseGameData">Whether the gamedata engine may be reused across setups instead of cold-started each time.</param>

@@ -408,64 +408,145 @@ public sealed class EngineSpecTests
     }
 
     /// <summary>
-    /// <b>A launchable adapter that claims a name we ship gets that name's endpoint declaration.</b> The
-    /// in-process BattleScribe reference adapter is not a third party's website, and CI must not be told
-    /// that it is.
+    /// <b>A NAME IS AN APPLICABILITY LABEL, NOT A WARRANT.</b> A launchable adapter that claims a
+    /// built-in's name inherits <em>nothing</em> from it — not its endpoint declaration, not its measured
+    /// <see cref="EngineProfile"/>. It declares what it is, or it is treated as a stranger's live site.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <c>--engine "battlescribe=dotnet:…/bs-reference-adapter.dll"</c> is the line CI runs on every push.
-    /// It is a <em>launchable</em> connectable, and <c>EngineRegistry.Resolve</c> used to look up metadata
-    /// for one in <c>engines.json</c> only — a file this repo does not have — so it resolved to null
-    /// endpoints ⇒ <see cref="EngineEndpointKind.Undeclared"/> ⇒ <see cref="LoadTarget.ThirdPartyLive"/>.
-    /// CI therefore printed <i>"Load target: third-party live service — held to 2 concurrent sessions"</i>
-    /// for an IKVM engine with no network code at all, and ran it at half the width the runner affords.
-    /// The fail-safe was firing on a case it was never meant to catch, which is not free: it is a
-    /// permanent 2× on a lane that costs nobody anything.
+    /// <b>The regression this pins, reproduced.</b> <c>EngineRegistry.Resolve</c> briefly let a launchable
+    /// claiming a built-in's name inherit that built-in's whole entry. <c>--engine
+    /// "newrecruit=exec:./anything"</c> then inherited <c>newrecruit</c>'s <c>url-var:NR_ENGINE_URL</c>
+    /// endpoint — and with that variable <b>unset</b> (the default state of every shell not running the
+    /// live lane) <c>ServedByThisMachine(null)</c> is <b>true</b>, so it resolved to
+    /// <see cref="LoadTarget.Local"/>. It also inherited <c>newrecruit</c>'s measured <c>k = 0.375</c> and
+    /// its 1.22 GiB <c>MemPerInstanceBytes</c>, which <em>retires</em>
+    /// <c>ConcurrencyPolicy.UndeclaredMemoryWorkerCap</c>. Both fail-safes, off, for a binary nobody has
+    /// ever run: <c>ceil(32 × 0.375) = 12</c> concurrent processes on a 32-core box, at whatever that
+    /// executable drives. A third party writing their own NewRecruit adapter <b>must</b> call it
+    /// <c>newrecruit</c> — <c>RunBatch</c> selects specs by engine name — so this is the live case, not a
+    /// contrived one.
     /// </para>
     /// <para>
-    /// <b>Falsifiable:</b> drop the <c>Builtins</c> fallback from <c>EngineRegistry.Resolve</c>'s
-    /// launchable branch and the first two assertions go red (Undeclared ⇒ ThirdPartyLive ⇒ 2 workers).
-    /// The third pins the direction that must NOT change: an unknown name still declares nothing and
-    /// still fails safe.
+    /// <b>Falsifiable, and it was verified red against <c>c45ff69</c>:</b> restore the <c>Builtins</c>
+    /// fallback in <c>EngineRegistry.Resolve</c>'s launchable branch and the first two blocks go red
+    /// (<c>ThirdPartyLive</c> → <c>Local</c>, 2 workers → 12 on this box). The previous gate tested this
+    /// same connectable with <c>NR_ENGINE_URL</c> <em>set</em> — which is the half that stayed safe.
     /// </para>
     /// </remarks>
     [Fact]
-    public void LaunchableAdapter_ClaimingABuiltinName_InheritsThatEnginesEndpoint_AndIsNotCalledAThirdParty()
+    public void LaunchableAdapter_ClaimingABuiltinName_InheritsNothing_AndStillFailsSafe()
     {
-        var reference = Resolve("plain-spec-id", "--engine", "battlescribe=dotnet:bs-reference-adapter.dll");
+        // THE CASE THAT FAILED OPEN: the endpoint variable is unset, which is what makes an inherited
+        // `url-var:` declaration resolve to Local. Nothing here sets it, and nothing may.
+        Assert.True(
+            string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NR_ENGINE_URL")),
+            "this test is about the UNSET case — the shell running it must not have NR_ENGINE_URL set");
 
-        Assert.Equal(LoadTarget.Local, reference.LoadTarget);
+        var claimsNr = Resolve("plain-spec-id", "--engine", "newrecruit=exec:./unknown-adapter");
 
-        // ...and it keeps the machine's measured width rather than a stranger's courtesy limit.
-        Assert.Equal(LocalWorkers(reference.Entry.Profile), reference.EffectivePlan.Workers);
+        // 1. It did not inherit the endpoint. An unknown binary is a third party's service until declared.
+        Assert.Equal(EngineEndpointKind.Undeclared, claimsNr.Entry.EndpointFor("roster").Kind);
+        Assert.Equal(LoadTarget.ThirdPartyLive, claimsNr.LoadTarget);
 
-        // The teeth, wherever the two numbers can differ at all. On the 2-vCPU CI runner the machine's
-        // own answer for this engine is 2, which IS the limit — the throttle was invisible there, and
-        // that is precisely why it survived: the misclassification cost CI nothing it could measure.
-        if (LocalWorkers(reference.Entry.Profile) > ConcurrencyPolicy.ThirdPartyLiveLoadLimit)
+        // 2. It did not inherit the MEASURED profile — which is the half that turns the memory cap off.
+        //    `newrecruit` declares k = 0.375 and 1.22 GiB/process; an unknown adapter declares neither, so
+        //    UndeclaredMemoryWorkerCap binds and the machine-width answer is never reached.
+        Assert.Equal(0L, claimsNr.Entry.Profile.MemPerInstanceBytes);
+        Assert.Equal(1.0, claimsNr.Entry.Profile.OversubscriptionFactor);
+        Assert.NotEqual(Builtin("newrecruit").Profile, claimsNr.Entry.Profile);
+
+        // 3. THE NUMBER. It must not be machine-width. It is held to the third-party load limit, which on
+        //    a big box is far below both ceil(cpuCount × 0.375) and the undeclared cap.
+        Assert.Equal(LiveWorkersEntitlement(claimsNr.Entry.Profile), claimsNr.EffectivePlan.Workers);
+        Assert.True(claimsNr.EffectivePlan.Workers <= ConcurrencyPolicy.ThirdPartyLiveLoadLimit);
+
+        // The teeth, wherever the numbers can differ at all: on a 32-core box the inherited profile bought
+        // 12 workers and the fail-safe buys 2. (On the 2-vCPU CI runner every candidate answer collapses to
+        // 2, which is exactly why this could not be caught there — the guard says so rather than passing
+        // vacuously and pretending it proved something.)
+        var machineWidth = ConcurrencyPolicy.For(
+            MachineProfile.Current(), Builtin("newrecruit").Profile, LoadTarget.Local).Workers;
+        if (machineWidth > ConcurrencyPolicy.ThirdPartyLiveLoadLimit)
         {
             Assert.True(
-                reference.EffectivePlan.Workers > ConcurrencyPolicy.ThirdPartyLiveLoadLimit,
-                "the in-process reference adapter is not someone else's website and must not be held to its load limit");
+                claimsNr.EffectivePlan.Workers < machineWidth,
+                $"an unknown adapter merely NAMED 'newrecruit' got {claimsNr.EffectivePlan.Workers} workers — " +
+                $"the built-in's own machine-width answer is {machineWidth}. A name is not a measurement.");
         }
 
-        // The fail-safe is untouched for an adapter nobody has declared: an unknown name is still
-        // Undeclared, and Undeclared is still live.
-        var stranger = Resolve("plain-spec-id", "--engine", "who-knows=dotnet:bs-reference-adapter.dll");
-        Assert.Equal(LoadTarget.ThirdPartyLive, stranger.LoadTarget);
-
-        // And a launchable claiming a name whose endpoint is a URL VARIABLE still derives from that
-        // variable — it inherits the declaration, not a verdict.
-        var claimsNr = Resolve("plain-spec-id", "--engine", "newrecruit=exec:./whatever") with
+        // And the same holds when the variable IS set: it never had a declaration to derive from.
+        var claimsNrLive = claimsNr with
         {
             ChildEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["NR_ENGINE_URL"] = "https://www.newrecruit.eu",
             },
         };
-        Assert.Equal(LoadTarget.ThirdPartyLive, claimsNr.LoadTarget);
+        Assert.Equal(LoadTarget.ThirdPartyLive, claimsNrLive.LoadTarget);
     }
+
+    /// <summary>
+    /// <b>The reference adapter is not a third party's website, and it says so — with a declaration, not
+    /// with its name.</b> <c>--engine-endpoint local</c> is the line CI runs, and it is the only thing
+    /// that lifts the fail-safe.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>--engine "battlescribe=dotnet:…/bs-reference-adapter.dll"</c> is a <em>launchable</em>
+    /// connectable: an in-process IKVM engine with no network code at all, which the harness cannot
+    /// distinguish from any other unknown executable. Undeclared, it fails safe to
+    /// <see cref="LoadTarget.ThirdPartyLive"/> — CI printed <i>"Load target: third-party live service —
+    /// held to 2 concurrent sessions"</i> for it on every push. The answer is for the operator who chose
+    /// the binary to state the fact, which is what CI now does.
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable:</b> drop <c>--engine-endpoint</c>'s application in <c>EngineOptions.Resolve</c> and
+    /// the declared arm goes red (it falls back to the fail-safe); make the flag apply to built-ins and
+    /// the rejection assertion goes red. The undeclared arm pins the direction that must never change.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void LaunchableAdapter_TakesTheMachinesWidth_OnlyWhenItsEndpointIsDeclared()
+    {
+        const string RefAdapter = "battlescribe=dotnet:bs-reference-adapter.dll";
+
+        // Undeclared: a binary we have never seen. The fail-safe holds.
+        var undeclared = Resolve("plain-spec-id", "--engine", RefAdapter);
+        Assert.Equal(LoadTarget.ThirdPartyLive, undeclared.LoadTarget);
+
+        // Declared: the operator states what the binary is, and it takes the machine's own answer.
+        var declared = Resolve("plain-spec-id", "--engine", RefAdapter, "--engine-endpoint", "local");
+        Assert.Equal(LoadTarget.Local, declared.LoadTarget);
+        Assert.Equal(LocalWorkers(declared.Entry.Profile), declared.EffectivePlan.Workers);
+
+        // The teeth, wherever the two can differ. (On the 2-vCPU CI runner the machine's own answer for an
+        // undeclared engine IS 2 — the throttle was invisible there, which is exactly how it survived.)
+        if (LocalWorkers(declared.Entry.Profile) > ConcurrencyPolicy.ThirdPartyLiveLoadLimit)
+        {
+            Assert.True(
+                declared.EffectivePlan.Workers > undeclared.EffectivePlan.Workers,
+                "a declared-local adapter must not be held to a stranger's courtesy limit");
+        }
+
+        // What the declaration does NOT do: hand over a measured profile. It says where the traffic lands,
+        // and nothing else — an undeclared footprint still binds ConcurrencyPolicy's conservative cap for
+        // engines nobody has measured, whatever the endpoint says.
+        Assert.Equal(0L, declared.Entry.Profile.MemPerInstanceBytes);
+        Assert.Equal(DefaultProfileOf(undeclared), declared.Entry.Profile);
+
+        // And a built-in refuses the flag: its endpoints are measured facts, per domain, and one word on a
+        // command line may not turn the live fail-safe off.
+        var refused = Assert.Throws<CliInputException>(
+            () => Resolve("plain-spec-id", "--engine", "newrecruit", "--engine-endpoint", "local"));
+        Assert.Contains("applies only to an exec:/dotnet: adapter", refused.Message, StringComparison.Ordinal);
+    }
+
+    private static EngineEntry Builtin(string name) =>
+        EngineRegistry.Load(null).Resolve(EngineConnectable.Parse(name));
+
+    /// <summary>The profile an adapter nobody declared gets — the conservative default, whatever it is called.</summary>
+    private static EngineProfile DefaultProfileOf(EngineSelection undeclaredAdapter) => undeclaredAdapter.Entry.Profile;
 
     /// <summary>
     /// A <c>--policy</c> override may lower the load on a third party's site; it may not raise it — and it

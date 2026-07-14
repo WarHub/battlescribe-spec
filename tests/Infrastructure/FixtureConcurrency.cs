@@ -60,10 +60,14 @@ internal static class FixtureConcurrency
     /// </para>
     /// <para>
     /// What replaces it is not "nothing": <see cref="ConcurrencyPolicy.For"/> now bounds the pool by
-    /// the engine's own measured per-context memory cost and the machine's memory
-    /// (<c>MemoryHeadroomFactor</c>), and by <c>MaxParallel</c>. That is a real bound derived from
-    /// what a context actually costs, rather than a round number — and unlike the round number, it
-    /// gets tighter on a small box instead of on a big one.
+    /// what the pool actually costs on this machine — its fixed baseline
+    /// (<c>EngineProfile.MemPoolBaselineBytes</c>: the shared browser, driver and test host) plus the
+    /// measured per-context slope (<c>MemPerContextBytes</c>), against <c>MemoryHeadroomFactor</c> of
+    /// the machine's memory — and by <c>MaxContexts</c>, this axis's own ceiling. <b>Not</b> by
+    /// <c>MaxParallel</c>: that one bounds adapter <em>processes</em>, and clamping the pool with it was
+    /// one number governing two axes. A real bound derived from what a context actually costs, rather
+    /// than a round number — and unlike the round number, it gets tighter on a small box instead of on a
+    /// big one.
     /// </para>
     /// <para>
     /// The worst-case composed count across simultaneously-live collection fixtures (<b>issue

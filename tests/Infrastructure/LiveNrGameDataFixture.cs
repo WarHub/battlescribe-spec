@@ -38,15 +38,20 @@ public sealed class LiveNrGameDataFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        _lease = LiveLoadBudget.Reserve(nameof(LiveNrGameDataFixture), baseUrl, 1);
-        if (_lease.Sessions == 0)
+        var lease = LiveLoadBudget.Reserve(nameof(LiveNrGameDataFixture), baseUrl, 1);
+        if (lease.Sessions == 0)
         {
-            Unavailable = _lease.Explanation;
+            Unavailable = lease.Explanation;
+            lease.Dispose();
             return;
         }
 
         using var span = FixtureTelemetry.StartInit(nameof(LiveNrGameDataFixture));
-        Engine = await NewRecruitGameDataEngine.CreateAsync(baseUrl, headless, slowMo);
+
+        // The permit is returned if the engine fails to come up — see LiveLoadLease.Open: a fixture that
+        // holds no session must hold no permit, or an outage starves every later fixture.
+        _lease = lease;
+        Engine = await lease.OpenAsync(() => NewRecruitGameDataEngine.CreateAsync(baseUrl, headless, slowMo));
     }
 
     public ValueTask DisposeAsync()

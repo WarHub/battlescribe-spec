@@ -227,6 +227,47 @@ internal sealed class EngineOptions
         Description = "Show the browser/app window (UI engines; default is headless).",
     };
 
+    /// <summary>
+    /// <b>The declaration channel for an ad-hoc adapter's endpoint</b> — the one thing an
+    /// <c>exec:</c>/<c>dotnet:</c> connectable cannot state any other way.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An adapter the harness has never seen has an <em>undeclared</em> endpoint, and an undeclared
+    /// endpoint is treated as a third party's live service — held to
+    /// <see cref="ConcurrencyPolicy.ThirdPartyLiveLoadLimit"/> on both axes. That fail-safe is right, and
+    /// it costs wall-clock, and there has to be a way to take the wall-clock back <b>by stating a fact</b>
+    /// rather than by the harness guessing one. A registered engine states it in <c>engines.json</c>
+    /// (<c>"endpoint": "local"</c>); an ad-hoc <c>--engine "name=exec:…"</c> is registered nowhere, and
+    /// states it here.
+    /// </para>
+    /// <para>
+    /// <b>Why this exists at all, and why it is not "inherit the built-in's declaration by name".</b> That
+    /// was tried. <c>EngineRegistry.Resolve</c> briefly let a launchable claiming a built-in's name
+    /// inherit that built-in's endpoint <em>and</em> its measured <c>EngineProfile</c> — and
+    /// <c>--engine "newrecruit=exec:./anything"</c> with <c>NR_ENGINE_URL</c> unset then resolved to
+    /// <see cref="LoadTarget.Local"/> at <c>ceil(cpuCount × 0.375)</c> workers, straight through both
+    /// fail-safes, for a binary nobody had ever run. <b>A name is an applicability label, not evidence.</b>
+    /// A declaration is a person saying what they know about the executable they chose; a name is what
+    /// <c>RunBatch</c> uses to pick specs.
+    /// </para>
+    /// <para>
+    /// <b>Built-in engines reject it.</b> They declare their own endpoints, measured, per domain
+    /// (<c>newrecruit</c>'s roster is <c>url-var:NR_ENGINE_URL</c> and its gamedata is always this
+    /// machine), and letting a flag overwrite that would hand anyone a one-word override of the fail-safe
+    /// this branch exists to install — <c>--engine newrecruit --engine-endpoint local</c> with the live
+    /// URL set is precisely the 12-browsers-at-newrecruit.eu bug, spelled differently.
+    /// </para>
+    /// </remarks>
+    public Option<string?> EndpointDeclaration { get; } = new("--engine-endpoint")
+    {
+        Description = "Declare where an exec:/dotnet: adapter's service lives: 'local' (this machine — " +
+            "takes the machine's full measured width), 'third-party-live' (it drives someone else's " +
+            "production site), or 'url-var:NAME' (live iff NAME holds a non-loopback URL). Ad-hoc adapters " +
+            "are otherwise undeclared, and an undeclared endpoint is held to the third-party live load " +
+            "limit. Built-in engines declare their own and reject this flag.",
+    };
+
     public void AddTo(Command command)
     {
         command.Options.Add(Engine);
@@ -234,6 +275,7 @@ internal sealed class EngineOptions
         command.Options.Add(Gamedata);
         command.Options.Add(Roster);
         command.Options.Add(Headed);
+        command.Options.Add(EndpointDeclaration);
     }
 
     /// <summary>Resolve the parsed axes into a concrete <see cref="EngineSelection"/>.</summary>
@@ -285,6 +327,39 @@ internal sealed class EngineOptions
         catch (KeyNotFoundException ex)
         {
             throw new CliInputException(ex.Message);
+        }
+
+        if (parseResult.GetValue(EndpointDeclaration) is { Length: > 0 } declaration)
+        {
+            // Only an ad-hoc adapter may be declared here. A built-in's endpoints are measured facts about
+            // engines we wrote, declared per domain in EngineRegistry.Builtins — and this flag would
+            // otherwise be a one-word override of the fail-safe: `--engine newrecruit --engine-endpoint
+            // local` with NR_ENGINE_URL pointed at the live site is exactly the regression this branch
+            // exists to prevent. Rejected, not silently ignored (#305: a flag is honoured or refused).
+            if (!connectable.IsLaunchable)
+            {
+                throw new CliInputException(
+                    $"--engine-endpoint applies only to an exec:/dotnet: adapter — '{entry.Name}' is a " +
+                    "built-in engine and declares its own endpoint, per domain, from what has been measured " +
+                    "about it (EngineRegistry). Overriding that from the command line would let one word " +
+                    "turn the third-party load limit off for a live site.");
+            }
+
+            EngineEndpoint endpoint;
+            try
+            {
+                endpoint = EngineEndpoint.Parse(declaration);
+            }
+            catch (FormatException ex)
+            {
+                throw new CliInputException($"--engine-endpoint: {ex.Message}");
+            }
+
+            // One declaration, both domains: an ad-hoc adapter is one binary and the operator is telling us
+            // where it goes. (The built-ins split roster from gamedata because they genuinely differ —
+            // newrecruit's roster can go live and its gamedata never does. Nothing about a foreign binary
+            // supports drawing that distinction on its behalf, so we do not invent one.)
+            entry = entry with { RosterEndpoint = endpoint, GameDataEndpoint = endpoint };
         }
 
         var headed = parseResult.GetValue(Headed);

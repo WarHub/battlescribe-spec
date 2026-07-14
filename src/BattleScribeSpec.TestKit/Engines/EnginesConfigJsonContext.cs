@@ -71,12 +71,25 @@ public sealed class EngineConfigEntry
     public int ContextPoolSize { get; set; }
 
     /// <summary>
-    /// CONTEXT axis: bytes per additional browser context (~6× smaller than
-    /// <see cref="MemPerInstanceBytes"/> — a context is not a process family). 0 = undeclared → the
-    /// pool gets no memory bound, which is safe only because the undeclared pool size is small.
+    /// CONTEXT axis: bytes per <b>additional</b> browser context — the <b>SLOPE</b> of a pool sweep
+    /// (~6× smaller than <see cref="MemPerInstanceBytes"/>: a context is not a process family). 0 =
+    /// undeclared → the pool gets no memory bound, which is safe only because the undeclared pool size
+    /// is small. <b>Declare it together with <see cref="MemPoolBaselineBytes"/> or not at all</b> — a
+    /// slope without an intercept charges the pool's whole shared browser + driver + test host to
+    /// nobody, and the loader rejects it.
     /// </summary>
     [JsonPropertyName("memPerContextBytes")]
     public long MemPerContextBytes { get; set; }
+
+    /// <summary>
+    /// CONTEXT axis: the pool's <b>fixed</b> cost in bytes — the shared browser, the Node driver and the
+    /// test host, which all exist before the first context does. The <b>INTERCEPT</b> of the same
+    /// regression whose slope is <see cref="MemPerContextBytes"/> (≈1.0–1.6 GiB for the built-in browser
+    /// engines: 17–21% of a 7.8 GiB CI runner, so it is not a rounding error). 0 = undeclared, which is
+    /// only valid alongside an undeclared slope.
+    /// </summary>
+    [JsonPropertyName("memPoolBaselineBytes")]
+    public long MemPoolBaselineBytes { get; set; }
 
     /// <summary>
     /// <b>LOAD axis — where this engine's traffic lands, which is not a performance property at all.</b>

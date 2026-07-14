@@ -114,18 +114,24 @@ jobs:
       # It picks min(cpuCount, UndeclaredMemoryWorkerCap=8) — see the "Runner profile" step for what
       # cpuCount actually is here; the previous version of this comment asserted 4 without checking.
       #
-      # And it is LOCAL now, which it was not. This connectable claims the name `battlescribe`, and a
-      # launchable name used to be looked up in engines.json ALONE (a file this repo does not have), so
-      # it resolved to an UNDECLARED endpoint and the fail-safe announced an in-process IKVM engine with
-      # no network code as "third-party live service — held to 2 concurrent sessions", in CI, on every
-      # run. A launchable that claims a built-in's name now inherits that engine's declaration
-      # (EngineRegistry.Resolve). Note the throttle was INVISIBLE on this runner — a 2-vCPU box is
-      # already at the load limit on its own — which is exactly how it survived: it cost CI nothing it
-      # could measure, and would have halved any larger runner.
+      # --engine-endpoint local IS LOAD-BEARING, AND IT IS A DECLARATION, NOT A TUNING FLAG. Without it
+      # this connectable is an executable the harness has never seen: its endpoint is UNDECLARED, and an
+      # undeclared endpoint fails safe to "a third party's live service" — so CI announced an in-process
+      # IKVM adapter with no network code at all as "third-party live service — held to 2 concurrent
+      # sessions", on every run, and throttled it. The flag states the fact (this adapter's service is
+      # this machine) and the throttle lifts. It is stated HERE, by the people who chose the binary,
+      # rather than inferred from the name: an adapter named `battlescribe` is not necessarily ours, and
+      # letting a NAME grant a built-in's endpoint and measured profile is how `newrecruit=exec:./anything`
+      # briefly got 12 workers and no load limit (EngineRegistry.Resolve).
+      #
+      # Note the throttle was INVISIBLE on this runner — a 2-vCPU box is already at the load limit on its
+      # own — which is exactly how it survived: it cost CI nothing it could measure, and would have halved
+      # any larger runner.
       - name: Reference adapter (dotnet) — roster kitchen-sink
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
             --engine "battlescribe=dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
+            --engine-endpoint local \
             --specs specs/roster \
             --roster \
             --filter "protocol/protocol-kitchen-sink,category/" \
@@ -410,10 +416,14 @@ jobs:
         run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live-conformance --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
+      # --engine-endpoint local: same declaration as the `checks` job's reference-adapter step — this
+      # adapter's service is this machine. Without it the endpoint is undeclared and the fail-safe holds
+      # the run to the third-party live load limit. See that step for why it is declared and not inferred.
       - name: Generate BattleScribe conformance report
         run: |
           dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all \
             --engine "battlescribe=dotnet:artifacts/bin/BattleScribeSpec.ReferenceAdapter/debug/bs-reference-adapter.dll" \
+            --engine-endpoint local \
             --specs specs/roster \
             --roster \
             --expected-failures battlescribe \

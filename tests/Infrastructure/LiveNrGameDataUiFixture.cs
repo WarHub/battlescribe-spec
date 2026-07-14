@@ -38,21 +38,28 @@ public sealed class LiveNrGameDataUiFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        _lease = LiveLoadBudget.Reserve(nameof(LiveNrGameDataUiFixture), url, 1);
-        if (_lease.Sessions == 0)
+        var lease = LiveLoadBudget.Reserve(nameof(LiveNrGameDataUiFixture), url, 1);
+        if (lease.Sessions == 0)
         {
-            Unavailable = _lease.Explanation;
+            Unavailable = lease.Explanation;
+            lease.Dispose();
             return;
         }
 
         using var span = FixtureTelemetry.StartInit(nameof(LiveNrGameDataUiFixture));
+        _lease = lease;
         try
         {
-            Engine = await NrGameDataUiEngine.CreateAsync(url, headless, slowMo);
+            // The permit is returned if the engine fails to come up — see LiveLoadLease.Open.
+            Engine = await lease.OpenAsync(() => NrGameDataUiEngine.CreateAsync(url, headless, slowMo));
         }
         catch (Microsoft.Playwright.PlaywrightException ex)
         {
             // Playwright browsers not installed — skip gracefully, saying so rather than blaming the URL.
+            // OpenAsync has already handed the session back, and it must have: this fixture opened NO
+            // browser, and it used to go on holding a permit at giloushaker.github.io for the whole
+            // collection anyway — a permit against zero sessions, starving whoever asked next.
+            _lease = null;
             Unavailable = $"Playwright is not available — skipping live NR Editor GameData UI tests ({ex.Message})";
         }
     }

@@ -34,15 +34,19 @@ public sealed class LiveNrUiRosterFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        _lease = LiveLoadBudget.Reserve(nameof(LiveNrUiRosterFixture), baseUrl, 1);
-        if (_lease.Sessions == 0)
+        var lease = LiveLoadBudget.Reserve(nameof(LiveNrUiRosterFixture), baseUrl, 1);
+        if (lease.Sessions == 0)
         {
-            Unavailable = _lease.Explanation;
+            Unavailable = lease.Explanation;
+            lease.Dispose();
             return;
         }
 
         using var span = FixtureTelemetry.StartInit(nameof(LiveNrUiRosterFixture));
-        Engine = await NrRosterUiEngine.CreateAsync(baseUrl, headless, slowMo);
+
+        // The permit is returned if the engine fails to come up — see LiveLoadLease.Open.
+        _lease = lease;
+        Engine = await lease.OpenAsync(() => NrRosterUiEngine.CreateAsync(baseUrl, headless, slowMo));
     }
 
     public async ValueTask DisposeAsync()

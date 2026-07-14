@@ -1142,18 +1142,32 @@ being the shared browser main + GPU + network processes).
 225 MiB` and the same `MemoryHeadroomFactor = 0.8`, a **16 GiB container** affords
 `(16 × 0.8 − 1.3 GiB baseline) / 0.225 GiB ≈ 51` contexts. **Memory does not bind at the measured
 optimum of 16** — confirmed directly: peak whole-container RSS at P=16 was **6.16 GiB**
-(`newrecruit-ui`) and **6.70 GiB** (`newrecruit`) **of 16 GiB**. Pool 16 stays memory-safe down to an
-~8 GiB box. The binding constraint on this axis is **contention, not memory** — the opposite of the
-process axis.
+(`newrecruit-ui`) and **6.70 GiB** (`newrecruit`) **of 16 GiB**. The binding constraint on this axis
+is **contention, not memory** — the opposite of the process axis.
 
-> ⚠️ **"Down to an ~8 GiB box" — and the real CI runner has 7.8 GiB (§11.6).** This paragraph's
-> reassurance was computed against the 16 GiB *container*, not against the machine CI actually runs
-> on, which has now been measured: **2 vCPU / 7.8 GiB**. A 6.16–6.70 GiB peak on a 7.8 GiB box is
-> **79–86% of total memory** — the policy still computes pool 16 there
-> (`7.8 × 0.8 / 0.225 ≈ 28 > 16`, so the memory bound does not bind), and the lane does pass, but the
-> headroom is a fraction of what this paragraph implies. **Do not read "memory does not bind" as a
-> statement about CI.** It is the one number in this section that was fitted against the wrong
-> machine, and §11.6 does not re-fit it: measuring the peak ON the runner is the follow-up.
+> ⚠️ **Note what that arithmetic subtracts — and what the code did not.** The `− 1.3 GiB baseline`
+> above is the *intercept* column of the table, and this paragraph charged it while
+> `ConcurrencyPolicy` **did not**: it charged `N × slope` against `0.8 × total` and counted the
+> intercept nowhere. **A marginal slope consumed as a total charge** — the ninth instance of this
+> branch's signature defect, and the one place where the doc was right and the code was wrong.
+> On the real runner (**2 vCPU / 7.8 GiB**, §11.6 — *not* the 16 GiB container this section was
+> measured in) the un-charged bound authorised `floor(6.24 / 0.220) = 28` contexts, which really cost
+> `1.28 + 28 × 0.220 = 7.4 GiB` on a 7.8 GiB box. It was inert only because the shipped pool (16) sat
+> below it — but **§10.2 records 16 / 20 / 24 as statistically tied on that runner**, so a 24 is a
+> change these very measurements invite, and 24 did not fit.
+>
+> **Fixed (#317).** `EngineProfile.MemPoolBaselineBytes` now carries the intercept — per engine, from
+> the *same* CI-class fit as the slope it is spent with (`newrecruit` 1058 MiB, `newrecruit-ui`
+> 1310 MiB; do not mix fits, a slope from one regression and an intercept from another is not a line)
+> — and the bound is `floor((0.8 × total − baseline) / slope)`. On the real runner that is **22** for
+> `newrecruit-ui`: **16 still does not bind** (the §10.2 sweep's answer stands, untouched) and **24 is
+> refused**. `MemoryHeadroomFactor`'s 20% was never able to absorb the intercept — 1.56 GiB of margin
+> against a 1.3 GiB baseline — and it now has exactly one job again: what lives *outside* the pool's
+> process tree (OS, page cache, build servers ≈ 1.37 GiB observed on the container, against that
+> 1.56 GiB), plus the fact that a sampled peak is a lower bound. A margin spent twice is not a margin.
+>
+> Still open, and still the honest follow-up: **measure the peak ON the runner.** Everything above is
+> fitted on the container.
 
 ## 7.8 What §7 did NOT reach
 

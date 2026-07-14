@@ -225,6 +225,27 @@ say so), or `"url-var:NAME"` (live iff `NAME` holds a non-loopback URL, which is
 NewRecruit engines work via `NR_ENGINE_URL`). If your run prints *"Load target: third-party live
 service — held to 2 concurrent sessions"* and it is not, this is the line you are missing.
 
+**Without an `engines.json` — declare it on the command line.** An ad-hoc `--engine
+"<name>=exec:<command>"` is registered nowhere, so it has the same one-word escape hatch as a flag:
+
+```bash
+bs-spec run --all --engine "myengine=exec:/path/to/your-adapter" --engine-endpoint local
+```
+
+`--engine-endpoint` takes the same three values as the JSON field, and it is how this repo's own CI
+runs the reference adapter (`--engine "battlescribe=dotnet:…/bs-reference-adapter.dll"
+--engine-endpoint local`). Built-in engines refuse the flag: they declare their own endpoints, per
+domain, from what has been measured about them.
+
+**And the name is not a shortcut.** Calling your adapter `newrecruit` is *required* — that is what
+selects which specs apply to it — but it earns you **nothing**: not the built-in `newrecruit`'s
+endpoint, and not its measured `EngineProfile` (its `k`, its per-process memory footprint). A name is
+an applicability label; a profile is a *measurement*, and nothing about your executable has been
+measured because of what you called it. A launchable adapter that claims a built-in's name briefly did
+inherit both, and `newrecruit=exec:./anything` was consequently planned as `local` at
+`ceil(cpuCount × 0.375)` = 12 concurrent processes — through the undeclared-endpoint fail-safe *and*
+through the memory cap for unmeasured engines. Declare what you know; inherit nothing.
+
 ### With Docker
 
 ```bash

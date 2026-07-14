@@ -164,12 +164,19 @@ public sealed class EngineRegistry
         // read of this same data made pool 2 look like a 3.4% winner (it "beat" 4 in 6 of 6 blocks),
         // and that was an artefact of run-order, not a real effect (§10.3).
         //
-        // MemPerContextBytes MEASURED: 225,863,270 B (215.4 MiB) — the least-squares slope across the
+        // MemPerContextBytes MEASURED: 225,863,270 B (215.4 MiB) — the least-squares SLOPE across the
         // pool sweep on the 4-CPU Linux container (R²=0.99); the 32-core Windows box measured 213.4
         // MiB, i.e. this constant reproduces across OS and hardware to within 1%, unlike k. Take the
         // larger. Each context adds exactly one Chromium renderer process. Note this is ~5.8× SMALLER
         // than MemPerInstanceBytes above — a context is not a process family, and charging one at the
         // other's rate is precisely the mistake that motivated separating the axes.
+        //
+        // MemPoolBaselineBytes MEASURED: 1,109,393,408 B (1058 MiB) — the INTERCEPT of that same
+        // least-squares fit (§7.7), i.e. what the pool costs at zero contexts: one shared Chromium, one
+        // Playwright Node driver, one test host. Slope AND intercept come from the SAME 4-CPU Linux
+        // regression, deliberately — mixing the slope of one fit with the intercept of another is not a
+        // line. The intercept used to be charged nowhere, which made the pool's memory bound a marginal
+        // slope consumed as a total charge (see ConcurrencyPolicy).
         //
         // ---- ENDPOINT (the axis neither profile above can see) ----
         //
@@ -191,7 +198,8 @@ public sealed class EngineRegistry
             new EngineProfile(
                 MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
                 MemPerInstanceBytes: 1_313_420_083L, OversubscriptionFactor: 0.375,
-                ContextPoolSize: 4, MemPerContextBytes: 225_863_270L),
+                ContextPoolSize: 4, MemPerContextBytes: 225_863_270L,
+                MemPoolBaselineBytes: 1_109_393_408L),
             Builtin: true,
             RosterEndpoint: EngineEndpoint.FromUrlVariable("NR_ENGINE_URL"),
             GameDataEndpoint: EngineEndpoint.OnThisMachine),
@@ -241,11 +249,22 @@ public sealed class EngineRegistry
         // worth less; the genuine 6 → 16 gain there is ~10%. The model box got the optimum right and
         // the speed wrong — and this constant encodes the optimum.
         //
-        // MemPerContextBytes MEASURED: 235,824,742 B (224.9 MiB) — least-squares slope, 4-CPU Linux
+        // MemPerContextBytes MEASURED: 235,824,742 B (224.9 MiB) — least-squares SLOPE, 4-CPU Linux
         // container (R²=0.98); the 32-core Windows box measured 162.6 MiB. Take the LARGER, i.e. the
         // CI-class figure: it is the conservative one, and CI is the machine that has to survive it.
-        // At pool 16 the whole container peaked at 6.16 GiB of 16 GiB — memory does not bind at the
-        // optimum on this axis; contention does. That is the exact opposite of the process axis.
+        //
+        // MemPoolBaselineBytes MEASURED: 1,373,634,560 B (1310 MiB) — the INTERCEPT of that same 4-CPU
+        // Linux fit (§7.7): the shared Chromium + Node driver + test host, which exist at pool 0. Same
+        // regression as the slope above, on purpose.
+        //
+        // AND THE MEMORY HEADROOM HERE IS NOT WHAT THIS COMMENT USED TO SAY. It said "at pool 16 the
+        // whole container peaked at 6.16 GiB of 16 GiB — memory does not bind at the optimum". The 16 GiB
+        // is the CONTAINER the sweep ran in. THE REAL CI RUNNER IS 2 vCPU / 7.8 GiB (measured: `nproc` 2,
+        // `MemTotal` 7.8 GiB — §11.6), so that same 6.16 GiB peak is 79% of the machine CI actually runs
+        // on, not 39% of a machine it does not have. Memory still does not BIND at 16 there — the model
+        // now charges 1310 MiB + 16 × 224.9 MiB = 4.79 GiB against 0.8 × 7.8 GiB = 6.24 GiB — but the
+        // margin is a fraction of what "of 16 GiB" implies, and the pool is memory-bounded at 22 on that
+        // box. Contention still binds before memory; it no longer binds by a mile.
         //
         // ENDPOINT: same shape as `newrecruit`, and the sharper case for the process axis — k = 1.0, so a
         // live `bs-spec run --all --engine newrecruit-ui` on this 32-core box planned a FULL 32 browsers
@@ -256,7 +275,8 @@ public sealed class EngineRegistry
             new EngineProfile(
                 MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
                 MemPerInstanceBytes: 1_548_969_984L, OversubscriptionFactor: 1.0,
-                ContextPoolSize: 16, MemPerContextBytes: 235_824_742L),
+                ContextPoolSize: 16, MemPerContextBytes: 235_824_742L,
+                MemPoolBaselineBytes: 1_373_634_560L),
             Builtin: true,
             RosterEndpoint: EngineEndpoint.FromUrlVariable("NR_ENGINE_URL"),
             GameDataEndpoint: EngineEndpoint.OnThisMachine),
@@ -299,6 +319,28 @@ public sealed class EngineRegistry
             }
             Validate(configPath, name, entry);
 
+            // AN ENTRY WITH NO `exec` CANNOT REPLACE A BUILT-IN, SO IT MAY NOT SHADOW ONE. A built-in's
+            // launch is bs-engine-host (EngineHostLocator); a config entry carries only an `exec`. So
+            // `{"battlescribe": {"endpoint": "local"}}` — the shape somebody reaches for when they want to
+            // ANNOTATE a built-in — replaced the built-in with an entry that has Executable = null and
+            // Builtin = false, and `bs-spec run --engine battlescribe` (the primary documented usage) died
+            // with "Engine 'battlescribe' has no executable configured". Reproduced; that is why this
+            // throws instead. A built-in's declarations are MEASURED and live in code, next to the
+            // measurements; they are not overridable from a config file, and an entry that silently half-
+            // became one is the failure mode the rest of Validate exists to close.
+            if (launch is null && Builtins.ContainsKey(name))
+            {
+                throw new InvalidDataException(
+                    $"Invalid engines config '{configPath}', entry '{name}': '{name}' is a BUILT-IN engine " +
+                    $"and this entry declares no \"exec\", so it has nothing to launch — it would replace " +
+                    $"the built-in with an engine that has no executable, and `--engine {name}` would then " +
+                    $"fail with \"no executable configured\". Give the entry an \"exec\" to genuinely " +
+                    $"replace the built-in under that name, or pick a different name. A built-in's profile " +
+                    $"and endpoint are measured and declared in code (EngineRegistry.Builtins); they are " +
+                    $"not overridable from config. To declare the endpoint of an ad-hoc adapter you launch " +
+                    $"under a built-in's name (`--engine \"{name}=exec:…\"`), pass --engine-endpoint.");
+            }
+
             // A third-party engine that omits memPerInstanceBytes gets 0 — i.e. "undeclared" — and is
             // therefore bound by ConcurrencyPolicy.UndeclaredMemoryWorkerCap rather than the machine's
             // full width. Declaring a measured footprint is how an engine opts into full parallelism;
@@ -325,7 +367,8 @@ public sealed class EngineRegistry
                     entry.OversubscriptionFactor,
                     entry.ContextPoolSize,
                     entry.MemPerContextBytes,
-                    entry.MaxContexts),
+                    entry.MaxContexts,
+                    entry.MemPoolBaselineBytes),
                 Builtin: false,
                 RosterEndpoint: endpoint,
                 GameDataEndpoint: endpoint);
@@ -348,21 +391,26 @@ public sealed class EngineRegistry
     /// is rejected outright rather than being quietly read as "undeclared" — a config that says something
     /// the loader silently ignores is the failure mode the rest of <see cref="Validate"/> exists to close.
     /// </remarks>
-    private static EngineEndpoint? ParseEndpoint(string configPath, string name, string? declared) => declared switch
+    private static EngineEndpoint? ParseEndpoint(string configPath, string name, string? declared)
     {
-        null or "" => null,
-        "local" => EngineEndpoint.OnThisMachine,
-        "third-party-live" => EngineEndpoint.ThirdPartyLive,
-        _ when declared.StartsWith("url-var:", StringComparison.Ordinal)
-            && declared["url-var:".Length..] is { Length: > 0 } variable => EngineEndpoint.FromUrlVariable(variable),
-        _ => throw new InvalidDataException(
-            $"Invalid engines config '{configPath}', entry '{name}': endpoint must be \"local\" (the engine's " +
-            $"service runs on this machine), \"third-party-live\" (it drives someone else's production site, " +
-            $"so it is held to a load limit), or \"url-var:NAME\" (live iff the NAME environment variable " +
-            $"holds a non-loopback URL) — got \"{declared}\". Omit it to leave the endpoint undeclared, which " +
-            $"is treated as third-party-live: declaring \"local\" is how an engine opts into this machine's " +
-            $"full worker count."),
-    };
+        if (declared is null or "")
+        {
+            return null;
+        }
+
+        // The grammar lives in EngineEndpoint.Parse — one implementation, shared with the CLI's
+        // --engine-endpoint, so the two channels a human can declare an endpoint through cannot come to
+        // mean different things. Only the file/entry context is added here.
+        try
+        {
+            return EngineEndpoint.Parse(declared);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': {ex.Message}", ex);
+        }
+    }
 
     /// <summary>
     /// Reject the numbers a third-party <c>engines.json</c> can state that the policy cannot safely
@@ -443,11 +491,42 @@ public sealed class EngineRegistry
         {
             throw new InvalidDataException(
                 $"Invalid engines config '{configPath}', entry '{name}': memPerContextBytes must be >= 0 " +
-                $"(got {entry.MemPerContextBytes}). It is the memory cost of ONE browser context (~225 MiB " +
-                $"for the built-in browser engines), not of a whole adapter process — that is " +
-                $"memPerInstanceBytes, and it is roughly 6x larger. Omit it (or use 0) to declare it " +
-                $"unknown; the pool then gets no memory bound, which is safe only because the undeclared " +
-                $"pool size is small.");
+                $"(got {entry.MemPerContextBytes}). It is the memory cost of ONE ADDITIONAL browser context " +
+                $"(~225 MiB for the built-in browser engines) — the SLOPE of a pool sweep, not the cost of a " +
+                $"whole adapter process (that is memPerInstanceBytes, roughly 6x larger) and not the cost of " +
+                $"the pool (that needs memPoolBaselineBytes too). Omit it (or use 0) to declare it unknown; " +
+                $"the pool then gets no memory bound, which is safe only because the undeclared pool size is " +
+                $"small.");
+        }
+
+        if (entry.MemPoolBaselineBytes < 0)
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': memPoolBaselineBytes must be >= 0 " +
+                $"(got {entry.MemPoolBaselineBytes}). It is the pool's FIXED cost — the shared browser, the " +
+                $"Playwright/Node driver and the test host, which exist before the first context does — i.e. " +
+                $"the INTERCEPT of the same regression whose slope is memPerContextBytes.");
+        }
+
+        // A SLOPE WITHOUT AN INTERCEPT IS NOT A MEMORY MODEL. memPerContextBytes is the MARGINAL cost of
+        // one more context; charging N x slope against the machine's memory and calling that the pool's
+        // cost is a marginal slope consumed as a total charge, and it under-counts by the entire fixed
+        // baseline (1.0-1.6 GiB of shared browser + driver + test host — 17-21% of a 7.8 GiB CI runner).
+        // Neither half is optional and neither may be guessed, so a config that declares one and not the
+        // other is rejected rather than being quietly completed with a zero we invented.
+        if ((entry.MemPerContextBytes > 0) != (entry.MemPoolBaselineBytes > 0))
+        {
+            throw new InvalidDataException(
+                $"Invalid engines config '{configPath}', entry '{name}': memPerContextBytes " +
+                $"({entry.MemPerContextBytes}) and memPoolBaselineBytes ({entry.MemPoolBaselineBytes}) must " +
+                $"be declared together or not at all. They are the SLOPE and the INTERCEPT of one measured " +
+                $"regression — bytes per additional browser context, and the fixed cost of the shared " +
+                $"browser + driver + test host that exists at pool 0. A slope alone under-charges the pool " +
+                $"by the whole baseline (~1.0-1.6 GiB for the built-in browser engines), which is exactly " +
+                $"the memory bound this pair exists to make honest; an intercept alone is never read, " +
+                $"because the bound is gated on the slope. Measure both (sweep the pool and fit a line — " +
+                $"docs/concurrency-policy-measurements.md §7.7), or declare neither and take " +
+                $"ConcurrencyPolicy.UndeclaredContextPoolSize.");
         }
     }
 
@@ -472,44 +551,51 @@ public sealed class EngineRegistry
     {
         if (connectable.IsLaunchable)
         {
-            // Ad-hoc launch; merge metadata when the identity is a KNOWN name — configured first
-            // (engines.json wins, as it does for a plain name below), then the built-ins.
+            // A LAUNCHABLE IS A FOREIGN BINARY, AND ITS NAME IS NOT EVIDENCE ABOUT IT.
             //
-            // THE BUILT-IN FALLBACK IS NOT COSMETIC. Without it, `--engine
-            // "battlescribe=dotnet:…/bs-reference-adapter.dll"` — the exact line CI runs on every push —
-            // resolved to NO metadata (there is no engines.json in this repo), hence null endpoints,
-            // hence Undeclared, hence LoadTarget.ThirdPartyLive: CI announced an IN-PROCESS IKVM ADAPTER
-            // WITH NO NETWORK CODE AT ALL as "third-party live service — held to 2 concurrent sessions",
-            // on every run, and throttled it to 2 workers on a runner that affords 4. A fail-safe firing
-            // on a case it was never meant to catch is not free — it is a permanent, invisible 2x on a
-            // lane whose traffic costs nobody anything.
+            // To the user and to RunBatch (`EngineFilter = selection.EngineName`), the name is an
+            // APPLICABILITY LABEL: it selects which specs apply and which assertion set is used. That is
+            // precisely why a third party writing their own NewRecruit adapter has no choice but to call
+            // it `newrecruit` — the documented `<name>=<connectable>` usage. It says what the adapter is
+            // FOR. It says nothing whatever about what the binary is.
             //
-            // A launchable that CLAIMS a name we ship gets that name's declarations. That is the same
-            // trust already extended to `_configured` (a configured name's endpoint is taken from the
-            // user's file), and it is safe in the direction that matters: `--engine
-            // "newrecruit=exec:whatever"` inherits newrecruit's UrlVariable endpoint, so it is still
-            // derived from NR_ENGINE_URL and still fails safe to ThirdPartyLive when that names a live
-            // site. It inherits a DECLARATION, never a verdict. What it cannot do is invent a "local"
-            // for an adapter nobody has declared.
+            // SO IT MAY NOT INHERIT A BUILT-IN'S DECLARATIONS. That fallback existed here briefly (it was
+            // meant to fix the CI case below) and it FAILED OPEN in exactly the shape this branch exists
+            // to close: `--engine "newrecruit=exec:./anything"` inherited built-in `newrecruit`'s measured
+            // EngineProfile (k = 0.375, MemPerInstanceBytes = 1.22 GiB) AND its
+            // `url-var:NR_ENGINE_URL` endpoint. With that variable unset — the default state of every
+            // shell that is not running the live lane — ServedByThisMachine(null) is TRUE, so an unknown
+            // executable resolved to LoadTarget.Local at ceil(32 × 0.375) = 12 workers on this box:
+            // through BOTH the undeclared-endpoint fail-safe AND UndeclaredMemoryWorkerCap, because the
+            // declared footprint it borrowed retires that cap. A profile is MEASURED. Nothing about an
+            // arbitrary executable has been measured because of what somebody called it.
             //
-            // An ad-hoc adapter under an UNKNOWN name still declares nothing at all — endpoints stay null
-            // ⇒ Undeclared ⇒ ThirdPartyLive. That trade is unchanged and correct: the alternative is
-            // assuming, of an executable we have never seen, that nobody else pays for its traffic.
-            // Register it in engines.json with "endpoint": "local" to state the fact and take the
-            // machine's full width.
-            var metadata = connectable.Name is { } claimed
-                ? _configured.GetValueOrDefault(claimed) ?? Builtins.GetValueOrDefault(claimed)
-                : null;
+            // An ad-hoc adapter therefore declares NOTHING unless somebody declares it: endpoints stay
+            // null ⇒ EngineEndpoint.Undeclared ⇒ LoadTarget.ThirdPartyLive, and DefaultProfile ⇒
+            // UndeclaredMemoryWorkerCap. Both fail-safes hold, together, for every binary we did not
+            // write. The alternative is assuming, of an executable we have never seen, that nobody else
+            // pays for its traffic.
+            //
+            // DECLARATION, NEVER INHERITANCE. The two channels that state the fact and take the machine's
+            // full width back, both explicit and both written by a human who knows what the binary is:
+            //   * `--engine-endpoint local` on the command line — for an ad-hoc adapter, which is what CI
+            //     runs (`--engine "battlescribe=dotnet:…/bs-reference-adapter.dll" --engine-endpoint
+            //     local`: an in-process IKVM engine with no network code, which the fail-safe used to
+            //     announce as "third-party live service — held to 2 concurrent sessions" on every push);
+            //   * an `engines.json` entry for the name (docs/adapter-guide.md). That IS name-keyed — but
+            //     it is a file the operator wrote about their own adapters, not a table we shipped about
+            //     ours, and it is read below and here alike.
+            var declared = connectable.Name is { } claimed ? _configured.GetValueOrDefault(claimed) : null;
 
             return new EngineEntry(
                 connectable.Name,
                 connectable.Executable,
                 connectable.Arguments,
-                metadata?.Domains ?? BothDomains,
-                metadata?.Profile ?? DefaultProfile,
+                declared?.Domains ?? BothDomains,
+                declared?.Profile ?? DefaultProfile,
                 Builtin: false,
-                RosterEndpoint: metadata?.RosterEndpoint,
-                GameDataEndpoint: metadata?.GameDataEndpoint);
+                RosterEndpoint: declared?.RosterEndpoint,
+                GameDataEndpoint: declared?.GameDataEndpoint);
         }
 
         var name = connectable.Name!;

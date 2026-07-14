@@ -103,13 +103,25 @@ internal static class LiveLoadBudget
 
     /// <summary>The host a live endpoint URL names — the key a budget is held under.</summary>
     /// <remarks>
+    /// <para>
     /// A URL we cannot parse is keyed by its raw text rather than being waved through: an unparseable
     /// endpoint is not evidence that nobody is on the other end, and every other decision on this axis
     /// (<c>EngineEndpoint.ResolveLoadTarget</c>) fails safe the same way.
+    /// </para>
+    /// <para>
+    /// <b>One server must not get two budgets.</b> Scheme, port, path and case already normalize
+    /// (<c>https://WWW.NewRecruit.EU:443/x</c> → <c>www.newrecruit.eu</c>, and the dictionary is
+    /// <see cref="StringComparer.OrdinalIgnoreCase"/> on top). Two spellings did not:
+    /// <see cref="Uri.IdnHost"/> rather than <see cref="Uri.Host"/> folds a unicode host onto its
+    /// punycode twin, and a fully-qualified trailing dot (<c>newrecruit.eu.</c>) names the same server as
+    /// <c>newrecruit.eu</c>. Unreachable today — every fixture on a given host reads the same endpoint
+    /// variable, so two spellings cannot co-exist in one process — but "cannot happen yet" is what the
+    /// five unbudgeted fixtures were, and the third endpoint variable is one PR away.
+    /// </para>
     /// </remarks>
     internal static string HostOf(string endpointUrl) =>
-        Uri.TryCreate(endpointUrl, UriKind.Absolute, out var uri) && uri.Host is { Length: > 0 } host
-            ? host
+        Uri.TryCreate(endpointUrl, UriKind.Absolute, out var uri) && uri.IdnHost is { Length: > 0 } host
+            ? host.TrimEnd('.')
             : endpointUrl;
 
     internal static void Return(string host, string fixtureName, int sessions)
@@ -167,9 +179,11 @@ internal sealed class LiveLoadLease(string host, string fixtureName, int session
         $"this harness holds at most {LiveLoadBudget.PerHostLimit} concurrent sessions at any one third " +
         $"party's live site (ConcurrencyPolicy.ThirdPartyLiveLoadLimit)" +
         (denialContext.Length > 0 ? $", and in this test process {denialContext}. " : ". ") +
-        "Run the lanes in separate processes (that is what CI does: -p:TestProfile=nr-live-smoke and " +
-        "-p:TestProfile=nr-live-conformance are two `dotnet test` invocations, not one) rather than " +
-        "raising the limit — it bounds traffic to someone else's website, and no measurement of ours is " +
+        "Run the lanes in separate SEQUENTIAL processes rather than raising the limit — the budget is " +
+        "per process, so two lanes running at the same time in two processes would DOUBLE the load on " +
+        "the site, not halve it; what makes CI safe is that -p:TestProfile=nr-live-smoke and " +
+        "-p:TestProfile=nr-live-conformance are two `dotnet test` invocations that run one after the " +
+        "other. The limit bounds traffic to someone else's website, and no measurement of ours is " +
         "entitled to fit it.";
 
     /// <summary>Skip the calling test when the budget granted nothing, explaining who holds it.</summary>
@@ -178,6 +192,69 @@ internal sealed class LiveLoadLease(string host, string fixtureName, int session
         if (sessions == 0)
         {
             Assert.Skip(Explanation);
+        }
+    }
+
+    /// <summary>
+    /// Open the sessions this lease grants — and <b>hand the permit back if opening them throws</b>.
+    /// Every acquisition site goes through this or <see cref="OpenAsync{T}"/>: a fixture that has no
+    /// session open must hold no permit.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The leak this closes, and why it was worse than it looks.</b> The fixtures reserved, then
+    /// constructed the engine, and constructing an engine is exactly the step that fails when the live
+    /// site is down (connection refused, DNS, a Playwright launch failure). The permit was never
+    /// returned. The next test re-entered the getter, reserved again and <em>overwrote</em> the field,
+    /// orphaning the first grant until process exit; after
+    /// <see cref="ConcurrencyPolicy.ThirdPartyLiveLoadLimit"/> failed constructions every later test was
+    /// granted <b>0</b> and <see cref="EnsureGranted"/> <c>Assert.Skip</c>ped it — <b>a site outage
+    /// silently became a skip that blamed the load budget</b>, from a fixture holding two permits and
+    /// zero sessions. Composed, two leaked permits starve <c>LiveNrRosterFixture</c> and all 363 live
+    /// conformance tests skip for an outage. "A skip that misreports its reason is how a throttled lane
+    /// comes to look like an unconfigured one" — that is what <c>Unavailable</c> exists to prevent, and
+    /// the leak walked straight around it.
+    /// </para>
+    /// <para>
+    /// It is a method on the lease rather than a <c>try/catch</c> in each fixture because there are
+    /// five fixtures and there will be a sixth. An invariant that every caller must remember to uphold
+    /// is the one the sixth caller forgets — which is the entire history of this budget.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">What opening the sessions produces (an engine, a pool).</typeparam>
+    /// <param name="open">Opens the sessions. Must open no more than <see cref="Sessions"/> of them.</param>
+    /// <returns>Whatever <paramref name="open"/> returned.</returns>
+    public T Open<T>(Func<T> open)
+    {
+        ArgumentNullException.ThrowIfNull(open);
+
+        try
+        {
+            return open();
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Async <see cref="Open{T}"/>: the sessions are returned if opening them throws.</summary>
+    /// <typeparam name="T">What opening the sessions produces (an engine, a pool).</typeparam>
+    /// <param name="open">Opens the sessions. Must open no more than <see cref="Sessions"/> of them.</param>
+    /// <returns>Whatever <paramref name="open"/> returned.</returns>
+    public async Task<T> OpenAsync<T>(Func<Task<T>> open)
+    {
+        ArgumentNullException.ThrowIfNull(open);
+
+        try
+        {
+            return await open().ConfigureAwait(false);
+        }
+        catch
+        {
+            Dispose();
+            throw;
         }
     }
 

@@ -71,11 +71,12 @@ public sealed class ConcurrencyPolicyTests
 
     [Theory]
     // engine, MaxParallel, ColdStartCost, ReuseSafeRoster, ReuseSafeGameData,
-    //   PROCESS axis: MemPerInstanceBytes, k | CONTEXT axis: ContextPoolSize, MemPerContextBytes
-    [InlineData("battlescribe", 0, ColdStartCost.Cheap, false, false, 0L, 1.0, 0, 0L)]
-    [InlineData("battlescribe-ui", 1, ColdStartCost.Expensive, true, true, 1_055_391_744L, 1.0, 0, 0L)]
-    [InlineData("newrecruit", 0, ColdStartCost.Cheap, false, false, 1_313_420_083L, 0.375, 4, 225_863_270L)]
-    [InlineData("newrecruit-ui", 0, ColdStartCost.Cheap, false, false, 1_548_969_984L, 1.0, 16, 235_824_742L)]
+    //   PROCESS axis: MemPerInstanceBytes, k
+    //   CONTEXT axis: ContextPoolSize, MemPerContextBytes (slope), MemPoolBaselineBytes (intercept)
+    [InlineData("battlescribe", 0, ColdStartCost.Cheap, false, false, 0L, 1.0, 0, 0L, 0L)]
+    [InlineData("battlescribe-ui", 1, ColdStartCost.Expensive, true, true, 1_055_391_744L, 1.0, 0, 0L, 0L)]
+    [InlineData("newrecruit", 0, ColdStartCost.Cheap, false, false, 1_313_420_083L, 0.375, 4, 225_863_270L, 1_109_393_408L)]
+    [InlineData("newrecruit-ui", 0, ColdStartCost.Cheap, false, false, 1_548_969_984L, 1.0, 16, 235_824_742L, 1_373_634_560L)]
     public void EngineProfiles_AllBuiltins_PinAllFields(
         string engineName,
         int expectedMaxParallel,
@@ -85,7 +86,8 @@ public sealed class ConcurrencyPolicyTests
         long expectedMemPerInstanceBytes,
         double expectedOversubscriptionFactor,
         int expectedContextPoolSize,
-        long expectedMemPerContextBytes)
+        long expectedMemPerContextBytes,
+        long expectedMemPoolBaselineBytes)
     {
         var registry = EngineRegistry.LoadDefault();
         var profile = registry.Resolve(EngineConnectable.Parse(engineName)).Profile;
@@ -112,6 +114,13 @@ public sealed class ConcurrencyPolicyTests
         // reason these are separate fields.
         Assert.Equal(expectedContextPoolSize, profile.ContextPoolSize);
         Assert.Equal(expectedMemPerContextBytes, profile.MemPerContextBytes);
+
+        // ...and the pool's memory cost is a LINE, not a rate: MemPerContextBytes is the SLOPE and
+        // MemPoolBaselineBytes is the INTERCEPT of the same §7.7 regression (the shared browser + Node
+        // driver + test host, which exist at pool 0). Charging the slope alone under-counted the pool by
+        // ~1.3 GiB — 21% of a 7.8 GiB runner — so an engine that declares one must declare the other.
+        Assert.Equal(expectedMemPoolBaselineBytes, profile.MemPoolBaselineBytes);
+        Assert.Equal(profile.MemPerContextBytes > 0, profile.MemPoolBaselineBytes > 0);
     }
 
     [Fact]
@@ -212,8 +221,22 @@ public sealed class ConcurrencyPolicyTests
     /// <summary>A 16 GiB laptop. Note "available" is TOTAL memory — such a box never has 16 GiB free.</summary>
     private static readonly MachineProfile Laptop16Gib = new(CpuCount: 16, AvailableMemoryBytes: 16L << 30);
 
-    /// <summary>The 4-vCPU / 16 GB GitHub-hosted runner CI actually runs on.</summary>
-    private static readonly MachineProfile CiRunner = new(CpuCount: 4, AvailableMemoryBytes: 16L << 30);
+    /// <summary>
+    /// <b>The 4-CPU / 16 GiB Linux container the sweeps used to MODEL CI. It is not the runner.</b> Every
+    /// context-axis constant was fitted here (docs/concurrency-policy-measurements.md §7), so it is the
+    /// right machine to pin those constants against — but the docs called it "the 4-vCPU / 16 GiB CI
+    /// runner" for months, and it is neither: see <see cref="GitHubRunner"/>. A model of a machine read as
+    /// the machine is how the pool's memory bound came to be checked against 16 GiB it does not have.
+    /// </summary>
+    private static readonly MachineProfile CiModelContainer = new(CpuCount: 4, AvailableMemoryBytes: 16L << 30);
+
+    /// <summary>
+    /// <b>The GitHub-hosted runner CI actually runs on — MEASURED.</b> <c>nproc: 2</c>,
+    /// <c>MemTotal: 7.8 GiB</c> (printed by the <c>Runner profile</c> step in the <c>checks</c> job;
+    /// docs/concurrency-policy-measurements.md §11.6). Half the CPUs and half the memory of the container
+    /// that modelled it.
+    /// </summary>
+    private static readonly MachineProfile GitHubRunner = new(CpuCount: 2, AvailableMemoryBytes: 8_375_186_227L);
 
     private static EngineProfile Builtin(string name) =>
         EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(name)).Profile;
@@ -260,13 +283,13 @@ public sealed class ConcurrencyPolicyTests
     }
 
     [Fact]
-    public void Policy_MeasuredEngine_OnTheCiRunner_IsCpuBound()
+    public void Policy_MeasuredEngine_OnTheCiModelContainer_IsCpuBound()
     {
         // The 4-vCPU runner: byCpu = ceil(4 * 1.0) = 4; byMemory = floor(16 GiB * 0.8 / 1.44 GiB) = 8.
         // CPU binds -> 4 workers, replacing the hand-set NR_PARALLEL: 6 / NR_PARALLEL: 2 in ci.yml.
         // k = 1.0 was fitted on the 32-core dev box and is NOT measured here — this is the number we
         // ship watching, not one we claim.
-        var plan = ConcurrencyPolicy.For(CiRunner, Builtin("newrecruit-ui"));
+        var plan = ConcurrencyPolicy.For(CiModelContainer, Builtin("newrecruit-ui"));
 
         Assert.Equal(4, plan.Workers);
     }
@@ -478,7 +501,7 @@ public sealed class ConcurrencyPolicyTests
     {
         var nrUi = Builtin("newrecruit-ui");
 
-        var onCi = ConcurrencyPolicy.For(CiRunner, nrUi);       // 4 vCPU / 16 GiB
+        var onCi = ConcurrencyPolicy.For(CiModelContainer, nrUi);       // 4 vCPU / 16 GiB
         var onDevBox = ConcurrencyPolicy.For(DevBox, nrUi);     // 32 cpu / 93.6 GiB
 
         // PROCESS axis: 8x the CPUs, 8x the workers. Unchanged behaviour, deliberately.
@@ -497,8 +520,9 @@ public sealed class ConcurrencyPolicyTests
     }
 
     /// <summary>
-    /// What CI actually gets on its 4-vCPU / 16 GiB runner — the numbers this change exists to
-    /// deliver, pinned so a regression is a red test rather than a slow lane nobody attributes.
+    /// The measured optima, on <b>both</b> machines that get called "CI" — the 4-CPU/16 GiB container the
+    /// sweeps modelled it with, and the 2-vCPU/7.8 GiB runner it actually is. The same numbers on both,
+    /// because this axis does not scale with the machine.
     /// </summary>
     /// <remarks>
     /// Falsifiable: the mirror gave 2 and 4 here (measured cost: +11.6% on <c>nr-frozen</c>, +99.8%
@@ -508,18 +532,81 @@ public sealed class ConcurrencyPolicyTests
     [Theory]
     [InlineData("newrecruit", 4)]        // nr-frozen / nr-live-conformance
     [InlineData("newrecruit-ui", 16)]    // nr-editor-ui-frozen
-    public void Policy_PoolSize_OnTheCiRunner_IsTheMeasuredOptimum(string engineName, int expectedPool)
+    public void Policy_PoolSize_OnTheCiModelContainer_IsTheMeasuredOptimum(string engineName, int expectedPool)
     {
-        var plan = ConcurrencyPolicy.For(CiRunner, Builtin(engineName));
+        var engine = Builtin(engineName);
 
-        Assert.Equal(expectedPool, plan.PoolSize);
+        Assert.Equal(expectedPool, ConcurrencyPolicy.For(CiModelContainer, engine).PoolSize);
 
-        // Memory does not bind at the optimum on this axis — contention does. (Measured: pool 16
-        // peaks at 6.16 GiB of the runner's 16 GiB.) If memory were what produced these numbers, the
-        // test above would be pinning an accident.
-        var affordable = (long)(CiRunner.AvailableMemoryBytes * 0.8) / Builtin(engineName).MemPerContextBytes;
+        // AND ON THE MACHINE CI ACTUALLY IS. Half the CPUs and half the memory of the container above, and
+        // the pool is the same — because this axis is contention-bound, not CPU-bound, and because the
+        // memory bound (which now charges the pool's fixed baseline, not just the per-context slope) still
+        // does not bind at the optimum there. The runner sweep fitted these two numbers on real GitHub
+        // hardware (§10.2/§10.3); nothing here may re-tune them.
+        Assert.Equal(expectedPool, ConcurrencyPolicy.For(GitHubRunner, engine).PoolSize);
+
+        // Contention produces these numbers, not memory. If memory were what produced them, the
+        // assertions above would be pinning an accident — so state the memory bound separately and require
+        // it to be slack. Note the charge: baseline + N × slope, the whole line, on the REAL runner.
+        var affordable =
+            ((long)(GitHubRunner.AvailableMemoryBytes * 0.8) - engine.MemPoolBaselineBytes)
+            / engine.MemPerContextBytes;
         Assert.True(affordable > expectedPool,
             $"the memory bound ({affordable}) must not be what produces the pool of {expectedPool}");
+    }
+
+    /// <summary>
+    /// <b>A MARGINAL SLOPE IS NOT A TOTAL CHARGE.</b> The pool's memory bound must charge the fixed
+    /// baseline — the one shared browser, Node driver and test host that exist before the first context
+    /// does — and not just <c>N × MemPerContextBytes</c>. On the real runner that fixed cost is 1.3 GiB:
+    /// 21% of the box, and 17× the 1-context slope.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The bug this pins.</b> <c>MemPerContextBytes</c> is the least-squares <em>slope</em> of a pool
+    /// sweep (§7.7); the <em>intercept</em> of that same regression was charged nowhere. On the 2-vCPU /
+    /// 7.8 GiB runner the bound therefore authorised <b>28</b> contexts of <c>newrecruit-ui</c> —
+    /// 28 × 224.9 MiB = 6.16 GiB of a 6.24 GiB allowance, "fits" — while the pool would really have cost
+    /// 1310 MiB + 6.16 GiB = <b>7.4 GiB on a 7.8 GiB box</b>. It was inert only because the declared pool
+    /// (16) happened to sit below the bound — but §10.2 records pools <b>16 / 20 / 24 as statistically
+    /// tied</b> on that runner, so a 24 is a change the measurements positively invite, and 24 did not
+    /// fit. <c>MemoryHeadroomFactor</c>'s 20% (1.56 GiB) does not absorb a 1.3 GiB baseline; a margin
+    /// spent twice is not a margin.
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable — and mutation-verified:</b> delete the <c>- engine.MemPoolBaselineBytes</c> term
+    /// from <c>ConcurrencyPolicy.For</c>'s pool bound and the first assertion goes red (the box authorises
+    /// the full declared 24). The second assertion pins the direction that must NOT move: the shipped pool
+    /// of 16 was fitted on real GitHub hardware and the baseline term must not clamp it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Policy_PoolMemoryBound_ChargesTheFixedBaseline_NotOnlyThePerContextSlope()
+    {
+        var nrUi = Builtin("newrecruit-ui");
+
+        // A pool of 24 — which §10.2 calls "statistically tied" with 16 on this very runner, i.e. exactly
+        // the change a reader of the measurements would make. It does not fit, and the bound must say so.
+        var declares24 = nrUi with { ContextPoolSize = 24 };
+        var plan = ConcurrencyPolicy.For(GitHubRunner, declares24);
+
+        Assert.True(
+            plan.PoolSize < 24,
+            $"the memory bound authorised all {plan.PoolSize} declared contexts on a 7.8 GiB box: " +
+            $"{nrUi.MemPoolBaselineBytes / (1024.0 * 1024 * 1024):F2} GiB of shared browser + driver + test " +
+            $"host, plus 24 x {nrUi.MemPerContextBytes / (1024.0 * 1024):F0} MiB, needs " +
+            $"{((double)nrUi.MemPoolBaselineBytes + (24 * nrUi.MemPerContextBytes)) / (1024 * 1024 * 1024):F2} " +
+            $"GiB — the fixed baseline is being charged to nobody");
+
+        // It is exactly the intercept that produces this. floor((0.8 x 7.8 GiB - 1310 MiB) / 224.9 MiB) = 22.
+        var expected = (int)(((long)(GitHubRunner.AvailableMemoryBytes * ConcurrencyPolicy.MemoryHeadroomFactor)
+            - nrUi.MemPoolBaselineBytes) / nrUi.MemPerContextBytes);
+        Assert.Equal(expected, plan.PoolSize);
+
+        // AND THE SHIPPED CONSTANT STANDS. The runner sweep fitted 16 on real GitHub hardware; charging the
+        // baseline honestly must not quietly re-tune it downward. 16 < 22, so it does not bind.
+        Assert.Equal(16, ConcurrencyPolicy.For(GitHubRunner, nrUi).PoolSize);
+        Assert.Equal(4, ConcurrencyPolicy.For(GitHubRunner, Builtin("newrecruit")).PoolSize);
     }
 
     /// <summary>
@@ -527,10 +614,20 @@ public sealed class ConcurrencyPolicyTests
     /// of 16 and ≈225 MiB per context; a 2 GiB container cannot afford 16 of them.
     /// </summary>
     /// <remarks>
-    /// Falsifiable by construction, and specifically against the two ways to break it: delete the
-    /// memory bound from the pool computation and this box plans the full declared 16 (asserted
-    /// directly, so a test that merely said "&lt;= 16" cannot hide it); delete the headroom factor and
-    /// it plans 9 instead of 7. Both are red.
+    /// <para>
+    /// Falsifiable by construction, and specifically against the three ways to break it: delete the memory
+    /// bound from the pool computation and this box plans the full declared 16 (asserted directly, so a
+    /// test that merely said "&lt;= 16" cannot hide it); delete the fixed-baseline term and it plans 7;
+    /// delete the headroom factor and it plans 2. All three are red.
+    /// </para>
+    /// <para>
+    /// <b>The old answer here was 7, and it was wrong by the whole baseline.</b> The bound charged only
+    /// <c>N × MemPerContextBytes</c> — a marginal slope read as a total charge — so a 2 GiB box "afforded"
+    /// 7 contexts costing 1.6 GiB on top of a 1.3 GiB shared browser + driver + test host it never
+    /// counted: 2.9 GiB on a 2 GiB machine. This test's own comment had already noticed the omission
+    /// ("a slope that excludes the pool's ~1.3 GiB fixed baseline") and asserted the wrong number anyway.
+    /// The honest answer is that this box can barely hold the pool's fixed cost, and gets 1.
+    /// </para>
     /// </remarks>
     [Fact]
     public void Policy_PoolSize_IsBoundedByMemory_OnASmallMemoryBox()
@@ -540,16 +637,19 @@ public sealed class ConcurrencyPolicyTests
 
         var plan = ConcurrencyPolicy.For(tiny, nrUi);
 
-        // floor(2 GiB * 0.8 / 235,824,742 B) = 7 — memory binds, well below the declared 16.
-        Assert.Equal(7, plan.PoolSize);
+        // claimable = 0.8 × 2 GiB = 1.60 GiB; the pool's FIXED cost is 1310 MiB = 1.28 GiB of that, which
+        // leaves 328 MiB — one 224.9 MiB context. floor(328 / 224.9) = 1.
+        Assert.Equal(1, plan.PoolSize);
         Assert.True(plan.PoolSize < nrUi.ContextPoolSize,
             "the memory bound must actually cost contexts on a small box, or it is not doing anything");
 
-        // Without the headroom factor the same box would plan 9 (~2.0 GiB — the entire machine, on a
-        // slope that excludes the pool's ~1.3 GiB fixed baseline). The margin is not decorative.
-        var withoutHeadroom = (int)(tiny.AvailableMemoryBytes / nrUi.MemPerContextBytes);
-        Assert.Equal(9, withoutHeadroom);
-        Assert.True(plan.PoolSize < withoutHeadroom);
+        // The baseline is what produces it. Charge only the slope — the bug — and this box "affords" 7,
+        // which really costs 1.28 GiB + 7 × 224.9 MiB = 2.82 GiB on a 2 GiB machine.
+        var slopeOnly = (int)((long)(tiny.AvailableMemoryBytes * ConcurrencyPolicy.MemoryHeadroomFactor)
+            / nrUi.MemPerContextBytes);
+        Assert.Equal(7, slopeOnly);
+        Assert.True(plan.PoolSize < slopeOnly,
+            "the fixed baseline (shared browser + driver + test host) is being charged to nobody");
     }
 
     /// <summary>
@@ -638,8 +738,8 @@ public sealed class ConcurrencyPolicyTests
     {
         var newrecruit = Builtin("newrecruit");
 
-        var frozen = ConcurrencyPolicy.For(CiRunner, newrecruit, LoadTarget.Local);
-        var live = ConcurrencyPolicy.For(CiRunner, newrecruit, LoadTarget.ThirdPartyLive);
+        var frozen = ConcurrencyPolicy.For(CiModelContainer, newrecruit, LoadTarget.Local);
+        var live = ConcurrencyPolicy.For(CiModelContainer, newrecruit, LoadTarget.ThirdPartyLive);
 
         // The live lane: 2. Not "at most 4", not "whatever the sweep said" — 2, the number commit
         // 7e65836 chose for it on purpose and declined to sweep.
@@ -738,7 +838,7 @@ public sealed class ConcurrencyPolicyTests
     [InlineData("newrecruit-ui", 16)]
     public void Policy_LoadLimit_DoesNotTouchLocalLanes(string engineName, int measuredOptimum)
     {
-        var plan = ConcurrencyPolicy.For(CiRunner, Builtin(engineName), LoadTarget.Local);
+        var plan = ConcurrencyPolicy.For(CiModelContainer, Builtin(engineName), LoadTarget.Local);
 
         Assert.Equal(measuredOptimum, plan.PoolSize);
         Assert.True(plan.PoolSize > ConcurrencyPolicy.ThirdPartyLiveLoadLimit,

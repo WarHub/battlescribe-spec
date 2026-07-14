@@ -315,13 +315,43 @@ public static class ConcurrencyPolicy
         // exists to stop you.
         var declaredPool = engine.ContextPoolSize > 0 ? engine.ContextPoolSize : UndeclaredContextPoolSize;
 
-        // Memory still bounds it — a context is ~6x cheaper than a worker process (≈225 MiB vs
-        // ≈1.4 GiB), so this rarely binds (a 16 GiB runner affords ~58 contexts against a measured
-        // optimum of 16), but "rarely" is not "never": a 4 GiB container is a real thing. Same
-        // headroom factor as the process axis — the reasons for it (a sampled peak is a lower bound;
-        // "available" is not "spare") are properties of the machine, not of the axis.
+        // Memory bounds it — and the bound must charge what the pool ACTUALLY costs, which is NOT just
+        // N × MemPerContextBytes.
+        //
+        // A MARGINAL SLOPE IS NOT A TOTAL CHARGE. MemPerContextBytes is the least-squares SLOPE of a pool
+        // sweep: the cost of ONE MORE context. Every context in a pool shares ONE Chromium behind ONE
+        // Playwright Node driver, inside ONE test host, and all of that exists before the first context
+        // does — it is the INTERCEPT of the same regression, and this line used to charge it NOWHERE.
+        // On the real CI runner (2 vCPU / 7.8 GiB — measured, §11.6; it is not the 16 GiB box the earlier
+        // version of this comment invoked) the arithmetic was:
+        //
+        //     claimable = 0.8 × 7.8 GiB                                   = 6.24 GiB
+        //     charged for newrecruit-ui's pool of 16 = 16 × 224.9 MiB     = 3.51 GiB   "does not bind"
+        //     actually costs = 1310 MiB baseline + 16 × 224.9 MiB         = 4.79 GiB   (79% of TOTAL RAM
+        //                                                                               once the rest of
+        //                                                                               the box is counted)
+        //     pool the bound would have authorised = floor(6.24 / 0.2196) = 28 contexts = 7.4 GiB. OOM.
+        //
+        // It was inert only because the declared pool (16) happened to sit below the bound. But §10.2
+        // records pools 16 / 20 / 24 as STATISTICALLY TIED on the runner, so a 24 is a change the
+        // measurements positively invite — and a 24 needs more than the box has. Charge the fixed cost
+        // first; the contexts get what is left. That gives 22 on that runner: 16 still does not bind
+        // (the sweep's answer stands, untouched), and 24 is refused.
+        //
+        // MemoryHeadroomFactor does NOT cover this and was never asked to. Its 20% (1.56 GiB on that box)
+        // pays for what lives OUTSIDE the pool's process tree — the OS, the page cache, the build servers —
+        // and for a sampled peak being a lower bound. It cannot also pay a 1.3 GiB baseline; a margin
+        // spent twice is not a margin. (The residue it does cover is real and measured: the 4-CPU
+        // container's whole-box peak at pool 16 was 6.16 GiB against this model's 4.79 GiB of pool — so
+        // ≈1.37 GiB lives outside the tree, against a 1.56 GiB margin. Thin, and now stated.)
+        //
+        // An engine that declares a slope but no baseline is charged no baseline — same as before, i.e.
+        // optimistic by exactly that much. EngineRegistry.Validate rejects that config outright; the
+        // built-ins declare both; and there is deliberately no invented default here, because a guessed
+        // baseline is a measurement nobody took.
+        var claimableForContexts = Math.Max(0, claimableMemory - engine.MemPoolBaselineBytes);
         var poolByMemory = engine.MemPerContextBytes > 0
-            ? (int)Math.Min(int.MaxValue, claimableMemory / engine.MemPerContextBytes)
+            ? (int)Math.Min(int.MaxValue, claimableForContexts / engine.MemPerContextBytes)
             : int.MaxValue;
 
         var poolSize = Math.Max(1, Math.Min(declaredPool, poolByMemory));

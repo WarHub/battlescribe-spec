@@ -153,6 +153,7 @@ public sealed class EngineRegistryTests : IDisposable
     [Theory]
     [InlineData("contextPoolSize", -1)]
     [InlineData("memPerContextBytes", -1)]
+    [InlineData("memPoolBaselineBytes", -1)]
     public void NegativeContextAxisDeclarations_AreRejectedAtLoad(string field, int value)
     {
         var path = WriteConfig(
@@ -166,22 +167,86 @@ public sealed class EngineRegistryTests : IDisposable
         Assert.Contains(path, ex.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <b>A slope without an intercept is not a memory model.</b> <c>memPerContextBytes</c> is the
+    /// MARGINAL cost of one more browser context; <c>memPoolBaselineBytes</c> is the FIXED cost of the
+    /// browser, driver and test host they all share. Declare one and the pool's memory bound charges the
+    /// other to nobody — which is precisely the bug that let a 7.8 GiB runner authorise a pool costing
+    /// 7.4 GiB. Both, or neither.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: delete the paired check from <c>EngineRegistry.Validate</c> and either row loads —
+    /// the first with a memory bound that is optimistic by the whole baseline, the second with an
+    /// intercept nothing will ever read (the bound is gated on the slope).
+    /// </remarks>
+    [Theory]
+    [InlineData("\"memPerContextBytes\":209715200")]    // slope, no intercept — the optimistic bound
+    [InlineData("\"memPoolBaselineBytes\":1073741824")] // intercept, no slope — a number nothing reads
+    public void HalfAMemoryModel_IsRejectedAtLoad(string declaration)
+    {
+        var path = WriteConfig("{\"engines\":{\"wham\":{\"exec\":\"node w.js\"," + declaration + "}}}");
+
+        var ex = Assert.Throws<InvalidDataException>(() => EngineRegistry.Load(path));
+
+        Assert.Contains("memPerContextBytes", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("memPoolBaselineBytes", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("wham", ex.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A third-party engine can declare the context axis, and the policy reads it.</summary>
     [Fact]
     public void DeclaredContextAxis_IsLoadedAsTheEnginesOwnAbsolutePoolSize()
     {
         var path = WriteConfig(
-            """{"engines":{"wham":{"exec":"node w.js","contextPoolSize":12,"memPerContextBytes":209715200}}}""");
+            """
+            {"engines":{"wham":{"exec":"node w.js","contextPoolSize":12,
+             "memPerContextBytes":209715200,"memPoolBaselineBytes":1073741824}}}
+            """);
 
         var profile = EngineRegistry.Load(path).Resolve(EngineConnectable.Parse("wham")).Profile;
 
         Assert.Equal(12, profile.ContextPoolSize);
         Assert.Equal(209_715_200L, profile.MemPerContextBytes);
+        Assert.Equal(1_073_741_824L, profile.MemPoolBaselineBytes);
 
-        // And it is an ABSOLUTE count: the same 12 on a 4-CPU box and on a 64-core box. (200 MiB per
-        // context × 12 = 2.4 GiB, so the 16 GiB box's memory bound — 65 — does not bind either.)
+        // And it is an ABSOLUTE count: the same 12 on a 4-CPU box and on a 64-core box. (1 GiB of shared
+        // browser + driver + test host, plus 200 MiB per context × 12 = 2.4 GiB, so the 16 GiB box's
+        // memory bound — 60 — does not bind either.)
         Assert.Equal(12, ConcurrencyPolicy.For(new MachineProfile(4, 16L << 30), profile).PoolSize);
         Assert.Equal(12, ConcurrencyPolicy.For(new MachineProfile(64, 256L << 30), profile).PoolSize);
+    }
+
+    /// <summary>
+    /// <b>An entry with no <c>exec</c> cannot replace a built-in, so it may not shadow one.</b> Reaching
+    /// for <c>{"battlescribe": {"endpoint": "local"}}</c> to <em>annotate</em> a built-in instead
+    /// <em>replaced</em> it with an engine that has no executable — and <c>bs-spec run --engine
+    /// battlescribe</c>, the primary documented usage, died with "no executable configured".
+    /// </summary>
+    /// <remarks>
+    /// Reproduced on the CLI before this check existed. Falsifiable: delete the guard from
+    /// <c>EngineRegistry.Load</c> and this loads, handing back an entry with <c>Executable == null</c> and
+    /// <c>Builtin == false</c> for a name whose engine is <c>bs-engine-host</c>. A built-in's endpoint and
+    /// profile are measured and declared in code; the way to declare an <em>ad-hoc</em> adapter launched
+    /// under a built-in's name is <c>--engine-endpoint</c>, which the message says.
+    /// </remarks>
+    [Fact]
+    public void ExeclessEntry_NamingABuiltin_IsRejectedAtLoad_RatherThanBrickingIt()
+    {
+        var path = WriteConfig("""{"engines":{"battlescribe":{"endpoint":"local"}}}""");
+
+        var ex = Assert.Throws<InvalidDataException>(() => EngineRegistry.Load(path));
+
+        Assert.Contains("battlescribe", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("exec", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("--engine-endpoint", ex.Message, StringComparison.Ordinal);
+
+        // ...and a genuine replacement — one that actually brings an executable — is still allowed.
+        var replaced = EngineRegistry
+            .Load(WriteConfig("""{"engines":{"battlescribe":{"exec":"node bs.js","endpoint":"local"}}}"""))
+            .Resolve(EngineConnectable.Parse("battlescribe"));
+
+        Assert.Equal("node", replaced.Executable);
+        Assert.False(replaced.Builtin);
     }
 
     /// <summary>Omitting the optional numbers stays legal — the conservative defaults apply.</summary>

@@ -53,15 +53,22 @@ public sealed class LiveNrRosterFixture : IAsyncLifetime
         // ...and the policy's answer is a ceiling for THIS fixture, not for the process. Whatever other
         // live fixtures are alive in this test host draw on the same site's budget, so take what is
         // actually left rather than what we would like — see LiveLoadBudget for the 2 + 1 = 3 this closes.
-        _lease = LiveLoadBudget.Reserve(nameof(LiveNrRosterFixture), baseUrl, concurrency);
-        if (_lease.Sessions == 0)
+        var lease = LiveLoadBudget.Reserve(nameof(LiveNrRosterFixture), baseUrl, concurrency);
+        if (lease.Sessions == 0)
         {
-            Unavailable = _lease.Explanation;
+            Unavailable = lease.Explanation;
+            lease.Dispose();
             return;
         }
 
         using var span = FixtureTelemetry.StartInit(nameof(LiveNrRosterFixture));
-        EnginePool = await NewRecruitEnginePool.CreateLiveAsync(_lease.Sessions, baseUrl, headless, visual, slowMo);
+
+        // OpenAsync returns the permits if the pool fails to come up (site down, Playwright launch
+        // failure): a fixture holding no sessions must hold no permits, or an outage starves every later
+        // fixture and they skip blaming the budget. See LiveLoadLease.Open.
+        _lease = lease;
+        EnginePool = await lease.OpenAsync(() =>
+            NewRecruitEnginePool.CreateLiveAsync(lease.Sessions, baseUrl, headless, visual, slowMo));
         FixtureTelemetry.SetPoolSize(span, EnginePool.Size);
     }
 

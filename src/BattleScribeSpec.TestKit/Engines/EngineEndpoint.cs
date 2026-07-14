@@ -92,6 +92,47 @@ public sealed record EngineEndpoint(EngineEndpointKind Kind, string? UrlVariable
         new(EngineEndpointKind.UrlVariable, variable);
 
     /// <summary>
+    /// Parse a <b>written declaration</b>: <c>"local"</c>, <c>"third-party-live"</c> or
+    /// <c>"url-var:NAME"</c>. The one grammar, used by both channels a human can declare an endpoint
+    /// through — <c>engines.json</c>'s <c>"endpoint"</c> (<see cref="EngineRegistry"/>) and the CLI's
+    /// <c>--engine-endpoint</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One grammar, one parser, deliberately.</b> Two implementations of "what does this word mean"
+    /// is how <c>--config-a "nr_engine_url=…"</c> came to mean one thing to the parent and another to
+    /// the child. There is no <c>"undeclared"</c> spelling on purpose: absence is the only way to be
+    /// undeclared, and it is the caller's business (an omitted <c>engines.json</c> key, an unpassed
+    /// flag), never a word somebody types.
+    /// </para>
+    /// </remarks>
+    /// <param name="declaration">The declared endpoint.</param>
+    /// <returns>The parsed endpoint.</returns>
+    /// <exception cref="FormatException"><paramref name="declaration"/> is not one of the three forms.</exception>
+    public static EngineEndpoint Parse(string declaration)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(declaration);
+
+        return declaration switch
+        {
+            "local" => OnThisMachine,
+            "third-party-live" => ThirdPartyLive,
+            _ when declaration.StartsWith("url-var:", StringComparison.Ordinal)
+                && declaration["url-var:".Length..] is { Length: > 0 } variable => FromUrlVariable(variable),
+
+            // An unrecognized value is rejected outright rather than quietly read as "undeclared" — a
+            // declaration the reader silently ignores is a lie the author cannot see.
+            _ => throw new FormatException(
+                $"endpoint must be \"local\" (the engine's service runs on this machine), " +
+                $"\"third-party-live\" (it drives someone else's production site, so it is held to a load " +
+                $"limit), or \"url-var:NAME\" (live iff the NAME environment variable holds a non-loopback " +
+                $"URL) — got \"{declaration}\". Leave it out to declare nothing, which is treated as " +
+                $"third-party-live: declaring \"local\" is how an engine opts into this machine's full " +
+                $"worker count."),
+        };
+    }
+
+    /// <summary>
     /// <b>Where this engine's load lands</b>, given the environment the engine process will actually
     /// see. <b>Fail-safe by construction: only positive evidence yields <see cref="LoadTarget.Local"/>.</b>
     /// </summary>

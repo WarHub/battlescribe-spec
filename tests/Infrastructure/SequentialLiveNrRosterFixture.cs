@@ -72,10 +72,18 @@ public sealed class SequentialLiveNrRosterFixture : IAsyncLifetime
                     return _engine;
                 }
 
-                _lease = LiveLoadBudget.Reserve(nameof(SequentialLiveNrRosterFixture), baseUrl, 1);
-                _lease.EnsureGranted();
+                var lease = LiveLoadBudget.Reserve(nameof(SequentialLiveNrRosterFixture), baseUrl, 1);
+                lease.EnsureGranted();
 
-                return _engine = CreateEngine(baseUrl);
+                // Open() hands the permit back if CreateEngine throws — the site being down must FAIL,
+                // loudly, and must not leave this fixture holding a session it never opened. It used to:
+                // the lease was assigned before the engine existed, so a connection-refused left a permit
+                // held until process exit, the next test overwrote the field and orphaned it, and after
+                // two such failures every later test SKIPPED, blaming the load budget for the outage. See
+                // LiveLoadLease.Open.
+                _engine = lease.Open(() => CreateEngine(baseUrl));
+                _lease = lease;
+                return _engine;
             }
         }
     }

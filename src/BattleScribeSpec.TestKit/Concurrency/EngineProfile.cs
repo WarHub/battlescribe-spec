@@ -67,16 +67,33 @@ public enum ColdStartCost
 /// </para>
 /// </param>
 /// <param name="MemPerContextBytes">
-/// <b>CONTEXT AXIS.</b> Measured memory cost of ONE additional browser context (the least-squares
-/// slope across a pool sweep — each context adds exactly one Chromium renderer). ≈215–225 MiB for the
-/// NR engines: <b>~6× cheaper than <see cref="MemPerInstanceBytes"/></b>, which is precisely the
-/// over-charge the old mirror made. 0 = undeclared → no memory bound on the pool (the small default
-/// pool size is then the only bound).
+/// <b>CONTEXT AXIS — a MARGINAL SLOPE, not a total charge.</b> Measured memory cost of ONE
+/// <em>additional</em> browser context (the least-squares slope across a pool sweep — each context
+/// adds exactly one Chromium renderer). ≈215–225 MiB for the NR engines: <b>~6× cheaper than
+/// <see cref="MemPerInstanceBytes"/></b>, which is precisely the over-charge the old mirror made.
+/// 0 = undeclared → no memory bound on the pool (the small default pool size is then the only bound).
 /// <para>
-/// The slope excludes the pool's fixed baseline (≈1.0–1.6 GiB of shared browser + driver + test
-/// host), so on a very small box the memory bound is optimistic by roughly that much;
-/// <c>ConcurrencyPolicy.MemoryHeadroomFactor</c> is the margin that absorbs it. Memory does not bind
-/// at the measured optima on any machine we run: pool 16 peaks at ≈6.2 GiB of a 16 GiB runner.
+/// <b>It is HALF of a line, and it must be spent with the other half</b>
+/// (<see cref="MemPoolBaselineBytes"/>, the intercept of the same regression). Charging
+/// <c>slope × N</c> against the machine's memory and calling it the pool's cost is a marginal slope
+/// consumed as a total charge — the whole shared browser, driver and test host counted nowhere. It
+/// under-stated the real cost by ~1.3 GiB on the CI-class box, and
+/// <c>ConcurrencyPolicy.MemoryHeadroomFactor</c> does <b>not</b> absorb that: the margin on the real
+/// runner is 20% of 7.8 GiB = 1.56 GiB, and it has its own job (see the constant). The policy charges
+/// both terms now. <c>EngineRegistry.Validate</c> rejects a config that declares one without the other.
+/// </para>
+/// </param>
+/// <param name="MemPoolBaselineBytes">
+/// <b>CONTEXT AXIS — the pool's FIXED cost, i.e. the INTERCEPT of the regression whose slope is
+/// <see cref="MemPerContextBytes"/>.</b> One shared Chromium, one Playwright Node driver, one test
+/// host: what the pool costs before its first context exists. Measured, per engine, on the CI-class
+/// box, in the same fit as the slope (docs/concurrency-policy-measurements.md §7.7 — <c>newrecruit</c>
+/// 1058 MiB, <c>newrecruit-ui</c> 1310 MiB; the 32-core Windows box fits 1220 / 1607 MiB). 0 =
+/// undeclared, which is only safe alongside an undeclared slope — declare both or neither.
+/// <para>
+/// <b>Do not mix fits.</b> Taking the slope from one regression and the intercept from another is not
+/// a line, and "take the larger of each" would be exactly that. Both built-ins take the CI-class fit,
+/// whole, because CI is the machine that has to survive it.
 /// </para>
 /// </param>
 /// <param name="MaxContexts">
@@ -90,7 +107,8 @@ public enum ColdStartCost
 /// agent, so a pool of contexts is meaningless for it — the same fact its <c>MaxParallel: 1</c>
 /// states, but stated separately, because they are separate facts that happen to coincide. Nothing
 /// else needs it: <c>PoolSize</c> is not on the protocol wire, no adapter reads it, and the two
-/// measured pools (4 and 16) are already bounded by <see cref="MemPerContextBytes"/> and the machine.
+/// measured pools (4 and 16) are already bounded by the machine's memory
+/// (<see cref="MemPoolBaselineBytes"/> + N × <see cref="MemPerContextBytes"/>).
 /// </para>
 /// </param>
 /// <remarks>
@@ -98,10 +116,21 @@ public enum ColdStartCost
 /// <b>The two axes are separate facts and must stay separate.</b> <see cref="MaxParallel"/> /
 /// <see cref="MemPerInstanceBytes"/> / <see cref="OversubscriptionFactor"/> size adapter
 /// <em>processes</em> on the CLI path (<c>bs-spec run --all</c>). <see cref="MaxContexts"/> /
-/// <see cref="ContextPoolSize"/> / <see cref="MemPerContextBytes"/> size browser <em>contexts</em> on
+/// <see cref="ContextPoolSize"/> / <see cref="MemPerContextBytes"/> / <see cref="MemPoolBaselineBytes"/>
+/// size browser <em>contexts</em> on
 /// the xUnit path (<c>dotnet test</c> — what every NewRecruit CI lane runs). No number is shared
 /// between them, deliberately: the whole bug was two quantities wearing one name. <see cref="MaxParallel"/>
 /// was the last one still shared, and it is not any more.
+/// </para>
+/// <para>
+/// <b>The two memory numbers are not measured the same way, and that is why only one axis carries a
+/// baseline term.</b> <see cref="MemPerInstanceBytes"/> is a <em>total</em> — peak RSS over a whole run
+/// divided by the worker count — and a worker <em>is</em> a whole process family (its own adapter, its
+/// own Node driver, its own browser tree: §3/§5), so there is no shared fixed cost left uncharged.
+/// <see cref="MemPerContextBytes"/> is a <em>slope</em>: every context in a pool shares ONE browser
+/// behind ONE driver, so the pool has a large fixed cost that no per-context number can carry — and
+/// that is <see cref="MemPoolBaselineBytes"/>. One phrase ("the memory cost"), two quantities. Charging
+/// the slope as if it were the total is the same defect as <c>PoolSize: workers</c>, one field down.
 /// </para>
 /// <para>
 /// <b><see cref="ReuseSafeRoster"/> and <see cref="ReuseSafeGameData"/> are EARNED, not asserted.</b>
@@ -125,4 +154,5 @@ public sealed record EngineProfile(
     double OversubscriptionFactor = 1.0,
     int ContextPoolSize = 0,
     long MemPerContextBytes = 0,
-    int MaxContexts = 0);
+    int MaxContexts = 0,
+    long MemPoolBaselineBytes = 0);
