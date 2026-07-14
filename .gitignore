@@ -25,3 +25,6 @@ lib/
 # (a59738c) because this directory did not exist at the merge-base and nothing ignored it. Telemetry
 # artifacts belong in artifacts/telemetry/, which is already ignored.
 tel/
+
+# Subagent-driven-development working notes (process scratch, not repo content).
+.superpowers/
