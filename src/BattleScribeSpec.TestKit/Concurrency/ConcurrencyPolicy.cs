@@ -2,9 +2,16 @@ namespace BattleScribeSpec.Concurrency;
 
 /// <summary>
 /// The single source of every concurrency and reuse decision in the harness. A <b>pure function</b>
-/// of the machine and what the engine declares about itself — no I/O, no environment variables,
-/// no string-matching on engine names.
+/// of the machine, what the engine declares about itself, and <b>who is on the other end</b>
+/// (<see cref="LoadTarget"/>) — no I/O, no environment variables, no string-matching on engine names.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The third input is not a performance parameter and was not there originally, which is exactly how
+/// a courtesy limit on a third party's website got replaced by a constant fitted against a HAR file.
+/// See <see cref="ThirdPartyLiveLoadLimit"/>.
+/// </para>
+/// </remarks>
 public static class ConcurrencyPolicy
 {
     /// <summary>
@@ -142,6 +149,68 @@ public static class ConcurrencyPolicy
     /// </remarks>
     internal const int UndeclaredContextPoolSize = 4;
 
+    /// <summary>
+    /// <b>A LOAD LIMIT ON A THIRD PARTY'S LIVE WEBSITE. NOT A THROUGHPUT KNOB.</b> The most concurrent
+    /// browser sessions this harness may point at someone else's production service
+    /// (<see cref="LoadTarget.ThirdPartyLive"/>) — on <em>either</em> axis, because what the remote host
+    /// feels is requests in flight, and it does not care whether we spawned them as worker processes or
+    /// as browser contexts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>THIS NUMBER MUST NEVER BE "OPTIMIZED" BY A SWEEP. RAISING IT INCREASES LOAD ON SOMEONE ELSE'S
+    /// WEBSITE.</b> If you are reading this because a 2 looks small next to
+    /// <see cref="EngineProfile.ContextPoolSize"/> = 4 (or <c>newrecruit-ui</c>'s 16) and you would like
+    /// to bring them into line: <b>stop.</b> That is not a tidy-up, it is a decision to send twice the
+    /// traffic to a website we do not own, and it has already been made once by accident. Read the next
+    /// two paragraphs before you touch this line.
+    /// </para>
+    /// <para>
+    /// <b>Where the 2 comes from — verbatim, from the commit that set it</b> (<c>7e65836</c>,
+    /// 2026-07-12, <i>"ci: NR_PARALLEL 4 -&gt; 6 on the frozen NR lanes (measured optimum on real
+    /// runners)"</i>):
+    /// </para>
+    /// <para>
+    /// <i>"The live nr-conformance lane stays at 2 — it drives the real newrecruit.eu, so parallelism
+    /// there is a load question, not a throughput one."</i>
+    /// </para>
+    /// <para>
+    /// Note what that commit <b>is</b>: a sweep result. It raised the frozen lanes to their measured
+    /// optimum and <b>deliberately declined to apply itself to the live lane</b>. So this 2 is not an
+    /// unmeasured number waiting for someone to measure it — it is <em>deliberately</em> not measured,
+    /// because the quantity it bounds is not ours to optimize. A sweep can tell you how fast
+    /// newrecruit.eu will answer 8 concurrent sessions. It cannot tell you whether we are entitled to
+    /// ask.
+    /// </para>
+    /// <para>
+    /// <b>How it was lost, so that it cannot be lost the same way twice.</b> The 2 lived in a
+    /// <c>NR_PARALLEL: 2</c> environment variable in <c>ci.yml</c>. The concurrency model deleted that
+    /// variable — correctly: it was a second place to decide a question the policy owns — but the
+    /// <em>constraint</em> it carried had nowhere in the model to live, and was deleted along with it.
+    /// It then survived by <b>coincidence</b>: the mirrored policy computed the live pool as
+    /// <c>ceil(4 × 0.375) = 2</c>, the same 2 by accident. The axis separation (#314) broke the
+    /// coincidence, and the live lane silently became <b>4</b> — fitted by sweeping <c>nr-frozen</c>
+    /// (HAR replay, no network) on a 4-CPU container, a measurement that never touched newrecruit.eu.
+    /// That was the first change to this lane's concurrency in the repo's history, and nobody chose it.
+    /// Related: issue #318.
+    /// </para>
+    /// <para>
+    /// <b>Nothing else bounds this load.</b> Not politeness, not the network, not the engine: a search
+    /// of <c>src/BattleScribeSpec.NewRecruit/</c> for
+    /// <c>retry|backoff|throttl|rate.?limit|429|Task.Delay|Thread.Sleep</c> returns <b>zero hits</b> —
+    /// no pause between specs, no retry, no backoff, no 429 handling. This constant is the only thing
+    /// standing between a 363-spec conformance run and a volunteer-run website.
+    /// </para>
+    /// <para>
+    /// <b>The price is known and accepted.</b> Holding the live lane at 2 costs real wall-clock: CI
+    /// measured that lane at ≈145 s with a pool of 4 against ≈230 s at 2 (§8.8 of
+    /// docs/concurrency-policy-measurements.md). We pay those 85 s out of our own CI budget rather than
+    /// out of someone else's bandwidth. If this lane must get faster, make it send <em>fewer</em>
+    /// requests — not more of them at once.
+    /// </para>
+    /// </remarks>
+    internal const int ThirdPartyLiveLoadLimit = 2;
+
     /// <summary>Derive the plan. Deterministic: the same machine and engine always give the same plan.</summary>
     /// <remarks>
     /// <para>
@@ -157,8 +226,26 @@ public static class ConcurrencyPolicy
     /// </remarks>
     /// <param name="machine">The machine the run is happening on.</param>
     /// <param name="engine">What the engine declares about itself.</param>
+    /// <param name="loadTarget">
+    /// <b>Where the load lands.</b> <see cref="LoadTarget.ThirdPartyLive"/> clamps <em>both</em> axes to
+    /// <see cref="ThirdPartyLiveLoadLimit"/>. This is a limit on someone else's website, not a tuning
+    /// input — see the constant. It defaults to <see cref="LoadTarget.Local"/> (the "nothing leaves this
+    /// machine" case, which is what every measurement in this repo was taken on); a caller that can
+    /// reach a live third-party service <b>must</b> say so, and <c>FixtureConcurrency</c> — the xUnit
+    /// path, which is where the live lane lives — gives it no default at all.
+    /// <para>
+    /// <b>KNOWN GAP, stated rather than hidden:</b> the CLI batch path (<c>bs-spec run --all</c>) does
+    /// not declare this yet. The child engine host picks live-vs-frozen from <c>NR_ENGINE_URL</c>
+    /// (<c>HostEngineFactory</c>) and the parent that computes the plan never asks, so
+    /// <c>bs-spec run --all</c> against live NR is still bounded only by <c>Workers</c>. Wiring it needs
+    /// the engine to declare which service it talks to — the policy is forbidden from string-matching
+    /// engine names — and that is out of this change's scope. Recorded in
+    /// docs/concurrency-policy-measurements.md §9.4.
+    /// </para>
+    /// </param>
     /// <returns>The concurrency and reuse decisions for this machine/engine pair.</returns>
-    public static ConcurrencyPlan For(MachineProfile machine, EngineProfile engine)
+    public static ConcurrencyPlan For(
+        MachineProfile machine, EngineProfile engine, LoadTarget loadTarget = LoadTarget.Local)
     {
         ArgumentNullException.ThrowIfNull(machine);
         ArgumentNullException.ThrowIfNull(engine);
@@ -235,6 +322,22 @@ public static class ConcurrencyPolicy
         if (engine.MaxParallel > 0)
         {
             poolSize = Math.Min(poolSize, engine.MaxParallel);
+        }
+
+        // ===== THE LOAD LIMIT. NOT A THIRD AXIS — THE OTHER PARTY'S CONSTRAINT ON BOTH OF THEM. =====
+        //
+        // Every line above this one asks "how fast can THIS MACHINE go?" and answers it from something
+        // we measured. The clamp below asks a question no measurement of ours can answer — "how hard
+        // may we hit a stranger's server?" — so it is not fitted, and it does not move up. It applies
+        // to BOTH axes because the remote host feels requests in flight and cannot see whether we
+        // spawned them as processes or as contexts.
+        //
+        // Do not fold this into ContextPoolSize, do not scale it with the machine, and do not sweep
+        // it. ThirdPartyLiveLoadLimit carries the rationale, quoted from the commit that set it.
+        if (loadTarget == LoadTarget.ThirdPartyLive)
+        {
+            workers = Math.Min(workers, ThirdPartyLiveLoadLimit);
+            poolSize = Math.Min(poolSize, ThirdPartyLiveLoadLimit);
         }
 
         // Reuse needs BOTH: correct AND worth it. Reusing a cheap-to-start engine is safe and

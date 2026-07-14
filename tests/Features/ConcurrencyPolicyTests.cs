@@ -562,6 +562,168 @@ public sealed class ConcurrencyPolicyTests
         Assert.Equal(ConcurrencyPolicy.UndeclaredContextPoolSize, plan.PoolSize);
     }
 
+    // ===== The LOAD LIMIT (#318, related): who is on the other end is not a performance question =====
+    //
+    // Everything above sizes this machine's throughput. Everything below bounds the traffic this
+    // harness puts on SOMEONE ELSE'S production website. `nr-frozen` (HAR replay from local disk) and
+    // `nr-live-conformance` (the real newrecruit.eu) resolve the SAME engine — same EngineProfile, same
+    // measured ContextPoolSize of 4 — so the model could not tell them apart, and the live lane's
+    // deliberate courtesy limit of 2 (commit 7e65836: "parallelism there is a load question, not a
+    // throughput one") was silently replaced by a pool fitted against a HAR file. LoadTarget is the
+    // input that distinguishes them; these are the tests that keep it distinguished.
+
+    /// <summary>
+    /// <b>The live lane is 2, the frozen lane is 4, and they are the same engine on the same box.</b>
+    /// The whole defect in one assertion: a single <see cref="EngineProfile"/> cannot express "4
+    /// contexts against a file on disk, 2 against a stranger's website", and until
+    /// <see cref="LoadTarget"/> existed the policy had no choice but to give both lanes the number that
+    /// was measured on the one that costs nobody anything.
+    /// </summary>
+    /// <remarks>
+    /// <b>Falsifiable — and specifically against the regression that actually happened.</b> Raise
+    /// <see cref="ConcurrencyPolicy.ThirdPartyLiveLoadLimit"/> to match the frozen pool (the tidy-up
+    /// that a future reader, seeing a 2 next to a 4, will want to make) and the first assertion fails.
+    /// Derive the limit from <c>ContextPoolSize</c> in any way at all — mirror it, halve it, take its
+    /// max — and the last assertion fails, because it demands the live number be strictly smaller than
+    /// the engine's declared pool on an engine whose declared pool is 16. Delete the clamp entirely and
+    /// both fail.
+    /// </remarks>
+    [Fact]
+    public void Policy_LiveLane_IsHeldAtTheLoadLimit_AndDoesNotTrackTheFrozenContextPool()
+    {
+        var newrecruit = Builtin("newrecruit");
+
+        var frozen = ConcurrencyPolicy.For(CiRunner, newrecruit, LoadTarget.Local);
+        var live = ConcurrencyPolicy.For(CiRunner, newrecruit, LoadTarget.ThirdPartyLive);
+
+        // The live lane: 2. Not "at most 4", not "whatever the sweep said" — 2, the number commit
+        // 7e65836 chose for it on purpose and declined to sweep.
+        Assert.Equal(2, live.PoolSize);
+        Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, live.PoolSize);
+
+        // The frozen lane keeps its measured optimum — the fix that made CI faster is not regressed.
+        Assert.Equal(4, frozen.PoolSize);
+        Assert.Equal(newrecruit.ContextPoolSize, frozen.PoolSize);
+
+        // And the two are NOT the same number, on the same machine, for the same engine.
+        Assert.True(live.PoolSize < frozen.PoolSize,
+            $"the live load limit ({live.PoolSize}) must not track the frozen context pool ({frozen.PoolSize})");
+    }
+
+    /// <summary>
+    /// The load limit is a property of <b>the remote service</b>, not of the engine that talks to it.
+    /// <c>newrecruit-ui</c> declares a pool of 16 and <c>newrecruit</c> declares 4; pointed at a third
+    /// party's live site, both get 2, and so does a hypothetical engine declaring 64.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: any implementation that computes the limit <em>from</em> the engine's declared pool
+    /// (<c>pool / 2</c>, <c>min(pool, cpu)</c>, "the smaller of the two measured optima"…) returns 8, 2
+    /// and 32 across these rows instead of 2, 2, 2. The point is that the engine's own measured numbers
+    /// have <b>no vote</b> here: they were fitted for throughput on hardware we own.
+    /// </remarks>
+    [Fact]
+    public void Policy_LoadLimit_IsAPropertyOfTheRemoteService_NotOfTheEnginesDeclaredPool()
+    {
+        var declaresPool64 = new EngineProfile(
+            MaxParallel: 0, ColdStartCost.Cheap, ReuseSafeRoster: false, ReuseSafeGameData: false,
+            MemPerInstanceBytes: 1L << 30, OversubscriptionFactor: 1.0,
+            ContextPoolSize: 64, MemPerContextBytes: 100L << 20);
+
+        EngineProfile[] engines = [Builtin("newrecruit"), Builtin("newrecruit-ui"), declaresPool64];
+
+        Assert.All(engines, engine =>
+        {
+            var live = ConcurrencyPolicy.For(DevBox, engine, LoadTarget.ThirdPartyLive);
+            Assert.Equal(ConcurrencyPolicy.ThirdPartyLiveLoadLimit, live.PoolSize);
+        });
+
+        // The declared pools these three would otherwise get are 4, 16 and 64 — all different, none 2.
+        int[] localPools = [4, 16, 64];
+        Assert.Equal(
+            localPools,
+            engines.Select(e => ConcurrencyPolicy.For(DevBox, e, LoadTarget.Local).PoolSize).ToArray());
+    }
+
+    /// <summary>
+    /// <b>The load limit does not scale with the machine.</b> Buying a bigger CI runner does not entitle
+    /// us to send more traffic to someone else's website — the constraint lives on the far end of the
+    /// wire, where our CPU count and our RAM are not facts about anything.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: reintroduce <em>any</em> machine term into the clamp — <c>ceil(cpuCount × k)</c>,
+    /// <c>min(cpu, limit)</c>, a memory-derived bound — and the 1-CPU row or the 64-CPU row (or both)
+    /// stops reading 2. This is the same shape of mistake as <c>PoolSize: workers</c>, one axis further
+    /// out: there, a process constant was fitted to contexts; here, a machine's capacity would be
+    /// mistaken for a stranger's consent.
+    /// </remarks>
+    [Theory]
+    [InlineData(1, 8L)]
+    [InlineData(2, 16L)]
+    [InlineData(4, 16L)]     // the CI runner the live lane actually runs on
+    [InlineData(8, 32L)]
+    [InlineData(16, 16L)]
+    [InlineData(32, 93L)]    // the dev box
+    [InlineData(64, 256L)]   // a box far bigger than anything we own
+    public void Policy_LoadLimit_DoesNotScaleWithCpuCountOrMemory(int cpuCount, long memoryGib)
+    {
+        var machine = new MachineProfile(cpuCount, memoryGib << 30);
+
+        var live = ConcurrencyPolicy.For(machine, Builtin("newrecruit"), LoadTarget.ThirdPartyLive);
+
+        Assert.Equal(2, live.PoolSize);
+
+        // ...and it bounds the PROCESS axis too. The remote host feels requests in flight; it cannot
+        // see whether we spawned them as browser contexts or as whole adapter processes. Falsifiable:
+        // clamp only the pool and the 32-core box plans 12 live worker processes against newrecruit.eu.
+        Assert.True(live.Workers <= ConcurrencyPolicy.ThirdPartyLiveLoadLimit,
+            $"the load limit must bound workers too; got {live.Workers} on a {cpuCount}-CPU box");
+    }
+
+    /// <summary>
+    /// The clamp is inert for every local lane — it may not become a general-purpose throttle that
+    /// quietly slows the suites nobody else pays for.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: apply the clamp unconditionally (drop the <see cref="LoadTarget"/> check) and
+    /// <c>newrecruit-ui</c>'s frozen pool collapses from 16 to 2 — a 2× CI regression on
+    /// <c>nr-editor-ui-frozen</c>, which is the mirror-image of the bug this whole branch fixes.
+    /// </remarks>
+    [Theory]
+    [InlineData("newrecruit", 4)]
+    [InlineData("newrecruit-ui", 16)]
+    public void Policy_LoadLimit_DoesNotTouchLocalLanes(string engineName, int measuredOptimum)
+    {
+        var plan = ConcurrencyPolicy.For(CiRunner, Builtin(engineName), LoadTarget.Local);
+
+        Assert.Equal(measuredOptimum, plan.PoolSize);
+        Assert.True(plan.PoolSize > ConcurrencyPolicy.ThirdPartyLiveLoadLimit,
+            "a local lane must keep its measured optimum, not inherit the third-party load limit");
+    }
+
+    /// <summary>
+    /// <see cref="LoadTarget.Local"/> is the default — the case every measurement in this repo was
+    /// taken on — so the 2-argument overload must be exactly the local plan and must never silently
+    /// become the throttled one.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable in both directions: flip the default to <see cref="LoadTarget.ThirdPartyLive"/> and
+    /// the first assertion fails (every local lane would be throttled to 2); make the parameter change
+    /// anything else about the plan and the record comparison fails.
+    /// </remarks>
+    [Fact]
+    public void Policy_DefaultLoadTarget_IsLocal()
+    {
+        var engine = Builtin("newrecruit-ui");
+
+        Assert.Equal(
+            ConcurrencyPolicy.For(DevBox, engine, LoadTarget.Local),
+            ConcurrencyPolicy.For(DevBox, engine));
+
+        Assert.NotEqual(
+            ConcurrencyPolicy.For(DevBox, engine, LoadTarget.ThirdPartyLive),
+            ConcurrencyPolicy.For(DevBox, engine));
+    }
+
     [Fact]
     public void Policy_IsPure_SameInputsSamePlan()
     {

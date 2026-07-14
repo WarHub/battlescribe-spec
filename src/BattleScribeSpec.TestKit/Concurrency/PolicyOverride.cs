@@ -5,7 +5,7 @@ namespace BattleScribeSpec.Concurrency;
 /// <summary>
 /// The one <c>--policy k=v,...</c> parser, shared by <c>serve</c>, <c>run</c>, and <c>compare</c>.
 /// Applies overrides on top of a base <see cref="ConcurrencyPlan"/> — usually
-/// <see cref="ConcurrencyPolicy.For(MachineProfile, EngineProfile)"/>'s own answer — so a caller
+/// <see cref="ConcurrencyPolicy.For(MachineProfile, EngineProfile, LoadTarget)"/>'s own answer — so a caller
 /// can nudge one knob (e.g. force <c>reuse=off</c> for an ablation) without inventing a
 /// command-specific flag for it. One vocabulary for this idea, not three.
 /// </summary>

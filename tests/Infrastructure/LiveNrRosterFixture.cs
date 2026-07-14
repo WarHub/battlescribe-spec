@@ -1,3 +1,4 @@
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.NewRecruit;
 
 namespace BattleScribeSpec.Tests;
@@ -8,6 +9,22 @@ namespace BattleScribeSpec.Tests;
 /// (backed by <c>ConcurrencyPolicy</c>) — not from an env var.
 /// This is the default fixture for live NR conformance tests.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>This is the one fixture in the repo that puts traffic on a third party's production website</b>
+/// (<c>newrecruit.eu</c> — run by volunteers, not by us), so it is the one fixture that passes
+/// <see cref="LoadTarget.ThirdPartyLive"/>. Its pool is therefore
+/// <c>ConcurrencyPolicy.ThirdPartyLiveLoadLimit</c> = <b>2</b>, and NOT the <c>newrecruit</c> engine's
+/// measured <c>ContextPoolSize</c> of 4 — which was fitted by sweeping <c>nr-frozen</c>, a HAR file on
+/// local disk, in a measurement that never sent a request to newrecruit.eu.
+/// </para>
+/// <para>
+/// The two lanes share an engine and they must not share a pool size. If you change this line, read
+/// <c>ConcurrencyPolicy.ThirdPartyLiveLoadLimit</c> first — it quotes the commit that chose the 2, and
+/// <c>ConcurrencyConfigurationDriftTests.LiveFixture_DeclaresThirdPartyLive_SoTheLoadLimitApplies</c>
+/// will go red if this argument becomes <see cref="LoadTarget.Local"/>.
+/// </para>
+/// </remarks>
 public sealed class LiveNrRosterFixture : IAsyncLifetime
 {
     public NewRecruitEnginePool? EnginePool { get; private set; }
@@ -25,7 +42,8 @@ public sealed class LiveNrRosterFixture : IAsyncLifetime
         var visual = Environment.GetEnvironmentVariable("NR_VISUAL") == "true";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit");
+        // ThirdPartyLive: every context in this pool is a real visitor on newrecruit.eu.
+        var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit", LoadTarget.ThirdPartyLive);
 
         using var span = FixtureTelemetry.StartInit(nameof(LiveNrRosterFixture));
         EnginePool = await NewRecruitEnginePool.CreateLiveAsync(concurrency, baseUrl, headless, visual, slowMo);

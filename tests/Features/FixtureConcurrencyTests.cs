@@ -17,17 +17,17 @@ public sealed class FixtureConcurrencyTests
     [InlineData("newrecruit-ui")]
     public void Resolve_IgnoresNrParallel_ThePolicyIsTheOnlySource(string engineName)
     {
-        var before = FixtureConcurrency.Resolve(engineName);
+        var before = FixtureConcurrency.Resolve(engineName, LoadTarget.Local);
 
         var previous = Environment.GetEnvironmentVariable("NR_PARALLEL");
         Environment.SetEnvironmentVariable("NR_PARALLEL", "999999");
         try
         {
-            var after = FixtureConcurrency.Resolve(engineName);
+            var after = FixtureConcurrency.Resolve(engineName, LoadTarget.Local);
 
             Assert.Equal(before, after);
             Assert.NotEqual(999999, after.PoolSize);
-            Assert.NotEqual(999999, FixtureConcurrency.PoolSizeFor(engineName));
+            Assert.NotEqual(999999, FixtureConcurrency.PoolSizeFor(engineName, LoadTarget.Local));
         }
         finally
         {
@@ -48,10 +48,10 @@ public sealed class FixtureConcurrencyTests
         try
         {
             Environment.SetEnvironmentVariable("BS_UI_KEEP_ALIVE", null);
-            var withVariableUnset = FixtureConcurrency.Resolve("battlescribe-ui").ReuseGameData;
+            var withVariableUnset = FixtureConcurrency.Resolve("battlescribe-ui", LoadTarget.Local).ReuseGameData;
 
             Environment.SetEnvironmentVariable("BS_UI_KEEP_ALIVE", "true");
-            var withVariableSet = FixtureConcurrency.Resolve("battlescribe-ui").ReuseGameData;
+            var withVariableSet = FixtureConcurrency.Resolve("battlescribe-ui", LoadTarget.Local).ReuseGameData;
 
             Assert.Equal(withVariableSet, withVariableUnset);
 
@@ -85,9 +85,44 @@ public sealed class FixtureConcurrencyTests
     [InlineData("newrecruit-ui")]
     public void PoolSizeFor_IsThePolicysAnswer_UnmodifiedByAnyFixtureLevelCap(string engineName)
     {
-        var plan = FixtureConcurrency.Resolve(engineName);
+        var plan = FixtureConcurrency.Resolve(engineName, LoadTarget.Local);
 
-        Assert.Equal(plan.PoolSize, FixtureConcurrency.PoolSizeFor(engineName));
+        Assert.Equal(plan.PoolSize, FixtureConcurrency.PoolSizeFor(engineName, LoadTarget.Local));
+    }
+
+    /// <summary>
+    /// <b>The live lane's pool is the third-party load limit — 2 — and the frozen lane's is the engine's
+    /// measured optimum — 4. Same engine, same machine, different number.</b> This is the fixture-level
+    /// statement of the defect: <c>LiveNrRosterFixture</c> and <c>FrozenNrRosterFixture</c> both resolve
+    /// <c>"newrecruit"</c>, and the only thing that distinguishes them is the
+    /// <see cref="LoadTarget"/> each declares.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Falsifiable, and aimed at the regression that actually shipped:</b> raise
+    /// <c>ConcurrencyPolicy.ThirdPartyLiveLoadLimit</c> to match the frozen pool — the "why is this 2
+    /// when that one is 4?" tidy-up — and the first assertion goes red. Delete the clamp and the live
+    /// lane silently becomes 4 again (which is what commit <c>edf3b4a</c> did) and both the first and
+    /// the last assertion go red. Note this runs on the <em>real</em> machine, via the same code path
+    /// the fixture uses, so it also fails if <c>FixtureConcurrency</c> stops forwarding the load target.
+    /// </para>
+    /// <para>
+    /// It asserts the live pool is <em>strictly smaller</em> rather than merely "at most" the frozen
+    /// one: an "at most" test would pass in the world where both are 4, which is the world we are in
+    /// today and the one this whole change exists to leave.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void PoolSizeFor_TheLiveLane_IsTheThirdPartyLoadLimit_NotTheFrozenPool()
+    {
+        var live = FixtureConcurrency.PoolSizeFor("newrecruit", LoadTarget.ThirdPartyLive);
+        var frozen = FixtureConcurrency.PoolSizeFor("newrecruit", LoadTarget.Local);
+
+        Assert.Equal(2, live);
+        Assert.Equal(4, frozen);
+        Assert.True(live < frozen,
+            $"the live lane ({live}) must not track the frozen lane's measured pool ({frozen}) — " +
+            "they are the same engine, and only one of them costs a third party anything");
     }
 
     /// <summary>
@@ -112,7 +147,7 @@ public sealed class FixtureConcurrencyTests
 
         foreach (var machine in Machines)
         {
-            Assert.Equal(measuredOptimum, ConcurrencyPolicy.For(machine, profile).PoolSize);
+            Assert.Equal(measuredOptimum, ConcurrencyPolicy.For(machine, profile, LoadTarget.Local).PoolSize);
         }
     }
 }

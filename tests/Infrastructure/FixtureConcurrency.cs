@@ -22,13 +22,26 @@ internal static class FixtureConcurrency
 {
     /// <summary>
     /// The <see cref="ConcurrencyPlan"/> for the named built-in engine (e.g. <c>"newrecruit"</c>,
-    /// <c>"battlescribe-ui"</c>) on the real machine this process is running on.
+    /// <c>"battlescribe-ui"</c>) on the real machine this process is running on, pointed at
+    /// <paramref name="loadTarget"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b><paramref name="loadTarget"/> deliberately has no default.</b> The engine name cannot answer
+    /// it: <c>FrozenNrRosterFixture</c> and <c>LiveNrRosterFixture</c> both resolve <c>"newrecruit"</c>,
+    /// and one replays a HAR file from local disk while the other drives a third party's production
+    /// website. Every fixture must say which it is — that a fixture had no way to say so is precisely
+    /// how the live lane's <c>NR_PARALLEL: 2</c> courtesy limit was deleted with the env var that
+    /// carried it, and replaced by a pool size fitted against a HAR file
+    /// (<c>ConcurrencyPolicy.ThirdPartyLiveLoadLimit</c>).
+    /// </para>
+    /// </remarks>
     /// <param name="engineName">Built-in engine identity.</param>
-    public static ConcurrencyPlan Resolve(string engineName)
+    /// <param name="loadTarget">Whether this fixture's engine is served by this machine or by a third party's live site.</param>
+    public static ConcurrencyPlan Resolve(string engineName, LoadTarget loadTarget)
     {
         var profile = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(engineName)).Profile;
-        return ConcurrencyPolicy.For(MachineProfile.Current(), profile);
+        return ConcurrencyPolicy.For(MachineProfile.Current(), profile, loadTarget);
     }
 
     /// <summary>
@@ -55,11 +68,21 @@ internal static class FixtureConcurrency
     /// <para>
     /// The worst-case composed count across simultaneously-live collection fixtures (<b>issue
     /// #314</b>, still open) is <em>not</em> made worse by removing the cap: the three NR pools now
-    /// ask for 4 + 4 + 16 = <b>24</b> contexts, which is exactly what the 8-cap allowed
-    /// (8 + 8 + 8 = 24) and above the pre-policy defaults' 20. The composed bound was never this
-    /// cap's to give; a shared budget the pools draw from is #314's business.
+    /// ask for 2 + 4 + 16 = <b>22</b> contexts (the live pool being held at
+    /// <c>ConcurrencyPolicy.ThirdPartyLiveLoadLimit</c>), against the 8-cap's 24 and the pre-policy
+    /// defaults' 20. The composed bound was never this cap's to give; a shared budget the pools draw
+    /// from is #314's business.
+    /// </para>
+    /// <para>
+    /// <b>The one bound that is NOT the throughput answer</b> is <paramref name="loadTarget"/>: a pool
+    /// pointed at <see cref="LoadTarget.ThirdPartyLive"/> is clamped to a load limit that no sweep may
+    /// raise. It is not a fixture-level cap sneaking back in — it lives in the policy, with the rest of
+    /// the decisions, and it bounds a quantity (traffic to a stranger's server) that no measurement of
+    /// ours is entitled to fit.
     /// </para>
     /// </remarks>
     /// <param name="engineName">Built-in engine identity.</param>
-    public static int PoolSizeFor(string engineName) => Resolve(engineName).PoolSize;
+    /// <param name="loadTarget">Whether this pool's contexts are served by this machine or by a third party's live site.</param>
+    public static int PoolSizeFor(string engineName, LoadTarget loadTarget) =>
+        Resolve(engineName, loadTarget).PoolSize;
 }

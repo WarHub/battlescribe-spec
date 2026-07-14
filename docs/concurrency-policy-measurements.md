@@ -1,5 +1,14 @@
 # Concurrency policy measurements (Task 8) — and what Task 9 did with them
 
+> ## ⚠ EVERY MEASUREMENT IN THIS DOCUMENT WAS TAKEN ON A LOCAL LANE.
+>
+> Every sweep below — both axes, both hardware classes — ran against a **frozen HAR file on local
+> disk** or a **statically-served local site**. **None of them sent a single request to
+> `newrecruit.eu`.** Their results therefore say nothing about `nr-live-conformance`, which drives a
+> third party's production website, and whose pool is **not a throughput number**: it is a load limit
+> (`ConcurrencyPolicy.ThirdPartyLiveLoadLimit = 2`), it is not swept, and it does not move up.
+> Applying this document's numbers to that lane is exactly the defect **§9** exists to record and fix.
+
 > ## ⚠ THIS DOCUMENT COVERS TWO DIFFERENT AXES. DO NOT MIX THEM.
 >
 > | | **Process axis** (§1–§6) | **Context axis** (§7)|
@@ -745,7 +754,17 @@ anywhere it was measured.** It binds only on memory-constrained boxes (the 16 Gi
 |---|---|--:|--:|---|
 | `nr-frozen` | `FrozenNrRosterFixture` → `newrecruit` | `NR_PARALLEL: 6` | **2** | ⚠️ **3× fewer** |
 | `nr-editor-ui-frozen` | `FrozenNrGameDataUiFixture` → `newrecruit-ui` | `NR_PARALLEL: 6` | **4** | 1.5× fewer |
-| `nr-live-conformance` | `LiveNrRosterFixture` → `newrecruit` | `NR_PARALLEL: 2` | **2** | **unchanged** |
+| `nr-live-conformance` | `LiveNrRosterFixture` → `newrecruit` | `NR_PARALLEL: 2` | **2** | **unchanged — but only by coincidence** |
+
+> ⚠️ **CORRECTION (§9).** That last row's "unchanged" was true when written and stayed true only by
+> **accident**: the mirrored policy happened to compute `ceil(4 × 0.375) = 2` for that lane, the same 2
+> the deleted `NR_PARALLEL: 2` carried. The two numbers had nothing to do with each other. The `2` was
+> a **deliberate load limit on a third party's live website** (`newrecruit.eu`); the `ceil(4 × 0.375)`
+> was a process-axis constant fitted on a dev box. When §8 separated the axes, the coincidence broke
+> and the live lane silently became **4** — a number fitted by sweeping a HAR file on local disk.
+> **The constraint had been deleted along with the env var that carried it, and nothing noticed for
+> two commits.** It now lives in `ConcurrencyPolicy.ThirdPartyLiveLoadLimit` and the lane is back at
+> **2** — see §9, and do not read this table's last row as evidence that this lane is fine.
 
 ⚠️ **`nr-frozen` 6 → 2 is the one to watch, and it is a genuine open risk, not a rounding.** CI's own
 historical figure — `NR_PARALLEL: 6` was recorded as *measured optimal on the 4-vCPU runner* (48 s;
@@ -1197,18 +1216,21 @@ boxes (a 16 GiB runner affords ≈58 contexts); it starts binding below ≈8 GiB
 |---|---|--:|--:|--:|
 | `nr-frozen` | `FrozenNrRosterFixture` → `newrecruit` | 6 | 2 | **4** ⭐ measured optimum |
 | `nr-editor-ui-frozen` | `FrozenNrGameDataUiFixture` → `newrecruit-ui` | 6 | 4 | **16** ⭐ measured optimum |
-| `nr-live-conformance` | `LiveNrRosterFixture` → `newrecruit` | 2 | 2 | **4** ⚠️ see below |
+| `nr-live-conformance` | `LiveNrRosterFixture` → `newrecruit` | 2 | 2 | ~~4~~ → **2** (§9) |
 
 **CI should end up faster than `main`, not merely back at parity**, because `NR_PARALLEL: 6` was
 *itself* far below `newrecruit-ui`'s true optimum of 16 — that lane has never once been run near it
 (§7.5: 6 costs 50%; the mirrored 4 costs 100%).
 
-⚠️ **`nr-live-conformance` 2 → 4 is a side-effect worth watching.** It shares the `newrecruit` engine
-with `nr-frozen`, so it inherits the declared pool of 4. §7 swept only the **frozen** suites; a live
-lane has a different latency profile, and 4 concurrent contexts is more traffic to a third-party
-service than 2. It is still below the pre-policy code default for that fixture (5), and the sweep says
-the shared Playwright driver saturates at 4 regardless — but it is the one number here that no
-measurement covers.
+> ⚠️ **`nr-live-conformance` 2 → 4 was a DEFECT, and §9 reverts it.** What §8 shipped read: *"a
+> side-effect worth watching… it is the one number here that no measurement covers."* That was the
+> right instinct and the wrong conclusion. The missing measurement was not an oversight to be filled
+> in later — **the 2 was never a throughput figure at all.** It was a load limit on `newrecruit.eu`, a
+> website we do not own, chosen deliberately by the same commit that swept the frozen lanes
+> (`7e65836`) and *declined* to apply its own sweep result here. Inheriting `newrecruit`'s declared
+> pool of 4 doubled the traffic this harness puts on a third party, on the strength of a sweep of a
+> HAR file. The lane is back at **2**, and the limit now has a name:
+> `ConcurrencyPolicy.ThirdPartyLiveLoadLimit`.
 
 ## 8.5 `FixtureConcurrency.FixturePoolCap` — DELETED, not re-derived
 
@@ -1252,6 +1274,19 @@ deliberately reintroduced version of the defect (the mutant is named):
 | `FixtureConcurrencyTests.PoolSizeFor_IsThePolicysAnswer_UnmodifiedByAnyFixtureLevelCap` | re-add any fixture-level cap that binds on the running machine (e.g. the old 8, against a plan of 16) |
 | `PolicyOverrideTests.Workers_OverridesTheProcessAxisOnly_NotThePool` | restore `poolSize = parsedWorkers` |
 
+And the tests §9 adds, against the defect §8 itself introduced (each verified red against the named
+mutant, then green):
+
+| test | mutant that makes it fail |
+|---|---|
+| `Policy_LiveLane_IsHeldAtTheLoadLimit_AndDoesNotTrackTheFrozenContextPool` | raise `ThirdPartyLiveLoadLimit` to the frozen pool's 4 — **the regression that shipped**. Also fails if the limit is derived from `ContextPoolSize` by any formula |
+| `Policy_LoadLimit_IsAPropertyOfTheRemoteService_NotOfTheEnginesDeclaredPool` | compute the limit from the engine (`pool / 2`, `min(pool, cpu)`, …): three engines declaring 4 / 16 / 64 would stop all giving 2 |
+| `Policy_LoadLimit_DoesNotScaleWithCpuCountOrMemory` | put **any** machine term in the clamp (`ceil(cpu × k)`, `min(cpu, limit)`, a memory bound) — a bigger runner is not consent. Also fails if the clamp misses the *process* axis (a 32-core box would plan 12 live workers) |
+| `Policy_LoadLimit_DoesNotTouchLocalLanes` | apply the clamp unconditionally — `nr-editor-ui-frozen`'s pool would collapse 16 → 2, the mirror-image mistake |
+| `Policy_DefaultLoadTarget_IsLocal` | flip the default to `ThirdPartyLive` (throttles every local lane) |
+| `FixtureConcurrencyTests.PoolSizeFor_TheLiveLane_IsTheThirdPartyLoadLimit_NotTheFrozenPool` | the same, on the **real machine** through the fixture's own code path; also fails if `FixtureConcurrency` stops forwarding the load target |
+| `ConcurrencyConfigurationDriftTests.LiveFixture_DeclaresThirdPartyLive_SoTheLoadLimitApplies` | change `LiveNrRosterFixture` to `LoadTarget.Local` — **a policy nobody invokes is a policy nobody has.** Also fails if a *local* fixture declares `ThirdPartyLive` |
+
 ## 8.8 What CI measured after the change
 
 Run [29325721441](https://github.com/WarHub/battlescribe-spec/actions/runs/29325721441) (all 8 jobs
@@ -1288,7 +1323,114 @@ itself**, which the `harness.pool.size` telemetry has just been shown to support
   baseline on both boxes and found **zero divergent specs** — that is what licenses raising the pools.
   §8 re-ran `nr-frozen` and `nr-editor-ui-frozen` at the new pools (4 / 16) on the dev box and both are
   green, but that is a check, not a new campaign.
-- **`nr-live-conformance`'s pool of 4 is unmeasured** (§8.4).
+- ~~**`nr-live-conformance`'s pool of 4 is unmeasured** (§8.4).~~ **Worse than unmeasured — it was
+  wrong.** §8 filed this as a gap to be closed by a future measurement. It could not be: the number it
+  replaced was never a throughput figure. See **§9**, which reverts the lane to 2.
 - **`battlescribe` declares nothing on either axis** and takes both conservative defaults.
 - **Issue #314's composed bound across collections is still open.** Unchanged by this work, and no
   longer masked by a cap that was costing more than it saved.
+
+---
+
+# 9. The live lane is not a lane — it is someone else's website
+
+> **§7 and §8 measured the FROZEN lanes. Their results DO NOT TRANSFER to the live lane, and the
+> reason is not that the live lane is unmeasured. It is that the live lane's number answers a
+> different question.**
+
+## 9.1 What happened
+
+`nr-frozen` and `nr-live-conformance` resolve the **same engine** — `"newrecruit"`, the same
+`EngineProfile`, the same `ContextPoolSize: 4`. One replays a HAR file off local disk. The other
+drives **`newrecruit.eu`**, a live production website run by other people. Nothing in
+`MachineProfile`, and nothing in `EngineProfile`, could tell those two apart, so the policy gave them
+the same pool. It had no way not to.
+
+The live lane's pool had been **2** for its entire history, set deliberately:
+
+> *"The live nr-conformance lane stays at 2 — it drives the real newrecruit.eu, so parallelism there
+> is a load question, not a throughput one."*
+> — commit `7e65836`, 2026-07-12
+
+Read what that commit **is**: it is a *sweep result*. It raised the frozen lanes 4 → 6 on measured
+evidence and, in the same breath, **refused to apply itself to the live lane.** The 2 is not an
+unmeasured number awaiting a sweep. It is *deliberately* unmeasured, because the thing it bounds is
+not ours to optimize.
+
+Then:
+
+1. The concurrency model deleted `NR_PARALLEL` — correctly; it was a second place to decide a question
+   the policy owns. But the **constraint** the variable carried had nowhere in the model to live, and
+   was deleted with it.
+2. For one commit it survived **by coincidence**: the mirrored policy computed `ceil(4 × 0.375) = 2`.
+   The same 2, for unrelated reasons.
+3. §8 separated the axes (#314). The coincidence broke. The live lane took `newrecruit`'s declared
+   `ContextPoolSize: 4` — **fitted by sweeping `nr-frozen` (HAR replay, no network) on a 4-CPU
+   container. Nothing in that sweep touched newrecruit.eu.**
+4. CI measured the result and reported it as a **win**: `nr-live-conformance` 230 s → 145 s, −37%
+   (§8.8). It was not a win. It was 85 seconds of our wall-clock bought with a doubling of the traffic
+   we put on a stranger's server.
+
+**This was the first change to that lane's concurrency in the repo's history, and nobody chose it.**
+
+## 9.2 The fix: `LoadTarget`, and a limit that no sweep may raise
+
+`ConcurrencyPolicy.For(machine, engine, loadTarget)` — a third input, because the question "who is on
+the other end?" is not answerable from the machine or the engine, and cannot be defaulted safely.
+
+| | asks | answered by |
+|---|---|---|
+| `OversubscriptionFactor`, `ContextPoolSize`, `MemPerContextBytes`, `MemoryHeadroomFactor` | *how fast can **this machine** go?* | measurement (§1–§8) |
+| **`ThirdPartyLiveLoadLimit = 2`** | *how hard may we hit **a stranger's server**?* | **judgment. Never a sweep.** |
+
+`LoadTarget.ThirdPartyLive` clamps **both axes** to 2 — contexts *and* worker processes — because the
+remote host feels requests in flight and cannot see how we spawned them. `LoadTarget.Local` (HAR
+replay, static local site, in-process IKVM, desktop app) is inert: the frozen lanes keep their measured
+optima of 4 and 16 exactly.
+
+`FixtureConcurrency.PoolSizeFor(engine, loadTarget)` has **no default** for the load target. Every
+fixture must state who it is talking to. That a fixture had no way to say so is precisely how the
+courtesy limit got deleted.
+
+**Why it is not a fourth quantity to reconcile with the other three.** This branch's entire history is
+numbers that got conflated because they shared a name or a mirror (`PoolSize: workers`;
+`maxParallelThreads` pinned to a memory cap). `ThirdPartyLiveLoadLimit` differs in **kind**, not in
+value, from `ContextPoolSize`. There is no exchange rate between them, and the next person to see a 2
+sitting next to a 4 **will** want to bring them into line — the constant's own doc comment stops them,
+in the code, where they will be standing.
+
+## 9.3 What it costs, stated plainly
+
+The live lane goes **145 s → ≈230 s** (the §8.8 numbers, run backwards). We pay that out of our CI
+budget rather than out of someone else's bandwidth. **If this lane needs to be faster, make it send
+fewer requests — not more of them at once.**
+
+Two things make the 2 load-bearing rather than decorative:
+
+- **Nothing else bounds it.** `grep -rE 'retry|backoff|throttl|rate.?limit|429|Task.Delay|Thread.Sleep'
+  src/BattleScribeSpec.NewRecruit/` → **zero hits.** No pause between specs, no retry, no backoff, no
+  429 handling. The pool size is the only brake this harness has.
+- **`SequentialLiveNrRosterFixture` was launching a second browser against newrecruit.eu that no test
+  used.** All 363 of its specs skip unless `NR_SEQUENTIAL=true` (nothing sets it), but the lane's
+  filter still selected them, so xUnit built the fixture and it eagerly called
+  `NewRecruitRosterEngine.CreateAsync` — a separate browser from the pool's, loading a third party's
+  site for zero benefit. It is now lazy: the engine is created on first *use*.
+
+## 9.4 What §9 did NOT reach
+
+- **The CLI path does not declare its load target.** `bs-spec run --all` with `NR_ENGINE_URL` set makes
+  the child engine host go live (`HostEngineFactory`), and the parent that computes the plan never
+  asks — so that path is still bounded only by `Workers` (`ceil(cpuCount × 0.375)`: **12** worker
+  processes on the dev box, each with its own browser, against newrecruit.eu). `ConcurrencyPolicy.For`
+  now *accepts* the answer and clamps both axes when given it; the CLI simply never passes it. Wiring
+  it honestly needs the **engine** to declare which service it talks to (the policy is forbidden from
+  string-matching engine names, and `NR_ENGINE_URL` is meaningless for `battlescribe`), which is a
+  design change, not a patch. **Filed, not fixed.** The xUnit lane — the one CI actually runs against
+  the live site — is bounded.
+- **The 2 itself is not, and will not be, measured.** That is the point. A sweep can tell you how fast
+  newrecruit.eu answers 8 concurrent sessions. It cannot tell you whether we are entitled to ask.
+- **This does not explain issue #318** (the `nr-conformance` crash). The evidence there is n=2 and the
+  exit code (0) argues *against* resource exhaustion. §9 fixes a design defect on its own merits;
+  #318 stays open. What §9 *does* give #318 is the thing it was missing: `nr-conformance` now uploads
+  its telemetry (`if: always()`), so the next crash on that lane leaves a trace behind. It was the only
+  lane in `ci.yml` without that step.

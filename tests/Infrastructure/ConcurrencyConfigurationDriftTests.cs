@@ -130,6 +130,57 @@ public sealed class ConcurrencyConfigurationDriftTests
     }
 
     /// <summary>
+    /// <b>The one fixture that talks to a third party's production website must say so.</b>
+    /// <c>ConcurrencyPolicy</c>'s load limit can only bind a caller that declares
+    /// <c>LoadTarget.ThirdPartyLive</c>; a policy nobody invokes is a policy nobody has. This is the
+    /// only test in the repo that connects the constant to the lane it protects — the unit tests prove
+    /// the policy <em>would</em> return 2, and this proves the live lane <em>asks</em> for it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Falsifiable, in both of the ways this can go wrong.</b> Change <c>LiveNrRosterFixture</c>'s
+    /// argument to <c>LoadTarget.Local</c> — the change that "restores" it to the frozen lane's
+    /// measured pool of 4, i.e. the exact regression of #314/edf3b4a — and the first assertion goes
+    /// red. Declare <c>ThirdPartyLive</c> in a fixture that only ever touches local disk (throttling a
+    /// lane nobody else pays for, the mirror-image mistake) and the second goes red.
+    /// </para>
+    /// <para>
+    /// It matches on the call shape (<c>LoadTarget.ThirdPartyLive)</c> — with the closing paren) rather
+    /// than the bare name, so prose and <c>&lt;see cref&gt;</c> references in the fixtures' own docs are
+    /// not offenders. This file is excluded from the scan because it necessarily contains the string it
+    /// searches for.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void LiveFixture_DeclaresThirdPartyLive_SoTheLoadLimitApplies()
+    {
+        var infrastructure = Path.Combine(RepoRoot, "tests", "Infrastructure");
+        var liveFixture = Path.Combine(infrastructure, "LiveNrRosterFixture.cs");
+
+        // The live NR conformance pool — the 363-spec lane that drives newrecruit.eu — must ask the
+        // policy for the third-party load limit, by name, with the engine it shares with `nr-frozen`.
+        Assert.Contains(
+            "PoolSizeFor(\"newrecruit\", LoadTarget.ThirdPartyLive)",
+            File.ReadAllText(liveFixture),
+            StringComparison.Ordinal);
+
+        // ...and nothing else may claim it. A local lane that declares ThirdPartyLive would be silently
+        // throttled to 2 (a 2x CI regression on a suite that costs nobody but us) while looking, in the
+        // diff, like a safety improvement.
+        var declaring = Directory
+            .EnumerateFiles(infrastructure, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !Path.GetFileName(f).Equals(
+                $"{nameof(ConcurrencyConfigurationDriftTests)}.cs", StringComparison.Ordinal))
+            .Where(f => File.ReadAllText(f).Contains("LoadTarget.ThirdPartyLive)", StringComparison.Ordinal))
+            .Select(f => Path.GetRelativePath(RepoRoot, f))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        string[] onlyTheLiveFixture = [Path.GetRelativePath(RepoRoot, liveFixture)];
+        Assert.Equal(onlyTheLiveFixture, declaring);
+    }
+
+    /// <summary>
     /// The environment-variable knobs the concurrency model replaced. Each one used to answer a
     /// question <c>ConcurrencyPolicy</c> now owns, from a second place that could disagree with it.
     /// </summary>

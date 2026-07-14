@@ -59,7 +59,9 @@ public sealed class BsGameDataUiFixture : IAsyncLifetime
 
         // KeepAlive means exactly "the plan says reuse this engine" — the same single decision the
         // CLI path takes (HostEngineFactory.CreateBsUiGameDataEngine). No environment variable.
-        var keepAlive = FixtureConcurrency.Resolve("battlescribe-ui").ReuseGameData;
+        // Local: a desktop app on this machine. (LoadTarget governs the load limit, not reuse — but it
+        // has no default, so every fixture states who it is talking to.)
+        var keepAlive = FixtureConcurrency.Resolve("battlescribe-ui", LoadTarget.Local).ReuseGameData;
 
         using var span = FixtureTelemetry.StartInit(nameof(BsGameDataUiFixture));
         var engine = new BsGameDataUiEngine(options) { KeepAlive = keepAlive };

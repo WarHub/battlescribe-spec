@@ -1,3 +1,4 @@
+using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.NrGameDataUiDriver;
 
 namespace BattleScribeSpec.Tests;
@@ -47,7 +48,8 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
         var headless = Environment.GetEnvironmentVariable("NR_HEADLESS") != "false";
         float? slowMo = float.TryParse(Environment.GetEnvironmentVariable("NR_SLOW_MO"), out var sm) ? sm : null;
 
-        var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit-ui");
+        // Local: this pool drives a statically-served copy of the NR editor from `staticDir`.
+        var concurrency = FixtureConcurrency.PoolSizeFor("newrecruit-ui", LoadTarget.Local);
 
         // Held for the pool's entire alive window (released in DisposeAsync, after teardown) so
         // NrGameDataUiEnginePoolResourceMetricsTests/NrGameDataUiEngineResourceMetricsTests's own
