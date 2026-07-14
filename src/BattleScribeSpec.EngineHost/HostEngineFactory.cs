@@ -49,12 +49,7 @@ internal static class HostEngineFactory
                 {
                     var options = ResolveBsUiOptions();
                     Ui.Info($"BS UI mode: {options.RosterEditorJarPath}");
-
-                    // KeepAlive means exactly "the plan says reuse this engine" — no OR with a
-                    // separate --keep-alive flag, no environment-variable override. Reuse is one
-                    // decision made once by the caller (ConcurrencyPlan), not two mechanisms that
-                    // can disagree.
-                    return new BsUiRosterEngine(options) { KeepAlive = reuseRoster };
+                    return CreateBsUiRosterEngine(options, reuseRoster);
                 }
 
             case "newrecruit-ui":
@@ -103,9 +98,7 @@ internal static class HostEngineFactory
                         "BS UI artifacts not found — run setup.ps1 (installs the Liberica JDK and builds the agent jar), " +
                         "or set BS_UI_JAVA_PATH and ensure DataEditor.jar + the agent jar exist.");
                     Ui.Info($"BattleScribe Data Editor UI: {options.RosterEditorJarPath}");
-                    // KeepAlive means exactly "the plan says reuse this engine" — see the roster
-                    // case above for why there's no OR and no environment-variable override here.
-                    return new BsGameDataUiEngine(options) { KeepAlive = reuseGameData };
+                    return CreateBsUiGameDataEngine(options, reuseGameData);
                 }
 
             case "newrecruit":
@@ -124,6 +117,45 @@ internal static class HostEngineFactory
                 throw new ArgumentException($"Unknown gamedata engine: '{name}'.");
         }
     }
+
+    /// <summary>
+    /// Construct the BS-UI roster engine from already-resolved artifact paths, with
+    /// <c>KeepAlive</c> set from the caller's reuse decision.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>KeepAlive means exactly "the plan says reuse this engine"</b> — no OR with a separate
+    /// <c>--keep-alive</c> flag, no environment-variable override. Reuse is one decision, made once
+    /// by the parent (<c>ConcurrencyPlan</c>), not two mechanisms that can disagree.
+    /// </para>
+    /// <para>
+    /// <b>Why this is a separate seam from <see cref="CreateRosterEngineAsync"/>:</b> so the rule
+    /// above can be tested in <em>every</em> CI job. The engine name is the only thing that decides
+    /// whether a <c>BsUiRosterEngine</c> is built, and <see cref="ResolveBsUiOptions"/> throws
+    /// ("Agent JAR not found") on any machine without the Java agent jar — which is every CI job
+    /// except <c>smoke</c> and <c>thorough-ui-bs</c> (<c>setup.ps1</c> skips the jar when
+    /// <c>CI=true</c>). Testing the reuse rule through the discovery path would therefore mean a
+    /// test that only runs where the artifacts happen to exist. <c>KeepAlive</c> exists only on the
+    /// two BS-UI engines, so the rule cannot be retargeted to a cheaper engine either. Splitting
+    /// construction from discovery lets the test hand in a <see cref="BsUiOptions"/> directly (as
+    /// <c>BsUiSetupFailureTeardownTests</c> already does) and assert the rule with no artifacts at
+    /// all — a gate that runs everywhere beats a gate that is skipped where it matters.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">Resolved artifact paths.</param>
+    /// <param name="reuseRoster">The plan's roster-reuse decision; becomes <c>KeepAlive</c> verbatim.</param>
+    internal static IRosterEngine CreateBsUiRosterEngine(BsUiOptions options, bool reuseRoster) =>
+        new BsUiRosterEngine(options) { KeepAlive = reuseRoster };
+
+    /// <summary>
+    /// Construct the BS-UI gamedata engine from already-resolved artifact paths, with
+    /// <c>KeepAlive</c> set from the caller's reuse decision. See
+    /// <see cref="CreateBsUiRosterEngine"/> for why this is a seam.
+    /// </summary>
+    /// <param name="options">Resolved artifact paths.</param>
+    /// <param name="reuseGameData">The plan's gamedata-reuse decision; becomes <c>KeepAlive</c> verbatim.</param>
+    internal static IGameDataEngine CreateBsUiGameDataEngine(BsUiOptions options, bool reuseGameData) =>
+        new BsGameDataUiEngine(options) { KeepAlive = reuseGameData };
 
     /// <summary>
     /// Resolve the BattleScribe Roster Editor UI options (Java runtime, app jar, agent jar)

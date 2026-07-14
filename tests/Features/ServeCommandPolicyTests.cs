@@ -1,3 +1,5 @@
+using BattleScribeSpec.BsGameDataUiDriver;
+using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.EngineHost;
 
@@ -17,7 +19,7 @@ public sealed class ServeCommandPolicyTests
     [Fact]
     public void BuildOptions_ReuseOn_SetsBothAcrossSetupsFlagsFromThePlan()
     {
-        var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, MaxParallelThreads: 1, ReuseRoster: true, ReuseGameData: true);
+        var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, ReuseRoster: true, ReuseGameData: true);
 
         var options = ServeCommand.BuildOptions("battlescribe-ui", headless: true, plan);
 
@@ -28,7 +30,7 @@ public sealed class ServeCommandPolicyTests
     [Fact]
     public void BuildOptions_ReuseOff_SetsBothAcrossSetupsFlagsFromThePlan()
     {
-        var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, MaxParallelThreads: 1, ReuseRoster: false, ReuseGameData: false);
+        var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, ReuseRoster: false, ReuseGameData: false);
 
         var options = ServeCommand.BuildOptions("battlescribe-ui", headless: true, plan);
 
@@ -41,7 +43,7 @@ public sealed class ServeCommandPolicyTests
     {
         // Regression guard for the string-match era, where reuse was an engine-name-wide on/off.
         // The plan can (and does, e.g. a future engine) disagree per domain.
-        var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, MaxParallelThreads: 1, ReuseRoster: true, ReuseGameData: false);
+        var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, ReuseRoster: true, ReuseGameData: false);
 
         var options = ServeCommand.BuildOptions("battlescribe-ui", headless: true, plan);
 
@@ -55,7 +57,7 @@ public sealed class ServeCommandPolicyTests
         // MaxParallel is an engine CEILING (EngineRegistry.Builtins), not this run's chosen worker
         // count — a --policy workers=N override must not leak into the capability the client uses
         // to decide how many adapter processes IT may spawn.
-        var plan = new ConcurrencyPlan(Workers: 7, PoolSize: 7, MaxParallelThreads: 7, ReuseRoster: true, ReuseGameData: true);
+        var plan = new ConcurrencyPlan(Workers: 7, PoolSize: 7, ReuseRoster: true, ReuseGameData: true);
 
         var options = ServeCommand.BuildOptions("battlescribe-ui", headless: true, plan);
 
@@ -72,7 +74,7 @@ public sealed class ServeCommandPolicyTests
         try
         {
             Environment.SetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE", "1");
-            var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, MaxParallelThreads: 1, ReuseRoster: true, ReuseGameData: true);
+            var plan = new ConcurrencyPlan(Workers: 1, PoolSize: 1, ReuseRoster: true, ReuseGameData: true);
 
             var options = ServeCommand.BuildOptions("battlescribe-ui", headless: true, plan);
 
@@ -85,34 +87,71 @@ public sealed class ServeCommandPolicyTests
         }
     }
 
-    [Fact]
-    public async Task CreateRosterEngineAsync_BattlescribeUi_KeepAliveMatchesTheReuseDecision_True()
+    /// <summary>
+    /// Artifact-free BS-UI paths. Construction never launches the JVM (that happens on the first
+    /// <c>SetupAsync</c>), so these paths are never dereferenced here — the same trick
+    /// <c>BsUiSetupFailureTeardownTests</c> uses. This is what lets the KeepAlive-follows-the-plan
+    /// gate below run in EVERY CI job, including the ones that do not build the Java agent jar
+    /// (<c>checks</c>, <c>thorough-conformance</c>: <c>setup.ps1</c> skips the jar when CI=true).
+    /// Going through <c>HostEngineFactory.Create*EngineAsync</c> instead would throw "Agent JAR not
+    /// found" there — a gate that cannot fail in CI is not a gate.
+    /// </summary>
+    private static BsUiOptions UnusedOptions() => new()
     {
-        var engine = await HostEngineFactory.CreateRosterEngineAsync("battlescribe-ui", headless: true, reuseRoster: true);
+        JavaPath = "unused-java-bsspec-test.exe",
+        RosterEditorJarPath = "unused-roster-editor.jar",
+        AgentJarPath = "unused-agent.jar",
+    };
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CreateBsUiRosterEngine_KeepAliveMatchesTheReuseDecision(bool reuseRoster)
+    {
+        // KeepAlive must be the plan's reuse decision, verbatim. The bug this guards: the factory
+        // used to force KeepAlive ON for battlescribe-ui roster regardless of what the caller
+        // decided (`keepAlive || !reuseDisabled`), so the child overrode the parent.
+        var engine = HostEngineFactory.CreateBsUiRosterEngine(UnusedOptions(), reuseRoster);
+
         using (engine as IDisposable)
         {
-            Assert.IsType<BattleScribeSpec.BsRosterUiDriver.BsUiRosterEngine>(engine);
-            Assert.True(((BattleScribeSpec.BsRosterUiDriver.BsUiRosterEngine)engine).KeepAlive);
+            Assert.Equal(reuseRoster, Assert.IsType<BsUiRosterEngine>(engine).KeepAlive);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CreateBsUiGameDataEngine_KeepAliveMatchesTheReuseDecision(bool reuseGameData)
+    {
+        var engine = HostEngineFactory.CreateBsUiGameDataEngine(UnusedOptions(), reuseGameData);
+
+        using (engine as IDisposable)
+        {
+            Assert.Equal(reuseGameData, Assert.IsType<BsGameDataUiEngine>(engine).KeepAlive);
         }
     }
 
     [Fact]
-    public async Task CreateRosterEngineAsync_BattlescribeUi_KeepAliveMatchesTheReuseDecision_False()
+    public void CreateBsUiEngines_DoNotReadTheAblationEnvironmentVariable()
     {
+        // The reuse decision arrives as a parameter and nothing else. Set the retired ablation var
+        // to the value that used to force reuse OFF, ask for reuse ON, and prove the parameter wins.
         var prior = Environment.GetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE");
         try
         {
-            // Old ablation var says "force reuse off"; the new code must ignore it entirely and
-            // key off the explicit parameter alone. Set it to something that would have forced
-            // KeepAlive ON under the old `keepAlive || !reuseDisabled` logic (i.e. leave it unset,
-            // which used to mean reuseDisabled=false => KeepAlive=true) to prove the parameter,
-            // not the environment, governs.
-            Environment.SetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE", null);
+            Environment.SetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE", "1");
 
-            var engine = await HostEngineFactory.CreateRosterEngineAsync("battlescribe-ui", headless: true, reuseRoster: false);
-            using (engine as IDisposable)
+            var roster = HostEngineFactory.CreateBsUiRosterEngine(UnusedOptions(), reuseRoster: true);
+            using (roster as IDisposable)
             {
-                Assert.False(((BattleScribeSpec.BsRosterUiDriver.BsUiRosterEngine)engine).KeepAlive);
+                Assert.True(Assert.IsType<BsUiRosterEngine>(roster).KeepAlive);
+            }
+
+            var gameData = HostEngineFactory.CreateBsUiGameDataEngine(UnusedOptions(), reuseGameData: true);
+            using (gameData as IDisposable)
+            {
+                Assert.True(Assert.IsType<BsGameDataUiEngine>(gameData).KeepAlive);
             }
         }
         finally
@@ -120,21 +159,4 @@ public sealed class ServeCommandPolicyTests
             Environment.SetEnvironmentVariable("BSSPEC_DISABLE_WARM_REUSE", prior);
         }
     }
-
-    [Fact]
-    public async Task CreateGameDataEngineAsync_BattlescribeUi_KeepAliveMatchesTheReuseDecision()
-    {
-        var engineOn = await HostEngineFactory.CreateGameDataEngineAsync("battlescribe-ui", headless: true, reuseGameData: true);
-        using (engineOn as IDisposable)
-        {
-            Assert.True(((BattleScribeSpec.BsGameDataUiDriver.BsGameDataUiEngine)engineOn).KeepAlive);
-        }
-
-        var engineOff = await HostEngineFactory.CreateGameDataEngineAsync("battlescribe-ui", headless: true, reuseGameData: false);
-        using (engineOff as IDisposable)
-        {
-            Assert.False(((BattleScribeSpec.BsGameDataUiDriver.BsGameDataUiEngine)engineOff).KeepAlive);
-        }
-    }
-
 }
