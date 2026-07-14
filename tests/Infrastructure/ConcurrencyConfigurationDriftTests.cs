@@ -284,6 +284,69 @@ public sealed class ConcurrencyConfigurationDriftTests
     }
 
     /// <summary>
+    /// <b>Every test project must actually be RUN by CI.</b> A gate nobody invokes is a gate nobody has.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This repo has two test projects and CI ran <em>one</em> of them: all fifteen <c>dotnet test</c>
+    /// steps in <c>ci.yml</c> named <c>tests/BattleScribeSpec.Tests.csproj</c>, and there was no
+    /// solution-wide sweep — so <c>tests/BattleScribeSpec.Cli.Tests</c> had <b>never executed in CI</b>.
+    /// That is where every gate on the CLI's load target lives (the third-party limit, the fail-safe for
+    /// undeclared adapters, the <c>--policy</c> rejections), and where this branch's regression test for
+    /// the case-sensitivity defect lives. They all passed locally and CI had never seen one of them.
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable:</b> delete the CLI step from <c>ci.yml</c> (or add a third test project without a
+    /// step for it) and this goes red, naming the project. It scans the <c>dotnet test</c> COMMAND LINES
+    /// only — not the file text — so it does not care which job runs the project, with what filter, or in
+    /// what order, and (verified by mutation) a passing <em>mention</em> of the project in a comment
+    /// cannot satisfy it. The first draft of this test scanned the whole file and was defeated by the
+    /// comment three lines above the step it was guarding.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryTestProject_IsRunBySomeCiStep()
+    {
+        var workflows = Path.Combine(RepoRoot, ".github", "workflows");
+        var invocations = Directory
+            .EnumerateFiles(workflows, "*.yml", SearchOption.AllDirectories)
+            .Order(StringComparer.Ordinal)
+            .SelectMany(File.ReadAllLines)
+            .Where(line => line.Contains("dotnet test", StringComparison.Ordinal)
+                && !line.TrimStart().StartsWith('#'))
+            .ToArray();
+
+        var testProjects = Directory
+            .EnumerateFiles(Path.Combine(RepoRoot, "tests"), "*.csproj", SearchOption.AllDirectories)
+            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.NotEmpty(testProjects);
+
+        // A solution-wide `dotnet test BattleScribeSpec.slnx` would cover every project at once; today
+        // every step names one project explicitly, which is what makes an unnamed project invisible.
+        var sweepsTheSolution = invocations.Any(line => line.Contains(".slnx", StringComparison.Ordinal));
+
+        // Workflows are authored with forward slashes whatever the developer's OS.
+        var unrun = testProjects
+            .Select(p => Path.GetRelativePath(RepoRoot, p).Replace(Path.DirectorySeparatorChar, '/'))
+            .Where(rel => !sweepsTheSolution
+                && !invocations.Any(line => line.Contains(rel, StringComparison.Ordinal)))
+            .ToArray();
+
+        Assert.True(
+            unrun.Length == 0,
+            $"These test projects are never run by any CI step:\n{string.Join("\n", unrun.Select(p => "  " + p))}\n\n" +
+            "Every `dotnet test` invocation in .github/workflows names a project explicitly — there is no " +
+            "solution-wide sweep — so a project with no step of its own is a suite that passes on the " +
+            "author's machine and has never once been executed by CI. That is how tests/BattleScribeSpec.Cli.Tests " +
+            "came to hold every gate on the CLI's third-party load limit while CI ran none of them. Add a " +
+            "step, or delete the project.");
+    }
+
+    /// <summary>
     /// The environment-variable knobs the concurrency model replaced. Each one used to answer a
     /// question <c>ConcurrencyPolicy</c> now owns, from a second place that could disagree with it.
     /// </summary>

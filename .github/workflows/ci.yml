@@ -75,6 +75,19 @@ jobs:
         run: node --test scripts/har-diff.test.mjs
       - name: Unit / protocol / lint (offline)
         run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Category!=Conformance" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+      # THE CLI'S OWN TESTS. There are two test projects in this repo and, until now, CI ran ONE of
+      # them: every `dotnet test` step here targeted tests/BattleScribeSpec.Tests.csproj, and nothing
+      # ran tests/BattleScribeSpec.Cli.Tests — not even a solution-wide sweep. So every gate on the
+      # CLI's concurrency model (EngineSpecTests: the third-party load limit, the fail-safe for
+      # undeclared adapters, the --policy rejection gates), plus RunBatchSurfaceTests and
+      # CompareCommandTests, had never once been executed by CI. A gate nobody invokes is a gate
+      # nobody has.
+      #
+      # It belongs in THIS job: these tests are offline and CPU-only. They drive the in-process
+      # BattleScribe engine and the dotnet: reference adapter — both of which this job already builds
+      # and runs in the two steps below — and they touch no browser and no network.
+      - name: CLI (engine selection / load target / protocol surface)
+        run: dotnet test tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       - name: BattleScribe reference engine — kitchen-sink
         run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "(Engine=BsRoster|Engine=BsGameData)&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
       # No --policy here, deliberately: this engine is a LAUNCHABLE (dotnet:) adapter, and a plan
