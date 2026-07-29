@@ -465,6 +465,7 @@ public sealed class SpecLintTests
         "deselectSelection", "setSelectionCount",
         "duplicateSelection", "duplicateForce", "setCostLimit",
         "setCustomization",
+        "loadRoster", "reload",
         "dump"
     ];
 

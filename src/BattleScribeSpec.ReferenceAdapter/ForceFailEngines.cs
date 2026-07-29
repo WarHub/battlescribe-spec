@@ -132,6 +132,16 @@ internal sealed class ForceFailRosterEngine(IRosterEngine inner) : IRosterEngine
 
     public string ExportRosterXml() => inner.ExportRosterXml();
 
+    // STANDING RULE for this file: every defaulted member on IRosterEngine/IGameDataEngine must be
+    // forwarded explicitly here. A decorator cannot forward a member it does not name — an omitted
+    // one binds to the interface's throwing default, so the wrapper reports "not supported" while
+    // the engine it wraps supports it fine. That compiles with no warning, which is what makes it a
+    // trap: adding a defaulted member breaks no build, it just makes this decorator quietly
+    // misreport the inner engine's capabilities.
+    public void LoadRoster(string xml) => inner.LoadRoster(xml);
+
+    public void ReloadRoster() => inner.ReloadRoster();
+
     public void Cleanup() => inner.Cleanup();
 
     public void Dispose() => inner.Dispose();

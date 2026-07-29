@@ -139,6 +139,17 @@ public sealed class ProtocolSchemaTests
             CustomNotes = "Some notes",
         }));
 
+        yield return ("action-loadRoster", SerializeCommand(new ActionCommand
+        {
+            Action = "loadRoster",
+            Xml = "<?xml version=\"1.0\"?><roster id=\"r1\" name=\"Imported\"/>",
+        }));
+
+        yield return ("action-reload", SerializeCommand(new ActionCommand
+        {
+            Action = "reload",
+        }));
+
         yield return ("getState", SerializeCommand(new GetStateCommand()));
 
         yield return ("getErrors", SerializeCommand(new GetErrorsCommand()));

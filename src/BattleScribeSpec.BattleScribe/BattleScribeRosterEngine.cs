@@ -281,6 +281,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
 
     public string ExportRosterXml() => Engine.ExportRosterXml();
 
+    public void LoadRoster(string xml) => Engine.LoadRosterXml(xml);
+
+    public void ReloadRoster() => Engine.ReloadRoster();
+
     // ===== DataSource support (file-based setup + name-based actions) =====
 
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)

@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Roster load + reload (#201, #279)** — the roster domain gains the persistence half of the
+  gamedata lifecycle: `IRosterEngine.LoadRoster(xml)` replaces the engine's roster wholesale from
+  a `.ros` payload and re-links it against the setup data, and `IRosterEngine.ReloadRoster()`
+  serializes the current roster and loads it straight back. (Save already shipped as
+  `ExportRosterXml()`.) Both surface as roster **actions** — `loadRoster` (with an inline `content`
+  XML payload, mirroring gamedata `openFile`) and `reload` — dispatched inside the existing
+  `action` command rather than as new top-level optional protocol commands: optional commands route
+  through nullable `AdapterOptions` delegates whose "unsupported" signal is a `NotSupportedException`
+  the runner *catches and passes over*, and a round-trip spec that vacuously passes is worse than no
+  spec (#309). The runner deliberately does **not** catch `NotSupportedException` for these actions:
+  an engine that cannot load makes the spec fail, and engines opt out explicitly via `engines:` /
+  `skipEngines`. Implemented for the in-process `battlescribe` reference engine via DataUtils
+  `g(InputStream)` — the roster-side counterpart of `e` (game system) / `f` (catalogue) — followed by
+  the desktop app's own load sequence (`setRoster` with default-root-entry selection suppressed, as
+  the app does for a saved roster). `battlescribe-ui`, `newrecruit` and `newrecruit-ui` keep the
+  defaulted throw and are opted out per spec. Covered by the new `roundtrip` roster category
+  (`roundtrip-reload-roster`, `roundtrip-load-roster`) and by `protocol-kitchen-sink`.
 - **Cross-engine roster export byte-compare** — roster specs now support `expectedFile`
   (mirroring gamedata), byte-comparing an engine's exported `.ros` XML against a
   per-engine snapshot. Adds `IRosterEngine.ExportRosterXml()` for **both** engines —

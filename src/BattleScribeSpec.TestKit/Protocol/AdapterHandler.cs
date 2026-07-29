@@ -328,6 +328,13 @@ public static class AdapterHandler
                         cmd.CustomName,
                         cmd.CustomNotes);
                     break;
+                case "loadRoster":
+                    engine.LoadRoster(
+                        cmd.Xml ?? throw new InvalidOperationException("loadRoster requires xml"));
+                    break;
+                case "reload":
+                    engine.ReloadRoster();
+                    break;
                 default:
                     return new ActionResult { Ok = false, Error = $"Unknown action: {cmd.Action}" };
             }

@@ -298,6 +298,21 @@ public sealed class RosterRunner
                     step.CustomNotes);
                 break;
 
+            // Persistence. Deliberately NOT wrapped in a NotSupportedException catch: an engine
+            // that cannot load must make the spec FAIL, never silently pass. Opting out is the
+            // spec's job, via skipEngines / engines: — never the runner's, via swallowing.
+            case "loadRoster":
+                {
+                    var inline = step.Content
+                        ?? throw new InvalidOperationException($"Step {stepIndex}: loadRoster requires content");
+                    _engine.LoadRoster(_exprResolver.Resolve(inline) ?? inline);
+                    break;
+                }
+
+            case "reload":
+                _engine.ReloadRoster();
+                break;
+
             default:
                 _errors.Add($"Step {stepIndex}: unknown action '{step.Action}'");
                 break;

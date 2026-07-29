@@ -32,6 +32,8 @@ internal static class StepFormatter
             Add("count", step.Count);
             Add("costTypeId", step.CostTypeId);
             Add("value", step.Value);
+            // Roster XML payloads are far too long to dump inline — report the size instead.
+            Add("content", step.Content is { } xml ? $"<{xml.Length} chars>" : null);
 
             return string.Join(" ", parts);
         }

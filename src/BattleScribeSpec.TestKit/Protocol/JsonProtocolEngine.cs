@@ -169,6 +169,20 @@ public sealed class JsonProtocolEngine : IRosterEngine
         });
     }
 
+    public void LoadRoster(string xml)
+    {
+        SendAction(new ActionCommand
+        {
+            Action = "loadRoster",
+            Xml = xml,
+        });
+    }
+
+    public void ReloadRoster()
+    {
+        SendAction(new ActionCommand { Action = "reload" });
+    }
+
     public RosterState GetRosterState()
     {
         var response = SendCommand(new GetStateCommand());
