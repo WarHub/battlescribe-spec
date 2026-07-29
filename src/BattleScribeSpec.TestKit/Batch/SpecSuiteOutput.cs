@@ -35,10 +35,25 @@ public static class SpecSuiteOutput
 
     public static void WriteJson(SpecSuiteResult result, string? engineLabel, TextWriter output)
     {
-        // result.Results (SpecResult) carries no adapter-death info by design (SpecResult is a
+        // result.Results (SpecResult) carries no adapter-death COUNT by design (SpecResult is a
         // long-standing public shape used as a dictionary key elsewhere) — that signal lives on
         // the parallel ReportResults (SpecResultSummary) list instead, keyed the same way
         // CompareCommand's verdict map is, so it can be looked up here for the JSON surface too.
+        //
+        // Not to be confused with SpecResult.HarnessError, which does live on SpecResult: the two
+        // answer different questions and neither subsumes the other. AdapterDeaths is an
+        // out-of-process, retry-aware count owned by SpecSuiteRunner ("the adapter PROCESS died N
+        // times, and here is what the rescue retry did about it") and is meaningful only when there
+        // IS an adapter process. HarnessError is the in-process runner's record of the exception it
+        // caught ("the engine threw rather than an assertion failing"), which is the only crash
+        // signal available to a consumer that embeds RosterRunner directly with no adapter process
+        // at all. Adding it to SpecResult widens the record's value equality by one nullable string;
+        // that is safe for the dictionaries above because they are keyed by the very instances the
+        // runner returned, and a strictly finer equality cannot turn a hit into a miss.
+        // Known gaps, deliberately left rather than widened here: HarnessError is set only on the
+        // roster path (RosterRunner), so it is null for GameDataRunner results and for the
+        // load-failure SpecResult that SpecSuiteRunner builds; and it is not surfaced in
+        // JsonSpecEntry below, so `bs-spec run --all --json` does not expose it yet.
         var deathsByKey = result.ReportResults.ToDictionary(
             r => $"{r.Category}/{r.SpecId}", r => r.AdapterDeaths, StringComparer.Ordinal);
 
