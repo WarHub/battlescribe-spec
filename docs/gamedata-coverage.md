@@ -342,7 +342,8 @@ compares it **byte-for-byte** (only `\r\n`→`\n` normalized on read) against ex
 **NewRecruit base**) plus optional per-engine overrides `{specId}.{stepId}.{engine}.{ext}` (`ext` ∈
 `cat`/`gst`, from the root element). Both NR engines serialize through NR's own writer, so they share
 the base; the BS engines get overrides only where their serialization diverges. `BSSPEC_UPDATE_SNAPSHOTS=1`
-(or `bs-spec run --update-snapshots`) (re)writes the side-files. **Declared ids** make exports
+(re)writes the side-files — the only switch, honored by both `bs-spec run` and `dotnet test`; there
+is no `--update-snapshots` flag. **Declared ids** make exports
 reproducible: `addEntry`/`addLink` accept an optional `entryId` (the id to assign the created node),
 echoed back for `${{ steps.<id>.entryId }}` references. `export/export-add-entry` pins a declared-id
 selection entry's `.cat` (NR base + `battlescribe`/`battlescribe-ui` overrides); `export/openfile-inline`

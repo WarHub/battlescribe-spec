@@ -111,6 +111,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`exportRosterXml` silently unsupported for 3 of 4 engines over the protocol** — `bs-engine-host`
+  wired its roster-XML exporter as `e is BsUiRosterEngine ? … : null` and advertised
+  `capabilities.rosterXml` from a `name is "battlescribe-ui"` match, although **all four** built-ins
+  export (three implement `IRosterEngine.ExportRosterXml` directly; `BsUiRosterEngine` is merely
+  async-only). Because a null exporter is the adapter's "unsupported" signal, `battlescribe`,
+  `newrecruit` and `newrecruit-ui` answered `exportRosterXml` with a `ProtocolError`, which
+  `JsonProtocolEngine` maps to `NotSupportedException`, which `RosterRunner.ExecuteFileAssertion`
+  catches and `return`s from — so **every roster `expectedFile` byte-compare was a no-op** for those
+  three engines whenever specs ran through the protocol (`bs-spec run`, hence all `--report`
+  matrices and every external adapter). Nothing failed and nothing warned; the xUnit conformance
+  tests construct engines in-process and bypass the protocol, which is why CI stayed green. This
+  restores assertions that were already written and believed to be running — it adds no new
+  capability. The exporter now falls through to the interface member for every engine and returns
+  the unsupported signal **only** on a genuine `NotSupportedException`, so a real export failure
+  surfaces as a protocol error instead of a skipped assertion. Same fix un-gates `--save-roster`,
+  which `bs-spec run` had been disabling with a warning for every engine but `battlescribe-ui`.
+- **Docs referenced a `--update-snapshots` flag that does not exist** — `bs-spec` registers only
+  `run`/`compare`/`verify`/`probe`/`export-xml`/`format`/`discover`, and `BSSPEC_UPDATE_SNAPSHOTS=1`
+  is the only switch (read by `RosterRunner`/`GameDataRunner`, so it works under both `bs-spec run`
+  and `dotnet test`). Corrected in `docs/adapter-protocol.md`, `docs/gamedata-coverage.md`,
+  `GameDataRunner`'s docstring and the "no expected file" error message, which had been telling
+  people to pass a flag that would have been rejected as unrecognized.
 - **BattleScribe gamedata cost parsing locale bug** — `BattleScribeGameDataEngine`
   parsed spec cost strings with the current culture, so on a locale using `,` as the
   decimal separator a value like `"0.5"` silently became `0`. Both numeric parse sites

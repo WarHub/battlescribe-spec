@@ -17,6 +17,28 @@ await AdapterHandler.RunAsync(
         GameDataEngineFactory = () => new ForceFailGameDataEngine(new BattleScribeGameDataEngine()),
         Name = "battlescribe",
         Version = typeof(BattleScribeRosterEngine).Assembly.GetName().Version?.ToString(),
+
+        // This adapter wraps BattleScribeRosterEngine, which exports. Leaving the exporter unwired
+        // (a null RosterXmlExporter is AdapterHandler's "unsupported" signal) made every roster
+        // `expectedFile` byte-compare a silent no-op on this path too: ProtocolError ->
+        // JsonProtocolEngine's NotSupportedException -> RosterRunner.ExecuteFileAssertion catches
+        // and returns, passing the step. CI drives this adapter as the `battlescribe` identity
+        // (`--engine "battlescribe=dotnet:…/bs-reference-adapter.dll"`), so the assertions the
+        // kitchen-sink spec carries were never actually running there. Same fix as ServeCommand.
+        Capabilities = new AdapterCapabilities { RosterXml = true },
+        RosterXmlExporter = static engine =>
+        {
+            try
+            {
+                return engine.ExportRosterXml();
+            }
+            catch (NotSupportedException)
+            {
+                // Null means "the engine genuinely does not offer this" — the one answer the runner
+                // may ignore. Every other failure propagates and becomes a loud ProtocolError.
+                return null;
+            }
+        },
     },
     input: Console.In,
     output: Console.Out);

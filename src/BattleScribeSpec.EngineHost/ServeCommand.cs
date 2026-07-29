@@ -5,6 +5,7 @@ using BattleScribeSpec.Concurrency;
 using BattleScribeSpec.Engines;
 using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.EngineHost;
 
@@ -103,7 +104,26 @@ internal static class ServeCommand
             {
                 Screenshot = name is "battlescribe-ui" or "newrecruit-ui",
                 Record = name is "battlescribe-ui",
-                RosterXml = name is "battlescribe-ui",
+
+                // NOT `name is "battlescribe-ui"`. ALL FOUR built-ins export a roster — three
+                // implement IRosterEngine.ExportRosterXml directly (BattleScribeRosterEngine,
+                // NewRecruitRosterEngine, NrRosterUiEngine) and BsUiRosterEngine is merely
+                // async-only — so the name match advertised a difference that does not exist, and
+                // it did so on the ONE capability whose false negative is silent: RosterRunner
+                // treats "export unsupported" as "the expectedFile byte-compare does not apply"
+                // and returns, passing the step. Three of four engines had every expectedFile
+                // assertion skipped on the protocol path. (RunCommand also gates --save-roster on
+                // this flag, so the same lie disabled a flag the user explicitly passed.)
+                //
+                // There is deliberately NO per-engine declaration behind this in
+                // EngineRegistry.Builtins: 4 of 4 export, so there is no variation to declare, and
+                // inventing one is precisely what the name match did. What keeps the claim honest
+                // is a falsifiable gate over the code instead of a transcribed table —
+                // ServeCommandCapabilityTests.EveryRosterEngineTheHostCanServe_ProvidesAnExport
+                // reflects over every concrete IRosterEngine in the assemblies this host
+                // references. Add an engine that genuinely cannot export and it goes red; that is
+                // the moment to introduce a real per-engine declaration, not before.
+                RosterXml = true,
                 MaxParallel = maxParallel,
             },
             // Reuse is enabled ONLY where it is measured both CORRECT (per-spec verdicts identical
@@ -133,7 +153,7 @@ internal static class ServeCommand
                 NrRosterUiEngine nr => nr.CaptureScreenshotAsync().GetAwaiter().GetResult(),
                 _ => null,
             },
-            RosterXmlExporter = e => e is BsUiRosterEngine bs ? bs.ExportRosterXmlAsync().GetAwaiter().GetResult() : null,
+            RosterXmlExporter = ExportRosterXml,
             RecordStarter = e =>
             {
                 if (e is BsUiRosterEngine bs)
@@ -145,5 +165,50 @@ internal static class ServeCommand
                 ? bs.StopRecordingAsync().GetAwaiter().GetResult()?.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
                 : null,
         };
+    }
+
+    /// <summary>
+    /// Export <paramref name="engine"/>'s current roster as <c>.ros</c> XML for the
+    /// <c>exportRosterXml</c> command. Every engine goes through here; the only fork is which
+    /// member carries the export.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This used to be <c>e is BsUiRosterEngine bs ? … : null</c></b> — a type test that returned
+    /// the <em>unsupported</em> signal for the other three engines, all of which export perfectly
+    /// well. <c>AdapterHandler</c> reads a null exporter result as "this adapter cannot do that" and
+    /// answers <c>ProtocolError</c>; <c>JsonProtocolEngine.ExportRosterXml</c> maps that to
+    /// <see cref="NotSupportedException"/>; <c>RosterRunner.ExecuteFileAssertion</c> catches it and
+    /// <c>return</c>s. Nothing fails, nothing warns — the byte-compare simply never happens.
+    /// </para>
+    /// <para>
+    /// <b>Which is why only <see cref="NotSupportedException"/> may become null here.</b> Null means
+    /// "the engine does not offer this", and it is the one answer the runner is entitled to ignore.
+    /// A genuine export failure — the BS UI agent unreachable, a serializer blowing up, an engine
+    /// that was never set up — must propagate: <c>AdapterHandler</c> catches it and returns a
+    /// <c>ProtocolError</c> carrying the real message, which is a loud failure rather than a
+    /// byte-compare that quietly did not run. Catching <see cref="Exception"/> here would rebuild
+    /// the same silence one layer down.
+    /// </para>
+    /// </remarks>
+    /// <param name="engine">The live roster engine for the current spec.</param>
+    /// <returns>The roster XML, or null if this engine genuinely does not support export.</returns>
+    private static string? ExportRosterXml(IRosterEngine engine)
+    {
+        try
+        {
+            // BsUiRosterEngine is the one built-in that does not implement the sync interface
+            // member: its export is async-only (an RPC to the Java agent). GetAwaiter().GetResult()
+            // rethrows the task's own exception unwrapped, so the NotSupportedException filter below
+            // works identically on both branches.
+            return engine is BsUiRosterEngine bsUi
+                ? bsUi.ExportRosterXmlAsync().GetAwaiter().GetResult()
+                : engine.ExportRosterXml();
+        }
+        catch (NotSupportedException)
+        {
+            // The engine declined the interface's default implementation — genuinely unsupported.
+            return null;
+        }
     }
 }

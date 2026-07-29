@@ -255,7 +255,7 @@ protocol version it speaks, the spec domains it supports, and optional capabilit
 Response:
 
 ```json
-{"type":"describeResult","name":"battlescribe","version":"2.03.29","protocolVersion":"1.1","domains":["roster","gamedata"],"capabilities":{"screenshot":false,"record":false,"rosterXml":false,"maxParallel":0}}
+{"type":"describeResult","name":"battlescribe","version":"2.03.29","protocolVersion":"1.1","domains":["roster","gamedata"],"capabilities":{"screenshot":false,"record":false,"rosterXml":true,"maxParallel":0}}
 ```
 
 Adapters predating v1.1 answer `describe` with an `error` response; clients MUST treat that
@@ -270,6 +270,14 @@ Support for each is advertised via `describeResult.capabilities` (`screenshot`, 
 `record`). An adapter that does not implement a command answers with an `error` response
 (`"<type> is not supported by this adapter"`); the client maps that to a NotSupported result
 rather than failing the spec.
+
+> **Do not answer `exportRosterXml` with "not supported" if your engine can export.** It is the
+> one optional command whose absence is *silent* rather than merely degraded: the runner reads
+> NotSupported as "the byte-compare does not apply to this engine" and passes the step without a
+> warning, so every `expectedFile` assertion in every spec becomes a no-op for your adapter.
+> Screenshots and recording only cost you an artifact; this costs you the assertions. An adapter
+> whose engine cannot serialize a roster is still entitled to decline — just be sure that is the
+> reason.
 
 #### `screenshot`
 
@@ -663,9 +671,9 @@ the step `id`. Side-files resolve in three tiers (`ext` ∈ `cat`/`gst`, from th
    so it matches `battlescribe-ui` byte-for-byte rather than carrying its own snapshot.
 
 Resolution prefers exact → family → base; the writer keeps each tier minimal (no override is written
-when an engine matches the tier above it). `BSSPEC_UPDATE_SNAPSHOTS=1` (or `bs-spec run
---update-snapshots`) (re)writes the side-files; generate the base first, then the family-canonical
-engine, then variants.
+when an engine matches the tier above it). `BSSPEC_UPDATE_SNAPSHOTS=1` (re)writes the side-files —
+it is the only switch, honored by both `bs-spec run` and `dotnet test`, and there is no
+`--update-snapshots` flag; generate the base first, then the family-canonical engine, then variants.
 
 ### Open / load mid-spec
 
