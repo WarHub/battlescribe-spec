@@ -5,6 +5,7 @@ description: >
   with all selections and children preserved.
 engines:
   battlescribe: skip
+  battlescribe-ui: skip # same engine as battlescribe — the skip applies to its UI drivers too (see #309/#310 discussion)
 
 setup:
   gameSystem:

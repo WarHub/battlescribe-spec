@@ -9,6 +9,20 @@ tags:
   - constraint
   - validation
 
+engines:
+  # Real desktop BS enforces a collective child's "max" constraint as a hard
+  # bound on the per-model count Spinner in the parent's edit panel: verified
+  # live (bs-ui agent) that once Weapon is at its max (2 per model), clicking
+  # the increment arrow, calling the spinner's own setSpinnerValue(3) or even
+  # setSpinnerValue(100) directly, and Ctrl+D duplicating the selection all
+  # leave it clamped at 2 — the JavaFX IntegerSpinnerValueFactory's max is
+  # wired from the constraint, so no UI gesture (click, direct value commit,
+  # or duplicate) can ever reach the per-model 3 this spec's final action
+  # requires. A real desktop-BS user cannot perform this spec's last
+  # setSelectionCount; the in-process reference/newrecruit engines still
+  # cover it. See issue #309, PR #310.
+  battlescribe-ui: skip
+
 setup:
   gameSystem:
     costTypes:

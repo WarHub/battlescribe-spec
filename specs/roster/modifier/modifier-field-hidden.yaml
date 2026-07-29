@@ -2,6 +2,12 @@ id: modifier-field-hidden
 category: modifier
 description: Modifier targeting 'hidden' field changes entry visibility and produces validation error
 
+engines:
+  # Hidden at browse time: real desktop BS never displays this entry, so no
+  # UI-gesture driver can select it (see issue #309). The in-process engine
+  # and the (currently engine-API-backed) bs-ui driver still cover it.
+  battlescribe-ui: skip
+
 setup:
   gameSystem:
     categoryEntries:
