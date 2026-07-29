@@ -1,8 +1,8 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 312 spec files covering the
-complete BattleScribe data model and editing operations.
+Any engine, in any language, can validate its behavior against 478 spec files — 365 roster specs
+and 113 GameData specs — covering the complete BattleScribe data model and editing operations.
 
 ## Quick Start
 
@@ -105,7 +105,7 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 312 declarative spec files covering all BattleScribe operations |
+| **YAML Specs** | 478 declarative spec files (365 roster + 113 GameData) covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
 | **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
@@ -114,33 +114,70 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 ## Spec Coverage
 
-312 specs across 17 categories:
+The suite covers two domains, and they are counted separately. **Roster** specs (`specs/roster/`)
+drive a roster engine — add forces, select entries, assert the resulting roster state. **GameData**
+specs (`specs/gamedata/`) drive a catalogue editor — create and edit `.cat`/`.gst` data, assert the
+resulting model or the exact serialized file.
+
+### Roster specs — 365 across 22 categories
 
 | Category | Specs | Description |
 |----------|------:|-------------|
 | auto-select | 5 | Automatic selection with min constraints and defaults |
-| catalogue | 5 | Catalogue-level entries, rules, cost types |
-| category | 2 | Category links with modifiers, hidden categories |
-| condition | 34 | All condition types, groups, scopes, instanceOf, null-childId |
-| constraint | 40 | Min/max validation, shared, percent, hidden, cost limits, linked errors |
-| cost | 24 | Calculation, aggregation, limits, multi-type, negative, hidden |
+| catalogue | 5 | Catalogue-level category/force entries, cost types, profile types, root rules |
+| category | 3 | Category links with modifiers, hidden category entries, uncategorised fallback |
+| condition | 37 | All condition types, groups, scopes, instanceOf, null-childId |
+| constraint | 39 | Min/max validation, shared, percent, hidden, cost limits, linked errors |
+| cost | 27 | Calculation, aggregation, limits, multi-type, negative, hidden, fractional |
+| customization | 3 | `customName`/`customNotes` on a force, a selection, and a category |
 | deep-nesting | 6 | Cross-catalogue links, chained entry links, nested constraints |
 | entry-group | 4 | Selection entry groups with links, categories, nesting |
+| entry-id | 15 | How `entryId`/`entryGroupId` compose — direct entries, `linkId::targetId` for links, chained links, groups |
 | entry-link | 3 | Entry links with children, collective, groups |
-| force | 20 | Add/remove, nested, categories, multi-catalogue, multi-level |
-| gamesystem | 4 | Game system shared entries, rules, publications |
-| modifier | 54 | All modifier types, groups, repeats, profiles, rules, characteristics |
-| protocol | 1 | Full protocol smoke test (kitchen sink) |
+| export | 1 | Byte-compare of an exported `.ros` against a per-engine snapshot |
+| force | 21 | Add/remove, nested, categories, multi-catalogue, multi-level |
+| gamesystem | 4 | Game system root/shared entries, rules, publications |
+| modifier | 63 | All modifier types, groups, repeats, profiles, rules, characteristics |
+| ordering | 6 | Order of forces, selections and categories — alphabetical, natural sort, definition order |
+| override | 1 | Per-engine override machinery: an action-input override composed with an expected-state override |
+| protocol | 2 | Protocol smoke tests (kitchen sink, duplicate force) |
 | real-world | 2 | DataSource specs using wh40k-10e external data |
-| roster | 10 | Creation, metadata, cost types, lifecycle |
+| roster | 9 | Creation, metadata, cost types, lifecycle |
 | scope | 14 | All scope types, child ID filters, include flags |
-| selection | 84 | Lifecycle, groups, links, collective, types, entry links, publications |
+| selection | 95 | Lifecycle, groups, links, collective, types, profiles, rules, info groups, publications |
+
+### GameData specs — 113 across 22 categories
+
+| Category | Specs | Description |
+|----------|------:|-------------|
+| category | 1 | Category entries with nested constraints and modifiers |
+| comment | 1 | The `comment` (author note) field across data elements |
+| condition | 3 | All condition types, condition groups, advanced query fields |
+| constraint | 2 | Constraint creation and query fields (shared, percent, include-child) |
+| cost | 3 | Cost values, fractional values, cost modifiers |
+| entry | 50 | Selection/category/force entries and groups — creation, nesting, fields, deletion |
+| export | 4 | Byte-compare of serialized `.cat`/`.gst` output against per-engine snapshots |
+| force | 1 | Force entries: creation, nesting, category entries |
+| info-group | 1 | Info groups with nested profiles and rules |
+| links | 4 | Entry and catalogue links: types, targets, flags (collective, import, hidden) |
+| modifier | 3 | Modifier types (string, list/category) and nested conditions |
+| modifier-group | 1 | Modifier groups with nested modifiers and shared conditions |
+| nr | 10 | NewRecruit-only extensions: associations, `exactly`, extended condition/modifier types |
+| profile | 2 | Profiles: profile types, characteristics, metadata fields |
+| publication | 1 | Publications and their metadata fields |
+| repeat | 1 | Modifier repeats and their query fields |
+| root | 2 | Catalogue and game system root metadata fields |
+| roundtrip | 7 | Save + reload fidelity for edits and metadata |
+| rule | 2 | Rules: fields and nested modifiers |
+| shared | 1 | Shared root containers (entries, groups, rules, profiles) |
+| type-def | 1 | Cost types, profile types, characteristic types |
+| validation | 12 | Referential integrity and validation errors (broken links, bad scopes) |
 
 ## Project Structure
 
 ```
 battlescribe-spec/
-├── specs/                          # 246 YAML spec files
+├── specs/                          # 478 YAML spec files (365 roster + 113 gamedata)
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)

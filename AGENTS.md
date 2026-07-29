@@ -100,8 +100,8 @@ pwsh -File tools/format-specs.ps1                                               
 
 | Path | What |
 |------|------|
-| `specs/roster/{category}/{id}.yaml` | Roster spec files (312 total, 17 categories) |
-| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (49 total, 1 category) |
+| `specs/roster/{category}/{id}.yaml` | Roster spec files (365 total, 22 categories) |
+| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (113 total, 22 categories) |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
 | `src/BattleScribeSpec.TestKit/Roster/RosterTypes.cs` | Roster state records |
 | `src/BattleScribeSpec.TestKit/Roster/RosterSpecModels.cs` | Roster YAML spec model classes |
