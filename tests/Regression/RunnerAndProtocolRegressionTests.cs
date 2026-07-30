@@ -30,6 +30,84 @@ public class RunnerAndProtocolRegressionTests
         Assert.Equal(0, engine.ActionCalls);
     }
 
+    // ── Engine identity: base vs concrete ────────────────────────────────
+    // A UI driver asserts under its BASE engine's name (so it inherits every `engines: battlescribe:`
+    // expectation) but must be gateable by its CONCRETE name, because it does not necessarily support
+    // what the base engine supports. Collapsing the two made `skipEngines: [battlescribe-ui]` and
+    // `engines: {battlescribe-ui: …}` silently inert under `bs-spec run --engine battlescribe --ui`.
+
+    [Theory]
+    // Concrete identity named → skip fires.
+    [InlineData("battlescribe", "battlescribe-ui", "battlescribe-ui", 0)]
+    // Base identity named → still fires, as it always did.
+    [InlineData("battlescribe", "battlescribe-ui", "battlescribe", 0)]
+    // Neither identity named → the step runs. An engine that genuinely cannot do this must FAIL
+    // loudly, not be skipped by accident.
+    [InlineData("battlescribe", "battlescribe-ui", "newrecruit", 1)]
+    // No -ui in play: the single identity behaves exactly as before.
+    [InlineData("battlescribe", null, "battlescribe", 0)]
+    [InlineData("battlescribe", null, "newrecruit", 1)]
+    public void SpecRunner_SkipEngines_MatchesBaseOrConcreteEngineIdentity(
+        string engineName, string? engineIdentity, string skipName, int expectedActionCalls)
+    {
+        var engine = new FakeEngine();
+        var runner = new RosterRunner(engine, null, engineName, engineIdentity);
+        var spec = new SpecFile
+        {
+            Id = "skip-identity",
+            Category = "runner",
+            Description = "skipEngines matches either engine identity",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps = [new StepDef { Action = "addForce", ForceEntryId = "fe-1", SkipEngines = [skipName] }]
+        };
+
+        runner.Run(spec);
+
+        Assert.Equal(expectedActionCalls, engine.ActionCalls);
+    }
+
+    [Theory]
+    // The concrete engine has its own entry → most specific wins.
+    [InlineData("battlescribe-ui", 7)]
+    // It does not → it inherits the base engine's entry, which is what nearly every spec relies on.
+    [InlineData("newrecruit-ui", 3)]
+    public void SpecRunner_ExpectedStateOverride_PrefersConcreteIdentityThenBase(
+        string engineIdentity, int expectedForceCount)
+    {
+        var engine = new FakeEngine
+        {
+            State = new RosterState("roster", "gs", [], [], []),
+        };
+        var runner = new RosterRunner(engine, null, "battlescribe", engineIdentity);
+        var spec = new SpecFile
+        {
+            Id = "override-identity",
+            Category = "runner",
+            Description = "per-engine overrides resolve concrete-then-base",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps =
+            [
+                new StepDef
+                {
+                    ExpectedState = new ExpectedStateDef
+                    {
+                        ForceCount = 99,
+                        Engines = new Dictionary<string, ExpectedStateDef>
+                        {
+                            ["battlescribe"] = new() { ForceCount = 3 },
+                            ["battlescribe-ui"] = new() { ForceCount = 7 },
+                        },
+                    },
+                }
+            ]
+        };
+
+        var result = runner.Run(spec);
+
+        // The fake reports zero forces, so the failure text tells us which expectation was applied.
+        Assert.Contains(result.Failures, f => f.Contains($"expected {expectedForceCount} but got 0"));
+    }
+
     [Fact]
     public void SpecRunner_StopsAfterActionException()
     {

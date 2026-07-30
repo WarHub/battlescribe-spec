@@ -11,6 +11,8 @@ public sealed class RosterRunner
     private readonly IRosterEngine _engine;
     private readonly DataSourceResolver? _dataSourceResolver;
     private readonly string? _engineName;
+    private readonly string? _engineIdentity;
+    private readonly IReadOnlyList<string> _skipMatchNames;
     private readonly List<string> _errors = [];
     private readonly ExpressionResolver _exprResolver = new();
     private bool _isDataSourceMode;
@@ -40,12 +42,56 @@ public sealed class RosterRunner
     /// </summary>
     public Func<int, StepDef, bool>? OnBeforeStep { get; set; }
 
-    public RosterRunner(IRosterEngine engine, DataSourceResolver? dataSourceResolver = null, string? engineName = null)
+    /// <param name="engine">The engine under test.</param>
+    /// <param name="dataSourceResolver">Resolves <c>dataSource:</c> setups to a directory of data files.</param>
+    /// <param name="engineName">
+    /// <b>Base identity</b> — the engine whose declarations apply by default, and which
+    /// <c>expectedFile</c> snapshot variant is read. A UI driver is given its <em>base</em> engine
+    /// name here (<c>battlescribe-ui</c> → <c>battlescribe</c>): driving the same engine through a UI
+    /// must not, on its own, change the state it is expected to produce.
+    /// </param>
+    /// <param name="engineIdentity">
+    /// <b>Concrete identity</b> — the engine actually running (<c>battlescribe-ui</c>). Null means
+    /// "same as <paramref name="engineName"/>"; the xUnit conformance suites pass one full name for
+    /// both and are unaffected.
+    /// <para>
+    /// The two exist because a UI driver <em>produces</em> what its base engine produces but does not
+    /// necessarily <em>support</em> what its base engine supports. Collapsing them made
+    /// <c>skipEngines: [battlescribe-ui]</c> and <c>engines: {battlescribe-ui: …}</c> silently inert
+    /// under <c>bs-spec run --engine battlescribe --ui</c>. Both now resolve against the concrete
+    /// identity first and fall back to the base one, so a spec inherits the base engine's
+    /// declarations by default and can still state something specific to the driver — the same
+    /// most-specific-wins rule the batch runner already applies to spec-level <c>engines:</c>.
+    /// </para>
+    /// </param>
+    public RosterRunner(
+        IRosterEngine engine,
+        DataSourceResolver? dataSourceResolver = null,
+        string? engineName = null,
+        string? engineIdentity = null)
     {
         _engine = engine;
         _dataSourceResolver = dataSourceResolver;
         _engineName = engineName;
+        _engineIdentity = engineIdentity is { Length: > 0 } ? engineIdentity : engineName;
+        // A skip fires when the spec names EITHER identity. Purely additive: an existing
+        // `skipEngines: [battlescribe]` keeps applying to a battlescribe-ui run, and
+        // `skipEngines: [battlescribe-ui]` now applies too instead of being silently inert.
+        _skipMatchNames = new[] { engineName, _engineIdentity }
+            .Where(n => n is { Length: > 0 })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()!;
     }
+
+    /// <summary>
+    /// Which per-engine override key applies: the concrete engine's own entry when the spec declares
+    /// one, else the base engine's. Most specific wins; absent a concrete entry a UI driver inherits
+    /// its base engine's expectations, which is what nearly every spec wants and relies on.
+    /// </summary>
+    private string? OverrideKeyFor<T>(Dictionary<string, T>? engines)
+        => _engineIdentity is { } id && engines is not null && engines.ContainsKey(id)
+            ? id
+            : _engineName;
 
     /// <summary>
     /// Run a complete spec test. Returns list of assertion failures (empty = pass).
@@ -208,8 +254,10 @@ public sealed class RosterRunner
 
     private void ExecuteAction(StepDef step, int stepIndex)
     {
-        // Skip this step for engines listed in SkipEngines
-        if (step.SkipEngines?.Contains(_engineName, StringComparer.OrdinalIgnoreCase) == true)
+        // Skip this step for engines listed in SkipEngines — matched against both the assertion
+        // identity and the concrete engine identity (see the constructor).
+        if (step.SkipEngines is { } skip
+            && _skipMatchNames.Any(n => skip.Contains(n, StringComparer.OrdinalIgnoreCase)))
         {
             if (step.Id is { Length: > 0 } skippedId)
             {
@@ -219,7 +267,7 @@ public sealed class RosterRunner
         }
 
         // Apply any per-engine action-input overrides for this step.
-        step = step.ForEngine(_engineName);
+        step = step.ForEngine(OverrideKeyFor(step.Engines));
 
         // Resolve expressions in instance ID fields
         var forceId = _exprResolver.Resolve(step.ForceId);
@@ -329,7 +377,7 @@ public sealed class RosterRunner
     {
         if (step.ExpectedState is not null)
         {
-            var effective = step.ExpectedState.ForEngine(_engineName);
+            var effective = step.ExpectedState.ForEngine(OverrideKeyFor(step.ExpectedState.Engines));
             AssertExpectedState(effective, stepIndex);
         }
     }

@@ -210,6 +210,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a profile's engine filter legitimately matches nothing in `BattleScribeSpec.Cli.Tests`.
   `ConcurrencyConfigurationDriftTests.EveryCiTestStep_ExecutesAtLeastOneTest` forbids a bare
   `dotnet test` in any workflow, so a new step cannot silently opt out.
+- **Per-engine declarations were inert for `-ui` engines under `bs-spec run`** — the CLI collapsed a
+  UI engine to its base name before handing it to `RosterRunner` (`battlescribe-ui` → `battlescribe`),
+  so step-level `skipEngines: [battlescribe-ui]` and step/state `engines: {battlescribe-ui: …}` never
+  matched anything and were silently ignored. Collapsing is right for *expectations* — a UI driver
+  produces what its base engine produces, and every spec relies on inheriting `engines: battlescribe:`
+  — but wrong for *capabilities*, which genuinely differ between a driver and its base engine. The
+  runner now carries both identities and resolves most-specific-first: a `skipEngines` entry matches
+  either name, and a per-engine override prefers the concrete engine's entry and falls back to the
+  base engine's. That is the same rule the batch runner already applied to spec-level `engines:`
+  (which filters by the concrete name). Purely additive — every existing declaration keeps its
+  current meaning — and it preserves honest failure: an action an engine cannot perform still fails
+  loudly unless a spec explicitly names that engine. The xUnit conformance suites, which pass one
+  full name for both roles, are unaffected.
 - **`exportRosterXml` silently unsupported for 3 of 4 engines over the protocol** — `bs-engine-host`
   wired its roster-XML exporter as `e is BsUiRosterEngine ? … : null` and advertised
   `capabilities.rosterXml` from a `name is "battlescribe-ui"` match, although **all four** built-ins
