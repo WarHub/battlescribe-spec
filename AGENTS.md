@@ -104,7 +104,7 @@ pwsh -File tools/format-specs.ps1                                               
 
 | Path | What |
 |------|------|
-| `specs/roster/{category}/{id}.yaml` | Roster spec files (365 total, 22 categories) |
+| `specs/roster/{category}/{id}.yaml` | Roster spec files (367 total, 23 categories) |
 | `specs/gamedata/{category}/{id}.yaml` | GameData spec files (113 total, 22 categories) |
 | `src/BattleScribeSpec.TestKit/RepoRoot.cs` | Repo-root resolution (`BattleScribeSpec.slnx` marker) — the ONE implementation; never inline another walk |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
