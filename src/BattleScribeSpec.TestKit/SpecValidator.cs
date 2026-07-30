@@ -27,7 +27,6 @@ public static class SpecValidator
         "customName",
         "customNotes",
         "categoryEntryId",
-        "path",
         "content",
     ];
 
@@ -264,11 +263,6 @@ public static class SpecValidator
             yield return ("categoryEntryId", step.CategoryEntryId);
         }
 
-        if (step.Path is not null)
-        {
-            yield return ("path", step.Path);
-        }
-
         if (step.Content is not null)
         {
             yield return ("content", step.Content);
@@ -288,7 +282,6 @@ public static class SpecValidator
         "customName" => step.CustomName,
         "customNotes" => step.CustomNotes,
         "categoryEntryId" => step.CategoryEntryId,
-        "path" => step.Path,
         "content" => step.Content,
         _ => null,
     };

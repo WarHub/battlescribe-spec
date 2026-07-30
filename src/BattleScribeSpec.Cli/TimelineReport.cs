@@ -611,7 +611,6 @@ public sealed class TimelineReport
         AddParameter(parameters, "customName", step.CustomName);
         AddParameter(parameters, "customNotes", step.CustomNotes);
         AddParameter(parameters, "costTypeId", step.CostTypeId);
-        AddParameter(parameters, "path", step.Path);
 
         if (step.Count is { } count)
         {
