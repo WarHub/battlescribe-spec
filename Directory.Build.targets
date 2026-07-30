@@ -1,0 +1,39 @@
+<Project>
+
+  <!--
+    PIN THE SDK'S IMPLICIT ILLink PACKAGE, SO A RESTORE IS A PROPERTY OF THE REPO AND NOT OF THE BOX.
+
+    Three projects set IsAotCompatible=true (Cli, TestKit, Telemetry). That turns on the trim/AOT
+    analyzers, and the SDK responds by adding an IMPLICIT PackageReference to
+    Microsoft.NET.ILLink.Tasks whose version comes from the installed SDK's KnownILLinkPack
+    (in that SDK's own Microsoft.NETCoreSdk.BundledVersions.props) and NOT from
+    Directory.Packages.props. Central package management does not manage implicit references, so
+    there is no PackageVersion that can hold this down.
+
+    The reference is Direct, so it lands in packages.lock.json, and its version moves with whatever
+    SDK the machine happens to have: global.json pins 10.0.100 with rollForward=latestFeature and CI
+    asks setup-dotnet for '10.0.x', so "whatever SDK" genuinely differs between contributors and
+    between CI runs. main was carrying 10.0.3 in src/BattleScribeSpec.Cli's lock and 10.0.10 in the
+    other two, written by different machines, and a plain `dotnet restore` rewrote whichever ones
+    disagreed with the local SDK. Four separate branches hit that churn and reverted it as unrelated
+    noise before anyone traced it here.
+
+    Pinning ends that, and it is what makes locked-mode restore (enforced by the "Verify lock files"
+    step in .github/workflows/ci.yml) mean anything at all: without it, CI's floating '10.0.x' would
+    fail the repo on the next SDK patch. The pack is a build-time trimmer/analyzer with
+    PrivateAssets=all: it ships in nothing, so pinning it a patch behind the SDK's bundled copy costs
+    only newer analyzer diagnostics.
+
+    Bumping is deliberate and manual, because dependabot does not see this item: read the net10.0
+    ILLinkPackVersion out of the SDK's BundledVersions.props, edit the line below, then re-restore
+    with the force-evaluate switch.
+
+    This MUST live in Directory.Build.targets, not Directory.Build.props: KnownILLinkPack is defined
+    by Microsoft.NET.Sdk.DefaultItems.props, which the SDK imports AFTER Directory.Build.props, so an
+    Update there silently does nothing (measured: the restore still picked the SDK's version).
+  -->
+  <ItemGroup>
+    <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks" ILLinkPackVersion="10.0.10" />
+  </ItemGroup>
+
+</Project>
