@@ -581,9 +581,20 @@ internal static class RunCommand
                 return 130;
             }
 
+            // Printed before the verdict, and on pass as well as fail: "all assertions passed" is a
+            // smaller claim when the spec opted this engine out of some of them, and the reader can
+            // only tell if we say which.
+            foreach (var skipped in result.SkippedSteps)
+            {
+                Ui.Warn(skipped);
+            }
+
             if (result.Failures.Count == 0)
             {
-                Ui.Pass("PASS — all assertions passed");
+                var skipNote = result.SkippedSteps.Count > 0
+                    ? $" ({result.SkippedSteps.Count} step(s) skipped for this engine)"
+                    : "";
+                Ui.Pass($"PASS — all assertions passed{skipNote}");
             }
             else
             {

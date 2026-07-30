@@ -491,15 +491,38 @@ public sealed class BsUiRosterEngine : IRosterEngine
             GameSystemName: _gameSystem.Name);
     }
 
-    /// <summary>Exports the current roster as BattleScribe XML (.ros format).</summary>
-    public async Task<string?> ExportRosterXmlAsync()
+    /// <summary>
+    /// Exports the current roster as BattleScribe XML (.ros format) — the <see cref="IRosterEngine"/>
+    /// member, so this engine reports an export like the other three rather than falling through to
+    /// the interface default that throws <see cref="NotSupportedException"/>. That default is how the
+    /// stack says "genuinely unsupported", and since <c>RosterRunner.ExecuteFileAssertion</c> now
+    /// fails on it, an engine that <em>can</em> export must never raise it: driving this engine
+    /// in-process (any <c>new RosterRunner(engine)</c>, not just via <c>bs-engine-host</c>) would
+    /// otherwise fail every <c>expectedFile</c> byte-compare with "engine reports no export".
+    /// </summary>
+    public string ExportRosterXml() => ExportRosterXmlAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Exports the current roster as BattleScribe XML (.ros format).
+    /// <para>
+    /// Throws rather than returning null when the agent answers without an <c>xml</c> field. Null was
+    /// the adapter layer's "this engine does not support export" signal (see
+    /// <c>AdapterHandler</c>/<c>ServeCommand</c>), so a malformed or empty agent reply used to arrive
+    /// at the runner as a capability gap and — before the swallow was removed — silently passed the
+    /// byte-compare. A broken reply is a fault, and faults must be loud.
+    /// </para>
+    /// </summary>
+    public async Task<string> ExportRosterXmlAsync()
     {
         ThrowIfDisposed();
         if (_client is null)
         {
             throw new InvalidOperationException("Not connected to BattleScribe app.");
         }
-        return await ConnectedClient.ExportRosterXmlAsync();
+        return await ConnectedClient.ExportRosterXmlAsync()
+            ?? throw new InvalidOperationException(
+                "[bs-ui] exportRosterXml returned no 'xml' field. The agent is reachable but did not " +
+                "produce a roster — this is an agent/app fault, not a missing capability.");
     }
 
     /// <summary>Captures a screenshot of the current JavaFX scene as PNG bytes.</summary>

@@ -92,6 +92,13 @@ public abstract class ConformanceTestBase
         var runner = new RosterRunner(engine, new DataSourceResolver(), EngineName);
         var result = runner.Run(spec);
 
+        // What this engine was opted out of, printed on pass as well as fail — a green spec that
+        // skipped steps proved less than a green spec that didn't, and the verdict alone won't say so.
+        foreach (var skipped in result.SkippedSteps)
+        {
+            _output.WriteLine($"{LogPrefix}[SKIPPED] {skipped}");
+        }
+
         if (result.Passed && expectedToFail)
         {
             Assert.Fail($"{LogPrefix}Spec '{specName}' was expected to fail on {EngineName} but now passes! " +

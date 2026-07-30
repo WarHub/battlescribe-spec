@@ -156,12 +156,45 @@ public sealed class GameDataRunner
     /// Export the active file and byte-compare it to the expected (inline or side-file). When
     /// <see cref="UpdateSnapshots"/> is set, (re)write the expected side-file from the actual
     /// export instead.
+    /// <para>
+    /// An engine that cannot export makes this step <b>fail</b>, matching
+    /// <c>RosterRunner.ExecuteFileAssertion</c>. That has always been true here — the call was
+    /// unguarded, so <see cref="IGameDataEngine.ExportActiveFile"/>'s default
+    /// <see cref="NotSupportedException"/> propagated to the step loop and was recorded as a failure;
+    /// gamedata never grew the swallow the roster path did. The catch below only replaces the generic
+    /// "Step N: NotSupportedException: …" with a message that names the opt-out, and must never
+    /// become a <c>return</c>.
+    /// </para>
+    /// <para>
+    /// The opt-out is spec-level (<c>engines: {…: skip}</c>) because <see cref="GameDataStepDef"/>
+    /// has no step-level <c>skipEngines</c>, and it does not need one: a gamedata engine that cannot
+    /// serialize cannot meaningfully run an export spec at all — all three (<c>completeness</c>,
+    /// <c>cost-fractional-export</c>, <c>export-add-entry</c>) exist to byte-compare an export, so
+    /// skipping the assertion would leave nothing behind. Roster specs differ: <c>expectedFile</c>
+    /// there is one step inside a spec that asserts plenty else (<c>protocol-kitchen-sink</c>), which
+    /// is exactly when a per-step skip earns its keep.
+    /// </para>
     /// </summary>
     private void ExecuteFileAssertion(GameDataStepDef step, int stepIndex)
     {
+        string activeFile;
+        try
+        {
+            activeFile = _engine.ExportActiveFile();
+        }
+        catch (NotSupportedException ex)
+        {
+            var engine = _engineName ?? "(unnamed engine)";
+            _errors.Add(
+                $"Step {stepIndex}: expectedFile needs a file export, but engine '{engine}' reports " +
+                $"none ({ex.Message}). Implement ExportActiveFile, or opt this engine out explicitly " +
+                $"with 'engines: {{{engine}: skip}}' on the spec.");
+            return;
+        }
+
         var error = ExportSnapshotAssertion.AssertOrUpdate(
             step.ExpectedFile!.ForEngine(_engineName),
-            _engine.ExportActiveFile(),
+            activeFile,
             _engineName,
             _specId,
             _specDir,

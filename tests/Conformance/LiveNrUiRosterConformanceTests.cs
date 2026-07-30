@@ -49,6 +49,7 @@ public sealed class LiveNrUiRosterConformanceTests
         var skipped = 0;
         var expectedFailures = 0;
         var failures = new List<string>();
+        var skippedSteps = new SkippedStepLog();
 
         foreach (var (specPath, specName, spec) in loadedSpecs)
         {
@@ -64,6 +65,7 @@ public sealed class LiveNrUiRosterConformanceTests
             var runner = new RosterRunner(engine, resolver, EngineName);
             var result = runner.Run(spec);
             engine.Cleanup();
+            skippedSteps.Record(specName, result);
 
             if (result.Passed && expectedToFail)
             {
@@ -89,6 +91,7 @@ public sealed class LiveNrUiRosterConformanceTests
         }
 
         _output.WriteLine($"{LogPrefix}Results: {passed} passed, {skipped} skipped, {expectedFailures} expected failures, {failures.Count} failures");
+        skippedSteps.WriteTo(_output, LogPrefix);
 
         if (failures.Count > 0)
         {

@@ -57,7 +57,11 @@ New-Item -ItemType Directory -Path (Join-Path $OutDir 'classes') -Force | Out-Nu
 
 $sources = Get-ChildItem -Path $SrcDir -Filter '*.java' -Recurse | ForEach-Object { $_.FullName }
 
-& $javac --add-modules javafx.controls -classpath $GsonJar -d (Join-Path $OutDir 'classes') @sources
+# -encoding UTF-8 is not optional: the sources are UTF-8 (box-drawing characters in comments) and
+# javac otherwise decodes them with the platform default charset, which on a Windows machine is
+# typically windows-1252 — 100 "unmappable character" errors and no jar. CI runs on Linux, where the
+# default already is UTF-8, so the flag's absence only ever broke local Windows setup.
+& $javac -encoding UTF-8 --add-modules javafx.controls -classpath $GsonJar -d (Join-Path $OutDir 'classes') @sources
 if ($LASTEXITCODE -ne 0) {
     throw 'javac failed'
 }
