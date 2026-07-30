@@ -154,7 +154,7 @@
         "skipEngines": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Engine names to skip this action step for (e.g., [\"battlescribe\"])"
+          "description": "Engine names to skip this step for (e.g., [\"battlescribe\"]). Applies to any step kind — actions, expectedState and expectedFile alike — and is how a spec declares that an engine cannot do what the step asks. The runner never swallows a capability gap, so an undeclared one fails the spec. Skipped steps are reported in the run summary. Spec-level equivalent: engines: {<engine>: skip}."
         },
         "engines": {
           "type": "object",

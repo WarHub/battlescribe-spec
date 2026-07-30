@@ -114,13 +114,24 @@ public sealed class StepDef
     public string? Content { get; set; }
 
     /// <summary>
-    /// Engine names to skip this action step for (e.g., ["battlescribe"]).
-    /// When skipped, an empty <see cref="ActionOutputs"/> is stored for the step's ID (if set),
-    /// which prevents "step not found" errors in downstream expressions. However, any expression
-    /// that references a specific output field (e.g., <c>${{ steps.id.forceId }}</c>) will still
-    /// throw because those fields are null on the empty outputs. Do not use skipped-step expressions
-    /// in downstream steps for engines where the step is skipped.
-    /// Use for actions not supported by certain engines.
+    /// Engine names to skip this step for (e.g., ["battlescribe"]). Applies to <em>any</em> step kind
+    /// — actions, <c>expectedState</c>, and <c>expectedFile</c> alike — and is the step-level way to
+    /// declare that an engine cannot do what the step asks. Use it for capability gaps: the runner
+    /// never swallows one, so an undeclared gap fails the spec (see
+    /// <c>RosterRunner.ExecuteFileAssertion</c>). The spec-level equivalent, which opts an engine out
+    /// of the whole spec, is <c>engines: {…: skip}</c>.
+    /// <para>
+    /// Skipped steps are reported in <see cref="SpecResult.SkippedSteps"/> so a run that verified less
+    /// says so.
+    /// </para>
+    /// <para>
+    /// When a skipped step is an <em>action</em>, an empty <see cref="ActionOutputs"/> is stored for
+    /// the step's ID (if set), which prevents "step not found" errors in downstream expressions.
+    /// However, any expression that references a specific output field (e.g.
+    /// <c>${{ steps.id.forceId }}</c>) will still throw because those fields are null on the empty
+    /// outputs. Do not use skipped-step expressions in downstream steps for engines where the step is
+    /// skipped.
+    /// </para>
     /// </summary>
     public List<string>? SkipEngines { get; set; }
 

@@ -122,9 +122,16 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// Serialize the current roster to its BattleScribe <c>.ros</c> XML form for byte-compare
-    /// (<c>expectedFile</c>) assertions. Engines that cannot export a roster leave this unsupported,
-    /// and the file assertion is skipped for them. The root <c>roster</c> element identifies the file
-    /// type to the snapshot resolver.
+    /// (<c>expectedFile</c>) assertions. The root <c>roster</c> element identifies the file type to
+    /// the snapshot resolver.
+    /// <para>
+    /// Engines that cannot export a roster leave this unsupported and the assertion <b>fails</b> for
+    /// them — it used to be skipped silently, which passed the step while comparing nothing. Specs opt
+    /// an engine out explicitly via <c>skipEngines</c> / <c>engines:</c>, the same rule
+    /// <see cref="LoadRoster"/> and <see cref="ReloadRoster"/> follow. So an engine that <em>can</em>
+    /// export must implement this member rather than exposing an export some other way: leaving the
+    /// default in place is a claim, and the stack now believes it.
+    /// </para>
     /// </summary>
     string ExportRosterXml()
         => throw new NotSupportedException("This engine does not support roster XML export.");

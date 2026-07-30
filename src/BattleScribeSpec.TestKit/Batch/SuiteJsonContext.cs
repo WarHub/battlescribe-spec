@@ -67,4 +67,14 @@ public sealed class JsonSpecEntry
     [JsonPropertyName("adapterDeaths")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int AdapterDeaths { get; init; }
+
+    /// <summary>
+    /// Steps this engine was opted out of by <c>skipEngines</c> (see
+    /// <see cref="SpecResult.SkippedSteps"/>). Present so a machine reader can tell a spec that
+    /// asserted everything from one that asserted half — <c>passed: true</c> alone cannot. Omitted
+    /// when empty, which is every spec but the handful carrying per-engine skips.
+    /// </summary>
+    [JsonPropertyName("skippedSteps")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? SkippedSteps { get; init; }
 }

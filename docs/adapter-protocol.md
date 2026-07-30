@@ -270,16 +270,17 @@ These four commands give the client roster parity with the engine's own UI: capt
 screenshot, exporting the current roster as `.ros` XML, and recording/replaying UI actions.
 Support for each is advertised via `describeResult.capabilities` (`screenshot`, `rosterXml`,
 `record`). An adapter that does not implement a command answers with an `error` response
-(`"<type> is not supported by this adapter"`); the client maps that to a NotSupported result
-rather than failing the spec.
+(`"<type> is not supported by this adapter"`); the client maps that to a NotSupported result.
+For `screenshot` and `record` that costs you an artifact and the client moves on.
 
-> **Do not answer `exportRosterXml` with "not supported" if your engine can export.** It is the
-> one optional command whose absence is *silent* rather than merely degraded: the runner reads
-> NotSupported as "the byte-compare does not apply to this engine" and passes the step without a
-> warning, so every `expectedFile` assertion in every spec becomes a no-op for your adapter.
-> Screenshots and recording only cost you an artifact; this costs you the assertions. An adapter
-> whose engine cannot serialize a roster is still entitled to decline — just be sure that is the
-> reason.
+> **`exportRosterXml` is different: declining it FAILS every `expectedFile` step.** The runner does
+> not treat "unsupported" as "the byte-compare does not apply" — it did once, which meant an adapter
+> that wrongly declined turned every `expectedFile` assertion into a silent no-op, passing while
+> comparing nothing. So do not answer "not supported" if your engine can export. An adapter whose
+> engine genuinely cannot serialize a roster is still entitled to decline; the spec then has to say
+> so out loud — `skipEngines: [<engine>]` on the step, or `engines: {<engine>: skip}` on the spec —
+> and the run reports the steps it skipped. Declining is a decision the spec records, not one the
+> runner absorbs.
 
 #### `screenshot`
 

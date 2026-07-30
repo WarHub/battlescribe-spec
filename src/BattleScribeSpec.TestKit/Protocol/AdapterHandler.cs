@@ -133,9 +133,15 @@ public static class AdapterHandler
                         ScreenshotCommand => engine is not null && options.ScreenshotProvider?.Invoke(engine) is { } png
                             ? new ScreenshotResult { PngBase64 = Convert.ToBase64String(png) }
                             : new ProtocolError { Message = "screenshot is not supported by this adapter" },
-                        ExportRosterXmlCommand => engine is not null && options.RosterXmlExporter?.Invoke(engine) is { } xml
-                            ? new RosterXmlResult { Xml = xml }
-                            : new ProtocolError { Message = "exportRosterXml is not supported by this adapter" },
+                        // "No engine" is a STATE error, not a capability one, and the two are told
+                        // apart here — as the gamedata commands below already do. The runner maps
+                        // "unsupported" to a failure telling the author to declare skipEngines, which
+                        // is useless advice for an adapter that was simply never set up.
+                        ExportRosterXmlCommand => engine is null
+                            ? new ProtocolError { Message = "roster engine not initialized (call setup first)" }
+                            : options.RosterXmlExporter?.Invoke(engine) is { } xml
+                                ? new RosterXmlResult { Xml = xml }
+                                : new ProtocolError { Message = "exportRosterXml is not supported by this adapter" },
                         RecordStartCommand => HandleRecordStart(options, engine),
                         RecordStopCommand => engine is not null && options.RecordStopper is not null
                             ? new RecordResult { ActionsJson = options.RecordStopper(engine) }

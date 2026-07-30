@@ -108,6 +108,157 @@ public class RunnerAndProtocolRegressionTests
         Assert.Contains(result.Failures, f => f.Contains($"expected {expectedForceCount} but got 0"));
     }
 
+    // ── expectedFile must never pass vacuously ───────────────────────────
+    // `RosterRunner.ExecuteFileAssertion` used to `catch (NotSupportedException) { return; }`, so an
+    // engine that could not export made every byte-compare pass while comparing nothing. #326 removed
+    // the trigger (the host wired the exporter for battlescribe-ui only, so three of four engines
+    // reported "unsupported" over the protocol); these gates remove the swallow, so the next engine,
+    // adapter, or regression that cannot export fails loudly instead of going green.
+
+    [Fact]
+    public void ExpectedFile_WhenTheEngineCannotExport_Fails()
+    {
+        // RosterXml unset → ExportRosterXml throws NotSupportedException, exactly as the interface
+        // default does for an engine that never implemented it.
+        var engine = new FakeEngine();
+        var runner = new RosterRunner(engine, null, "battlescribe");
+        var result = runner.Run(FileAssertionSpec());
+
+        Assert.False(result.Passed);
+        var failure = Assert.Single(result.Failures);
+        Assert.Contains("expectedFile", failure, StringComparison.Ordinal);
+        // The message must name the engine and both opt-outs — a failure the reader cannot act on
+        // invites the swallow back.
+        Assert.Contains("battlescribe", failure, StringComparison.Ordinal);
+        Assert.Contains("skipEngines", failure, StringComparison.Ordinal);
+        Assert.Contains("skip", failure, StringComparison.Ordinal);
+        // Not a harness crash: the engine answered honestly, the spec just failed to declare it.
+        Assert.Null(result.HarnessError);
+        Assert.Empty(result.SkippedSteps);
+    }
+
+    [Fact]
+    public void ExpectedFile_WhenTheSpecOptsTheEngineOut_PassesAndSaysSo()
+    {
+        var engine = new FakeEngine();
+        var runner = new RosterRunner(engine, null, "battlescribe");
+        var spec = FileAssertionSpec();
+        spec.Steps[^1].SkipEngines = ["battlescribe"];
+
+        var result = runner.Run(spec);
+
+        Assert.True(result.Passed);
+        // The declared opt-out is honoured — and reported, so a pass that verified less than the
+        // spec describes is visible rather than indistinguishable from a full run.
+        var skipped = Assert.Single(result.SkippedSteps);
+        Assert.Contains("expectedFile", skipped, StringComparison.Ordinal);
+        Assert.Contains("battlescribe", skipped, StringComparison.Ordinal);
+        Assert.Equal(0, engine.ExportCalls);
+    }
+
+    /// <summary>
+    /// <c>skipEngines</c> on a non-action step used to be silently inert: the check lived inside
+    /// <c>ExecuteAction</c>, which assertion steps never reach. Harmless while assertions could not
+    /// trip over a capability gap; a trap the moment they can, since it is the very declaration the
+    /// new failure message tells authors to write.
+    /// </summary>
+    [Fact]
+    public void SkipEngines_IsHonoredOnExpectedStateSteps()
+    {
+        var engine = new FakeEngine();
+        var runner = new RosterRunner(engine, null, "battlescribe");
+        var spec = new SpecFile
+        {
+            Id = "skip-assertion",
+            Category = "runner",
+            Description = "skipEngines applies to assertion steps, not just actions",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps =
+            [
+                new StepDef
+                {
+                    // Unsatisfiable: the fake reports zero forces. Only the skip can keep this green.
+                    ExpectedState = new ExpectedStateDef { ForceCount = 42 },
+                    SkipEngines = ["battlescribe"],
+                },
+            ],
+        };
+
+        var result = runner.Run(spec);
+
+        Assert.True(result.Passed);
+        Assert.Single(result.SkippedSteps);
+        Assert.Equal(0, engine.GetStateCalls);
+    }
+
+    /// <summary>
+    /// The export is genuinely called and compared when the engine can export — otherwise "no
+    /// failures" would prove nothing about whether the assertion ran at all, which is the exact
+    /// ambiguity this whole area is about.
+    /// </summary>
+    [Fact]
+    public void ExpectedFile_WhenTheEngineExports_ActuallyCompares()
+    {
+        var engine = new FakeEngine { RosterXml = "<roster>actual</roster>" };
+        var runner = new RosterRunner(engine, null, "battlescribe");
+        var spec = FileAssertionSpec();
+        spec.Steps[^1].ExpectedFile!.Content = "<roster>expected</roster>";
+
+        var result = runner.Run(spec);
+
+        Assert.Equal(1, engine.ExportCalls);
+        Assert.False(result.Passed);
+        Assert.Contains(result.Failures, f => f.Contains("does not match expected", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Moving the skip check out of <c>ExecuteAction</c> must not drop the empty-outputs store that
+    /// keeps a downstream <c>${{ steps.&lt;id&gt; }}</c> reporting a missing <em>field</em> rather than
+    /// a missing step.
+    /// </summary>
+    [Fact]
+    public void SkippedAction_StillRegistersItsStepId()
+    {
+        var engine = new FakeEngine();
+        var runner = new RosterRunner(engine, null, "battlescribe");
+        var spec = new SpecFile
+        {
+            Id = "skip-outputs",
+            Category = "runner",
+            Description = "a skipped action still registers its step id",
+            Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+            Steps =
+            [
+                new StepDef { Action = "addForce", Id = "add", ForceEntryId = "fe-1", SkipEngines = ["battlescribe"] },
+                new StepDef { Action = "removeForce", ForceId = "${{ steps.add.forceId }}" },
+            ],
+        };
+
+        var result = runner.Run(spec);
+
+        // The step resolves (not "step 'add' not found"); the field on it does not.
+        Assert.False(result.Passed);
+        Assert.Contains(result.Failures, f => f.Contains("no forceId", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.Failures, f => f.Contains("not found. Available steps", StringComparison.Ordinal));
+    }
+
+    /// <summary>A one-step spec whose only step is a side-file-free inline expectedFile byte-compare.</summary>
+    private static SpecFile FileAssertionSpec() => new()
+    {
+        Id = "file-assertion",
+        Category = "runner",
+        Description = "expectedFile byte-compare",
+        Setup = new SetupDef { GameSystem = new GameSystemDef(), Catalogues = [new CatalogueDef()] },
+        Steps =
+        [
+            new StepDef
+            {
+                Id = "exported",
+                ExpectedFile = new GameData.ExpectedFileDef { Content = "<roster/>" },
+            },
+        ],
+    };
+
     [Fact]
     public void SpecRunner_StopsAfterActionException()
     {
@@ -418,6 +569,15 @@ public class RunnerAndProtocolRegressionTests
         public IReadOnlyList<string> SetupErrors { get; init; } = [];
         public bool ThrowOnSetup { get; init; }
         public bool ThrowOnAddForce { get; init; }
+
+        /// <summary>
+        /// What <see cref="ExportRosterXml"/> returns. Null models an engine that cannot export at
+        /// all — the interface default's <see cref="NotSupportedException"/>, which is the signal
+        /// <c>RosterRunner</c> used to swallow.
+        /// </summary>
+        public string? RosterXml { get; init; }
+
+        public int ExportCalls { get; private set; }
         public int ActionCalls { get; private set; }
         public int GetStateCalls { get; private set; }
         public int CleanupCalls { get; private set; }
@@ -490,6 +650,13 @@ public class RunnerAndProtocolRegressionTests
         }
 
         public IReadOnlyList<ValidationErrorState> GetValidationErrors() => State.ValidationErrors;
+
+        public string ExportRosterXml()
+        {
+            ExportCalls++;
+            return RosterXml
+                ?? throw new NotSupportedException("This engine does not support roster XML export.");
+        }
 
         public void Cleanup() => CleanupCalls++;
 

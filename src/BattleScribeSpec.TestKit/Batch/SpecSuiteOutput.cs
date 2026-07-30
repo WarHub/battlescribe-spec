@@ -15,10 +15,15 @@ public static class SpecSuiteOutput
             output.WriteLine($"Engine: {engineLabel}");
         }
 
+        // Skipped steps are printed alongside failures, not folded into the PASS/FAIL verdict: a spec
+        // that opted this engine out of half its assertions passes on a strictly smaller claim than
+        // one that ran them all, and without this the two lines are identical. Making the shortfall
+        // visible is the whole point — a silent skip is what #309's vacuous-pass class is made of.
         foreach (var r in result.Results)
         {
             var status = r.Passed ? "PASS" : "FAIL";
-            output.WriteLine($"  [{status}] {r.Category}/{r.SpecId}");
+            var skipLabel = r.SkippedSteps.Count > 0 ? $" ({r.SkippedSteps.Count} step(s) skipped)" : "";
+            output.WriteLine($"  [{status}] {r.Category}/{r.SpecId}{skipLabel}");
             if (!r.Passed)
             {
                 foreach (var failure in r.Failures)
@@ -26,11 +31,23 @@ public static class SpecSuiteOutput
                     output.WriteLine($"         {failure}");
                 }
             }
+
+            foreach (var skipped in r.SkippedSteps)
+            {
+                output.WriteLine($"         {skipped}");
+            }
         }
 
         output.WriteLine();
         var xfailLabel = result.ExpectedFailures > 0 ? $", {result.ExpectedFailures} expected failures" : "";
         output.WriteLine($"Results: {result.Passed} passed, {result.Failed} failed{xfailLabel}, {result.Results.Count} total ({result.Elapsed.TotalSeconds:F1}s)");
+
+        var skippedSteps = result.Results.Sum(r => r.SkippedSteps.Count);
+        if (skippedSteps > 0)
+        {
+            var specs = result.Results.Count(r => r.SkippedSteps.Count > 0);
+            output.WriteLine($"Skipped steps: {skippedSteps} across {specs} spec(s) — declared via skipEngines, not verified here");
+        }
     }
 
     public static void WriteJson(SpecSuiteResult result, string? engineLabel, TextWriter output)
@@ -80,6 +97,7 @@ public static class SpecSuiteOutput
                     Tags = spec?.Tags,
                     DurationMs = durationMs,
                     AdapterDeaths = deathsByKey.GetValueOrDefault($"{r.Category}/{r.SpecId}"),
+                    SkippedSteps = r.SkippedSteps.Count > 0 ? r.SkippedSteps : null,
                 };
             })],
         };
@@ -96,6 +114,16 @@ public static class SpecSuiteOutput
         var xpassLabel = result.UnexpectedPasses > 0 ? $", **{result.UnexpectedPasses}** unexpected passes" : "";
         output.WriteLine($"**{result.Passed}** passed, **{result.Failed}** failed{xfailLabel}{xpassLabel}, **{result.Results.Count}** total ({result.Elapsed.TotalSeconds:F1}s)");
         output.WriteLine();
+
+        // How much of the suite this engine was opted out of, next to the pass count that would
+        // otherwise imply it all ran.
+        var skippedSteps = result.Results.Sum(r => r.SkippedSteps.Count);
+        if (skippedSteps > 0)
+        {
+            var specs = result.Results.Count(r => r.SkippedSteps.Count > 0);
+            output.WriteLine($"**{skippedSteps}** step(s) skipped via `skipEngines` across **{specs}** spec(s) — not verified for this engine.");
+            output.WriteLine();
+        }
 
         if (result.Failed > 0)
         {

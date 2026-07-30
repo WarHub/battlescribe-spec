@@ -105,15 +105,15 @@ internal static class ServeCommand
                 Screenshot = name is "battlescribe-ui" or "newrecruit-ui",
                 Record = name is "battlescribe-ui",
 
-                // NOT `name is "battlescribe-ui"`. ALL FOUR built-ins export a roster — three
-                // implement IRosterEngine.ExportRosterXml directly (BattleScribeRosterEngine,
-                // NewRecruitRosterEngine, NrRosterUiEngine) and BsUiRosterEngine is merely
-                // async-only — so the name match advertised a difference that does not exist, and
-                // it did so on the ONE capability whose false negative is silent: RosterRunner
-                // treats "export unsupported" as "the expectedFile byte-compare does not apply"
-                // and returns, passing the step. Three of four engines had every expectedFile
-                // assertion skipped on the protocol path. (RunCommand also gates --save-roster on
-                // this flag, so the same lie disabled a flag the user explicitly passed.)
+                // NOT `name is "battlescribe-ui"`. ALL FOUR built-ins implement
+                // IRosterEngine.ExportRosterXml, so the name match advertised a difference that does
+                // not exist — and it did so on the ONE capability whose false negative was silent:
+                // RosterRunner treated "export unsupported" as "the expectedFile byte-compare does
+                // not apply" and returned, passing the step. Three of four engines had every
+                // expectedFile assertion skipped on the protocol path. (RunCommand also gates
+                // --save-roster on this flag, so the same lie disabled a flag the user explicitly
+                // passed.) The runner no longer swallows that signal — an undeclared capability gap
+                // now FAILS the step — so this flag being wrong is loud rather than invisible.
                 //
                 // There is deliberately NO per-engine declaration behind this in
                 // EngineRegistry.Builtins: 4 of 4 export, so there is no variation to declare, and
@@ -197,13 +197,11 @@ internal static class ServeCommand
     {
         try
         {
-            // BsUiRosterEngine is the one built-in that does not implement the sync interface
-            // member: its export is async-only (an RPC to the Java agent). GetAwaiter().GetResult()
-            // rethrows the task's own exception unwrapped, so the NotSupportedException filter below
-            // works identically on both branches.
-            return engine is BsUiRosterEngine bsUi
-                ? bsUi.ExportRosterXmlAsync().GetAwaiter().GetResult()
-                : engine.ExportRosterXml();
+            // No type test: every engine implements the interface member. BsUiRosterEngine used to be
+            // forked out here because its export was async-only; it now implements the sync member
+            // (wrapping its own RPC) like NewRecruitRosterEngine and NrRosterUiEngine do, which also
+            // makes it correct when driven in-process rather than through this host.
+            return engine.ExportRosterXml();
         }
         catch (NotSupportedException)
         {

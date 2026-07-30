@@ -33,6 +33,7 @@ public sealed class FrozenNrRosterConformanceTests
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var pool = _fixture.EnginePool!;
         var failures = new ConcurrentBag<string>();
+        var skippedSteps = new SkippedStepLog();
         var passed = 0;
         var skipped = 0;
         var expectedFailures = 0;
@@ -83,6 +84,7 @@ public sealed class FrozenNrRosterConformanceTests
 
                 var runner = new RosterRunner(engine, resolver, EngineName);
                 var result = runner.Run(spec);
+                skippedSteps.Record(specName, result);
 
                 if (result.Passed && expectedToFail)
                 {
@@ -109,6 +111,7 @@ public sealed class FrozenNrRosterConformanceTests
 
         _output.WriteLine($"{LogPrefix}Results: {passed} passed, {skipped} skipped, {expectedFailures} expected failures, {failures.Count} failures");
         _output.WriteLine($"{LogPrefix}Pool size: {pool.Size} contexts");
+        skippedSteps.WriteTo(_output, LogPrefix);
 
         if (!failures.IsEmpty)
         {

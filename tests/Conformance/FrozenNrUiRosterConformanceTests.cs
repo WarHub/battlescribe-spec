@@ -55,6 +55,7 @@ public sealed class FrozenNrUiRosterConformanceTests
         var skipped = 0;
         var expectedFailures = 0;
         var failures = new List<string>();
+        var skippedSteps = new SkippedStepLog();
 
         // Sequential execution — UI interactions require a single-browser flow
         foreach (var (specPath, specName, spec) in loadedSpecs)
@@ -71,6 +72,7 @@ public sealed class FrozenNrUiRosterConformanceTests
             var runner = new RosterRunner(engine, resolver, EngineName);
             var result = runner.Run(spec);
             engine.Cleanup();
+            skippedSteps.Record(specName, result);
 
             if (result.Passed && expectedToFail)
             {
@@ -96,6 +98,7 @@ public sealed class FrozenNrUiRosterConformanceTests
         }
 
         _output.WriteLine($"{LogPrefix}Results: {passed} passed, {skipped} skipped, {expectedFailures} expected failures, {failures.Count} failures");
+        skippedSteps.WriteTo(_output, LogPrefix);
 
         if (failures.Count > 0)
         {

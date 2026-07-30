@@ -52,6 +52,11 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
         var result = runner.Run(spec);
         engine.Cleanup();
 
+        foreach (var skipped in result.SkippedSteps)
+        {
+            _output.WriteLine($"{LogPrefix}[SKIPPED] {skipped}");
+        }
+
         if (result.Passed && expectedToFail)
         {
             Assert.Fail($"{LogPrefix}Spec '{specName}' expected to fail on {EngineName} but now passes!");

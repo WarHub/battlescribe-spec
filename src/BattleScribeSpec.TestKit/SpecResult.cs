@@ -19,4 +19,19 @@ public sealed record SpecResult(
     /// use this to distinguish a harness crash from a real spec failure.
     /// </summary>
     public string? HarnessError { get; init; }
+
+    /// <summary>
+    /// One entry per step the spec explicitly opted this engine out of (step-level
+    /// <c>skipEngines</c>). A pass with a non-empty list verified strictly less than a pass with an
+    /// empty one, and nothing else in the result distinguishes them — so the harness reports the
+    /// count rather than letting a spec that skipped half its assertions read as a clean run. Empty
+    /// for <see cref="GameData.GameDataRunner"/> results, which have no step-level skip (gamedata
+    /// opts out per spec, via <c>engines: {…: skip}</c>).
+    /// <para>
+    /// Advisory only: <see cref="Passed"/> and <see cref="Failures"/> are unchanged, since a skip a
+    /// spec asked for is not a failure. Capability gaps the spec did <em>not</em> declare are
+    /// failures and appear in <see cref="Failures"/> — never here.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> SkippedSteps { get; init; } = [];
 }

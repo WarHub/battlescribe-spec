@@ -14,6 +14,7 @@ public sealed class RosterRunner
     private readonly string? _engineIdentity;
     private readonly IReadOnlyList<string> _skipMatchNames;
     private readonly List<string> _errors = [];
+    private readonly List<string> _skippedSteps = [];
     private readonly ExpressionResolver _exprResolver = new();
     private bool _isDataSourceMode;
     private IReadOnlyList<string> _catalogueIds = [];
@@ -99,6 +100,7 @@ public sealed class RosterRunner
     public SpecResult Run(SpecFile spec)
     {
         _errors.Clear();
+        _skippedSteps.Clear();
         _isDataSourceMode = false;
         _catalogueIds = [];
         _specId = spec.Id;
@@ -140,7 +142,11 @@ public sealed class RosterRunner
                         break;
                     }
 
-                    if (step.Action == "dump")
+                    if (IsSkippedForEngine(step))
+                    {
+                        SkipStep(step, i);
+                    }
+                    else if (step.Action == "dump")
                     {
                         // dump is a no-op in the runner itself; the callback does the work
                     }
@@ -195,8 +201,57 @@ public sealed class RosterRunner
         return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors])
         {
             HarnessError = _harnessError,
+            SkippedSteps = [.. _skippedSteps],
         };
     }
+
+    /// <summary>
+    /// Does the spec opt this engine out of <paramref name="step"/>? Matched against both the base
+    /// assertion identity and the concrete engine identity (see the constructor).
+    /// <para>
+    /// Checked for <em>every</em> step kind, not just actions. It used to be checked inside
+    /// <see cref="ExecuteAction"/> alone, which made <c>skipEngines</c> on an assertion step silently
+    /// inert — harmless while assertions could never trip over a capability gap, wrong now that they
+    /// can: <see cref="ExecuteFileAssertion"/> fails on an engine that cannot export, and
+    /// <c>skipEngines</c> is the declaration a spec uses to opt out of that. A declaration the runner
+    /// ignores is the same silence this change exists to remove.
+    /// </para>
+    /// <para>
+    /// This is the step-level half of the opt-out contract; the spec-level half is
+    /// <c>engines: {…: skip}</c> (<see cref="SpecFileBase.IsApplicableTo"/>), applied by the callers
+    /// before the runner ever sees the spec.
+    /// </para>
+    /// </summary>
+    private bool IsSkippedForEngine(StepDef step)
+        => step.SkipEngines is { } skip
+            && _skipMatchNames.Any(n => skip.Contains(n, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Record a step this engine was opted out of, so the result reports what it did <em>not</em>
+    /// verify (<see cref="SpecResult.SkippedSteps"/>) instead of being indistinguishable from a run
+    /// that checked everything. Skipped <em>actions</em> additionally store empty outputs under the
+    /// step id, so a later <c>${{ steps.&lt;id&gt;.… }}</c> reference reports a missing field rather
+    /// than a missing step (see <see cref="StepDef.SkipEngines"/>).
+    /// </summary>
+    private void SkipStep(StepDef step, int stepIndex)
+    {
+        if (step.Action is not null && step.Id is { Length: > 0 } skippedId)
+        {
+            _exprResolver.StoreOutputs(skippedId, new ActionOutputs());
+        }
+
+        _skippedSteps.Add($"Step {stepIndex}: {DescribeStep(step)} skipped by skipEngines for '{EngineLabel}'");
+    }
+
+    private static string DescribeStep(StepDef step) => step switch
+    {
+        { Action: { } action } => $"action '{action}'",
+        { ExpectedFile: not null } => "expectedFile",
+        _ => "expectedState",
+    };
+
+    /// <summary>The engine name a spec would name to opt out — the concrete identity when there is one.</summary>
+    private string EngineLabel => _engineIdentity ?? _engineName ?? "(unnamed engine)";
 
     private void NotifyStepCompleted(int stepIndex, StepDef step)
     {
@@ -254,17 +309,8 @@ public sealed class RosterRunner
 
     private void ExecuteAction(StepDef step, int stepIndex)
     {
-        // Skip this step for engines listed in SkipEngines — matched against both the assertion
-        // identity and the concrete engine identity (see the constructor).
-        if (step.SkipEngines is { } skip
-            && _skipMatchNames.Any(n => skip.Contains(n, StringComparer.OrdinalIgnoreCase)))
-        {
-            if (step.Id is { Length: > 0 } skippedId)
-            {
-                _exprResolver.StoreOutputs(skippedId, new ActionOutputs());
-            }
-            return;
-        }
+        // SkipEngines is handled by the step loop (IsSkippedForEngine / SkipStep), which applies it
+        // to assertions too — this method only ever sees steps this engine is meant to run.
 
         // Apply any per-engine action-input overrides for this step.
         step = step.ForEngine(OverrideKeyFor(step.Engines));
@@ -384,7 +430,17 @@ public sealed class RosterRunner
 
     /// <summary>
     /// Export the roster and byte-compare it to a per-engine snapshot (or inline content), or (re)write
-    /// the snapshot in update mode. Engines that cannot export a roster are skipped silently.
+    /// the snapshot in update mode.
+    /// <para>
+    /// An engine that cannot export makes this step <b>fail</b>. It used to <c>return</c>, so the
+    /// byte-compare silently passed while verifying nothing — the vacuous-pass defect class of #309.
+    /// #326 removed the trigger (three of four engines reported no export over the protocol because
+    /// <c>RosterXmlExporter</c> was wired for <c>battlescribe-ui</c> only) but left the swallow, so a
+    /// fifth engine, an external adapter, or a regression would have restored the silence. Opting an
+    /// engine out is the spec's job — <c>skipEngines</c> on the step, or <c>engines: {…: skip}</c> on
+    /// the spec — never the runner's, via swallowing. Same rule the <c>loadRoster</c>/<c>reload</c>
+    /// actions follow in <see cref="ExecuteAction"/>.
+    /// </para>
     /// </summary>
     private void ExecuteFileAssertion(StepDef step, int stepIndex)
     {
@@ -393,9 +449,13 @@ public sealed class RosterRunner
         {
             rosterXml = _engine.ExportRosterXml();
         }
-        catch (NotSupportedException)
+        catch (NotSupportedException ex)
         {
-            // Engine can't serialize a roster (e.g. a UI-only driver) — the byte-compare doesn't apply.
+            _errors.Add(
+                $"Step {stepIndex}: expectedFile needs a roster export, but engine '{EngineLabel}' " +
+                $"reports none ({ex.Message}). Implement ExportRosterXml, or opt this engine out " +
+                $"explicitly: 'skipEngines: [{EngineLabel}]' on this step, or " +
+                $"'engines: {{{EngineLabel}: skip}}' on the spec.");
             return;
         }
 

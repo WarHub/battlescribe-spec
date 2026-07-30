@@ -15,19 +15,22 @@ namespace BattleScribeSpec.Tests.Features;
 /// <para>
 /// <c>ServeCommand.BuildOptions</c> used to wire the exporter as
 /// <c>e =&gt; e is BsUiRosterEngine bs ? bs.ExportRosterXmlAsync()… : null</c> and advertise
-/// <c>RosterXml = name is "battlescribe-ui"</c>. All four built-ins export — three implement
-/// <see cref="IRosterEngine.ExportRosterXml"/> directly and only <c>BsUiRosterEngine</c> is
-/// async-only — so for <c>battlescribe</c>, <c>newrecruit</c> and <c>newrecruit-ui</c> the
-/// delegate returned null, <c>AdapterHandler</c> read null as "unsupported" and answered
-/// <c>ProtocolError</c>, <c>JsonProtocolEngine.ExportRosterXml</c> mapped that to
-/// <see cref="NotSupportedException"/>, and <c>RosterRunner.ExecuteFileAssertion</c> caught it and
-/// <c>return</c>ed — so every <c>expectedFile</c> byte-compare <b>silently passed</b> on the
-/// protocol path (i.e. under <c>bs-spec run</c>, which is how <c>--report</c> matrices and all
-/// external adapters run). The xUnit conformance tests construct engines in-process and never touch
-/// the protocol, which is why CI stayed green.
+/// <c>RosterXml = name is "battlescribe-ui"</c>. All four built-ins export, so for
+/// <c>battlescribe</c>, <c>newrecruit</c> and <c>newrecruit-ui</c> the delegate returned null,
+/// <c>AdapterHandler</c> read null as "unsupported" and answered <c>ProtocolError</c>,
+/// <c>JsonProtocolEngine.ExportRosterXml</c> mapped that to <see cref="NotSupportedException"/>, and
+/// <c>RosterRunner.ExecuteFileAssertion</c> caught it and <c>return</c>ed — so every
+/// <c>expectedFile</c> byte-compare <b>silently passed</b> on the protocol path (i.e. under
+/// <c>bs-spec run</c>, which is how <c>--report</c> matrices and all external adapters run). The
+/// xUnit conformance tests construct engines in-process and never touch the protocol, which is why
+/// CI stayed green.
 /// </para>
 /// <para>
 /// These gates are protocol-level on purpose: the defect was invisible to every in-process test.
+/// They are now belt-and-braces rather than the only line of defence — the runner no longer converts
+/// "engine reports no export" into a pass, so the same miswiring would fail loudly today. Keeping
+/// them means a capability lie is caught where it starts, with a message naming the engine, rather
+/// than as an export failure on whichever spec happens to carry an <c>expectedFile</c> step.
 /// </para>
 /// </summary>
 [Trait("Category", "Unit")]
@@ -81,9 +84,9 @@ public sealed class ServeCommandCapabilityTests
         Assert.True(
             options.Capabilities.RosterXml,
             $"bs-engine-host serving '{name}' does not advertise capabilities.rosterXml, but that engine " +
-            $"exports rosters. RunCommand gates --save-roster on this flag and RosterRunner treats an " +
-            $"unsupported export as 'skip the expectedFile assertion', so a false negative here is a " +
-            $"silently-passing byte-compare, not a loud failure.");
+            $"exports rosters. RunCommand gates --save-roster on this flag, so a false negative here " +
+            $"disables a flag the user passed; it also makes every expectedFile byte-compare fail with " +
+            $"'engine reports no export' on a spec whose engine is perfectly capable of one.");
     }
 
     /// <summary>
@@ -115,8 +118,9 @@ public sealed class ServeCommandCapabilityTests
             $"bs-engine-host advertises capabilities.rosterXml unconditionally and routes every engine " +
             $"through ServeCommand's exporter, but these roster engines provide no export: " +
             $"[{string.Join(", ", withoutExport.Select(t => t.Name))}]. Implement " +
-            $"IRosterEngine.ExportRosterXml (or an ExportRosterXmlAsync the host can route to), or make " +
-            $"the capability a real per-engine declaration now that engines genuinely differ.");
+            $"IRosterEngine.ExportRosterXml (an async-only export no longer counts — the host calls the " +
+            $"interface member and nothing else), or make the capability a real per-engine declaration " +
+            $"now that engines genuinely differ.");
     }
 
     /// <summary>
@@ -136,16 +140,17 @@ public sealed class ServeCommandCapabilityTests
     /// <summary>
     /// Does <paramref name="engineType"/> genuinely export, or would it fall through to
     /// <see cref="IRosterEngine.ExportRosterXml"/>'s default implementation (which throws
-    /// <see cref="NotSupportedException"/>)? Both shapes the host routes count: the sync interface
-    /// member, and <c>BsUiRosterEngine</c>'s async-only <c>ExportRosterXmlAsync</c>.
+    /// <see cref="NotSupportedException"/>)?
+    /// <para>
+    /// Only the interface member counts. An <c>ExportRosterXmlAsync</c> used to count too, because
+    /// <c>ServeCommand</c> type-tested for <c>BsUiRosterEngine</c> and routed it; that engine now
+    /// implements the sync member (wrapping its own RPC) and the host's fork is gone, so an
+    /// async-only engine would <em>not</em> be exported by the host — accepting one here would put
+    /// the lie back into the capability flag from the other side.
+    /// </para>
     /// </summary>
     private static bool ProvidesRosterXmlExport(Type engineType)
     {
-        if (engineType.GetMethod("ExportRosterXmlAsync", Type.EmptyTypes) is not null)
-        {
-            return true;
-        }
-
         // The interface map, not GetMethod: an explicit interface implementation is a real override
         // and must count, while the inherited default implementation must NOT — and the default is
         // reported here as a target method still declared on IRosterEngine itself.

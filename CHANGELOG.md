@@ -128,6 +128,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **An `expectedFile` step no longer passes when the engine cannot export (#309)** —
+  `RosterRunner.ExecuteFileAssertion` opened with `catch (NotSupportedException) { return; }`, so an
+  engine reporting no roster export made every byte-compare pass while comparing nothing. #326 fixed
+  the *trigger* (the host wired `RosterXmlExporter` for `battlescribe-ui` only, so three of four
+  engines reported "unsupported" over the protocol and every `expectedFile` assertion silently
+  no-op'd) but left the swallow, which would restore the silence for the next engine, external
+  adapter, or regression. An undeclared capability gap is now a **failure** naming the engine and
+  both opt-outs, and opting out is the spec's job — step-level `skipEngines`, or spec-level
+  `engines: {…: skip}` — exactly as `loadRoster`/`reload` already worked. No spec needed a new
+  opt-out: all four engines export. Related repairs along the same path:
+  - **`skipEngines` now applies to assertion steps.** The check lived inside `ExecuteAction`, so
+    `skipEngines` on an `expectedState`/`expectedFile` step was silently inert — harmless while
+    assertions could not trip over a capability gap, wrong now that they can, since it is the very
+    declaration the new failure message asks for.
+  - **`BsUiRosterEngine` implements `IRosterEngine.ExportRosterXml`** instead of exposing an
+    async-only export that `ServeCommand` type-tested for. Driven in-process (any
+    `new RosterRunner(engine)`, not just through `bs-engine-host`) it would otherwise have hit the
+    interface default and failed every byte-compare. Its `ExportRosterXmlAsync` now throws instead of
+    returning null when the agent answers without an `xml` field: null is the adapter layer's
+    "unsupported" signal, so a malformed reply used to reach the runner as a capability gap — and
+    silently pass. `ServeCommand`'s fork is gone, and the capability gate no longer accepts an
+    async-only export as proof the host can export.
+  - **The harness reports skipped steps.** `SpecResult.SkippedSteps` carries what a spec opted an
+    engine out of, surfaced by `bs-spec run`, `run --all` (console, `--json`, GitHub step summary)
+    and the xUnit conformance suites — so a spec that skipped half its assertions no longer reads
+    exactly like one that ran them all.
+
+  `GameDataRunner.ExecuteFileAssertion` never had the swallow (its `ExportActiveFile` call was
+  unguarded, so the default throw was already recorded as a failure); it keeps that behaviour, now
+  pinned by tests and with the same actionable message. It has no step-level `skipEngines` and needs
+  none: all three gamedata export specs exist to byte-compare an export, so skipping the assertion
+  would leave an empty spec behind.
 - **NR roster export intermittently exported from the lists index instead of the editor** —
   `FrozenNrRosterConformanceTests` / `protocol/protocol-kitchen-sink` step 41 failed roughly a
   quarter of the time with `no mounted component exposes exportRos() after 15s at /app/MyLists`.
