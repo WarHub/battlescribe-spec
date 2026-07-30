@@ -37,8 +37,12 @@ NR client version (pinned in `testdata.json`), updated separately via
 
 The frozen NR Editor GameData tests serve the **gh-pages static deployment** of the
 [NR Editor](https://github.com/giloushaker/nr-editor) locally via Playwright route
-interception. No network access needed. The static files are downloaded by `setup.ps1`
-(git clone of the gh-pages branch, pinned by commit SHA in `testdata.json`).
+interception. No network access needed. The static files are downloaded by `setup.ps1`, which
+checks out the **exact commit** pinned in `testdata.json` (fetch-by-SHA, so the pin holds after
+it stops being the `gh-pages` tip) and **fails** if that commit cannot be obtained — it never
+substitutes the branch tip. Re-pinning is a deliberate edit to `testdata.json`, and because a
+`testdata.json` change swaps out what the frozen suites replay, any PR touching that file runs
+the full `thorough-conformance` lane.
 
 ## BS GameData UI tests (local)
 

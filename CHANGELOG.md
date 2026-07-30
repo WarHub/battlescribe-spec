@@ -129,6 +129,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `BsGameDataUiEngine` — collapse into one `BattleScribeSpec.RepoRoot` in the TestKit, which
   every other project already references; copy-paste divergence is what let this bug reach four
   sites in the first place.
+- **The "frozen" NR Editor snapshot was not pinned — it tracked upstream's branch tip** —
+  `testdata.json` names a commit for the `nr-editor` archive, and `setup.ps1` ignored it:
+  it ran `git clone --depth 1 --branch gh-pages`, which by construction can only ever produce
+  that branch's newest commit, then on mismatch printed `Write-Warning "The pinned commit may
+  be outdated"` and carried on with whatever it had just downloaded. The pin was advisory.
+  Measured on 2026-07-30: the pin was `74e2207` (2026-04-27) while `gh-pages` was at `6165dbb`
+  (2026-07-26), so every machine and every CI job ran the `nr-editor-frozen` and
+  `nr-editor-ui-frozen` suites against a third-party deployment three months newer than the
+  one recorded in the repo — with nothing in the test output to say so. The `.tag` marker made
+  it worse rather than better: it recorded the commit actually obtained instead of the one
+  required, so it could never disagree with reality, the "[OK] Already downloaded" fast path
+  never engaged while a pin lagged, and CI silently re-pulled the current tip on every run.
+  `setup.ps1` now resolves the pinned **object** — `git fetch --depth 1 origin <sha>`, which
+  GitHub serves (`uploadpack.allowAnySHA1InWant`) and which reaches a commit that is no longer
+  a branch tip — falling back to a full-history fetch of `ref` for hosts that refuse
+  fetch-by-SHA, and **failing** with re-pin instructions (including the branch's current tip)
+  when the commit is genuinely gone. `ref` is now only a recovery hint, never a source of
+  content. The pin is verified against `HEAD` after checkout, must be a full 40-character SHA,
+  and `.tag` is written afterwards holding the **pinned** commit — so a marker hit is proof
+  the pinned bytes are on disk. `core.autocrlf`/`core.eol` are forced off so the snapshot is
+  the same bytes on every OS. `nr-editor` is re-pinned to `6165dbb`, the current `gh-pages`.
+- **Snapshot-bump PRs did not run the suites they break** — `thorough-conformance` is gated on
+  schedule / `workflow_dispatch` / `[nr-test]` / the `thorough-ci` label, so a PR editing
+  `testdata.json` — which swaps out the very HAR, NR Editor snapshot and BattleScribe build the
+  frozen suites replay — got only the every-push lanes, and those trim exactly those suites to
+  kitchen-sink. #301 (HAR `v34.93-20260708` → `v35.12`) was green through three weeks of daily
+  bot re-runs, merged, and broke the NR-UI roster driver and the store-direct NR roster export;
+  bisecting the HAR tag with nothing else changed confirmed the NR client had dropped a navbar
+  route and replaced every raster icon with an SVG component. `ci.yml`'s gate now turns the
+  thorough lanes on for **any** PR whose diff touches `testdata.json`, bot or human: the
+  exposure comes from the content change, not the author, and a maintainer hand-editing a pin
+  has precisely the bot's exposure. `update-nr-snapshot.yml` additionally labels its PR
+  `thorough-ci`, so the reason the deep suites ran is legible on the PR itself. The `gate` job
+  was also missing from `ci-gate`'s result table — a failed gate skipped the thorough lanes and
+  still aggregated green — and is now checked.
 - **`exportRosterXml` silently unsupported for 3 of 4 engines over the protocol** — `bs-engine-host`
   wired its roster-XML exporter as `e is BsUiRosterEngine ? … : null` and advertised
   `capabilities.rosterXml` from a `name is "battlescribe-ui"` match, although **all four** built-ins
