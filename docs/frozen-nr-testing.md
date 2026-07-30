@@ -139,7 +139,15 @@ The `update-nr-snapshot.yml` workflow runs daily and on manual dispatch:
    - Determines the tag: `v{version}` for new versions, `v{version}-{YYYYMMDD}` if the
      version is unchanged but content differs
    - Publishes a new release to [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har)
-   - Opens a PR updating `testdata.json` with the new tag
+   - Opens a PR updating `testdata.json` with the new tag, labelled `thorough-ci`
+
+A snapshot bump changes what every frozen suite replays, and the every-push CI lanes trim those
+suites to kitchen-sink — so the bump PR must run the full ones or it proves nothing. `ci.yml`
+turns the `thorough-conformance` lane on for **any** PR whose diff touches `testdata.json`,
+whether the bot or a maintainer made the edit; the `thorough-ci` label the bot applies is the
+visible marker of the same decision. #301 (`v34.93-20260708` → `v35.12`) is why: it was green
+through three weeks of daily bot re-runs, merged, and broke the NR-UI roster driver and the
+store-direct roster export.
 
 ## Key Design Decisions
 

@@ -10,6 +10,11 @@
     - Artifacts pinned in testdata.json (e.g., newrecruit-har — frozen HAR snapshot,
       battlescribe-app — extracted to lib/battlescribe)
 
+    testdata.json entries with "type": "archive" (e.g. nr-editor) are checked out at the
+    EXACT pinned commit, not at the tip of "ref" — that field only names the branch used to
+    recover the commit if the host refuses fetch-by-SHA. If the pinned commit cannot be
+    obtained, setup fails and tells you to re-pin; it never falls back to the branch tip.
+
     Installs Playwright browsers needed for New Recruit adapter tests.
 
     Test data is downloaded/cloned into .testdata/<key>/ unless testdata.json overrides
@@ -69,6 +74,99 @@ function Resolve-JdkHome {
         if (Test-Path (Join-Path $macHome 'bin')) { return $macHome }
     }
     return $null
+}
+
+# Materialize $Repo at exactly $Commit under $Destination.
+#
+# A pin is a CONTRACT, not a hint. The suites that consume these archives are advertised as
+# frozen, and a fixture that quietly follows a third party's branch tip is not frozen — it is a
+# test against whatever someone else published last night, and the substitution is invisible in
+# the results. So this resolves the pinned OBJECT and never the branch, and it throws when it
+# cannot: a hard error at setup time is strictly better than a green suite that proves nothing.
+function Install-PinnedArchive {
+    param(
+        [Parameter(Mandatory)][string]$Repo,
+        [Parameter(Mandatory)][string]$Commit,
+        [Parameter(Mandatory)][string]$Destination,
+        [string]$Ref
+    )
+
+    $remote = "https://github.com/$Repo.git"
+    $refLabel = if ($Ref) { $Ref } else { 'the default branch' }
+    $short = $Commit.Substring(0, 12)
+
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+
+    # core.autocrlf/core.eol are pinned off: this is a byte-for-byte snapshot served to a
+    # browser, and it must be the same bytes on Windows, Linux and macOS.
+    $git = @('-C', $Destination, '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf')
+
+    git @git init --quiet
+    if ($LASTEXITCODE -ne 0) { throw "Failed to initialize a git repository at $Destination" }
+    git @git remote add origin $remote
+    if ($LASTEXITCODE -ne 0) { throw "Failed to add remote $remote" }
+
+    # Preferred: ask for the object by SHA. GitHub serves fetch-by-SHA
+    # (uploadpack.allowAnySHA1InWant), so one shallow fetch lands the pinned commit even after
+    # it has stopped being the branch tip — which `clone --depth 1 --branch <ref>` can never do,
+    # because a depth-1 clone of a branch only ever contains that branch's newest commit.
+    Write-Host "  Fetching $Repo @ $short..." -ForegroundColor Yellow
+    $shaLog = (git @git fetch --depth 1 --no-tags origin $Commit 2>&1) -join [Environment]::NewLine
+    $refLog = $null
+
+    # `not our ref` is the server saying the object is not in the repository at all — a full
+    # history fetch cannot conjure it either, so skip straight to the re-pin error instead of
+    # dragging down every commit on $Ref first. Any OTHER failure (a host that refuses
+    # unadvertised objects, a network blip) still gets the fallback: keying on the message
+    # costs us a slow path if git ever rewords it, never a wrong answer.
+    if ($LASTEXITCODE -ne 0 -and $shaLog -notmatch 'not our ref') {
+        # The full history of $Ref still contains the pin whenever it is an ancestor of the tip.
+        Write-Host "  Fetch-by-SHA did not succeed — retrying with the full history of $refLabel..." -ForegroundColor Yellow
+        $fetchArgs = @('fetch', '--no-tags', 'origin')
+        if ($Ref) { $fetchArgs += $Ref }
+        $refLog = (git @git @fetchArgs 2>&1) -join [Environment]::NewLine
+    }
+
+    # One checkout covers both paths: after the SHA fetch the object is present outright, and
+    # after the history fetch it is present iff the pin is reachable from $Ref. Either way this
+    # is where an unobtainable pin becomes a hard failure.
+    git @git checkout --quiet --detach $Commit 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        $indent = { param($t) ($t -split "`r?`n" | ForEach-Object { "      $($_.TrimEnd())" }) -join [Environment]::NewLine }
+        $tried = @("  - fetch by SHA (--depth 1 origin $short)", (& $indent $shaLog))
+        $tried += if ($refLog) {
+            @("  - full history of $refLabel", (& $indent $refLog))
+        } else {
+            "  - full history of ${refLabel}: skipped, the server reports the object is not in this repository"
+        }
+
+        $tip = (git ls-remote $remote ($Ref ? "refs/heads/$Ref" : 'HEAD') 2>&1) -split '\s+' | Select-Object -First 1
+        if ($tip -match '^[0-9a-f]{40}$') { $tried += "", "  $refLabel is currently at $tip" }
+
+        throw @"
+Could not obtain the pinned commit $Commit of $Repo.
+
+$($tried -join [Environment]::NewLine)
+
+The pin is unreachable upstream — most likely $refLabel was force-pushed and the commit was
+garbage-collected. setup.ps1 will NOT substitute the branch tip: a frozen fixture that tracks
+someone else's HEAD is not frozen, and nothing downstream can tell the difference.
+
+Re-pin it:
+  1. pick a commit from https://github.com/$Repo/commits/$Ref
+  2. update "commit" for this entry in testdata.json
+  3. re-run ./setup.ps1
+"@
+    }
+
+    $actual = "$(git @git rev-parse HEAD)".Trim()
+    if ($LASTEXITCODE -ne 0 -or $actual -ne $Commit) {
+        throw "Checked out $Commit of $Repo but HEAD is $actual — refusing to treat this as the pinned snapshot"
+    }
+
+    # Only the static files are needed; drop the object store.
+    $gitDir = Join-Path $Destination '.git'
+    if (Test-Path $gitDir) { Remove-Item $gitDir -Recurse -Force }
 }
 
 Write-Host "Setting up battlescribe-spec dependencies..." -ForegroundColor Cyan
@@ -163,8 +261,20 @@ if (Test-Path $configPath) {
             'archive' {
                 $commit = $entry.commit
                 $ref = if ($entry.PSObject.Properties['ref']) { $entry.ref } else { $null }
+                # Fetch-by-SHA needs a full SHA over the wire, and only a full SHA can be
+                # compared exactly against the resulting HEAD. Reject anything else up front
+                # rather than discovering it as a mismatch after the download.
+                if ($commit -notmatch '^[0-9a-f]{40}$') {
+                    throw "[$key] testdata.json pins commit '$commit' — an archive pin must be a full 40-character lowercase commit SHA"
+                }
                 Write-Host "[$key] archive: $repo @ $($commit.Substring(0, 12))" -ForegroundColor Cyan
 
+                # The marker holds the PINNED commit, and it is written only after the checkout
+                # has been verified to be at it — so a marker hit is proof that the pinned bytes
+                # are on disk. It used to hold whatever had actually been cloned, i.e. a log of
+                # what happened rather than an assertion of what was required; combined with a
+                # warn-and-continue on mismatch, that is how a fixture documented as frozen came
+                # to serve the upstream branch tip on every machine and every CI run.
                 $tagMarker = Join-Path $destDir '.tag'
                 if (-not $Force -and (Test-Path $tagMarker) -and ((Get-Content $tagMarker -Raw).Trim() -eq $commit)) {
                     Write-Host "  [OK] Already downloaded ($($commit.Substring(0, 12)))" -ForegroundColor Green
@@ -172,28 +282,9 @@ if (Test-Path $configPath) {
                 }
 
                 if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force }
+                Install-PinnedArchive -Repo $repo -Commit $commit -Ref $ref -Destination $destDir
 
-                # Clone at specific branch (shallow) then verify commit matches
-                $cloneArgs = @('clone', '--depth', '1')
-                if ($ref) { $cloneArgs += @('--branch', $ref) }
-                $cloneArgs += @("https://github.com/$repo.git", $destDir)
-                $refLabel = if ($ref) { $ref } else { 'default' }
-                Write-Host "  Cloning $repo ($refLabel)..." -ForegroundColor Yellow
-                git @cloneArgs
-                if ($LASTEXITCODE -ne 0) { throw "Failed to clone $repo" }
-
-                # Verify commit SHA — write actual commit to .tag (not expected)
-                $actual = (git -C $destDir rev-parse HEAD).Trim()
-                if ($actual -ne $commit) {
-                    Write-Warning "  Expected commit $($commit.Substring(0, 12)) but got $($actual.Substring(0, 12))"
-                    Write-Warning "  The pinned commit may be outdated. Update testdata.json to match."
-                }
-
-                # Remove .git to save space — we only need the static files
-                $gitDir = Join-Path $destDir '.git'
-                if (Test-Path $gitDir) { Remove-Item $gitDir -Recurse -Force }
-
-                $actual | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
+                $commit | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
                 Write-Host "  [OK] Downloaded to $destDir" -ForegroundColor Green
             }
             default {

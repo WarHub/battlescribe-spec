@@ -20,16 +20,44 @@ jobs:
   gate:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       thorough: ${{ steps.decide.outputs.thorough }}
     steps:
+      # EDITING testdata.json IS EDITING WHAT THE FROZEN SUITES REPLAY — a different NR client
+      # HAR, a different NR Editor snapshot, a different BattleScribe app build. Those are exactly
+      # the suites the every-push lanes trim to kitchen-sink, so a bump sails through PR CI while
+      # changing the one input the trimmed lanes barely exercise. #301 (v34.93 → v35.12) was green
+      # for three weeks of daily bot re-runs, merged, and broke the NR-UI roster driver and the
+      # store-direct NR roster export: the client had dropped a navbar route and replaced every
+      # raster icon with an SVG component.
+      #
+      # The gate is on the FILE, not the author. The exposure comes from the content change, and a
+      # maintainer hand-editing a pin has precisely the exposure the nightly bot has.
+      - id: testdata
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename' > changed-files.txt
+          if grep -qxF 'testdata.json' changed-files.txt; then
+            echo "This PR edits testdata.json — forcing the thorough suites."
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "touched=false" >> "$GITHUB_OUTPUT"
+          fi
       - id: decide
         shell: pwsh
         run: |
           $thorough = (
             ('${{ github.event_name }}' -in @('workflow_dispatch', 'schedule')) -or
             ('${{ contains(github.event.head_commit.message, '[nr-test]') }}' -eq 'true') -or
-            ('${{ contains(github.event.pull_request.labels.*.name, 'thorough-ci') }}' -eq 'true')
+            ('${{ contains(github.event.pull_request.labels.*.name, 'thorough-ci') }}' -eq 'true') -or
+            ('${{ steps.testdata.outputs.touched }}' -eq 'true')
           )
           "thorough=$($thorough.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           Write-Host "thorough = $thorough"
@@ -461,6 +489,10 @@ jobs:
         shell: pwsh
         run: |
           $results = @{
+            # `gate` decides whether the thorough lanes run at all. It was absent from this table,
+            # so a failed gate skipped those lanes and the aggregate still read green — the one
+            # failure that silently disables the deepest suites was the one nobody was told about.
+            'gate'                 = '${{ needs.gate.result }}'
             'checks'               = '${{ needs.checks.result }}'
             'smoke'                = '${{ needs.smoke.result }}'
             'thorough-conformance' = '${{ needs.thorough-conformance.result }}'
@@ -525,6 +557,7 @@ jobs:
         shell: pwsh
         run: |
           $failed = @()
+          if ('${{ needs.gate.result }}' -eq 'failure') { $failed += 'gate' }
           if ('${{ needs.checks.result }}' -eq 'failure') { $failed += 'checks' }
           if ('${{ needs.smoke.result }}' -eq 'failure') { $failed += 'smoke' }
           if ('${{ needs.thorough-conformance.result }}' -eq 'failure') { $failed += 'thorough-conformance' }
