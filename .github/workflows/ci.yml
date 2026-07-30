@@ -115,8 +115,26 @@ jobs:
         run: dotnet format whitespace BattleScribeSpec.slnx --no-restore --verify-no-changes --exclude .deps/
       - name: Run script tests
         run: node --test scripts/har-diff.test.mjs
+      # EVERY TEST STEP IN THIS FILE GOES THROUGH scripts/dotnet-test-step.ps1, WHICH FAILS THE STEP
+      # WHEN IT EXECUTED NO TESTS (passed + failed == 0, read from the TRX counters — not scraped from
+      # console text). Bare `dotnet test` is forbidden here, and
+      # ConcurrencyConfigurationDriftTests.EveryCiTestStep_ExecutesAtLeastOneTest (a Lint test, run by
+      # the very step below) keeps it that way — reintroduce one and the build goes red.
+      #
+      # The invariant is "this step RAN a test", not "the filter matched something", because both
+      # frozen NR roster lanes failed in different ways and only one of them was empty:
+      #   * `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` matched 0 tests — that class is a single
+      #     [Fact] AllSpecs(), so no display name carries a spec id and the clause can never match.
+      #   * `Engine=FrozenNrRoster&DisplayName~kitchen-sink` matched exactly 1 — the Mode=Sequential
+      #     variant, gated behind NR_SEQUENTIAL, which self-skips. Total: 1, Passed: 0, exit 0.
+      # Both were green on every PR. The second is the more insidious one and a non-empty-selection
+      # check (RunConfiguration.TreatNoTestsAsError, which the script also passes) does not catch it.
+      #
+      # The guard is per invocation rather than a runsettings setting because a runsettings would also
+      # bind `dotnet test -p:TestProfile=<x>` run against the SOLUTION — the form AGENTS.md documents —
+      # where an engine filter legitimately matches nothing in BattleScribeSpec.Cli.Tests.
       - name: Unit / protocol / lint (offline)
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Category!=Conformance" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Category!=Conformance" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       # THE CLI'S OWN TESTS. There are two test projects in this repo and, until now, CI ran ONE of
       # them: every `dotnet test` step here targeted tests/BattleScribeSpec.Tests.csproj, and nothing
       # ran tests/BattleScribeSpec.Cli.Tests — not even a solution-wide sweep. So every gate on the
@@ -129,9 +147,9 @@ jobs:
       # BattleScribe engine and the dotnet: reference adapter — both of which this job already builds
       # and runs in the two steps below — and they touch no browser and no network.
       - name: CLI (engine selection / load target / protocol surface)
-        run: dotnet test tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       - name: BattleScribe reference engine — kitchen-sink
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "(Engine=BsRoster|Engine=BsGameData)&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        run: pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "(Engine=BsRoster|Engine=BsGameData)&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
       # No --policy here, deliberately: this engine is a LAUNCHABLE (dotnet:) adapter, and a plan
       # cannot be conveyed to one — there is no channel for it, so the CLI errors rather than
       # silently dropping the flag (#305). This step used to pass `--workers 2`; the flag's
@@ -234,20 +252,33 @@ jobs:
       # (expensive) analyzers/doc generation here; the test binaries are identical.
       - name: Build
         run: dotnet build -p:RunAnalyzers=false -p:EnforceCodeStyleInBuild=false -p:GenerateDocumentationFile=false
+      # A [Fact] AGGREGATE CANNOT BE NARROWED BY DisplayName, AND THIS STEP USED TO PROVE IT THE HARD
+      # WAY. `Engine=FrozenNrRoster&DisplayName~kitchen-sink` selected exactly ONE test — and it was
+      # SequentialFrozenNrRosterConformanceTests' theory row, which is gated behind NR_SEQUENTIAL and
+      # therefore SKIPPED on every run. Measured: `Skipped! - Failed: 0, Passed: 0, Skipped: 1`, exit
+      # 0, green. The real suite (FrozenNrRosterConformanceTests.AllSpecs, a [Fact] whose display name
+      # contains no spec id) was never selected at all. Per-spec narrowing comes from the engine side
+      # instead — NR_FROZEN_SMOKE, the same shape as NR_UI_SMOKE two steps below — and the filter is
+      # the profile's own (`Mode!=Sequential` keeps the 365 skipped sequential rows out).
       - name: NR frozen roster — kitchen-sink
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrRoster&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        run: pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrRoster&Mode!=Sequential" --logger "console;verbosity=minimal"
         env:
           NR_HEADLESS: true
+          NR_FROZEN_SMOKE: 1
+      # Same defect, no env knob needed: FrozenNrUiRosterConformanceTests is hardcoded to
+      # TargetSpecs = ["protocol/protocol-kitchen-sink"], so the CLASS is the narrowing and the
+      # DisplayName clause only ever subtracted. It matched ZERO tests, exited 0, and reported green
+      # right through the frozen NR UI suite breaking on the v35.12 HAR client change.
       - name: NR UI roster — kitchen-sink
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrUiRoster&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        run: pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrUiRoster" --logger "console;verbosity=minimal"
         env:
           NR_HEADLESS: true
       - name: NR Editor GameData — kitchen-sink
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrGameData&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        run: pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrGameData&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
         env:
           NR_HEADLESS: true
       - name: NR Editor GameData UI — kitchen-sink
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrGameDataUi" --logger "console;verbosity=minimal"
+        run: pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrGameDataUi" --logger "console;verbosity=minimal"
         env:
           NR_HEADLESS: true
           NR_UI_SMOKE: 1
@@ -255,7 +286,7 @@ jobs:
       # the engine's declared ColdStartCost/ReuseSafeGameData — not the BS_UI_KEEP_ALIVE env var this
       # step used to set. The variable is read nowhere; setting it here would be decoration.
       - name: BS GameData UI — kitchen-sink (engine + Java agent + app)
-        run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
+        run: xvfb-run -a pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&DisplayName~kitchen-sink" --logger "console;verbosity=minimal"
       - name: BS UI roster driver — kitchen-sink
         # --no-build: reuse the binaries from the Build step above. Without it, `dotnet run`
         # rebuilds with default props (analyzers on), re-doing the whole solution.
@@ -307,21 +338,21 @@ jobs:
       - name: Build
         run: dotnet build
       - name: Full offline suite (core)
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=core --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile core tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       - name: Full frozen NR roster
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
       - name: Full frozen NR UI roster
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
       - name: Full frozen NR Editor GameData
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-editor-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
       - name: Full frozen NR Editor GameData UI (parallelized)
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-ui-frozen --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-editor-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
       - name: Upload telemetry
@@ -385,7 +416,7 @@ jobs:
       # asks the policy. It used to be BS_UI_KEEP_ALIVE, set here and nowhere else, so this suite ran
       # warm in CI and cold on every developer's machine. Both now run warm, from one decision.
       - name: BS GameData UI (shard ${{ matrix.shard }}, warm start)
-        run: xvfb-run -a dotnet test tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&Shard=${{ matrix.shard }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: xvfb-run -a pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&Shard=${{ matrix.shard }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -437,11 +468,11 @@ jobs:
       - name: Build
         run: dotnet build
       - name: Run NR smoke tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live-smoke --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-live-smoke tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
       - name: Run NR conformance tests
-        run: dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live-conformance --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-live-conformance tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
       # --engine-endpoint local: same declaration as the `checks` job's reference-adapter step — this
