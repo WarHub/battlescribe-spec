@@ -125,20 +125,4 @@ internal static class SpecLoading
 
         return normalized.Contains("roster") ? "roster" : "roster";
     }
-
-    public static string? FindRepoRoot()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            if (Directory.Exists(Path.Combine(dir, ".git")))
-            {
-                return dir;
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        return null;
-    }
 }

@@ -84,20 +84,4 @@ internal static class HostSpecLoading
 
         throw new FileNotFoundException($"GameData spec not found: '{input}'. Provide a file path, category/id, or id.");
     }
-
-    public static string? FindRepoRoot()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            if (Directory.Exists(Path.Combine(dir, ".git")))
-            {
-                return dir;
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        return null;
-    }
 }

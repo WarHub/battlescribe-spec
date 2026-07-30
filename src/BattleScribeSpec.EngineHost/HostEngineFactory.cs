@@ -166,7 +166,7 @@ internal static class HostEngineFactory
         var appDir = Environment.GetEnvironmentVariable("BS_UI_APP_DIR");
         var agentJar = Environment.GetEnvironmentVariable("BS_UI_AGENT_JAR");
 
-        var repoRoot = FindRepoRoot();
+        var repoRoot = RepoRoot.FromWorkingDirectory;
 
         // BS_UI_JAVA_PATH → repo-local Liberica JDK → bundled platform JRE. See BsUiPaths.
         var javaPath = repoRoot is not null
@@ -224,19 +224,5 @@ internal static class HostEngineFactory
             RosterEditorJarPath = rosterEditorJar,
             AgentJarPath = agentJar,
         };
-    }
-
-    private static string? FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        for (; dir is not null; dir = dir.Parent)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
-            {
-                return dir.FullName;
-            }
-        }
-
-        return null;
     }
 }

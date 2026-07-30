@@ -14,23 +14,8 @@ public static class SchemaValidator
     /// Path to the XSD schema files. Set before first use if not using embedded resource.
     /// </summary>
     public static string SchemaDirectory { get; set; } =
-        Path.GetFullPath(Path.Combine(FindRepoRoot() ?? AppContext.BaseDirectory,
+        Path.GetFullPath(Path.Combine(RepoRoot.FromBinaries ?? AppContext.BaseDirectory,
             ".deps", "wham", "src", "dataformat", "xml", "schema", "latest"));
-
-    private static string? FindRepoRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
-            {
-                return dir;
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-        return null;
-    }
 
     private static XmlSchemaSet LoadSchemas()
     {

@@ -64,7 +64,7 @@ internal static class DiscoverCommand
         Ui.Info($"Loaded GameData spec: {spec.Category}/{spec.Id} — {spec.Description}");
         var (gameSystem, catalogues) = SpecLoader.GetGameDataSetupData(spec.Setup);
 
-        var repoRoot = HostSpecLoading.FindRepoRoot() ?? Directory.GetCurrentDirectory();
+        var repoRoot = RepoRoot.FromWorkingDirectory ?? Directory.GetCurrentDirectory();
         var dir = outputDir ?? Path.Combine(repoRoot, "artifacts", "discover", spec.Id);
         Directory.CreateDirectory(dir);
 
