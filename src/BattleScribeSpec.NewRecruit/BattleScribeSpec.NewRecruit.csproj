@@ -7,6 +7,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="BattleScribeSpec.Tests" />
+    <!-- The UI roster driver creates NR lists too, so it must share this project's one correct
+         list-deletion JS (NrListStoreJs) rather than keep its own copy. -->
+    <InternalsVisibleTo Include="BattleScribeSpec.NrRosterUiDriver" />
   </ItemGroup>
 
   <ItemGroup>

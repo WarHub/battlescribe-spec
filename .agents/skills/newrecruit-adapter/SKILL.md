@@ -81,7 +81,16 @@ document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties
 | Store | Key methods |
 |-------|------------|
 | `systemsStore` | `loadSystemFromFs(files)`, `selectSystem()`, `localLibrary` |
-| `lists` | `getCurrentList()`, `addList()`, `deleteList()` |
+| `lists` | `getCurrentList()`, `addList(list)`, `removeList(row)`, `findListByKey(key, systemIds)` |
+
+> **There is no `lists.deleteList`.** This table used to claim there was, and both roster engines
+> called `listsStore.deleteList?.(key)` — an optional call on a non-existent action, so cleanup
+> silently deleted nothing and rows piled up across a suite run. Deletion is `removeList(row)`:
+> local-only (splices `listData`, rebuilds `treeData`, deletes from IndexedDB), and it takes the
+> **row**, not the key. `removeListVue(row, browserOnly, skipConfirm)` is the UI wrapper (mounts a
+> confirm dialog); `deleteListFromServer(row)` issues a server RPC and must never run under a frozen
+> HAR. `deleteList` does exist in NR — as a MyLists *page-component* method and as the server RPC
+> verb — but not on the store. See `NrListStoreJs`.
 
 ### Navigation
 

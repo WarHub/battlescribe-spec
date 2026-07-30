@@ -504,22 +504,29 @@ public sealed class NrRosterUiEngine : IRosterEngine
         {
             ResetBrowserStateAsync(listId).GetAwaiter().GetResult();
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort; the next spec's setup will surface any real problem.
+            // Best-effort — the next spec's setup will surface any real problem — but say so.
+            // A reset that fails without a word is how the leftover-list bug stayed invisible.
+            Console.Error.WriteLine($"[nr-ui] browser reset failed after list '{listId}': {ex.Message}");
         }
     }
 
     /// <summary>
     /// Returns the shared browser to a clean <c>/app</c> for the next spec.
     /// <para>
-    /// The list MUST be removed through NR's own store API (<c>listsStore.deleteList</c>), and the
-    /// loaded game data cleared (<c>systemsStore.localLibrary</c>) — mirroring
-    /// <c>NewRecruitRosterEngine.Cleanup</c>. Merely splicing <c>lists</c> and nulling
-    /// <c>currentList</c> (as this method used to do) never tells NR to delete anything, so
-    /// navigating back to <c>/app</c> re-hydrates the old list from persistence. The leftover row
-    /// then makes the Create List dialog's controls ambiguous and EVERY subsequent spec's first
-    /// <c>addForce</c> times out — warm batches passed only their first roster-creating spec.
+    /// The list MUST be removed through NR's own store API, and the loaded game data cleared
+    /// (<c>systemsStore.localLibrary</c>) — mirroring <c>NewRecruitRosterEngine.Cleanup</c>. Merely
+    /// splicing <c>lists</c> and nulling <c>currentList</c> (as this method used to do) never tells
+    /// NR to delete anything, so navigating back to <c>/app</c> re-hydrates the old list from
+    /// persistence. The leftover row then makes the Create List dialog's controls ambiguous and
+    /// EVERY subsequent spec's first <c>addForce</c> times out — warm batches passed only their
+    /// first roster-creating spec.
+    /// </para>
+    /// <para>
+    /// That is what this method was written to fix, but it called <c>listsStore.deleteList?.(key)</c>
+    /// — an action that does not exist — so it never actually deleted anything either. See
+    /// <see cref="NrListStoreJs.DeleteListsFn"/> for the store's real API.
     /// </para>
     /// </summary>
     private async Task ResetBrowserStateAsync(string? listId)
@@ -529,7 +536,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
             return;
         }
 
-        var error = await Browser.Page.EvaluateAsync<string?>("""
+        var error = await Browser.Page.EvaluateAsync<string?>($$"""
             async (listId) => {
                 try {
                     const pinia = document.querySelector('#__nuxt')
@@ -538,6 +545,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     const listsStore = pinia._s?.get('lists');
                     const sysStore = pinia._s?.get('systemsStore');
                     if (!listsStore) return null;
+
+                    {{NrListStoreJs.DeleteListsFn}}
 
                     // Drop the open list's forces first (mirrors the store-direct engine).
                     const current = listsStore.getCurrentList?.() ?? listsStore.currentList;
@@ -548,16 +557,15 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     }
 
                     // Delete EVERY list NR knows about through its own API, not just ours — a spec
-                    // may have created more than one.
+                    // may have created more than one. The rows live in `listData`; `listsStore.lists`
+                    // (which this loop used to read) is not a thing, so it always yielded nothing.
                     const keys = [];
                     if (listId) keys.push(listId);
-                    for (const l of (listsStore.lists ?? [])) {
-                        const k = l?.list_key ?? l?.id ?? l?.key;
+                    for (const l of (listsStore.listData ?? [])) {
+                        const k = l?.list_key;
                         if (k && !keys.includes(k)) keys.push(k);
                     }
-                    for (const k of keys) {
-                        await listsStore.deleteList?.(k);
-                    }
+                    const listError = await bsspecDeleteLists(listsStore, keys);
                     listsStore.currentList = null;
 
                     // Unload game data so the next spec's Setup loads its own cleanly.
@@ -568,7 +576,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     for (const k of Object.keys(localStorage)) {
                         if (/list/i.test(k)) localStorage.removeItem(k);
                     }
-                    return null;
+                    return listError;
                 } catch (e) {
                     return 'reset error: ' + (e?.stack ?? e?.message ?? String(e));
                 }
