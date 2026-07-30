@@ -93,15 +93,17 @@ public static class HarRecorder
         catch (TimeoutException) { /* app may have changed structure; continue */ }
 
         // Navigate through pages the UI driver uses to capture lazy-loaded chunks:
-        // MySystems page (loads MySystems component + CSS)
+        // MySystems page (loads MySystems component + CSS).
+        //
+        // Routes, not nav controls: this used to click `a[href*='MySystems']` guarded by
+        // IsVisibleAsync, so when NR dropped that "Home" link from the navbar (gone by client v35.12)
+        // the hop silently became a no-op — a recorder that stops visiting a page it believes it is
+        // visiting is a snapshot with a hole in it. Pushing the route says what we mean and keeps
+        // saying it across NR's navbar restyles.
         try
         {
-            var mySysLink = page.Locator("a[href*='MySystems']").First;
-            if (await mySysLink.IsVisibleAsync())
-            {
-                await mySysLink.ClickAsync();
-                await WaitForNetworkSettledAsync(page, timeoutMs: 5_000);
-            }
+            await NewRecruitBrowser.PushRouteAsync(page, "/app/MySystems");
+            await WaitForNetworkSettledAsync(page, timeoutMs: 5_000);
         }
         catch { /* page structure may vary */ }
 

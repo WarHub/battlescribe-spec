@@ -133,6 +133,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `dotnet test`). Corrected in `docs/adapter-protocol.md`, `docs/gamedata-coverage.md`,
   `GameDataRunner`'s docstring and the "no expected file" error message, which had been telling
   people to pass a flag that would have been rejected as unrecognized.
+- **NR UI roster driver vs. NR client v35** (#301) — the frozen NR-UI suite broke the moment
+  `testdata.json`'s HAR tag moved from `v34.93-20260708` to `v35.12`, because the driver reached
+  for UI chrome NR had changed. Two independent changes in that range: the **"Home" navbar link**
+  to `/app/MySystems` was removed (setup clicked it, and timed out for 30s), and **every raster
+  icon became an `<nr-icon>` SVG component**, taking `alt="list menu"`, `alt="Save unit"` and
+  `alt="edit cost limits"` with it. The driver now navigates by **route** (`NewRecruitBrowser
+  .PushRouteAsync`) instead of clicking a nav control, and identifies buttons by the element
+  attributes that survived the icon swap — `[title=…]` (kept on `<nr-icon>`), the wrapper classes
+  `.menu` / `.back`, and the menu item's own label — rather than by `<img>` alt text. `HarRecorder`
+  made the same move: its `a[href*='MySystems']` hop was guarded by `IsVisibleAsync`, so it had
+  silently stopped visiting the page it believed it was visiting.
 - **BattleScribe gamedata cost parsing locale bug** — `BattleScribeGameDataEngine`
   parsed spec cost strings with the current culture, so on a locale using `,` as the
   decimal separator a value like `"0.5"` silently became `0`. Both numeric parse sites

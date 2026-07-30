@@ -194,9 +194,22 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// route settles (including any redirects, e.g. /app → /app/MySystems).
     /// Avoids full page reloads — faster and preserves JS state.
     /// </summary>
-    private async Task VueRouterPushAsync(string route)
+    private Task VueRouterPushAsync(string route) => PushRouteAsync(Page, route);
+
+    /// <summary>
+    /// Ask NR's Vue Router to navigate <paramref name="page"/> to <paramref name="route"/>, awaiting
+    /// the push Promise so the call returns only once the final route (after any redirect) has settled.
+    /// <para>
+    /// Exposed statically so code that holds a bare <see cref="IPage"/> rather than a
+    /// <see cref="NewRecruitBrowser"/> — <c>HarRecorder</c> — reaches a route the same way, instead of
+    /// clicking whichever nav control happens to point there. Navigation controls are NR's to restyle:
+    /// the app's "Home" link to <c>/app/MySystems</c> existed in client v34.93 and was gone by v35.12,
+    /// which is exactly how a snapshot bump broke the UI driver's setup. Routes are the stable contract.
+    /// </para>
+    /// </summary>
+    public static async Task PushRouteAsync(IPage page, string route)
     {
-        await Page.EvaluateAsync("""
+        await page.EvaluateAsync("""
             async (route) => {
                 const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
                 if (router) await router.push(route);

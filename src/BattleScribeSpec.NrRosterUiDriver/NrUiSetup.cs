@@ -26,9 +26,16 @@ public static class NrUiSetup
         // Inject the directory picker mock with our spec data files
         await InjectDirectoryPickerMockAsync(page, files);
 
-        // Navigate to MySystems (Home) page
-        var homeLink = page.Locator("a[href*='MySystems']").First;
-        await homeLink.ClickAsync();
+        // Navigate to the MySystems (game library) page.
+        //
+        // This used to click `a[href*='MySystems']` — NR's "Home" navbar link. That link was removed
+        // from the app navbar between client v34.93 and v35.12, so the click became a 30s timeout the
+        // moment testdata.json's HAR tag was bumped (#301): "Setup failed: TimeoutException ... waiting
+        // for Locator("a[href*='MySystems']")". The route itself never changed — /app still redirects
+        // to /app/MySystems, and the link was `router-link-exact-active` on arrival, i.e. the click was
+        // already a no-op navigation. So ask the router for the route rather than depending on a nav
+        // control NR is free to restyle or drop.
+        await browser.NavigateToRouteAsync("/app/MySystems");
         await page.WaitForTimeoutAsync(500);
 
         // Click "Add More Games" to open the install popup
