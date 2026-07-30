@@ -19,6 +19,11 @@ dotnet test -p:TestProfile=pre-push                                             
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
 ```
 
+**Lock files are real.** Every project has a `packages.lock.json` and CI verifies it
+(`dotnet restore --locked-mode`, `checks` job). If a restore rewrites one, that is a **finding, not
+noise** — do not revert it. Regenerate with `dotnet restore --force-evaluate` and commit the result;
+`git add` normalises the CRLF that NuGet writes on Windows, so only genuinely-changed files remain.
+
 **Always run `pre-push` before pushing.** It covers lint, BattleScribe conformance, and NR frozen
 (offline HAR replay) in one fast command. Other profiles: `core` (offline suite, no NR engines),
 `lint`, `bs`, `nr-frozen`, `nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`,

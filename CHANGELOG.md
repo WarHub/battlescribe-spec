@@ -128,6 +128,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Lock files that nothing verified, and therefore lied** — `RestorePackagesWithLockFile` has been
+  on since the start and no gate ever checked the result, so `main` shipped `packages.lock.json`
+  files that disagreed with `Directory.Packages.props`: #287 bumped seven central versions and
+  updated **zero** lock files, #323 bumped nine and updated the `src` locks while leaving both test
+  projects' `CentralTransitive` entries on OpenTelemetry **1.16.0** / System.CommandLine **2.0.9**.
+  Both merged green; four separate branches then hit a plain `dotnet restore` silently rewriting
+  those files and each reverted the churn as unrelated noise. Regenerated against the central
+  versions (`--force-evaluate`) — every lock is now OpenTelemetry 1.17.0 / System.CommandLine
+  2.0.10 — and CI's `checks` job gained a **`dotnet restore --locked-mode`** step, so a lock file
+  that disagrees with its project fails the PR that introduced it, naming the project and the
+  package (NU1004). Locked mode is passed on the command line, **not** set as `RestoreLockedMode`
+  in `Directory.Build.props`: a contributor adding a `PackageReference` must still be able to
+  restore. Dependabot's lock updates for this repo are partial — the entries it misses are the
+  `CentralTransitive` ones for packages a project reaches only through a `ProjectReference`, which
+  is why the two test projects lagged while `src` did not — so an occasional bump PR will now go
+  red; the fix is `dotnet restore --force-evaluate` on the branch, and that is a great deal cheaper
+  than a lock file nobody can trust.
+- **`Microsoft.NET.ILLink.Tasks` floated with the installed SDK** — the three `IsAotCompatible`
+  projects (Cli, TestKit, Telemetry) get an *implicit* `PackageReference` to it, versioned from the
+  SDK's `KnownILLinkPack` rather than from `Directory.Packages.props` (central package management
+  does not manage implicit references). It is a `Direct` entry in the lock, so the lock encoded
+  whichever SDK last wrote it: `main` carried **10.0.3** in the Cli lock and **10.0.10** in the
+  other two, and a plain restore rewrote whichever disagreed with the local SDK — with `global.json`
+  on `rollForward: latestFeature` and CI on `10.0.x`, that is every contributor on a different
+  patch. Now pinned to **10.0.10** via `KnownILLinkPack` in a new `Directory.Build.targets` (it has
+  to be `.targets`: the SDK defines the item *after* importing `Directory.Build.props`, so an
+  `Update` there is silently ignored), making the restore a property of the repository instead of
+  the machine — and making locked mode survivable on a floating CI SDK. Bumping it is a deliberate
+  one-line edit; dependabot does not see the item.
 - **Repo-root detection resolved to the wrong tree inside a git worktree** — four production sites
   walked up for a `.git` **directory**. In a worktree `.git` is a **file** holding a `gitdir:`
   pointer, so `Directory.Exists` was false, the walk sailed past the worktree root, and — because

@@ -93,6 +93,28 @@ jobs:
         run: pwsh ./setup.ps1 -SkipPlaywright -SkipJavaAgent -SkipWh40k
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      # A LOCK FILE NOBODY VERIFIES IS DECORATION. RestorePackagesWithLockFile has been on since the
+      # start (Directory.Build.props) and NOTHING has ever checked the result, so main shipped
+      # packages.lock.json files that disagreed with Directory.Packages.props and nobody noticed:
+      # #287 bumped seven central versions and updated ZERO lock files; #323 bumped nine, updated the
+      # `src` locks, and left both test projects' CentralTransitive entries on OpenTelemetry 1.16.0 /
+      # System.CommandLine 2.0.9. Both merged green. Downstream, four separate branches hit a plain
+      # `dotnet restore` silently rewriting those files and each reverted the churn as unrelated
+      # noise — the cost of the missing check was paid four times over, in the wrong place.
+      #
+      # This is `--locked-mode` on the command line and deliberately NOT RestoreLockedMode in
+      # Directory.Build.props: locked mode belongs where a lock file that lies is a bug (CI), not on a
+      # contributor's machine, where adding a PackageReference has to keep working.
+      #
+      # IT WILL GO RED ON SOME DEPENDABOT PRs, because dependabot's lock updates for this repo are
+      # demonstrably partial — the entries it misses are the CentralTransitive ones for packages a
+      # project reaches only through a ProjectReference, which is exactly the shape of both test
+      # projects. That is not a reason to drop the check; the fix is one command on the PR branch,
+      # and NU1004 names the offending project AND package, so the failure is actionable:
+      #     dotnet restore --force-evaluate     # then commit the lock files
+      # The bump path stays open. It just stops being silent.
+      - name: Verify lock files (restore in locked mode)
+        run: dotnet restore --locked-mode
       - name: Build
         run: dotnet build
       # WHAT MACHINE IS THIS, ACTUALLY? Every constant in docs/concurrency-policy-measurements.md is
