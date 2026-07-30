@@ -17,8 +17,10 @@ public sealed class GameDataRunner
 
     /// <summary>
     /// When true, <c>expectedFile</c> assertions (re)write the expected side-file from the actual
-    /// export instead of comparing. Defaults to the <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var so the
-    /// xUnit conformance harness honors it; the CLI also sets it via <c>--update-snapshots</c>.
+    /// export instead of comparing. Defaults to the <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var, which is
+    /// the only switch: it is read here, so the xUnit conformance harness and <c>bs-spec run</c>
+    /// alike honor it. There is deliberately no <c>--update-snapshots</c> flag (see
+    /// <c>CommandFactory</c> for the verbs that do exist).
     /// </summary>
     public bool UpdateSnapshots { get; set; }
         = Environment.GetEnvironmentVariable("BSSPEC_UPDATE_SNAPSHOTS") is "1" or "true";
@@ -151,8 +153,9 @@ public sealed class GameDataRunner
     }
 
     /// <summary>
-    /// Export the active file and byte-compare it to the expected (inline or side-file). In
-    /// update-snapshots mode, (re)write the expected side-file from the actual export instead.
+    /// Export the active file and byte-compare it to the expected (inline or side-file). When
+    /// <see cref="UpdateSnapshots"/> is set, (re)write the expected side-file from the actual
+    /// export instead.
     /// </summary>
     private void ExecuteFileAssertion(GameDataStepDef step, int stepIndex)
     {

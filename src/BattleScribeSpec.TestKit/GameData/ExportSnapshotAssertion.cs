@@ -146,7 +146,7 @@ public static class ExportSnapshotAssertion
         if (path is null)
         {
             return $"Step {stepIndex}: no expected file for snapshot '{key}' (engine '{engineName}', .{ext}); " +
-                "run with --update-snapshots (or BSSPEC_UPDATE_SNAPSHOTS=1) to create it";
+                "set BSSPEC_UPDATE_SNAPSHOTS=1 to create it";
         }
 
         var expected = NormalizeNewlines(File.ReadAllText(path));
