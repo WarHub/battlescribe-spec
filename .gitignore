@@ -28,3 +28,7 @@ tel/
 
 # Subagent-driven-development working notes (process scratch, not repo content).
 .superpowers/
+
+# Agent worktrees. `git worktree add` here nests a full checkout inside this one; only a local
+# .git/info/exclude was keeping it out of `git status`, which is per-machine and unshared.
+.claude/worktrees/

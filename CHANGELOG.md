@@ -111,6 +111,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Repo-root detection resolved to the wrong tree inside a git worktree** — four production sites
+  walked up for a `.git` **directory**. In a worktree `.git` is a **file** holding a `gitdir:`
+  pointer, so `Directory.Exists` was false, the walk sailed past the worktree root, and — because
+  this repo's worktrees live at `.claude/worktrees/<name>` *inside* the main checkout — it landed on
+  the main checkout. Every artifact path then resolved against the wrong tree: `bs-engine-host` was
+  probed in the main checkout's stale `artifacts/`, so the CLI suite failed with "Could not locate
+  bs-engine-host" (`EngineSpecTests.ResolveLaunch_*`, `CompareCommandTests`, `RunBatchSurfaceTests`)
+  for anyone working in a worktree unless they set `BSSPEC_ENGINE_HOST` by hand. Detection now walks
+  up for `BattleScribeSpec.slnx` — the marker the repo's test helpers already used. It is not merely
+  worktree-safe: `.git` marks "some git checkout", so a walk starting inside a submodule
+  (`.deps/wham`) or a cloned data directory (`.testdata/wh40k-9e`, `lib/nr-editor`) used to stop
+  there too, at a directory with no `artifacts/` or `specs/` at all. Neither marker exists next to
+  an installed `bs-spec`, so the published-layout fallbacks (env override, sibling assembly, PATH,
+  current directory) are unaffected. The six hand-copied walks — `EngineHostLocator`,
+  `HostSpecLoading`, `HostEngineFactory`, `Cli/SpecLoading` (dead code, deleted), `SchemaValidator`
+  and `BsGameDataUiEngine` — collapse into one `BattleScribeSpec.RepoRoot` in the TestKit, which
+  every other project already references; copy-paste divergence is what let this bug reach four
+  sites in the first place.
 - **`exportRosterXml` silently unsupported for 3 of 4 engines over the protocol** — `bs-engine-host`
   wired its roster-XML exporter as `e is BsUiRosterEngine ? … : null` and advertised
   `capabilities.rosterXml` from a `name is "battlescribe-ui"` match, although **all four** built-ins

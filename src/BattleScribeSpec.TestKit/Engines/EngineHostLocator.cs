@@ -20,7 +20,8 @@ public static class EngineHostLocator
     /// 1. env BSSPEC_ENGINE_HOST (path to bs-engine-host.dll or executable),
     /// 2. bs-engine-host.dll next to the current entry assembly,
     /// 3. artifacts/bin/BattleScribeSpec.EngineHost/&lt;pivot&gt;/bs-engine-host.dll relative
-    ///    to the repo root (walk up from AppContext.BaseDirectory to a .git dir),
+    ///    to the repo root (see <see cref="RepoRoot"/> — the checkout the binaries came from,
+    ///    which is the worktree, not the main tree it may be nested in),
     ///    trying the same pivot as the current assembly's artifacts path, else "debug",
     /// 4. "bs-engine-host" on PATH.
     /// Throws InvalidOperationException naming all probed locations when not found.
@@ -145,10 +146,10 @@ public static class EngineHostLocator
 
     private static string? ProbeArtifactsWalk(List<string> probed)
     {
-        var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
+        var repoRoot = RepoRoot.FromBinaries;
         if (repoRoot is null)
         {
-            probed.Add("artifacts walk (no .git ancestor found above " + AppContext.BaseDirectory + ")");
+            probed.Add($"artifacts walk (no {RepoRoot.MarkerFileName} ancestor found above {AppContext.BaseDirectory})");
             return null;
         }
 
@@ -195,19 +196,6 @@ public static class EngineHostLocator
         }
 
         probed.Add($"{HostExeName} on PATH");
-        return null;
-    }
-
-    private static string? FindRepoRoot(string startDirectory)
-    {
-        for (var dir = new DirectoryInfo(startDirectory); dir is not null; dir = dir.Parent)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
-            {
-                return dir.FullName;
-            }
-        }
-
         return null;
     }
 

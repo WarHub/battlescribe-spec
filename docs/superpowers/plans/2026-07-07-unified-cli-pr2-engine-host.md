@@ -157,6 +157,12 @@ private static string? FindRepoRoot()
 ```
 
 (compare with the Cli original at `src/BattleScribeSpec.Cli/SpecLoading.cs:138-152` and keep the exact semantics).
+
+> **Superseded — do not copy the snippet above.** "Inline a private copy" is how this predicate
+> reached four call sites, and the predicate itself was wrong: `.git` is a *file* in a git worktree,
+> so the walk resolved to the enclosing checkout. Repo-root detection now lives once in
+> `BattleScribeSpec.RepoRoot` (TestKit) and walks up for `BattleScribeSpec.slnx`.
+
 - It calls `Ui.Info(...)` (Cli's Spectre wrapper) — replace with `Console.Error.WriteLine($"[bs-engine-host] ...")` (protocol rule: stdout is protocol-only, stderr is free).
 
 - [ ] **Step 3: ServeCommand — AdapterOptions per engine**

@@ -533,7 +533,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     public static BsUiOptions? FindOptions()
     {
         // Same discovery as BsUiRosterEngine — artifacts in lib/battlescribe/
-        var repoRoot = FindRepoRoot();
+        var repoRoot = RepoRoot.FromBinaries;
         if (repoRoot is null)
         {
             return null;
@@ -579,21 +579,5 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         // Standard output path from src/bs-ui-java-agent/build.ps1
         var candidate = Path.Combine(repoRoot, "src", "bs-ui-java-agent", "bs-ui-java-agent.jar");
         return File.Exists(candidate) ? candidate : null;
-    }
-
-    private static string? FindRepoRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
-            {
-                return dir;
-            }
-
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-
-        return null;
     }
 }
