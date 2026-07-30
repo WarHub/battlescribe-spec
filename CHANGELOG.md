@@ -346,6 +346,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- **BREAKING: roster step field `path`** — a decoy that was registered nearly everywhere but usable
+  nowhere. It existed on `StepDef`, in `SpecValidator`'s `ActionOnlyFields` / `GetSetFields` /
+  `GetFieldValue`, in `StepDef.ForEngine`'s per-engine copy list, in the CLI timeline's step
+  parameters, and in `docs/spec-schema.json` — but it had **no entry in any action's
+  `ActionParams`**, so the "action 'x' does not accept 'path'" check rejected it on every action.
+  No spec ever set it. It looked like the natural field for a load-from-file action, but roster
+  `loadRoster` deliberately takes an inline `content` payload instead (mirroring how gamedata's
+  `openFile` resolves a side-file by convention from the step `id`). With
+  `additionalProperties: false` on the schema's step object, a spec using `path:` is now a hard
+  schema error — which is the intent.
 - **Dead code cleanup** (~800 lines of C# + 3,170 lines of debug JSON):
   - 4 `Debug_Probe*` exploratory methods from `NrIntegrationTests.cs` (617 lines).
   - 7 unused diagnostic methods from `BattleScribeOracle.cs` (185 lines).

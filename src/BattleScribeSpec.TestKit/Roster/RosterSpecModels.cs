@@ -105,8 +105,6 @@ public sealed class StepDef
     /// </summary>
     public string? CategoryEntryId { get; set; }
 
-    public string? Path { get; set; }
-
     /// <summary>
     /// Inline BattleScribe <c>.ros</c> XML payload for <c>loadRoster</c>. Mirrors the gamedata
     /// <c>openFile</c> <c>content</c> field: the roster is authored in the spec itself, so a load
@@ -175,7 +173,6 @@ public sealed class StepDef
             CustomName = o.CustomName ?? CustomName,
             CustomNotes = o.CustomNotes ?? CustomNotes,
             CategoryEntryId = o.CategoryEntryId ?? CategoryEntryId,
-            Path = o.Path ?? Path,
             Content = o.Content ?? Content,
         };
     }
