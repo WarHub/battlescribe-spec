@@ -505,10 +505,10 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// <summary>
     /// Capture NewRecruit's own <c>.ros</c> serialization for byte-compare. NR's roster serializer
     /// (<c>Sb</c>/<c>fX</c>) and the <c>.ros</c> export are module-scoped, reachable only through the
-    /// roster editor's export menu. So we navigate to the editor (mounting that menu bound to the
-    /// current list), temporarily hook <c>Blob</c> to capture the <c>text/ros</c> payload and neutralize
-    /// the download click, then invoke the mounted component's <c>exportRos()</c> method and read back
-    /// the exact XML NR would have downloaded.
+    /// roster editor's export menu. So we navigate to the editor, <em>wait for that menu to mount</em>
+    /// bound to the current list, temporarily hook <c>Blob</c> to capture the <c>text/ros</c> payload
+    /// and neutralize the download click, then invoke the mounted component's <c>exportRos()</c> method
+    /// and read back the exact XML NR would have downloaded.
     /// </summary>
     private async Task<string> ExportRosterXmlAsync()
     {
@@ -546,26 +546,27 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 return new OrigBlob(parts, opts);
             };
             HTMLAnchorElement.prototype.click = function () {};
-            try {
+            const findRoot = () => {
                 const el = document.querySelector('#__nuxt') || document.body;
                 const app = el?.__vue_app__ || document.querySelector('#__nuxt')?.__vue_app__;
-                const root = app?._instance
-                    || app?._container?._vnode?.component
-                    || el?.__vueParentComponent
-                    || el?.firstElementChild?.__vueParentComponent;
-                if (!root) {
-                    return JSON.stringify({ error: 'no root instance; appKeys=' + (app ? Object.keys(app).join(',') : 'no-app') });
-                }
-                // BFS the whole component tree for a mounted component exposing exportRos().
+                return {
+                    app,
+                    root: app?._instance
+                        || app?._container?._vnode?.component
+                        || el?.__vueParentComponent
+                        || el?.firstElementChild?.__vueParentComponent,
+                };
+            };
+            // BFS the whole component tree for a mounted component exposing exportRos().
+            const findTarget = (root) => {
                 const seen = new Set();
                 const queue = [root];
-                let target = null;
                 while (queue.length) {
                     const inst = queue.shift();
                     if (!inst || seen.has(inst)) continue;
                     seen.add(inst);
                     const px = inst.proxy;
-                    if (px && typeof px.exportRos === 'function') { target = px; break; }
+                    if (px && typeof px.exportRos === 'function') return px;
                     const pushVnode = (vn) => {
                         if (!vn || typeof vn !== 'object') return;
                         if (vn.component) queue.push(vn.component);
@@ -577,7 +578,38 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                     };
                     pushVnode(inst.subTree);
                 }
-                if (!target) return JSON.stringify({ error: 'no mounted component exposes exportRos()' });
+                return null;
+            };
+            try {
+                // WAIT for the editor to mount; do not race it. router.push() resolves when the route
+                // is CONFIRMED, which is strictly earlier than when the route's component has mounted
+                // and rendered its export menu into the tree. A single immediate BFS therefore searches
+                // whatever page is still up and truthfully reports "no mounted component exposes
+                // exportRos()" — a real error message about a page we never waited for. The only reason
+                // this usually passed is the ~1s that DismissDialogsAsync spends waiting for a consent
+                // root that is not there; that accidental buffer is not a synchronization primitive.
+                // Measured, 8 runs per snapshot, nothing else changed: 1/8 failures on the v34.93
+                // frozen HAR, 3/8 on v35.12. A latent race the snapshot bump made frequent, not a
+                // new one — so the wait is the fix on every snapshot, not a workaround for this one.
+                let app = null;
+                let root = null;
+                let target = null;
+                const deadline = Date.now() + 15000;
+                for (;;) {
+                    ({ app, root } = findRoot());
+                    if (root) {
+                        target = findTarget(root);
+                        if (target) break;
+                    }
+                    if (Date.now() >= deadline) break;
+                    await new Promise((r) => setTimeout(r, 100));
+                }
+                if (!root) {
+                    return JSON.stringify({ error: 'no root instance after 15s; appKeys=' + (app ? Object.keys(app).join(',') : 'no-app') });
+                }
+                if (!target) {
+                    return JSON.stringify({ error: 'no mounted component exposes exportRos() after 15s at ' + location.pathname });
+                }
                 // Point the menu's list at our loaded roster (window.__bsspec has {army, row:{name,...}}),
                 // so exportRos() serializes exactly the spec's roster rather than the menu's own context.
                 const bsspec = window.__bsspec;

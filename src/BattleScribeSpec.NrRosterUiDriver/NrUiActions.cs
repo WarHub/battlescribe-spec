@@ -389,7 +389,7 @@ public static class NrUiActions
         if (found)
         {
             var selEl = page.Locator($"[data-nrui-uid='{selectionUid}']");
-            await selEl.Locator("img[title='Delete Unit']").ClickAsync();
+            await selEl.Locator("[title='Delete Unit']").ClickAsync();
             await MaybeConfirmDeletionAsync(page);
         }
         else
@@ -408,7 +408,7 @@ public static class NrUiActions
     {
         var before = await GetAllSelectionUidsAsync(page);
         var selEl = await GetSelectionLocatorAsync(page, selectionUid);
-        await selEl.Locator("img[title='Duplicate Unit']").ClickAsync();
+        await selEl.Locator("[title='Duplicate Unit']").ClickAsync();
         return await WaitForNewSelectionUidAsync(page, before);
     }
 
@@ -459,8 +459,15 @@ public static class NrUiActions
         // Open "List Options" dropdown
         await page.Locator(".dotsMenuContainer").Filter(new() { HasText = "List Options" }).First.ClickAsync();
 
-        // Click "List Configuration" menu item (has img with alt="edit cost limits")
-        await page.Locator("img[alt='edit cost limits']").First.ClickAsync(new() { Timeout = 5_000 });
+        // Click the "List Configuration" menu item. Matched by its label, because the icon that
+        // used to identify it (img[alt='edit cost limits']) is now an <nr-icon> with no alt and no
+        // title. The item's own markup is otherwise unchanged across v34.93 and v35.12:
+        // `<div class="imgBt"><span class="dropDownIcon">[icon]</span><span>List Configuration</span></div>`.
+        // Label-matching is already how this driver picks every other menu item (Rename Unit,
+        // Duplicate Force, and the "List Options" opener two lines up).
+        await page.Locator(".subMenu .imgBt")
+            .Filter(new() { HasText = "List Configuration" })
+            .First.ClickAsync(new() { Timeout = 5_000 });
 
         // Wait for the configuration dialog to appear with cost limit inputs
         // Use attribute selector since typeId often contains special chars (dots, dashes)
@@ -570,7 +577,7 @@ public static class NrUiActions
 
     /// <summary>
     /// Opens the "Unit Options" submenu in the editing panel header.
-    /// The button is in .unitNameTitle .rightButton with img[alt='list menu'].
+    /// The button is the <c>.unitNameTitle .rightButton</c> carrying the <c>.menu</c> (kebab) icon.
     /// </summary>
     private static async Task OpenUnitOptionsSubmenuAsync(IPage page)
     {
@@ -582,8 +589,14 @@ public static class NrUiActions
             await page.WaitForTimeoutAsync(200);
         }
 
+        // Identify the button by the ICON'S CLASS, not its alt text. NR client v35 swapped every
+        // raster icon for an <nr-icon> SVG component, so `img[alt='list menu']` — and every other
+        // alt this driver matched on — ceased to exist. The wrapper's own class survived the swap
+        // untouched: `<img class="menu" alt="list menu">` became `<nr-icon class="nr-icon menu">`,
+        // inside the same `.imgBt.rightButton` div. `.menu` therefore matches both snapshots, and
+        // does not depend on NR's UI language the way the sibling "Unit Options" label would.
         var unitOptionsBtn = page.Locator(".unitNameTitle .rightButton")
-            .Filter(new() { Has = page.Locator("img[alt='list menu']") });
+            .Filter(new() { Has = page.Locator(".menu") });
         await unitOptionsBtn.ClickAsync(new() { Timeout = 5_000 });
         // Wait for submenu to appear
         await page.Locator(".subMenu").WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
@@ -1078,12 +1091,15 @@ public static class NrUiActions
     }
 
     /// <summary>
-    /// Closes any open unit editing panel by clicking the "Save unit" (X) button.
+    /// Closes any open unit editing panel by clicking the close (X) button in the panel header.
     /// This returns the view to the force list, making left panel elements accessible.
     /// </summary>
     private static async Task CloseEditingPanelAsync(IPage page)
     {
-        var saveBtn = page.Locator(".unitNameTitle img[alt='Save unit']");
+        // `.back` is the button's own class (`imgBt back rightButton`, unchanged from v34.93 to
+        // v35.12); the old `img[alt='Save unit']` selector matched its icon, which v35 replaced
+        // with an <nr-icon> SVG component carrying no alt text.
+        var saveBtn = page.Locator(".unitNameTitle .back");
         if (await saveBtn.CountAsync() > 0)
         {
             await saveBtn.First.ClickAsync(new() { Timeout = 3_000 });
