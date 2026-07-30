@@ -17,6 +17,7 @@ public sealed class RosterRunner
     private IReadOnlyList<string> _catalogueIds = [];
     private string _specId = "";
     private string? _specDir;
+    private string? _harnessError;
 
     /// <summary>
     /// When true, <c>expectedFile</c> assertions (re)write the expected snapshot from the actual
@@ -56,6 +57,7 @@ public sealed class RosterRunner
         _catalogueIds = [];
         _specId = spec.Id;
         _specDir = spec.SourceDirectory;
+        _harnessError = null;
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -118,6 +120,7 @@ public sealed class RosterRunner
                 catch (Exception ex)
                 {
                     _errors.Add($"Step {i}: {ex.GetType().Name}: {ex.Message}");
+                    _harnessError = $"{ex.GetType().Name}: {ex.Message}";
                     NotifyStepCompleted(i, step);
                     if (step.Action is not null && step.Action != "dump")
                     {
@@ -129,6 +132,7 @@ public sealed class RosterRunner
         catch (Exception ex)
         {
             _errors.Add($"Setup failed: {ex.GetType().Name}: {ex.Message}");
+            _harnessError = $"{ex.GetType().Name}: {ex.Message}";
         }
         finally
         {
@@ -142,7 +146,10 @@ public sealed class RosterRunner
             }
         }
 
-        return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
+        return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors])
+        {
+            HarnessError = _harnessError,
+        };
     }
 
     private void NotifyStepCompleted(int stepIndex, StepDef step)
@@ -175,11 +182,13 @@ public sealed class RosterRunner
         _isDataSourceMode = true;
         var resolvedDir = _dataSourceResolver.Resolve(dataSourceUri);
 
-        // Read all .gst and .cat files from the resolved directory
+        // Read all .gst, .cat, .yaml, and .yml files from the resolved directory
         var files = new List<(string FileName, string Content)>();
         foreach (var file in Directory.EnumerateFiles(resolvedDir, "*.*", SearchOption.AllDirectories)
             .Where(f => f.EndsWith(".gst", StringComparison.OrdinalIgnoreCase)
-                     || f.EndsWith(".cat", StringComparison.OrdinalIgnoreCase)))
+                     || f.EndsWith(".cat", StringComparison.OrdinalIgnoreCase)
+                     || f.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase)
+                     || f.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)))
         {
             files.Add((System.IO.Path.GetFileName(file), File.ReadAllText(file)));
         }
@@ -187,7 +196,7 @@ public sealed class RosterRunner
         if (files.Count == 0)
         {
             throw new InvalidOperationException(
-                $"No .gst or .cat files found in resolved data source directory: {resolvedDir}");
+                $"No .gst, .cat, .yaml, or .yml files found in resolved data source directory: {resolvedDir}");
         }
 
         var setupErrors = _engine.SetupFromFiles(files);
