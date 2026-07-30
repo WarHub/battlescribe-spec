@@ -164,6 +164,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `thorough-ci`, so the reason the deep suites ran is legible on the PR itself. The `gate` job
   was also missing from `ci-gate`'s result table — a failed gate skipped the thorough lanes and
   still aggregated green — and is now checked.
+- **Both frozen-NR roster smoke steps executed ZERO tests and reported green** — the `smoke` job runs
+  on every PR, so this was a hole in the checks gating all normal contributions, and it failed in two
+  different ways that a single "did the filter match anything?" check does **not** cover:
+  - `--filter "Engine=FrozenNrUiRoster&DisplayName~kitchen-sink"` matched **0 tests**.
+    `FrozenNrUiRosterConformanceTests` is a single `[Fact] AllSpecs()`, so no test's display name
+    carries a spec id and a `DisplayName` clause can never match it. VSTest printed "No test matches
+    the given testcase filter", exited 0, green — right through the suite breaking on the v35.12 NR
+    HAR client change, which is what the step existed to catch. The class already hardcodes
+    `TargetSpecs = ["protocol/protocol-kitchen-sink"]`, so the class *is* the narrowing: the filter
+    is now `Engine=FrozenNrUiRoster` (measured 1 test, and it runs).
+  - `--filter "Engine=FrozenNrRoster&DisplayName~kitchen-sink"` matched **exactly 1** — and it was
+    `SequentialFrozenNrRosterConformanceTests`, the `Mode=Sequential` debugging variant gated behind
+    `NR_SEQUENTIAL`, which self-skips in CI. Measured: `Skipped! - Failed: 0, Passed: 0, Skipped: 1,
+    Total: 1`, exit 0, green. The real suite was never selected at all. The step now filters
+    `Engine=FrozenNrRoster&Mode!=Sequential` (the `nr-frozen` profile's own filter) and narrows to
+    kitchen-sink from the engine side with a new `NR_FROZEN_SMOKE=1` knob on
+    `FrozenNrRosterConformanceTests` — the same shape as the existing `NR_UI_SMOKE`, keeping the
+    smoke lane on the pooled/parallel class the thorough lane also runs.
+- **A CI test step that runs nothing can no longer pass** — every `dotnet test` step in `ci.yml` now
+  goes through `scripts/dotnet-test-step.ps1`, which reads the run's TRX `<Counters>` and fails the
+  step when **passed + failed == 0**. The invariant is "this step *executed* a test", not "the filter
+  matched something": a non-empty selection that entirely skips is the more insidious failure and
+  looks exactly like a real run. (`RunConfiguration.TreatNoTestsAsError=true` is passed too, purely
+  so the empty-selection case fails with VSTest's own precise message.) It is a per-invocation
+  wrapper rather than a runsettings setting because a runsettings would also bind
+  `dotnet test -p:TestProfile=<x>` run against the *solution* — the form AGENTS.md documents — where
+  a profile's engine filter legitimately matches nothing in `BattleScribeSpec.Cli.Tests`.
+  `ConcurrencyConfigurationDriftTests.EveryCiTestStep_ExecutesAtLeastOneTest` forbids a bare
+  `dotnet test` in any workflow, so a new step cannot silently opt out.
 - **`exportRosterXml` silently unsupported for 3 of 4 engines over the protocol** — `bs-engine-host`
   wired its roster-XML exporter as `e is BsUiRosterEngine ? … : null` and advertised
   `capabilities.rosterXml` from a `name is "battlescribe-ui"` match, although **all four** built-ins

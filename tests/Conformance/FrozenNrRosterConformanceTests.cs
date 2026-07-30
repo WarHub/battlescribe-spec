@@ -37,14 +37,31 @@ public sealed class FrozenNrRosterConformanceTests
         var skipped = 0;
         var expectedFailures = 0;
 
+        // NR_FROZEN_SMOKE=1 restricts the run to kitchen-sink — the fast CI lane proves the engine
+        // wires up without running the full suite (which the thorough `nr-frozen` lane covers).
+        //
+        // This knob exists because THIS CLASS IS A [Fact] AGGREGATE: every spec collapses into one
+        // test named `…FrozenNrRosterConformanceTests.AllSpecs`, whose display name contains no spec
+        // id, so `--filter DisplayName~kitchen-sink` cannot narrow it — it selects nothing here and
+        // silently fell through to the NR_SEQUENTIAL-gated Sequential theory, which skipped. The
+        // smoke lane's "kitchen-sink" step therefore executed ZERO tests and reported green. Same
+        // knob shape, and same reason, as NR_UI_SMOKE in FrozenNrGameDataUiConformanceTests.
+        var smoke = Environment.GetEnvironmentVariable("NR_FROZEN_SMOKE") == "1";
+
         // Load all specs upfront and pre-resolve datasources before parallel execution
         var resolver = new DataSourceResolver();
-        var loadedSpecs = allSpecs.Select(s => (
-            s.Path,
-            s.Name,
-            spec: SpecLoader.Load(s.Path)
-        )).ToList();
+        var loadedSpecs = allSpecs
+            .Where(s => !smoke || s.Name.Contains("kitchen-sink", StringComparison.Ordinal))
+            .Select(s => (
+                s.Path,
+                s.Name,
+                spec: SpecLoader.Load(s.Path)
+            )).ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
+
+        // A smoke lane that selected no spec is the same silent pass this knob was added to fix.
+        Assert.False(smoke && loadedSpecs.Count == 0,
+            "NR_FROZEN_SMOKE=1 selected no specs — expected at least the kitchen-sink spec.");
 
         await Parallel.ForEachAsync(
             loadedSpecs,

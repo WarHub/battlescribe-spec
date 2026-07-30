@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using BattleScribeSpec.Engines;
@@ -368,7 +369,7 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This repo has two test projects and CI ran <em>one</em> of them: all fifteen <c>dotnet test</c>
+    /// This repo has two test projects and CI ran <em>one</em> of them: all fifteen test
     /// steps in <c>ci.yml</c> named <c>tests/BattleScribeSpec.Tests.csproj</c>, and there was no
     /// solution-wide sweep — so <c>tests/BattleScribeSpec.Cli.Tests</c> had <b>never executed in CI</b>.
     /// That is where every gate on the CLI's load target lives (the third-party limit, the fail-safe for
@@ -377,7 +378,7 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// </para>
     /// <para>
     /// <b>Falsifiable:</b> delete the CLI step from <c>ci.yml</c> (or add a third test project without a
-    /// step for it) and this goes red, naming the project. It scans the <c>dotnet test</c> COMMAND LINES
+    /// step for it) and this goes red, naming the project. It scans the test-step COMMAND LINES
     /// only — not the file text — so it does not care which job runs the project, with what filter, or in
     /// what order, and (verified by mutation) a passing <em>mention</em> of the project in a comment
     /// cannot satisfy it. The first draft of this test scanned the whole file and was defeated by the
@@ -387,14 +388,14 @@ public sealed class ConcurrencyConfigurationDriftTests
     [Fact]
     public void EveryTestProject_IsRunBySomeCiStep()
     {
-        var workflows = Path.Combine(RepoRoot, ".github", "workflows");
-        var invocations = Directory
-            .EnumerateFiles(workflows, "*.yml", SearchOption.AllDirectories)
-            .Order(StringComparer.Ordinal)
-            .SelectMany(File.ReadAllLines)
-            .Where(line => line.Contains("dotnet test", StringComparison.Ordinal)
+        // Test steps run through the guard wrapper, not `dotnet test` directly — see
+        // EveryCiTestStep_ExecutesAtLeastOneTest, which is what enforces that.
+        var invocations = WorkflowCommandLines()
+            .Where(line => line.Contains(TestStepScript, StringComparison.Ordinal)
                 && !line.TrimStart().StartsWith('#'))
             .ToArray();
+
+        Assert.NotEmpty(invocations);
 
         var testProjects = Directory
             .EnumerateFiles(Path.Combine(RepoRoot, "tests"), "*.csproj", SearchOption.AllDirectories)
@@ -405,7 +406,7 @@ public sealed class ConcurrencyConfigurationDriftTests
 
         Assert.NotEmpty(testProjects);
 
-        // A solution-wide `dotnet test BattleScribeSpec.slnx` would cover every project at once; today
+        // A solution-wide sweep (`… BattleScribeSpec.slnx`) would cover every project at once; today
         // every step names one project explicitly, which is what makes an unnamed project invisible.
         var sweepsTheSolution = invocations.Any(line => line.Contains(".slnx", StringComparison.Ordinal));
 
@@ -419,11 +420,121 @@ public sealed class ConcurrencyConfigurationDriftTests
         Assert.True(
             unrun.Length == 0,
             $"These test projects are never run by any CI step:\n{string.Join("\n", unrun.Select(p => "  " + p))}\n\n" +
-            "Every `dotnet test` invocation in .github/workflows names a project explicitly — there is no " +
+            "Every test-step invocation in .github/workflows names a project explicitly — there is no " +
             "solution-wide sweep — so a project with no step of its own is a suite that passes on the " +
             "author's machine and has never once been executed by CI. That is how tests/BattleScribeSpec.Cli.Tests " +
             "came to hold every gate on the CLI's third-party load limit while CI ran none of them. Add a " +
             "step, or delete the project.");
+    }
+
+    /// <summary>
+    /// The wrapper every CI test step must go through. It fails the step when the step EXECUTED no
+    /// tests — see its own header for the two ways that happens and why neither is detectable from
+    /// a `dotnet test` exit code.
+    /// </summary>
+    private const string TestStepScript = "scripts/dotnet-test-step.ps1";
+
+    /// <summary>
+    /// <b>A CI test step that EXECUTED NO TESTS must fail, not pass.</b> Every test step in
+    /// <c>.github/workflows</c> must run through <see cref="TestStepScript"/>; bare <c>dotnet test</c>
+    /// is forbidden there.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The invariant is <b>passed + failed ≥ 1</b>, not "the filter matched something" — because the
+    /// two real defects this replaces failed in different ways and only one of them was empty:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <c>Engine=FrozenNrUiRoster&amp;DisplayName~kitchen-sink</c> matched <b>zero</b> tests. That
+    /// class is a single <c>[Fact] AllSpecs()</c>, so no test's display name carries a spec id and a
+    /// DisplayName clause can never match. VSTest printed "No test matches the given testcase
+    /// filter", exited 0, green.
+    /// </description></item>
+    /// <item><description>
+    /// <c>Engine=FrozenNrRoster&amp;DisplayName~kitchen-sink</c> matched <b>exactly one</b> — the
+    /// <c>Mode=Sequential</c> variant of the class, gated behind <c>NR_SEQUENTIAL</c>, which
+    /// self-skips in CI. Measured: <c>Skipped! - Failed: 0, Passed: 0, Skipped: 1, Total: 1</c>,
+    /// exit 0, green. <b>A non-empty-selection check does not catch this one</b>, which is why the
+    /// guard counts executions rather than matches; it is also the more insidious of the two,
+    /// because a non-zero test count looks like a real run.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// Between them, both frozen NR roster suites had zero per-PR coverage — which is how a HAR bump
+    /// merged green and then broke two suites the smoke job claimed to guard.
+    /// </para>
+    /// <para>
+    /// The guard is a per-invocation wrapper rather than a runsettings setting <b>on purpose</b>: a
+    /// runsettings would also bind <c>dotnet test -p:TestProfile=&lt;x&gt;</c> run against the
+    /// <em>solution</em> — the form AGENTS.md documents — where the profile's engine filter genuinely
+    /// matches nothing in <c>BattleScribeSpec.Cli.Tests</c> (measured: <c>-p:TestProfile=lint</c> at
+    /// solution level would start failing). The gate belongs where a silent zero is a lie (CI), not
+    /// where it is expected (a developer's solution-wide profile run).
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable:</b> change any step back to a bare <c>dotnet test</c> (or add a new one) and
+    /// this goes red naming the line. Like <see cref="EveryTestProject_IsRunBySomeCiStep"/> it scans
+    /// COMMAND LINES only, so the prose above those steps — which necessarily says "dotnet test" —
+    /// cannot satisfy or trip it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryCiTestStep_ExecutesAtLeastOneTest()
+    {
+        var unguarded = WorkflowCommandLines()
+            .Where(line => line.Contains("dotnet test", StringComparison.Ordinal)
+                && !line.TrimStart().StartsWith('#')
+                && !line.Contains(TestStepScript, StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.True(
+            unguarded.Length == 0,
+            $"These CI steps invoke `dotnet test` directly instead of through {TestStepScript}:\n" +
+            string.Join("\n", unguarded.Select(l => "  " + l.Trim())) + "\n\n" +
+            "A bare `dotnet test` step exits 0 when its filter selected NOTHING, and exits 0 when the " +
+            "only test it selected SKIPPED — both indistinguishable from a step whose tests ran and " +
+            "passed. That is how `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` (0 matched) and " +
+            "`Engine=FrozenNrRoster&DisplayName~kitchen-sink` (1 matched, self-skipping) gated every " +
+            $"PR while executing zero tests between them. Route the step through {TestStepScript}, " +
+            "which reads the TRX counters and fails when passed + failed == 0.");
+    }
+
+    /// <summary>
+    /// Every line of every workflow file, with backslash-continued shell lines joined into the single
+    /// command line they actually form — so a multi-line <c>run:</c> block is scanned as one
+    /// invocation rather than as fragments that individually look flagless.
+    /// </summary>
+    private static List<string> WorkflowCommandLines()
+    {
+        var workflows = Path.Combine(RepoRoot, ".github", "workflows");
+        var lines = new List<string>();
+
+        foreach (var file in Directory
+            .EnumerateFiles(workflows, "*.yml", SearchOption.AllDirectories)
+            .Order(StringComparer.Ordinal))
+        {
+            var pending = new StringBuilder();
+            foreach (var raw in File.ReadAllLines(file))
+            {
+                var line = raw.TrimEnd();
+                if (line.EndsWith('\\'))
+                {
+                    pending.Append(line, 0, line.Length - 1).Append(' ');
+                    continue;
+                }
+
+                lines.Add(pending.Append(line).ToString());
+                pending.Clear();
+            }
+
+            if (pending.Length > 0)
+            {
+                lines.Add(pending.ToString());
+            }
+        }
+
+        return lines;
     }
 
     /// <summary>
