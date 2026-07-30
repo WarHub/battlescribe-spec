@@ -144,6 +144,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `.menu` / `.back`, and the menu item's own label — rather than by `<img>` alt text. `HarRecorder`
   made the same move: its `a[href*='MySystems']` hop was guarded by `IsVisibleAsync`, so it had
   silently stopped visiting the page it believed it was visiting.
+- **Store-direct NR roster export raced the editor mount** — `NewRecruitRosterEngine`'s
+  `.ros` capture pushed the editor route and then immediately walked the component tree for one
+  exposing `exportRos()`. `router.push()` resolves when a route is *confirmed*, which is strictly
+  earlier than when its component has *mounted*, so the walk could search the outgoing page and
+  report — truthfully — `no mounted component exposes exportRos()`. The only thing covering the gap
+  was an accident: `DismissDialogsAsync` spends ~1s waiting for a consent root the frozen HAR does
+  not contain. Measured over 8 runs per snapshot with nothing else changed, the step failed 1/8 on
+  `v34.93-20260708` and 3/8 on `v35.12` — a latent race the snapshot bump made frequent, not a new
+  one. The walk now polls for the mounted component against a 15s deadline, and its failure message
+  names `location.pathname` so a genuinely wrong page is distinguishable from a slow mount.
 - **BattleScribe gamedata cost parsing locale bug** — `BattleScribeGameDataEngine`
   parsed spec cost strings with the current culture, so on a locale using `,` as the
   decimal separator a value like `"0.5"` silently became `0`. Both numeric parse sites
