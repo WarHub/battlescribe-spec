@@ -187,6 +187,8 @@ use BattleScribe data model IDs from the setup data. Instance references (e.g., 
 | `duplicateSelection` | `forceId`, `selectionId` | `selectionId` | Duplicate a selection |
 | `duplicateForce` | `forceId` | `forceId` | Duplicate a force (deep copy with all selections). Not supported by BattleScribe Java engine. |
 | `setCostLimit` | `costTypeId`, `value` | — | Set cost limit for a cost type |
+| `loadRoster` | `xml` | — | Load a `.ros` XML payload, replacing the current roster wholesale and re-linking it against the setup data. Adapters that cannot load a roster must return `{"ok":false,"error":...}` — never a silent success |
+| `reload` | — | — | Serialize the current roster and load it straight back. Round-trip specs assert the same `expectedState` before and after |
 
 #### Action outputs
 

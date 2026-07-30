@@ -37,6 +37,8 @@
         "duplicateForce",
         "setCostLimit",
         "setCustomization",
+        "loadRoster",
+        "reload",
         "dump"
       ]
     },
@@ -146,6 +148,10 @@
         "customNotes": { "type": "string" },
         "categoryEntryId": { "type": "string" },
         "path": { "type": "string" },
+        "content": {
+          "type": "string",
+          "description": "Inline BattleScribe .ros XML payload for loadRoster."
+        },
         "skipEngines": {
           "type": "array",
           "items": { "type": "string" },

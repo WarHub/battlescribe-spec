@@ -529,7 +529,7 @@ public static class SpecSuiteRunner
             var rosterSpec = (SpecFile)spec;
             var timeout = rosterSpec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
             using var engine = new JsonProtocolEngine(proc, timeout);
-            var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter);
+            var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter, engineFilter);
             result = runner.Run(rosterSpec);
         }
 

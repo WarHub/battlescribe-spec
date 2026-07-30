@@ -5,8 +5,8 @@ description: >
   ProtocolModifierGroup, ProtocolConditionGroup, ProtocolRepeat), all action
   types (addForce, addChildForce, removeForce, duplicateForce, selectEntry,
   selectChildEntry, deselectSelection, setSelectionCount, duplicateSelection,
-  setCostLimit, setCustomization), and a broad set of state assertion fields
-  for adapter protocol adherence.
+  setCostLimit, setCustomization, reload, loadRoster), and a broad set of state
+  assertion fields for adapter protocol adherence.
 
 setup:
   gameSystem:
@@ -1449,3 +1449,45 @@ steps:
   # (single-quoted so the snapshot stays well-formed XML).
   - id: exported-roster
     expectedFile: {}
+
+  # ── Persistence actions ──
+  # Protocol coverage for the two roster persistence actions. What they *mean* is proven by the
+  # roundtrip category (roundtrip-reload-roster, roundtrip-load-roster); what this covers is that
+  # both dispatch across the adapter protocol like every other action.
+  #
+  # Only the in-process reference engine implements roster load today, so the other three skip
+  # both steps. That skip is explicit and visible here — never a swallowed NotSupportedException
+  # in the runner — and the assertion below spells out, per engine, that they still hold the
+  # roster the earlier steps built.
+  - action: reload
+    skipEngines: [battlescribe-ui, newrecruit, newrecruit-ui]
+
+  - action: loadRoster
+    skipEngines: [battlescribe-ui, newrecruit, newrecruit-ui]
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ks-loaded" name="Kitchen Sink Loaded" battleScribeVersion="2.03" gameSystemId="ks-gs" gameSystemName="Kitchen Sink GS" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+        <costs/>
+        <forces/>
+      </roster>
+
+  # The reference engine now holds the loaded roster: empty, and therefore inside the 200pt
+  # limit, so the cost-limit error the built roster carried is gone. The three engines that
+  # skipped both steps still hold the built roster — same forces, same one error.
+  - expectedState:
+      name: Kitchen Sink Loaded
+      forceCount: 0
+      errorCount: 0
+      engines:
+        battlescribe-ui:
+          name: protocol-kitchen-sink
+          forceCount: 1
+          errorCount: 1
+        newrecruit:
+          name: protocol-kitchen-sink
+          forceCount: 1
+          errorCount: 1
+        newrecruit-ui:
+          name: protocol-kitchen-sink
+          forceCount: 1
+          errorCount: 1

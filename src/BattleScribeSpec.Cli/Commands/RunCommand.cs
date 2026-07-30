@@ -433,7 +433,11 @@ internal static class RunCommand
             var timeline = options.TimelinePath is not null ? new TimelineReport(spec.Id) : null;
 
             var dumpOptions = new DumpOptions(Json: options.Format == OutputFormat.Json);
-            var runner = new RosterRunner(engine, new DataSourceResolver(), options.Engine.AssertionEngineName);
+            var runner = new RosterRunner(
+                engine,
+                new DataSourceResolver(),
+                options.Engine.AssertionEngineName,
+                options.Engine.EngineName);
             var lastStepIndex = spec.Steps.Count - 1;
 
             runner.OnStepCompleted = (stepIndex, step, state, errors) =>

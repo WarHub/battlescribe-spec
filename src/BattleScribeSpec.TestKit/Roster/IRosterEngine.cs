@@ -129,6 +129,36 @@ public interface IRosterEngine : IDisposable
     string ExportRosterXml()
         => throw new NotSupportedException("This engine does not support roster XML export.");
 
+    // ===== Persistence =====
+
+    /// <summary>
+    /// Load a roster from its BattleScribe <c>.ros</c> XML form, replacing the engine's current roster
+    /// wholesale, and re-link it against the game system and catalogues supplied to <see cref="Setup"/>.
+    /// The loaded roster must come back live: subsequent actions and <see cref="GetRosterState"/> operate
+    /// on it exactly as they would on a roster the engine built itself. Backs the <c>loadRoster</c> action.
+    /// Engines that cannot load a roster throw, and specs opt them out explicitly via
+    /// <c>skipEngines</c> / <c>engines:</c> — a spec must never pass by silently skipping the load.
+    /// <para>
+    /// No id is returned. Unlike <see cref="GameData.IGameDataEngine.LoadFile"/> — where loaded files
+    /// coexist and the returned root id is the handle used to address them — a roster is a singleton
+    /// that is replaced, never added to; nothing addresses it by id, and <see cref="RosterState"/>
+    /// does not even expose one.
+    /// </para>
+    /// </summary>
+    /// <param name="xml">The <c>.ros</c> XML to load. The root element is <c>roster</c>.</param>
+    void LoadRoster(string xml)
+        => throw new NotSupportedException("This engine does not support roster load.");
+
+    /// <summary>
+    /// Serialize the current roster to its on-disk <c>.ros</c> form and load it straight back, replacing
+    /// the in-memory roster with what a fresh load of the saved file produces. Mirrors
+    /// <see cref="GameData.IGameDataEngine.Reload"/>: round-trip specs place a repeated
+    /// <c>expectedState</c> after a reload to assert that save + load preserved semantics.
+    /// Engines that cannot persist and reload a roster throw; specs opt them out explicitly.
+    /// </summary>
+    void ReloadRoster()
+        => throw new NotSupportedException("This engine does not support roster reload.");
+
     // ===== Lifecycle =====
 
     /// <summary>

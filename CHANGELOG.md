@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Roster load + reload (#201, #279)** — the roster domain gains the persistence half of the
+  gamedata lifecycle: `IRosterEngine.LoadRoster(xml)` replaces the engine's roster wholesale from
+  a `.ros` payload and re-links it against the setup data, and `IRosterEngine.ReloadRoster()`
+  serializes the current roster and loads it straight back. (Save already shipped as
+  `ExportRosterXml()`.) Both surface as roster **actions** — `loadRoster` (with an inline `content`
+  XML payload, mirroring gamedata `openFile`) and `reload` — dispatched inside the existing
+  `action` command rather than as new top-level optional protocol commands: optional commands route
+  through nullable `AdapterOptions` delegates whose "unsupported" signal is a `NotSupportedException`
+  the runner *catches and passes over*, and a round-trip spec that vacuously passes is worse than no
+  spec (#309). The runner deliberately does **not** catch `NotSupportedException` for these actions:
+  an engine that cannot load makes the spec fail, and engines opt out explicitly via `engines:` /
+  `skipEngines`. Implemented for the in-process `battlescribe` reference engine via DataUtils
+  `g(InputStream)` — the roster-side counterpart of `e` (game system) / `f` (catalogue) — followed by
+  the desktop app's own load sequence (`setRoster` with default-root-entry selection suppressed, as
+  the app does for a saved roster). `battlescribe-ui`, `newrecruit` and `newrecruit-ui` keep the
+  defaulted throw and are opted out per spec. Covered by the new `roundtrip` roster category
+  (`roundtrip-reload-roster`, `roundtrip-load-roster`) and by `protocol-kitchen-sink`.
 - **Cross-engine roster export byte-compare** — roster specs now support `expectedFile`
   (mirroring gamedata), byte-comparing an engine's exported `.ros` XML against a
   per-engine snapshot. Adds `IRosterEngine.ExportRosterXml()` for **both** engines —
@@ -193,6 +210,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a profile's engine filter legitimately matches nothing in `BattleScribeSpec.Cli.Tests`.
   `ConcurrencyConfigurationDriftTests.EveryCiTestStep_ExecutesAtLeastOneTest` forbids a bare
   `dotnet test` in any workflow, so a new step cannot silently opt out.
+- **Per-engine declarations were inert for `-ui` engines under `bs-spec run`** — the CLI collapsed a
+  UI engine to its base name before handing it to `RosterRunner` (`battlescribe-ui` → `battlescribe`),
+  so step-level `skipEngines: [battlescribe-ui]` and step/state `engines: {battlescribe-ui: …}` never
+  matched anything and were silently ignored. Collapsing is right for *expectations* — a UI driver
+  produces what its base engine produces, and every spec relies on inheriting `engines: battlescribe:`
+  — but wrong for *capabilities*, which genuinely differ between a driver and its base engine. The
+  runner now carries both identities and resolves most-specific-first: a `skipEngines` entry matches
+  either name, and a per-engine override prefers the concrete engine's entry and falls back to the
+  base engine's. That is the same rule the batch runner already applied to spec-level `engines:`
+  (which filters by the concrete name). Purely additive — every existing declaration keeps its
+  current meaning — and it preserves honest failure: an action an engine cannot perform still fails
+  loudly unless a spec explicitly names that engine. The xUnit conformance suites, which pass one
+  full name for both roles, are unaffected.
 - **`exportRosterXml` silently unsupported for 3 of 4 engines over the protocol** — `bs-engine-host`
   wired its roster-XML exporter as `e is BsUiRosterEngine ? … : null` and advertised
   `capabilities.rosterXml` from a `name is "battlescribe-ui"` match, although **all four** built-ins

@@ -86,6 +86,8 @@ instance IDs (e.g., `forceId`, `selectionId`) are returned in action outputs.
 | `duplicateSelection` | Duplicate a selection. Returns new `selectionId`. |
 | `duplicateForce` | Duplicate a force (deep copy). Returns new `forceId`. Not supported by BattleScribe Java engine. |
 | `setCostLimit` | Set a cost limit by `costTypeId` and `value` |
+| `loadRoster` | Replace the roster wholesale from the `.ros` XML in `xml`, re-linked against the setup data. Answer `{"ok":false,"error":…}` if your engine cannot load — never a silent success. |
+| `reload` | Serialize the current roster and load it straight back. Round-trip specs assert the same state either side of it. |
 
 See [adapter-protocol.md](adapter-protocol.md#action--execute-roster-action) for the
 full parameter reference and output fields.

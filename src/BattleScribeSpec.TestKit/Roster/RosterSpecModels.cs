@@ -108,6 +108,14 @@ public sealed class StepDef
     public string? Path { get; set; }
 
     /// <summary>
+    /// Inline BattleScribe <c>.ros</c> XML payload for <c>loadRoster</c>. Mirrors the gamedata
+    /// <c>openFile</c> <c>content</c> field: the roster is authored in the spec itself, so a load
+    /// spec needs no external fixture and the payload is reviewable next to what it asserts.
+    /// Supports <c>${{ steps.* }}</c> expressions.
+    /// </summary>
+    public string? Content { get; set; }
+
+    /// <summary>
     /// Engine names to skip this action step for (e.g., ["battlescribe"]).
     /// When skipped, an empty <see cref="ActionOutputs"/> is stored for the step's ID (if set),
     /// which prevents "step not found" errors in downstream expressions. However, any expression
@@ -168,6 +176,7 @@ public sealed class StepDef
             CustomNotes = o.CustomNotes ?? CustomNotes,
             CategoryEntryId = o.CategoryEntryId ?? CategoryEntryId,
             Path = o.Path ?? Path,
+            Content = o.Content ?? Content,
         };
     }
 }

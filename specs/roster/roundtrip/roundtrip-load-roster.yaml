@@ -1,0 +1,127 @@
+id: roundtrip-load-roster
+category: roundtrip
+description: >
+  loadRoster replaces the engine's roster wholesale from a .ros payload and re-links it against
+  the setup data. A roster is first built through the editor, then a payload describing a
+  different roster is loaded over it. The payload is deliberately incomplete — its roster-level
+  cost is stale, its selections carry no <costs>, and its force carries no <categories> — so the
+  assertion afterwards can only pass if the engine re-resolved every selection against the
+  catalogue and recalculated, rather than merely echoing the XML back.
+
+# Only the in-process reference engine implements roster load today. The other three are opted out
+# here, explicitly and visibly, rather than being allowed to no-op their way to a green run: an
+# engine that cannot load must FAIL this spec, never silently skip it (#309).
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 7
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  # The roster the editor built: one bare Squad, roster named after the spec.
+  - expectedState:
+      name: roundtrip-load-roster
+      costs:
+        - typeId: ct-pts
+          value: 10
+      forces:
+        - name: Detachment
+          selections:
+            - name: Squad
+              childCount: 0
+
+  # A different roster arrives as XML. Note the stale roster cost (999), the absent per-selection
+  # <costs>, and the absent force <categories> — all of which the engine must derive on load.
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-imported" name="Imported Roster" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemName="Test System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+        <costs>
+          <cost name="pts" typeId="ct-pts" value="999"/>
+        </costs>
+        <forces>
+          <force id="f-imported" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
+            <selections>
+              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit">
+                <selections>
+                  <selection id="s-trooper" name="Trooper" entryId="se-trooper" number="2" type="model"/>
+                </selections>
+              </selection>
+            </selections>
+          </force>
+        </forces>
+      </roster>
+
+  # The built roster is gone; only the loaded one remains — renamed, re-nested, re-costed
+  # (10 + 2x7 = 24, not the payload's 999) and re-categorised.
+  - expectedState:
+      name: Imported Roster
+      gameSystemId: gs-1
+      gameSystemName: Test System
+      costs:
+        - name: pts
+          typeId: ct-pts
+          value: 24
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          catalogueId: cat-1
+          catalogueName: Test Catalogue
+          categories:
+            - name: Uncategorised
+          selections:
+            - name: Squad
+              entryId: se-squad
+              type: unit
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+              children:
+                - name: Trooper
+                  entryId: se-trooper
+                  type: model
+                  number: 2
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 14

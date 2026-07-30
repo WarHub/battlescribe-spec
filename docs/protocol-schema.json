@@ -102,7 +102,8 @@
         "value": { "type": "number" },
         "customName": { "type": "string" },
         "customNotes": { "type": "string" },
-        "categoryEntryId": { "type": "string" }
+        "categoryEntryId": { "type": "string" },
+        "xml": { "type": "string", "description": "loadRoster: the BattleScribe .ros XML payload." }
       }
     },
     "getStateCommand": {
@@ -478,7 +479,9 @@
         "duplicateSelection",
         "duplicateForce",
         "setCostLimit",
-        "setCustomization"
+        "setCustomization",
+        "loadRoster",
+        "reload"
       ]
     },
     "gameDataActionName": {

@@ -182,6 +182,9 @@ public sealed class ActionCommand : ProtocolCommand
     public string? CustomNotes { get; set; }
 
     public string? CategoryEntryId { get; set; }
+
+    /// <summary>loadRoster: the BattleScribe <c>.ros</c> XML payload.</summary>
+    public string? Xml { get; set; }
 }
 
 public sealed class GetStateCommand : ProtocolCommand

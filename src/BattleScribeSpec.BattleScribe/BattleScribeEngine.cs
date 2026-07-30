@@ -1364,6 +1364,119 @@ public sealed class BattleScribeEngine : IDisposable
     }
 
     /// <summary>
+    /// Serialize the current roster and load it straight back, replacing the in-memory roster with
+    /// what a fresh load of the saved <c>.ros</c> produces. Round-trip specs place a repeated
+    /// <c>expectedState</c> after this to assert that save + load preserved semantics. The byte
+    /// round-trip exercises the same DataUtils serializer a disk save/open would; disk is incidental.
+    /// </summary>
+    public void ReloadRoster()
+    {
+        EnsureInitialized();
+        LoadRosterXml(ExportRosterXml());
+    }
+
+    /// <summary>
+    /// Deserialize a roster from its BattleScribe <c>.ros</c> XML via DataUtils <c>g(InputStream)</c>
+    /// — the roster-side counterpart of <c>e</c> (game system) and <c>f</c> (catalogue) — and hand it
+    /// to the Java engine as the current roster.
+    /// <para>
+    /// This reproduces the desktop app's "Load Roster" path. The app builds a <c>LoadDataParams</c>
+    /// (<c>net.battlescribe.engine.b.d</c>) that maps every force in the loaded roster to its catalogue
+    /// by <c>catalogueId</c> plus that catalogue's linked catalogues, then calls
+    /// <c>RosterManager.setRoster(roster, gs, forceCats, linkedCats, favourites, !saved)</c>. Loading a
+    /// SAVED roster passes <c>!saved</c> = <c>false</c>, which suppresses the engine's
+    /// "select default root entries" pass — the loaded roster already carries its selections, and
+    /// re-running defaults would duplicate them. We pass <c>false</c> for exactly that reason.
+    /// </para>
+    /// </summary>
+    public void LoadRosterXml(string xml)
+    {
+        EnsureInitialized();
+        var gameSystem = _gameSystem
+            ?? throw new InvalidOperationException("LoadRosterXml: no game system (setup not run?).");
+
+        var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
+            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+        var read = dataUtils.GetMethod("g",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            [typeof(java.io.InputStream)])
+            ?? throw new InvalidOperationException("DataUtils deserialize 'g(InputStream)' not found.");
+
+        BsRoster roster;
+        try
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(xml);
+            // g() requires a mark-supporting stream — BufferedInputStream provides it.
+            var stream = new java.io.BufferedInputStream(new java.io.ByteArrayInputStream(bytes));
+            roster = (BsRoster)(read.Invoke(null, [stream])
+                ?? throw new InvalidOperationException("LoadRosterXml: DataUtils.g returned null."));
+        }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw; // unreachable
+        }
+
+        // Map every force (including child forces) to its catalogue and that catalogue's linked
+        // catalogues — the engine resolves each force's entries through this map.
+        var forceCatMap = new JavaHashMap();
+        var linkedCatMap = new JavaHashMap();
+        var favouritesMap = new JavaHashMap();
+        _forceCatalogueMap.Clear();
+
+        foreach (var force in FlattenForces(roster))
+        {
+            var catalogueId = force.getCatalogueId();
+            if (catalogueId is null || !_catalogues.TryGetValue(catalogueId, out var catalogue))
+            {
+                throw new InvalidOperationException(
+                    $"LoadRosterXml: force '{force.getId()}' references catalogue '{catalogueId ?? "<null>"}', " +
+                    $"which is not loaded (have: {string.Join(", ", _catalogues.Keys)}).");
+            }
+
+            forceCatMap.put(force, catalogue);
+
+            var linked = new JavaHashMap();
+            foreach (var kvp in ResolveLinkedCatalogues(catalogue))
+            {
+                linked.put(kvp.Key, kvp.Value);
+            }
+
+            linkedCatMap.put(force, linked);
+            favouritesMap.put(force, new JavaArrayList());
+            _forceCatalogueMap[force] = catalogue;
+        }
+
+        // false = do NOT re-run "select default root entries": the loaded roster already has them.
+        _engine.a(roster, gameSystem, forceCatMap, linkedCatMap, favouritesMap, false);
+
+        // Defaults have already been applied by whoever produced this roster; a later AddForce must
+        // not trigger the one-shot auto-select pass and duplicate them.
+        _autoSelectDone = true;
+    }
+
+    /// <summary>All forces in a roster, depth-first, parents before their children.</summary>
+    private static List<Force> FlattenForces(BsRoster roster)
+    {
+        var result = new List<Force>();
+        void Visit(Force force)
+        {
+            result.Add(force);
+            foreach (var child in JavaListToList<Force>(force.getForces()))
+            {
+                Visit(child);
+            }
+        }
+
+        foreach (var force in JavaListToList<Force>(roster.getForces()))
+        {
+            Visit(force);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Reorder a roster-level cost list (costs or costLimits) in place to match the cost-type
     /// DECLARATION order captured in <see cref="_setupCostTypes"/>. Stable: cost types not found
     /// in the declaration order (e.g. file-based setups where <see cref="_setupCostTypes"/> is

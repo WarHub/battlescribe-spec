@@ -28,6 +28,7 @@ public static class SpecValidator
         "customNotes",
         "categoryEntryId",
         "path",
+        "content",
     ];
 
     /// <summary>
@@ -46,6 +47,8 @@ public static class SpecValidator
         ["duplicateForce"] = new(Required: ["forceId"], Optional: []),
         ["setCostLimit"] = new(Required: ["costTypeId", "value"], Optional: []),
         ["setCustomization"] = new(Required: ["forceId"], Optional: ["selectionId", "customName", "customNotes", "categoryEntryId"]),
+        ["loadRoster"] = new(Required: ["content"], Optional: []),
+        ["reload"] = new(Required: [], Optional: []),
         ["dump"] = new(Required: [], Optional: []),
     };
 
@@ -265,6 +268,11 @@ public static class SpecValidator
         {
             yield return ("path", step.Path);
         }
+
+        if (step.Content is not null)
+        {
+            yield return ("content", step.Content);
+        }
     }
 
     private static object? GetFieldValue(StepDef step, string fieldName) => fieldName switch
@@ -281,6 +289,7 @@ public static class SpecValidator
         "customNotes" => step.CustomNotes,
         "categoryEntryId" => step.CategoryEntryId,
         "path" => step.Path,
+        "content" => step.Content,
         _ => null,
     };
 

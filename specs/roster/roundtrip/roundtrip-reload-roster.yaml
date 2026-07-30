@@ -1,0 +1,153 @@
+id: roundtrip-reload-roster
+category: roundtrip
+description: >
+  Round-trip fidelity: a roster built through the editor survives a save + reload. Adds a force,
+  selects a squad, adds a nested collective weapon and bumps a model count, asserts the state,
+  reloads (serialize to .ros and load it straight back), then asserts the identical state —
+  proving persistence preserved forces, selections, nesting, counts, categories, and recalculated
+  costs. The roster-side counterpart to gamedata roundtrip-add-entry.
+
+# Only the in-process reference engine implements roster load today. The other three are opted out
+# here, explicitly and visibly, rather than being allowed to no-op their way to a green run: an
+# engine that cannot load must FAIL this spec, never silently skip it (#309).
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              selectionEntries:
+                - id: se-weapon
+                  name: Weapon
+                  type: upgrade
+                  collective: true
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-trooper
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    entryId: se-weapon
+
+  # Baseline: the state the editor produced.
+  - expectedState:
+      name: roundtrip-reload-roster
+      gameSystemId: gs-1
+      costs:
+        - name: pts
+          typeId: ct-pts
+          value: 25
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          catalogueId: cat-1
+          selections:
+            - name: Squad
+              entryId: se-squad
+              type: unit
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+              children:
+                - name: Trooper
+                  entryId: se-trooper
+                  type: model
+                  number: 3
+                  children:
+                    - name: Weapon
+                      entryId: se-weapon
+                      type: upgrade
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 15
+
+  - action: reload
+
+  # Identical assertion after the round-trip. Anything persistence drops, renames, re-nests,
+  # or re-costs shows up here as a diff.
+  - expectedState:
+      name: roundtrip-reload-roster
+      gameSystemId: gs-1
+      costs:
+        - name: pts
+          typeId: ct-pts
+          value: 25
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          catalogueId: cat-1
+          selections:
+            - name: Squad
+              entryId: se-squad
+              type: unit
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+              children:
+                - name: Trooper
+                  entryId: se-trooper
+                  type: model
+                  number: 3
+                  children:
+                    - name: Weapon
+                      entryId: se-weapon
+                      type: upgrade
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 15
