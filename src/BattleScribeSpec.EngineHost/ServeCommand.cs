@@ -140,6 +140,14 @@ internal static class ServeCommand
             //   newrecruit-ui   roster   : BROKEN — 6/8 warm-only failures (the shared browser's
             //                              leftover list makes NR's Create List dropdown ambiguous)
             //                              and 1.8x slower. Left cold.
+            //                              The named cause is now fixed: that engine's per-spec reset
+            //                              called `listsStore.deleteList?.(key)`, an action the lists
+            //                              store does not have, so it never deleted the leftover list
+            //                              it was written to remove (see NrListStoreJs). This entry
+            //                              still stands as written, because the rule here is measured
+            //                              evidence and nobody has re-run `bs-spec compare` since.
+            //                              Re-measure before touching ReuseSafeRoster — do not
+            //                              promote it on the strength of the fix alone.
             //   battlescribe (in-process): engine construction is cheap; nothing to save.
             //
             // Known risk on battlescribe-ui: the app can intermittently self-terminate when kept

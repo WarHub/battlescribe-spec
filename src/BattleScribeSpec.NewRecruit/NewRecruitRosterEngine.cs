@@ -547,10 +547,16 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             const lists = pinia?._s?.get('lists');
             const systems = pinia?._s?.get('systemsStore');
             if (!lists || !systems) return 'Pinia lists/systemsStore not reachable';
+            // Checked by name up front: without this, a findListByKey that went missing would make
+            // resolves() permanently false and the failure below would report "not reachable by
+            // NR's own route lookup" — blaming the roster for an absent store action.
+            if (typeof lists.findListByKey !== 'function') {
+                return "lists store has no findListByKey() action — NR's store API changed";
+            }
             // Exactly the predicate NR's editor page uses to resolve the :list route param.
             const resolves = () => {
                 const sel = systems.selectedSystem;
-                return !!lists.findListByKey?.(listKey, [sel?.id, sel?.bsid]);
+                return !!lists.findListByKey(listKey, [sel?.id, sel?.bsid]);
             };
             const deadline = Date.now() + 10000;
             for (;;) {
@@ -763,13 +769,22 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         CleanupAsync().GetAwaiter().GetResult();
     }
 
+    /// <summary>
+    /// Returns this engine's browser to a clean state for the next spec: the roster row this spec
+    /// created is deleted through NR's own store API, and the loaded game data is unloaded.
+    /// <para>
+    /// The deletion goes through <see cref="NrListStoreJs.DeleteListsFn"/> — see its remarks for why
+    /// <c>removeList(row)</c> is the only correct action and why the <c>listsStore.deleteList?.(key)</c>
+    /// this replaced silently deleted nothing on every run.
+    /// </para>
+    /// </summary>
     private async Task CleanupAsync()
     {
         try
         {
             await Browser.WaitForPiniaAsync();
 
-            var cleanupError = await Browser.Page.EvaluateAsync<string?>("""
+            var cleanupError = await Browser.Page.EvaluateAsync<string?>($$"""
                 async () => {
                     try {
                         const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
@@ -779,21 +794,32 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const listsStore = pinia._s.get('lists');
                         if (!sysStore || !listsStore) return null;
 
-                        if (window.__bsspec?.row?.list_key) {
-                            const currentList = listsStore.getCurrentList?.();
+                        {{NrListStoreJs.DeleteListsFn}}
+
+                        let listError = null;
+                        const listKey = window.__bsspec?.row?.list_key;
+                        if (listKey) {
+                            // `?? currentList` because getCurrentList() is a one-line getter over it —
+                            // the fallback is the identical value, so this cannot silently skip the
+                            // force teardown the way a bare `?.()` would.
+                            const currentList = listsStore.getCurrentList?.() ?? listsStore.currentList;
                             if (currentList?.army) {
                                 const forces = currentList.army.getForces?.() || [];
                                 for (const f of [...forces]) {
                                     if (typeof f.delete === 'function') f.delete();
                                 }
                             }
-                            await listsStore.deleteList?.(window.__bsspec.row.list_key);
+                            listError = await bsspecDeleteLists(listsStore, [listKey]);
+                            // Don't leave currentList pointing at a row that no longer exists.
+                            if (listsStore.currentList?.row?.list_key === listKey) {
+                                listsStore.currentList = null;
+                            }
                         }
                         for (const key of Object.keys(sysStore.localLibrary || {})) {
                             delete sysStore.localLibrary[key];
                         }
                         window.__bsspec = undefined;
-                        return null;
+                        return listError;
                     } catch(e) {
                         const errorText = e?.stack ?? e?.message ?? String(e);
                         return 'Cleanup error: ' + errorText;
