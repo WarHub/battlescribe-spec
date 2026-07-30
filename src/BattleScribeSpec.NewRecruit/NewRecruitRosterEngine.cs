@@ -491,9 +491,120 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             "window.__bsspec?.row?.list_key");
         if (listKey != null)
         {
-            await Browser.NavigateToEditorAsync(listKey);
+            await NavigateToRosterEditorAsync(listKey);
         }
     }
+
+    /// <summary>
+    /// Put the app on <c>/app/Lists/{listKey}</c> — the roster editor for <em>this</em> spec's list —
+    /// and prove it stayed there.
+    /// <para>
+    /// NR's editor page does not resolve the <c>:list</c> route param against the whole list store. It
+    /// calls <c>findListByKey(key, [selectedSystem.id, selectedSystem.bsid])</c>, which first filters
+    /// <c>listData</c> down to the rows belonging to the <em>currently selected game system</em>. A row
+    /// owned by any other system is invisible to that lookup, and the page then falls through
+    /// <c>findMostRecentList(selectedSystem.id)</c> to <c>router.push({name:'app-MyLists'})</c> — it
+    /// bounces to the lists index. The list existing in the store is therefore not sufficient: the
+    /// system that OWNS the list has to be the selected one at the moment we push.
+    /// </para>
+    /// <para>
+    /// Engine reuse is what breaks that. A pooled browser context runs dozens of specs;
+    /// <c>library.array</c> retains every system it ever loaded, so a stale one can be re-selected
+    /// while a later spec is running. Measured on the failing exports: the roster's own system was the
+    /// only entry in <c>localLibrary</c> and its row was present in <c>listData</c>
+    /// (<c>rowPresent: true</c>), yet <c>selectedSystem</c> was a previous spec's game system and NR's
+    /// own lookup returned null — <c>router.afterEach</c> recorded the push to the editor immediately
+    /// followed by a redirect back to <c>/app/MyLists</c>. Re-asserting the selection is the fix;
+    /// waiting longer never could be, because the app had left the editor route and was staying away.
+    /// </para>
+    /// </summary>
+    private async Task NavigateToRosterEditorAsync(string listKey)
+    {
+        var unresolvable = await Browser.Page.EvaluateAsync<string?>(PrepareEditorRouteJs, listKey);
+        if (unresolvable is not null)
+        {
+            throw new InvalidOperationException($"NewRecruit editor navigation failed: {unresolvable}");
+        }
+
+        await Browser.NavigateToEditorAsync(listKey);
+
+        var redirected = await Browser.Page.EvaluateAsync<string?>(ConfirmEditorRouteJs, listKey);
+        if (redirected is not null)
+        {
+            throw new InvalidOperationException($"NewRecruit editor navigation failed: {redirected}");
+        }
+    }
+
+    /// <summary>
+    /// Make NR's own route lookup for <c>listKey</c> resolve <em>before</em> we ask the router to go
+    /// there. Waits for the row to appear in <c>listData</c> (setup awaits <c>addList</c>, so this is
+    /// normally already true) and re-selects the system that owns the row whenever the current
+    /// selection would hide it. Returns null on success, or a diagnostic naming the exact mismatch.
+    /// </summary>
+    private const string PrepareEditorRouteJs = """
+        async (listKey) => {
+            const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+            const lists = pinia?._s?.get('lists');
+            const systems = pinia?._s?.get('systemsStore');
+            if (!lists || !systems) return 'Pinia lists/systemsStore not reachable';
+            // Exactly the predicate NR's editor page uses to resolve the :list route param.
+            const resolves = () => {
+                const sel = systems.selectedSystem;
+                return !!lists.findListByKey?.(listKey, [sel?.id, sel?.bsid]);
+            };
+            const deadline = Date.now() + 10000;
+            for (;;) {
+                const row = (lists.listData ?? []).find(r => r.list_key === listKey);
+                if (row) {
+                    if (resolves()) return null;
+                    // The selected system is not the one that owns this roster. Re-select the owner —
+                    // bsid first, which is what the row filter matches on for a locally loaded system.
+                    systems.selectSystem(row.bsid_system);
+                    if (resolves()) return null;
+                    systems.selectSystem(row.id_system);
+                    if (resolves()) return null;
+                }
+                if (Date.now() >= deadline) {
+                    const sel = systems.selectedSystem;
+                    return 'list ' + listKey + " is not reachable by NR's own route lookup after 10s: "
+                        + (row ? 'row present' : 'row MISSING')
+                        + ' in listData(' + (lists.listData?.length ?? 0) + ')'
+                        + ', selectedSystem=' + (sel ? sel.id + '/' + sel.bsid : 'none')
+                        + (row ? ', row system=' + row.id_system + '/' + row.bsid_system : '');
+                }
+                await new Promise((r) => setTimeout(r, 50));
+            }
+        }
+        """;
+
+    /// <summary>
+    /// Confirm the push actually landed on the editor route and was not bounced. <c>router.push()</c>
+    /// resolves when the route is confirmed, which is before the page component's own guard has had a
+    /// chance to redirect — so the route is re-read after a tick before it is believed.
+    /// </summary>
+    private const string ConfirmEditorRouteJs = """
+        async (listKey) => {
+            const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
+            if (!router) return 'Vue Router not reachable';
+            const onEditor = () => {
+                const r = router.currentRoute?.value;
+                return r?.name === 'app-Lists' && r?.params?.list === listKey;
+            };
+            const deadline = Date.now() + 5000;
+            for (;;) {
+                if (onEditor()) {
+                    await new Promise((r) => setTimeout(r, 50));
+                    if (onEditor()) return null;
+                }
+                if (Date.now() >= deadline) {
+                    const r = router.currentRoute?.value;
+                    return 'pushed /app/Lists/' + listKey + ' but NR redirected away — now at '
+                        + (r?.fullPath ?? location.pathname) + ' (route ' + String(r?.name) + ')';
+                }
+                await new Promise((r) => setTimeout(r, 50));
+            }
+        }
+        """;
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
     {
@@ -515,10 +626,10 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         var listKey = await Browser.Page.EvaluateAsync<string?>("window.__bsspec?.row?.list_key");
         if (listKey != null)
         {
-            await Browser.NavigateToEditorAsync(listKey);
+            await NavigateToRosterEditorAsync(listKey);
         }
 
-        var json = await Browser.Page.EvaluateAsync<string?>(ExportRosterJs) ?? "{}";
+        var json = await Browser.Page.EvaluateAsync<string?>(ExportRosterJs, listKey) ?? "{}";
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         if (doc.RootElement.TryGetProperty("text", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String)
         {
@@ -533,7 +644,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     }
 
     private const string ExportRosterJs = """
-        async () => {
+        async (listKey) => {
             const captured = { text: null };
             const OrigBlob = window.Blob;
             const origClick = HTMLAnchorElement.prototype.click;
@@ -580,22 +691,40 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                 }
                 return null;
             };
+            // Where the app actually is. exportRos() lives on the editor page component and nowhere
+            // else, so hunting the tree for it while the app sits on another route can only ever burn
+            // the whole deadline and then report the truth about the wrong page.
+            const routeNow = () => document.querySelector('#__nuxt')
+                ?.__vue_app__?.config?.globalProperties?.$router?.currentRoute?.value;
+            const offEditor = () => {
+                if (!listKey) return null; // nothing was navigated — search wherever we are
+                const r = routeNow();
+                if (!r || (r.name === 'app-Lists' && r.params?.list === listKey)) return null;
+                return 'NR left the editor route: expected app-Lists/' + listKey + ', now at '
+                    + (r.fullPath ?? location.pathname) + ' (route ' + String(r.name) + ')';
+            };
             try {
                 // WAIT for the editor to mount; do not race it. router.push() resolves when the route
                 // is CONFIRMED, which is strictly earlier than when the route's component has mounted
-                // and rendered its export menu into the tree. A single immediate BFS therefore searches
-                // whatever page is still up and truthfully reports "no mounted component exposes
-                // exportRos()" — a real error message about a page we never waited for. The only reason
-                // this usually passed is the ~1s that DismissDialogsAsync spends waiting for a consent
-                // root that is not there; that accidental buffer is not a synchronization primitive.
-                // Measured, 8 runs per snapshot, nothing else changed: 1/8 failures on the v34.93
-                // frozen HAR, 3/8 on v35.12. A latent race the snapshot bump made frequent, not a
-                // new one — so the wait is the fix on every snapshot, not a workaround for this one.
+                // and rendered its export menu into the tree, so a single immediate BFS can search a
+                // page that is on its way in and truthfully report "no mounted component exposes
+                // exportRos()". The ~1s DismissDialogsAsync spends waiting for a consent root that is
+                // not there used to cover that gap by accident; an accidental buffer is not a
+                // synchronization primitive, so the wait stays.
+                //
+                // It is not, however, what made step 41 flaky: the failures were never mount lag but a
+                // redirect — NR bounced the editor route back to /app/MyLists, where exportRos() does
+                // not exist and never will (see NavigateToRosterEditorAsync). Hence the second bound
+                // below: this loop is bounded by the ROUTE as well as by the clock, because once the
+                // app has left the editor route no amount of waiting can help and burning 15s to say
+                // "component missing" about the lists index actively misleads whoever reads it.
                 let app = null;
                 let root = null;
                 let target = null;
                 const deadline = Date.now() + 15000;
                 for (;;) {
+                    const left = offEditor();
+                    if (left) return JSON.stringify({ error: left });
                     ({ app, root } = findRoot());
                     if (root) {
                         target = findTarget(root);

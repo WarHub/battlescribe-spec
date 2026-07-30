@@ -128,6 +128,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **NR roster export intermittently exported from the lists index instead of the editor** —
+  `FrozenNrRosterConformanceTests` / `protocol/protocol-kitchen-sink` step 41 failed roughly a
+  quarter of the time with `no mounted component exposes exportRos() after 15s at /app/MyLists`.
+  The trailing pathname was the whole story: `exportRos()` is a method on NR's **editor page
+  component** and exists nowhere else, so a 15-second hunt for it on the lists index could only
+  ever end one way. The driver was not losing a mount race — it was on the wrong page, and the
+  polled mount wait added in #328 could not help (measured 4/8 failures with it, 6/8 → 2/8 here).
+  Cause, read out of the recorded app bundle and then confirmed at runtime: NR's editor page does
+  not resolve the `:list` route param against the whole store. It calls
+  `findListByKey(key, [selectedSystem.id, selectedSystem.bsid])`, which **first filters `listData`
+  down to the rows owned by the currently selected game system**; a row owned by any other system
+  is invisible to it, and the page then falls through `findMostRecentList(selectedSystem.id)` to
+  `router.push({name:'app-MyLists'})`. So `router.push('/app/Lists/<key>')` was landing and being
+  bounced straight back out. Instrumenting the store at the moment of failure showed exactly that:
+  the roster's own system was the only entry in `localLibrary` and its row *was* present in
+  `listData`, yet `selectedSystem` was a **previous spec's** game system (`gs-1` while the roster
+  belonged to `ks-gs`), NR's own lookup returned null, and `router.afterEach` recorded the push to
+  `/app/Lists/<key>` immediately followed by a redirect to `/app/MyLists`. The intermittency is
+  engine reuse, not timing: a pooled browser context runs dozens of specs, `library.array` retains
+  every system it ever loaded, and which stale system is selected when a given spec reaches its
+  export step depends on the order `Parallel.ForEachAsync` happened to hand specs to that engine.
+  The driver now re-asserts the selection to the system that owns the roster **before** pushing —
+  and proves NR's own `findListByKey` resolves the key first, so the navigation is only attempted
+  once it cannot bounce. After the push it confirms the app is actually on `app-Lists` with the
+  expected `:list` param (re-read after a tick, since `router.push()` resolves before a page-level
+  guard can redirect), and the mount wait is now bounded by the route as well as the clock: leaving
+  the editor route fails immediately with the route it landed on instead of burning 15 seconds to
+  report a component missing from a page that was never going to have it.
 - **Lock files that nothing verified, and therefore lied** — `RestorePackagesWithLockFile` has been
   on since the start and no gate ever checked the result, so `main` shipped `packages.lock.json`
   files that disagreed with `Directory.Packages.props`: #287 bumped seven central versions and
@@ -295,6 +323,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `v34.93-20260708` and 3/8 on `v35.12` — a latent race the snapshot bump made frequent, not a new
   one. The walk now polls for the mounted component against a 15s deadline, and its failure message
   names `location.pathname` so a genuinely wrong page is distinguishable from a slow mount.
+  (The polled wait is correct and stays, but it turned out **not** to be what made step 41 flaky —
+  the `location.pathname` it started reporting is what identified the real cause; see *NR roster
+  export intermittently exported from the lists index instead of the editor* above.)
 - **BattleScribe gamedata cost parsing locale bug** — `BattleScribeGameDataEngine`
   parsed spec cost strings with the current culture, so on a locale using `,` as the
   decimal separator a value like `"0.5"` silently became `0`. Both numeric parse sites
