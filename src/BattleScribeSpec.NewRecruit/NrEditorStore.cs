@@ -38,6 +38,30 @@ public static class NrEditorStore
             ? v
             : 30_000;
 
+    /// <summary>
+    /// How many times <see cref="OpenFileFromListAsync"/> drives the open sequence before giving up.
+    /// Bounded on purpose: the failure it absorbs is a <i>lost interaction</i> (Playwright dispatches the
+    /// double-click, the SPA never acts on it), which one re-dispatch fixes. A larger count would only
+    /// stretch the wall time of a genuinely broken navigation.
+    /// </summary>
+    private const int NavAttempts = 3;
+
+    /// <summary>
+    /// Per-stage ceiling for the <b>non-final</b> attempts. A lost double-click is observable almost
+    /// immediately — the URL simply never changes — so burning the full <see cref="NavTimeoutMs"/> to
+    /// learn that only delays the retry that actually fixes it. The <b>final</b> attempt still gets the
+    /// full <see cref="NavTimeoutMs"/>, so nothing that passes today can start failing: the last attempt
+    /// is exactly as patient as the single attempt used to be.
+    /// </summary>
+    private static readonly int NavProbeTimeoutMs =
+        Math.Min(NavTimeoutMs, Math.Max(5_000, NavTimeoutMs / 3));
+
+    /// <summary>Ceiling for the file-list render — a local, already-parsed view, so it is not the slow part.</summary>
+    private const int ListTimeoutMs = 10_000;
+
+    /// <summary>Selector for the file-list rows (one per uploaded game system / catalogue).</summary>
+    private const string FileListItemSelector = ".item.unselectable:not(.add)";
+
     private static readonly Dictionary<string, string> MimeTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         [".html"] = "text/html",
@@ -252,60 +276,27 @@ public static class NrEditorStore
         _ = name ?? throw new InvalidOperationException(
             $"NR Editor UI: cannot resolve a name for file id '{id}' to open it.");
 
-        // Return to the system list and double-click the target file.
-        await page.GoBackAsync(new PageGoBackOptions { Timeout = NavTimeoutMs });
-        await page.WaitForSelectorAsync(".item.unselectable:not(.add)", new() { Timeout = 10_000 });
-        var item = page.Locator(".item.unselectable:not(.add)", new PageLocatorOptions { HasText = name });
-        await item.First.DblClickAsync();
-        await page.WaitForURLAsync("**/catalogue**", new() { Timeout = NavTimeoutMs });
-        await page.WaitForFunctionAsync(
-            """
-            (id) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const sId = new URLSearchParams(location.search).get('systemId');
-                return !!pinia?._s?.get('editor')?.gameSystems?.[sId]?.loadedCatalogues?.[id];
-            }
-            """, id, new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
+        // Return to the system list and double-click the target file. Same interaction — and the same
+        // flake surface — as the setup path, so it goes through the same bounded retry.
+        var navError = await OpenFileFromListAsync(page, name, expectedId: id);
+        if (navError is not null)
+        {
+            throw new InvalidOperationException(
+                $"NR Editor UI: could not open file id '{id}' ({name}). {navError}");
+        }
     }
 
     private static async Task<string?> NavigateToEditableAsync(IPage page, string itemName)
     {
+        var navError = await OpenFileFromListAsync(page, itemName, expectedId: null);
+        if (navError is not null)
+        {
+            return navError;
+        }
+
+        // Persist Pinia store references for action methods to use later.
         try
         {
-            // After file upload, the system list page shows .item.unselectable elements —
-            // one per uploaded file. Wait for them to appear.
-            await page.WaitForSelectorAsync(".item.unselectable:not(.add)",
-                new PageWaitForSelectorOptions { Timeout = 10_000 });
-
-            // Find the item matching the name and double-click it.
-            // Double-click (not single click) navigates to the editor.
-            var item = page.Locator(".item.unselectable:not(.add)",
-                new PageLocatorOptions { HasText = itemName });
-            await item.First.DblClickAsync();
-
-            // Wait for URL to change to the catalogue editor route.
-            await page.WaitForURLAsync("**/catalogue**",
-                new PageWaitForURLOptions { Timeout = NavTimeoutMs });
-
-            // Wait for the editor store to have the catalogue fully loaded in
-            // loadedCatalogues. The URL change fires before Vue finishes
-            // populating editor.gameSystems[systemId].loadedCatalogues[catId].
-            await page.WaitForFunctionAsync(
-                """
-                () => {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const params = new URLSearchParams(window.location.search);
-                    const systemId = params.get('systemId');
-                    const catId = params.get('id');
-                    const editor = pinia?._s?.get('editor');
-                    return !!editor?.gameSystems?.[systemId]?.loadedCatalogues?.[catId];
-                }
-                """,
-                null,
-                new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
-
-            // Persist Pinia store references for action methods to use later.
             await page.EvaluateAsync("""
                 () => {
                     const pinia = document.querySelector('#__nuxt')
@@ -318,13 +309,169 @@ public static class NrEditorStore
                     };
                 }
                 """);
-
-            return null;
         }
         catch (Exception ex)
         {
-            return $"Navigation to editor failed: {ex.Message}";
+            return $"Navigation to editor reached '{itemName}' but capturing the Pinia store references "
+                + $"failed: {Compact(ex.Message)}";
         }
+
+        return null;
+    }
+
+    /// <summary>The ordered stages of one open attempt. Named in diagnostics so a CI log says which one lost.</summary>
+    private enum NavStage
+    {
+        /// <summary>Standing on the file-list view the double-click starts from.</summary>
+        FileList,
+
+        /// <summary>Double-clicking the named row to ask the editor to open it.</summary>
+        Activate,
+
+        /// <summary>Waiting for the SPA to route to the catalogue-editor view.</summary>
+        Route,
+
+        /// <summary>Waiting for Vue to populate <c>editor.gameSystems[systemId].loadedCatalogues[id]</c>.</summary>
+        Store,
+    }
+
+    /// <summary>
+    /// Opens a loaded file (catalogue or game system) in the editor by double-clicking its row in the
+    /// file list, retrying the whole sequence up to <see cref="NavAttempts"/> times.
+    ///
+    /// <para>
+    /// <b>Why a retry, and why the whole sequence.</b> The observed CI flake is a navigation that never
+    /// happens: Playwright dispatches the double-click, the SPA never routes, and the fixed wait then
+    /// expires. Nothing is wrong with the page — the interaction was simply lost — so re-dispatching it
+    /// is the only remedy that helps; a longer timeout just fails slower. The later stages are folded
+    /// into the same retry because they share the remedy: whether the route never came or the store
+    /// never populated, the fix is to go back to the list and open the file again.
+    /// </para>
+    /// <para>
+    /// <b>Why it is safe to re-enter.</b> The two failure modes leave the page in different places — a
+    /// lost double-click leaves us on the list, a stalled store wait leaves us half-navigated on the
+    /// catalogue route — so each attempt first re-establishes the list view rather than assuming it.
+    /// Recovery is a client-side <c>GoBack</c>, never a reload: the uploaded files live only in the
+    /// in-memory Pinia stores, and a reload would destroy the very state we are navigating to.
+    /// </para>
+    ///
+    /// <para>Returns null on success, or a message naming the stage that lost on every attempt.</para>
+    /// </summary>
+    /// <param name="page">The editor page, standing on the file list or on a half-navigated editor route.</param>
+    /// <param name="itemName">Display name of the file-list row to double-click.</param>
+    /// <param name="expectedId">
+    /// Id the editor store must have loaded, when the caller knows it (the <c>openFile</c> path). Null
+    /// means "whatever id the resulting URL names" — the setup path, which learns the id from the URL.
+    /// </param>
+    private static async Task<string?> OpenFileFromListAsync(IPage page, string itemName, string? expectedId)
+    {
+        var failures = new List<string>(NavAttempts);
+        var lastStage = NavStage.FileList;
+
+        for (var attempt = 1; attempt <= NavAttempts; attempt++)
+        {
+            // The last attempt keeps the original, generous ceiling; earlier ones are fast probes.
+            var timeout = attempt == NavAttempts ? NavTimeoutMs : NavProbeTimeoutMs;
+            var stage = NavStage.FileList;
+
+            try
+            {
+                // 1. File list. Right after an upload we are already there; after a failed attempt we
+                //    may be half-navigated instead, so step back onto the list deterministically.
+                if (IsOnEditorRoute(page))
+                {
+                    await page.GoBackAsync(new PageGoBackOptions { Timeout = timeout });
+                }
+
+                await page.WaitForSelectorAsync(FileListItemSelector,
+                    new PageWaitForSelectorOptions { Timeout = ListTimeoutMs });
+
+                // 2. Activate. Double-click (not single click) is what opens the editor.
+                stage = NavStage.Activate;
+                var item = page.Locator(FileListItemSelector, new PageLocatorOptions { HasText = itemName });
+                await item.First.DblClickAsync(new LocatorDblClickOptions { Timeout = timeout });
+
+                // 3. Route. This is the stage a lost double-click stalls at.
+                stage = NavStage.Route;
+                await page.WaitForURLAsync("**/catalogue**",
+                    new PageWaitForURLOptions { Timeout = timeout });
+
+                // 4. Store. The URL changes before Vue finishes populating
+                //    editor.gameSystems[systemId].loadedCatalogues[id].
+                stage = NavStage.Store;
+                await page.WaitForFunctionAsync(
+                    """
+                    (expectedId) => {
+                        const pinia = document.querySelector('#__nuxt')
+                            ?.__vue_app__?.config?.globalProperties?.$pinia;
+                        const params = new URLSearchParams(window.location.search);
+                        const systemId = params.get('systemId');
+                        const id = expectedId ?? params.get('id');
+                        const editor = pinia?._s?.get('editor');
+                        return !!editor?.gameSystems?.[systemId]?.loadedCatalogues?.[id];
+                    }
+                    """,
+                    expectedId,
+                    new PageWaitForFunctionOptions { Timeout = timeout });
+
+                // A retry that succeeds is still a signal: surface it so a degrading environment
+                // cannot hide behind silent recoveries.
+                if (attempt > 1)
+                {
+                    Console.Error.WriteLine(
+                        $"[nr-editor-nav] Opened '{itemName}' on attempt {attempt}/{NavAttempts}; "
+                        + $"earlier attempts lost at: {string.Join("; ", failures)}");
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                lastStage = stage;
+                failures.Add($"[{attempt}/{NavAttempts}] {StageName(stage)}: {Compact(ex.Message)}");
+            }
+        }
+
+        var listReached = lastStage > NavStage.FileList;
+        return $"Navigation to editor failed for '{itemName}' after {NavAttempts} attempts. "
+            + $"Last stage: {StageName(lastStage)} — {StageDescription(lastStage)}. "
+            + $"Last observed state: URL '{page.Url}'; file list found: {(listReached ? "yes" : "no")}; "
+            + $"on catalogue route: {(IsOnEditorRoute(page) ? "yes" : "no")}. "
+            + $"Attempts: {string.Join("; ", failures)}";
+    }
+
+    /// <summary>True when the page is on the catalogue-editor route rather than the file list.</summary>
+    private static bool IsOnEditorRoute(IPage page)
+        => Uri.TryCreate(page.Url, UriKind.Absolute, out var uri)
+            && uri.AbsolutePath.Contains("/catalogue", StringComparison.OrdinalIgnoreCase);
+
+    private static string StageName(NavStage stage) => stage switch
+    {
+        NavStage.FileList => "file-list",
+        NavStage.Activate => "activate",
+        NavStage.Route => "route",
+        NavStage.Store => "store",
+        _ => stage.ToString(),
+    };
+
+    private static string StageDescription(NavStage stage) => stage switch
+    {
+        NavStage.FileList => "the file list never rendered, so there was no row to double-click",
+        NavStage.Activate => "the row was located but the double-click never completed (not actionable)",
+        NavStage.Route => "the double-click was dispatched but the editor never routed to the catalogue "
+            + "view — the click did not register",
+        NavStage.Store => "the catalogue route was reached but "
+            + "editor.gameSystems[systemId].loadedCatalogues[id] never populated",
+        _ => "unknown stage",
+    };
+
+    /// <summary>First line of an exception message, length-capped — Playwright appends a long call log.</summary>
+    private static string Compact(string message)
+    {
+        var span = message.AsSpan();
+        var end = span.IndexOfAny('\r', '\n');
+        var line = (end >= 0 ? span[..end] : span).Trim().ToString();
+        return line.Length > 200 ? string.Concat(line.AsSpan(0, 200), "…") : line;
     }
 
     /// <summary>
@@ -429,8 +576,8 @@ public static class NrEditorStore
         // hidden file input lives.
         try
         {
-            await page.GoBackAsync(new PageGoBackOptions { Timeout = 10_000 });
-            await page.WaitForSelectorAsync(".item.unselectable:not(.add)", new() { Timeout = 10_000 });
+            await page.GoBackAsync(new PageGoBackOptions { Timeout = ListTimeoutMs });
+            await page.WaitForSelectorAsync(FileListItemSelector, new() { Timeout = ListTimeoutMs });
         }
         catch
         {
