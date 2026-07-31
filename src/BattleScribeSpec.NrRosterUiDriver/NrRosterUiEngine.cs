@@ -568,6 +568,34 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     const listError = await bsspecDeleteLists(listsStore, keys);
                     listsStore.currentList = null;
 
+                    // Deleting the ROWS is not enough, because NR's roster editor page is kept alive
+                    // rather than destroyed. Its `activated` hook re-runs `updateRoute` on every
+                    // navigation back, which calls `listsStore.selectList(<the list it still holds>)`
+                    // — and `selectList` re-selects that row's system. So the next spec would load its
+                    // own game data, have it clobbered on the way to the Create List dialog, and be
+                    // offered the PREVIOUS spec's faction. `addForce` then spent its whole 30s
+                    // reporting "did not find some options".
+                    //
+                    // Two references keep that alive, and both must go:
+                    //   lastSelectedListKey — the store's own record of what to re-select
+                    //   unloadList          — the slot the editor page fills with
+                    //                         `() => { this.list = null }` so the store can tell it to
+                    //                         drop its cached list. NR calls this itself in
+                    //                         `syncAllLists`; `removeList` does not.
+                    //
+                    // Measured: with the rows deleted but these two left alone, `selectList` fired with
+                    // the previous spec's row while `listData` was already empty — the row came from the
+                    // kept-alive component, not the store. Clearing both makes every spec select its own
+                    // list and nothing else (docs/warm-reuse.md).
+                    //
+                    // `unloadList` is legitimately conditional, unlike the store ACTIONS above: it is
+                    // null whenever no list page is mounted, so absent means "nobody is holding a
+                    // reference", not "the API moved".
+                    listsStore.lastSelectedListKey = null;
+                    if (typeof listsStore.unloadList === 'function') {
+                        listsStore.unloadList();
+                    }
+
                     // Unload game data so the next spec's Setup loads its own cleanly.
                     for (const k of Object.keys(sysStore?.localLibrary || {})) {
                         delete sysStore.localLibrary[k];
