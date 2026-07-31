@@ -238,6 +238,30 @@ internal sealed class EngineOptions
     };
 
     /// <summary>
+    /// Records <b>who mutated NewRecruit's Pinia stores, and from where</b>, into the failure
+    /// diagnostic report.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The rest of the diagnostics answer "what is the state now?". This answers "who changed it?",
+    /// which is the question every recent NR bug actually posed (#334, #336, #337, #339) and which a
+    /// snapshot cannot answer. It is the technique that cracked two of them, made repeatable: wrap
+    /// the store action, keep the caller stack. See <c>NrStoreTraceJs</c>.
+    /// </para>
+    /// <para>
+    /// Off by default and never implied. Wrapping replaces the store's function identities, so this
+    /// perturbs the thing under observation — which is tolerable while debugging and not tolerable
+    /// in <c>bs-spec compare</c>, whose whole job is to measure one variable at a time.
+    /// </para>
+    /// </remarks>
+    public Option<bool> TraceStore { get; } = new("--trace-store")
+    {
+        Description = "Record NR Pinia store mutations (action, args, before/after, caller stack) " +
+            "into the failure diagnostic report. Answers 'who changed this state?', which the " +
+            "state snapshot cannot. NR UI engines only; off by default.",
+    };
+
+    /// <summary>
     /// <b>The declaration channel for an ad-hoc adapter's endpoint</b> — the one thing an
     /// <c>exec:</c>/<c>dotnet:</c> connectable cannot state any other way.
     /// </summary>
@@ -278,6 +302,33 @@ internal sealed class EngineOptions
             "limit. Built-in engines declare their own and reject this flag.",
     };
 
+    /// <summary>
+    /// Applies <c>--trace-store</c> by exporting the switch the NR drivers read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An environment variable rather than a plumbed parameter because the engine usually lives in a
+    /// <c>bs-engine-host</c> <b>child process</b>, and an env var is the channel that survives that
+    /// hop — the same reason <c>compare</c>'s <c>--config-a</c>/<c>--config-b</c> take that shape.
+    /// The name is inlined rather than referenced from <c>NrStoreTraceJs</c> because the CLI
+    /// deliberately does not reference driver types (see <c>ReportDiagnosticDumps</c>, which inlines
+    /// the BS-UI diagnostics path for the same reason). <c>NrStoreTraceJs.EnableVariable</c> is the
+    /// source of truth; <c>CliDiagnosticSwitchTests</c> pins the two together.
+    /// </para>
+    /// <para>
+    /// This is a diagnostics switch, not a policy knob. The retired-knob rule that deleted
+    /// <c>NR_PARALLEL</c> and <c>BS_UI_KEEP_ALIVE</c> is about inputs to <c>ConcurrencyPolicy</c> —
+    /// things that must have exactly one source. This changes what gets recorded, not what runs.
+    /// </para>
+    /// </remarks>
+    public void ApplyDiagnosticSwitches(ParseResult parseResult)
+    {
+        if (parseResult.GetValue(TraceStore))
+        {
+            Environment.SetEnvironmentVariable("NR_TRACE_STORE", "1");
+        }
+    }
+
     public void AddTo(Command command)
     {
         command.Options.Add(Engine);
@@ -285,6 +336,7 @@ internal sealed class EngineOptions
         command.Options.Add(Gamedata);
         command.Options.Add(Roster);
         command.Options.Add(Headed);
+        command.Options.Add(TraceStore);
         command.Options.Add(EndpointDeclaration);
     }
 

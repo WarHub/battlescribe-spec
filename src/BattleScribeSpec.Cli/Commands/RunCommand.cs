@@ -178,6 +178,8 @@ internal static class RunCommand
                         throw new CliInputException($"--output '{batchOutput}' is not valid for --all; use summary, json, or github-actions.");
                     }
 
+                    engineOptions.ApplyDiagnosticSwitches(parseResult);
+
                     // Resolve validates --gamedata/--roster exclusivity, --ui, and the engine identity.
                     var selection = ApplyPolicyOverride(
                         engineOptions.Resolve(parseResult, specInput: null), parseResult.GetValue(policy), Ui.Warn);
@@ -229,6 +231,7 @@ internal static class RunCommand
                 }
 
                 RejectInertPolicyKeys(parseResult.GetValue(policy));
+                engineOptions.ApplyDiagnosticSwitches(parseResult);
 
                 var format = parseResult.GetValue(json) || outputStr == "json" ? OutputFormat.Json : OutputFormat.Tree;
                 var options = new RunOptions(
