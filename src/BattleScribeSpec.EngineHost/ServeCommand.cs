@@ -137,17 +137,24 @@ internal static class ServeCommand
             //   newrecruit-ui   gamedata : verdicts identical, but 0.92x — NO benefit. Headless
             //                              Chromium relaunches in ~1.6s, about what NR's per-spec
             //                              reset costs. Left cold.
-            //   newrecruit-ui   roster   : BROKEN — 6/8 warm-only failures (the shared browser's
-            //                              leftover list makes NR's Create List dropdown ambiguous)
-            //                              and 1.8x slower. Left cold.
-            //                              The named cause is now fixed: that engine's per-spec reset
-            //                              called `listsStore.deleteList?.(key)`, an action the lists
-            //                              store does not have, so it never deleted the leftover list
-            //                              it was written to remove (see NrListStoreJs). This entry
-            //                              still stands as written, because the rule here is measured
-            //                              evidence and nobody has re-run `bs-spec compare` since.
-            //                              Re-measure before touching ReuseSafeRoster — do not
-            //                              promote it on the strength of the fix alone.
+            //   newrecruit-ui   roster   : BROKEN — 7/8 warm-only failures. Left cold.
+            //                              RE-MEASURED 2026-07-31, and the cause recorded here for a
+            //                              year was WRONG. It said "the shared browser's leftover
+            //                              list makes NR's Create List dropdown ambiguous". #336
+            //                              fixed that leftover list — the per-spec reset had been
+            //                              calling `listsStore.deleteList?.(key)`, an action the
+            //                              store does not have, so it deleted nothing — and warm
+            //                              reuse is still broken in exactly the same shape: only the
+            //                              first roster-creating spec of a batch passes.
+            //                              The dropdown is not ambiguous, it is EMPTY of the spec's
+            //                              catalogue ("did not find some options"), so the residue
+            //                              that matters is warm game-data/system state, not the list
+            //                              row. See docs/warm-reuse.md for the compare output.
+            //                              Do not promote ReuseSafeRoster off the back of a cleanup
+            //                              fix — that is the exact inference this re-measurement
+            //                              falsified. Fix the economics case first anyway: NR gains
+            //                              nothing from warm reuse even when it works (gamedata
+            //                              measured 0.92x); parallelism is the lever.
             //   battlescribe (in-process): engine construction is cheap; nothing to save.
             //
             // Known risk on battlescribe-ui: the app can intermittently self-terminate when kept
