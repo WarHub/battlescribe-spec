@@ -137,24 +137,29 @@ internal static class ServeCommand
             //   newrecruit-ui   gamedata : verdicts identical, but 0.92x — NO benefit. Headless
             //                              Chromium relaunches in ~1.6s, about what NR's per-spec
             //                              reset costs. Left cold.
-            //   newrecruit-ui   roster   : BROKEN — 7/8 warm-only failures. Left cold.
-            //                              RE-MEASURED 2026-07-31, and the cause recorded here for a
-            //                              year was WRONG. It said "the shared browser's leftover
-            //                              list makes NR's Create List dropdown ambiguous". #336
-            //                              fixed that leftover list — the per-spec reset had been
-            //                              calling `listsStore.deleteList?.(key)`, an action the
-            //                              store does not have, so it deleted nothing — and warm
-            //                              reuse is still broken in exactly the same shape: only the
-            //                              first roster-creating spec of a batch passes.
-            //                              The dropdown is not ambiguous, it is EMPTY of the spec's
-            //                              catalogue ("did not find some options"), so the residue
-            //                              that matters is warm game-data/system state, not the list
-            //                              row. See docs/warm-reuse.md for the compare output.
-            //                              Do not promote ReuseSafeRoster off the back of a cleanup
-            //                              fix — that is the exact inference this re-measurement
-            //                              falsified. Fix the economics case first anyway: NR gains
-            //                              nothing from warm reuse even when it works (gamedata
-            //                              measured 0.92x); parallelism is the lever.
+            //   newrecruit-ui   roster   : correct since 2026-07-31, but only 1.10x. Left cold.
+            //                              This entry read "BROKEN — 6/8 warm-only failures (the
+            //                              shared browser's leftover list makes NR's Create List
+            //                              dropdown ambiguous)" for a year, and that diagnosis was
+            //                              wrong twice over. The leftover list was real and #336
+            //                              fixed it (the reset called `listsStore.deleteList?.(key)`,
+            //                              an action the store does not have, so it deleted nothing)
+            //                              — and warm reuse stayed broken. The dropdown was never
+            //                              ambiguous either; it was EMPTY of the spec's catalogue.
+            //                              The actual cause: NR's roster editor page is KEPT ALIVE,
+            //                              so its `activated` hook re-ran `updateRoute` on every
+            //                              navigation and called `selectList` with the list the
+            //                              component still held, re-selecting the PREVIOUS spec's
+            //                              system. Releasing both references NR keeps for that
+            //                              (`lastSelectedListKey` and the `unloadList` slot) makes
+            //                              warm 8/8 with verdicts identical to cold.
+            //                              Still left cold, on economics, not correctness: 1.10x on 8
+            //                              specs, and per-spec p50 is unchanged (all reuse saves is
+            //                              the browser launches). ConcurrencyPolicy.For gates reuse
+            //                              on ColdStartCost.Expensive anyway, so flipping
+            //                              ReuseSafeRoster would change nothing today. Confirm at the
+            //                              42-54 spec scale the enabled entries were earned at before
+            //                              promoting it. Parallelism remains the lever (3.8x).
             //   battlescribe (in-process): engine construction is cheap; nothing to save.
             //
             // Known risk on battlescribe-ui: the app can intermittently self-terminate when kept

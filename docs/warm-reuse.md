@@ -17,7 +17,7 @@ been measured to be both correct and faster.**
 | `battlescribe-ui` | **gamedata** | ✅ **enabled** | Verdicts identical to cold, **2.20× faster**. |
 | `battlescribe-ui` | **roster** | ✅ **enabled** | Verdicts identical to cold, **1.79× faster**. |
 | `newrecruit-ui` | gamedata | ❌ cold | Verdicts identical, but **0.92× — no benefit**. |
-| `newrecruit-ui` | roster | ❌ cold | Warm-reuse was **0.56× and produced wrong verdicts**. |
+| `newrecruit-ui` | roster | ❌ cold | Verdicts were wrong until 2026-07-31; now correct, but only **1.10×**. |
 | `newrecruit` | both | ❌ cold | Same economics as `newrecruit-ui`. |
 | `battlescribe` | both | ⚪ n/a | In-process; engine construction is cheap. Nothing to save. |
 
@@ -45,12 +45,15 @@ speedup that changes conformance results is not a speedup, it's a bug.
 | `newrecruit-ui` gamedata | 53 | 95.2s | 87.6s | 0.92× | ✅ all identical |
 | `newrecruit-ui` roster | 8 | 258.8s | 145.0s | 0.56× | ❌ **6 mismatches** |
 | `newrecruit-ui` roster (re-measured 2026-07-31) | 8 | — | — | **not reportable** | ❌ **7 mismatches** |
+| `newrecruit-ui` roster (**fixed**, 2026-07-31) | 8 | **107.5s** | 118.4s | **1.10×** | ✅ all identical |
 
-The 2026-07-31 row re-ran the ablation after #336 fixed `Cleanup`'s list deletion, since the
-reuse-policy table named the leftover list row as the cause. It is still broken, for a different
-reason than the one on record — see "NR-UI roster warm-reuse" under Known limitations. No timing is
-quoted because `compare` refuses to report one when verdicts differ, and quoting a wall-clock ratio
-from a run that got 7 specs wrong is precisely the mistake this table exists to prevent.
+The two 2026-07-31 rows are one investigation. The first re-ran the ablation after #336 fixed
+`Cleanup`'s list deletion, since the reuse-policy table named the leftover list row as the cause: it
+was **still broken, for a different reason than the one on record**, and no timing is quoted because
+`compare` refuses to report one when verdicts differ — quoting a wall-clock ratio from a run that got
+7 specs wrong is exactly the mistake this table exists to prevent. The second row is after the real
+cause (a kept-alive editor page holding the previous spec's list) was found and fixed. Both are kept:
+the failed measurement is what made the successful one findable.
 
 The speedup grows with batch size for `battlescribe-ui` gamedata (1.56× at 8 specs → 2.20× at 54),
 because the per-spec JVM cold start is what's being amortized away.
@@ -91,7 +94,9 @@ Two measurements settle how NR should actually be sped up (8 roster specs):
 **Sharing the browser saved nothing** (143.7s vs a 145.0s per-spec-browser baseline) — launching
 Chromium was never the cost; an NR spec spends its ~18s on SPA boot, HAR routing, game-data load and
 UI actions. It is kept anyway because it makes isolation *structural*, which is what makes parallel
-contexts safe and what killed the leftover-list corruption for good.
+contexts safe — and it kills the leftover-list corruption **for the pool**. Note the limit of that
+claim: warm-reuse deliberately shares one context across specs, so it gets no protection from it. See
+"NR-UI roster warm-reuse" under Known limitations, where assuming otherwise cost a re-measurement.
 
 So the engines split cleanly by where their cost lives:
 
@@ -141,7 +146,7 @@ that a **host-process** death still fails the rest of that worker's batch — se
 the app's phone-home from the Java agent (we hold `Instrumentation` and run before its `main`) is the
 obvious next step if the crash proves recurrent.
 
-### NR-UI roster warm-reuse — still broken, re-measured 2026-07-31
+### NR-UI roster warm-reuse — was broken for a third reason, now fixed (2026-07-31)
 
 Warm-reuse of the NR roster engine corrupts results: only the first roster-creating spec of a batch
 passes. This section used to call that historical and assert **"this class of bug is now
@@ -193,21 +198,50 @@ spec asks for its own catalogue by label — "did not find some options", and `a
 Same clobber as #334, reached by a different route, and it survives the rows being deleted because the
 row object handed to `selectList` does not come from `listData`.
 
-**Two remedies were tried and measured; neither works.** Recorded so nobody spends the afternoon
-again:
+### …and then fixed — the editor page is kept alive
 
-1. *Select the loaded system explicitly in setup* (`systemsStore.selectSystem(systemId)` after
-   `LoadGameDataAsync`, which otherwise never selects anything and relies on NR auto-selecting the
-   only system a cold browser has). Verified to take effect — and then clobbered by the call above
-   before the dialog opens. Note `selectSystem` takes an **id** and compares with `==`; passing the
-   system object makes every comparison fail and the call a silent no-op returning null.
-2. *Release NR's cached list reference at reset* — null `lastSelectedListKey` and invoke
-   `listsStore.unloadList()`, the slot NR's editor page fills with `() => { this.list = null }` and
-   which NR itself calls from `syncAllLists` when a list disappears. No change.
+The row did not come from the store at all. Hooking `selectList` to dump its caller *and* the
+component tree at the moment of the clobber gave the answer:
 
-So the open question is narrow and specific: **where does the row object passed to `selectList` come
-from, given `listData` is empty and neither of the above releases it?** Answer that and warm-reuse
-correctness is probably one line away.
+```
+selectList(<previous spec's row>)  ← argSystem: the previous spec's system
+  listData: []                        the row IS deleted; #336 works
+  lastSelectedListKey: <previous spec's key>
+  stack: selectList ← updateRoute ← activated
+```
+
+`activated` is the Vue **keep-alive** hook. NR's roster editor page is cached rather than destroyed,
+and every navigation back re-runs its `updateRoute`, which calls `selectList` with the list the
+component is *still holding*. That is also why a component-tree walk reports no holder: a
+keep-alive-cached component is not in the active subtree, so an ordinary traversal cannot see it.
+
+Two references keep it alive, and **both** must be released — clearing either alone changes nothing,
+which is how this was first mis-diagnosed as "neither remedy works":
+
+- `lastSelectedListKey` — the store's own record of what to re-select.
+- `unloadList` — the slot the editor page fills with `() => { this.list = null }` so the store can
+  tell it to drop the cached list. NR calls this itself from `syncAllLists`; `removeList` does not.
+  It is `null` whenever no list page is mounted, so it is legitimately conditional.
+
+With both cleared in the UI driver's per-spec reset: **8/8 specs pass warm, verdicts identical to
+cold, 1.10×.**
+
+One trap worth keeping: `systemsStore.selectSystem` takes an **id** (plus an optional type, e.g.
+`selectSystem(827374861, 'nr')`) and compares it with `==`/`===`. Handing it the system *object*
+makes every comparison fail and the call a silent no-op returning `null`. Verified against live
+newrecruit.eu, which serves the same client version the frozen HAR pins (35.12).
+
+### Should `ReuseSafeRoster` be flipped?
+
+Not on this evidence alone, and it would change nothing today even if it were.
+`ConcurrencyPolicy.For` computes `worthReusing = engine.ColdStartCost == ColdStartCost.Expensive`
+and applies `ReuseRoster: worthReusing && engine.ReuseSafeRoster`. `newrecruit-ui` is
+`ColdStartCost.Cheap`, so reuse stays off regardless of the flag — deliberately, per the comment
+there: for a cheap cold start, reuse "would add a warm-state failure mode for no gain".
+
+1.10× is a gain, but a small one, and it is the whole gain: per-spec p50 is unchanged (15.36s warm
+vs 15.29s cold) because all reuse saves is seven browser launches. The other enabled entries in this
+table were earned over 42–54 specs; this is 8. Confirm at that scale before promoting it.
 
 **NR warm-reuse stays disabled, and the reason it stays disabled is economics, not this bug.** Even
 working, it buys NR nothing: the gamedata domain measured 0.92×. Parallelism is the lever (3.8× at 4
