@@ -1,3 +1,4 @@
+using BattleScribeSpec.NewRecruit;
 using Microsoft.Playwright;
 
 namespace BattleScribeSpec.NrRosterUiDriver;
@@ -99,6 +100,43 @@ public sealed class NrUiDiagnostics
     }
 
     /// <summary>
+    /// Installs the store-mutation tracer (<see cref="NrStoreTraceJs"/>) if it has been enabled.
+    /// Idempotent; call after Pinia is ready and after every per-spec reset.
+    /// </summary>
+    public async Task InstallStoreTraceAsync(int limit = 200)
+    {
+        if (!NrStoreTraceJs.Enabled)
+        {
+            return;
+        }
+
+        try
+        {
+            await _page.EvaluateAsync<string>(NrStoreTraceJs.InstallJs, limit);
+        }
+        catch
+        {
+            // Diagnostics must never break the run they are diagnosing.
+        }
+    }
+
+    /// <summary>
+    /// Reads back the recorded store mutations — who changed the stores, and from where.
+    /// Null when tracing is off or nothing was recorded.
+    /// </summary>
+    public async Task<string?> CaptureStoreTraceAsync()
+    {
+        try
+        {
+            return await _page.EvaluateAsync<string?>(NrStoreTraceJs.ReadJs);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Captures all diagnostic information and returns a formatted report.
     /// Useful for attaching to test failure messages or writing to disk.
     /// </summary>
@@ -107,9 +145,60 @@ public sealed class NrUiDiagnostics
         var screenshot = await CaptureScreenshotAsync();
         var dom = await CaptureDomSnapshotAsync();
         var pinia = await CapturePiniaStateAsync();
+        var storeTrace = await CaptureStoreTraceAsync();
         var console = GetConsoleLog().ToList();
 
-        return new DiagnosticReport(screenshot, console, dom, pinia);
+        return new DiagnosticReport(screenshot, console, dom, pinia, storeTrace);
+    }
+
+    /// <summary>Where reports land. Mirrors <c>NrGameDataUiDiagnostics</c>, including its worker suffix.</summary>
+    public static string DefaultArtifactsDir =>
+        Environment.GetEnvironmentVariable("NR_UI_DIAGNOSTICS_DIR")
+        ?? Path.Combine("artifacts", $"nr-ui-diagnostics{WorkerSuffix}");
+
+    private static string WorkerSuffix =>
+        Environment.GetEnvironmentVariable("BSSPEC_WORKER_ID") is { Length: > 0 } id ? $"-w{id}" : "";
+
+    /// <summary>
+    /// Writes a report to <see cref="DefaultArtifactsDir"/> as screenshot.png / console.txt /
+    /// pinia-state.json / store-trace.json / dom.html.
+    /// <para>
+    /// This driver had a <c>CaptureFullReportAsync</c> and no way to persist it, and nothing called
+    /// it — so an NR roster UI failure produced no artifacts at all. Seven identical 30s
+    /// <c>addForce</c> timeouts while diagnosing #339 wrote nothing to disk.
+    /// </para>
+    /// </summary>
+    public static async Task SaveReportAsync(DiagnosticReport report, string? specId = null)
+    {
+        var dir = Path.Combine(
+            DefaultArtifactsDir,
+            $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{specId ?? "unknown"}{WorkerSuffix}");
+        Directory.CreateDirectory(dir);
+
+        if (report.Screenshot is not null)
+        {
+            await File.WriteAllBytesAsync(Path.Combine(dir, "screenshot.png"), report.Screenshot);
+        }
+
+        if (report.ConsoleLog.Count > 0)
+        {
+            await File.WriteAllTextAsync(Path.Combine(dir, "console.txt"), string.Join("\n", report.ConsoleLog));
+        }
+
+        if (report.PiniaState is not null)
+        {
+            await File.WriteAllTextAsync(Path.Combine(dir, "pinia-state.json"), report.PiniaState);
+        }
+
+        if (report.StoreTrace is not null)
+        {
+            await File.WriteAllTextAsync(Path.Combine(dir, "store-trace.json"), report.StoreTrace);
+        }
+
+        if (report.DomSnapshot is not null)
+        {
+            await File.WriteAllTextAsync(Path.Combine(dir, "dom.html"), report.DomSnapshot);
+        }
     }
 }
 
@@ -120,7 +209,8 @@ public sealed record DiagnosticReport(
     byte[]? Screenshot,
     IReadOnlyList<string> ConsoleLog,
     string? DomSnapshot,
-    string? PiniaState)
+    string? PiniaState,
+    string? StoreTrace = null)
 {
     /// <summary>
     /// Formats the non-binary diagnostics as a human-readable string.
@@ -139,6 +229,14 @@ public sealed record DiagnosticReport(
         {
             parts.Add("\n=== Pinia State ===");
             parts.Add(PiniaState);
+        }
+
+        // Deliberately above the DOM dump: when state is wrong, the question is almost always who
+        // changed it, and this is the only section that answers that.
+        if (StoreTrace is not null)
+        {
+            parts.Add("\n=== Store Mutations (who changed the stores, and from where) ===");
+            parts.Add(StoreTrace);
         }
 
         if (Screenshot is not null)

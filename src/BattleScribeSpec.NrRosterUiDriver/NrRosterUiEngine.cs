@@ -116,6 +116,12 @@ public sealed class NrRosterUiEngine : IRosterEngine
             }
         }
 
+        // Arm the store tracer for this spec (no-op unless NR_TRACE_STORE is set). Installed here,
+        // after Pinia is up, because the buffer lives on `window` and a page load clears it — which
+        // is the scope we want: a failure needs the mutations of the spec that failed.
+        _diagnostics ??= new NrUiDiagnostics(Browser.Page);
+        await _diagnostics.InstallStoreTraceAsync();
+
         // Roster creation is deferred to the first AddForce call (like BS UI driver).
         // This matches the user-facing NR flow: load data → pick force → roster created.
         return [];
@@ -186,7 +192,47 @@ public sealed class NrRosterUiEngine : IRosterEngine
     public ActionOutputs AddForce(string forceEntryId, string catalogueId)
         => AddForceAsync(forceEntryId, catalogueId).GetAwaiter().GetResult();
 
-    private async Task<ActionOutputs> AddForceAsync(string forceEntryId, string catalogueId)
+    /// <summary>
+    /// Runs a UI action and, if it throws, captures a diagnostic report to disk before rethrowing.
+    /// <para>
+    /// Mirrors <c>NrGameDataUiEngine.CaptureFailureDiagnostics</c>, which this driver had no
+    /// equivalent of: it owned a <see cref="NrUiDiagnostics"/> and a public
+    /// <c>CaptureDiagnosticsAsync</c> that nothing ever called, so an NR roster UI failure produced
+    /// no artifacts whatsoever. Wrapping the roster-creation and force paths covers where failures
+    /// actually land; any other action becomes covered by one more <c>WithDiagnosticsAsync</c>.
+    /// </para>
+    /// </summary>
+    private async Task<T> WithDiagnosticsAsync<T>(string label, Func<Task<T>> action)
+    {
+        try
+        {
+            return await action();
+        }
+        catch
+        {
+            await CaptureFailureDiagnosticsAsync(label);
+            throw;
+        }
+    }
+
+    private async Task CaptureFailureDiagnosticsAsync(string label)
+    {
+        try
+        {
+            _diagnostics ??= new NrUiDiagnostics(Browser.Page);
+            var report = await _diagnostics.CaptureFullReportAsync();
+            await NrUiDiagnostics.SaveReportAsync(report, $"{_rosterName}-{label}");
+        }
+        catch
+        {
+            // Best-effort — diagnostics must never mask the original failure.
+        }
+    }
+
+    private Task<ActionOutputs> AddForceAsync(string forceEntryId, string catalogueId)
+        => WithDiagnosticsAsync($"addForce-{forceEntryId}", () => AddForceCoreAsync(forceEntryId, catalogueId));
+
+    private async Task<ActionOutputs> AddForceCoreAsync(string forceEntryId, string catalogueId)
     {
         var isFirstAddForce = !_rosterCreated;
         await EnsureRosterCreatedAsync(catalogueId);
@@ -618,6 +664,12 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         await Browser.NavigateToAppAsync();
         await Browser.WaitForPiniaAsync();
+
+        // Re-arm after the navigation above; installation is idempotent.
+        if (_diagnostics is not null)
+        {
+            await _diagnostics.InstallStoreTraceAsync();
+        }
     }
 
     public void Dispose()

@@ -92,6 +92,37 @@ document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties
 > HAR. `deleteList` does exist in NR — as a MyLists *page-component* method and as the server RPC
 > verb — but not on the store. See `NrListStoreJs`.
 
+### When state is wrong, find *who changed it* — don't reason about it
+
+Four NR bugs in a row (#334, #336, #337, #339) were all the same question: some earlier spec's state
+was still present, and the fix depended on knowing *which code put it there*. Snapshot diagnostics
+(screenshot, DOM, Pinia dump) answer "what is the state now?" and cannot answer that. Reasoning about
+it from the bundle is slow and, in three of those four cases, produced a confident wrong answer first.
+
+**The technique that works — wrap the action, keep the caller stack:**
+
+```javascript
+const orig = store.selectSystem.bind(store);
+store.selectSystem = function (...args) {
+    console.log(args, store.selectedSystem?.id, new Error().stack);  // frames 2+ = the real caller
+    return orig(...args);
+};
+```
+
+The caller frame names the component *and* its lifecycle hook. In #339 that printed
+`selectList <- updateRoute <- activated` — `activated` being Vue's **keep-alive** hook — which was
+the whole diagnosis, after a lot of theorising had produced nothing.
+
+This is now built in: **`bs-spec run --trace-store`** (see `NrStoreTraceJs`). It wraps the
+bug-prone actions, records `{action, args, selectedSystem before/after, lastSelectedListKey, stack}`
+into a ring buffer, and writes `store-trace.json` into the failure diagnostic report. Off by
+default — wrapping replaces the store's function identities, so it must never be on during
+`bs-spec compare`.
+
+**Do not trust a component tree walk to prove "nothing holds this".** A component cached by
+`<KeepAlive>` is not in the active subtree, so walking `inst.subTree` returns a false negative for
+exactly the case that bites. A caller stack has no such blind spot.
+
 ### Navigation
 
 - **Live mode:** Direct `page.GotoAsync(baseUrl)`
