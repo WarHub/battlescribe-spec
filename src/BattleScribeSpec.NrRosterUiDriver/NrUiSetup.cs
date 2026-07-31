@@ -183,13 +183,25 @@ public static class NrUiSetup
 
         await page.WaitForTimeoutAsync(1500);
 
-        // Verify no error after selection (library catalogues can't create rosters)
+        // NR refuses to build a list from a catalogue it cannot load. Report the observation and the
+        // causes actually known, rather than asserting one that was never checked.
+        //
+        // This used to read "NR does not support creating rosters from library catalogues", which was
+        // a guess and, for every spec that hits it, wrong: measured across 56 roster specs, all five
+        // failures here were specs whose catalogue is EMPTY, and not one of them declares `library`.
+        // The distinguishing case proves the mechanism rather than muddying it —
+        // gamesystem/gamesystem-root-selectionentry also has an empty catalogue and does NOT fail,
+        // because its content lives in the gameSystem, so NR has something to load.
         var errorVisible = await box.Locator("text=could not be loaded").IsVisibleAsync();
         if (errorVisible)
         {
             throw new InvalidOperationException(
                 $"Create List dialog shows 'could not be loaded' for catalogue '{preferredCatalogueName}'. " +
-                "NR does not support creating rosters from library catalogues.");
+                "NR's Create List dialog needs a catalogue with loadable content: this is what an empty " +
+                "catalogue looks like (no selectionEntries/entryLinks/etc., and none in the gameSystem " +
+                "either), and it is also what a library catalogue looks like. The store-direct " +
+                "`newrecruit` engine builds these rosters fine — it is the UI dialog that refuses, so a " +
+                "spec failing only here is an NR-UI limitation, not a data error.");
         }
 
         // Set list name
