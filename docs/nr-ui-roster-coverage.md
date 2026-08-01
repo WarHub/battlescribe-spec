@@ -12,8 +12,8 @@ over `force/`, `cost/`, `entry-group/`, `gamesystem/`:
 | | |
 |---|---:|
 | Specs run | 56 |
-| **Passed** | **43 (77%)** |
-| Failed | 13 |
+| **Passed** | **45 (80%)** |
+| Failed | 11 |
 
 Every one of those 56 created its own roster in the same browser session, which is the fact that
 retires the one-spec limit.
@@ -43,16 +43,28 @@ not. Not a data error, and not fixable from this side.
 > — a cause it never checked, and false for all five (none declare `library`). Corrected to state
 > the observation and both known causes.
 
-### 2. Multi-catalogue — 3 specs — **driver gap**
+### 2. Multi-catalogue — was 3 specs, **2 fixed**
 
-`force-nested-multi-catalogue` (`selectEntry se-b1 not visible in the catalogue panel`),
-`force-remove-first-multi-catalogue` (`se-beta not visible`),
-`force-multi-catalogue-two-forces` (`expected Beta Unit but got Alpha Unit`).
+`force-remove-first-multi-catalogue` and `force-multi-catalogue-two-forces` **now pass**.
 
-All three are multi-catalogue, and all three fail on reaching the *second* catalogue's entries. NR
-binds a list to one faction at creation, and `CreateRosterAsync` picks exactly one; the store-direct
-engine carries `books`/`bookCatalogueIds` for all of them. This is a coherent, nameable gap — the UI
-driver does not support multi-catalogue rosters — not an assortment of flaky selectors.
+`AddForceByNameAsync` ignored its `catalogueId`, on the strength of a comment claiming *"NR shows
+force entries without distinguishing which catalogue they belong to. The UI picks the correct book
+internally when clicked."* It does not. NR renders `select.faction-select` whenever the system has
+more than one playable catalogue; the force list below is derived from it, and the chosen book is
+what `roster.insertForce(book, entryId)` receives — which is also what calls `addCatalogue()` to
+bring the second catalogue into the roster. Leaving it alone silently created the force against the
+list's own catalogue, so the entries it should have offered were absent.
+
+Measured on `force-multi-catalogue-two-forces`: force 2 was created against `cat-a`, and
+`selectEntry se-b1` returned Alpha Unit instead of Beta Unit.
+
+The child-force path had already been doing this correctly via `.childForces select` — only the
+top-level path had not.
+
+**Still failing: `force-nested-multi-catalogue`**, which straddles this group and the next. Its child
+force from `cat-b` is created correctly now; `selectEntry se-b1` then fails with "not visible in the
+catalogue panel". That is the *entry* panel, a different surface from add-force, and it belongs with
+group 3.
 
 ### 3. Nested child forces — 3 specs — **driver gap**
 
@@ -79,6 +91,6 @@ confirmation: 56 roster creations, one session, no HAR exhaustion.
 This matters because `docs/warm-reuse.md` records the cost of that lane: *"CI never caught the
 original bug because the NR-UI roster lane runs a single spec."* The same blind spot hid #339.
 
-Widening it is worth doing on the **thorough** lane rather than every push — 43 specs at ~15s each
+Widening it is worth doing on the **thorough** lane rather than every push — 45 specs at ~15s each
 is ~11 minutes, which is right for an opt-in suite and wrong for the fast gate the smoke lane exists
-to be. Groups 2 and 3 should be fixed or declared before widening, so the lane starts green.
+to be. The remaining groups should be fixed or declared before widening, so the lane starts green.
