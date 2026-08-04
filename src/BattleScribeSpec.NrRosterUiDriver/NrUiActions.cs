@@ -101,21 +101,40 @@ public static class NrUiActions
     /// spec keeps its current behaviour.
     /// </para>
     /// </summary>
-    private static async Task SelectForceCatalogueAsync(IPage page, string? catalogueId)
+    private static Task SelectForceCatalogueAsync(IPage page, string? catalogueId)
+        => SelectCatalogueInPickerAsync(page, page.Locator("select.faction-select").First, catalogueId, "add-force");
+
+    /// <summary>
+    /// Points a catalogue picker at <paramref name="catalogueId"/>, by name, and refuses to guess.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NR renders one of these wherever a force can come from more than one catalogue: the top-level
+    /// add-force panel (<c>select.faction-select</c>) and each force's child-force section (a bare
+    /// <c>select</c> under <c>.childForces</c>). Both are the same decision, so both go through here.
+    /// </para>
+    /// <para>
+    /// <b>It must never fall back to an index.</b> The child-force path used to resolve the catalogue
+    /// name through <c>army.system || army.gameSystem</c>, which is not where the books live — so the
+    /// lookup returned null and the code selected <c>Index = 1</c>, i.e. whatever the first real
+    /// option happened to be. On force/force-nested-multi-catalogue that is "Faction A", so a child
+    /// force requested from <c>cat-b</c> was built against <c>cat-a</c>, and the entry it should then
+    /// have offered (<c>se-b1</c>) was absent. That surfaced two steps later as "entry 'se-b1' is not
+    /// visible in the catalogue panel" — blaming the entry panel for a force built against the wrong
+    /// catalogue.
+    /// </para>
+    /// </remarks>
+    private static async Task SelectCatalogueInPickerAsync(
+        IPage page, ILocator picker, string? catalogueId, string what)
     {
-        if (catalogueId is null)
+        if (catalogueId is null || await picker.CountAsync() == 0 || !await picker.IsVisibleAsync())
         {
             return;
         }
 
-        var factionSelect = page.Locator("select.faction-select").First;
-        if (await factionSelect.CountAsync() == 0 || !await factionSelect.IsVisibleAsync())
-        {
-            return;
-        }
-
-        // NR labels the options by catalogue NAME; the spec addresses catalogues by id. Resolve
-        // through the loaded books, which is where both live side by side.
+        // NR labels the options by catalogue NAME; specs address catalogues by id. The loaded books
+        // are where both live side by side — read them off systemsStore, which is the store that
+        // actually holds them.
         var catalogueName = await page.EvaluateAsync<string?>("""
             (catId) => {
                 const pinia = document.querySelector('#__nuxt')
@@ -126,26 +145,27 @@ public static class NrUiActions
             }
             """, catalogueId);
 
-        if (catalogueName is null)
-        {
-            return;
-        }
+        var options = (await picker.Locator("option").AllTextContentsAsync())
+            .Select(o => o.Trim())
+            .ToList();
 
-        var options = await factionSelect.Locator("option").AllTextContentsAsync();
-        if (!options.Any(o => o.Trim() == catalogueName))
+        if (catalogueName is null || !options.Contains(catalogueName))
         {
-            // The catalogue exists but this picker is not offering it. Say so rather than silently
-            // adding the force against whatever happens to be selected — that is the failure mode
-            // this method was written to end.
+            // Say what went wrong rather than adding the force against whatever is selected.
+            // Guessing here produced a wrong roster AND an error pointing at the wrong panel.
             throw new InvalidOperationException(
-                $"NR UI: catalogue '{catalogueName}' (id={catalogueId}) is not offered by the add-force " +
-                $"faction picker. Offered: [{string.Join(", ", options.Select(o => o.Trim()))}].");
+                $"NR UI: cannot point the {what} catalogue picker at id={catalogueId} — "
+                + (catalogueName is null
+                    ? "no loaded book has that id."
+                    : $"'{catalogueName}' is not among its options.")
+                + $" Offered: [{string.Join(", ", options)}].");
         }
 
-        await factionSelect.SelectOptionAsync(new SelectOptionValue { Label = catalogueName });
+        await picker.SelectOptionAsync(new SelectOptionValue { Label = catalogueName });
         // The force list is derived from the selection; let it re-render before it is read.
         await page.WaitForTimeoutAsync(300);
     }
+
 
     /// <summary>
     /// Adds a child force under <paramref name="parentForceId"/> by name.
@@ -196,39 +216,10 @@ public static class NrUiActions
                 await page.WaitForTimeoutAsync(300);
             }
 
-            // If multiple catalogues exist, NR shows a <select> picker before the unitList
-            var catSelect = parentBookForce.Locator(".childForces select");
-            if (await catSelect.CountAsync() > 0)
-            {
-                // Resolve catalogue name from ID
-                var catName = catalogueId != null
-                    ? await page.EvaluateAsync<string?>("""
-                        ([catId]) => {
-                            const pinia = document.querySelector('#__nuxt')
-                                ?.__vue_app__?.config?.globalProperties?.$pinia;
-                            const army = pinia?._s?.get('lists')?.currentList?.army
-                                ?? window.__bsspec?.army;
-                            if (!army) return null;
-                            const sys = army.system || army.gameSystem;
-                            const books = sys?.books?.array || [];
-                            const book = books.find(b => b.id === catId);
-                            return book?.name ?? null;
-                        }
-                        """, new[] { catalogueId })
-                    : null;
-
-                if (catName != null)
-                {
-                    await catSelect.SelectOptionAsync(new SelectOptionValue { Label = catName });
-                    await page.WaitForTimeoutAsync(300);
-                }
-                else
-                {
-                    // Select first non-disabled option
-                    await catSelect.SelectOptionAsync(new SelectOptionValue { Index = 1 });
-                    await page.WaitForTimeoutAsync(300);
-                }
-            }
+            // Same catalogue decision as the top-level add-force panel, same helper — NR renders a
+            // bare <select> under .childForces when the child force could come from more than one.
+            await SelectCatalogueInPickerAsync(
+                page, parentBookForce.Locator(".childForces select").First, catalogueId, "child-force");
 
             var unitList = parentBookForce.Locator(".childForces .unitList");
             await unitList.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });

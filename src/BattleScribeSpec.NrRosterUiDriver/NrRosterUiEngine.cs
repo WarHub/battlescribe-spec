@@ -700,6 +700,22 @@ public sealed class NrRosterUiEngine : IRosterEngine
             RegisterSelectionEntry(se);
         }
 
+        // Shared entries defined on the GAME SYSTEM, which this used to skip while
+        // RegisterCatalogue registered the catalogue-level equivalents — an asymmetry with a real
+        // cost. Every UI action addresses entries by their visible NAME (the DOM does not carry
+        // BattleScribe ids), so an unregistered entry falls back to its raw id: the driver went
+        // looking for a label "se-shared-weapon" in a panel that says "Shared Weapon", found
+        // nothing, and reported it as a hidden entry. Measured on gamesystem/gamesystem-shared-entry.
+        foreach (var se in gameSystem.SharedSelectionEntries ?? [])
+        {
+            RegisterSelectionEntry(se);
+        }
+
+        foreach (var grp in gameSystem.SharedSelectionEntryGroups ?? [])
+        {
+            RegisterSelectionEntryGroup(grp);
+        }
+
         foreach (var el in gameSystem.EntryLinks ?? [])
         {
             RegisterEntryLink(el);
