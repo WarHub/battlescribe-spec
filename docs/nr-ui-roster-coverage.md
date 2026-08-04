@@ -12,16 +12,17 @@ over `force/`, `cost/`, `entry-group/`, `gamesystem/`:
 | | |
 |---|---:|
 | Specs run | 56 |
-| **Passed** | **47 (84%)** |
-| Failed | 9 |
+| **Passed** | **49 (88%)** |
+| Failed | 7 |
 
 Every one of those 56 created its own roster in the same browser session, which is the fact that
 retires the one-spec limit.
 
 ## The failures are four groups, not noise
 
-First measured at 43/56. Grouping them turned "the UI driver is unreliable" into a work list: two
-groups were driver defects and are now fixed (43 → 47), two are limitations of NR's UI.
+First measured at 43/56. Grouping them turned "the UI driver is unreliable" into a work list: the
+driver defects are now all fixed (43 → 49), and **every remaining failure is a limitation of NR's
+own UI**, not of this driver.
 
 ### 1. Empty catalogue — 5 specs — NR-UI limitation
 
@@ -82,15 +83,26 @@ maps forces to `.bookForce` sections positionally, so it now verifies the counts
 a diagnostic instead of leaving elements untagged (an untagged element is indistinguishable from a
 force that does not exist).
 
-### 3b. Entry panels — 2 specs — **open**
+### 3b. The last two — **both fixed, and neither was what its error said**
 
-The two that remain are a distinct, third surface: entry selection rather than force structure.
+Both were filed as "entry panel" gaps because that is where they threw. Neither was.
 
-`force-nested-multi-catalogue` — its child force from `cat-b` is created correctly now, and
-`selectEntry se-b1` then reports "not visible in the catalogue panel". Very likely the same
-catalogue-filter lever as group 2, applied to the entry panel; that is the first thing to check.
-`gamesystem-shared-entry` — `selectChildEntry se-shared-weapon` reports "not visible in the options
-panel".
+`force-nested-multi-catalogue` was **still the multi-catalogue bug**, one level down. The child-force
+picker resolved its catalogue name through `army.system || army.gameSystem` — not where the books
+live — so the lookup returned null and the code fell back to `SelectOptionAsync(Index = 1)`, i.e.
+"Faction A". A child force requested from `cat-b` was built against `cat-a`, and `selectEntry se-b1`
+then correctly reported that Beta Unit was not there. Both pickers now share one helper that resolves
+through `systemsStore` and **throws rather than falling back to an index**.
+
+`gamesystem-shared-entry` was **name registration**. `RegisterCatalogue` registers a catalogue's
+`SharedSelectionEntries` and `SharedSelectionEntryGroups`; `BuildEntryLookups` registered neither for
+the *game system*. Every UI action addresses entries by visible name, so an unregistered entry falls
+back to its raw id — the driver hunted for a label "se-shared-weapon" in a panel that says "Shared
+Weapon" and called it hidden. Two loops, mirroring the catalogue path.
+
+Both had been diagnosed from where the exception surfaced rather than from where the state went
+wrong, which is the same mistake the "library catalogues" and "child force not visible" messages
+encode. Probing the state at the point of failure is what separated them.
 
 ### 4. Hidden entries and validation — 2 specs — NR-UI limitations
 
@@ -112,6 +124,7 @@ confirmation: 56 roster creations, one session, no HAR exhaustion.
 This matters because `docs/warm-reuse.md` records the cost of that lane: *"CI never caught the
 original bug because the NR-UI roster lane runs a single spec."* The same blind spot hid #339.
 
-Widening it is worth doing on the **thorough** lane rather than every push — 47 specs at ~15s each
+Widening it is worth doing on the **thorough** lane rather than every push — 49 specs at ~15s each
 is ~11 minutes, which is right for an opt-in suite and wrong for the fast gate the smoke lane exists
-to be. The remaining groups should be fixed or declared before widening, so the lane starts green.
+to be. No driver gap blocks it now; the 7 remaining failures need declaring (per-spec skipEngines or
+expected-failure entries for newrecruit-ui) so the lane starts green.
