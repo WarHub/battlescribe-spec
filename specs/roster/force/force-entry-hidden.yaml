@@ -7,6 +7,11 @@ description: >
   error is produced, unlike for hidden SelectionEntries/CategoryEntries.
   See docs/hidden-validation-analysis.md for decompiled source analysis.
 
+# A hidden force is not rendered in NR's forces panel, so a user cannot add it and neither can a
+# UI driver. The store-direct engine can, which is the difference this records.
+engines:
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     forceEntries:

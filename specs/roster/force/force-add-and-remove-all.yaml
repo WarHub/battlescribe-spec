@@ -2,6 +2,13 @@ id: force-add-and-remove-all
 category: force
 description: Adding and removing all forces returns roster to empty state
 
+# NR's Create List dialog refuses a catalogue with no loadable content, so this roster cannot be
+# built through the UI at all. The store-direct `newrecruit` engine builds it fine — the limit is the
+# dialog, not the data. Declared `fail` rather than `skip` so an NR release that lifts it is reported
+# as an unexpected pass instead of going unnoticed. See docs/nr-ui-roster-coverage.md.
+engines:
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     forceEntries:

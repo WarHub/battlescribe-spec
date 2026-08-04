@@ -23,9 +23,6 @@ public static class NrUiSetup
     {
         var page = browser.Page;
 
-        // Inject the directory picker mock with our spec data files
-        await InjectDirectoryPickerMockAsync(page, files);
-
         // Navigate to the MySystems (game library) page.
         //
         // This used to click `a[href*='MySystems']` — NR's "Home" navbar link. That link was removed
@@ -37,6 +34,21 @@ public static class NrUiSetup
         // control NR is free to restyle or drop.
         await browser.NavigateToRouteAsync("/app/MySystems");
         await page.WaitForTimeoutAsync(500);
+
+        // Inject the directory picker mock — AFTER the navigation above, not before it.
+        //
+        // It used to be the first thing this method did, which put an `evaluate` immediately before a
+        // navigation and immediately after the previous spec's cleanup navigation. Both are hazards:
+        // the mock is installed into a context the next line is about to change, and the evaluate can
+        // land while a route change is still settling, which Playwright reports as "Execution context
+        // was destroyed, most likely because of a navigation".
+        //
+        // Measured: running 56 specs sequentially through one shared browser (the widened NR-UI
+        // roster lane) hit it once in two runs — invisible to `bs-spec run`, which gives every spec
+        // its own engine, and invisible to the old one-spec lane, which never had a previous spec to
+        // race with. The mock is only read when "Add From Folder" is clicked below, so installing it
+        // here is both safe and sufficient.
+        await InjectDirectoryPickerMockAsync(page, files);
 
         // Click "Add More Games" to open the install popup
         var addMoreGames = page.GetByText("Add more games");

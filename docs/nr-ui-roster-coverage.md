@@ -124,7 +124,21 @@ confirmation: 56 roster creations, one session, no HAR exhaustion.
 This matters because `docs/warm-reuse.md` records the cost of that lane: *"CI never caught the
 original bug because the NR-UI roster lane runs a single spec."* The same blind spot hid #339.
 
-Widening it is worth doing on the **thorough** lane rather than every push — 49 specs at ~15s each
-is ~11 minutes, which is right for an opt-in suite and wrong for the fast gate the smoke lane exists
-to be. No driver gap blocks it now; the 7 remaining failures need declaring (per-spec skipEngines or
-expected-failure entries for newrecruit-ui) so the lane starts green.
+**Widened.** The thorough lane now runs these four categories — 56 specs, ~18 minutes — behind
+`NR_UI_ROSTER_FULL`, which the `Full frozen NR UI roster` CI step sets. Every-push and `pre-push`
+still run kitchen-sink alone, unchanged. The 7 NR-UI limitations are declared `newrecruit-ui: fail`
+in the specs themselves, so an NR release that lifts one is reported as an unexpected pass.
+
+**It is scoped to what has been measured, not to everything applicable.** Running the whole roster
+suite through this driver selects **363** specs, takes ~90 minutes, and fails 28 of them in
+categories nobody has classified. Those 28 are unmeasured, not known limitations; declaring them to
+get green would be inventing declarations rather than earning them. A category joins the lane once
+its failures have been measured and classified, the way these four were.
+
+**The widening paid for itself on its first run**, which is the point of it. Sequencing 56 specs
+through one shared browser surfaced a navigation race in `LoadGameDataAsync` — it injected the
+directory-picker mock as its first action, between the previous spec's cleanup navigation and its
+own, and Playwright reported "Execution context was destroyed". Structurally invisible to
+`bs-spec run` (a fresh engine per spec) and to the old one-spec lane (no previous spec to race).
+Fixed by injecting the mock after the navigation, where it is actually read; two clean 56-spec runs
+since, against one failure in two before.

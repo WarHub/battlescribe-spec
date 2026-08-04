@@ -365,10 +365,17 @@ jobs:
         run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
+      # NR_UI_ROSTER_FULL is what makes this step deserve the word "Full". Without it the class runs
+      # kitchen-sink only — which is what it did for its whole life, and is why
+      # docs/warm-reuse.md records "CI never caught the original bug because the NR-UI roster lane
+      # runs a single spec". The knob is opt-in so the every-push lane and pre-push stay fast;
+      # ConcurrencyConfigurationDriftTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet fails if this
+      # env entry is ever dropped, because a lane silently shrinking from 49 specs to 1 still exits 0.
       - name: Full frozen NR UI roster
         run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
+          NR_UI_ROSTER_FULL: 1
       - name: Full frozen NR Editor GameData
         run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-editor-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
