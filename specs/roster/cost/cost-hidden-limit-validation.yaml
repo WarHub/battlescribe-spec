@@ -3,6 +3,11 @@ category: cost
 description: Hidden cost type with a limit still produces validation error when exceeded
 tags: [cost, costType, validation-errors]
 
+# NR's UI does not surface a violation of a HIDDEN cost limit, so the expected validation error never
+# appears. The store-direct engine reports it.
+engines:
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     costTypes:

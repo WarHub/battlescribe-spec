@@ -19,12 +19,80 @@ public sealed class FrozenNrUiRosterConformanceTests
     private const string LogPrefix = "[FROZEN-UI] ";
 
     /// <summary>
-    /// The spec(s) this UI driver runs against. Only kitchen-sink — the NR UI driver validates core
-    /// protocol conformance, not all 312 specs. The frozen HAR supports a single roster-creation flow
-    /// per run, so exactly one roster-building spec runs here; kitchen-sink's trailing
-    /// <c>expectedFile</c> step exercises the UI export path (Export button → .ros) within that flow.
+    /// The spec(s) the fast lane runs. Kitchen-sink alone: it exercises core protocol conformance and
+    /// its trailing <c>expectedFile</c> step drives the UI export path (Export button → .ros) inside
+    /// the same flow.
     /// </summary>
-    private static readonly string[] TargetSpecs = ["protocol/protocol-kitchen-sink"];
+    /// <remarks>
+    /// This used to be the ONLY set, justified as "the frozen HAR supports a single roster-creation
+    /// flow per run". That limit no longer exists — <c>NewRecruitBrowser</c>'s HAR fallback
+    /// benign-fulfills <c>/api/</c> calls precisely so the SPA stops hanging across repeated roster
+    /// flows, and 56 consecutive roster creations in one session are now measured
+    /// (docs/nr-ui-roster-coverage.md). Set <see cref="FullVariable"/> for the full set.
+    /// </remarks>
+    private static readonly string[] SmokeSpecs = ["protocol/protocol-kitchen-sink"];
+
+    /// <summary>
+    /// Opt in to running every applicable roster spec instead of just kitchen-sink.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Opt-IN rather than opt-out, deliberately. The full set is ~49 specs at ~15s each — right for
+    /// the thorough suite, and wrong for the every-push lane and for <c>pre-push</c>, which exist to
+    /// be fast. This keeps every lane exactly as quick as it is today unless it asks otherwise.
+    /// </para>
+    /// <para>
+    /// The obvious hazard of an opt-in is that the thorough lane silently stops opting in and nobody
+    /// notices a suite shrinking from 49 specs to 1 — which is the exact failure this lane already
+    /// had once (<c>docs/warm-reuse.md</c>: "CI never caught the original bug because the NR-UI
+    /// roster lane runs a single spec"). Two things guard it: the run logs which mode it chose and
+    /// how many specs that selected, and
+    /// <c>ConcurrencyConfigurationDriftTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet</c> fails if
+    /// the CI step stops setting this.
+    /// </para>
+    /// </remarks>
+    internal const string FullVariable = "NR_UI_ROSTER_FULL";
+
+    private static bool RunFullSet =>
+        Environment.GetEnvironmentVariable(FullVariable) is "1" or "true";
+
+    /// <summary>
+    /// The categories the full set covers: the ones whose NR-UI coverage has actually been measured
+    /// and whose failures are declared (docs/nr-ui-roster-coverage.md). 56 specs, ~14 minutes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not "everything applicable", and the difference is not small.</b> Running the whole roster
+    /// suite through this driver selects <b>363</b> specs and takes roughly 90 minutes — and 28 of
+    /// them fail, in categories nobody has looked at. Those 28 are not known NR-UI limitations; they
+    /// are simply unmeasured, and shipping them as expected-failures would be inventing a
+    /// declaration rather than earning one.
+    /// </para>
+    /// <para>
+    /// So the rule is: a category joins this list once its failures have been measured and
+    /// classified, the same way these four were. That keeps every entry here a statement someone
+    /// checked, and keeps the lane's runtime honest.
+    /// </para>
+    /// </remarks>
+    private static readonly string[] MeasuredCategories =
+        ["force/", "cost/", "entry-group/", "gamesystem/"];
+
+    /// <summary>The concrete engine this lane drives, as specs address it.</summary>
+    private const string EngineIdentity = "newrecruit-ui";
+
+    /// <summary>
+    /// The spec's expectation for this lane — <c>pass</c>, <c>fail</c> or <c>skip</c>.
+    /// <para>
+    /// Most specific wins, matching <see cref="RosterRunner"/>: a spec that names
+    /// <c>newrecruit-ui</c> means this driver specifically; otherwise it inherits whatever it says
+    /// for the base <c>newrecruit</c> engine. Checking only the base name is why a
+    /// <c>newrecruit-ui</c> entry used to have no effect here at all.
+    /// </para>
+    /// </summary>
+    private static string ExpectationFor(SpecFile spec)
+        => spec.Engines is not null && spec.Engines.ContainsKey(EngineIdentity)
+            ? spec.GetExpectation(EngineIdentity)
+            : spec.GetExpectation(EngineName);
 
     public FrozenNrUiRosterConformanceTests(ITestOutputHelper output, FrozenNrUiRosterFixture fixture)
     {
@@ -42,14 +110,31 @@ public sealed class FrozenNrUiRosterConformanceTests
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var resolver = new DataSourceResolver();
 
+        var full = RunFullSet;
         var loadedSpecs = allSpecs
-            .Where(s => TargetSpecs.Contains(s.Name))
+            .Where(s => full
+                ? MeasuredCategories.Any(c => s.Name.StartsWith(c, StringComparison.Ordinal))
+                : SmokeSpecs.Contains(s.Name))
             .Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path)))
+            .Where(s => !string.Equals(ExpectationFor(s.spec), "skip", StringComparison.OrdinalIgnoreCase))
             .ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
-        Assert.SkipWhen(loadedSpecs.Count == 0,
-            $"No matching specs found for targets: {string.Join(", ", TargetSpecs)}");
+        // Say which mode ran and how big it was. A lane that quietly stops opting in shows up here as
+        // "1 spec" next to a step called "Full frozen NR UI roster", instead of as silence.
+        _output.WriteLine(
+            $"{LogPrefix}mode={(full ? $"FULL ({FullVariable} set)" : "smoke (kitchen-sink)")}, "
+            + $"{loadedSpecs.Count} spec(s) selected");
+
+        Assert.False(loadedSpecs.Count == 0,
+            full
+                ? $"{FullVariable} is set but no applicable specs were discovered."
+                : $"No matching specs found for targets: {string.Join(", ", SmokeSpecs)}");
+
+        // A "full" run that selected a single spec is the shrink this guard exists to catch.
+        Assert.False(full && loadedSpecs.Count < 2,
+            $"{FullVariable} is set but only {loadedSpecs.Count} spec(s) were selected — the full set "
+            + "should be the whole applicable suite, not kitchen-sink.");
 
         var passed = 0;
         var skipped = 0;
@@ -60,16 +145,21 @@ public sealed class FrozenNrUiRosterConformanceTests
         // Sequential execution — UI interactions require a single-browser flow
         foreach (var (specPath, specName, spec) in loadedSpecs)
         {
-            if (!spec.IsApplicableTo(EngineName))
+            var expectation = ExpectationFor(spec);
+            if (string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase))
             {
                 skipped++;
                 continue;
             }
 
-            var expectedToFail = spec.IsExpectedToFail(EngineName);
+            var expectedToFail = string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
             engine.SetTestContext(specName);
 
-            var runner = new RosterRunner(engine, resolver, EngineName);
+            // Both identities: this drives `newrecruit-ui`, and a spec addressing that name by its
+            // own must be honoured. Passing only the base name is what made
+            // `engines: {newrecruit-ui: …}` silently inert here — the same collapse RosterRunner's
+            // own remarks describe.
+            var runner = new RosterRunner(engine, resolver, EngineName, EngineIdentity);
             var result = runner.Run(spec);
             engine.Cleanup();
             skippedSteps.Record(specName, result);

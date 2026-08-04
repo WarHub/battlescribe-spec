@@ -505,6 +505,46 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// command line they actually form — so a multi-line <c>run:</c> block is scanned as one
     /// invocation rather than as fragments that individually look flagless.
     /// </summary>
+    /// <summary>
+    /// The CI step named "Full frozen NR UI roster" must actually run the full spec set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// That lane ran <b>one</b> spec for its entire life — `TargetSpecs = ["protocol/protocol-kitchen-sink"]`
+    /// — on the since-falsified premise that "the frozen HAR supports a single roster-creation flow
+    /// per run". <c>docs/warm-reuse.md</c> records what that cost: "CI never caught the original bug
+    /// because the NR-UI roster lane runs a single spec." It is now the whole applicable suite, but
+    /// only when <c>NR_UI_ROSTER_FULL</c> is set, because the every-push lane and <c>pre-push</c>
+    /// must stay fast.
+    /// </para>
+    /// <para>
+    /// An opt-in that gets dropped is invisible: the step still passes, still says "Full", and
+    /// quietly covers one spec instead of ~49. <c>dotnet-test-step.ps1</c> cannot catch it either —
+    /// one executed test is not zero executed tests. Hence this.
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable:</b> delete the <c>NR_UI_ROSTER_FULL</c> env entry from that step and this goes
+    /// red.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "Lint")]
+    public void ThoroughNrUiRosterStep_RunsTheFullSpecSet()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RepoRoot, ".github", "workflows", "ci.yml"));
+        var stepIndex = Array.FindIndex(lines, l => l.Contains("name: Full frozen NR UI roster", StringComparison.Ordinal));
+
+        Assert.True(stepIndex >= 0,
+            "ci.yml no longer has a step named 'Full frozen NR UI roster'. If it was renamed, update "
+            + "this guard; if it was deleted, the thorough NR-UI roster coverage went with it.");
+
+        // Scan this step only — up to the next step's `- name:`.
+        var end = Array.FindIndex(lines, stepIndex + 1, l => l.TrimStart().StartsWith("- name:", StringComparison.Ordinal));
+        var body = string.Join("\n", lines[stepIndex..(end < 0 ? lines.Length : end)]);
+
+        Assert.Contains("NR_UI_ROSTER_FULL", body, StringComparison.Ordinal);
+    }
+
     private static List<string> WorkflowCommandLines()
     {
         var workflows = Path.Combine(RepoRoot, ".github", "workflows");
