@@ -156,31 +156,26 @@ public static class NrUiActions
     {
         var before = await GetAllForceUidsAsync(page);
 
-        // Resolve the parent force's name to find its .bookForce element by header text
-        var parentForceName = await page.EvaluateAsync<string?>("""
-            ([targetUid]) => {
-                const pinia = document.querySelector('#__nuxt')
-                    ?.__vue_app__?.config?.globalProperties?.$pinia;
-                const army = pinia?._s?.get('lists')?.currentList?.army
-                    ?? window.__bsspec?.army;
-                if (!army) return null;
-                const force = (army.getForces?.() || []).find(f => f.uid === targetUid);
-                return force?.getName?.() ?? force?.name ?? null;
-            }
-            """, new[] { parentForceId });
+        // Address the parent force by UID, never by name.
+        //
+        // This used to locate it with `.bookForce` filtered on `HasText = <parent's name>`, taking
+        // `.First`. That is wrong for any nested force, because a parent's section LISTS ITS
+        // AVAILABLE CHILD FORCE TYPES BY NAME: Army's `.bookForce` contains the text "Division", so
+        // filtering for "Division" matched Army's section first and the driver then hunted for
+        // "Platoon" in Army's child-force picker — which only ever offers "Division". Measured on
+        // force/force-nested-multi-level, where it surfaced as the misleading "child force 'Platoon'
+        // section is not visible/interactable".
+        //
+        // Name matching is also ambiguous whenever two forces share a name, which
+        // force/force-multi-catalogue-two-forces does by design (two "Patrol" forces).
 
-        ILocator parentBookForce;
-        if (parentForceName != null)
+        var tagError = await TagBookForceElementsAsync(page);
+        if (tagError is not null)
         {
-            parentBookForce = page.Locator(".bookForce")
-                .Filter(new() { HasText = parentForceName })
-                .First;
+            throw new InvalidOperationException($"NR UI: cannot address forces by uid — {tagError}");
         }
-        else
-        {
-            await TagBookForceElementsAsync(page);
-            parentBookForce = page.Locator($".bookForce[data-nrui-force-uid='{parentForceId}']");
-        }
+
+        var parentBookForce = page.Locator($".bookForce[data-nrui-force-uid='{parentForceId}']");
 
         // Try UI path: expand childForces accordion and click force type row
         try
@@ -976,17 +971,43 @@ public static class NrUiActions
     /// to army.getForces() — same approach used for selection uid tagging.
     /// Must be called before scoping Playwright locators to a specific parent force.
     /// </summary>
-    private static async Task TagBookForceElementsAsync(IPage page)
+    /// <summary>
+    /// Stamps each rendered <c>.bookForce</c> with the uid of the force it shows, so forces can be
+    /// addressed by identity rather than by name. Returns null on success, or a diagnostic.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The mapping is positional: NR renders one <c>.bookForce</c> per force as siblings, in the
+    /// order <c>army.getForces()</c> returns them (flattened, all depths). That correspondence is
+    /// load-bearing, so it is now <b>checked</b> — the counts must match. This used to loop to
+    /// <c>Math.min(forces.length, bookForces.length)</c>, which silently left elements untagged
+    /// whenever the two disagreed, and an untagged element is indistinguishable from a force that
+    /// does not exist.
+    /// </para>
+    /// <para>
+    /// Reads the army from the live store first and falls back to <c>window.__bsspec</c>, because
+    /// the editor re-hydrates its own roster object and the two can diverge.
+    /// </para>
+    /// </remarks>
+    private static async Task<string?> TagBookForceElementsAsync(IPage page)
     {
-        await page.EvaluateAsync("""
+        return await page.EvaluateAsync<string?>("""
             () => {
-                const army = window.__bsspec?.army;
-                if (!army) return;
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                if (!army) return 'no army loaded';
                 const forces = army.getForces?.() || [];
                 const bookForces = document.querySelectorAll('.bookForce');
-                for (let i = 0; i < Math.min(forces.length, bookForces.length); i++) {
+                if (forces.length !== bookForces.length) {
+                    return 'roster has ' + forces.length + ' force(s) but the page renders '
+                        + bookForces.length + ' .bookForce section(s); the positional mapping between '
+                        + 'them does not hold, so a force cannot be addressed by uid';
+                }
+                for (let i = 0; i < forces.length; i++) {
                     bookForces[i].setAttribute('data-nrui-force-uid', forces[i].uid);
                 }
+                return null;
             }
             """);
     }
