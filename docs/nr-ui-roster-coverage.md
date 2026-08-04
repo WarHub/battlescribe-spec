@@ -12,16 +12,16 @@ over `force/`, `cost/`, `entry-group/`, `gamesystem/`:
 | | |
 |---|---:|
 | Specs run | 56 |
-| **Passed** | **45 (80%)** |
-| Failed | 11 |
+| **Passed** | **47 (84%)** |
+| Failed | 9 |
 
 Every one of those 56 created its own roster in the same browser session, which is the fact that
 retires the one-spec limit.
 
-## The 13 failures are four groups, not noise
+## The failures are four groups, not noise
 
-`force/` looks alarming on its own — 11 of 21 fail — until they are grouped. Three groups are
-limitations of NR's UI; two are gaps in this driver.
+First measured at 43/56. Grouping them turned "the UI driver is unreliable" into a work list: two
+groups were driver defects and are now fixed (43 → 47), two are limitations of NR's UI.
 
 ### 1. Empty catalogue — 5 specs — NR-UI limitation
 
@@ -61,15 +61,36 @@ Measured on `force-multi-catalogue-two-forces`: force 2 was created against `cat
 The child-force path had already been doing this correctly via `.childForces select` — only the
 top-level path had not.
 
-**Still failing: `force-nested-multi-catalogue`**, which straddles this group and the next. Its child
-force from `cat-b` is created correctly now; `selectEntry se-b1` then fails with "not visible in the
-catalogue panel". That is the *entry* panel, a different surface from add-force, and it belongs with
-group 3.
+### 3. Nested child forces — was 3 specs, **2 fixed**
 
-### 3. Nested child forces — 3 specs — **driver gap**
+`force-nested-deep-selections` and `force-nested-multi-level` **now pass**.
 
-`force-nested-deep-selections`, `force-nested-multi-level`, `gamesystem-shared-entry`, all failing
-`addChildForce` with `child force 'Platoon' section is not visible/interactable`.
+`AddChildForceByNameAsync` located the parent with `.bookForce` filtered on `HasText = <parent's
+name>`, taking `.First`. **A parent's section lists its available child force types by name**, so
+Army's `.bookForce` contains the text "Division"; asking for "Division" matched Army's section first,
+and the driver then hunted for "Platoon" in Army's child-force picker, which only ever offers
+"Division". It surfaced as the misleading `child force 'Platoon' section is not
+visible/interactable` — the section was visible, the driver was looking in the wrong one.
+
+Name matching is also ambiguous whenever two forces share a name, which
+`force-multi-catalogue-two-forces` does by design (two "Patrol" forces).
+
+Forces are now addressed by uid. That path already existed — `TagBookForceElementsAsync` plus a
+`[data-nrui-force-uid]` selector — but only as a *fallback* for when the name lookup returned
+nothing, so the broken path was the one that ran. The tagger also stopped silently truncating: it
+maps forces to `.bookForce` sections positionally, so it now verifies the counts match and reports
+a diagnostic instead of leaving elements untagged (an untagged element is indistinguishable from a
+force that does not exist).
+
+### 3b. Entry panels — 2 specs — **open**
+
+The two that remain are a distinct, third surface: entry selection rather than force structure.
+
+`force-nested-multi-catalogue` — its child force from `cat-b` is created correctly now, and
+`selectEntry se-b1` then reports "not visible in the catalogue panel". Very likely the same
+catalogue-filter lever as group 2, applied to the entry panel; that is the first thing to check.
+`gamesystem-shared-entry` — `selectChildEntry se-shared-weapon` reports "not visible in the options
+panel".
 
 ### 4. Hidden entries and validation — 2 specs — NR-UI limitations
 
@@ -91,6 +112,6 @@ confirmation: 56 roster creations, one session, no HAR exhaustion.
 This matters because `docs/warm-reuse.md` records the cost of that lane: *"CI never caught the
 original bug because the NR-UI roster lane runs a single spec."* The same blind spot hid #339.
 
-Widening it is worth doing on the **thorough** lane rather than every push — 45 specs at ~15s each
+Widening it is worth doing on the **thorough** lane rather than every push — 47 specs at ~15s each
 is ~11 minutes, which is right for an opt-in suite and wrong for the fast gate the smoke lane exists
 to be. The remaining groups should be fixed or declared before widening, so the lane starts green.
