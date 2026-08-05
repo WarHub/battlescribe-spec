@@ -918,15 +918,37 @@ public static class NrUiActions
                     // Build name→id and ordered id list from Pinia (original names).
                     const nameToId = new Map();
                     const orderedIds = [];
+                    // Everything the catalogue panel can render, not just `selectionEntries`.
+                    //
+                    // An entryLink renders as its own row under its own name, and a shared entry can
+                    // be rendered too — but only `selectionEntries` used to be indexed here. Two
+                    // consequences, both bad: the link's row never got a `data-spec-entry-id`, so
+                    // addressing it by id found nothing; and the second pass below then handed that
+                    // row a LEFTOVER id positionally, labelling "Alpha Squad" as the shared entry it
+                    // links to. Measured on constraint/constraint-shared-flag and four others, where
+                    // it surfaced as "entry 'link-alpha' is not visible in the catalogue panel
+                    // (hidden entry)" for an entry that is neither hidden nor absent.
+                    const indexEntries = (entries) => {
+                        for (const entry of (entries || [])) {
+                            if (!entry?.id) continue;
+                            const name = entry.name;
+                            if (name && !nameToId.has(name)) nameToId.set(name, entry.id);
+                            orderedIds.push(entry.id);
+                        }
+                    };
                     for (const book of playableBooks) {
                         const bd = await sys.getBook?.(book.id);
                         if (!bd?.catalogue) continue;
-                        for (const entry of (bd.catalogue.selectionEntries || [])) {
-                            if (!nameToId.has(entry.name)) {
-                                nameToId.set(entry.name, entry.id);
-                            }
-                            orderedIds.push(entry.id);
-                        }
+                        indexEntries(bd.catalogue.selectionEntries);
+                        indexEntries(bd.catalogue.entryLinks);
+                        // NOT sharedSelectionEntries. A shared entry is not rendered as its own row —
+                        // the LINKS to it are. Indexing its name puts the target's name in the map,
+                        // and since NR labels a link with its TARGET's name, that name then matches
+                        // the first link's row and steals it: two links to one shared entry render as
+                        // two rows both reading "Squad", and the first was being tagged with the
+                        // shared entry's id instead of the link's. Leaving shared entries out lets
+                        // same-named link rows fall through to the ordered second pass below, which
+                        // assigns them in declaration order — the only thing that can tell them apart.
                     }
 
                     // First pass: match unit-wraps by their current displayed name.
@@ -1019,26 +1041,99 @@ public static class NrUiActions
                     ?.__vue_app__?.config?.globalProperties?.$pinia;
                 const army = pinia?._s?.get('lists')?.currentList?.army
                     ?? window.__bsspec?.army;
-                if (!army) return '{}';
+                // Report the force's settling state alongside the map, so a caller polling for
+                // auto-added selections can tell "the force is not rendered yet" and "its selections
+                // exist but their ids have not populated" apart from "there are genuinely none".
+                // Without that distinction the only safe policy is to burn a fixed timeout every
+                // time — which is what the caller used to do, for 8s on every addForce.
+                if (!army) return JSON.stringify({ state: 'no-army', map: {} });
                 const force = (army.getForces?.() || []).find(f => f.uid === forceUid);
-                if (!force) return '{}';
+                if (!force) return JSON.stringify({ state: 'no-force', map: {} });
                 const out = {};
+                let raw = 0, unresolved = 0;
                 for (const s of (force.getSelections?.() || [])) {
+                    raw++;
                     // Use || (not ??) so empty strings also fall through to the next option.
                     const entryId = s.id || s.entryId || s.getEntryId?.();
                     if (entryId && s.uid) {
                         out[entryId] = s.uid;
+                    } else {
+                        unresolved++;
                     }
                 }
-                return JSON.stringify(out);
+                return JSON.stringify({
+                    state: unresolved > 0 ? 'unresolved' : (raw > 0 ? 'resolved' : 'empty'),
+                    map: out,
+                });
             }
             """, new object[] { forceUid });
-        if (string.IsNullOrEmpty(json) || json == "{}")
+
+        return ParseForceSelections(json).Map;
+    }
+
+    /// <summary>
+    /// How settled a force's selections are, for callers that must wait for NR to finish adding
+    /// them. <c>NoForce</c>/<c>Unresolved</c> mean "not done yet"; <c>Empty</c> means this force has
+    /// no auto-added selections and never will.
+    /// </summary>
+    internal enum ForceSelectionState
+    {
+        NoForce,
+        Unresolved,
+        Empty,
+        Resolved,
+    }
+
+    /// <summary>As <see cref="GetForceSelectionsAsync"/>, but also reporting how settled NR is.</summary>
+    internal static async Task<(ForceSelectionState State, Dictionary<string, string> Map)>
+        GetForceSelectionsWithStateAsync(IPage page, string forceUid)
+    {
+        var json = await page.EvaluateAsync<string>("""
+            ([forceUid]) => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army
+                    ?? window.__bsspec?.army;
+                if (!army) return JSON.stringify({ state: 'no-army', map: {} });
+                const force = (army.getForces?.() || []).find(f => f.uid === forceUid);
+                if (!force) return JSON.stringify({ state: 'no-force', map: {} });
+                const out = {};
+                let raw = 0, unresolved = 0;
+                for (const s of (force.getSelections?.() || [])) {
+                    raw++;
+                    const entryId = s.id || s.entryId || s.getEntryId?.();
+                    if (entryId && s.uid) { out[entryId] = s.uid; } else { unresolved++; }
+                }
+                return JSON.stringify({
+                    state: unresolved > 0 ? 'unresolved' : (raw > 0 ? 'resolved' : 'empty'),
+                    map: out,
+                });
+            }
+            """, new object[] { forceUid });
+
+        return ParseForceSelections(json);
+    }
+
+    private static (ForceSelectionState State, Dictionary<string, string> Map) ParseForceSelections(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
         {
-            return [];
+            return (ForceSelectionState.NoForce, []);
         }
 
-        return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var state = doc.RootElement.TryGetProperty("state", out var s) ? s.GetString() : null;
+        var map = doc.RootElement.TryGetProperty("map", out var m)
+            ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(m.GetRawText()) ?? []
+            : [];
+
+        return (state switch
+        {
+            "resolved" => ForceSelectionState.Resolved,
+            "unresolved" => ForceSelectionState.Unresolved,
+            "empty" => ForceSelectionState.Empty,
+            _ => ForceSelectionState.NoForce,
+        }, map);
     }
 
     private static async Task<HashSet<string>> GetAllForceUidsAsync(IPage page)

@@ -260,23 +260,42 @@ public sealed class NrRosterUiEngine : IRosterEngine
         }
 
         // Capture any auto-added selections (e.g. from min=1 constraints).
-        // NR adds selections asynchronously: the selection appears immediately (s.id=null)
-        // then ~2s later the entry id is populated. After clicking "Add Force", the editor
-        // can also briefly re-hydrate (currentList.army replaced), during which getForceSelections
-        // returns empty. Poll for up to 8s without early breaks to handle both timing scenarios.
+        //
+        // NR adds these asynchronously: the selection appears immediately with `id` null and the
+        // entry id populates ~2s later, and the editor can briefly re-hydrate (currentList.army
+        // replaced) so the force is momentarily absent. Both look identical to "this force has no
+        // auto-added selections" if all you can see is an empty map — which is why this used to
+        // burn a FIXED 8 seconds on every addForce, whether or not the spec could ever produce one.
+        //
+        // Measured: over the 56-spec NR-UI roster lane that is ~9.4s of every ~18s spec — about half
+        // the lane — and not one of those specs declares a `min` constraint, so the early break
+        // could never fire. The engine now asks NR which of the three states it is in and stops as
+        // soon as the answer is settled. The 8s stays as a CEILING, not a cost.
         Dictionary<string, string> selections = [];
         if (uid is not null)
         {
             var deadline = DateTime.UtcNow.AddSeconds(8);
-            while (DateTime.UtcNow < deadline)
+            // An empty force is only believed after two consecutive quiet reads: a single one can
+            // land inside the re-hydration window, which is the case the old fixed wait was really
+            // paying for.
+            var quietReads = 0;
+            while (true)
             {
-                selections = await NrUiActions.GetForceSelectionsAsync(Browser.Page, uid);
-                if (selections.Count > 0)
+                var (state, map) = await NrUiActions.GetForceSelectionsWithStateAsync(Browser.Page, uid);
+                selections = map;
+
+                if (state == NrUiActions.ForceSelectionState.Resolved)
                 {
                     break;
                 }
 
-                await Browser.Page.WaitForTimeoutAsync(400);
+                quietReads = state == NrUiActions.ForceSelectionState.Empty ? quietReads + 1 : 0;
+                if (quietReads >= 2 || DateTime.UtcNow >= deadline)
+                {
+                    break;
+                }
+
+                await Browser.Page.WaitForTimeoutAsync(state == NrUiActions.ForceSelectionState.Empty ? 250 : 100);
             }
         }
 

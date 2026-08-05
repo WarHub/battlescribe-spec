@@ -253,6 +253,16 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
             // Consent dialog may not be present — that's fine
         }
 
+        // A frozen run cannot show a consent dialog, so waiting a second to discover that is a
+        // second spent per navigation for nothing. The HAR contains no `fc-consent-root`, no
+        // fundingchoices asset and no consent URL at all, and the HAR fallback aborts anything it
+        // does not contain — so this locator can only ever run out its full timeout and throw.
+        // Measured across the 56-spec NR-UI roster lane: ~2.2 minutes of guaranteed dead time.
+        if (IsFrozen)
+        {
+            return;
+        }
+
         try
         {
             // CookieFirst consent root (fc-consent-root) may block UI interactions
