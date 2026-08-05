@@ -6,23 +6,25 @@ form input, state read back from Pinia. Its coverage had never been measured. Th
 
 ## What it actually covers
 
-Measured 2026-07-31, frozen HAR (offline), `bs-spec run --all --engine newrecruit-ui --roster`
-over `force/`, `cost/`, `entry-group/`, `gamesystem/`:
+Measured 2026-08-05, frozen HAR (offline), over `force/`, `cost/`, `entry-group/`, `gamesystem/`,
+`selection/` and `condition/` — the categories whose failures have been classified:
 
 | | |
 |---|---:|
-| Specs run | 56 |
-| **Passed** | **49 (88%)** |
-| Failed | 7 |
+| Specs run | 188 |
+| **Passed** | **178 (95%)** |
+| Failed | 10 — all declared NR-UI limitations |
 
-Every one of those 56 created its own roster in the same browser session, which is the fact that
+Every one of those 188 created its own roster in the same browser session, which is the fact that
 retires the one-spec limit.
 
 ## The failures are four groups, not noise
 
-First measured at 43/56. Grouping them turned "the UI driver is unreliable" into a work list: the
-driver defects are now all fixed (43 → 49), and **every remaining failure is a limitation of NR's
-own UI**, not of this driver.
+First measured at 43/56. Grouping them turned "the UI driver is unreliable" into a work list, and
+working through the groups took it to 178/188 across six categories. **Every remaining failure is a
+limitation of NR's own UI**, not of this driver — each declared `newrecruit-ui: fail` in the spec
+itself, so a spec still RUNS and an NR release that lifts a limitation is reported as an unexpected
+pass rather than going quiet.
 
 ### 1. Empty catalogue — 5 specs — NR-UI limitation
 
@@ -118,16 +120,16 @@ in a comment as *"the frozen HAR supports a single roster-creation flow per run"
 
 **That limit is gone.** `NewRecruitBrowser`'s HAR fallback benign-fulfills `/api/` calls with an
 empty JSON body specifically so the SPA stops hanging across repeated roster flows — its own comment
-calls that "the root cause of the single-spec-per-HAR limit". The 56-spec run above is the
-confirmation: 56 roster creations, one session, no HAR exhaustion.
+calls that "the root cause of the single-spec-per-HAR limit". The run above is the confirmation:
+188 roster creations, one session, no HAR exhaustion.
 
 This matters because `docs/warm-reuse.md` records the cost of that lane: *"CI never caught the
 original bug because the NR-UI roster lane runs a single spec."* The same blind spot hid #339.
 
-**Widened.** The thorough lane now runs these four categories — 56 specs, ~18 minutes — behind
+**Widened.** The thorough lane now runs these six categories — 188 specs, ~28 minutes — behind
 `NR_UI_ROSTER_FULL`, which the `Full frozen NR UI roster` CI step sets. Every-push and `pre-push`
-still run kitchen-sink alone, unchanged. The 7 NR-UI limitations are declared `newrecruit-ui: fail`
-in the specs themselves, so an NR release that lifts one is reported as an unexpected pass.
+still run kitchen-sink alone, unchanged. All 10 NR-UI limitations are declared `newrecruit-ui: fail`
+in the specs themselves.
 
 **It is scoped to what has been measured, not to everything applicable.** Running the whole roster
 suite through this driver selects **363** specs, takes ~90 minutes, and fails 28 of them in
@@ -142,3 +144,45 @@ own, and Playwright reported "Execution context was destroyed". Structurally inv
 `bs-spec run` (a fresh engine per spec) and to the old one-spec lane (no previous spec to race).
 Fixed by injecting the mock after the navigation, where it is actually read; two clean 56-spec runs
 since, against one failure in two before.
+
+## 5. What widening it actually found — three navigation races
+
+Sequencing 188 specs through one shared browser surfaced three separate races, one per lane run,
+each fixed at its source rather than retried away. All three share a shape — **an `evaluate` racing
+a navigation** — and all three were structurally invisible to `bs-spec run`, whose per-spec engines
+never navigate twice in quick succession.
+
+| Where | Mechanism |
+|---|---|
+| `LoadGameDataAsync` mock injection | Injected as the method's FIRST action, between the previous spec's cleanup navigation and its own. Moved to after the navigation, where the mock is actually read. |
+| `LoadGameDataAsync` popup close | `IsVisibleAsync` is a snapshot, not a wait, so `if (visible) click()` is check-then-act. When NR closed its own popup in between, the click burned Playwright's full 30s default and failed Setup. Bounded and tolerated — "already closed" is success for that step. |
+| `PushRouteAsync` | The evaluate **awaits the `router.push` it triggered**, so a navigation that replaces the execution context kills the very call that caused it. The push had succeeded; only the reporting channel died. Now tolerated, then the new context's router is awaited. Deliberately without re-asserting the route: `/app` legitimately redirects to `/app/MySystems`. |
+
+Each surfaced as `Setup failed: …` on a **different spec each run**, which is what an intermittent
+looks like when the cause is shared and the victim is whoever happens to be next.
+
+This is the lane paying for itself. `docs/warm-reuse.md` records the cost of the old one-spec
+version — *"CI never caught the original bug because the NR-UI roster lane runs a single spec"* — and
+with one spec there is no previous spec to race with, so none of these three could ever have appeared.
+
+Two consecutive fully-green 188-spec runs before shipping, because a race that fires once in two runs
+hides from a single pass about a quarter of the time.
+
+## 6. Still outside the lane
+
+`catalogue/`, `modifier/`, `entry-id/`, `ordering/`, `roster/`, `scope/`, `deep-nesting/`,
+`customization/`, `entry-link/`, `category/`, `real-world/`, `roundtrip/`, `protocol/`.
+
+Known items in there, from the 363-spec sweep:
+
+- several `modifier/*` and `catalogue/catalogue-category-entries` hidden-entry cases, which look like
+  the same NR-UI limitation as `selection/selection-hidden-entry` but have not been confirmed;
+- `ordering/ordering-nested-forces` — the empty-catalogue limitation;
+- `real-world/wh40k-10e-create-army` — a dataSource spec, different setup path;
+- **`roster/roster-full-lifecycle`** — exposed (correctly) by the `window.__bsspec` leak fix: it
+  asserts before its first mutation, and the UI driver defers roster creation to the first
+  `addForce`. Neither fixed nor declared yet. The proposed fix is to have `GetRosterState()` trigger
+  `EnsureRosterCreatedAsync()`, which composes now that the first-`addForce` path reconciles by
+  entry id rather than keying off `_rosterCreated`.
+
+The rule stands: a category joins `MeasuredCategories` once its failures are classified, not before.

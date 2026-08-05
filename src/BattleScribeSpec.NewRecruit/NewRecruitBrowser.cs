@@ -209,12 +209,33 @@ public sealed class NewRecruitBrowser : IAsyncDisposable
     /// </summary>
     public static async Task PushRouteAsync(IPage page, string route)
     {
-        await page.EvaluateAsync("""
-            async (route) => {
-                const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
-                if (router) await router.push(route);
-            }
-            """, route);
+        try
+        {
+            await page.EvaluateAsync("""
+                async (route) => {
+                    const router = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router;
+                    if (router) await router.push(route);
+                }
+                """, route);
+        }
+        catch (PlaywrightException ex)
+            when (ex.Message.Contains("Execution context was destroyed", StringComparison.Ordinal))
+        {
+            // This evaluate AWAITS the push it triggered, so when the navigation replaces the
+            // execution context the call that caused it is the one that dies. The push succeeded;
+            // only the channel reporting it did not. Treating that as a failure surfaced as
+            // "Setup failed: Execution context was destroyed" on a different spec each run —
+            // intermittent, and invisible to `bs-spec run`, whose per-spec engines never navigate
+            // twice in quick succession.
+            //
+            // Deliberately not re-asserting the route here: `/app` legitimately redirects to
+            // `/app/MySystems`, so demanding the requested path would fail on a correct navigation.
+            // Waiting for the NEW context's router to exist is the honest post-condition.
+            await page.WaitForFunctionAsync(
+                "() => !!document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$router",
+                null,
+                new PageWaitForFunctionOptions { Timeout = 15_000 });
+        }
     }
 
     private static readonly Regex SafeStoreIdPattern = new("^[a-zA-Z0-9_-]+$", RegexOptions.Compiled);
