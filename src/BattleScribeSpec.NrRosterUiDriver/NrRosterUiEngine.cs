@@ -106,7 +106,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // Load game data into NR (only once per unique system in frozen mode)
         if (!_systemLoaded || _loadedSystemId != gameSystem.Id)
         {
-            await NrUiSetup.LoadGameDataAsync(Browser, allFiles, gameSystem.Id);
+            await NrUiTiming.MeasureAsync("load-gamedata", () =>
+                NrUiSetup.LoadGameDataAsync(Browser, allFiles, gameSystem.Id));
             _systemLoaded = true;
             _loadedSystemId = gameSystem.Id;
 
@@ -154,12 +155,15 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         catalogueName ??= _catalogues?.FirstOrDefault(c => c.Library != true)?.Name;
 
-        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, catalogueName);
+        var listId = await NrUiTiming.MeasureAsync("create-roster", () =>
+            NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, catalogueName));
         _listId = listId;
 
         // Wait for editor to stabilize and bypass supporter paywall
-        await NrUiSetup.WaitForEditorLoadedAsync(Browser.Page);
-        await NrUiSetup.BypassSupporterPaywallAsync(Browser.Page);
+        await NrUiTiming.MeasureAsync("wait-editor-loaded", () =>
+            NrUiSetup.WaitForEditorLoadedAsync(Browser.Page));
+        await NrUiTiming.MeasureAsync("bypass-paywall", () =>
+            NrUiSetup.BypassSupporterPaywallAsync(Browser.Page));
 
         _rosterCreated = true;
     }
@@ -694,7 +698,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // (e.g. the Create List dialog's controls become ambiguous once a prior list is present).
         try
         {
-            ResetBrowserStateAsync(listId).GetAwaiter().GetResult();
+            NrUiTiming.MeasureAsync("cleanup-reset-browser", () => ResetBrowserStateAsync(listId))
+                .GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
