@@ -3,6 +3,12 @@ category: real-world
 description: Build a Space Marines army — verify auto-selections, unit types, and points costs
 tags: [wh40k-10e, real-world, space-marines, cost, profile, design-difference]
 
+# Same unimplemented path as wh40k-10e-create-army: newrecruit-ui's SetupFromFilesAsync records
+# no spec data, so the first addForce throws before the UI is touched at all. Driver gap, not an
+# NR limitation — store-direct `newrecruit` passes. See docs/nr-ui-roster-coverage.md.
+engines:
+  newrecruit-ui: fail
+
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
 

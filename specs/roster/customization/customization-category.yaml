@@ -3,6 +3,12 @@ category: customization
 description: Setting customName and customNotes on a category
 engines:
   newrecruit: skip
+  # Same engine, same three misses, byte-identical output. Category-level customName/customNotes
+  # do not exist in NR's data model — force categories are derived groupings, not instance nodes
+  # carrying those properties — and NR emits no "Uncategorised" bucket either. Both NR drivers
+  # return early on categoryEntryId by design (NewRecruitActions.cs, NrUiActions.cs).
+  # `skip` rather than `fail`: no NR release can flip a call the drivers no-op on purpose.
+  newrecruit-ui: skip
 
 setup:
   gameSystem:

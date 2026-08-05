@@ -3,6 +3,21 @@ category: catalogue
 tags: [catalogue, categoryEntry]
 description: Catalogue defines own categoryEntries used in force categories
 
+engines:
+  # NOT a hidden entry, despite what the driver's message used to say. `se-1` carries no
+  # `hidden` and no modifiers. NR's catalogue panel groups a force's selectable entries under
+  # the FORCE's own categories; anything whose primary category is not one of them goes into
+  # NR's `(Illegal Units)` bucket, which NR builds with hidden:true and never renders. `fe-1`
+  # declares no categoryLinks, so `Custom Category` is not a force category and NR offers no
+  # row for Marine.
+  # Measured two ways: the identical spec with a force categoryLink to a GAME-SYSTEM category
+  # passes; and NR's own "Search Units, Categories, Costs..." box returns zero rows for it, so
+  # the bucket is unreachable by search either. The store-direct `newrecruit` engine selects it
+  # fine — the limit is the panel, not the data.
+  # `fail` rather than `skip` so the spec still RUNS — an NR release that starts offering these
+  # is reported as an unexpected pass. See docs/nr-ui-roster-coverage.md.
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     forceEntries:

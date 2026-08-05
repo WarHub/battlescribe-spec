@@ -3,6 +3,17 @@ category: real-world
 description: Create a basic Warhammer 40k 10th Edition roster
 tags: [wh40k-10e, real-world]
 
+# `setup.dataSource` specs cannot run on newrecruit-ui yet. SetupFromFilesAsync loads the game
+# data into NR but records none of it — no _gameSystem, no _catalogues, no BuildEntryLookups,
+# unlike SetupAsync — so the first addForce throws "Setup must be called before any mutation."
+# Behind that guard the id-to-name lookups every UI action addresses entries with are empty too.
+# This is a gap in THIS driver, not an NR limitation: a user can load BSData files into NR and
+# build the list by hand, and the store-direct `newrecruit` engine passes the spec end to end.
+# Declared `fail` rather than `skip` so implementing the path is reported as an unexpected pass.
+# See docs/nr-ui-roster-coverage.md.
+engines:
+  newrecruit-ui: fail
+
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
 

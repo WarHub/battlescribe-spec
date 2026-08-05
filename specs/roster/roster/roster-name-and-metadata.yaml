@@ -2,6 +2,16 @@ id: roster-name-and-metadata
 category: roster
 description: Roster metadata matches game system configuration
 
+# NR's Create List dialog refuses a catalogue with no loadable content, and `cat-1` is empty while
+# the gameSystem holds nothing but forceEntries — so this roster cannot be built through the UI at
+# all, neither at step 0 (which asserts before mutating, forcing roster creation) nor at the
+# `addForce` that follows. Same limitation as force/force-add-single. The store-direct `newrecruit`
+# engine builds it fine — the limit is the dialog, not the data.
+# Declared `fail` rather than `skip` so an NR release that lifts it is reported as an unexpected
+# pass instead of going unnoticed. See docs/nr-ui-roster-coverage.md.
+engines:
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     id: custom-gs-123

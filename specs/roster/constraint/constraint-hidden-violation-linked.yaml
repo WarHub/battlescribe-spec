@@ -10,6 +10,10 @@ engines:
   # UI-gesture driver can select it (see issue #309). The in-process engine
   # and the (currently engine-API-backed) bs-ui driver still cover it.
   battlescribe-ui: skip
+  # Same reason for NR's web UI: NR never renders a row for a hidden entry either.
+  # `fail` rather than `skip` so the spec still RUNS here — if an NR release starts
+  # rendering it, that is reported as an unexpected pass instead of going unnoticed.
+  newrecruit-ui: fail
 
 setup:
   gameSystem:

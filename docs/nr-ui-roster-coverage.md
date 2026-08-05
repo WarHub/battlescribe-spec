@@ -1,43 +1,55 @@
 # NR UI roster driver — measured coverage
 
 `newrecruit-ui` (roster domain) drives NewRecruit's web UI through Playwright: real clicks, real
-form input, state read back from Pinia. Its coverage had never been measured. The CI lane runs
-**one** spec, and the reason recorded for that was stale — see "The one-spec lane" below.
+form input, state read back from Pinia. Its coverage had never been measured, and the CI lane ran
+**one** spec on a reason that had gone stale — see "The one-spec lane" below.
 
 ## What it actually covers
 
-Measured 2026-08-05, frozen HAR (offline), over `force/`, `cost/`, `entry-group/`, `gamesystem/`,
-`selection/` and `condition/` — the categories whose failures have been classified:
+Measured 2026-08-05, frozen HAR (offline), over **every applicable roster spec**:
 
 | | |
 |---|---:|
-| Specs run | 188 |
-| **Passed** | **178 (95%)** |
-| Failed | 10 — all declared NR-UI limitations |
+| Specs selected | 363 |
+| **Passed** | **340 (94%)** |
+| Failed | 23 — every one declared, with a reason, in the spec itself |
+| Skipped | 4 — never run on this engine |
 
-Every one of those 188 created its own roster in the same browser session, which is the fact that
-retires the one-spec limit.
+Every one of those 363 created its own roster in the same browser session, which is the fact that
+retires the one-spec limit. Wall-clock: **47 minutes**, sequential, one shared browser.
+
+There is no allow-list. A spec added tomorrow is covered the day it lands, and a driver regression
+that breaks a category nobody was watching is a failed lane rather than silence.
 
 ## The failures are four groups, not noise
 
 First measured at 43/56. Grouping them turned "the UI driver is unreliable" into a work list, and
-working through the groups took it to 178/188 across six categories. **Every remaining failure is a
-limitation of NR's own UI**, not of this driver — each declared `newrecruit-ui: fail` in the spec
-itself, so a spec still RUNS and an NR release that lifts a limitation is reported as an unexpected
-pass rather than going quiet.
+working through the groups took the six measured categories to 178/188 — then the same treatment
+applied to the rest took the whole suite to 340/363.
 
-### 1. Empty catalogue — 5 specs — NR-UI limitation
+**Almost every remaining failure is a limitation of NR's own UI**, not of this driver; the two
+exceptions are named as driver gaps in §6. Each is declared in the spec itself, and almost all are
+declared `fail` rather than `skip`, so the spec still RUNS and an NR release that lifts a limitation
+is reported as an unexpected pass rather than going quiet.
+
+The four groups below are the six-category batch. The rest are summarised in §6.
+
+### 1. Empty catalogue — 8 specs — NR-UI limitation
 
 `force-add-single`, `force-remove`, `force-add-multiple`, `force-add-and-remove-all`,
-`force-with-categories`.
+`force-with-categories`, `ordering-nested-forces`, and — reached the same way but via a step-0 read
+rather than an `addForce` — `roster-create-empty`, `roster-no-cost-types`,
+`roster-name-and-metadata`.
 
 NR's Create List dialog reports "could not be loaded" for a catalogue with nothing in it. All five
 declare `catalogues: [- id: cat-1]` and no entries anywhere.
 
-The distinguishing case is what makes this a diagnosis rather than a correlation:
-`gamesystem/gamesystem-root-selectionentry` **also** has an empty catalogue and passes — because its
-content lives in the `gameSystem`, so NR has something to load. Empty catalogue plus empty game
-system is the failing shape; empty catalogue alone is not.
+The criterion first written here — "empty catalogue plus empty game system" — was **too loose**.
+`ordering-nested-forces` has game-system content (nested `forceEntries`) and still fails, while
+`gamesystem/gamesystem-root-selectionentry` has `selectionEntries` and passes. The real threshold is
+**at least one SELECTABLE entry** (`selectionEntries`/`entryLinks`); force and category entries do
+not count. `force-with-categories` confirms it from the other side: `categoryEntries` +
+`forceEntries`, and it fails.
 
 The store-direct `newrecruit` engine builds all five rosters fine. The dialog refuses; the API does
 not. Not a data error, and not fixable from this side.
@@ -126,16 +138,23 @@ calls that "the root cause of the single-spec-per-HAR limit". The run above is t
 This matters because `docs/warm-reuse.md` records the cost of that lane: *"CI never caught the
 original bug because the NR-UI roster lane runs a single spec."* The same blind spot hid #339.
 
-**Widened.** The thorough lane now runs these six categories — 188 specs, ~28 minutes — behind
+**Widened, in two steps.** First to six measured categories (188 specs), then — once the last
+unclassified failure had a name — to the whole applicable suite: **363 specs, 47 minutes**, behind
 `NR_UI_ROSTER_FULL`, which the `Full frozen NR UI roster` CI step sets. Every-push and `pre-push`
-still run kitchen-sink alone, unchanged. All 10 NR-UI limitations are declared `newrecruit-ui: fail`
-in the specs themselves.
+still run kitchen-sink alone, unchanged.
 
-**It is scoped to what has been measured, not to everything applicable.** Running the whole roster
-suite through this driver selects **363** specs, takes ~90 minutes, and fails 28 of them in
-categories nobody has classified. Those 28 are unmeasured, not known limitations; declaring them to
-get green would be inventing declarations rather than earning them. A category joins the lane once
-its failures have been measured and classified, the way these four were.
+**The intermediate step was not caution for its own sake.** Running everything selected 28 failures
+in categories nobody had classified. Declaring those to get a green lane would have been inventing
+declarations rather than earning them — a spec marked `fail` with no reason behind it is
+indistinguishable from a bug someone decided to stop looking at. So the lane grew as the
+classifications did, and the allow-list was deleted the moment it had nothing left to exclude.
+
+**47 minutes is the honest cost of "complete".** The lane is opt-in only — label, schedule or
+manual dispatch — so per-PR CI is untouched. Two measured levers remain if that becomes too steep,
+neither taken here: roughly 5s/spec of fixed sleeps still sit in `CreateRosterAsync` and
+`LoadGameDataAsync` (~15 minutes at this scale, though several of them gate NEGATIVE assertions and
+need conditions rather than smaller constants), and hybrid parallelism — N workers over contiguous
+chunks — which buys wall-clock by shortening the cross-spec chains that found the three races below.
 
 **The widening paid for itself on its first run**, which is the point of it. Sequencing 56 specs
 through one shared browser surfaced a navigation race in `LoadGameDataAsync` — it injected the
@@ -168,21 +187,35 @@ with one spec there is no previous spec to race with, so none of these three cou
 Two consecutive fully-green 188-spec runs before shipping, because a race that fires once in two runs
 hides from a single pass about a quarter of the time.
 
-## 6. Still outside the lane
+## 6. Nothing is outside the lane
 
-`catalogue/`, `modifier/`, `entry-id/`, `ordering/`, `roster/`, `scope/`, `deep-nesting/`,
-`customization/`, `entry-link/`, `category/`, `real-world/`, `roundtrip/`, `protocol/`.
+The remaining categories — `catalogue/`, `modifier/`, `entry-id/`, `ordering/`, `roster/`, `scope/`,
+`deep-nesting/`, `customization/`, `entry-link/`, `category/`, `real-world/`, `roundtrip/`,
+`protocol/` — are all in, and every failure they held has been named. The first sweep across all 363
+found 28; the driver fixes earlier in this stack cleared 12 of them outright, leaving 16 to account
+for here: **1 fixed, 15 declared.**
 
-Known items in there, from the 363-spec sweep:
+**`roster/roster-full-lifecycle` was the one real fix** of the batch: it asserts before its first
+mutation, and roster creation was deferred to the first `addForce`. The reasoning first recorded
+here for that fix was wrong; the correction lives in the commit and in
+`EnsureRosterMaterialisedForReadAsync`'s remarks.
 
-- several `modifier/*` and `catalogue/catalogue-category-entries` hidden-entry cases, which look like
-  the same NR-UI limitation as `selection/selection-hidden-entry` but have not been confirmed;
-- `ordering/ordering-nested-forces` — the empty-catalogue limitation;
-- `real-world/wh40k-10e-create-army` — a dataSource spec, different setup path;
-- **`roster/roster-full-lifecycle`** — exposed (correctly) by the `window.__bsspec` leak fix: it
-  asserts before its first mutation, and the UI driver defers roster creation to the first
-  `addForce`. Neither fixed nor declared yet. The proposed fix is to have `GetRosterState()` trigger
-  `EnsureRosterCreatedAsync()`, which composes now that the first-`addForce` path reconciles by
-  entry id rather than keying off `_rosterCreated`.
+Everything else was a declaration, and which KIND it got was a decision each time:
 
-The rule stands: a category joins `MeasuredCategories` once its failures are classified, not before.
+| Kind | Count | Why that kind |
+|---|---:|---|
+| NR-UI limitation | 11 | `fail`, because a future NR release could plausibly lift it — and `fail` still RUNS the spec, so that arrives as an unexpected pass rather than as nothing. Seven hidden-entry/hidden-modifier cases, plus four that hit the empty-catalogue limitation of §1. |
+| NR behaviour, by design | 2 | `skip`. Both engines fail byte-identically and both NR drivers `return` early on the relevant input on purpose. No NR release can flip a call the drivers no-op deliberately, so `fail` there would be an alarm that cannot ring. |
+| Driver gap | 2 | `fail`. `real-world/wh40k-10e-*` need `SetupFromFilesAsync` to record the spec's model, which it does not — an unimplemented feature, not a patch. Declared so implementing it is reported. |
+
+**One of them was nearly mis-declared, which is the argument for settling open questions rather
+than declaring around them.** `catalogue/catalogue-category-entries` looked like the same
+hidden-entry limitation as the rest, but its `se-1` carries neither `hidden` nor any modifier — NR
+files it under the `(Illegal Units)` group it builds with `hidden: true`, because its primary
+category is not one of the force's own. That left one question open: NR's own search box exists
+page-wide, so could it reach the entry anyway? If yes, this was a driver gap and the declaration
+would have been false. It returns zero rows for it. Genuine NR-UI limitation, confirmed rather than
+assumed.
+
+The rule that replaces the allow-list: **a failing spec carries its reason, or it is not failing on
+purpose.** There is no longer a place to park a spec nobody has looked at.

@@ -320,6 +320,12 @@ jobs:
     needs: [gate]
     if: needs.gate.outputs.thorough == 'true'
     runs-on: ubuntu-latest
+    # The NR UI roster step alone is ~47 minutes (363 specs, sequential, one shared browser), so this
+    # job now runs well over an hour. Bounded explicitly rather than left on GitHub's 360-minute
+    # default: every step here drives a browser against a replayed HAR, and a hung SPA is a realistic
+    # failure mode that would otherwise burn six hours of runner time before anyone saw it. 150 is
+    # roughly double the current total — room for a slower runner, not room for a hang.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
         with:
@@ -370,7 +376,8 @@ jobs:
       # docs/warm-reuse.md records "CI never caught the original bug because the NR-UI roster lane
       # runs a single spec". The knob is opt-in so the every-push lane and pre-push stay fast;
       # ConcurrencyConfigurationDriftTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet fails if this
-      # env entry is ever dropped, because a lane silently shrinking from 49 specs to 1 still exits 0.
+      # env entry is ever dropped, because a lane silently shrinking from 363 specs to 1 still
+      # exits 0. This step is the long one: ~47 minutes, and it is why the job carries a timeout.
       - name: Full frozen NR UI roster
         run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:

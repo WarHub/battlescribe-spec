@@ -27,7 +27,7 @@ public sealed class FrozenNrUiRosterConformanceTests
     /// This used to be the ONLY set, justified as "the frozen HAR supports a single roster-creation
     /// flow per run". That limit no longer exists — <c>NewRecruitBrowser</c>'s HAR fallback
     /// benign-fulfills <c>/api/</c> calls precisely so the SPA stops hanging across repeated roster
-    /// flows, and 56 consecutive roster creations in one session are now measured
+    /// flows, and 363 consecutive roster creations in one session are now measured
     /// (docs/nr-ui-roster-coverage.md). Set <see cref="FullVariable"/> for the full set.
     /// </remarks>
     private static readonly string[] SmokeSpecs = ["protocol/protocol-kitchen-sink"];
@@ -37,13 +37,14 @@ public sealed class FrozenNrUiRosterConformanceTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Opt-IN rather than opt-out, deliberately. The full set is ~49 specs at ~15s each — right for
-    /// the thorough suite, and wrong for the every-push lane and for <c>pre-push</c>, which exist to
-    /// be fast. This keeps every lane exactly as quick as it is today unless it asks otherwise.
+    /// Opt-IN rather than opt-out, deliberately. The full set is 363 specs and 47 minutes — right
+    /// for the thorough suite, and wrong for the every-push lane and for <c>pre-push</c>, which
+    /// exist to be fast. This keeps every lane exactly as quick as it is today unless it asks
+    /// otherwise.
     /// </para>
     /// <para>
     /// The obvious hazard of an opt-in is that the thorough lane silently stops opting in and nobody
-    /// notices a suite shrinking from 49 specs to 1 — which is the exact failure this lane already
+    /// notices a suite shrinking from 363 specs to 1 — which is the exact failure this lane already
     /// had once (<c>docs/warm-reuse.md</c>: "CI never caught the original bug because the NR-UI
     /// roster lane runs a single spec"). Two things guard it: the run logs which mode it chose and
     /// how many specs that selected, and
@@ -57,25 +58,28 @@ public sealed class FrozenNrUiRosterConformanceTests
         Environment.GetEnvironmentVariable(FullVariable) is "1" or "true";
 
     /// <summary>
-    /// The categories the full set covers: the ones whose NR-UI coverage has actually been measured
-    /// and whose failures are declared (docs/nr-ui-roster-coverage.md). 56 specs, ~14 minutes.
+    /// The full set is now every applicable roster spec — 363 of them, 47 minutes.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Not "everything applicable", and the difference is not small.</b> Running the whole roster
-    /// suite through this driver selects <b>363</b> specs and takes roughly 90 minutes — and 28 of
-    /// them fail, in categories nobody has looked at. Those 28 are not known NR-UI limitations; they
-    /// are simply unmeasured, and shipping them as expected-failures would be inventing a
-    /// declaration rather than earning one.
+    /// This used to be a hand-maintained category allow-list, because running everything selected 28
+    /// failures in categories nobody had classified, and shipping those as expected-failures would
+    /// have been inventing declarations rather than earning them.
     /// </para>
     /// <para>
-    /// So the rule is: a category joins this list once its failures have been measured and
-    /// classified, the same way these four were. That keeps every entry here a statement someone
-    /// checked, and keeps the lane's runtime honest.
+    /// Every one of them has since been classified: 340 pass, and all 23 remaining failures carry an
+    /// <c>engines: {newrecruit-ui: …}</c> declaration in the spec itself saying which NR-UI
+    /// limitation or driver gap they are (docs/nr-ui-roster-coverage.md). With nothing left
+    /// unexplained, an allow-list would only hide future specs from the lane — the silent-narrowing
+    /// shape this whole effort exists to remove. So the filter is gone, and a new spec is covered the
+    /// day it lands.
+    /// </para>
+    /// <para>
+    /// The declarations are <c>fail</c> rather than <c>skip</c> wherever a future NR release could
+    /// plausibly lift the limitation, so the spec still RUNS and an unexpected pass is reported.
     /// </para>
     /// </remarks>
-    private static readonly string[] MeasuredCategories =
-        ["force/", "cost/", "entry-group/", "gamesystem/", "selection/", "condition/"];
+    private static bool InFullSet(string _) => true;
 
     /// <summary>The concrete engine this lane drives, as specs address it.</summary>
     private const string EngineIdentity = "newrecruit-ui";
@@ -113,7 +117,7 @@ public sealed class FrozenNrUiRosterConformanceTests
         var full = RunFullSet;
         var loadedSpecs = allSpecs
             .Where(s => full
-                ? MeasuredCategories.Any(c => s.Name.StartsWith(c, StringComparison.Ordinal))
+                ? InFullSet(s.Name)
                 : SmokeSpecs.Contains(s.Name))
             .Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path)))
             .Where(s => !string.Equals(ExpectationFor(s.spec), "skip", StringComparison.OrdinalIgnoreCase))
