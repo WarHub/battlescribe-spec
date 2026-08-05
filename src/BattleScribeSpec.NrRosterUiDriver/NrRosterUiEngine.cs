@@ -241,17 +241,53 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         if (isFirstAddForce)
         {
-            // NR auto-creates a force during "Create List". Adopt it instead of adding another.
-            uid = await Browser.Page.EvaluateAsync<string?>("""
+            // NR auto-creates a force during "Create List" — but NR chooses which one, and it is not
+            // necessarily the one this step asked for. This used to adopt `forces[0]` unconditionally
+            // and return it, so `addForce fe-cat` silently returned the game system's "GS Detachment"
+            // whenever NR picked that instead. Measured on catalogue/catalogue-force-entries. It
+            // works for most specs only because their requested force IS the one NR auto-creates,
+            // which is luck, not agreement.
+            var autoJson = await Browser.Page.EvaluateAsync<string?>("""
                 () => {
                     const pinia = document.querySelector('#__nuxt')
                         ?.__vue_app__?.config?.globalProperties?.$pinia;
                     const army = pinia?._s?.get('lists')?.currentList?.army
                         ?? window.__bsspec?.army;
                     const forces = army?.getForces?.() || [];
-                    return forces.length > 0 ? forces[0].uid : null;
+                    if (forces.length === 0) return null;
+                    // `source.id` is the force ENTRY id — the same accessor the state reader uses.
+                    return JSON.stringify({ uid: forces[0].uid, entryId: forces[0].source?.id ?? null });
                 }
                 """);
+
+            string? autoUid = null;
+            string? autoEntryId = null;
+            if (autoJson is not null)
+            {
+                using var autoDoc = System.Text.Json.JsonDocument.Parse(autoJson);
+                autoUid = autoDoc.RootElement.GetProperty("uid").GetString();
+                autoEntryId = autoDoc.RootElement.GetProperty("entryId").GetString();
+            }
+
+            if (autoUid is not null && autoEntryId == forceEntryId)
+            {
+                // It is the force we asked for — adopt it, as before.
+                uid = autoUid;
+            }
+            else
+            {
+                // It is not. Add the requested one through the UI and drop NR's, so the id this
+                // method returns is the force the spec actually named. Both paths are the ones
+                // every other step already uses.
+                var requestedName = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
+                uid = await NrUiActions.AddForceByNameAsync(
+                    Browser.Page, requestedName, forceEntryId, catalogueId);
+
+                if (autoUid is not null)
+                {
+                    await NrUiActions.RemoveForceAsync(Browser.Page, autoUid);
+                }
+            }
         }
         else
         {
@@ -660,6 +696,24 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     if (typeof listsStore.unloadList === 'function') {
                         listsStore.unloadList();
                     }
+
+                    // The fifth place NR-adjacent per-spec state hides: `window.__bsspec`, a plain
+                    // page global. It is the state reader's ONLY source (JsHelpers.__bsspec_readState
+                    // reads name/gameSystemId/gameSystemName straight off `spec.row`), it is written
+                    // only by CreateRosterAsync, and nothing here cleared it. Navigation is a Vue
+                    // Router push rather than a page load, so it survived into the next spec — and
+                    // because roster creation is deferred to the first addForce, any spec whose FIRST
+                    // step is an assertion read the PREVIOUS spec's roster.
+                    //
+                    // Measured: roster/roster-name-and-metadata reported name, gameSystemId and
+                    // gameSystemName all as "roster-multiple-selections"; roster/roster-no-cost-types
+                    // reported a cost of [Points=0] — the previous spec's cost TYPE, valued 0 because
+                    // this very reset had just deleted that army's forces through the object
+                    // `__bsspec.army` still pointed at.
+                    //
+                    // Note this makes some currently-green specs go red, correctly: `forceCount: 0`
+                    // was passing for two of them by reading a roster that had just been emptied.
+                    delete window.__bsspec;
 
                     // Unload game data so the next spec's Setup loads its own cleanly.
                     for (const k of Object.keys(sysStore?.localLibrary || {})) {
