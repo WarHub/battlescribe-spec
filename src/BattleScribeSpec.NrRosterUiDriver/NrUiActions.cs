@@ -335,6 +335,85 @@ public static class NrUiActions
     }
 
     /// <summary>
+    /// Stamps the options-panel row NR renders for <paramref name="uid"/> with
+    /// <c>data-nrui-option</c>. False when the panel has no row for it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NR puts the option's own uid on the row's <c>&lt;label for&gt;</c>. That is the only identifier
+    /// the panel carries, and the visible label is <b>not</b> one: it is the entry's CURRENT name, so
+    /// a <c>set name</c> modifier renames it before it has ever been selected
+    /// (condition/condition-instance-of-ancestor renders "Child Model" as "Has Ancestor"), and NR
+    /// labels an entryLink with its TARGET's name, so two links to one shared entry render two rows
+    /// that both read "Trigger" (condition/condition-shared-flag-nested). Text matching cannot
+    /// separate those even in principle. Both were reported as "hidden entry".
+    /// </para>
+    /// <para>
+    /// Two row shapes carry the label: <c>.inputOption</c>, and — for an instanced entry's own
+    /// instance — <c>.subUnitHeaderRow</c>, whose <c>.stepper input.numInput</c> is its count control.
+    /// </para>
+    /// </remarks>
+    private static Task<bool> TagOptionRowAsync(IPage page, string uid)
+        => page.EvaluateAsync<bool>("""
+            (uid) => {
+                for (const el of document.querySelectorAll('[data-nrui-option]')) {
+                    el.removeAttribute('data-nrui-option');
+                }
+                const label = document.querySelector("label[for='" + uid + "']");
+                const row = label?.closest('.inputOption, .subUnitHeaderRow');
+                if (!row) return false;
+                row.setAttribute('data-nrui-option', uid);
+                return true;
+            }
+            """, uid);
+
+    /// <summary>
+    /// Resolves <paramref name="entryId"/> to the uid of the child node NR renders for it under
+    /// <paramref name="parentSelectionUid"/>, or null when there is none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The predicate is the one <c>NewRecruitActions.SelectChildEntryByIdAsync</c> already uses: an
+    /// entryLink's <c>getId()</c> returns its TARGET's id, so the link's own id shows up only in
+    /// <c>source.id</c> / <c>selector.ids</c> / <c>getBattleScribePath()</c>. NR pre-creates a
+    /// zero-amount child node for every option it renders, so this resolves before selection.
+    /// </para>
+    /// <para>
+    /// <paramref name="excludeInstanced"/> is for the SELECT path: selecting an instanced entry
+    /// again must add an INSTANCE via its "+" row, not increment the one that already exists.
+    /// </para>
+    /// </remarks>
+    private static Task<string?> FindChildOptionUidAsync(
+        IPage page, string parentSelectionUid, string entryId, bool excludeInstanced)
+        => page.EvaluateAsync<string?>("""
+            ([parentUid, entryId, excludeInstanced]) => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                if (!army) return null;
+                function find(node) {
+                    for (const s of (node.getSelections?.() || [])) {
+                        if (s.uid === parentUid) return s;
+                        const found = find(s);
+                        if (found) return found;
+                    }
+                    return null;
+                }
+                let parent = null;
+                for (const f of (army.getForces?.() || [])) { parent = find(f); if (parent) break; }
+                if (!parent) return null;
+                const child = (parent.getSelections?.() || []).find(c =>
+                    c.getId?.() === entryId
+                    || c.source?.id === entryId
+                    || c.selector?.ids?.includes?.(entryId)
+                    || (entryId.includes('::') && c.getBattleScribePath?.() === entryId));
+                if (!child) return null;
+                if (excludeInstanced && child.selector?.isInstanced === true) return null;
+                return child.uid ?? null;
+            }
+            """, new object[] { parentSelectionUid, entryId, excludeInstanced });
+
+    /// <summary>
     /// Selects a child entry under an existing selection by incrementing its count
     /// in the parent selection's options panel.
     /// Supports two NR UI styles:
@@ -348,33 +427,51 @@ public static class NrUiActions
         // Open the options panel for the parent selection
         await OpenOptionsPanelAsync(page, parentSelectionUid);
 
-        // Find the .inputOption container for this child entry
-        var entryOption = page.Locator(".inputOption")
-            .Filter(new() { Has = page.Locator("span.optionLabel", new() { HasTextString = entryName }) });
+        // Address the row by NR's own uid; fall back to the label only for an instanced entry with
+        // no instance yet, whose "+" row carries neither the child's uid nor the selector's.
+        var childUid = entryId is null
+            ? null
+            : await FindChildOptionUidAsync(page, parentSelectionUid, entryId, excludeInstanced: true);
 
-        var isVisible = await entryOption.First.IsVisibleAsync();
-        if (isVisible)
+        var entryOption = childUid is not null && await TagOptionRowAsync(page, childUid)
+            ? page.Locator($"[data-nrui-option='{childUid}']")
+            : page.Locator(".inputOption")
+                .Filter(new() { Has = page.Locator("span.optionLabel", new() { HasTextString = entryName }) });
+
+        if (!await entryOption.First.IsVisibleAsync())
         {
-            // UI path: numeric input or binary button
-            var numInput = entryOption.Locator("input[type='number']");
-            if (await numInput.CountAsync() > 0)
-            {
-                var currentVal = int.TryParse(await numInput.First.InputValueAsync(), out var v) ? v : 0;
-                await numInput.First.FillAsync((currentVal + 1).ToString());
-                await numInput.First.PressAsync("Tab");
-            }
-            else
-            {
-                // Binary (checkbox-style) entry — click the "+" boutonSubUnit button
-                await entryOption.Locator("button.boutonSubUnit").First.ClickAsync();
-            }
+            throw new NotSupportedException(
+                $"NR UI: child entry '{entryName}' (entryId={entryId}) has no row in the options panel. " +
+                "Hidden entries cannot be selected via UI interaction.");
+        }
+
+        var numInput = entryOption.Locator("input[type='number']");
+        var checkbox = entryOption.Locator("input[type='checkbox']");
+        if (await numInput.CountAsync() > 0)
+        {
+            var currentVal = int.TryParse(await numInput.First.InputValueAsync(), out var v) ? v : 0;
+            await numInput.First.FillAsync((currentVal + 1).ToString());
+            await numInput.First.PressAsync("Tab");
+        }
+        else if (await checkbox.CountAsync() > 0)
+        {
+            // An entry inside a CONSTRAINED GROUP renders as a checkbox — no number input and no
+            // "+" button. Clicking `button.boutonSubUnit` on such a row waited out Playwright's
+            // full 30s default (selection/selection-entry-group-constraint).
+            await checkbox.First.CheckAsync(new() { Timeout = 5_000 });
         }
         else
         {
-            // Hidden entries are not accessible via NR UI — throw
-            throw new NotSupportedException(
-                $"NR UI: child entry '{entryName}' is not visible in the options panel (hidden entry). " +
-                "Hidden entries cannot be selected via UI interaction.");
+            // Binary (checkbox-style) entry — click the "+" boutonSubUnit button
+            await entryOption.Locator("button.boutonSubUnit").First.ClickAsync(new() { Timeout = 5_000 });
+        }
+
+        // Report the uid by ENTRY ID where we have one. By name it cannot work for either failing
+        // case: a modifier-renamed option is not called what the spec calls it, and two links to one
+        // shared entry are both called the target's name.
+        if (entryId is not null)
+        {
+            return await FindChildOptionUidAsync(page, parentSelectionUid, entryId, excludeInstanced: false);
         }
 
         // Query the child uid from the parent selection's children
@@ -409,9 +506,25 @@ public static class NrUiActions
     /// Sets the count of a child entry in the parent selection's options panel.
     /// Supports numeric inputs (input[type=number]) only — binary entries (boutonSubUnit) are not applicable for count-setting.
     /// </summary>
-    public static async Task SetChildEntryCountByNameAsync(IPage page, string parentSelectionUid, string entryName, int count)
+    public static async Task SetChildEntryCountByNameAsync(
+        IPage page, string parentSelectionUid, string entryName, int count, string? childSelectionUid = null)
     {
         await OpenOptionsPanelAsync(page, parentSelectionUid);
+
+        // By uid where we have one, because an INSTANCED entry renders TWO rows under one name: the
+        // "+" add row, which has no number input, and the instance's own `.subUnitHeaderRow` stepper.
+        // The name filter picked the first and spent its 5s timeout on it
+        // (selection/collective-instance-amount). `.stepper input.numInput` is itself
+        // `input[type=number]`, so no extra branch is needed below.
+        if (childSelectionUid is not null && await TagOptionRowAsync(page, childSelectionUid))
+        {
+            var row = page.Locator($"[data-nrui-option='{childSelectionUid}']");
+            var rowInput = row.Locator("input[type='number']");
+            await rowInput.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+            await rowInput.First.FillAsync(count.ToString());
+            await rowInput.First.PressAsync("Tab");
+            return;
+        }
 
         var entryOption = page.Locator(".inputOption")
             .Filter(new() { Has = page.Locator("span.optionLabel", new() { HasTextString = entryName }) });
@@ -456,14 +569,52 @@ public static class NrUiActions
             var selEl = page.Locator($"[data-nrui-uid='{selectionUid}']");
             await selEl.Locator("[title='Delete Unit']").ClickAsync();
             await MaybeConfirmDeletionAsync(page);
+            return;
         }
-        else
+
+        // No `.unitRow` means this is a CHILD selection — not a hidden one. NR gives children no row
+        // in the unit list; it renders them in the parent's options panel, where the control is the
+        // count input, and deselecting one is decrementing it. That is exactly what the store-direct
+        // engine does with `decrementAmount()`.
+        //
+        // The old message said "hidden or nested" and then refused both, which was wrong twice over:
+        // nothing was hidden, and the child was fully editable one panel across. Measured on
+        // selection/selection-nested-deselect, selection-collective-deselect and
+        // collective-per-model-operations.
+        //
+        // The input holds the PER-PARENT amount, so a collective child at 2-per-model goes 6 -> 3 —
+        // which is the per-model semantics collective-per-model-operations asserts.
+        var parentUid = await FindParentUidAsync(page, selectionUid);
+        if (parentUid is not null)
         {
-            // Hidden/nested selections without a .unitRow are not accessible via NR UI — throw
-            throw new NotSupportedException(
-                $"NR UI: selection '{selectionUid}' has no .unitRow in DOM (hidden or nested). " +
-                "Hidden selections cannot be deselected via UI interaction.");
+            // OpenOptionsPanelAsync already walks up to the nearest ancestor that has a row, which is
+            // what makes the two-level Squad -> Trooper -> Weapon case reachable.
+            await OpenOptionsPanelAsync(page, parentUid);
+            if (await TagOptionRowAsync(page, selectionUid))
+            {
+                var row = page.Locator($"[data-nrui-option='{selectionUid}']");
+
+                var numInput = row.Locator("input[type='number']");
+                if (await numInput.CountAsync() > 0)
+                {
+                    var current = int.TryParse(await numInput.First.InputValueAsync(), out var v) ? v : 1;
+                    await numInput.First.FillAsync(Math.Max(0, current - 1).ToString());
+                    await numInput.First.PressAsync("Tab");
+                    return;
+                }
+
+                var checkbox = row.Locator("input[type='checkbox']");
+                if (await checkbox.CountAsync() > 0)
+                {
+                    await checkbox.First.UncheckAsync(new() { Timeout = 5_000 });
+                    return;
+                }
+            }
         }
+
+        throw new NotSupportedException(
+            $"NR UI: selection '{selectionUid}' has neither a .unitRow nor an options-panel row (hidden). " +
+            "Hidden selections cannot be deselected via UI interaction.");
     }
 
     /// <summary>

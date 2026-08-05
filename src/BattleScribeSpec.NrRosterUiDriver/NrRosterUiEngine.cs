@@ -416,7 +416,10 @@ public sealed class NrRosterUiEngine : IRosterEngine
         _ = forceId;
         if (_childSelectionParent.TryGetValue(selectionId, out var info))
         {
-            NrUiActions.SetChildEntryCountByNameAsync(Browser.Page, info.ParentUid, info.EntryName, count).GetAwaiter().GetResult();
+            // Pass the child's uid: an instanced entry renders two rows under one name, and only the
+            // uid distinguishes the instance's stepper from the "+" add row.
+            NrUiActions.SetChildEntryCountByNameAsync(
+                Browser.Page, info.ParentUid, info.EntryName, count, selectionId).GetAwaiter().GetResult();
         }
         else
         {
