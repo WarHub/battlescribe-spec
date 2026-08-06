@@ -421,6 +421,42 @@ public sealed class NrGameDataUiDriver
             }
             """);
 
+    /// <summary>
+    /// Waits until the node the editor is showing carries <paramref name="expected"/> in
+    /// <paramref name="property"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the post-condition of every widget edit in the right panel, and it replaces a family
+    /// of 150-200ms sleeps that stood in for "NR has taken the value". `get_selected()` returns the
+    /// same object the exporter serialises, so asserting on it is asserting on the ANSWER rather
+    /// than on a proxy for it.
+    /// </para>
+    /// <para>
+    /// Use NR's own property names, read from the code that uses them — not names inferred from the
+    /// C# parameter. The sibling roster driver shipped a predicate asserting `getCustomNotes()`,
+    /// which NR does not have (the property is `note`), turning a 300ms sleep that worked into a
+    /// 10s timeout that never passed. A condition asserted against an invented property is strictly
+    /// worse than the sleep it replaces.
+    /// </para>
+    /// </remarks>
+    private Task WaitSelectedFieldAsync(string property, string? expected, int timeoutMs = 5_000)
+        => _page.WaitForFunctionAsync(
+            """
+            ([property, expected]) => {
+                const st = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                const sel = st?.get_selected?.();
+                if (!sel) { return false; }
+                const v = sel[property];
+                return expected === null
+                    ? (v === undefined || v === null || v === '')
+                    : String(v) === expected;
+            }
+            """,
+            new object?[] { property, expected },
+            new PageWaitForFunctionOptions { Timeout = timeoutMs });
+
     private async Task<string?> ReadUniqueIdAsync()
     {
         var idRow = _page.Locator(".rightPanel tr").Filter(new LocatorFilterOptions { HasText = "Unique ID" });
@@ -444,7 +480,8 @@ public sealed class NrGameDataUiDriver
         await nameInput.ClickAsync(new LocatorClickOptions { ClickCount = 3 });
         await nameInput.FillAsync(name);
         await nameInput.PressAsync("Tab");
-        await _page.WaitForTimeoutAsync(150);
+        // The tree label is derived from this, and FindTreeNodeByIdAsync matches on it later.
+        await WaitSelectedFieldAsync("name", name);
     }
 
     /// <summary>Writes the editor's "Unique ID" field for the currently-selected entry.</summary>
@@ -455,7 +492,9 @@ public sealed class NrGameDataUiDriver
         await idInput.ClickAsync(new LocatorClickOptions { ClickCount = 3 });
         await idInput.FillAsync(id);
         await idInput.PressAsync("Tab");
-        await _page.WaitForTimeoutAsync(150);
+        // Basics' id setter removes from and re-adds to the catalogue index, so asserting the id
+        // landed also proves the index the next tree lookup needs was rebuilt.
+        await WaitSelectedFieldAsync("id", id);
     }
 
     /// <summary>
@@ -597,14 +636,16 @@ public sealed class NrGameDataUiDriver
         {
             case "type":
                 await constraint.Locator("select").First.SelectOptionAsync(new SelectOptionValue { Value = value });
-                await _page.WaitForTimeoutAsync(150);
+                await WaitSelectedFieldAsync("type", value);
                 return true;
             case "value":
                 {
                     var num = constraint.Locator("input[type='number']").First;
                     await num.FillAsync(value ?? "");
+                    // NumberInput only emits update:modelValue on @change, so the Tab is
+                    // load-bearing; the sleep after it was not.
                     await num.PressAsync("Tab");
-                    await _page.WaitForTimeoutAsync(150);
+                    await WaitSelectedFieldAsync("value", value);
                     return true;
                 }
             case "percentValue":
