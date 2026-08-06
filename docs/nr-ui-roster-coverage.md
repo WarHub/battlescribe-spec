@@ -16,7 +16,7 @@ Measured 2026-08-05, frozen HAR (offline), over **every applicable roster spec**
 | Skipped | 4 — never run on this engine |
 
 Every one of those 363 created its own roster in the same browser session, which is the fact that
-retires the one-spec limit. Wall-clock: **20m40s**, sequential, one shared browser — down from 47
+retires the one-spec limit. Wall-clock: **18m17s**, sequential, one shared browser — down from 47
 minutes, see "Where the time went" below.
 
 There is no allow-list. A spec added tomorrow is covered the day it lands, and a driver regression
@@ -151,9 +151,9 @@ indistinguishable from a bug someone decided to stop looking at. So the lane gre
 classifications did, and the allow-list was deleted the moment it had nothing left to exclude.
 
 **The lane is opt-in only** — label, schedule or manual dispatch — so per-PR CI is untouched. It
-was 47 minutes when first widened to 363 specs; it is now 20m40s. See below.
+was 47 minutes when first widened to 363 specs; it is now 18m17s. See below.
 
-## Where the time went — 47m to 20m40s
+## Where the time went — 47m to 18m17s
 
 Measured, not estimated: `NR_UI_TIMINGS=1` prints a per-phase breakdown, added precisely because the
 case for this work had been arithmetic ("seven sleeps totalling 6.3s times 363 specs"), which says
@@ -175,6 +175,10 @@ than the constant — a slow render satisfies the condition and did not satisfy 
 | after `/app/MySystems` | 500ms | wait for the control, and for the route to hold — 17ms |
 | after MyLists click | 500ms | wait `location.pathname` — 27ms |
 | after popup close | 300ms | wait `.xCross` hidden |
+| before "Create List" | 1500ms | wait `loadedCatalogues` drained — 268ms |
+
+`NrUiSetup` now holds exactly one fixed wait: 1000ms in a branch only the two gamesystem-only specs
+reach, which is 2 seconds across the whole lane.
 
 Two were correctness fixes rather than trades. The 2000ms preceded a one-shot snapshot that returns
 null when the army is not ready, and on that path `window.__bsspec` — the state reader's only
@@ -184,15 +188,36 @@ substring "New", loose enough to hit a control on the page being navigated away 
 auto-waiting cannot protect against: it guards an element being absent, never the wrong one being
 present.
 
-**One sleep remains, at 1.5s.** NR's Create List dialog renders a FORCE dropdown when the game
-system and the catalogue both define force entries, and this driver does not set it — so the roster
-takes NR's default, and this sleep is what makes that default correct (draining
-`manager.loadedCatalogues` re-renders the dropdown and flips it). Selecting the option directly was
-tried and **reverted**: locating it as "first visible select after the faction one containing this
-exact option text" picked a different control on some specs and built the wrong force, failing 4
-specs with a panel belonging to a force nobody asked for. What that attempt established for the next
-one: both options are present from the dialog's first paint (t=25ms), so nothing is being waited
-FOR — the dropdown simply needs identifying by its label or by NR's component state.
+**The last fixed wait in roster creation is gone too**, and with it the driver's habit of hoping NR
+guesses right. NR renders a FORCE dropdown whenever a roster could start from more than one force
+entry, and this driver never set it — so every roster began life with NR's default, which a flat
+1500ms made correct by letting `manager.loadedCatalogues` drain and re-render the control.
+
+The `<option>` carries the force entry id as its Vue-bound `_value`, which is the whole fix:
+
+    select#0  _value = {id: 'cat-1', name: …}   ← faction, binds a catalogue OBJECT
+    select#1  _value = 'fe-gs' / 'fe-cat'        ← force,   binds the entry id STRING
+
+The control identifies itself by what it carries — a string equal to the requested entry id can only
+be a force option. A first attempt matched option **text** and required the select to be **visible**,
+and both were wrong: names are ambiguous by design (`force-multi-catalogue-two-forces` has two
+"Patrol" forces), and the force select always exists — NR merely hides it when there is one option,
+so the filter skipped exactly the specs with nothing to choose.
+
+**Removing that sleep exposed what else it covered**, which is the finding worth keeping: NR renders
+and wires the unit list *before* it finishes parsing the catalogue, and a `+` clicked in that window
+is **discarded, not delayed** — a 10s wait proves it. Eight specs failed on their first action rather
+than during creation. `WaitForCatalogueWorkSettledAsync` now waits for `loadedCatalogues` to drain,
+bounded and tolerated (draining is not universal; a hard wait would hang the specs that never
+populate it).
+
+**Position mattered more than duration, at the cost of two lane runs.** Placed *after* roster
+creation the same wait left 63 specs failing — a list built from a half-parsed catalogue is wired to
+incomplete data, and the discarded clicks were a symptom of the roster, not the click. It also
+measured 1467ms there, close enough to the old 1500ms to support a confident and wrong conclusion,
+written down at the time, that this was NR's real work and unrecoverable. Moved to where the sleep
+actually sat, the identical condition costs **268ms**: by then the parse has been running since the
+faction was chosen. Same code, 5.5× cheaper, one statement's difference in placement.
 
 Hybrid parallelism — N workers over contiguous chunks — remains available and untaken; it buys
 wall-clock by shortening exactly the cross-spec chains that found all four races below.
