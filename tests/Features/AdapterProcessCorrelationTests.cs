@@ -24,14 +24,26 @@ public sealed class AdapterProcessCorrelationTests
     [Fact]
     public async Task LateResponseAfterTimeout_DoesNotDesyncNextCommand()
     {
-        // Adapter: GetStateCommand ("slow") replies LATE, well past the client's short timeout;
-        // any other command replies immediately. Both echo corrId — real AdapterHandler behavior.
-        await using var adapter = ScriptedAdapter.Start(async (command, respond, ct) =>
+        var ct = TestContext.Current.CancellationToken;
+
+        // The TEST decides when "slow" answers and when the caller gives up — no wall-clock race.
+        //
+        // This used to sleep 600ms in the adapter against a 200ms CancellationTokenSource, i.e. two
+        // real timers racing. Note what the client timeout actually IS here: NdjsonLineConnection
+        // has no timeout of its own, so the 200ms CTS was purely "the caller gave up". Cancelling
+        // that token explicitly expresses the same thing without a clock.
+        var slowRequestReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSlowReply = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var slowReplyWritten = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var adapter = ScriptedAdapter.Start(async (command, respond, adapterCt) =>
         {
             if (command is GetStateCommand)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(600), ct); // > the short client timeout below
+                slowRequestReceived.TrySetResult();
+                await releaseSlowReply.Task.WaitAsync(adapterCt);
                 await respond(new StateResponse { Name = "stale-late-response", GameSystemId = "gs" }, true);
+                slowReplyWritten.TrySetResult();
             }
             else
             {
@@ -39,18 +51,21 @@ public sealed class AdapterProcessCorrelationTests
             }
         });
 
-        var ct = TestContext.Current.CancellationToken;
-
-        // cmd1 times out client-side while the adapter is still "working" on it.
-        using (var shortCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200)))
+        // cmd1 is abandoned by the caller while the adapter is still "working" on it.
+        using (var callerGaveUp = new CancellationTokenSource())
         {
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => adapter.Connection.SendCommandAsync(new GetStateCommand(), shortCts.Token));
+            var cmd1 = adapter.Connection.SendCommandAsync(new GetStateCommand(), callerGaveUp.Token);
+            await slowRequestReceived.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+            await callerGaveUp.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cmd1);
         }
 
-        // Give cmd1's late response time to actually land on the wire and sit unread before cmd2
-        // is sent — this is what makes the repro deterministic rather than a scheduling race.
-        await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
+        // Release cmd1's late response and wait for the fact that it was written, so it is on the
+        // wire and unread before cmd2 goes out. That ordering IS the regression under test —
+        // without it a positional reader is never offered the stale line and the test would pass
+        // while proving nothing.
+        releaseSlowReply.SetResult();
+        await slowReplyWritten.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
 
         // cmd2 must get ITS OWN response. A positional reader would instead hand it the stale
         // StateResponse meant for cmd1 — exactly the production cascade ("Unexpected response type").
