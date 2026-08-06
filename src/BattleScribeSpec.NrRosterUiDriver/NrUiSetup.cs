@@ -300,13 +300,33 @@ public static class NrUiSetup
             }
             else
             {
-                // This branch has no such anchor: it wants "whatever the last option happens to be",
-                // so there is no label to wait for. `CountAsync` is a snapshot, and an unpopulated
-                // <select> reads as 0-or-1 options and silently selects NOTHING — a wrong roster
-                // rather than an error. The fixed wait therefore stays, rather than being converted
-                // into a condition this side cannot state precisely. Only the two gamesystem-only
-                // specs reach it, so keeping it costs 2 seconds across the lane, not 6 minutes.
-                await page.WaitForTimeoutAsync(1000);
+                // This branch wants "whatever the last option happens to be", so there is no label
+                // to wait for — but there is still a condition: the <select> has been POPULATED.
+                // `CountAsync` is a snapshot, and an unpopulated select reads as 0-or-1 options and
+                // silently selects NOTHING, which is a wrong roster rather than an error. Waiting
+                // for the dialog to render its options states that precisely; the 1000ms here only
+                // hoped for it.
+                //
+                // Tolerated, because a single-catalogue system legitimately offers one option and
+                // would otherwise wait out the bound for nothing.
+                try
+                {
+                    await page.WaitForFunctionAsync(
+                        """
+                        () => {
+                            const box = document.querySelector('.box');
+                            const sel = box?.querySelector('select');
+                            return !!sel && sel.options.length > 1;
+                        }
+                        """,
+                        null,
+                        new() { Timeout = 5_000 });
+                }
+                catch (TimeoutException)
+                {
+                    // One option (or none) is a real shape here — fall through and let the count
+                    // check below decide, exactly as it did before.
+                }
 
                 // Select the last option (typically the non-library catalogue)
                 var optionCount = await factionSelect.Locator("option").CountAsync();

@@ -594,7 +594,23 @@ public sealed class NrRosterUiEngine : IRosterEngine
             }
 
             await rosButton.First.ClickAsync(new() { Timeout = 5_000 });
-            await page.WaitForTimeoutAsync(150);
+
+            // Wait for the export hook to have CAPTURED the blob, rather than for 150ms and then
+            // reading whatever is there. The read below is a snapshot: too early and it returns
+            // null, which surfaces as "export produced no XML" — an accusation against NR for a
+            // race on this side.
+            try
+            {
+                await page.WaitForFunctionAsync(
+                    "() => window.__bsspec_rosCapture != null",
+                    null,
+                    new() { Timeout = 10_000 });
+            }
+            catch (TimeoutException)
+            {
+                // Fall through: the read below reports the empty capture with its own message.
+            }
+
             xml = await page.EvaluateAsync<string?>("window.__bsspec_rosCapture ?? null");
         }
         finally

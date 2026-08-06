@@ -69,6 +69,9 @@ public sealed class NrGameDataUiDriver
         else
         {
             await SelectAsync(parentId);
+            // Record what is selected BEFORE the add, so the wait below can assert the selection
+            // moved to the new node rather than that a panel is on screen.
+            await MarkSelectionAsync();
             await RightClickSelectedAsync();
             if (entryType == "profile")
             {
@@ -122,6 +125,7 @@ public sealed class NrGameDataUiDriver
         // Nested link: right-click the parent, open the "Link ❯" submenu and pick the item matching
         // the target's kind (so the right link container is created), then set the target.
         await SelectAsync(parentId);
+        await MarkSelectionAsync();
         await RightClickSelectedAsync();
         var kind = await NrGameDataUiActions.LinkTargetKindAsync(_page, targetId);
         await OpenSubmenuAndPickAsync("Link", LinkSubmenuItemForKind(kind) ?? LinkSubmenuItemForType(linkType));
@@ -212,7 +216,10 @@ public sealed class NrGameDataUiDriver
         {
             var rootNode = _page.Locator("#editor-entries .head h3:is(.normalTitle, .arrowTitle)").First;
             await rootNode.ClickAsync();
-            await WaitEditorReadyAsync();
+            // Selecting the root selects the catalogue itself, so assert THAT id rather than that
+            // some panel is on screen — `CataloguePanel` renders the same Basics fieldset an entry
+            // does, which is what made the old panel-only wait pass against the outgoing node.
+            await WaitEditorReadyAsync(await NrGameDataUiActions.GetCurrentCatalogueIdAsync(_page));
             _selectedToken = token;
             return;
         }
@@ -222,7 +229,7 @@ public sealed class NrGameDataUiDriver
         {
             var node = await NrGameDataUiActions.FindTreeNodeByIdAsync(_page, token);
             await node.ClickAsync();
-            await WaitEditorReadyAsync();
+            await WaitEditorReadyAsync(token);
             _selectedToken = token;
             return;
         }
@@ -250,6 +257,7 @@ public sealed class NrGameDataUiDriver
         {
             throw new InvalidOperationException("NR Editor UI: breadcrumb ancestor out of range.");
         }
+        await MarkSelectionAsync();
         await crumbs.Nth(index).ClickAsync();
         await WaitEditorReadyAsync();
     }
@@ -331,15 +339,87 @@ public sealed class NrGameDataUiDriver
         // The caller waits for the editor panel (WaitEditorReadyAsync) right after — reactive signal.
     }
 
-    private async Task WaitEditorReadyAsync()
+    /// <summary>
+    /// Waits until the editor is actually showing the node the caller means to edit.
+    /// </summary>
+    /// <param name="expectedSelectedId">
+    /// The node that should end up selected. Null means "whatever NR just created", which is
+    /// asserted as a CHANGE of selection against a marker taken before the click.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// This method used to wait for <c>.rightPanel fieldset</c> and then sleep 150ms, and the
+    /// fieldset is not a signal at all: <c>RightPanel</c> is <c>v-if="item"</c> with <c>:key</c>, so
+    /// when something was already selected the wait is satisfied by the OUTGOING panel. The 150ms
+    /// was therefore the entire gap between clicking a context-menu item and reading the new entry's
+    /// id out of the panel.
+    /// </para>
+    /// <para>
+    /// That is a wrong-answer bug, not a slow one. NR's <c>create()</c> adds with
+    /// <c>{select: true}</c>, and the flag is consumed from the NEW box's <c>mounted()</c> hook — a
+    /// Vue mount cycle after the click. Read too early and <c>ReadUniqueIdAsync</c> returns the
+    /// PREVIOUS entry's id, after which <c>SetNameInEditorAsync</c> renames the previous entry and
+    /// every later setField for that spec lands on the wrong node. It reports as a data mismatch
+    /// rather than an error.
+    /// </para>
+    /// <para>
+    /// Order matters: the selection is asserted FIRST, because the panel lags it — checking the
+    /// panel first can pass against the very panel we are trying to leave.
+    /// </para>
+    /// </remarks>
+    private async Task WaitEditorReadyAsync(string? expectedSelectedId = null)
     {
+        if (expectedSelectedId is not null)
+        {
+            await _page.WaitForFunctionAsync(
+                """
+                (id) => {
+                    const st = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                    return st?.get_selected?.()?.id === id;
+                }
+                """,
+                expectedSelectedId,
+                new PageWaitForFunctionOptions { Timeout = 10_000 });
+        }
+        else
+        {
+            await _page.WaitForFunctionAsync(
+                """
+                () => {
+                    const st = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                    const cur = st?.selectedItem;
+                    return cur != null && cur !== window.__bsspec_prev_sel?.deref();
+                }
+                """,
+                null,
+                new PageWaitForFunctionOptions { Timeout = 10_000 });
+        }
+
         await _page.Locator(".rightPanel fieldset").First.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 10_000,
         });
-        await _page.WaitForTimeoutAsync(150);
     }
+
+    /// <summary>
+    /// Records which node is selected right now, so <see cref="WaitEditorReadyAsync"/> can later
+    /// assert the selection MOVED rather than that something is selected.
+    /// </summary>
+    /// <remarks>
+    /// A <c>WeakRef</c> so a spec's discarded component cannot be kept alive by the marker.
+    /// </remarks>
+    private Task MarkSelectionAsync()
+        => _page.EvaluateAsync(
+            """
+            () => {
+                const st = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                window.__bsspec_prev_sel = st?.selectedItem ? new WeakRef(st.selectedItem) : null;
+            }
+            """);
 
     private async Task<string?> ReadUniqueIdAsync()
     {
@@ -684,8 +764,8 @@ public sealed class NrGameDataUiDriver
         {
             return;
         }
+        // See NrGameDataUiActions: the next statement waits for the popup this sleep hoped for.
         await container.Locator(".autocomplete-input").First.ClickAsync();
-        await _page.WaitForTimeoutAsync(300);
         var suggestions = container.Locator(".suggestions:not(.hidden) > div");
         await suggestions.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
         var pick = suggestions.Filter(new LocatorFilterOptions
@@ -989,8 +1069,10 @@ public sealed class NrGameDataUiDriver
         {
             return;
         }
+        // IconSelect.startEditing() is async — it un-hides the popup, THEN awaits fetch() for the
+        // options. So the popup exists before its children do, and the wait below (which requires a
+        // child) is the only correct gate. The sleep merely delayed reaching it.
         await container.Locator(".iconselect-input").First.ClickAsync();
-        await _page.WaitForTimeoutAsync(300);
         var suggestions = container.Locator(".suggestions:not(.hidden) > div");
         await suggestions.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
         var pick = suggestions.Filter(new LocatorFilterOptions

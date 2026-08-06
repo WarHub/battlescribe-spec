@@ -29,94 +29,8 @@ public static class NrGameDataUiActions
 {
     // ===== Structural mutations =====
 
-    /// <summary>
-    /// Adds a new entry of the given type under the specified parent.
-    ///
-    /// When <paramref name="parentId"/> matches the currently open catalogue ID (read from
-    /// the page URL), drives the catalogue editor's collapsible section headers:
-    /// right-clicks the section <c>&lt;h3&gt;</c>, picks the icon-based context menu item,
-    /// waits for the properties form, reads the auto-generated ID, and sets the name.
-    ///
-    /// When <paramref name="parentId"/> is a child entry, right-clicks that entry's tree node
-    /// and picks the text-labelled "add child" item from its context menu.
-    /// </summary>
-    public static async Task<GameDataActionOutputs> AddEntryAsync(
-        IPage page, string parentId, string entryType, string? name)
-    {
-        var catalogueId = await GetCurrentCatalogueIdAsync(page);
 
-        if (parentId == catalogueId)
-        {
-            return await AddEntryToRootSectionAsync(page, entryType, name);
-        }
 
-        return await AddEntryToParentNodeAsync(page, parentId, entryType, name);
-    }
-
-    /// <summary>
-    /// Adds a child entry under a non-root parent entry by driving the parent tree node's
-    /// context menu.
-    ///
-    /// The entry-node context menu lists "add child" items as text-labelled <c>&lt;div&gt;</c>
-    /// elements ("Entry" for a selection entry, "Group" for a selection entry group). Their
-    /// icons are inline base64 data URIs, so the item is matched by exact text — anchored to
-    /// avoid "Group" matching "Modifier Group" / "Info Group".
-    /// </summary>
-    private static async Task<GameDataActionOutputs> AddEntryToParentNodeAsync(
-        IPage page, string parentId, string entryType, string? name)
-    {
-        var parentNode = await FindTreeNodeByIdAsync(page, parentId);
-        await parentNode.ScrollIntoViewIfNeededAsync();
-        await parentNode.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-        // Reactive: wait for the context menu to render rather than a fixed delay.
-        await page.WaitForSelectorAsync(".context-menu:visible", new PageWaitForSelectorOptions { Timeout = 5_000 });
-
-        var label = GetAddChildMenuLabel(entryType);
-        await page.Locator(".context-menu > div")
-            .Filter(new LocatorFilterOptions
-            {
-                HasTextRegex = new System.Text.RegularExpressions.Regex($"^\\s*{label}\\s*$"),
-            })
-            .First.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
-
-        // Wait for the properties form to open — the "Unique ID" row is the reliable signal.
-        var idRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = "Unique ID" });
-        await idRow.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = 10_000,
-        });
-
-        var entryId = await idRow.Locator("td:last-child input[type='text']").InputValueAsync();
-
-        if (name is not null)
-        {
-            var nameRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = "Name" });
-            var nameInput = nameRow.Locator("td:last-child input[type='text']").First;
-            await nameInput.ClickAsync(new LocatorClickOptions { ClickCount = 3 });
-            await nameInput.FillAsync(name);
-            await nameInput.PressAsync("Tab");
-            await page.WaitForTimeoutAsync(200);
-        }
-
-        return new GameDataActionOutputs { EntryId = entryId };
-    }
-
-    /// <summary>
-    /// Returns the context-menu text label for adding a child entry of the given type from an
-    /// entry node's context menu (distinct from the root-section icon items).
-    /// </summary>
-    private static string GetAddChildMenuLabel(string entryType) => entryType switch
-    {
-        "selectionEntry" => "Entry",
-        "selectionEntryGroup" => "Group",
-        "forceEntry" => "Force",
-        "categoryEntry" => "Category",
-        "profile" => "Profile",
-        "rule" => "Rule",
-        "infoGroup" => "Info Group",
-        _ => GetAddMenuLabel(entryType),
-    };
 
     /// <summary>
     /// Removes the entry with the given ID from the NR Editor tree.
@@ -388,8 +302,10 @@ public static class NrGameDataUiActions
             .Filter(new LocatorFilterOptions { HasText = rowLabel });
 
         // Click the autocomplete input — Vue removes 'hidden' from .suggestions after a tick
+        // No sleep: Autocomplete.startEditing() sets editing=true synchronously and
+        // `.suggestions :class="{hidden: !editing}"` follows in the same flush, so the wait on the
+        // next statement IS this condition — the sleep only delayed reaching it.
         await fieldRow.Locator(".autocomplete-input").ClickAsync();
-        await page.WaitForTimeoutAsync(300);
 
         // Wait for suggestions to become visible
         var suggestions = fieldRow.Locator(".suggestions:not(.hidden) > div");
@@ -853,96 +769,8 @@ public static class NrGameDataUiActions
         _ => char.ToUpperInvariant(field[0]) + field[1..], // Capitalize first letter
     };
 
-    /// <summary>Sets the name of a newly created entry in any inline editor or dialog.</summary>
-    private static async Task SetNewEntryNameAsync(IPage page, string name)
-    {
-        // NR Editor may show an inline rename editor or a "New entry" dialog
-        var nameInput = page.GetByPlaceholder("Name", new PageGetByPlaceholderOptions { Exact = false })
-            .Or(page.GetByLabel("Name", new PageGetByLabelOptions { Exact = true }))
-            .Or(page.Locator("[class*='new-entry'] input, [class*='rename'] input").First);
 
-        if (await nameInput.First.IsVisibleAsync())
-        {
-            await nameInput.First.FillAsync(name);
-            await nameInput.First.PressAsync("Enter");
-            await page.WaitForTimeoutAsync(300);
-        }
-    }
 
-    /// <summary>
-    /// Reads the ID of the most recently created entry under parentId of the given type,
-    /// by querying the Pinia editorStore.
-    /// </summary>
-    private static async Task<string?> ReadLastCreatedEntryIdAsync(
-        IPage page, string parentId, string entryType)
-    {
-        var containerKey = entryType switch
-        {
-            "selectionEntry" => "selectionEntries",
-            "selectionEntryGroup" => "selectionEntryGroups",
-            "forceEntry" => "forceEntries",
-            "categoryEntry" => "categoryEntries",
-            "rule" => "rules",
-            "profile" => "sharedProfiles",
-            "entryLink" => "entryLinks",
-            "infoLink" => "infoLinks",
-            "categoryLink" => "categoryLinks",
-            _ => entryType + "s",
-        };
-
-        return await page.EvaluateAsync<string?>("""
-            ([parentId, containerKey]) => {
-                try {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const ed = pinia?._s?.get('editor');
-                    const sId = new URLSearchParams(window.location.search).get('systemId');
-                    const cId = new URLSearchParams(window.location.search).get('id');
-                    const cat = ed?.gameSystems?.[sId]?.loadedCatalogues?.[cId];
-                    if (!cat) return null;
-
-                    const findById = (obj, id) => {
-                        if (!obj || typeof obj !== 'object') return null;
-                        if (obj.id === id) return obj;
-                        for (const val of Object.values(obj)) {
-                            if (Array.isArray(val)) {
-                                for (const item of val) {
-                                    const found = findById(item, id);
-                                    if (found) return found;
-                                }
-                            }
-                        }
-                        return null;
-                    };
-
-                    const parent = parentId === cat.id ? cat : findById(cat, parentId);
-                    if (!parent) return null;
-
-                    const items = parent[containerKey];
-                    if (!Array.isArray(items) || items.length === 0) return null;
-
-                    // Return the last item's ID (the most recently added)
-                    return items[items.length - 1]?.id || null;
-                } catch (e) {
-                    return null;
-                }
-            }
-            """, new object[] { parentId, containerKey });
-    }
-
-    /// <summary>Dismisses any open modal dialog (confirm/cancel button).</summary>
-    private static async Task DismissActiveDialogAsync(IPage page)
-    {
-        var confirmBtn = page.GetByRole(AriaRole.Button, new() { Name = "OK" })
-            .Or(page.GetByRole(AriaRole.Button, new() { Name = "Save" }))
-            .Or(page.GetByRole(AriaRole.Button, new() { Name = "Confirm" }))
-            .Or(page.GetByRole(AriaRole.Button, new() { Name = "Close" }));
-        if (await confirmBtn.First.IsVisibleAsync())
-        {
-            await confirmBtn.First.ClickAsync();
-            await page.WaitForTimeoutAsync(200);
-        }
-    }
 
     /// <summary>
     /// Returns the ID of the currently open catalogue by reading the <c>id</c> query

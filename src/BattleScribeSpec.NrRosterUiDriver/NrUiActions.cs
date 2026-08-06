@@ -162,9 +162,40 @@ public static class NrUiActions
         }
 
         await picker.SelectOptionAsync(new SelectOptionValue { Label = catalogueName });
-        // The force list is derived from the selection; let it re-render before it is read.
-        await page.WaitForTimeoutAsync(300);
+
+        // The force list is derived from the selection, so wait for the picker to actually CARRY it
+        // rather than for 300ms to pass. The caller then reads that list with `CountAsync()` — a
+        // snapshot — and on zero throws "not found in the forces panel"; worse, when two forces
+        // share a name (force-multi-catalogue-two-forces has two "Patrol"), a stale list can match
+        // the WRONG one and build a wrong roster instead of erroring.
+        await page.WaitForFunctionAsync(
+            """
+            ([sel, want]) => {
+                const el = document.evaluate(sel, document, null, 9, null).singleNodeValue;
+                if (!el) { return false; }
+                const opt = el.selectedOptions?.[0];
+                return (opt?.textContent || '').trim() === want;
+            }
+            """,
+            new object[] { await picker.EvaluateAsync<string>(XPathOfElement), catalogueName },
+            new() { Timeout = 10_000 });
     }
+
+    /// <summary>
+    /// Returns a unique XPath for the element a locator resolves to, so a JS predicate can re-find
+    /// exactly that node. Playwright locators cannot be passed into <c>WaitForFunctionAsync</c>.
+    /// </summary>
+    private const string XPathOfElement = """
+        el => {
+            const seg = n => {
+                if (!n.parentElement) { return '/' + n.tagName.toLowerCase(); }
+                const sibs = [...n.parentElement.children].filter(c => c.tagName === n.tagName);
+                const i = sibs.indexOf(n) + 1;
+                return seg(n.parentElement) + '/' + n.tagName.toLowerCase() + '[' + i + ']';
+            };
+            return seg(el);
+        }
+        """;
 
 
     /// <summary>
@@ -203,8 +234,11 @@ public static class NrUiActions
             // Close any open editing panel to ensure the bookForce is fully accessible
             await DismissOverlaysAsync(page);
             await CloseEditingPanelAsync(page);
-            await page.WaitForTimeoutAsync(500);
 
+            // No sleep between closing the panel and reaching for the accordion. The 500ms here
+            // stood in for "the panel finished closing", which CloseEditingPanelAsync now asserts
+            // itself (it waits for `.unitRow.editing` to be hidden), and the line below already
+            // waits for the element this step actually needs.
             var childForcesHeader = parentBookForce.Locator(".childForces h3.arrowTitle").First;
             await childForcesHeader.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
 
@@ -213,7 +247,27 @@ public static class NrUiActions
             if (isCollapsed)
             {
                 await childForcesHeader.ClickAsync(new() { Timeout = 3_000 });
-                await page.WaitForTimeoutAsync(300);
+
+                // Wait for the accordion to be EXPANDED, not for 300ms.
+                //
+                // This is the highest-consequence wait in the file for its size. The next call,
+                // SelectCatalogueInPickerAsync, early-returns when `picker.CountAsync() == 0 ||
+                // !IsVisibleAsync()` — both snapshots — so a section that has not finished expanding
+                // reads as "there is no catalogue picker here", the catalogue choice is skipped
+                // WITHOUT A WORD, and the child force is built against the wrong book. That is the
+                // documented force/force-nested-multi-catalogue bug, which surfaced two steps later
+                // as "entry 'se-b1' is not visible in the catalogue panel".
+                await childForcesHeader.WaitForAsync(new() { Timeout = 5_000 });
+                await page.WaitForFunctionAsync(
+                    """
+                    (uid) => {
+                        const bf = document.querySelector(`.bookForce[data-nrui-force-uid='${uid}']`);
+                        const h = bf?.querySelector('.childForces h3.arrowTitle');
+                        return !!h && !h.classList.contains('collapsed');
+                    }
+                    """,
+                    parentForceId,
+                    new() { Timeout = 5_000 });
             }
 
             // Same catalogue decision as the top-level add-force panel, same helper — NR renders a
@@ -268,7 +322,24 @@ public static class NrUiActions
         await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = 5_000 });
         await page.GetByText("Delete Force", new() { Exact = true }).ClickAsync(new() { Timeout = 5_000 });
         await MaybeConfirmDeletionAsync(page);
-        await page.WaitForTimeoutAsync(300);
+
+        // Wait for the force to be GONE from the army, which is what this method promises.
+        //
+        // The 300ms here was doing real work despite its size: callers re-read `army.getForces()`
+        // immediately afterwards, and `RemoveCreateListForcesAsync` loops on that read — so a
+        // deletion that had not landed made it re-target the same uid it had just removed.
+        await page.WaitForFunctionAsync(
+            """
+            (uid) => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                if (!army) { return true; }
+                return !(army.getForces?.() || []).some(f => f.uid === uid);
+            }
+            """,
+            forceUid,
+            new() { Timeout = 10_000 });
     }
 
     // ===== Selection operations =====
@@ -757,9 +828,10 @@ public static class NrUiActions
         await costInput.FillAsync(valueStr);
         await costInput.DispatchEventAsync("change");
 
-        // Close the dialog
+        // Close the dialog, and wait for it to BE closed — the input disappearing is the
+        // observable end of it, and callers read the roster right afterwards.
         await page.Keyboard.PressAsync("Escape");
-        await page.WaitForTimeoutAsync(300);
+        await costInput.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 5_000 });
     }
 
     /// <summary>
@@ -816,19 +888,25 @@ public static class NrUiActions
 
             // Click "Rename Unit" in the dropdown
             await page.GetByText("Rename Unit").First.ClickAsync(new() { Timeout = 3_000 });
-            await page.WaitForTimeoutAsync(300);
 
-            // An editable pre element appears in the name area
-            var nameInput = page.Locator(".unitNameTitle .editableDiv[contenteditable='true']").First;
-            if (await nameInput.CountAsync() == 0)
-            {
-                // Fallback: any contenteditable in the title area
-                nameInput = page.Locator(".unitNameTitle [contenteditable='true']").First;
-            }
-            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
+            // Wait for the editable field, rather than sleeping and then SNAPSHOTTING for it.
+            // The 300ms here existed to prop up the `CountAsync() == 0` below — a snapshot, so a
+            // field that had not rendered yet silently took the fallback branch. Both selectors
+            // match the same element when the specific one exists, so one union locator with a real
+            // wait replaces the sleep, the count check and the fallback together.
+            var nameInput = page
+                .Locator(".unitNameTitle .editableDiv[contenteditable='true'], "
+                    + ".unitNameTitle [contenteditable='true']")
+                .First;
+            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
             await nameInput.FillAsync(customName);
             await nameInput.PressAsync("Enter");
-            await page.WaitForTimeoutAsync(300);
+
+            // Wait for NR to COMMIT the rename to the store. Enter starts that; the 300ms assumed it
+            // finished. The spec asserts on customName, so committing is the postcondition that
+            // matters — and an assertion racing the commit reads the old name, which is a wrong
+            // answer rather than an error.
+            await WaitForSelectionCustomAsync(page, selectionUid, "customName", customName);
         }
 
         if (customNotes is not null)
@@ -838,20 +916,61 @@ public static class NrUiActions
 
             // Click "Add Note" in the dropdown
             await page.GetByText("Add Note").First.ClickAsync(new() { Timeout = 3_000 });
-            await page.WaitForTimeoutAsync(300);
 
-            // Fill the note field — a contenteditable pre with class "note" appears in .content
-            var noteField = page.Locator("pre.editableDiv.note[contenteditable='true'], pre[contenteditable='true'].note").First;
-            if (await noteField.CountAsync() == 0)
-            {
-                // Fallback: any contenteditable in the content area
-                noteField = page.Locator(".content [contenteditable='true']").First;
-            }
-            await noteField.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
+            // Same shape as the rename above: wait for the field instead of sleeping and then
+            // snapshotting for it.
+            var noteField = page
+                .Locator("pre.editableDiv.note[contenteditable='true'], pre[contenteditable='true'].note, "
+                    + ".content [contenteditable='true']")
+                .First;
+            await noteField.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
             await noteField.FillAsync(customNotes);
-            await page.WaitForTimeoutAsync(100);
+
+            // No Enter is pressed here, so the commit rides on the input event alone — which is
+            // exactly why the old 100ms was the least defensible number in this file. Wait for the
+            // store to carry the note.
+            await WaitForSelectionCustomAsync(page, selectionUid, "note", customNotes);
         }
     }
+
+    /// <summary>
+    /// Waits until the selection <paramref name="uid"/> carries <paramref name="expected"/> in
+    /// <paramref name="property"/> — the SAME property the state reader reports, so this asserts the
+    /// commit rather than the keystroke that started it.
+    /// </summary>
+    /// <remarks>
+    /// The property names are NR's, and they are not symmetric: a custom name lives on
+    /// <c>customName</c> but a custom note lives on <c>note</c> (JsHelpers reads exactly these). An
+    /// earlier version of this guessed `getCustomNotes()` from the C# parameter name and timed out
+    /// on every customization spec — inventing an accessor rather than reading the one in use.
+    /// </remarks>
+    private static Task WaitForSelectionCustomAsync(
+        IPage page, string uid, string property, string expected)
+        => page.WaitForFunctionAsync(
+            """
+            ([uid, property, expected]) => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                if (!army) { return false; }
+                let found = null;
+                const walk = node => {
+                    for (const s of (node.getSelections?.() || node.getChildren?.() || [])) {
+                        if (s.uid === uid) { found = s; return; }
+                        walk(s);
+                        if (found) { return; }
+                    }
+                };
+                for (const f of (army.getForces?.() || [])) {
+                    walk(f);
+                    if (found) { break; }
+                }
+                if (!found) { return false; }
+                return (found[property] ?? null) === expected;
+            }
+            """,
+            new[] { uid, property, expected },
+            new() { Timeout = 10_000 });
 
     /// <summary>
     /// Opens the "Unit Options" submenu in the editing panel header.
@@ -864,7 +983,19 @@ public static class NrUiActions
         if (await existingSubmenu.CountAsync() > 0)
         {
             await page.Keyboard.PressAsync("Escape");
-            await page.WaitForTimeoutAsync(200);
+
+            // Wait for it to be gone rather than for 200ms. Tolerated: if Escape does not close it,
+            // the button click below has its own actionability check and reports the overlay far
+            // better than a bare timeout here would.
+            try
+            {
+                await existingSubmenu.First.WaitForAsync(
+                    new() { State = WaitForSelectorState.Hidden, Timeout = 3_000 });
+            }
+            catch (TimeoutException)
+            {
+                // Still open — let the click speak for itself.
+            }
         }
 
         // Identify the button by the ICON'S CLASS, not its alt text. NR client v35 swapped every
@@ -921,19 +1052,31 @@ public static class NrUiActions
 
             // Click "Rename Force"
             await page.GetByText("Rename Force").First.ClickAsync(new() { Timeout = 3_000 });
-            await page.WaitForTimeoutAsync(300);
 
-            // Fill the inline rename field (contenteditable pre or input)
-            var nameInput = forceOptions.Locator("[contenteditable='true']").First;
-            if (await nameInput.CountAsync() == 0)
-            {
-                // Broader: any contenteditable that appeared in the force header area
-                nameInput = page.Locator(".forceSection [contenteditable='true'], .titreForce [contenteditable='true']").First;
-            }
-            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
+            // Wait for the field instead of sleeping and then snapshotting for it with CountAsync;
+            // one union locator covers both shapes the fallback was reaching for.
+            var nameInput = page
+                .Locator(".forceOptions [contenteditable='true'], "
+                    + ".forceSection [contenteditable='true'], .titreForce [contenteditable='true']")
+                .First;
+            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
             await nameInput.FillAsync(customName);
             await nameInput.PressAsync("Enter");
-            await page.WaitForTimeoutAsync(200);
+
+            // Wait for NR to commit the rename to the force, which is what the spec asserts.
+            await page.WaitForFunctionAsync(
+                """
+                ([uid, expected]) => {
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                    const f = (army?.getForces?.() || []).find(x => x.uid === uid);
+                    if (!f) { return false; }
+                    return (f.getCustomName?.() ?? f.customName) === expected;
+                }
+                """,
+                new[] { forceId, customName },
+                new() { Timeout = 10_000 });
         }
     }
 
@@ -1043,68 +1186,24 @@ public static class NrUiActions
         if (!isEditing)
         {
             await selEl.Locator(".displayName").ClickAsync();
-            await page.WaitForTimeoutAsync(300);
+
+            // Wait for the row to actually BE editing, which is the postcondition this method
+            // exists to establish — and, three lines up, exactly the state it tests for. A flat
+            // 300ms asserted nothing: everything downstream reads the panel with a SNAPSHOT
+            // (`TagOptionRowAsync` does a bare `querySelector("label[for=…]")`), so a panel that had
+            // not rendered yet was indistinguishable from a genuinely hidden entry, and got reported
+            // as one. That is a wrong ANSWER, not a slow one, which is why this site was singled out
+            // as correctness-critical rather than merely 42 seconds of lane time.
+            await page.WaitForFunctionAsync(
+                """
+                (uid) => document.querySelector(`[data-nrui-uid='${uid}']`)
+                    ?.classList.contains('editing') === true
+                """,
+                selectionUid,
+                new() { Timeout = 10_000 });
         }
     }
 
-    /// <summary>
-    /// Returns the number input for a child entry option by its label text.
-    /// Uses Filter-based locator rather than :text-is() inside :has() for reliability.
-    /// Not scoped to a specific parent element — the options panel is the only active
-    /// context, so any visible .inputOption on the page is from the correct panel.
-    /// </summary>
-    private static ILocator GetOptionsInput(IPage page, string entryName)
-    {
-        return page.Locator(".inputOption")
-            .Filter(new() { Has = page.Locator("span.optionLabel", new() { HasTextString = entryName }) })
-            .Locator("input[type='number']")
-            .First;
-    }
-
-    // ===== Internal: bookForce element tagging =====
-
-    /// <summary>
-    /// Navigates NR to show the specified force's catalogue in the left panel by clicking
-    /// its bookForce header. No-op when only one force exists (already active).
-    /// </summary>
-    private static async Task NavigateToForceAsync(IPage page, string forceUid)
-    {
-        var forceCount = await page.Locator(".bookForce").CountAsync();
-        if (forceCount <= 1)
-        {
-            return;
-        }
-
-        // Read force name from the LIVE Pinia currentList.army (not window.__bsspec.army,
-        // which can become stale after NR replaces the army object on UI mutations).
-        var forceName = await page.EvaluateAsync<string?>("""
-            ([targetUid]) => {
-                const pinia = document.querySelector('#__nuxt')
-                    ?.__vue_app__?.config?.globalProperties?.$pinia;
-                const army = pinia?._s?.get('lists')?.currentList?.army
-                    ?? window.__bsspec?.army;
-                if (!army) return null;
-                const force = (army.getForces?.() || []).find(f => f.uid === targetUid);
-                return force?.getName?.() ?? force?.name ?? null;
-            }
-            """, new[] { forceUid });
-
-        if (forceName == null)
-        {
-            return;
-        }
-
-        // Find the .bookForce containing this force's name, then click its header div.
-        // Filtering on .bookForce (the container) rather than the header div alone is more
-        // reliable: the container accumulates all force text, header text is a substring.
-        var targetBookForce = page.Locator(".bookForce")
-            .Filter(new() { HasText = forceName })
-            .First;
-        await targetBookForce.Locator("> div").First.ClickAsync(new() { Timeout = 5_000 });
-
-        // Wait for NR to re-render the left catalogue panel.
-        await page.WaitForTimeoutAsync(500);
-    }
 
     /// <summary>
     /// Annotates each visible .unit-wrap in the .unitList with a data-spec-entry-id attribute.
@@ -1517,7 +1616,13 @@ public static class NrUiActions
         if (await saveBtn.CountAsync() > 0)
         {
             await saveBtn.First.ClickAsync(new() { Timeout = 3_000 });
-            await page.WaitForTimeoutAsync(300);
+
+            // Wait for the panel to be closed, which is the postcondition and — per this method's
+            // own summary — what makes the left-panel elements reachable again. Callers index
+            // `.forceOptions` positionally right afterwards, so acting while the panel is still up
+            // reads the wrong list.
+            await page.Locator(".unitRow.editing").First.WaitForAsync(
+                new() { State = WaitForSelectorState.Hidden, Timeout = 10_000 });
         }
     }
 }
