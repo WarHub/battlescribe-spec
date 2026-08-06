@@ -133,7 +133,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// Currently uses JS (same as previous Setup flow). Will be replaced with UI-driven
     /// roster creation once the NR "Add List" flow is probed.
     /// </summary>
-    private async Task EnsureRosterCreatedAsync(string? catalogueId = null)
+    private async Task EnsureRosterCreatedAsync(string? catalogueId = null, string? forceEntryId = null)
     {
         if (_rosterCreated)
         {
@@ -155,13 +155,17 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         catalogueName ??= _catalogues?.FirstOrDefault(c => c.Library != true)?.Name;
 
+        // The force from that same first AddForce, so NR's Create List dialog builds the force the
+        // spec asked for rather than whichever one it would default to. Null for a step-0 read,
+        // which has no force in hand and keeps NR's default.
         var listId = await NrUiTiming.MeasureAsync("create-roster", () =>
-            NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, catalogueName));
+            NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, catalogueName, forceEntryId));
         _listId = listId;
 
         // Wait for editor to stabilize and bypass supporter paywall
         await NrUiTiming.MeasureAsync("wait-editor-loaded", () =>
             NrUiSetup.WaitForEditorLoadedAsync(Browser.Page));
+
         await NrUiTiming.MeasureAsync("bypass-paywall", () =>
             NrUiSetup.BypassSupporterPaywallAsync(Browser.Page));
 
@@ -239,7 +243,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private async Task<ActionOutputs> AddForceCoreAsync(string forceEntryId, string catalogueId)
     {
         var isFirstAddForce = !_rosterCreated;
-        await EnsureRosterCreatedAsync(catalogueId);
+        await EnsureRosterCreatedAsync(catalogueId, forceEntryId);
 
         string? uid;
 

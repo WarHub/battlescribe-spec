@@ -254,7 +254,8 @@ public static class NrUiSetup
     public static async Task<string?> CreateRosterAsync(
         IPage page,
         string rosterName,
-        string? preferredCatalogueName = null)
+        string? preferredCatalogueName = null,
+        string? preferredForceEntryId = null)
     {
         // Navigate to MyLists
         var listsLink = page.Locator("a[href*='MyLists']").First;
@@ -421,26 +422,98 @@ public static class NrUiSetup
                 "spec failing only here is an NR-UI limitation, not a data error.");
         }
 
-        // NR's Create List dialog renders a FORCE dropdown when the game system and the catalogue
-        // both define force entries, and this driver does not set it — so the roster begins life
-        // with whichever option NR defaults to, and this sleep is what makes that default the right
-        // one (draining `manager.loadedCatalogues` re-renders the dropdown and flips it).
+        // Tell NR which force to build, instead of waiting for it to default to the right one.
         //
-        // Selecting the intended option directly was tried and REVERTED. It is the obviously correct
-        // shape and it made things worse: locating the force by exact option text, in the first
-        // VISIBLE select after the faction one, picked a different control on some specs and built
-        // the wrong force — 4 specs failed with "no selectable row for entry 'se-unit-a' … Panel
-        // offered: rows=[?:Few Units]", i.e. a panel belonging to a force nobody asked for. It also
-        // did not remove the 30s click timeouts it was supposed to be unrelated to.
+        // NR renders a FORCE dropdown next to the faction one whenever the roster could start from
+        // more than one force entry. This driver never set it, so the roster began life with NR's
+        // default — and a flat 1500ms here was what made that default correct, because draining
+        // `manager.loadedCatalogues` re-renders the dropdown and flips it. 1.5s x 363 specs = 9
+        // minutes spent nudging a control rather than setting it.
         //
-        // What that attempt did establish, and what the next one should start from: BOTH options are
-        // present from the dialog's first paint (t=25ms), so nothing is being waited FOR here; the
-        // dropdown is simply not identified reliably by "second visible select containing an option
-        // with this exact name". Identifying it by its label, or by NR's own component state, is the
-        // missing piece. Until then, 1.5s x 363 specs buys 12 correct answers, which is the better
-        // trade.
-        await NrUiTiming.MeasureAsync("create-roster/sleep-force-dropdown-default", () =>
-            page.WaitForTimeoutAsync(1500));
+        // The option carries the force ENTRY ID as its bound value, which is the whole fix:
+        //
+        //   select#0  opt _value = {id: 'cat-1', name: …}   <- faction, binds a catalogue OBJECT
+        //   select#1  opt _value = 'fe-gs' / 'fe-cat'        <- force,   binds the entry id STRING
+        //
+        // So the control identifies itself by what it carries: a string equal to the requested entry
+        // id can only be a force option, never the faction one. No position, no label, and no name —
+        // names are ambiguous by design here (force-multi-catalogue-two-forces has two "Patrol"
+        // forces), which is why the previous attempt at this failed.
+        //
+        // That attempt is worth recording because its two mistakes are easy to repeat. It matched
+        // option TEXT and required the select to be VISIBLE. But the force select always exists —
+        // NR just hides it when there is only one option — so the visibility filter skipped exactly
+        // the specs that had nothing to choose, while the text match wandered onto other controls.
+        // Measured at both t=0 and t+1500ms, the option list is identical; only the default differs.
+        if (!string.IsNullOrEmpty(preferredForceEntryId))
+        {
+            await NrUiTiming.MeasureAsync("create-roster/select-force", async () =>
+            {
+                var found = await page.EvaluateAsync<int[]>(
+                    """
+                    (wantEntryId) => {
+                        const box = document.querySelector('.box');
+                        if (!box) { return [-1, -1, 0]; }
+                        const sels = [...box.querySelectorAll('select')];
+                        for (let i = 0; i < sels.length; i++) {
+                            const opts = [...sels[i].options];
+                            // Vue 3 stashes a non-string v-model value on the element as `_value`;
+                            // for force options it is the entry id itself.
+                            const j = opts.findIndex(o => o._value === wantEntryId);
+                            if (j >= 0) { return [i, j, sels[i].selectedIndex]; }
+                        }
+                        return [-1, -1, 0];
+                    }
+                    """,
+                    preferredForceEntryId);
+
+                if (found is not [var selectIndex, var optionIndex, var selectedIndex]
+                    || selectIndex < 0)
+                {
+                    // No option carries this id. The ordinary case for a spec whose force lives only
+                    // in the game system and is the sole choice — NR then has nothing to get wrong.
+                    return;
+                }
+
+                if (optionIndex == selectedIndex)
+                {
+                    // Already what NR picked. Skip rather than re-select: a redundant change event
+                    // makes NR rebuild the dialog for no reason.
+                    return;
+                }
+
+                // Set it through the DOM and announce it, rather than through Playwright's
+                // SelectOptionAsync. That call needs the control to be visible and actionable, and
+                // this one legitimately is not when NR collapses a single-choice dropdown — the very
+                // case the previous attempt filtered out and then mis-handled. Vue's v-model listens
+                // for `change`, so dispatching it is what "the user picked this" means here.
+                await page.EvaluateAsync(
+                    """
+                    ([selectIndex, optionIndex]) => {
+                        const box = document.querySelector('.box');
+                        const sel = [...box.querySelectorAll('select')][selectIndex];
+                        sel.selectedIndex = optionIndex;
+                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    """,
+                    new[] { selectIndex, optionIndex });
+            });
+        }
+
+        // Let NR finish parsing the catalogue BEFORE the list is created.
+        //
+        // Position matters more than duration here, which cost a lane run to learn: the same wait
+        // placed AFTER creation left 63 specs failing, because a list built from a half-parsed
+        // catalogue is wired to incomplete data and no later waiting repairs it. The '+' clicks that
+        // then get discarded are a symptom of the roster, not of the click.
+        //
+        // This replaces a flat 1500ms and costs about the same — measured avg 1467ms — because the
+        // 1500ms was never padding: it is how long NR's parse actually takes. That is the honest
+        // answer to "why is this lane slow here", and it is worth stating plainly so nobody spends
+        // another day trying to tune it away. The condition still earns its place over the constant:
+        // it adapts when the parse is quick, and it does not under-wait the specs that need longer,
+        // which the constant did (measured max 3380ms, more than twice the old sleep).
+        await WaitForCatalogueWorkSettledAsync(page);
 
         // Set list name
         await NrUiTiming.MeasureAsync("create-roster/fill-name", async () =>
@@ -629,6 +702,51 @@ public static class NrUiSetup
     /// Waits for the roster editor to fully load after navigating to /app/Lists/{listKey}.
     /// Once loaded, syncs window.__bsspec.army to currentList.army (the re-hydrated roster).
     /// </summary>
+    /// <summary>
+    /// Waits for NR to finish the catalogue work it starts when a faction is chosen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what the 1500ms sleep during roster creation was really buying, and it is why deleting
+    /// that sleep broke 8 specs on the FIRST action rather than during creation: NR renders and wires
+    /// the unit list before it has finished, so a '+' clicked in that window is silently discarded —
+    /// not delayed, discarded, with a 10s wait proving it.
+    /// </para>
+    /// <para>
+    /// `manager.loadedCatalogues` draining to empty is the observable end of that work. It was found
+    /// by snapshotting the whole store graph at the race and again 1500ms later, in the sequential
+    /// context where the failure lives: of ~98,000 facts it was the only one that moved.
+    /// </para>
+    /// <para>
+    /// Bounded and TOLERATED, because draining is not universal — some specs never populate
+    /// `loadedCatalogues` at all, and for those there is nothing to wait for. A hard wait would hang
+    /// them; this costs them the bound and costs everyone else milliseconds.
+    /// </para>
+    /// </remarks>
+    public static Task WaitForCatalogueWorkSettledAsync(IPage page, int timeoutMs = 2_500)
+        => NrUiTiming.MeasureAsync("wait-catalogue-work-settled", async () =>
+        {
+            try
+            {
+                await page.WaitForFunctionAsync(
+                    """
+                    () => {
+                        const pinia = document.querySelector('#__nuxt')
+                            ?.__vue_app__?.config?.globalProperties?.$pinia;
+                        const mgr = pinia?._s?.get('systemsStore')?._selectedSystem?.manager;
+                        if (!mgr) { return true; }
+                        return Object.keys(mgr.loadedCatalogues || {}).length === 0;
+                    }
+                    """,
+                    null,
+                    new() { Timeout = timeoutMs });
+            }
+            catch (TimeoutException)
+            {
+                // Never drained — nothing was pending. Proceed.
+            }
+        });
+
     public static async Task WaitForEditorLoadedAsync(IPage page, int timeoutMs = 30_000)
     {
         // Wait for the editor to have both book and army loaded

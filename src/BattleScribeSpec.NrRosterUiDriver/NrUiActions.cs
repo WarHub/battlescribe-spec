@@ -319,6 +319,36 @@ public static class NrUiActions
             await entryRow.Locator(".addButton").First.ClickAsync(new() { Timeout = 10_000 });
             var selectionUid = await WaitForNewSelectionUidAsync(page, before);
 
+            // NR can DISCARD the first '+' of a freshly created roster.
+            //
+            // It is not slowness — the wait above is 10s and the selection never arrives. The row is
+            // rendered and clickable while NR is still finishing the catalogue work it starts when
+            // the faction is chosen, and a click that lands in that window does nothing at all. It
+            // used to be hidden by a flat 1500ms during roster creation, which simply ran the clock
+            // out before the first step; removing that sleep exposed it on 8 specs.
+            //
+            // Retried rather than waited out, and safe to retry precisely because it is verifiable:
+            // re-read the selections and only click again if NOTHING was added, so a slow-but-real
+            // first click can never be turned into two selections.
+            if (selectionUid is null)
+            {
+                var after = await GetAllSelectionUidsAsync(page);
+                if (after.Except(before).Any())
+                {
+                    // It did land, just after the deadline. Take it rather than clicking again.
+                    return after.Except(before).First();
+                }
+
+                // One retry, and deliberately WITHOUT re-tagging first. Re-running
+                // TagUnitListEntriesAsync here looked like the obvious repair for a row whose
+                // `data-spec-entry-id` had been lost to a re-render, and it was catastrophic:
+                // 4 failures became 52 and the lane went from 16m44s to 47m31s. Stamping attributes
+                // onto Vue-managed rows makes NR patch them, so tagging mid-flow perturbs exactly
+                // the render it was meant to survive. The locators re-resolve on use anyway.
+                await entryRow.Locator(".addButton").First.ClickAsync(new() { Timeout = 10_000 });
+                selectionUid = await WaitForNewSelectionUidAsync(page, before);
+            }
+
             // A click that produced no selection means the row was not a catalogue entry. Returning
             // null here let that surface two steps later as a wrong ASSERTION instead of an error —
             // which is how "clicked the child-force picker" was reported as "expected 1 child forces
