@@ -41,41 +41,78 @@ public static class NrUiSetup
         // on this page — so its visibility IS "the route settled and painted", which is what the sleep
         // was standing in for. Measured at ~30ms against a flat 500ms, and strictly stronger: a slow
         // render satisfies this and did not satisfy the sleep.
-        await NrUiTiming.MeasureAsync("load-gamedata/wait-mysystems-rendered", () =>
-            page.GetByText("Add more games").First.WaitForAsync(
-                new() { State = WaitForSelectorState.Visible, Timeout = 15_000 }));
-
-        // Inject the directory picker mock — AFTER the navigation above, not before it.
+        // Install the system from MySystems, retrying the WHOLE sequence if NR navigates away.
         //
-        // It used to be the first thing this method did, which put an `evaluate` immediately before a
-        // navigation and immediately after the previous spec's cleanup navigation. Both are hazards:
-        // the mock is installed into a context the next line is about to change, and the evaluate can
-        // land while a route change is still settling, which Playwright reports as "Execution context
-        // was destroyed, most likely because of a navigation".
+        // The three steps below (be on MySystems, open the install popup, choose Add From Folder)
+        // are one unit of work, and the page can be taken out from under any of them: the previous
+        // spec's navigation is still in flight — its CreateRosterAsync clicked the MyLists nav link —
+        // and when it lands it takes this page with it. The controls used here exist only on
+        // MySystems, so they were visible, then gone.
         //
-        // Measured: running 56 specs sequentially through one shared browser (the widened NR-UI
-        // roster lane) hit it once in two runs — invisible to `bs-spec run`, which gives every spec
-        // its own engine, and invisible to the old one-spec lane, which never had a previous spec to
-        // race with. The mock is only read when "Add From Folder" is clicked below, so installing it
-        // here is both safe and sufficient.
-        await NrUiTiming.MeasureAsync("load-gamedata/inject-picker-mock", () =>
-            InjectDirectoryPickerMockAsync(page, files));
-
-        // Click "Add More Games" to open the install popup
-        var addMoreGames = page.GetByText("Add more games");
-        await NrUiTiming.MeasureAsync("load-gamedata/click-add-more-games", () =>
-            addMoreGames.ClickAsync());
-
-        // Click "Add From Folder" which triggers showDirectoryPicker()
+        // That was misread twice, as an animating element and then as a re-render, and "fixed" twice
+        // by guarding a single step. Guarding the WAIT was not enough precisely because the drift
+        // happens after it: the wait passes, and the click a moment later is on MyLists. Only the
+        // failure message printing page.Url settled what was actually happening.
         //
-        // No wait between the two clicks. The 500ms that used to sit here was standing in for "the
-        // install popup has rendered its options", and `ClickAsync` already waits for exactly that —
-        // attached, visible, stable, receiving events — on the specific element it needs, for up to
-        // 30s. The sleep could only ever be redundant with that wait or too short for it. At 363
-        // specs it cost 3 minutes of lane time to be neither.
-        var addFromFolder = page.GetByText("Add From Folder");
-        await NrUiTiming.MeasureAsync("load-gamedata/click-add-from-folder", () =>
-            addFromFolder.ClickAsync());
+        // Retried rather than waited out. Losing a race to another navigation is fixed by asserting
+        // the route again, not by more patience — and only when the page really has drifted, so a
+        // genuine failure still fails on its first attempt instead of three times as slowly.
+        var addMoreGames = page.GetByText("Add more games").First;
+        var addFromFolder = page.GetByText("Add From Folder").First;
+
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await NrUiTiming.MeasureAsync("load-gamedata/wait-mysystems-rendered", async () =>
+                {
+                    await page.WaitForFunctionAsync(
+                        "() => location.pathname.includes('MySystems')",
+                        null,
+                        new() { Timeout = 10_000 });
+                    await addMoreGames.WaitForAsync(
+                        new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+                    await WaitForTransitionsAsync(page);
+                });
+
+                // Inject the directory picker mock — AFTER the navigation, not before it.
+                //
+                // It used to be the first thing this method did, which put an `evaluate` immediately
+                // before a navigation and immediately after the previous spec's cleanup navigation.
+                // Both are hazards: the mock is installed into a context the next line is about to
+                // change, and the evaluate can land while a route change is still settling, which
+                // Playwright reports as "Execution context was destroyed".
+                //
+                // It also has to be re-injected per attempt: a navigation clears it.
+                await NrUiTiming.MeasureAsync("load-gamedata/inject-picker-mock", () =>
+                    InjectDirectoryPickerMockAsync(page, files));
+
+                await NrUiTiming.MeasureAsync("load-gamedata/click-add-more-games", () =>
+                    ClickWhenReadyAsync(page, addMoreGames, "Add more games"));
+
+                // Triggers showDirectoryPicker(). No wait before it: the 500ms that used to sit here
+                // stood in for "the popup has rendered its options", which ClickAsync already waits
+                // for — on the specific element, with actionability — so the sleep could only be
+                // redundant or too short.
+                await NrUiTiming.MeasureAsync("load-gamedata/click-add-from-folder", () =>
+                    ClickWhenReadyAsync(page, addFromFolder, "Add From Folder"));
+
+                break;
+            }
+            catch (Exception ex) when (attempt < 3 && ex is TimeoutException or InvalidOperationException)
+            {
+                var path = await page.EvaluateAsync<string>("() => location.pathname");
+                if (path.Contains("MySystems", StringComparison.Ordinal))
+                {
+                    throw; // Still on the right page — this is a real failure, not a lost race.
+                }
+
+                Console.Error.WriteLine(
+                    $"[nr-ui] navigated to '{path}' mid-install (attempt {attempt}) — returning to "
+                    + "MySystems and starting the sequence again.");
+                await browser.NavigateToRouteAsync("/app/MySystems");
+            }
+        }
 
         // Wait for NR to finish loading (system appears marked as local)
         await NrUiTiming.MeasureAsync("load-gamedata/wait-local-library", () => page.WaitForFunctionAsync(
@@ -221,7 +258,8 @@ public static class NrUiSetup
     {
         // Navigate to MyLists
         var listsLink = page.Locator("a[href*='MyLists']").First;
-        await NrUiTiming.MeasureAsync("create-roster/click-mylists", () => listsLink.ClickAsync());
+        await NrUiTiming.MeasureAsync("create-roster/click-mylists", () =>
+            ClickWhenReadyAsync(page, listsLink, "MyLists nav link"));
 
         // Wait for the MyLists route, rather than for 500ms to pass.
         //
@@ -230,14 +268,19 @@ public static class NrUiSetup
         // `ClickAsync`'s auto-waiting cannot help with that: it protects against an element being
         // absent, never against the wrong element being present. Gating on the route first means the
         // click can only resolve against MyLists.
-        await NrUiTiming.MeasureAsync("create-roster/wait-mylists-route", () => page.WaitForFunctionAsync(
-            "() => location.pathname.includes('MyLists')",
-            null,
-            new() { Timeout = 15_000 }));
+        await NrUiTiming.MeasureAsync("create-roster/wait-mylists-route", async () =>
+        {
+            await page.WaitForFunctionAsync(
+                "() => location.pathname.includes('MyLists')",
+                null,
+                new() { Timeout = 15_000 });
+            await WaitForTransitionsAsync(page);
+        });
 
         // Click "New" to open Create List dialog (the nav link with href="#")
         var newBtn = page.Locator("a[href='#']", new() { HasTextString = "New" });
-        await NrUiTiming.MeasureAsync("create-roster/click-new", () => newBtn.ClickAsync());
+        await NrUiTiming.MeasureAsync("create-roster/click-new", () =>
+            ClickWhenReadyAsync(page, newBtn, "New list button"));
 
         var box = page.Locator(".box").First;
 
@@ -353,41 +396,6 @@ public static class NrUiSetup
             return await handle.JsonValueAsync<string>();
         });
 
-        // ...and then, for now, still wait.
-        //
-        // This 1500ms is NOT what the comment above it used to claim, and it is not what three
-        // successive replacements assumed either. Every one of them was falsified by measurement, so
-        // the sequence is recorded here to stop the next attempt repeating it:
-        //
-        //   "it gives the error a chance to render"    — false: both outcomes are positively
-        //                                                observable (see the race above), and the
-        //                                                dialog settles by t=25ms.
-        //   "it waits for the catalogue to load"       — false: building the roster at t=20ms yields
-        //                                                a byte-identical army on a fresh browser.
-        //   "it waits for manager.loadedCatalogues"    — false: that is populated when the SYSTEM is
-        //                                                installed, so the condition is vacuous.
-        //   "it waits for catalogueFiles[id].catalogue"— false: also already present; still 12 fails.
-        //
-        // Snapshotting the state at the race and again 1500ms later, in the SEQUENTIAL context where
-        // the failure actually lives, leaves exactly one field moving — `manager.loadedCatalogues`
-        // draining to empty — and one telling piece of dialog text on the specs that fail:
-        //
-        //   "Create List | Faction … | List Name | Force  GS Detachment  Catalogue Detachment"
-        //
-        // When the game system AND the catalogue both define force entries, NR renders a FORCE
-        // dropdown, and this driver never touches it — so NR creates whichever the dropdown defaults
-        // to. Draining `loadedCatalogues` changes that default. That is why the sleep "works", and it
-        // is why every state-based replacement failed: the thing being waited for is not a load at
-        // all, it is a re-render that flips a control the driver should be setting explicitly.
-        //
-        // So this is a driver gap wearing a timing costume, and the fix is to select the intended
-        // force in that dropdown rather than to wait for NR to guess right. That is a behaviour
-        // change with its own blast radius (it interacts with AddForceCoreAsync's reconciliation of
-        // NR's auto-created force), so it is deliberately NOT bundled into a performance change.
-        // Until then the sleep stays: 9 minutes of lane time is a bad trade for 12 wrong answers.
-        await NrUiTiming.MeasureAsync("create-roster/sleep-force-dropdown-default", () =>
-            page.WaitForTimeoutAsync(1500));
-
         // NR refuses to build a list from a catalogue it cannot load. Report the observation and the
         // causes actually known, rather than asserting one that was never checked.
         //
@@ -412,6 +420,27 @@ public static class NrUiSetup
                 "`newrecruit` engine builds these rosters fine — it is the UI dialog that refuses, so a " +
                 "spec failing only here is an NR-UI limitation, not a data error.");
         }
+
+        // NR's Create List dialog renders a FORCE dropdown when the game system and the catalogue
+        // both define force entries, and this driver does not set it — so the roster begins life
+        // with whichever option NR defaults to, and this sleep is what makes that default the right
+        // one (draining `manager.loadedCatalogues` re-renders the dropdown and flips it).
+        //
+        // Selecting the intended option directly was tried and REVERTED. It is the obviously correct
+        // shape and it made things worse: locating the force by exact option text, in the first
+        // VISIBLE select after the faction one, picked a different control on some specs and built
+        // the wrong force — 4 specs failed with "no selectable row for entry 'se-unit-a' … Panel
+        // offered: rows=[?:Few Units]", i.e. a panel belonging to a force nobody asked for. It also
+        // did not remove the 30s click timeouts it was supposed to be unrelated to.
+        //
+        // What that attempt did establish, and what the next one should start from: BOTH options are
+        // present from the dialog's first paint (t=25ms), so nothing is being waited FOR here; the
+        // dropdown is simply not identified reliably by "second visible select containing an option
+        // with this exact name". Identifying it by its label, or by NR's own component state, is the
+        // missing piece. Until then, 1.5s x 363 specs buys 12 correct answers, which is the better
+        // trade.
+        await NrUiTiming.MeasureAsync("create-roster/sleep-force-dropdown-default", () =>
+            page.WaitForTimeoutAsync(1500));
 
         // Set list name
         await NrUiTiming.MeasureAsync("create-roster/fill-name", async () =>
@@ -475,6 +504,125 @@ public static class NrUiSetup
             """));
 
         return listKey;
+    }
+
+    /// <summary>
+    /// Waits out NR's page transitions, so a click is not aimed at a moving target.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Playwright refuses to click an element whose bounding box is still changing, and reports it
+    /// as <c>element is not stable</c> after burning its full 30s default. That is exactly what 11
+    /// of 363 specs did once the fixed sleeps came out of this file: the sleeps had been sitting
+    /// through NR's route transitions, so nothing ever clicked mid-animation. The clicks were not
+    /// blocked by an overlay and were not too early in any state sense — the target was moving.
+    /// </para>
+    /// <para>
+    /// Running animations are the precise condition, so wait for those rather than for a duration.
+    /// Infinite ones are excluded deliberately: a spinner never ends, and waiting for it would
+    /// convert a 30s flake into a guaranteed hang.
+    /// </para>
+    /// <para>
+    /// Tolerated rather than asserted. If something does animate forever, the click's own
+    /// actionability check is still there and still reports it — this is a way to arrive at a good
+    /// moment, not another thing that can fail setup.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Clicks <paramref name="locator"/>, falling back to a dispatched event if NR will not hold it
+    /// still.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Playwright will not click an element whose bounding box is still changing, and says so —
+    /// <c>element is not stable</c> — after burning its full 30s default. Waiting for CSS animations
+    /// to finish (<see cref="WaitForTransitionsAsync"/>) removed most of it, 11 failing specs down to
+    /// 3, but not all: the remaining movement is LAYOUT REFLOW as NR's lists fill in, which runs no
+    /// animation and so is invisible to <c>document.getAnimations()</c>.
+    /// </para>
+    /// <para>
+    /// A forced click is the obvious next step and the wrong one: <c>Force = true</c> still clicks a
+    /// screen COORDINATE, so against a moving target it lands wherever the element used to be.
+    /// Dispatching the event to the element instead removes position from the question entirely —
+    /// the handler runs on the node we resolved, whatever it is doing on screen.
+    /// </para>
+    /// <para>
+    /// The normal path stays first and stays honest: a real click, with its full actionability
+    /// checks, just bounded to 8s so a moving target costs seconds rather than half a minute. The
+    /// dispatch is the fallback, not the default, because a real click is what a user does and it
+    /// catches things a synthetic event cannot — an element covered by an overlay, for one.
+    /// </para>
+    /// </remarks>
+    private static async Task ClickWhenReadyAsync(IPage page, ILocator locator, string what)
+    {
+        await WaitForTransitionsAsync(page);
+        try
+        {
+            await locator.ClickAsync(new() { Timeout = 8_000 });
+            return;
+        }
+        catch (TimeoutException)
+        {
+            // Falls through to the dispatch below.
+        }
+
+        // Re-establish the element before dispatching.
+        //
+        // A click can fail here for two different reasons and they need different handling. Most are
+        // a MOVING target — NR reflowing — and a dispatch fixes those, since it delivers the event to
+        // the node rather than to a screen coordinate. But three specs failed the dispatch too, which
+        // a moving element cannot cause: dispatch only needs the node ATTACHED. Those had lost it
+        // entirely between the visibility wait above and this click, because NR re-rendered the page
+        // in between.
+        //
+        // So wait for it again rather than assuming it is still there. Locators re-resolve, so if NR
+        // put the control back this finds it; the earlier version went straight to dispatch and
+        // reported a 5s timeout whose message blamed reflow — a cause it had never checked.
+        try
+        {
+            await locator.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10_000 });
+        }
+        catch (TimeoutException)
+        {
+            throw new InvalidOperationException(
+                $"NR UI: '{what}' did not come back after the click failed — it was visible a moment "
+                + $"earlier and is now gone for 10s (page: {page.Url}). This is NR re-rendering the "
+                + "page out from under the step, not a slow animation.");
+        }
+
+        Console.Error.WriteLine(
+            $"[nr-ui] '{what}' would not hold still for a real click within 8s — dispatching the "
+            + "event directly.");
+
+        // Bounded too. DispatchEventAsync carries the same 30s default as ClickAsync, so leaving it
+        // open turned an element that was genuinely absent into 8s + 30s = 38s of waiting rather
+        // than the 30s it cost before this fallback existed — measured, on the run that added it.
+        await locator.DispatchEventAsync("click", eventInit: null, options: new() { Timeout = 5_000 });
+    }
+
+    private static async Task WaitForTransitionsAsync(IPage page, int timeoutMs = 5_000)
+    {
+        try
+        {
+            await page.WaitForFunctionAsync(
+                """
+                () => {
+                    if (!document.getAnimations) { return true; }
+                    return !document.getAnimations().some(a => {
+                        if (a.playState !== 'running') { return false; }
+                        const t = a.effect && a.effect.getComputedTiming
+                            ? a.effect.getComputedTiming() : null;
+                        return !t || t.iterations !== Infinity;
+                    });
+                }
+                """,
+                null,
+                new() { Timeout = timeoutMs });
+        }
+        catch (TimeoutException)
+        {
+            // Something is animating indefinitely. Let the click speak for itself.
+        }
     }
 
     /// <summary>
