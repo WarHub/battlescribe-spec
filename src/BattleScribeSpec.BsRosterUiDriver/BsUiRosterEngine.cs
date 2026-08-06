@@ -581,24 +581,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// fetch real game data over the staged spec data.
     /// </para>
     /// </remarks>
-    private async Task HandleStartupDialogsAsync()
-    {
-        var deadline = DateTime.UtcNow.AddMilliseconds(StartupDialogCeilingMs);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (await HasWindowAsync(ConfirmWindowTitle))
-            {
-                if (await TryFireButtonAsync("#btnNegative", ConfirmWindowTitle))
-                {
-                    await WaitForWindowToCloseAsync(ConfirmWindowTitle);
-                }
-
-                return;
-            }
-
-            await Task.Delay(StartupDialogPollMs);
-        }
-    }
+    private Task HandleStartupDialogsAsync()
+        => ConnectedClient.DismissStartupConfirmAsync(ConfirmWindowTitle, StartupDialogCeilingMs);
 
     /// <summary>
     /// Waits until the agent's FX thread is pumping again, instead of assuming a fixed backoff.

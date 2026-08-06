@@ -102,25 +102,10 @@ public sealed class BsGameDataUiProbe : IAsyncDisposable
 
     private async Task HandleStartupDialogsAsync(TextWriter log)
     {
-        await Task.Delay(2000);
-        var windows = await _client!.GetWindowsAsync();
-        if (windows is not System.Text.Json.Nodes.JsonArray arr)
-        {
-            return;
-        }
-
-        foreach (var w in arr)
-        {
-            var title = w?["title"]?.GetValue<string>();
-            if (title is not null && title.Contains("Confirm"))
-            {
-                log.WriteLine("  Dismissing startup dialog...");
-                await _client.FireButtonAsync("#btnNegative", windowTitle: "Confirm");
-                log.WriteLine("  Dialog dismissed.");
-                await Task.Delay(500);
-                break;
-            }
-        }
+        // One shared, condition-driven implementation — see AgentClient.DismissStartupConfirmAsync.
+        log.WriteLine("  Checking for the startup dialog...");
+        await _client!.DismissStartupConfirmAsync();
+        log.WriteLine("  Startup dialog handled.");
     }
 
     public async ValueTask DisposeAsync()

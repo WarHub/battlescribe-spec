@@ -350,26 +350,19 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         await CallActionAsync("gamedataLoadFilesAction", loadParams);
     }
 
-    private async Task HandleStartupDialogsAsync()
+    /// <summary>
+    /// Dismisses BattleScribe's first-launch "download data?" prompt.
+    /// </summary>
+    /// <remarks>
+    /// Delegates to <see cref="AgentClient.DismissStartupConfirmAsync"/>. This used to be its own
+    /// copy — sleep 2000ms, check once, sleep 500ms after firing — and was one of four such copies
+    /// across the two engines and two probes, all carrying the same single-sample-at-a-fixed-instant
+    /// bug. Both waits are now conditions, in one place.
+    /// </remarks>
+    private Task HandleStartupDialogsAsync()
     {
-        await Task.Delay(2000);
-        var windows = await _client!.GetWindowsAsync();
-        if (windows is not JsonArray arr)
-        {
-            return;
-        }
-
-        foreach (var w in arr)
-        {
-            var title = w?["title"]?.GetValue<string>();
-            if (title is not null && title.Contains("Confirm"))
-            {
-                Console.Error.WriteLine("[bs-gamedata-ui] Dismissing startup dialog...");
-                await _client.FireButtonAsync("#btnNegative", windowTitle: "Confirm");
-                await Task.Delay(500);
-                break;
-            }
-        }
+        Console.Error.WriteLine("[bs-gamedata-ui] Checking for the startup dialog...");
+        return _client!.DismissStartupConfirmAsync();
     }
 
     private async Task<GameDataState> GetStateAsync()
