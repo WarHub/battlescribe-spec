@@ -201,8 +201,10 @@ public class RosterActions {
         // Phase 1: Select the force in the roster tree
         runOnFx(() -> selectTreeItemById("#treeRoster", forceId));
 
-        // Brief pause to allow catalogue tree to refresh for the selected force
-        sleep(300);
+        // The catalogue tree is rebuilt for the selected force, so wait for the entry to be THERE
+        // rather than for 300ms. Clicking into a stale tree either misses or, worse, hits the
+        // like-named entry of the previously selected force.
+        waitForTreeItem("#treeCatalogue", entryId);
 
         // Phase 2: Double-click the entry in the catalogue tree
         runOnFx(() -> clickTreeItemById("#treeCatalogue", entryId, true));
@@ -240,7 +242,8 @@ public class RosterActions {
         runOnFx(() -> {
             selectComboBoxItemByText("#cboGameSystem", gameSystemName, NEW_ROSTER_WINDOW);
         });
-        sleep(300);
+        // No sleep: the game system's effect on this dialog is that #btnAddForce becomes usable,
+        // and the Add Force window wait below is the condition that proves it.
 
         // Set cost limit if specified
         if (costLimit >= 0) {
@@ -257,7 +260,9 @@ public class RosterActions {
         runOnFx(() -> {
             selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW);
         });
-        sleep(300);
+        // Choosing a catalogue repopulates the force-entry combo asynchronously. Wait for the
+        // entry to be OFFERED rather than sleeping — see waitForComboBoxItem.
+        waitForComboBoxItem("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
         runOnFx(() -> {
             selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
@@ -312,7 +317,8 @@ public class RosterActions {
 
         // Select catalogue and force entry
         runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW));
-        sleep(300);
+        // See waitForComboBoxItem: the force-entry list is rebuilt from the chosen catalogue.
+        waitForComboBoxItem("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
         runOnFx(() -> {
             selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
@@ -353,7 +359,8 @@ public class RosterActions {
         waitForWindow(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
 
         runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW));
-        sleep(300);
+        // See waitForComboBoxItem: the force-entry list is rebuilt from the chosen catalogue.
+        waitForComboBoxItem("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
         runOnFx(() -> {
             selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
@@ -391,13 +398,15 @@ public class RosterActions {
 
         // Click the remove button on the force's tree cell (fires async, triggers confirm dialog)
         runOnFx(() -> clickTreeCellButton("#treeForces", forceId, EDIT_ROSTER_WINDOW));
-        sleep(500);
 
-        // Dismiss confirmation dialog
+        // The remove fires async and raises a confirmation. Wait for that window rather than
+        // guessing at it: clicking YES into a dialog that has not appeared does nothing, and the
+        // force then survives a "removeForce" that reported success.
+        waitForWindow(CONFIRM_WINDOW, EDIT_ROSTER_WINDOW);
         runOnFx(() -> clickButtonByText("YES", CONFIRM_WINDOW));
 
-        // Close Edit Roster
-        sleep(300);
+        // Close Edit Roster once the confirmation is gone.
+        waitForWindowClose(CONFIRM_WINDOW, EDIT_ROSTER_WINDOW);
         runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
         waitForWindowClose(EDIT_ROSTER_WINDOW);
 
@@ -473,13 +482,13 @@ public class RosterActions {
             String targetId = selectionId != null ? selectionId : forceId;
             runOnFx(() -> selectTreeItemById("#treeRoster", targetId, MAIN_WINDOW));
         }
-        sleep(300);
-
         // Call showCustomiseSelectableDialog via reflection on the controller.
         // This is the same code path as the context menu "Customise Name..." item,
         // which has NO supporter check (unlike the edit panel button).
+        //
+        // No sleeps around this: the reflective call runs on the FX thread (so the selection above
+        // has been applied by the time it executes), and the dialog it opens is awaited below.
         runOnFx(() -> invokeShowCustomiseDialog(MAIN_WINDOW));
-        sleep(500);
 
         // Wait for the customization dialog
         String customizeWindow = waitForFirstWindow("Customise", "Customize", "Name");
@@ -709,7 +718,13 @@ public class RosterActions {
 
         // Select the parent selection in the roster tree
         runOnFx(() -> selectTreeItemById("#treeRoster", parentSelectionId, MAIN_WINDOW));
-        sleep(500);
+        // No sleep after a tree selection. selectTreeItemById runs inside runOnFx, which blocks
+        // until the FX task completes, and JavaFX dispatches selection listeners synchronously —
+        // so the edit panel below has already been rebuilt when this returns.
+        //
+        // If BattleScribe ever defers that rebuild internally, the next step fails LOUDLY with
+        // "control not found" rather than acting on a stale panel, which is the failure mode to
+        // want here.
 
         // Resolve entry name: prefer passed name, fall back to roster state lookup
         if (entryName == null || entryName.isEmpty()) {
@@ -765,7 +780,13 @@ public class RosterActions {
         // Select the parent in the roster tree
         final String parentIdFinal = parentId;
         runOnFx(() -> selectTreeItemById("#treeRoster", parentIdFinal, MAIN_WINDOW));
-        sleep(500);
+        // No sleep after a tree selection. selectTreeItemById runs inside runOnFx, which blocks
+        // until the FX task completes, and JavaFX dispatches selection listeners synchronously —
+        // so the edit panel below has already been rebuilt when this returns.
+        //
+        // If BattleScribe ever defers that rebuild internally, the next step fails LOUDLY with
+        // "control not found" rather than acting on a stale panel, which is the failure mode to
+        // want here.
 
         // Try decrement via control by label
         final String finalEntryName = entryName;
@@ -776,10 +797,11 @@ public class RosterActions {
 
         if (!clicked.get()) {
             // Fallback: select the selection itself and press DELETE
+            // Both calls block on the FX thread and the selection is applied synchronously, so
+            // the key press below already lands on the intended row.
             runOnFx(() -> {
                 selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW);
             });
-            sleep(300);
             runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
         }
 
@@ -826,7 +848,13 @@ public class RosterActions {
         // Select the parent in the roster tree
         final String parentIdFinal = parentId;
         runOnFx(() -> selectTreeItemById("#treeRoster", parentIdFinal, MAIN_WINDOW));
-        sleep(500);
+        // No sleep after a tree selection. selectTreeItemById runs inside runOnFx, which blocks
+        // until the FX task completes, and JavaFX dispatches selection listeners synchronously —
+        // so the edit panel below has already been rebuilt when this returns.
+        //
+        // If BattleScribe ever defers that rebuild internally, the next step fails LOUDLY with
+        // "control not found" rather than acting on a stale panel, which is the failure mode to
+        // want here.
 
         // Set spinner value by label
         final String finalEntryName = entryName;
@@ -1248,6 +1276,96 @@ public class RosterActions {
      *                    the calling action's flow (e.g. a parent dialog); anything else showing
      *                    fails the wait immediately instead of running out its timeout.
      */
+    /**
+     * Waits until {@code selector}'s ComboBox actually offers an item whose id is
+     * {@code targetId}.
+     *
+     * <p>This exists because selecting a catalogue REPOPULATES the force-entry combo
+     * asynchronously, and the driver used to bridge that with {@code sleep(300)}. A fixed sleep
+     * there is not merely slow — it is a correctness hazard. If the repopulation has not happened,
+     * {@link #selectComboBoxItemById} runs against the PREVIOUS catalogue's list, and its
+     * {@code toString().contains(targetId)} fallback can match a stale entry: the spec corpus
+     * reuses generic ids such as {@code fe-1} across catalogues, so the wrong force gets selected
+     * and the roster is built wrong while the action reports success.
+     *
+     * <p>Waiting for the item to be PRESENT removes the guess. When the item genuinely never
+     * arrives this throws with the ids actually on offer, which is a far better failure than a
+     * roster that is quietly wrong.
+     */
+    private void waitForComboBoxItem(String selector, String targetId, String windowTitle) {
+        long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            Boolean present = runOnFxGet(() -> comboBoxHasItem(selector, targetId, windowTitle));
+            if (present) return;
+            sleep(POLL_INTERVAL_MS);
+        }
+        String offered = runOnFxGet(() -> describeComboBoxItems(selector, windowTitle));
+        throw new RuntimeException(
+                "ComboBox '" + selector + "' in " + windowTitle + " never offered item id '"
+                        + targetId + "' within " + WINDOW_TIMEOUT_MS + "ms. Offered: " + offered);
+    }
+
+    /**
+     * Waits until {@code treeSelector} contains a tree item for {@code id}.
+     *
+     * <p>Selecting a force rebuilds the catalogue tree beside it. Acting on that tree before the
+     * rebuild lands either misses the item — a bare "Tree item not found" from a step that had
+     * nothing to do with the tree — or, when the previous force offered a like-named entry, hits
+     * the WRONG one. The 300ms that used to sit here covered neither case reliably.
+     */
+    private void waitForTreeItem(String treeSelector, String id) {
+        long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            Boolean present = runOnFxGet(() -> hasTreeItem(treeSelector, id));
+            if (present) return;
+            sleep(POLL_INTERVAL_MS);
+        }
+        throw new RuntimeException(
+                "Tree '" + treeSelector + "' never offered an item for id '" + id + "' within "
+                        + WINDOW_TIMEOUT_MS + "ms");
+    }
+
+    /** True when {@code treeSelector} holds an item carrying this id token. FX thread only. */
+    @SuppressWarnings("unchecked")
+    private boolean hasTreeItem(String treeSelector, String id) {
+        Scene scene = findScene(MAIN_WINDOW);
+        if (scene == null) return false;
+        Node node = scene.getRoot().lookup(treeSelector);
+        if (!(node instanceof TreeView)) return false;
+        TreeView<Object> tree = (TreeView<Object>) node;
+        return findTreeItemByText(tree.getRoot(), ":" + id + ":") != null;
+    }
+
+    /** True when {@code selector}'s ComboBox holds an item with this id. FX thread only. */
+    @SuppressWarnings("unchecked")
+    private boolean comboBoxHasItem(String selector, String targetId, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) return false;
+        Node node = scene.getRoot().lookup(selector);
+        if (!(node instanceof ComboBox)) return false;
+        ComboBox<Object> combo = (ComboBox<Object>) node;
+        for (Object item : combo.getItems()) {
+            if (item != null && targetId.equals(getObjectId(item))) return true;
+        }
+        return false;
+    }
+
+    /** The ids a ComboBox is currently offering — for failure messages. FX thread only. */
+    @SuppressWarnings("unchecked")
+    private String describeComboBoxItems(String selector, String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) return "(window not found)";
+        Node node = scene.getRoot().lookup(selector);
+        if (!(node instanceof ComboBox)) return "(not a ComboBox)";
+        ComboBox<Object> combo = (ComboBox<Object>) node;
+        StringBuilder sb = new StringBuilder("[");
+        for (Object item : combo.getItems()) {
+            if (sb.length() > 1) sb.append(", ");
+            sb.append(item == null ? "null" : String.valueOf(getObjectId(item)));
+        }
+        return sb.append("]").toString();
+    }
+
     private void waitForWindow(String titleFragment, String... alsoAllowed) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
         String[] allowed = withTitle(titleFragment, alsoAllowed);
