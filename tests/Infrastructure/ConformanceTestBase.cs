@@ -27,6 +27,18 @@ public abstract class ConformanceTestBase
     /// </summary>
     protected abstract IRosterEngine? GetEngine();
 
+    /// <summary>
+    /// Number of shards the roster UI suites can be split across in CI (see the <c>Shard</c> trait
+    /// below and the matrix in <c>.github/workflows/ci.yml</c>). Changing this MUST be mirrored in
+    /// the CI matrix.
+    /// </summary>
+    /// <remarks>
+    /// Matches <see cref="GameDataConformanceTestBase.ShardCount"/> so one matrix can drive both
+    /// halves of the BS UI stack: <c>thorough-ui-bs</c> already runs two shards for the gamedata
+    /// lane, and the roster lane joins them rather than adding a third dimension.
+    /// </remarks>
+    public const int ShardCount = 2;
+
     public static TheoryDataRow<string, string>[] AllSpecs()
     {
         var specsDir = SpecLoader.FindRosterSpecsDirectory();
@@ -37,7 +49,12 @@ public abstract class ConformanceTestBase
 
         return [.. SpecLoader.DiscoverSpecs(specsDir).Select(s =>
         {
-            var row = new TheoryDataRow<string, string>(s.Path, $"{s.Category}/{s.Id}");
+            var specName = $"{s.Category}/{s.Id}";
+            var row = new TheoryDataRow<string, string>(s.Path, specName);
+            // Stable, process-independent shard assignment — string.GetHashCode is randomized per
+            // run, which would make Shard filters disagree between CI matrix jobs and silently
+            // drop or duplicate specs.
+            row.Traits.Add("Shard", [(StableHash(specName) % ShardCount).ToString()]);
             try
             {
                 var spec = SpecLoader.Load(s.Path);
@@ -53,6 +70,22 @@ public abstract class ConformanceTestBase
             }
             return row;
         })];
+    }
+
+    /// <summary>Deterministic FNV-1a 32-bit hash, stable across processes and platforms.</summary>
+    private static int StableHash(string value)
+    {
+        unchecked
+        {
+            const uint offset = 2166136261;
+            const uint prime = 16777619;
+            var hash = offset;
+            foreach (var c in value)
+            {
+                hash = (hash ^ c) * prime;
+            }
+            return (int)(hash & 0x7FFFFFFF);
+        }
     }
 
     /// <summary>
