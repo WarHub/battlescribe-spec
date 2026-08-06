@@ -440,22 +440,58 @@ public sealed class NrGameDataUiDriver
     /// worse than the sleep it replaces.
     /// </para>
     /// </remarks>
-    private Task WaitSelectedFieldAsync(string property, string? expected, int timeoutMs = 5_000)
-        => _page.WaitForFunctionAsync(
-            """
-            ([property, expected]) => {
-                const st = document.querySelector('#__nuxt')
-                    ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
-                const sel = st?.get_selected?.();
-                if (!sel) { return false; }
-                const v = sel[property];
-                return expected === null
-                    ? (v === undefined || v === null || v === '')
-                    : String(v) === expected;
-            }
-            """,
-            new object?[] { property, expected },
-            new PageWaitForFunctionOptions { Timeout = timeoutMs });
+    private async Task WaitSelectedFieldAsync(string property, string? expected, int timeoutMs = 5_000)
+    {
+        try
+        {
+            await _page.WaitForFunctionAsync(
+                """
+                ([property, expected]) => {
+                    const st = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                    const sel = st?.get_selected?.();
+                    if (!sel) { return false; }
+                    const v = sel[property];
+                    return expected === null
+                        ? (v === undefined || v === null || v === '')
+                        : String(v) === expected;
+                }
+                """,
+                new object?[] { property, expected },
+                new PageWaitForFunctionOptions { Timeout = timeoutMs });
+        }
+        catch (TimeoutException)
+        {
+            // Report what the node ACTUALLY carries rather than a bare timeout. A wait on the wrong
+            // property is indistinguishable from a slow commit otherwise, and that mistake has
+            // already cost this work a lane run — the roster driver waited on `getCustomNotes()`
+            // when NR stores `note`.
+            var actual = await _page.EvaluateAsync<string>(
+                """
+                (property) => {
+                    const st = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                    const sel = st?.get_selected?.();
+                    if (!sel) { return '(nothing selected)'; }
+                    const own = Object.keys(sel).filter(k => typeof sel[k] !== 'function');
+                    const show = k => {
+                        let v; try { v = sel[k]; } catch (e) { return k + '=<throws>'; }
+                        if (v === null || v === undefined) { return k + '=' + String(v); }
+                        if (typeof v === 'object') { return k + '={' + Object.keys(v).length + ' keys}'; }
+                        return k + '=' + String(v).slice(0, 40);
+                    };
+                    return 'editorTypeName=' + (sel.editorTypeName ?? '?')
+                        + ' | requested ' + show(property)
+                        + ' | has: ' + own.slice(0, 30).join(', ');
+                }
+                """,
+                property);
+
+            throw new TimeoutException(
+                $"NR Editor UI: '{property}' did not become '{expected ?? "<null>"}' on the selected "
+                + $"node within {timeoutMs}ms. Selected node: {actual}");
+        }
+    }
 
     private async Task<string?> ReadUniqueIdAsync()
     {
@@ -563,8 +599,10 @@ public sealed class NrGameDataUiDriver
             }
             await div.ClickAsync();
             await div.FillAsync(value ?? "");
+            // EditableDiv emits update:modelValue from @input, so FillAsync already committed it;
+            // the Tab only blurs.
             await div.PressAsync("Tab");
-            await _page.WaitForTimeoutAsync(200);
+            await WaitSelectedFieldAsync(field == "comment" ? "comment" : "description", value);
             return;
         }
 
@@ -671,14 +709,14 @@ public sealed class NrGameDataUiDriver
         {
             case "type":
                 await condition.Locator("select").First.SelectOptionAsync(new SelectOptionValue { Value = value });
-                await _page.WaitForTimeoutAsync(150);
+                await WaitSelectedFieldAsync("type", value);
                 return true;
             case "value":
                 {
                     var num = condition.Locator("input[type='number']").First;
                     await num.FillAsync(value ?? "");
                     await num.PressAsync("Tab");
-                    await _page.WaitForTimeoutAsync(150);
+                    await WaitSelectedFieldAsync("value", value);
                     return true;
                 }
             case "percentValue":
@@ -728,16 +766,22 @@ public sealed class NrGameDataUiDriver
                     var num = condition.Locator("input[type='number']").First;
                     await num.FillAsync(value ?? "");
                     await num.PressAsync("Tab");
-                    await _page.WaitForTimeoutAsync(150);
+                    await WaitSelectedFieldAsync("repeats", value);
                     return true;
                 }
             case "value":
                 {
                     // Second number input: "N times for every <value> …".
+                    //
+                    // A repeat carries BOTH `repeats` and `value`, and the two inputs sit in a
+                    // fieldset whose markup is identical to the condition editor's. The first
+                    // conversion of this file asserted them crossed — `repeats` checking `value`
+                    // and vice versa — because a global find-and-replace matched the condition
+                    // editor's shape here too. The case label is the property; keep them in step.
                     var num = condition.Locator("input[type='number']").Nth(1);
                     await num.FillAsync(value ?? "");
                     await num.PressAsync("Tab");
-                    await _page.WaitForTimeoutAsync(150);
+                    await WaitSelectedFieldAsync("value", value);
                     return true;
                 }
             case "roundUp":
@@ -799,7 +843,7 @@ public sealed class NrGameDataUiDriver
     };
 
     /// <summary>Picks an option from an NR autocomplete given its container locator (no row label).</summary>
-    private async Task PickAutocompleteContainerAsync(ILocator container, string? match)
+    private static async Task PickAutocompleteContainerAsync(ILocator container, string? match)
     {
         if (match is null)
         {
@@ -819,7 +863,7 @@ public sealed class NrGameDataUiDriver
             pick = suggestions.Filter(new LocatorFilterOptions { HasText = match });
         }
         await pick.First.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
-        await _page.WaitForTimeoutAsync(250);
+        await WaitPopupClosedAsync(container);
     }
 
     private async Task<bool> EditModifierFieldAsync(ILocator modifier, string field, string? value)
@@ -829,7 +873,10 @@ public sealed class NrGameDataUiDriver
             case "type":
                 // The modifier type select carries object option values, so select by visible label.
                 await modifier.Locator("select").First.SelectOptionAsync(new SelectOptionValue { Label = ModifierTypeLabel(value) });
-                await _page.WaitForTimeoutAsync(150);
+                // Modifier.changed() writes item.type from the picked operation, and the VALUE widget
+                // is computed from it — so asserting the type also gates the re-render that the next
+                // setField addresses positionally.
+                await WaitSelectedFieldAsync("type", value);
                 return true;
             case "field":
                 await SetIconSelectAsync(modifier.Locator(".select-container").First, value);
@@ -853,7 +900,7 @@ public sealed class NrGameDataUiDriver
                         try
                         {
                             await sel.SelectOptionAsync(new SelectOptionValue { Value = value });
-                            await _page.WaitForTimeoutAsync(150);
+                            await WaitSelectedFieldAsync("value", value);
                             return true;
                         }
                         catch
@@ -867,13 +914,13 @@ public sealed class NrGameDataUiDriver
                         await ce.Last.ClickAsync();
                         await ce.Last.FillAsync(value ?? "");
                         await ce.Last.PressAsync("Tab");
-                        await _page.WaitForTimeoutAsync(150);
+                        await WaitSelectedFieldAsync("value", value);
                         return true;
                     }
                     var input = modifier.Locator("input").Last;
                     await input.FillAsync(value ?? "");
                     await input.PressAsync("Tab");
-                    await _page.WaitForTimeoutAsync(150);
+                    await WaitSelectedFieldAsync("value", value);
                     return true;
                 }
             default:
@@ -898,7 +945,7 @@ public sealed class NrGameDataUiDriver
                     if (await sel.CountAsync() > 0)
                     {
                         await SelectByValueOrLabelAsync(sel, value);
-                        await _page.WaitForTimeoutAsync(150);
+                        await WaitSelectedFieldAsync("type", value);
                         return true;
                     }
                     return false;
@@ -908,7 +955,7 @@ public sealed class NrGameDataUiDriver
                     var num = q.Locator("input[type='number'], input[type='text']").First;
                     await num.FillAsync(value ?? "");
                     await num.PressAsync("Tab");
-                    await _page.WaitForTimeoutAsync(150);
+                    await WaitSelectedFieldAsync("value", value);
                     return true;
                 }
             case "field":
@@ -981,7 +1028,12 @@ public sealed class NrGameDataUiDriver
             await input.FillAsync(value ?? "");
             await input.PressAsync("Tab");
         }
-        await _page.WaitForTimeoutAsync(200);
+
+        // NOTE: editorStore.changed() has a heavy branch — for a profileType (or a descendant of
+        // one) it awaits system.loadAll(), re-runs processForEditor on every loaded catalogue and
+        // runs the "Fix profiles" script. Asserting the field landed does NOT mean NR has finished
+        // that; the 200ms it replaces did not cover it either. Same guarantee, stated honestly.
+        await WaitSelectedFieldAsync(NrPropertyName(field), value);
     }
 
     // ===== Costs / characteristics =====
@@ -1022,7 +1074,24 @@ public sealed class NrGameDataUiDriver
         }
         await input.FillAsync(value ?? "");
         await input.PressAsync("Tab");
-        await _page.WaitForTimeoutAsync(200);
+
+        // Assert the cost landed, keyed by its type. Worth more than the time saved: Costs.changed()
+        // filters on isFinite(value), so a value NR cannot parse silently DROPS the cost rather than
+        // failing — nothing noticed until the state diff, two steps later.
+        await _page.WaitForFunctionAsync(
+            """
+            ([label, expected]) => {
+                const st = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                const sel = st?.get_selected?.();
+                if (!sel) { return false; }
+                const costs = sel.costs ?? [];
+                const c = costs.find(x => x.name === label || x.typeId === label);
+                return expected === null ? !c : (c != null && String(c.value) === expected);
+            }
+            """,
+            new object?[] { name, value },
+            new PageWaitForFunctionOptions { Timeout = 5_000 });
     }
 
     private async Task EditCharacteristicAsync(string name, string? value)
@@ -1056,7 +1125,18 @@ public sealed class NrGameDataUiDriver
             await input.FillAsync(value ?? "");
         }
         await input.PressAsync("Tab");
-        await _page.WaitForTimeoutAsync(200);
+        await _page.WaitForFunctionAsync(
+            """
+            ([label, expected]) => {
+                const st = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                const sel = st?.get_selected?.();
+                const c = (sel?.characteristics ?? []).find(x => x.name === label || x.typeId === label);
+                return c != null && String(c.$text ?? '') === String(expected ?? '');
+            }
+            """,
+            new object?[] { name, value },
+            new PageWaitForFunctionOptions { Timeout = 5_000 });
     }
 
     // ===== Widget primitives =====
@@ -1087,7 +1167,7 @@ public sealed class NrGameDataUiDriver
         await SetAutocompleteByRowAsync(rp, rowLabel, display ?? value);
     }
 
-    private async Task SetAutocompleteByRowAsync(ILocator rp, string rowLabel, string? match)
+    private static async Task SetAutocompleteByRowAsync(ILocator rp, string rowLabel, string? match)
     {
         var row = rp.Locator("table tr").Filter(new LocatorFilterOptions { HasText = rowLabel }).First;
         var container = row.Locator(".autocomplete").First;
@@ -1095,16 +1175,16 @@ public sealed class NrGameDataUiDriver
         {
             container = rp.Locator(".autocomplete").First;
         }
+        // The next statement waits for a suggestion, which is strictly stronger than this sleep was.
         await container.Locator(".autocomplete-input").First.ClickAsync();
-        await _page.WaitForTimeoutAsync(300);
         var suggestions = container.Locator(".suggestions:not(.hidden) > div");
         await suggestions.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
         var pick = suggestions.Filter(new LocatorFilterOptions { HasText = match });
         await pick.First.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
-        await _page.WaitForTimeoutAsync(250);
+        await WaitPopupClosedAsync(container);
     }
 
-    private async Task SetIconSelectAsync(ILocator container, string? value)
+    private static async Task SetIconSelectAsync(ILocator container, string? value)
     {
         if (value is null)
         {
@@ -1125,10 +1205,10 @@ public sealed class NrGameDataUiDriver
             pick = suggestions.Filter(new LocatorFilterOptions { HasText = value });
         }
         await pick.First.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
-        await _page.WaitForTimeoutAsync(250);
+        await WaitPopupClosedAsync(container);
     }
 
-    private async Task SetCheckboxAsync(ILocator checkbox, string? value)
+    private static async Task SetCheckboxAsync(ILocator checkbox, string? value)
     {
         if (await checkbox.CountAsync() == 0)
         {
@@ -1148,7 +1228,9 @@ public sealed class NrGameDataUiDriver
                 await checkbox.First.CheckAsync();
             }
         }
-        await _page.WaitForTimeoutAsync(150);
+
+        // No wait: every one of these boxes is a direct v-model (or an @change handler) that commits
+        // on the click's own event, and Check/UncheckAsync already assert the resulting state.
     }
 
     private static async Task<bool> IsCheckboxAsync(ILocator input)
@@ -1202,6 +1284,41 @@ public sealed class NrGameDataUiDriver
         "unset-primary" => "Unset Primary",
         _ => value ?? "",
     };
+
+    /// <summary>
+    /// The spec field name as NR stores it on the node — the data-side twin of
+    /// <see cref="FieldLabel"/>, which maps the same fields to their editor LABELS.
+    /// </summary>
+    /// <remarks>
+    /// Only the spellings that actually differ are listed; everything else is already NR's name.
+    /// Keep this honest by reading NR's model rather than assuming the spec name: the sibling
+    /// roster driver lost a lane run to a predicate that asserted `getCustomNotes()` when the
+    /// property is `note`.
+    /// </remarks>
+    private static string NrPropertyName(string field) => field switch
+    {
+        "imported" => "import",
+        _ => field,
+    };
+
+    /// <summary>
+    /// Waits for an autocomplete/icon-select popup to close after a pick.
+    /// </summary>
+    /// <remarks>
+    /// Picking emits <c>update:modelValue</c> and the <c>v-click-outside</c> handler bound to the
+    /// input fires on <c>document</c> — the suggestion is a SIBLING, not a child — setting
+    /// <c>editing = false</c>, which re-hides the popup and swaps the input back to a div. So the
+    /// popup closing is NR acknowledging the pick, and it replaces a 250ms guess.
+    /// <para>
+    /// This proves the click was SEEN, not that the value reached the node. Where the caller knows
+    /// which property it just set, it should also assert that — see the modifier/query paths, where
+    /// the value widget is re-rendered from the new type and the next setField addresses it
+    /// positionally.
+    /// </para>
+    /// </remarks>
+    private static Task WaitPopupClosedAsync(ILocator container)
+        => container.Locator(".suggestions:not(.hidden)").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Detached, Timeout = 5_000 });
 
     private static string FieldLabel(string field) => field switch
     {

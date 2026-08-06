@@ -27,6 +27,29 @@ namespace BattleScribeSpec.NrGameDataUiDriver;
 /// </summary>
 public static class NrGameDataUiActions
 {
+    /// <summary>
+    /// Waits until the node the editor is showing carries <paramref name="expected"/> in
+    /// <paramref name="property"/> — NR's own property, read from its store, so this asserts the
+    /// COMMIT rather than the keystroke that started it.
+    /// </summary>
+    private static Task WaitSelectedFieldAsync(
+        IPage page, string property, string? expected, int timeoutMs = 5_000)
+        => page.WaitForFunctionAsync(
+            """
+            ([property, expected]) => {
+                const st = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                const sel = st?.get_selected?.();
+                if (!sel) { return false; }
+                const v = sel[property];
+                return expected === null
+                    ? (v === undefined || v === null || v === '')
+                    : String(v) === expected;
+            }
+            """,
+            new object?[] { property, expected },
+            new PageWaitForFunctionOptions { Timeout = timeoutMs });
+
     // ===== Structural mutations =====
 
 
@@ -51,17 +74,43 @@ public static class NrGameDataUiActions
         var deleteItem = page.Locator(".context-menu > div")
             .Filter(new LocatorFilterOptions { HasText = "Remove" });
         await deleteItem.First.ClickAsync(new() { Timeout = 5_000 });
-        await page.WaitForTimeoutAsync(300);
 
-        // Confirm deletion dialog if present
-        var confirmBtn = page.GetByRole(AriaRole.Button, new() { Name = "Confirm" })
-            .Or(page.GetByRole(AriaRole.Button, new() { Name = "Delete" }))
-            .Or(page.GetByRole(AriaRole.Button, new() { Name = "Yes" }));
-        if (await confirmBtn.First.IsVisibleAsync())
-        {
-            await confirmBtn.First.ClickAsync();
-            await page.WaitForTimeoutAsync(300);
-        }
+        // Wait for the entry to be GONE, which is what this method promises.
+        //
+        // What was here instead: a 300ms sleep, then `if (await confirmBtn.IsVisibleAsync())` for a
+        // Confirm/Delete/Yes dialog. That is a NEGATIVE gate — the sleep was the entire evidence
+        // that no dialog would appear — and IsVisibleAsync is a snapshot, so it was also
+        // check-then-act.
+        //
+        // The negative is retired rather than raced, because the dialog does not exist on this
+        // path: `CatalogueEntry.vue` binds `@click="store.remove()"`, and `editorStore.remove()`
+        // pops the entry, calls do_action and unselects — no prompt anywhere. The only Confirm
+        // buttons in the editor live in a My Catalogues page this driver never visits.
+        await page.WaitForFunctionAsync(
+            """
+            (entryId) => {
+                const st = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                const p = new URLSearchParams(location.search);
+                const cat = st?.gameSystems?.[p.get('systemId')]?.loadedCatalogues?.[p.get('id')];
+                if (!cat) { return false; }
+                const seen = new WeakSet();
+                const find = (o) => {
+                    if (!o || typeof o !== 'object' || seen.has(o)) { return false; }
+                    seen.add(o);
+                    if (o.id === entryId) { return true; }
+                    for (const v of Object.values(o)) {
+                        if (Array.isArray(v)) {
+                            for (const it of v) { if (find(it)) { return true; } }
+                        }
+                    }
+                    return false;
+                };
+                return !find(cat);
+            }
+            """,
+            entryId,
+            new PageWaitForFunctionOptions { Timeout = 10_000 });
     }
 
     /// <summary>
@@ -111,7 +160,89 @@ public static class NrGameDataUiActions
                 .Locator("td:last-child input").First;
             await tidInput.FillAsync(value ?? "");
             await tidInput.PressAsync("Tab");
-            await page.WaitForTimeoutAsync(300);
+
+            // This is the ONE wait in the editor driver that covered a genuinely unbounded async
+            // operation, so 300ms was never a measurement of anything.
+            //
+            // `targetIdChanged` -> `updateLink()`, and for a catalogue link that body is
+            // `await this.catalogue.reload(...)` — which drops the catalogue's index, re-runs
+            // loadData + processForEditor, and recurses into every catalogue that links to it.
+            // Returning early leaves a half-rebuilt tree that a later ExportActiveFile serialises.
+            //
+            // This site is the one place in this driver where the post-condition is NARROWER than
+            // the operation, and that is worth stating rather than hiding behind a number.
+            //
+            // Two candidate signals were tried and MEASURED to be wrong, not argued away:
+            //
+            //   `item.name` becoming the target's name or "Unknown" — from reading Link.vue.
+            //   False: re-pointing at a deliberately non-existent id (links/catalogue-link does
+            //   exactly this) leaves BOTH name and target on the old catalogue —
+            //     targetId="does-not-exist" name="Shared Library" target={id:cat-library}
+            //
+            //   `catalogue.loaded_editor` flipping back to true after reload() — from reading
+            //   bs_main_catalogue.ts. False: on the live object those flags do not exist at all —
+            //     cat=found loaded_editor=null loaded=null initialized=null
+            //
+            // So the id committing is the only thing observable from here, and it is what is
+            // asserted. The reload that `updateLink()` awaits is NOT gated: nothing this side can
+            // reach reports its completion. That is a real gap, and it is the same gap the 300ms
+            // sleep had — a guess never covered an unbounded reload either — but a condition should
+            // not be mistaken for one it does not assert.
+            //
+            // Closing it needs a signal from NR: a store-level busy flag, or an editor event fired
+            // after processForEditor. Worth adding if catalogue-link specs ever go flaky.
+            try
+            {
+                await page.WaitForFunctionAsync(
+                    """
+                    (want) => {
+                        const st = document.querySelector('#__nuxt')
+                            ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                        const sel = st?.get_selected?.();
+                        if (!sel) { return false; }
+
+                        // The id must have committed.
+                        if (String(sel.targetId ?? '') !== String(want ?? '')) { return false; }
+
+                        // That is the whole of what this side can observe — see the note above.
+                        return true;
+                    }
+                    """,
+                    value,
+                    new PageWaitForFunctionOptions { Timeout = 20_000 });
+            }
+            catch (TimeoutException)
+            {
+                var actual = await page.EvaluateAsync<string>(
+                    """
+                    () => {
+                        const st = document.querySelector('#__nuxt')
+                            ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                        const sel = st?.get_selected?.();
+                        if (!sel) { return '(nothing selected)'; }
+                        let tgt;
+                        try { tgt = sel.target; } catch (e) { tgt = '<throws>'; }
+                        const q = new URLSearchParams(location.search);
+                        const sys = st?.gameSystems?.[q.get('systemId')];
+                        const cat = sys?.loadedCatalogues?.[q.get('id')];
+                        return 'editorTypeName=' + (sel.editorTypeName ?? '?')
+                            + ' targetId=' + JSON.stringify(sel.targetId ?? null)
+                            + ' name=' + JSON.stringify(sel.name ?? null)
+                            + ' target=' + (tgt === '<throws>' ? '<throws>'
+                                : tgt ? ('{id:' + tgt.id + '}') : String(tgt))
+                            + ' | cat=' + (cat ? 'found' : 'MISSING')
+                            + ' loaded_editor=' + JSON.stringify(cat?.loaded_editor ?? null)
+                            + ' loaded=' + JSON.stringify(cat?.loaded ?? null)
+                            + ' initialized=' + JSON.stringify(cat?.initialized ?? null)
+                            + ' | catKeys=' + (sys ? Object.keys(sys.loadedCatalogues || {}).join(',') : 'no-sys')
+                            + ' | urlId=' + q.get('id');
+                    }
+                    """);
+                throw new TimeoutException(
+                    $"NR Editor UI: catalogue-link targetId '{value}' did not settle within 20s. "
+                    + $"Selected node: {actual}");
+            }
+
             return;
         }
 
@@ -130,7 +261,7 @@ public static class NrGameDataUiActions
                 await cb.CheckAsync();
             }
 
-            await page.WaitForTimeoutAsync(200);
+            await WaitSelectedFieldAsync(page, "importRootEntries", value == "false" ? "false" : "true");
             return;
         }
 
@@ -159,7 +290,7 @@ public static class NrGameDataUiActions
                 {
                     await linkTypeSelect.SelectOptionAsync(new SelectOptionValue { Label = value });
                 }
-                await page.WaitForTimeoutAsync(200);
+                await WaitSelectedFieldAsync(page, "type", value);
                 return;
             }
         }
@@ -185,7 +316,7 @@ public static class NrGameDataUiActions
                 {
                     await SetLinkTypeFromTargetAsync(page, rightPanel, value);
                 }
-                await SetAutocompleteFieldAsync(page, rightPanel, fieldLabel, value, displayName);
+                await SetAutocompleteFieldAsync(rightPanel, fieldLabel, value, displayName);
             }
             return;
         }
@@ -276,7 +407,7 @@ public static class NrGameDataUiActions
         // Commit the change (Tab triggers model update in NR Editor for text fields;
         // checkboxes commit immediately on click so Tab is a no-op for them)
         await fieldInput.PressAsync("Tab");
-        await page.WaitForTimeoutAsync(300);
+        await WaitSelectedFieldAsync(page, field == "imported" ? "import" : field, value);
     }
 
     /// <summary>
@@ -296,7 +427,7 @@ public static class NrGameDataUiActions
     /// The suggestion is filtered by <paramref name="displayName"/> (or falls back to <paramref name="id"/>).
     /// </summary>
     private static async Task SetAutocompleteFieldAsync(
-        IPage page, ILocator rightPanel, string rowLabel, string id, string? displayName)
+        ILocator rightPanel, string rowLabel, string id, string? displayName)
     {
         var fieldRow = rightPanel.Locator("table.editorTable tr")
             .Filter(new LocatorFilterOptions { HasText = rowLabel });
@@ -329,7 +460,10 @@ public static class NrGameDataUiActions
                 $"NR Editor UI: no '{rowLabel}' suggestion matched '{displayName ?? id}' " +
                 $"(displayName={(displayName ?? "<null>")}, id={id}). Available: [{string.Join(", ", available)}]");
         }
-        await page.WaitForTimeoutAsync(300);
+        // The pick is done when NR closes the popup: targetSelected() emits update:modelValue and
+        // the v-click-outside handler sets editing=false, re-hiding .suggestions.
+        await fieldRow.Locator(".suggestions:not(.hidden)").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Detached, Timeout = 5_000 });
     }
 
     /// <summary>
@@ -426,7 +560,9 @@ public static class NrGameDataUiActions
         try
         {
             await typeSelect.SelectOptionAsync(new SelectOptionValue { Value = kind });
-            await page.WaitForTimeoutAsync(200);
+            // Must land before the Target autocomplete opens: availableTargets() filters on
+            // item.type, so a list opened against the OLD type offers the wrong candidates.
+            await WaitSelectedFieldAsync(page, "type", kind);
         }
         catch
         {
@@ -802,7 +938,12 @@ public static class NrGameDataUiActions
         // <h3>s, so scope to the direct child to avoid a strict-mode multi-match.
         await page.Locator($".{sectionClass}.depth-0 > h3").ClickAsync(
             new LocatorClickOptions { Button = MouseButton.Right });
-        await page.WaitForTimeoutAsync(300);
+        // ContextMenu.show() sets visible=true, so the menu itself is the condition. Do NOT add
+        // Force=true to the click that follows: ContextMenu.update() re-positions once in
+        // $nextTick after measuring, so the menu MOVES after appearing, and Playwright's
+        // stability check is what absorbs that.
+        await page.WaitForSelectorAsync(".context-menu:visible",
+            new PageWaitForSelectorOptions { Timeout = 5_000 });
 
         // Click the add menu item — identified by the entry type icon image. Shared root entries
         // reuse the base entry's icon (e.g. a sharedSelectionEntry uses the selectionEntry icon).
@@ -831,7 +972,7 @@ public static class NrGameDataUiActions
             await nameInput.ClickAsync(new LocatorClickOptions { ClickCount = 3 });
             await nameInput.FillAsync(name);
             await nameInput.PressAsync("Tab");
-            await page.WaitForTimeoutAsync(200);
+            await WaitSelectedFieldAsync(page, "name", name);
         }
 
         return new GameDataActionOutputs { EntryId = entryId };
@@ -854,7 +995,12 @@ public static class NrGameDataUiActions
         // AddEntryToRootSectionAsync) to open the context menu.
         await page.Locator($".{sectionClass}.depth-0 > h3").ClickAsync(
             new LocatorClickOptions { Button = MouseButton.Right });
-        await page.WaitForTimeoutAsync(300);
+        // ContextMenu.show() sets visible=true, so the menu itself is the condition. Do NOT add
+        // Force=true to the click that follows: ContextMenu.update() re-positions once in
+        // $nextTick after measuring, so the menu MOVES after appearing, and Playwright's
+        // stability check is what absorbs that.
+        await page.WaitForSelectorAsync(".context-menu:visible",
+            new PageWaitForSelectorOptions { Timeout = 5_000 });
 
         // From probe: context menu for section header shows two items:
         //   • "Entry" (with selectionEntry.png icon)
@@ -881,7 +1027,7 @@ public static class NrGameDataUiActions
         await SetLinkTypeFromTargetAsync(page, rightPanel, targetId);
         var targetFieldLabel = GetFieldLabel("targetId");
         var targetName = await page.EvaluateAsync<string?>(EntryNameLookupJs, targetId);
-        await SetAutocompleteFieldAsync(page, rightPanel, targetFieldLabel, targetId, targetName);
+        await SetAutocompleteFieldAsync(rightPanel, targetFieldLabel, targetId, targetName);
 
         return new GameDataActionOutputs { EntryId = entryId };
     }

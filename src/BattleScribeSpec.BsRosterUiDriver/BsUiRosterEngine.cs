@@ -37,6 +37,25 @@ public sealed class BsUiRosterEngine : IRosterEngine
     // Timeout constants — see class-level docs for the full timeout architecture.
     private const int EngineOpWaitMs = 15_000;
     private const int PollTimeoutMs = 10_000;
+
+    /// <summary>Ceiling for BattleScribe's first-launch "download data?" prompt to appear.</summary>
+    /// <remarks>
+    /// A ceiling, not a cost: the loop exits the moment the dialog shows. It cannot be replaced by a
+    /// condition because "this dialog will never appear" has no positive signal — and a dialog that
+    /// arrives after it is not lost, because DialogInspector.assertNoUnexpectedModals runs on every
+    /// Java-side wait and fails the next action loudly.
+    /// </remarks>
+    private const int StartupDialogCeilingMs = 3_000;
+
+    /// <summary>
+    /// Poll interval for window-state questions. Matches the Java agent's own POLL_INTERVAL_MS.
+    /// </summary>
+    /// <remarks>
+    /// Do not shrink this casually: every iteration is an FX-thread round trip contending with
+    /// BattleScribe's own dialog handling on that single thread — an observer effect DialogInspector's
+    /// javadoc records as measurably slowing real dialog transitions.
+    /// </remarks>
+    private const int StartupDialogPollMs = 200;
     private const int WindowWaitMs = 30_000;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -223,9 +242,21 @@ public sealed class BsUiRosterEngine : IRosterEngine
                     _ = await ConnectedClient.PingAsync();
                     Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
 
-                    // Close any open roster to return to clean main window state.
-                    // This dismisses unsaved changes without saving.
-                    await CloseCurrentRosterIfOpenAsync();
+                    // No roster-close step here. There used to be a call to
+                    // CloseCurrentRosterIfOpenAsync(), and it could never do anything: `_engineLocated`
+                    // is set false a few lines above, and that method's first act is a state read
+                    // which short-circuits on exactly that flag and returns an EMPTY roster — so it
+                    // always saw zero forces and returned before touching the app.
+                    //
+                    // Warm-start roster closing is really handled on the Java side, by
+                    // RosterActions.waitForNewRosterWindowDismissingContinuePrompt, which answers
+                    // BattleScribe's "Continue? Roster has not been saved" prompt with NO.
+                    //
+                    // If this is ever reinstated here it MUST end in a throw, never a return: a
+                    // close that silently fails leaves the previous spec's roster open, and
+                    // CallActionAsync then skips rosterCreateRosterAction because forces already
+                    // exist — appending this spec's force to the PREVIOUS spec's roster. A spec
+                    // asserting only on its own selection would pass on polluted data.
 
                     // Restage data files for the new run.
                     // NOTE: The app's loaded game data is from the previous startup.
@@ -322,46 +353,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _poisoned = false;
     }
 
-    /// <summary>
-    /// Closes any currently open roster to return to the clean main window.
-    /// Dismisses "save changes" confirmation without saving.
-    /// </summary>
-    private async Task CloseCurrentRosterIfOpenAsync()
-    {
-        // Check if a roster is currently loaded by reading state
-        var state = await ReadRosterStateOrEmptyAsync();
-        if (state.Forces.Count == 0)
-        {
-            // No roster open
-            return;
-        }
-
-        // Close via keyboard shortcut Ctrl+W or "Close" button
-        Console.Error.WriteLine("[bs-ui] Warm start: closing current roster...");
-        try
-        {
-            _ = await ConnectedClient.PressKeyAsync("W", windowTitle: MainWindowTitle, ctrl: true);
-        }
-        catch
-        {
-            // Ctrl+W not available, try Close button
-            if (!await TryFireButtonAsync("#btnClose", MainWindowTitle, async: true) &&
-                !await TryClickTextAsync("Close", MainWindowTitle, "Button"))
-            {
-                // No way to close — proceed anyway, AddForce handles existing rosters
-                return;
-            }
-        }
-
-        // Handle "save changes?" confirmation dialog
-        await Task.Delay(500);
-        if (await TryClickTextAsync("No", ConfirmWindowTitle, "Button") ||
-            await TryClickTextAsync("Don't Save", ConfirmWindowTitle, "Button") ||
-            await TryClickTextAsync("Discard", ConfirmWindowTitle, "Button"))
-        {
-            await Task.Delay(300);
-        }
-    }
 
     private static IEnumerable<ForceState> FlattenForces(IEnumerable<ForceState>? forces)
     {
@@ -570,12 +561,79 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return await ConnectedClient.StopRecordingAsync();
     }
 
+    /// <summary>
+    /// Dismisses BattleScribe's first-launch "download data?" prompt if it appears.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This used to sleep 1500ms and then check ONCE. Two things were wrong with that: the check is
+    /// a snapshot, so a dialog arriving at 1600ms was missed entirely; and when the dialog arrived
+    /// early, the remaining second was pure cost on every cold start.
+    /// </para>
+    /// <para>
+    /// The ceiling stays, because "this dialog will never appear" has no positive signal — but it is
+    /// now a CEILING rather than a cost: the loop exits the instant the dialog shows. Nothing is
+    /// silently lost if it appears later either, since DialogInspector.assertNoUnexpectedModals runs
+    /// on every Java-side wait and fails the next action loudly.
+    /// </para>
+    /// <para>
+    /// It is dismissed with #btnNegative deliberately: answering positively would make BattleScribe
+    /// fetch real game data over the staged spec data.
+    /// </para>
+    /// </remarks>
     private async Task HandleStartupDialogsAsync()
     {
-        await Task.Delay(1500);
-        if (await HasWindowAsync(ConfirmWindowTitle) && await TryFireButtonAsync("#btnNegative", ConfirmWindowTitle))
+        var deadline = DateTime.UtcNow.AddMilliseconds(StartupDialogCeilingMs);
+        while (DateTime.UtcNow < deadline)
         {
-            await WaitForWindowToCloseAsync(ConfirmWindowTitle);
+            if (await HasWindowAsync(ConfirmWindowTitle))
+            {
+                if (await TryFireButtonAsync("#btnNegative", ConfirmWindowTitle))
+                {
+                    await WaitForWindowToCloseAsync(ConfirmWindowTitle);
+                }
+
+                return;
+            }
+
+            await Task.Delay(StartupDialogPollMs);
+        }
+    }
+
+    /// <summary>
+    /// Waits until the agent's FX thread is pumping again, instead of assuming a fixed backoff.
+    /// </summary>
+    /// <remarks>
+    /// The transient failures this backs off from are mostly "the FX thread was wedged", so the
+    /// real condition is that it drains a queued task again.
+    /// <para>
+    /// <b>PingAsync is the wrong probe and looks like the right one.</b> `ping` is not in the
+    /// agent's FX_THREAD_METHODS — it answers from the socket thread and succeeds even under a full
+    /// FX deadlock. `getWindows` IS an FX-thread method, so a successful reply is proof the FX
+    /// thread executed something. (The warm-start reuse gate in SetupAsync has the same flaw and is
+    /// left alone here — it is a behaviour change, not a wait.)
+    /// </para>
+    /// </remarks>
+    private async Task WaitForAgentResponsiveAsync(TimeSpan ceiling)
+    {
+        var deadline = DateTime.UtcNow + ceiling;
+        while (DateTime.UtcNow < deadline)
+        {
+            var saved = ConnectedClient.CallTimeout;
+            ConnectedClient.CallTimeout = TimeSpan.FromSeconds(2);
+            try
+            {
+                _ = await ConnectedClient.GetWindowsAsync();
+                return;
+            }
+            catch
+            {
+                await Task.Delay(StartupDialogPollMs);
+            }
+            finally
+            {
+                ConnectedClient.CallTimeout = saved;
+            }
         }
     }
 
@@ -1103,7 +1161,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 Console.Error.WriteLine(
                     $"[bs-ui] Action '{actionName}' failed (attempt {attempt}/{attempts}): " +
                     $"{ex.GetType().Name}: {ex.Message}. Retrying in {RetryDelay.TotalSeconds:F0}s...");
-                await Task.Delay(RetryDelay);
+                await WaitForAgentResponsiveAsync(RetryDelay);
             }
             catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
             {
