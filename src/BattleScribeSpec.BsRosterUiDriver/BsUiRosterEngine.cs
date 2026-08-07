@@ -58,6 +58,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private const int StartupDialogPollMs = 200;
     private const int WindowWaitMs = 30_000;
 
+    /// <summary>
+    /// How long one <see cref="AgentClient.ProbeFxThreadAsync"/> call is given before the instance
+    /// is called wedged — both to gate warm-start reuse and to end the retry backoff.
+    /// </summary>
+    private static readonly TimeSpan FxProbeTimeout = TimeSpan.FromSeconds(2);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -239,7 +245,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
             {
                 try
                 {
-                    _ = await ConnectedClient.PingAsync();
+                    // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
+                    // undrivable instances reusable and every action against them then failed.
+                    await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
                     Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
 
                     // No roster-close step here. There used to be a call to
@@ -589,34 +597,23 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// </summary>
     /// <remarks>
     /// The transient failures this backs off from are mostly "the FX thread was wedged", so the
-    /// real condition is that it drains a queued task again.
-    /// <para>
-    /// <b>PingAsync is the wrong probe and looks like the right one.</b> `ping` is not in the
-    /// agent's FX_THREAD_METHODS — it answers from the socket thread and succeeds even under a full
-    /// FX deadlock. `getWindows` IS an FX-thread method, so a successful reply is proof the FX
-    /// thread executed something. (The warm-start reuse gate in SetupAsync has the same flaw and is
-    /// left alone here — it is a behaviour change, not a wait.)
-    /// </para>
+    /// real condition is that it drains a queued task again — see
+    /// <see cref="AgentClient.ProbeFxThreadAsync"/> for why that is asked with `getWindows` and
+    /// not `ping`.
     /// </remarks>
     private async Task WaitForAgentResponsiveAsync(TimeSpan ceiling)
     {
         var deadline = DateTime.UtcNow + ceiling;
         while (DateTime.UtcNow < deadline)
         {
-            var saved = ConnectedClient.CallTimeout;
-            ConnectedClient.CallTimeout = TimeSpan.FromSeconds(2);
             try
             {
-                _ = await ConnectedClient.GetWindowsAsync();
+                await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
                 return;
             }
             catch
             {
                 await Task.Delay(StartupDialogPollMs);
-            }
-            finally
-            {
-                ConnectedClient.CallTimeout = saved;
             }
         }
     }

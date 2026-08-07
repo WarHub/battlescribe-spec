@@ -123,6 +123,47 @@ public sealed class AgentClientTests
     }
 
     [Fact]
+    public async Task WedgedFxThread_AnswersPing_ButFailsTheFxProbe()
+    {
+        // The agent under a full JavaFX deadlock, modelled exactly as JsonRpcServer splits it:
+        // `ping` is not in FX_THREAD_METHODS and is answered from the socket thread, so it replies
+        // normally; `getWindows` IS dispatched onto the FX thread and therefore never returns.
+        //
+        // Both halves are asserted on purpose. The ping succeeding is not incidental colour — it is
+        // the defect (#357): the warm-start reuse gate used to ask this exact question, get this
+        // exact answer, and hand the next spec an instance that could not be driven at all.
+        var ct = TestContext.Current.CancellationToken;
+        var fxCallReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var server = FakeAgentServer.Start(async (req, respond, serverCt) =>
+        {
+            var id = req["id"]!.GetValue<int>();
+            if (req["method"]!.GetValue<string>() == "getWindows")
+            {
+                fxCallReceived.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, serverCt); // the wedged FX thread
+                return;
+            }
+
+            await respond($$"""{"jsonrpc":"2.0","id":{{id}},"result":"pong"}""");
+        });
+
+        using var client = new AgentClient(server.Connect()) { CallTimeout = TimeSpan.FromSeconds(30) };
+
+        Assert.Equal("pong", await client.PingAsync());
+
+        // The probe supplies its own short timeout, so the 30s CallTimeout above is never the clock
+        // here — which is the other half of the fix: a wedged instance is discarded promptly rather
+        // than stalling the reuse path for the full call timeout.
+        await Assert.ThrowsAsync<TimeoutException>(() => client.ProbeFxThreadAsync(TimeSpan.FromMilliseconds(50)));
+        await fxCallReceived.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+
+        // And it leaves CallTimeout as it found it: the probe must not silently re-tune the client
+        // it borrowed, or every later call on this connection inherits the probe's 50ms.
+        Assert.Equal(TimeSpan.FromSeconds(30), client.CallTimeout);
+    }
+
+    [Fact]
     public async Task ConnectionClosed_FaultsPendingCall()
     {
         var ct = TestContext.Current.CancellationToken;
