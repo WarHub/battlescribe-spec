@@ -328,11 +328,43 @@ public static class NrUiActions
                 + "selection appeared — the click landed on something that is not a catalogue entry row.");
         }
 
-        // Hidden entries are not accessible via NR UI — throw
+        // No row for this entry. NR omits one for at least TWO measured reasons and this driver
+        // cannot tell them apart from here, so report the observation and what the panel actually
+        // offered rather than asserting a cause. "hidden entry" was asserted unconditionally, and on
+        // catalogue/catalogue-category-entries it is simply false — `se-1` carries neither `hidden`
+        // nor any modifier; its primary category just is not one of the force's own, so NR files it
+        // under the `(Illegal Units)` group it builds with hidden:true and never renders.
+        var offered = await DescribeUnitListAsync(page, forceUid);
         throw new NotSupportedException(
-            $"NR UI: entry '{entryId}' is not visible in the catalogue panel (hidden entry). " +
-            "Hidden entries cannot be selected via UI interaction.");
+            $"NR UI: no selectable row for entry '{entryId}' ('{entryName}') in force '{forceUid}'. "
+            + "NR renders a row only when the entry is not hidden AND its primary category is one of "
+            + "the force's own categories; everything else goes to NR's '(Illegal Units)' group, which "
+            + $"it builds hidden and never renders. Panel offered: {offered}");
     }
+
+    /// <summary>
+    /// What the catalogue panel actually offers for <paramref name="forceUid"/> — every entry row
+    /// with the id this driver tagged it with, plus the panel's text.
+    /// </summary>
+    /// <remarks>
+    /// Only used in a failure message. The wanted row is absent by then, and which rows ARE present
+    /// is the first thing any diagnosis needs — four bugs this session were mis-diagnosed because
+    /// the message named a cause instead of reporting the observation.
+    /// </remarks>
+    private static Task<string> DescribeUnitListAsync(IPage page, string forceUid)
+        => page.EvaluateAsync<string>("""
+            (forceUid) => {
+                const force = document.querySelector("[id='" + forceUid + "']");
+                if (!force) return '(no element carries this force uid)';
+                const rows = [...force.querySelectorAll('.unitList .unit-wrap')]
+                    .filter(w => !w.closest('.childForces'))
+                    .map(w => (w.getAttribute('data-spec-entry-id') ?? '?')
+                        + ':' + (w.querySelector('.name')?.textContent?.trim() ?? '?'));
+                const panel = force.querySelector('.unitList')?.innerText?.trim()
+                    .replace(/\s+/g, ' ').slice(0, 300) ?? '';
+                return 'rows=[' + rows.join(', ') + '] text="' + panel + '"';
+            }
+            """, forceUid);
 
     /// <summary>
     /// Stamps the options-panel row NR renders for <paramref name="uid"/> with

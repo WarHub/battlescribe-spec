@@ -456,10 +456,98 @@ public sealed class NrRosterUiEngine : IRosterEngine
     // ===== IRosterEngine: State (JS reads — hybrid approach) =====
 
     public RosterState GetRosterState()
-        => NewRecruitStateReader.ReadRosterStateAsync(Browser.Page).GetAwaiter().GetResult();
+        => GetRosterStateAsync().GetAwaiter().GetResult();
+
+    private async Task<RosterState> GetRosterStateAsync()
+    {
+        await EnsureRosterMaterialisedForReadAsync();
+        return await NewRecruitStateReader.ReadRosterStateAsync(Browser.Page);
+    }
 
     public IReadOnlyList<ValidationErrorState> GetValidationErrors()
-        => NewRecruitStateReader.ReadValidationErrorsAsync(Browser.Page).GetAwaiter().GetResult();
+        => GetValidationErrorsAsync().GetAwaiter().GetResult();
+
+    private async Task<IReadOnlyList<ValidationErrorState>> GetValidationErrorsAsync()
+    {
+        await EnsureRosterMaterialisedForReadAsync();
+        return await NewRecruitStateReader.ReadValidationErrorsAsync(Browser.Page);
+    }
+
+    /// <summary>
+    /// Materialises the roster for a read that arrives before the first mutation.
+    /// </summary>
+    /// <remarks>
+    /// Roster creation is deferred to the first <c>addForce</c>, so a spec whose FIRST step is an
+    /// assertion had nothing to read and reported empties. (Before <c>window.__bsspec</c> was cleared
+    /// on reset it reported the PREVIOUS spec's roster instead, which is worse — some of those specs
+    /// were passing on another spec's data.)
+    /// </remarks>
+    private async Task EnsureRosterMaterialisedForReadAsync()
+    {
+        // `_gameSystem is null` is the SetupFromFiles (dataSource) path, which records none of the
+        // spec's model and so cannot pick a faction for the Create List dialog. Leave those reads as
+        // they were rather than throwing out of a state read.
+        if (_rosterCreated || _gameSystem is null)
+        {
+            return;
+        }
+
+        await WithDiagnosticsAsync("read-create-roster", async () =>
+        {
+            await EnsureRosterCreatedAsync();
+            await RemoveCreateListForcesAsync();
+            return true;
+        });
+    }
+
+    /// <summary>
+    /// Drops the force(s) NR's Create List dialog auto-adds, so a freshly created roster reads as
+    /// empty — which is what every other engine means by "a new roster".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This purge is what makes creating-on-read work at all. Without it, materialising the roster
+    /// for a step-0 read leaves NR's auto-created force in place, so <c>forceCount: 0</c> is false
+    /// and the read still fails.
+    /// </para>
+    /// <para>
+    /// It also fixes the second half. <c>AddForceCoreAsync</c> selects its branch on
+    /// <c>_rosterCreated</c>, which the read has now flipped — so the first real <c>addForce</c>
+    /// takes the "add another" path. Against an EMPTY roster that path is exactly right; against the
+    /// auto-populated one it added a second force and left NR's behind. Measured: two identical
+    /// "Patrol" forces, and every later assertion wrong.
+    /// </para>
+    /// </remarks>
+    private async Task RemoveCreateListForcesAsync()
+    {
+        // Bounded: a RemoveForceAsync that removed nothing would otherwise spin here forever.
+        for (var guard = 0; guard < 8; guard++)
+        {
+            var uid = await Browser.Page.EvaluateAsync<string?>("""
+                () => {
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const army = pinia?._s?.get('lists')?.currentList?.army
+                        ?? window.__bsspec?.army;
+                    // Root forces only — removing one takes its children with it.
+                    const forces = (army?.getForces?.() || [])
+                        .filter(f => !f.getParent?.()?.isForce?.());
+                    return forces.length > 0 ? forces[0].uid : null;
+                }
+                """);
+
+            if (uid is null)
+            {
+                return;
+            }
+
+            await NrUiActions.RemoveForceAsync(Browser.Page, uid);
+        }
+
+        throw new InvalidOperationException(
+            "NR UI: could not empty the roster NR's Create List dialog auto-populated — "
+            + "8 removals left forces behind.");
+    }
 
     public string ExportRosterXml() => ExportRosterXmlAsync().GetAwaiter().GetResult();
 
