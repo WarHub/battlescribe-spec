@@ -76,9 +76,9 @@ public static class NrUiSetup
                     await page.WaitForFunctionAsync(
                         "() => location.pathname.includes('MySystems')",
                         null,
-                        new() { Timeout = 30_000 });
+                        new() { Timeout = NrUiTimeouts.Condition });
                     await addMoreGames.WaitForAsync(
-                        new() { State = WaitForSelectorState.Visible, Timeout = 20_000 });
+                        new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
                     await WaitForTransitionsAsync(page);
                 });
 
@@ -132,7 +132,7 @@ public static class NrUiSetup
             }
             """,
             systemId,
-            new() { Timeout = 30_000 }));
+            new() { Timeout = NrUiTimeouts.Condition }));
 
         // Close the "Add More Games" popup that's still open.
         //
@@ -152,7 +152,7 @@ public static class NrUiSetup
             {
                 try
                 {
-                    await closeBtn.ClickAsync(new() { Timeout = 5_000 });
+                    await closeBtn.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
                 }
                 catch (TimeoutException)
                 {
@@ -169,7 +169,7 @@ public static class NrUiSetup
                 try
                 {
                     await closeBtn.WaitForAsync(
-                        new() { State = WaitForSelectorState.Hidden, Timeout = 3_000 });
+                        new() { State = WaitForSelectorState.Hidden, Timeout = NrUiTimeouts.OptionalProbe });
                 }
                 catch (TimeoutException)
                 {
@@ -281,7 +281,7 @@ public static class NrUiSetup
             await page.WaitForFunctionAsync(
                 "() => location.pathname.includes('MyLists')",
                 null,
-                new() { Timeout = 15_000 });
+                new() { Timeout = NrUiTimeouts.Condition });
             await WaitForTransitionsAsync(page);
         });
 
@@ -327,7 +327,7 @@ public static class NrUiSetup
                         }
                         """,
                         null,
-                        new() { Timeout = 5_000 });
+                        new() { Timeout = NrUiTimeouts.OptionalProbe });
                 }
                 catch (TimeoutException)
                 {
@@ -420,7 +420,7 @@ public static class NrUiSetup
                 }
                 """,
                 preferredCatalogueName,
-                new() { Timeout = 15_000 });
+                new() { Timeout = NrUiTimeouts.Condition });
             return await handle.JsonValueAsync<string>();
         });
 
@@ -578,7 +578,7 @@ public static class NrUiSetup
             }
             """,
             null,
-            new() { Timeout = 30_000 }));
+            new() { Timeout = NrUiTimeouts.Condition }));
 
         // After creation, set up __bsspec for state reading
         var listKey = await NrUiTiming.MeasureAsync("create-roster/eval-bsspec", () => page.EvaluateAsync<string?>("""
@@ -658,7 +658,7 @@ public static class NrUiSetup
         await WaitForTransitionsAsync(page);
         try
         {
-            await locator.ClickAsync(new() { Timeout = 8_000 });
+            await locator.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
             return;
         }
         catch (TimeoutException)
@@ -680,7 +680,7 @@ public static class NrUiSetup
         // reported a 5s timeout whose message blamed reflow — a cause it had never checked.
         try
         {
-            await locator.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 20_000 });
+            await locator.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
         }
         catch (TimeoutException)
         {
@@ -697,7 +697,11 @@ public static class NrUiSetup
         // Bounded too. DispatchEventAsync carries the same 30s default as ClickAsync, so leaving it
         // open turned an element that was genuinely absent into 8s + 30s = 38s of waiting rather
         // than the 30s it cost before this fallback existed — measured, on the run that added it.
-        await locator.DispatchEventAsync("click", eventInit: null, options: new() { Timeout = 5_000 });
+        // Interaction, not OptionalProbe: this one is NOT tolerated — if the dispatch fails the
+        // click fails, so it gets the same ceiling as any other interaction rather than the short
+        // bound reserved for probes whose failure is handled.
+        await locator.DispatchEventAsync(
+            "click", eventInit: null, options: new() { Timeout = NrUiTimeouts.Interaction });
     }
 
     private static async Task WaitForTransitionsAsync(IPage page, int timeoutMs = 5_000)

@@ -574,7 +574,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         {
             // "Export" is a toolbar button that opens the export options (.ros/.rosz/.json/...).
             await page.Locator(".outOfMenuButton").Filter(new() { HasText = "Export" }).First
-                .ClickAsync(new() { Timeout = 10_000 });
+                .ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
 
             var rosButton = page.GetByText(".ros", new() { Exact = true });
             if (await rosButton.CountAsync() == 0)
@@ -593,7 +593,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     "NR UI roster export: opened Export but found no '.ros' entry. Visible text: " + dump);
             }
 
-            await rosButton.First.ClickAsync(new() { Timeout = 5_000 });
+            await rosButton.First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
 
             // Wait for the export hook to have CAPTURED the blob, rather than for 150ms and then
             // reading whatever is there. The read below is a snapshot: too early and it returns
@@ -604,7 +604,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
                 await page.WaitForFunctionAsync(
                     "() => window.__bsspec_rosCapture != null",
                     null,
-                    new() { Timeout = 10_000 });
+                    new() { Timeout = NrUiTimeouts.Condition });
             }
             catch (TimeoutException)
             {
