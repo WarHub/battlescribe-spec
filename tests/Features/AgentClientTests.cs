@@ -123,6 +123,30 @@ public sealed class AgentClientTests
     }
 
     [Fact]
+    public async Task WaitForWindow_DoesNotMatchADialogTitleAgainstTheMainWindow()
+    {
+        // Only the main window is open, and BattleScribe embeds the roster name in its title — so
+        // "New Roster" is a substring of it. A Contains match therefore answered "the New Roster
+        // dialog is up" the instant it was asked, against a window that is not that dialog (#358).
+        const string mainWindow = "Roster Editor 2.03.21 - New Roster (GS v1)";
+
+        await using var server = FakeAgentServer.Start(async (req, respond, _) =>
+        {
+            var id = req["id"]!.GetValue<int>();
+            await respond($$"""{"jsonrpc":"2.0","id":{{id}},"result":[{"title":"{{mainWindow}}"}]}""");
+        });
+
+        using var client = new AgentClient(server.Connect());
+
+        // The prefix the main-window callers actually pass still matches...
+        Assert.True(await client.WaitForWindowAsync("Roster Editor", timeoutMs: 2_000));
+
+        // ...and the dialog title embedded inside it no longer does. This must exhaust its
+        // timeout to return false, so keep that timeout short — it is the cost of the assertion.
+        Assert.False(await client.WaitForWindowAsync("New Roster", timeoutMs: 300, pollIntervalMs: 50));
+    }
+
+    [Fact]
     public async Task WedgedFxThread_AnswersPing_ButFailsTheFxProbe()
     {
         // The agent under a full JavaFX deadlock, modelled exactly as JsonRpcServer splits it:

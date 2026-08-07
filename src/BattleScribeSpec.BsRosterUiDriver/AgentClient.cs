@@ -411,23 +411,29 @@ public sealed class AgentClient : IDisposable
         }
     }
 
-    /// <summary>Polls for a window with the given title to appear.</summary>
-    public async Task<bool> WaitForWindowAsync(string titleFragment, int timeoutMs = 30000, int pollIntervalMs = WindowPollIntervalMs)
+    /// <summary>
+    /// Polls for a window with this title to appear. Returns false if it has not by the deadline.
+    /// </summary>
+    /// <remarks>
+    /// Matching is <see cref="HasWindowAsync"/>'s, and deliberately not this method's former
+    /// <c>Contains</c>. Under <c>Contains</c> a dialog title that is a substring of the main
+    /// window's — "New Roster" against "Roster Editor 2.03.21 - New Roster (GS v1)" — returns true
+    /// against the MAIN window, immediately, and the dialog is never actually awaited. Nothing
+    /// reports that: the caller proceeds to act on a dialog that does not exist yet.
+    /// <para>
+    /// Every caller today passes a main-window title, so the two rules agreed and the bug was
+    /// latent (#358). It is fixed here rather than when the first dialog caller arrives, because
+    /// the symptom then would be an action failing for no visible reason several steps later.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> WaitForWindowAsync(string title, int timeoutMs = 30000, int pollIntervalMs = WindowPollIntervalMs)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
-            var windows = await GetWindowsAsync();
-            if (windows is JsonArray arr)
+            if (await HasWindowAsync(title))
             {
-                foreach (var w in arr)
-                {
-                    var title = w?["title"]?.GetValue<string>();
-                    if (title is not null && title.Contains(titleFragment))
-                    {
-                        return true;
-                    }
-                }
+                return true;
             }
 
             await Task.Delay(pollIntervalMs);
