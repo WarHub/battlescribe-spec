@@ -202,10 +202,17 @@ public class RosterActions {
         // Phase 1: Select the force in the roster tree
         runOnFx(() -> selectTreeItemById("#treeRoster", forceId));
 
-        // The catalogue tree is rebuilt for the selected force, so wait for the entry to be THERE
-        // rather than for 300ms. Clicking into a stale tree either misses or, worse, hits the
-        // like-named entry of the previously selected force.
-        waitForTreeItem("#treeCatalogue", entryId);
+        if (TREE_TRACE) {
+            System.err.println("[agent] tree trace: after selecting force " + forceId
+                    + runOnFxGet(() -> "\n  roster:    " + describeTree("#treeRoster")
+                            + "\n  catalogue: " + describeTree("#treeCatalogue")));
+        }
+
+        // Wait for the entry to be THERE — under THIS force — rather than for 300ms. Scoping is
+        // not belt-and-braces: #treeCatalogue lists every force's own copy of the same entries, so
+        // an unscoped wait is satisfied by a sibling force's item and an unscoped click adds the
+        // selection to that force instead. See resolveTreeScope.
+        waitForTreeItem("#treeCatalogue", forceId, entryId);
 
         // Phase 2: Double-click the entry in the catalogue tree, recording what the ROSTER tree
         // believed was selected at that moment rather than assuming it. When two forces come from
@@ -218,7 +225,7 @@ public class RosterActions {
         // single thread.
         String treeSelection = runOnFxGet(() -> {
             String selected = describeTreeSelection("#treeRoster");
-            clickTreeItemById("#treeCatalogue", entryId, true);
+            clickTreeItemById("#treeCatalogue", forceId, entryId, true);
             return selected;
         });
 
@@ -750,13 +757,19 @@ public class RosterActions {
         final String labelText = entryName;
         runOnFx(() -> clickControlByLabel(labelText, MAIN_WINDOW, null));
 
-        // Wait for a new child selection to appear under the parent
+        // Wait for the click to land — as a new child, OR as a count increase on an existing one.
+        //
+        // A COLLECTIVE entry does not gain a second child when selected again: BattleScribe
+        // increments the one that is already there. A predicate that only watches the child COUNT
+        // therefore waits out its full timeout on exactly those specs, and reports the click as
+        // having done nothing while the number it asked for sits in the state it just read.
         JsonObject after = waitForStateChange(state -> {
             JsonObject parent = findSelectionById(state, parentSelectionId);
             if (parent == null) return false;
             JsonObject beforeParent = findSelectionById(before, parentSelectionId);
             if (beforeParent == null) return true;
-            return childSelectionCount(parent) > childSelectionCount(beforeParent);
+            return childSelectionCount(parent) > childSelectionCount(beforeParent)
+                    || childNumberIncreased(beforeParent, parent, entryId);
         }, state -> {
             JsonObject parent = findSelectionById(state, parentSelectionId);
             if (parent == null) {
@@ -771,8 +784,23 @@ public class RosterActions {
                     + "; wanted entryId '" + entryId + "'";
         });
 
-        // Find the new child selection (in after but not in before)
+        // Find the new child selection (in after but not in before). A collective entry produced no
+        // new child — it incremented the existing one — so fall back to that, or the step's
+        // `selectionId` output would be absent and every later step referencing it would fail
+        // somewhere else entirely.
         JsonObject createdSelection = findNewChildSelection(before, after, parentSelectionId, entryId);
+        if (createdSelection == null) {
+            JsonObject parent = findSelectionById(after, parentSelectionId);
+            if (parent != null) {
+                for (JsonObject child : childSelectionsOf(parent)) {
+                    if (isSelectionOfEntry(child, entryId)) {
+                        createdSelection = child;
+                        break;
+                    }
+                }
+            }
+        }
+
         JsonObject result = new JsonObject();
         if (createdSelection != null) {
             result.addProperty("selectionId", getStringField(createdSelection, "id"));
@@ -887,10 +915,26 @@ public class RosterActions {
         final String finalEntryName = entryName;
         runOnFx(() -> setSpinnerValueByLabel(finalEntryName, count, MAIN_WINDOW));
 
-        // Wait for count to match
+        // Wait for the count to match — as the spinner's own value, OR as the per-model total.
+        //
+        // The spinner on a COLLECTIVE selection is per model: set it to 2 under a parent of 3 and
+        // BattleScribe stores number = 6, because a collective selection's number is the total
+        // across the parent's models. Waiting only for `number == count` therefore waits out the
+        // full timeout on exactly those specs and reports it as the spinner not having taken.
+        final int parentNumber = parentNumberOf(state, selectionId);
         waitForStateChange(s -> {
             JsonObject sel = findSelectionById(s, selectionId);
-            return sel != null && getIntField(sel, "number", -1) == count;
+            if (sel == null) return false;
+            int number = getIntField(sel, "number", -1);
+            return number == count || number == count * parentNumber;
+        }, s -> {
+            JsonObject sel = findSelectionById(s, selectionId);
+            return sel == null
+                    ? "selection " + selectionId + " is no longer in the roster"
+                    : "spinner '" + finalEntryName + "' set to " + count + " left selection "
+                            + selectionId + " at number " + getIntField(sel, "number", -1)
+                            + " (wanted " + count + ", or " + (count * parentNumber)
+                            + " for a collective under a parent of " + parentNumber + ")";
         });
 
         JsonObject result = new JsonObject();
@@ -1048,6 +1092,38 @@ public class RosterActions {
     /**
      * Gets the number of child selections in a selection/force.
      */
+    /**
+     * The {@code number} of {@code selectionId}'s parent SELECTION, or 1 when its parent is a force
+     * (a force has no multiplicity, so a collective directly under one is not scaled).
+     */
+    private int parentNumberOf(JsonObject state, String selectionId) {
+        String parentId = findSelectionParentId(state, selectionId);
+        if (parentId == null) return 1;
+        JsonObject parent = findSelectionById(state, parentId);
+        return parent == null ? 1 : getIntField(parent, "number", 1);
+    }
+
+    /**
+     * True when a child of {@code parent} for {@code entryId} carries a higher {@code number} than
+     * it did in {@code beforeParent} — how a collective entry records a second selection.
+     */
+    private boolean childNumberIncreased(JsonObject beforeParent, JsonObject parent, String entryId) {
+        Map<String, Integer> before = new HashMap<>();
+        for (JsonObject child : childSelectionsOf(beforeParent)) {
+            String id = getStringField(child, "id");
+            if (id != null && isSelectionOfEntry(child, entryId)) {
+                before.put(id, getIntField(child, "number", 1));
+            }
+        }
+        for (JsonObject child : childSelectionsOf(parent)) {
+            String id = getStringField(child, "id");
+            if (id == null || !isSelectionOfEntry(child, entryId)) continue;
+            Integer was = before.get(id);
+            if (was != null && getIntField(child, "number", 1) > was) return true;
+        }
+        return false;
+    }
+
     /** The child selections {@link #childSelectionCount} counts, for diagnostics. */
     private List<JsonObject> childSelectionsOf(JsonObject scope) {
         List<JsonObject> result = new ArrayList<>();
@@ -1434,26 +1510,36 @@ public class RosterActions {
      * the WRONG one. The 300ms that used to sit here covered neither case reliably.
      */
     private void waitForTreeItem(String treeSelector, String id) {
+        waitForTreeItem(treeSelector, null, id);
+    }
+
+    /**
+     * Waits until {@code treeSelector} offers an item for {@code id} INSIDE {@code containerId}'s
+     * subtree — see {@link #resolveTreeScope} for why the container matters.
+     */
+    private void waitForTreeItem(String treeSelector, String containerId, String id) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
-            Boolean present = runOnFxGet(() -> hasTreeItem(treeSelector, id));
+            Boolean present = runOnFxGet(() -> hasTreeItem(treeSelector, containerId, id));
             if (present) return;
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException(
-                "Tree '" + treeSelector + "' never offered an item for id '" + id + "' within "
-                        + WINDOW_TIMEOUT_MS + "ms");
+                "Tree '" + treeSelector + "' never offered an item for id '" + id + "'"
+                        + (containerId == null ? "" : " under '" + containerId + "'")
+                        + " within " + WINDOW_TIMEOUT_MS + "ms");
     }
 
     /** True when {@code treeSelector} holds an item carrying this id token. FX thread only. */
     @SuppressWarnings("unchecked")
-    private boolean hasTreeItem(String treeSelector, String id) {
+    private boolean hasTreeItem(String treeSelector, String containerId, String id) {
         Scene scene = findScene(MAIN_WINDOW);
         if (scene == null) return false;
         Node node = scene.getRoot().lookup(treeSelector);
         if (!(node instanceof TreeView)) return false;
         TreeView<Object> tree = (TreeView<Object>) node;
-        return findTreeItemByText(tree.getRoot(), ":" + id + ":") != null;
+        TreeItem<Object> scope = resolveTreeScope(tree, containerId);
+        return scope != null && findTreeItemByText(scope, ":" + id + ":") != null;
     }
 
     /** True when {@code selector}'s ComboBox holds an item with this id. FX thread only. */
@@ -1600,6 +1686,32 @@ public class RosterActions {
         tree.getSelectionModel().select(item);
     }
 
+    /** Set {@code BS_UI_TREE_TRACE=1} to dump both roster trees around a selectEntry. */
+    private static final boolean TREE_TRACE = "1".equals(System.getenv("BS_UI_TREE_TRACE"));
+
+    /** A TreeView's visible structure, for diagnostics. FX thread only. */
+    @SuppressWarnings("unchecked")
+    private String describeTree(String treeSelector) {
+        Scene scene = findScene(MAIN_WINDOW);
+        if (scene == null) return "(main window scene not found)";
+        Node node = scene.getRoot().lookup(treeSelector);
+        if (!(node instanceof TreeView)) return "(not a TreeView: " + treeSelector + ")";
+        TreeView<Object> tree = (TreeView<Object>) node;
+        StringBuilder sb = new StringBuilder();
+        appendTreeItem(tree.getRoot(), 0, sb);
+        return sb.toString();
+    }
+
+    private void appendTreeItem(TreeItem<Object> item, int depth, StringBuilder sb) {
+        if (item == null) return;
+        sb.append("\n    ");
+        for (int i = 0; i < depth; i++) sb.append("  ");
+        sb.append(item.getValue());
+        for (TreeItem<Object> child : item.getChildren()) {
+            appendTreeItem(child, depth + 1, sb);
+        }
+    }
+
     /** The text of a TreeView's selected item, for diagnostics. FX thread only. */
     @SuppressWarnings("unchecked")
     private String describeTreeSelection(String treeSelector) {
@@ -1617,6 +1729,14 @@ public class RosterActions {
      * Clicks (or double-clicks) a tree item located by ID token.
      */
     private void clickTreeItemById(String treeSelector, String id, boolean doubleClick) {
+        clickTreeItemById(treeSelector, null, id, doubleClick);
+    }
+
+    /**
+     * Clicks (or double-clicks) the item for {@code id} INSIDE {@code containerId}'s subtree —
+     * see {@link #resolveTreeScope} for why the container matters.
+     */
+    private void clickTreeItemById(String treeSelector, String containerId, String id, boolean doubleClick) {
         String token = ":" + id + ":";
         Scene scene = findScene(MAIN_WINDOW);
         if (scene == null) throw new RuntimeException("Main window scene not found");
@@ -1626,8 +1746,17 @@ public class RosterActions {
 
         @SuppressWarnings("unchecked")
         TreeView<Object> tree = (TreeView<Object>) node;
-        TreeItem<Object> item = findTreeItemByText(tree.getRoot(), token);
-        if (item == null) throw new RuntimeException("Tree item not found for id: " + id);
+        TreeItem<Object> scope = resolveTreeScope(tree, containerId);
+        if (scope == null) {
+            throw new RuntimeException(
+                    "Tree '" + treeSelector + "' has no subtree for container id: " + containerId);
+        }
+
+        TreeItem<Object> item = findTreeItemByText(scope, token);
+        if (item == null) {
+            throw new RuntimeException("Tree item not found for id: " + id
+                    + (containerId == null ? "" : " under " + containerId));
+        }
 
         // Select the item first
         tree.getSelectionModel().select(item);
@@ -2076,6 +2205,27 @@ public class RosterActions {
             if (found != null) return found;
         }
         return null;
+    }
+
+    /**
+     * The subtree an id search should be confined to: {@code containerId}'s item, or the whole
+     * tree when no container is named.
+     *
+     * <p><b>#treeCatalogue is not per-force.</b> It holds the entire roster — one subtree per
+     * force, each offering that force's own copy of the same catalogue entries. So every force in
+     * a multi-force roster carries an item reading {@code Target:se-target:…}, and an unscoped
+     * {@link #findTreeItemByText} returns whichever comes first in tree order. Clicking it adds the
+     * selection to THAT force, silently, and the caller's wait then times out looking in the force
+     * it asked for — which is what 20 specs were doing.
+     *
+     * <p>Returns null when the container is not in the tree, so callers report a missing FORCE
+     * rather than a missing entry.
+     */
+    private TreeItem<Object> resolveTreeScope(TreeView<Object> tree, String containerId) {
+        if (containerId == null) {
+            return tree.getRoot();
+        }
+        return findTreeItemByText(tree.getRoot(), ":" + containerId + ":");
     }
 
     // ═══════════════════════════════════════════════════════════════════
